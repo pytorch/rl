@@ -1,0 +1,84 @@
+from numbers import Number
+from typing import Union, Tuple, List
+
+import torch
+
+
+def _sub_index(tensor: torch.Tensor, idx: Union[Tuple, slice, Number]):
+    """
+    Allows indexing of tensors with nested tuples, i.e. tensor[tuple1][tuple2] can be indexed via _sub_index(tensor, (tuple1, tuple2))
+    """
+    if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
+        idx0 = idx[0]
+        idx1 = idx[1:]
+        return _sub_index(_sub_index(tensor, idx0), idx1)
+    return tensor[idx]
+
+
+def _td_fields(td):
+    return ", \n\t\t".join(
+        [
+            f"{key}: {item.class_name}({item.shape}, dtype={item.dtype})"
+            for key, item in td.items_meta()
+        ]
+    )
+
+
+def _getitem_batch_size(shape: torch.Size, items: Union[Tuple, torch.Tensor, List, Number, slice]):
+    """
+    Given an input shape and an index, returns the size of the resulting indexed tensor.
+    This function is aimed to be used when indexing is an expensive operation.
+    Args:
+        shape: Input shape
+        items: Index of the hypothetical tensor
+
+    Returns:
+
+    """
+    if not isinstance(items, tuple):
+        items = (items,)
+    bs = []
+    iter_bs = iter(shape)
+    if all(isinstance(_item, torch.Tensor) for _item in items) and len(items)==len(shape):
+        shape0 = items[0].shape
+        for _item in items[1:]:
+            assert _item.shape == shape0, "all tensor indices must have the same shape"
+        return shape0
+
+    for _item in items:
+        if isinstance(_item, slice):
+            batch = next(iter_bs)
+            v = len(range(*_item.indices(batch)))
+        elif isinstance(_item, (list, torch.Tensor)):
+            batch = next(iter_bs)
+            v = len(_item)
+        elif _item is None:
+            v = 1
+        elif isinstance(_item, Number):
+            batch = next(iter_bs)
+            continue
+        else:
+            raise NotImplementedError(
+                f"batch dim cannot be computed for type {type(_item)}"
+            )
+        bs.append(v)
+    list_iter_bs = list(iter_bs)
+    bs += list_iter_bs
+    return torch.Size(bs)
+
+
+def _check_keys(list_of_tensor_dicts, strict=False):
+    keys = set()
+    for td in list_of_tensor_dicts:
+        if not len(keys):
+            keys = set(td.keys())
+        else:
+            if not strict:
+                keys = keys.intersection(set(td.keys()))
+            else:
+                assert not len(set(td.keys()).difference(keys)) and len(
+                    set(td.keys())
+                ) == len(
+                    keys
+                ), f"got keys {keys} and {set(td.keys())} which are incompatible"
+    return keys

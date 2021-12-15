@@ -1,0 +1,73 @@
+import torch
+
+from torchrl.data import TensorDict
+
+
+class CloudpickleWrapper(object):
+    def __init__(self, fn):
+        self.fn = fn
+
+    def __getstate__(self):
+        import cloudpickle
+        return cloudpickle.dumps(self.fn)
+
+    def __setstate__(self, ob):
+        import pickle
+        self.fn = pickle.loads(ob)
+
+    def __call__(self, **kwargs):
+        return self.fn(**kwargs)
+
+
+def _stack_output(fun):
+    def stacked_output_fun(*args, **kwargs):
+        out = fun(*args, **kwargs)
+        return tuple(torch.stack(_o, 0) for _o in out)
+
+    return stacked_output_fun
+
+
+def _stack_output_zip(fun):
+    def stacked_output_fun(*args, **kwargs):
+        out = fun(*args, **kwargs)
+        return tuple(torch.stack(_o, 0) for _o in zip(*out))
+
+    return stacked_output_fun
+
+
+def split_trajectories(rollout_tensor_dict):
+    """Takes a tensordict with a key traj_ids that indicates the id of each trajectory.
+    From there, builds a B x T x ... zero-padded tensordict with B batches on max duration T
+    """
+    traj_ids = rollout_tensor_dict.get("traj_ids")
+    ndim = len(rollout_tensor_dict.batch_size)
+    splits = traj_ids.view(-1)
+    splits = [(splits == i).sum().item() for i in splits.unique_consecutive()]
+    out_splits = {
+        key: _d
+            .contiguous()
+            .view(-1, *_d.shape[ndim:])
+            .split(splits, 0)
+        for key, _d in rollout_tensor_dict.items()
+        # if key not in ("step_count", "traj_ids")
+    }
+    # select complete rollouts
+    dones = out_splits["done"]
+    valid_ids = list(range(len(dones)))
+    out_splits = {
+        key: [_out[i] for i in valid_ids] for key, _out in out_splits.items()
+    }
+    mask = [
+        torch.ones_like(_out, dtype=torch.bool)
+        for _out in out_splits["done"]
+    ]
+    out_splits["mask"] = mask
+    out_dict = {
+        key: torch.nn.utils.rnn.pad_sequence(_o, batch_first=True)
+        for key, _o in out_splits.items()
+    }
+    td = TensorDict(
+        source=out_dict,
+        device=rollout_tensor_dict.device,
+        batch_size=out_dict["mask"].shape[:-1])
+    return td
