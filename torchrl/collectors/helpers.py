@@ -5,6 +5,7 @@ from ..envs import ParallelEnv
 
 __all__ = ["sync_sync_collector", "sync_async_collector"]
 
+
 def sync_async_collector(
         env_fns: Union[Callable, List[Callable]],
         env_kwargs: Optional[Union[dict, List[dict]]],
@@ -53,11 +54,18 @@ def sync_async_collector(
 
     """
 
-    return _make_collector(MultiaSyncDataCollector, env_fns=env_fns, env_kwargs=env_kwargs, policy=policy,
-                           max_steps_per_traj=max_steps_per_traj, frames_per_batch=frames_per_batch,
-                           total_frames=total_frames, batcher=batcher,
-                           num_env_per_collector=num_env_per_collector, num_collectors=num_collectors,
-                           passing_device=passing_device, **kwargs)
+    return _make_collector(MultiaSyncDataCollector,
+                           env_fns=env_fns,
+                           env_kwargs=env_kwargs,
+                           policy=policy,
+                           max_steps_per_traj=max_steps_per_traj,
+                           frames_per_batch=frames_per_batch,
+                           total_frames=total_frames,
+                           batcher=batcher,
+                           num_env_per_collector=num_env_per_collector,
+                           num_collectors=num_collectors,
+                           passing_device=passing_device,
+                           **kwargs)
 
 
 def sync_sync_collector(
@@ -113,10 +121,16 @@ def sync_sync_collector(
     Returns:
 
     """
-    return _make_collector(MultiSyncDataCollector, env_fns=env_fns, env_kwargs=env_kwargs, policy=policy,
-                           max_steps_per_traj=max_steps_per_traj, frames_per_batch=frames_per_batch,
-                           total_frames=total_frames,  batcher=batcher,
-                           num_env_per_collector=num_env_per_collector, num_collectors=num_collectors,
+    return _make_collector(MultiSyncDataCollector,
+                           env_fns=env_fns,
+                           env_kwargs=env_kwargs,
+                           policy=policy,
+                           max_steps_per_traj=max_steps_per_traj,
+                           frames_per_batch=frames_per_batch,
+                           total_frames=total_frames,
+                           batcher=batcher,
+                           num_env_per_collector=num_env_per_collector,
+                           num_collectors=num_collectors,
                            passing_device=passing_device, **kwargs)
 
 
@@ -133,7 +147,6 @@ def _make_collector(
         num_collectors: Optional[int] = None,
         passing_device="cpu",
         **kwargs) -> MultiDataCollector:
-
     if env_kwargs is None:
         env_kwargs = dict()
     if isinstance(env_fns, list):
@@ -159,8 +172,12 @@ def _make_collector(
     env_kwargs_split = [env_kwargs[i:i + num_env_per_collector] for i in range(0, num_env, num_env_per_collector)]
     assert len(env_fns_split) == num_collectors
 
-    env_fns = [lambda: ParallelEnv(num_workers=len(_env_fn), create_env_fn=_env_fn, create_env_kwargs=_env_kwargs)
-               for _env_fn, _env_kwargs in zip(env_fns_split, env_kwargs_split)]
+    if num_env_per_collector == 1:
+        env_fns = [lambda: _env_fn[0](**_env_kwargs[0])
+                   for _env_fn, _env_kwargs in zip(env_fns_split, env_kwargs_split)]
+    else:
+        env_fns = [lambda: ParallelEnv(num_workers=len(_env_fn), create_env_fn=_env_fn, create_env_kwargs=_env_kwargs)
+                   for _env_fn, _env_kwargs in zip(env_fns_split, env_kwargs_split)]
     return collector_class(
         create_env_fn=env_fns,
         create_env_kwargs=None,

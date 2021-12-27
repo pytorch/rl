@@ -17,12 +17,12 @@ __all__ = [
 
 
 class DQNLoss:
-    def __init__(self, value_network: QValueActor, gamma, device=None, loss_type="l2"):
+    def __init__(self, value_network: QValueActor, gamma, device=None, loss_function="l2"):
         self.value_network = value_network
         self.value_network_in_keys = value_network.in_keys
         assert isinstance(value_network, QValueActor)
         self.gamma = gamma
-        self.loss_type = loss_type
+        self.loss_function = loss_function
         if device is None:
             try:
                 device = next(value_network.parameters()).device
@@ -67,7 +67,7 @@ class DQNLoss:
             target_value = rewards + (gamma ** steps_to_next_obs) * target_value
 
         input_tensor_dict.set("td_error", abs(pred_val_index-target_value).detach().unsqueeze(1).to(input_tensor_dict.device), inplace=True)
-        loss = distance_loss(pred_val_index, target_value, self.loss_type)
+        loss = distance_loss(pred_val_index, target_value, self.loss_function)
         return loss.mean()
 
     def _get_networks(self):

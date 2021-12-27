@@ -110,7 +110,7 @@ class SyncDataCollector(_DataCollector):
             device: Union[int, str, torch.device] = None,
             passing_device="cpu",
             seed=None,
-            pin_memory=True,
+            pin_memory=False,
     ):
         """
         Generic data collector for RL problems. Requires and environment and a policy.
@@ -274,7 +274,7 @@ class MultiDataCollector(_DataCollector):
             split_trajs: bool = True,
             device: Union[int, str, torch.device] = None,
             seed: Optional[int] = None,
-            pin_memory: bool = True,
+            pin_memory: bool = False,
             passing_device: Union[int, str, torch.device] = "cpu",
             update_at_each_batch: bool = True
     ):
@@ -365,7 +365,9 @@ class MultiDataCollector(_DataCollector):
     #     if j < self.iterator_len - 1:
     #         self.pipes[idx].send((idx, "continue"))
 
-    def set_seed(self, seed: Iterable):
+    def set_seed(self, seed: Union[Iterable, int]):
+        if isinstance(seed, int):
+            seed = [seed+i for i in range(self.num_workers)]
         if not len(seed) == self.num_workers and self.num_workers == 1:
             seed = [seed]
         for idx in range(self.num_workers):
@@ -525,7 +527,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             split_trajs: bool = True,
             device: Union[int, str, torch.device] = None,
             seed: Optional[int] = None,
-            pin_memory: bool = True,
+            pin_memory: bool = False,
     ):
         """
         Runs a DataCollector on a separate process.
@@ -585,6 +587,7 @@ def main_async_collector(
         pin_memory=pin_memory,
         passing_device=passing_device,
     )
+    print("Sync data collector created")
     dc_iter = iter(dc)
     j = 0
     has_timed_out = False

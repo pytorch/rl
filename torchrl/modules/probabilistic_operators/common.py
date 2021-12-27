@@ -13,10 +13,17 @@ __all__ = [
 
 
 def _forward_hook_safe_action(module, tensor_dict_in, tensor_dict_out):
-    tensor_dict_out.set_(
-        module.out_keys[0],
-        module.spec.project(tensor_dict_out.get(module.out_keys[0]))
-    )
+    if not module.spec.is_in(tensor_dict_out.get(module.out_keys[0])):
+        try:
+            tensor_dict_out.set_(
+                module.out_keys[0],
+                module.spec.project(tensor_dict_out.get(module.out_keys[0]))
+            )
+        except RuntimeError:
+            tensor_dict_out.set(
+                module.out_keys[0],
+                module.spec.project(tensor_dict_out.get(module.out_keys[0]))
+            )
 
 
 class ProbabilisticOperator(nn.Module):

@@ -209,6 +209,12 @@ class _TensorDict:
     def memmap_(self):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
+    def detach_(self):
+        raise NotImplementedError(f"{self.__class__.__name__}")
+
+    def detach(self):
+        return self.clone().detach_()
+
     def zero_(self):
         for key in self.keys():
             self.fill_(key, 0)
@@ -599,6 +605,11 @@ class TensorDict(_TensorDict):
             value.share_memory_()
         for key, value in self.items_meta():
             value.share_memory_()
+        return self
+
+    def detach_(self):
+        for key, value in self.items():
+            value.detach_()
         return self
 
     def memmap_(self):
@@ -1214,6 +1225,10 @@ class LazyStackedTensorDict(_TensorDict):
         for td in self.tensor_dicts:
             td.share_memory_()
         return self
+    def detach_(self):
+        for td in self.tensor_dicts:
+            td.detach_()
+        return self
 
     def memmap_(self):
         for td in self.tensor_dicts:
@@ -1375,6 +1390,9 @@ class SavedTensorDict(_TensorDict):
 
     def memmap__(self):
         raise RuntimeError("SavedTensorDict and memmap are mutually exclusive features.")
+
+    def detach_(self):
+        raise RuntimeError("SavedTensorDict cannot be put detached.")
 
     def items(self):
         return self.contiguous().items()

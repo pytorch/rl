@@ -16,7 +16,7 @@ class DDPGLoss:
                  value_network: ProbabilisticOperator,
                  gamma: Number,
                  device: Optional[Union[str, int, torch.device]] = None,
-                 loss_type: str = "l2",
+                 loss_function: str = "l2",
                  ):
 
         self.value_network = value_network
@@ -24,7 +24,7 @@ class DDPGLoss:
         self.actor_in_keys = actor_network.in_keys
 
         self.gamma = gamma
-        self.loss_type = loss_type
+        self.loss_type = loss_function
 
         if device is None:
             try:
@@ -76,7 +76,7 @@ class DDPGLoss:
 
     def _actor_loss(self, tensor_dict: _TensorDict, actor_network: ProbabilisticOperator,
                     value_network: ProbabilisticOperator):
-        td_copy = tensor_dict.select(*self.actor_in_keys).clone()
+        td_copy = tensor_dict.select(*self.actor_in_keys).detach()
         td_copy = actor_network(td_copy)
         rg_status = next(value_network.parameters()).requires_grad
         value_network.requires_grad_(False)
@@ -89,7 +89,7 @@ class DDPGLoss:
                     target_value_network: ProbabilisticOperator, done: torch.Tensor,
                     rewards: torch.Tensor, gamma: Number):
         # value loss
-        td_copy = tensor_dict.select(*value_network.in_keys).clone()
+        td_copy = tensor_dict.select(*value_network.in_keys).detach()
         value_network(td_copy)
         pred_val = td_copy.get("state_action_value").squeeze(-1)
         try:
