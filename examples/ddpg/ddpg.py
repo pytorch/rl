@@ -324,6 +324,7 @@ if __name__ == "__main__":
         "num_collectors": - args.num_workers // -args.env_per_collector,
         "passing_device": args.collector_device,
         "device": args.collector_device,
+        "init_random_frames": args.init_random_frames,
     }
 
     collector = collector_helper(**collector_helper_kwargs)

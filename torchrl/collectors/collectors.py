@@ -20,6 +20,7 @@ __all__ = ["SyncDataCollector", "aSyncDataCollector", "MultiaSyncDataCollector",
 from contextlib import contextmanager
 
 from ..data.tensordict.tensordict import _TensorDict, TensorDict
+from ..envs.common import _EnvClass
 
 TIMEOUT = 1.0
 MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
@@ -104,6 +105,7 @@ class SyncDataCollector(_DataCollector):
             create_env_kwargs: Optional[dict] = None,
             max_steps_per_traj: int = -1,
             frames_per_batch: int = 200,
+            init_random_frames: int = -1,
             reset_at_each_iter: bool = False,
             batcher: Optional[Callable] = None,
             split_trajs: bool = True,
@@ -144,7 +146,7 @@ class SyncDataCollector(_DataCollector):
         if create_env_kwargs is None:
             create_env_kwargs = {}
         env = create_env_fn(**create_env_kwargs)
-        self.env = env
+        self.env: _EnvClass = env
 
         self._get_policy_and_device(policy=policy, device=device, env=env)
 
@@ -153,6 +155,7 @@ class SyncDataCollector(_DataCollector):
             total_frames = float("inf")
         self.total_frames = total_frames
         self.reset_at_each_iter = reset_at_each_iter
+        self.init_random_frames = init_random_frames
         self.batcher = batcher
         if self.batcher is not None:
             self.batcher.to(self.passing_device)
@@ -175,12 +178,12 @@ class SyncDataCollector(_DataCollector):
     def iterator(self, ):
         total_frames = self.total_frames
         i = -1
-        frames = 0
+        self._frames = 0
         while True:
             i += 1
             tensor_dict_out = self.rollout()
-            frames += math.prod(tensor_dict_out.shape)
-            if frames >= total_frames:
+            self._frames += tensor_dict_out.numel()
+            if self._frames >= total_frames:
                 self.env.close()
 
             if self.split_trajs:
@@ -188,7 +191,7 @@ class SyncDataCollector(_DataCollector):
             if self.batcher is not None:
                 tensor_dict_out = self.batcher(tensor_dict_out)
             yield tensor_dict_out
-            if frames >= self.total_frames:
+            if self._frames >= self.total_frames:
                 break
 
     def _cast_to_policy(self, td: _TensorDict):
@@ -240,11 +243,14 @@ class SyncDataCollector(_DataCollector):
 
         tensor_dict_out = []
         for t in range(self.frames_per_batch):
-            td_cast = self._cast_to_policy(self._tensor_dict)
-            td_cast = self.policy(td_cast)
-            self._cast_to_env(td_cast, self._tensor_dict)
+            if self._frames < self.init_random_frames:
+                self.env.rand_step(self._tensor_dict)
+            else:
+                td_cast = self._cast_to_policy(self._tensor_dict)
+                td_cast = self.policy(td_cast)
+                self._cast_to_env(td_cast, self._tensor_dict)
+                self.env.step(self._tensor_dict)
 
-            self.env.step(self._tensor_dict)
             step_count = self._tensor_dict.get("step_count")
             step_count += 1
             tensor_dict_out.append(self._tensor_dict.clone())
@@ -269,6 +275,7 @@ class MultiDataCollector(_DataCollector):
             create_env_kwargs: Optional[List[dict]] = None,
             max_steps_per_traj: int = -1,
             frames_per_batch: int = 200,
+            init_random_frames: int = -1,
             reset_at_each_iter: bool = False,
             batcher: Optional[Callable] = None,
             split_trajs: bool = True,
@@ -276,7 +283,7 @@ class MultiDataCollector(_DataCollector):
             seed: Optional[int] = None,
             pin_memory: bool = False,
             passing_device: Union[int, str, torch.device] = "cpu",
-            update_at_each_batch: bool = True
+            update_at_each_batch: bool = True,
     ):
         """
         Runs a number of DataCollectors on separate processes.
@@ -303,6 +310,7 @@ class MultiDataCollector(_DataCollector):
         self.seed = seed
         self.split_trajs = split_trajs
         self.pin_memory = pin_memory
+        self.init_random_frames = init_random_frames
         self.update_at_each_batch = update_at_each_batch
         self.frames_per_worker = -(self.total_frames // -self.num_workers)  # ceil(total_frames/num_workers)
         self._run_processes()
@@ -367,7 +375,7 @@ class MultiDataCollector(_DataCollector):
 
     def set_seed(self, seed: Union[Iterable, int]):
         if isinstance(seed, int):
-            seed = [seed+i for i in range(self.num_workers)]
+            seed = [seed + i for i in range(self.num_workers)]
         if not len(seed) == self.num_workers and self.num_workers == 1:
             seed = [seed]
         for idx in range(self.num_workers):
@@ -405,7 +413,11 @@ class MultiSyncDataCollector(MultiDataCollector):
                 self.update_policy_weights_()
 
             for idx in range(self.num_workers):
-                self.pipes[idx].send((None, "continue"))
+                if frames < self.init_random_frames:
+                    msg = "continue_random"
+                else:
+                    msg = "continue"
+                self.pipes[idx].send((None, msg))
 
             i += 1
             max_traj_idx = None
@@ -463,14 +475,17 @@ class MultiaSyncDataCollector(MultiDataCollector):
 
     def iterator(self):
         for i in range(self.num_workers):
-            self.pipes[i].send((None, "continue"))
+            if self.init_random_frames>0:
+                self.pipes[i].send((None, "continue_random"))
+            else:
+                self.pipes[i].send((None, "continue"))
         self.running = True
         i = -1
-        frames = 0
+        self._frames = 0
 
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
-        while not all(dones) and frames < self.total_frames:
+        while not all(dones) and self._frames < self.total_frames:
             i += 1
             idx, j, out = self._get_from_queue()
 
@@ -479,7 +494,7 @@ class MultiaSyncDataCollector(MultiDataCollector):
                 worker_frames = out.get("mask").sum()
             else:
                 worker_frames = math.prod(out.shape)
-            frames += worker_frames
+            self._frames += worker_frames
             workers_frames[idx] = workers_frames[idx] + worker_frames
             if self.batcher is not None:
                 out = self.batcher(out)
@@ -487,7 +502,11 @@ class MultiaSyncDataCollector(MultiDataCollector):
             # the function blocks here until the next item is asked, hence we send the message to the
             # worker to keep on working in the meantime before the yield statement
             if workers_frames[idx] < self.frames_per_worker:
-                self.pipes[idx].send((idx, "continue"))
+                if self._frames<self.init_random_frames:
+                    msg = "continue_random"
+                else:
+                    msg = "continue"
+                self.pipes[idx].send((idx, msg))
             else:
                 print(f"{idx} is done!")
                 dones[idx] = True
@@ -510,7 +529,10 @@ class MultiaSyncDataCollector(MultiDataCollector):
         assert not self.queue_out.full()
         if self.running:
             for idx in range(self.num_workers):
-                self.pipes[idx].send((idx, "continue"))
+                if self._frames<self.init_random_frames:
+                    self.pipes[idx].send((idx, "continue_random"))
+                else:
+                    self.pipes[idx].send((idx, "continue"))
 
 
 class aSyncDataCollector(MultiaSyncDataCollector):
@@ -599,10 +621,15 @@ def main_async_collector(
             # this is expected to happen if queue_out reached the timeout, but no new msg was waiting in the pipe
             # in that case, the main process probably expects the worker to continue collect data
             if has_timed_out:
-                msg = "continue"
+                assert msg in ("continue", "continue_random")
             else:
                 continue
-        if msg == "continue":
+        if msg in ("continue", "continue_random"):
+            if msg == "continue_random":
+                dc.init_random_frames = float("inf")
+            else:
+                dc.init_random_frames = -1
+
             d = next(dc_iter)
             if pipe_child.poll(MIN_TIMEOUT):
                 # in this case, main send a message to the worker while it was busy collecting trajectories.
