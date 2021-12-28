@@ -178,13 +178,12 @@ class SerialEnv(_BatchedEnv):
     def __del__(self):
         self._shutdown_workers()
 
-    def set_seed(self, seed: Iterable) -> None:
-        if not isinstance(seed, Iterable):
-            raise Exception(f"seed provided to {self.__class__.__name__} must be an iterable of length equal "
-                            f"to the number of workers")
-        assert len(seed) == self.num_workers
-        for _seed, env in zip(seed, self._envs):
-            env.set_seed(_seed)
+    def set_seed(self, seed: int) -> int:
+        for i, env in enumerate(self._envs):
+            env.set_seed(seed)
+            if i < self.num_workers - 1:
+                seed = seed+1
+        return seed
 
     def _reset(self, tensor_dict: _TensorDict) -> _TensorDict:
         if tensor_dict is not None and "reset_workers" in tensor_dict.keys():
@@ -269,16 +268,15 @@ class ParallelEnv(_BatchedEnv):
         self.is_closed = True
         self._shutdown_workers()
 
-    def set_seed(self, seed: Iterable) -> None:
-        if not isinstance(seed, Iterable):
-            raise Exception(f"seed provided to {self.__class__.__name__} must be an iterable of length equal "
-                            f"to the number of workers")
-        assert len(seed) == self.num_workers
-        for _seed, channel in zip(seed, self.parent_channels):
-            channel.send(("seed", _seed))
+    def set_seed(self, seed: int) -> int:
+        for i, channel in enumerate(self.parent_channels):
+            channel.send(("seed", seed))
+            if i < self.num_workers-1:
+                seed = seed + 1
         for channel in self.parent_channels:
             out, _ = channel.recv()
             assert out == "seeded"
+        return seed
 
     def _reset(self, tensor_dict: _TensorDict) -> _TensorDict:
         cmd_out = "reset"

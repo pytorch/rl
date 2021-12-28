@@ -41,11 +41,10 @@ class _MockEnv(_EnvClass):
     def maxstep(self):
         return self.counter
 
-    def set_seed(self, seed: int = None) -> None:
-        assert seed is not None
+    def set_seed(self, seed: int) -> int:
         self.seed = seed
         self.counter = seed - 1
-
+        return seed
 
 class DiscreteActionVecMockEnv(_MockEnv):
     size = 7

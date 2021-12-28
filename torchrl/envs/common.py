@@ -152,7 +152,18 @@ class _EnvClass:
     def current_tensordict(self) -> _TensorDict:
         return self._current_tensordict
 
-    def set_seed(self, seed: int = None) -> None:
+    def set_seed(self, seed: int) -> int:
+        """
+        Set the seed of the environment and returns the last seed used (which is the input seed if a single environment
+        is present)
+
+        Args:
+            seed: integer
+
+        Returns: integer representing the "final seed" in case the environment has a non-empty batch. This feature
+         makes sure that the same seed won't be used for two different environments.
+
+        """
         raise NotImplementedError
 
     def set_state(self):

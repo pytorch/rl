@@ -96,10 +96,11 @@ class DMControlEnv(GymLikeEnv):
         observation = timestep_tuple[0].observation
         return observation, reward, done
 
-    def set_seed(self, seed=None):
+    def set_seed(self, seed: int) -> int:
         self.env = self._build_env(
             self.envname, self.taskname, seed=seed, **self.constructor_kwargs
         )
+        return seed
 
     @property
     def action_spec(self) -> TensorSpec:

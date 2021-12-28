@@ -373,17 +373,16 @@ class MultiDataCollector(_DataCollector):
     #     if j < self.iterator_len - 1:
     #         self.pipes[idx].send((idx, "continue"))
 
-    def set_seed(self, seed: Union[Iterable, int]):
-        if isinstance(seed, int):
-            seed = [seed + i for i in range(self.num_workers)]
-        if not len(seed) == self.num_workers and self.num_workers == 1:
-            seed = [seed]
+    def set_seed(self, seed: int) -> int:
         for idx in range(self.num_workers):
-            self.pipes[idx].send((seed[idx], "seed"))
-        for idx in range(self.num_workers):
-            j, msg = self.pipes[idx].recv()
+            self.pipes[idx].send((seed, "seed"))
+            new_seed, msg = self.pipes[idx].recv()
             assert msg == "seeded", f"got {msg}"
+            seed = new_seed
+            if idx < self.num_workers - 1:
+                seed = seed + 1
         self.reset()
+        return seed
 
     def reset(self, reset_idx: Optional[Iterable[bool]] = None):
         if reset_idx is None:
@@ -659,8 +658,10 @@ def main_async_collector(
             pipe_child.send((j, "updated"))
             continue
         elif msg == "seed":
-            dc.set_seed(data_in)
-            pipe_child.send((j, "seeded"))
+            new_seed = dc.set_seed(data_in)
+            torch.manual_seed(data_in)
+            np.random.seed(data_in)
+            pipe_child.send((new_seed, "seeded"))
             continue
         elif msg == "reset":
             dc.reset()

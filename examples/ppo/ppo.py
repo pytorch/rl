@@ -5,6 +5,7 @@ import time
 import uuid
 from argparse import ArgumentParser
 
+import numpy as np
 import torch
 import tqdm
 from torch import multiprocessing as mp
@@ -101,6 +102,9 @@ parser.add_argument("--collector_device", type=str, default="cpu",
                          "If the collector device differs from the policy device (cuda:0 if available), then the "
                          "weights of the collector policy are synchronized with collector.update_policy_weights_().")
 
+parser.add_argument("--seed", type=int, default=42,
+                    help="seed used for the environment, pytorch and numpy.")
+
 LOSS_DICT = {
     'clip': ClipPPOLoss,
     'kl': KLPENPPOLoss,
@@ -127,6 +131,9 @@ if __name__ == "__main__":
     mp.set_start_method("spawn")
 
     args = parser.parse_args()
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+
     env_name = args.env_name
     env_library = env_library_map[args.env_library]
     env_task = args.env_task
@@ -204,6 +211,7 @@ if __name__ == "__main__":
 
 
     env = make_transformed_env()
+    env.set_seed(args.seed)
     env_specs = env.specs  # TODO: use env.sepcs
     action_spec = env_specs["action_spec"]
     actor_critic_model = make_actor_critic_model(action_spec, save_dist_params=args.loss_class == "kl").to(device)
@@ -242,6 +250,8 @@ if __name__ == "__main__":
         device=args.collector_device,
         passing_device=args.collector_device,
     )
+    collector.set_seed(args.seed)
+
     log_dir = "/".join(
         ["dqn_logging", exp_name, str(datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")), str(uuid.uuid1())])
     if args.record_video:

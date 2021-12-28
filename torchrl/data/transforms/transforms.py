@@ -161,9 +161,8 @@ class TransformedEnv(_EnvClass):
         tensordict_out = self.transform(tensordict_out.clone())
         return tensordict_out
 
-    def set_seed(self, seed=None):
-        if seed is not None:
-            self.env.set_seed(seed)
+    def set_seed(self, seed: int) -> int:
+        return self.env.set_seed(seed)
 
     def _reset(self, tensordict: Optional[_TensorDict] = None):
         out_tensordict = self.env.reset().to(self.device)

@@ -142,7 +142,8 @@ parser.add_argument("--collector_update_interval", type=int, default=8,
                     help="number of data collection between two consecutive update of the policy "
                          "weights in the data collector. Default=8.")
 
-parser.add_argument("--seed", type=int, default=42)
+parser.add_argument("--seed", type=int, default=42,
+                    help="seed used for the environment, pytorch and numpy.")
 
 env_library_map = {
     "gym": GymEnv,
@@ -246,6 +247,7 @@ if __name__ == "__main__":
     print(f"device is {device}")
     # Create an example environment
     env = make_transformed_env()
+    env.set_seed(args.seed)
     env_specs = env.env.specs  # TODO: use env.sepcs
     linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
     # Create the actor network. For dqn, the actor is actually a Q-value-network. make_actor will figure out that
@@ -313,6 +315,7 @@ if __name__ == "__main__":
     }
 
     collector = collector_helper(**collector_helper_kwargs)
+    collector.set_seed(args.seed)
 
     if not args.prb:
         buffer = ReplayBuffer(args.buffer_size, collate_fn=lambda x: torch.stack(x, 0), pin_memory=device != "cpu")

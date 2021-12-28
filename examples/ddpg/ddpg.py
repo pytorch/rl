@@ -4,6 +4,7 @@ import os
 import sys
 import uuid
 
+import numpy as np
 import torch
 import tqdm
 from torch import multiprocessing as mp
@@ -147,6 +148,9 @@ parser.add_argument("--init_random_frames", type=int, default=5000,
 parser.add_argument("--init_env_steps", type=int, default=250,
                     help="number of random steps to compute normalizing constants")
 
+parser.add_argument("--seed", type=int, default=42,
+                    help="seed used for the environment, pytorch and numpy.")
+
 env_library_map = {
     "gym": GymEnv,
     "retro": RetroEnv,
@@ -157,6 +161,10 @@ if __name__ == "__main__":
     mp.set_start_method("spawn")
 
     args = parser.parse_args()
+
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+
     env_name = args.env_name
     env_library = env_library_map[args.env_library]
     env_task = args.env_task
@@ -254,6 +262,7 @@ if __name__ == "__main__":
     print(f"device is {device}")
     # Create an example environment
     env = make_transformed_env()
+    env.set_seed(args.seed)
     env_specs = env.specs  # TODO: use env.sepcs
     linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
     # Create the actor network. For dqn, the actor is actually a Q-value-network. make_actor will figure out that
@@ -328,6 +337,7 @@ if __name__ == "__main__":
     }
 
     collector = collector_helper(**collector_helper_kwargs)
+    collector.set_seed(args.seed)
 
     if not args.prb:
         buffer = ReplayBuffer(args.buffer_size, collate_fn=lambda x: torch.stack(x, 0), pin_memory=device != "cpu")

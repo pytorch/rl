@@ -91,9 +91,9 @@ class GymEnv(GymLikeEnv):
     def lib(self):
         return gym
 
-    def set_seed(self, seed=None):
-        if seed is not None:
-            self.env.seed(seed)
+    def set_seed(self, seed: int) -> int:
+        self.env.seed(seed)
+        return seed
 
     def _build_env(self, envname, taskname, from_pixels=False):
         assert (
