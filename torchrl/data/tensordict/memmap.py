@@ -71,6 +71,8 @@ class MemmapTensor(object):
         if isinstance(elem, MemmapTensor):
             prev_filename = elem.filename
             self._copy_item(prev_filename)
+            if self.memmap_array is elem.memmap_array:
+                raise RuntimeError
         else:
             self._save_item(elem)
 
@@ -105,7 +107,6 @@ class MemmapTensor(object):
             dtype=torch_to_numpy_dtype_dict[self.dtype],
             mode="r",
             shape=self.np_shape)
-        # shutil.copyfile(filename, self.filename)
 
     def _load_item(self, idx: Optional[int] = None, memmap_array: Optional[np.ndarray] = None) -> torch.Tensor:
         if memmap_array is None:
@@ -198,14 +199,14 @@ class MemmapTensor(object):
     def __add__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.add(self, other)
 
-    def __div__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __truediv__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.div(self, other)
 
     def __neg__(self: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.neg(self)
 
-    def __diff__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.diff(self, other)
+    def __sub__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
+        return torch.sub(self, other)
 
     def __matmul__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.matmul(self, other)

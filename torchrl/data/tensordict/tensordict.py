@@ -223,6 +223,9 @@ class _TensorDict:
     def detach(self) -> _TensorDict:
         return self.clone().detach_()
 
+    def to_tensordict(self):
+        return self.to(TensorDict)
+
     def zero_(self) -> _TensorDict:
         for key in self.keys():
             self.fill_(key, 0)
@@ -348,7 +351,7 @@ class _TensorDict:
             )
         return self.get_sub_tensor_dict(idx)
 
-    def __setitem__(self, index: Union[List, Tuple, torch.Tensor, int, slice], value: _TensorDict) -> None:
+    def __setitem__(self, index: INDEX_TYPING, value: _TensorDict) -> None:
         indexed_bs = _getitem_batch_size(self.batch_size, index)
         if value.batch_size != indexed_bs:
             raise RuntimeError(f"indexed destination TensorDict batch size is {indexed_bs} "
@@ -951,12 +954,16 @@ class SubTensorDict(_TensorDict):
 
     def set_at_(self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING,
                 discard_idx_attr: bool = False) -> SubTensorDict:
+        self._source.get(key)
         if not isinstance(idx, tuple):
             idx = (idx,)
         if discard_idx_attr:
             self._source.set_at_(key, value, idx)
         else:
-            self._source.set_at_(key, value, (self.idx, idx))
+            tensor = self._source.get_at(key, self.idx)
+            tensor[idx] = value
+            self._source.set_at_(key, tensor, self.idx)
+            # self._source.set_at_(key, value, (self.idx, idx))
         return self
 
     def get_at(self, key: str, idx: INDEX_TYPING, discard_idx_attr: bool = False) -> COMPATIBLE_TYPES:
@@ -1398,7 +1405,6 @@ class SavedTensorDict(_TensorDict):
 
     def __del__(self) -> None:
         if hasattr(self, 'file'):
-            print('deleting')
             self.file.close()
 
     def is_shared(self, no_check: bool = False) -> bool:
@@ -1425,15 +1431,11 @@ class SavedTensorDict(_TensorDict):
     def contiguous(self) -> _TensorDict:
         return self._load()
 
-    def clone(self, recursive: bool = True) -> None:
-        raise NotImplementedError("should copy files to another file")
-        # td = self._load()
-        # if recursive:
-        #     td = td.clone()
-        # return td
+    def clone(self, recursive: bool = True) -> SavedTensorDict:
+        return self._load().to(SavedTensorDict)
 
     def select(self, *keys: str, inplace: bool = False) -> SavedTensorDict:
-        _source = self.clone().select(*keys)
+        _source = self.contiguous().select(*keys)
         if inplace:
             self._save(_source)
             return self
@@ -1451,7 +1453,7 @@ class SavedTensorDict(_TensorDict):
     def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs):
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             td = dest(
-                source=self.clone(),
+                source=TensorDict(self.to_dict(), batch_size=self.batch_size),
                 **kwargs, )
             return td
         elif isinstance(dest, (torch.device, str, int)):
@@ -1657,7 +1659,7 @@ class _CustomOpTensorDict(_TensorDict):
 
     def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs) -> _TensorDict:
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
-            return dest(source=self.clone())
+            return dest(source=self.contiguous().clone())
         elif isinstance(dest, (torch.device, str, int)):
             if torch.device(dest) == self.device:
                 return self

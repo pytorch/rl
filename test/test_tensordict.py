@@ -459,7 +459,7 @@ class TestTensorDicts:
         td = getattr(self, td_name)
         assert (td.clone() == td).all()
         assert td.batch_size == td.clone().batch_size
-        if td_name in ("stacked_td", "saved_td", "unsqueezed_td"):
+        if td_name in ("stacked_td", "saved_td", "unsqueezed_td", "sub_td"):
             with pytest.raises(AssertionError):
                 assert td.clone(recursive=False).get("a") is td.get("a")
         else:
@@ -557,11 +557,13 @@ def remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordic
             command_pipe_child.send('done')
         elif cmd == 'update':
             tensordict.update(
-                TensorDict(source={'a': tensordict.get("a").clone() + 1}, batch_size=tensordict.batch_size))
+                TensorDict(source={'a': tensordict.get("a").clone() + 1},
+                           batch_size=tensordict.batch_size))
             command_pipe_child.send('done')
         elif cmd == 'update_':
             tensordict.update_(
-                TensorDict(source={'a': tensordict.get("a").clone() - 1}, batch_size=tensordict.batch_size))
+                TensorDict(source={'a': tensordict.get("a").clone() - 1},
+                           batch_size=tensordict.batch_size))
             command_pipe_child.send('done')
 
         elif cmd == 'close':
@@ -612,20 +614,20 @@ def driver_func(tensordict, tensor_dict_unbind):
         assert is_done == 'done'
     assert not tensordict.get('done').any()
 
-    a_prev = tensordict.get("a").clone()
+    a_prev = tensordict.get("a").clone().contiguous()
     for i in range(2):
         parents[i].send(('update_', i))
         is_done = parents[i].recv()
         assert is_done == 'done'
-    new_a = tensordict.get("a").clone()
+    new_a = tensordict.get("a").clone().contiguous()
     torch.testing.assert_allclose(a_prev - 1, new_a)
 
-    a_prev = tensordict.get("a").clone()
+    a_prev = tensordict.get("a").clone().contiguous()
     for i in range(2):
         parents[i].send(('update', i))
         is_done = parents[i].recv()
         assert is_done == 'done'
-    new_a = tensordict.get("a").clone()
+    new_a = tensordict.get("a").clone().contiguous()
     torch.testing.assert_allclose(a_prev + 1, new_a)
 
     for i in range(2):
