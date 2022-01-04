@@ -2,12 +2,12 @@ import collections
 import concurrent.futures
 import functools
 import threading
-from typing import Optional, Tuple, Union
+from numbers import Number
+from typing import Optional, Tuple, Union, List, Any, Callable, Iterable
 
 from torchrl._torchrl import SumSegmentTree, MinSegmentTree
 
 from .utils import *
-from .. import TensorDict
 
 __all__ = [
     "ReplayBuffer",
@@ -18,12 +18,15 @@ __all__ = [
     "create_prioritized_replay_buffer"
 ]
 
+from ..tensordict.tensordict import _TensorDict
+from ..utils import DEVICE_TYPING
 
-def stack_tensors(list_of_tensors):
+
+def stack_tensors(list_of_tensors: List) -> Tuple[torch.Tensor]:
     return tuple(torch.stack(tensors, 0) for tensors in zip(*list_of_tensors))
 
 
-def _pin_memory(output):
+def _pin_memory(output: Any) -> Any:
     if hasattr(output, 'pin_memory'):
         return output.pin_memory()
     else:
@@ -31,7 +34,7 @@ def _pin_memory(output):
         return output
 
 
-def pin_memory_output(fun):
+def pin_memory_output(fun) -> Callable:
     def decorated_fun(self, *args, **kwargs):
         output = fun(self, *args, **kwargs)
         if self._pin_memory:
@@ -51,9 +54,9 @@ def pin_memory_output(fun):
 class ReplayBuffer:
     def __init__(self,
                  size: int,
-                 collate_fn=None,
+                 collate_fn: Optional[Callable] = None,
                  pin_memory: bool = False,
-                 prefetch: Optional[int] = None) -> None:
+                 prefetch: Optional[int] = None):
         self._storage = []
         self._capacity = size
         self._cursor = 0
@@ -73,12 +76,12 @@ class ReplayBuffer:
         self._replay_lock = threading.RLock()
         self._future_lock = threading.RLock()
 
-    def __len__(self):
+    def __len__(self) -> int:
         with self._replay_lock:
             return len(self._storage)
 
     @pin_memory_output
-    def __getitem__(self, index: Union[int, Tensor]):
+    def __getitem__(self, index: Union[int, Tensor]) -> Any:
         index = to_numpy(index)
 
         with self._replay_lock:
@@ -92,15 +95,15 @@ class ReplayBuffer:
         return data
 
     @property
-    def capacity(self):
+    def capacity(self) -> int:
         return self._capacity
 
     @property
-    def cursor(self):
+    def cursor(self) -> int:
         with self._replay_lock:
             return self._cursor
 
-    def add(self, data) -> int:
+    def add(self, data: Any) -> int:
         with self._replay_lock:
             ret = self._cursor
             if self._cursor >= len(self._storage):
@@ -110,7 +113,7 @@ class ReplayBuffer:
             self._cursor = (self._cursor + 1) % self._capacity
             return ret
 
-    def extend(self, data):
+    def extend(self, data: Iterable):
         if not len(data):
             raise Exception("extending with empty data is not supported")
         if not isinstance(data, list):
@@ -152,7 +155,7 @@ class ReplayBuffer:
             return index
 
     @pin_memory_output
-    def _sample(self, batch_size: int):
+    def _sample(self, batch_size: int) -> Any:
         index = np.random.randint(0, len(self._storage), size=batch_size)
 
         with self._replay_lock:
@@ -161,7 +164,7 @@ class ReplayBuffer:
         data = self._collate_fn(data)
         return data
 
-    def sample(self, batch_size: int):
+    def sample(self, batch_size: int) -> Any:
         if not self._prefetch:
             return self._sample(batch_size)
 
@@ -201,7 +204,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
     @pin_memory_output
     def __getitem__(self, index: Union[int,
-                                       Tensor]):
+                                       Tensor]) -> Any:
         index = to_numpy(index)
 
         with self._replay_lock:
@@ -224,30 +227,30 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         return data, weight
 
     @property
-    def alpha(self):
+    def alpha(self) -> float:
         return self._alpha
 
     @property
-    def beta(self):
+    def beta(self) -> float:
         return self._beta
 
     @property
-    def eps(self):
+    def eps(self) -> float:
         return self._eps
 
     @property
-    def max_priority(self):
+    def max_priority(self) -> float:
         with self._replay_lock:
             return self._max_priority
 
     @property
-    def _default_priority(self):
+    def _default_priority(self) -> float:
         return (self._max_priority + self._eps) ** self._alpha
 
     def _add_or_extend(self,
-                       data,
-                       priority=None,
-                       do_add=True):
+                       data: Any,
+                       priority: Optional[torch.Tensor] = None,
+                       do_add: bool = True) -> torch.Tensor:
         if priority is not None:
             priority = to_numpy(priority)
             max_priority = np.max(priority)
@@ -288,15 +291,15 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         #     self._min_tree[index] = priority
         #     return index
 
-    def add(self, data, priority=None):
+    def add(self, data: Any, priority: Optional[torch.Tensor] = None) -> torch.Tensor:
         return self._add_or_extend(data, priority, True)
 
-    def extend(self, data, priority=None):
+    def extend(self, data: Iterable, priority: Optional[torch.Tensor] = None) -> torch.Tensor:
         return self._add_or_extend(data, priority, False)
 
     @pin_memory_output
     def _sample(self,
-                batch_size: int) -> Tuple[Tensor, np.ndarray]:
+                batch_size: int) -> Tuple[Any, np.ndarray, torch.Tensor]:
         with self._replay_lock:
             p_sum = self._sum_tree.query(0, self._capacity)
             p_min = self._min_tree.query(0, self._capacity)
@@ -305,9 +308,9 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             mass = np.random.uniform(0.0, p_sum, size=batch_size)
             index = self._sum_tree.scan_lower_bound(mass)
             if isinstance(index, torch.Tensor):
-                index.clamp_max_(len(self._storage)-1)
+                index.clamp_max_(len(self._storage) - 1)
             else:
-                index = np.clip(index, None, len(self._storage)-1)
+                index = np.clip(index, None, len(self._storage) - 1)
             data = [self._storage[i] for i in index]
             weight = self._sum_tree[index]
 
@@ -329,7 +332,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         return data, weight, index
 
     def sample(self,
-               batch_size: int):
+               batch_size: int) -> Tuple[Any, np.ndarray, torch.Tensor]:
         if not self._prefetch:
             return self._sample(batch_size)
 
@@ -366,7 +369,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 
 class TensorDictReplayBuffer(ReplayBuffer):
-    def sample(self, size):
+    def sample(self, size: int) -> Any:
         return super(TensorDictReplayBuffer, self).sample(size)[0]
 
 
@@ -387,7 +390,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                                                                 prefetch=prefetch)
         self.priority_key = priority_key
 
-    def _get_priority(self, tensor_dict):
+    def _get_priority(self, tensor_dict: _TensorDict) -> torch.Tensor:
         assert not tensor_dict.batch_dims
         try:
             priority = tensor_dict.get(self.priority_key).item()
@@ -398,14 +401,14 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
             priority = self._default_priority
         return priority
 
-    def add(self, tensor_dict):
+    def add(self, tensor_dict: _TensorDict) -> torch.Tensor:
         priority = self._get_priority(tensor_dict)
         index = super().add(tensor_dict, priority)
         tensor_dict.set("index", index)
         return index
 
-    def extend(self, tensor_dicts):
-        if isinstance(tensor_dicts, TensorDict):
+    def extend(self, tensor_dicts: _TensorDict) -> torch.Tensor:
+        if isinstance(tensor_dicts, _TensorDict):
             try:
                 priorities = tensor_dicts.get(self.priority_key)
             except KeyError:
@@ -419,18 +422,18 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         stacked_td.set("index", idx)
         return idx
 
-    def update_priority(self, tensor_dict):
+    def update_priority(self, tensor_dict: _TensorDict) -> None:
         return super().update_priority(tensor_dict.get("index"), tensor_dict.get(self.priority_key))
 
-    def sample(self, size):
+    def sample(self, size: int) -> _TensorDict:
         return super(TensorDictPrioritizedReplayBuffer, self).sample(size)[0]
 
 
-def create_replay_buffer(size,
-                         device=None,
-                         collate_fn=None,
-                         pin_memory=False,
-                         prefetch=None):
+def create_replay_buffer(size: int,
+                         device: Optional[DEVICE_TYPING] = None,
+                         collate_fn: Callable = None,
+                         pin_memory: bool = False,
+                         prefetch: Optional[int] = None) -> ReplayBuffer:
     if isinstance(device, str):
         device = torch.device(device)
 
@@ -443,14 +446,14 @@ def create_replay_buffer(size,
     return ReplayBuffer(size, collate_fn, pin_memory, prefetch)
 
 
-def create_prioritized_replay_buffer(size,
-                                     alpha,
-                                     beta,
-                                     eps=1e-8,
-                                     device='cpu',
-                                     collate_fn=None,
-                                     pin_memory=False,
-                                     prefetch=None):
+def create_prioritized_replay_buffer(size: int,
+                                     alpha: Number,
+                                     beta: Number,
+                                     eps: float = 1e-8,
+                                     device: Optional[DEVICE_TYPING] = 'cpu',
+                                     collate_fn: Callable = None,
+                                     pin_memory: bool = False,
+                                     prefetch: Optional[int] = None) -> PrioritizedReplayBuffer:
     if isinstance(device, str):
         device = torch.device(device)
 

@@ -1,7 +1,11 @@
 import math
+from numbers import Number
+from typing import Optional, Tuple
 
 import torch
+from torch import distributions as d
 
+from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import step_tensor_dict
 from torchrl.modules import Actor, ProbabilisticOperator
 
@@ -15,13 +19,13 @@ class PPOLoss:
             self,
             actor: Actor,
             critic: ProbabilisticOperator,
-            advantage_key="advantage",
-            entropy_bonus=True,
-            samples_mc_entropy=1,
-            entropy_factor=0.01,
-            critic_factor=1.0,
-            gamma=0.99,
-            critic_loss_type="l2"
+            advantage_key: str = "advantage",
+            entropy_bonus: bool = True,
+            samples_mc_entropy: int = 1,
+            entropy_factor: Number = 0.01,
+            critic_factor: Number = 1.0,
+            gamma: Number = 0.99,
+            critic_loss_type: str = "l2"
     ):
         self.actor = actor
         self.critic = critic
@@ -33,9 +37,10 @@ class PPOLoss:
         self.gamma = gamma
         self.critic_loss_type = critic_loss_type
 
-    def reset(self):
+    def reset(self) -> None:
         pass
-    def get_entropy_bonus(self, dist=None):
+
+    def get_entropy_bonus(self, dist: Optional[d.Distribution] = None) -> torch.Tensor:
         try:
             entropy = dist.entropy()
         except:
@@ -43,7 +48,7 @@ class PPOLoss:
             entropy = - dist.log_prob(x)
         return self.entropy_factor * entropy.unsqueeze(-1)
 
-    def _log_weight(self, tensor_dict):
+    def _log_weight(self, tensor_dict: _TensorDict) -> Tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
         action = tensor_dict.get("action")
         assert not action.requires_grad
@@ -58,7 +63,7 @@ class PPOLoss:
         log_weight = log_prob - prev_log_prob
         return log_weight, dist
 
-    def critic_loss(self, tensor_dict):
+    def critic_loss(self, tensor_dict: _TensorDict) -> torch.Tensor:
 
         if "value_target" in tensor_dict.keys():
             value_target = tensor_dict.get("value_target")
@@ -74,7 +79,7 @@ class PPOLoss:
         value_loss = distance_loss(value, value_target, loss_type=self.critic_loss_type)
         return self.critic_factor * value_loss
 
-    def __call__(self, tensor_dict):
+    def __call__(self, tensor_dict: _TensorDict) -> _TensorDict:
         tensor_dict = tensor_dict.clone()
         advantage = tensor_dict.get(self.advantage_key)
         log_weight, dist = self._log_weight(tensor_dict)
@@ -90,15 +95,22 @@ class PPOLoss:
 class ClipPPOLoss(PPOLoss):
     def __init__(
             self,
-            actor, critic, advantage_key="advantage", clip_epsilon=0.2, entropy_bonus=True,
-            samples_mc_entropy=1, entropy_factor=0.01, critic_factor=1.0, gamma=0.99, critic_loss_type="l2"
+            actor: Actor, critic: ProbabilisticOperator,
+            advantage_key: str = "advantage",
+            clip_epsilon: Number = 0.2,
+            entropy_bonus: bool = True,
+            samples_mc_entropy: int = 1,
+            entropy_factor: Number = 0.01,
+            critic_factor: Number = 1.0,
+            gamma: Number = 0.99,
+            critic_loss_type: str = "l2"
     ):
         super(ClipPPOLoss, self).__init__(actor, critic, advantage_key, entropy_bonus=entropy_bonus,
                                           samples_mc_entropy=samples_mc_entropy, entropy_factor=entropy_factor,
                                           critic_factor=critic_factor, gamma=gamma, critic_loss_type=critic_loss_type)
         self.clip_epsilon = clip_epsilon
 
-    def __call__(self, tensor_dict):
+    def __call__(self, tensor_dict: _TensorDict) -> _TensorDict:
         neg_loss = 0.0
         tensor_dict = tensor_dict.clone()
         for k, it in tensor_dict.items():
@@ -123,20 +135,20 @@ class ClipPPOLoss(PPOLoss):
 
 class KLPENPPOLoss(PPOLoss):
     def __init__(self,
-                 actor,
-                 critic,
+                 actor: Actor,
+                 critic: ProbabilisticOperator,
                  advantage_key="advantage",
-                 dtarg=0.01,
-                 beta=1.0,
-                 increment=2,
-                 decrement=0.5,
-                 samples_mc_kl=1,
-                 entropy_bonus=True,
-                 samples_mc_entropy=1,
-                 entropy_factor=0.01,
-                 critic_factor=1.0,
-                 gamma=0.99,
-                 critic_loss_type="l2"
+                 dtarg: Number = 0.01,
+                 beta: Number = 1.0,
+                 increment: int = 2,
+                 decrement: Number = 0.5,
+                 samples_mc_kl: int = 1,
+                 entropy_bonus: bool = True,
+                 samples_mc_entropy: int = 1,
+                 entropy_factor: Number = 0.01,
+                 critic_factor: Number = 1.0,
+                 gamma: Number = 0.99,
+                 critic_loss_type: str = "l2"
                  ):
         super(KLPENPPOLoss, self).__init__(actor, critic, advantage_key, entropy_bonus=entropy_bonus,
                                            samples_mc_entropy=samples_mc_entropy, entropy_factor=entropy_factor,
@@ -150,7 +162,7 @@ class KLPENPPOLoss(PPOLoss):
         self.decrement = decrement
         self.samples_mc_kl = samples_mc_kl
 
-    def __call__(self, tensor_dict):
+    def __call__(self, tensor_dict: _TensorDict) -> torch.Tensor:
         tensor_dict = tensor_dict.clone()
         advantage = tensor_dict.get(self.advantage_key)
         log_weight, dist = self._log_weight(tensor_dict)
@@ -191,5 +203,5 @@ class KLPENPPOLoss(PPOLoss):
             neg_loss = neg_loss - self.critic_loss(tensor_dict)
         return -neg_loss.mean()
 
-    def reset(self):
+    def reset(self) -> None:
         self.beta = self._beta_init

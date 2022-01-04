@@ -1,4 +1,5 @@
 from numbers import Number
+from typing import Union, Iterable
 
 import numpy as np
 import torch
@@ -12,7 +13,7 @@ __all__ = ["TanhNormal", "Delta", "TanhDelta"]
 
 
 class SafeTanhTransform(D.TanhTransform):
-    def _call(self, x):
+    def _call(self, x: torch.Tensor) -> torch.Tensor:
         y = super()._call(x)
         y = y.clamp(-1 + 1e-4, 1 - 1e-4)
         return y
@@ -30,14 +31,14 @@ class TanhNormal(D.TransformedDistribution):
 
     def __init__(
             self,
-            net_output,
-            upscale=5.0,
-            min=-1.0,
-            max=1.0,
-            scale_mapping="biased_softplus_1.0",
-            event_dims=1,
-            tanh_loc=True,
-            tanh_scale=True,
+            net_output: torch.Tensor,
+            upscale: Union[torch.Tensor, Number] = 5.0,
+            min: Union[torch.Tensor, Number] = -1.0,
+            max: Union[torch.Tensor, Number] = 1.0,
+            scale_mapping: str = "biased_softplus_1.0",
+            event_dims: int = 1,
+            tanh_loc: bool = True,
+            tanh_scale: bool = True,
     ):
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
             assert (max > min).all()
@@ -83,7 +84,7 @@ class TanhNormal(D.TransformedDistribution):
         super().__init__(base, t)
 
 
-def uniform_sample_tanhnormal(dist: TanhNormal, size=torch.Size([])):
+def uniform_sample_tanhnormal(dist: TanhNormal, size=torch.Size([])) -> torch.Tensor:
     return torch.rand_like(dist.sample(size)) * (dist.max - dist.min) + dist.min
 
 
@@ -95,11 +96,11 @@ class Delta(D.Distribution):
 
     def __init__(
             self,
-            param,
-            atol=1e-6,
-            rtol=1e-6,
-            batch_shape=torch.Size([]),
-            event_shape=torch.Size([]),
+            param: torch.Tensor,
+            atol: Number = 1e-6,
+            rtol: Number = 1e-6,
+            batch_shape: Union[torch.Size, Iterable] = torch.Size([]),
+            event_shape: Union[torch.Size, Iterable] = torch.Size([]),
     ):
         self.param = param
         self.atol = atol
@@ -109,14 +110,14 @@ class Delta(D.Distribution):
             event_shape = param.shape[-1:]
         super().__init__(batch_shape=batch_shape, event_shape=event_shape)
 
-    def _is_equal(self, value):
+    def _is_equal(self, value: torch.Tensor) -> torch.Tensor:
         param = self.param.expand_as(value)
         is_equal = abs(value - param) < self.atol + self.rtol * abs(param)
         for i in range(-1, -len(self.event_shape) - 1, -1):
             is_equal = is_equal.all(i)
         return is_equal
 
-    def log_prob(self, value):
+    def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         is_equal = self._is_equal(value)
         out = torch.zeros_like(is_equal, dtype=value.dtype)
         out.masked_fill_(is_equal, np.inf)
@@ -124,18 +125,18 @@ class Delta(D.Distribution):
         return out
 
     @torch.no_grad()
-    def sample(self, size=torch.Size([])):
+    def sample(self, size=torch.Size([])) -> torch.Tensor:
         return self.param.expand(*size, *self.param.shape)
 
-    def rsample(self, size=torch.Size([])):
+    def rsample(self, size=torch.Size([])) -> torch.Tensor:
         return self.param.expand(*size, *self.param.shape)
 
     @property
-    def mode(self):
+    def mode(self) -> torch.Tensor:
         return self.param
 
     @property
-    def mean(self):
+    def mean(self) -> torch.Tensor:
         return self.param
 
 
@@ -150,12 +151,12 @@ class TanhDelta(D.TransformedDistribution):
 
     def __init__(
             self,
-            net_output,
-            min=-1.0,
-            max=1.0,
-            event_dims=1,
-            atol=1e-4,
-            rtol=1e-4,
+            net_output: torch.Tensor,
+            min: Union[torch.Tensor, Number] = -1.0,
+            max: Union[torch.Tensor, Number] = 1.0,
+            event_dims: int = 1,
+            atol: Number = 1e-4,
+            rtol: Number = 1e-4,
             **kwargs,
     ):
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
@@ -188,18 +189,18 @@ class TanhDelta(D.TransformedDistribution):
         super().__init__(base, t)
 
     @property
-    def mode(self):
+    def mode(self) -> torch.Tensor:
         mode = self.base_dist.param
         for t in self.transforms:
             mode = t(mode)
         return mode
 
     @property
-    def mean(self):
+    def mean(self) -> torch.Tensor:
         raise AttributeError("TanhDelta mean has not analytical form.")
 
 
-def uniform_sample_delta(dist: Delta, size=torch.Size([])):
+def uniform_sample_delta(dist: Delta, size=torch.Size([])) -> torch.Tensor:
     return torch.randn_like(dist.sample(size))
 
 

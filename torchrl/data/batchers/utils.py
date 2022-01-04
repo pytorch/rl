@@ -1,4 +1,7 @@
-def expand_as_right(tensor, dest):
+import torch
+
+
+def expand_as_right(tensor: torch.Tensor, dest: torch.Tensor):
     assert dest.ndimension() >= tensor.ndimension()
     assert (
             tensor.shape == dest.shape[:tensor.ndimension()]

@@ -1,3 +1,5 @@
+from typing import Iterable, Optional
+
 import torch
 from torch import nn
 
@@ -15,32 +17,32 @@ __all__ = [
 
 
 class SqueezeLayer(nn.Module):
-    def __init__(self, dims=(-1,)):
+    def __init__(self, dims: Iterable=(-1,)):
         super().__init__()
         self.dims = dims
 
-    def forward(self, input: torch.Tensor):
+    def forward(self, input: torch.Tensor)->torch.Tensor:
         for dim in self.dims:
             input = input.squeeze(dim)
         return input
 
 
 class Squeeze2dLayer(nn.Module):
-    def forward(self, x):
+    def forward(self, x:torch.Tensor)->torch.Tensor:
         return x.squeeze(-1).squeeze(-1)
 
 
 class SquashDims(nn.Module):
-    def __init__(self, ndims_in=3):
+    def __init__(self, ndims_in:int=3):
         super().__init__()
         self.ndims_in = ndims_in
 
-    def forward(self, value):
+    def forward(self, value:torch.Tensor)->torch.Tensor:
         value = value.view(*value.shape[:-self.ndims_in], -1)
         return value
 
 
-def _find_depth(depth, *list_or_ints):
+def _find_depth(depth: Optional[int], *list_or_ints: Iterable):
     if depth is None:
         for item in list_or_ints:
             if isinstance(item, (list, tuple)):

@@ -1,25 +1,12 @@
+from typing import Callable
+
 import torch
 
 from torchrl.data import TensorDict
+from torchrl.data.tensordict.tensordict import _TensorDict
 
 
-class CloudpickleWrapper(object):
-    def __init__(self, fn):
-        self.fn = fn
-
-    def __getstate__(self):
-        import cloudpickle
-        return cloudpickle.dumps(self.fn)
-
-    def __setstate__(self, ob):
-        import pickle
-        self.fn = pickle.loads(ob)
-
-    def __call__(self, **kwargs):
-        return self.fn(**kwargs)
-
-
-def _stack_output(fun):
+def _stack_output(fun) -> Callable:
     def stacked_output_fun(*args, **kwargs):
         out = fun(*args, **kwargs)
         return tuple(torch.stack(_o, 0) for _o in out)
@@ -27,7 +14,7 @@ def _stack_output(fun):
     return stacked_output_fun
 
 
-def _stack_output_zip(fun):
+def _stack_output_zip(fun) -> Callable:
     def stacked_output_fun(*args, **kwargs):
         out = fun(*args, **kwargs)
         return tuple(torch.stack(_o, 0) for _o in zip(*out))
@@ -35,7 +22,7 @@ def _stack_output_zip(fun):
     return stacked_output_fun
 
 
-def split_trajectories(rollout_tensor_dict):
+def split_trajectories(rollout_tensor_dict: _TensorDict) -> _TensorDict:
     """Takes a tensordict with a key traj_ids that indicates the id of each trajectory.
     From there, builds a B x T x ... zero-padded tensordict with B batches on max duration T
     """

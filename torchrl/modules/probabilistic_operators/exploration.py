@@ -1,22 +1,29 @@
+from numbers import Number
+from typing import Iterable, Optional, Union
+
+import numpy as np
+import torch
+from torch import distributions as d
+
+from torchrl.envs.utils import set_exploration_mode
+from .common import _forward_hook_safe_action
 from ..probabilistic_operators import (
     ProbabilisticOperatorWrapper,
     ProbabilisticOperator,
 )
-from torchrl.envs.utils import exploration_mode, set_exploration_mode
-import torch
-from torchrl.modules.distributions import UNIFORM
-import numpy as np
 
 __all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcess", "OrnsteinUhlenbeckProcessWrapper"]
+
+from ...data.tensordict.tensordict import _TensorDict
 
 
 class EGreedyWrapper(ProbabilisticOperatorWrapper):
     def __init__(
             self,
             probabilistic_operator: ProbabilisticOperator,
-            eps_init=1.0,
-            eps_end=0.1,
-            annealing_num_steps=1000,
+            eps_init: Number = 1.0,
+            eps_end: Number = 0.1,
+            annealing_num_steps: int = 1000,
     ):
         super().__init__(probabilistic_operator)
         self.register_buffer("eps_init", torch.tensor([eps_init]))
@@ -27,7 +34,7 @@ class EGreedyWrapper(ProbabilisticOperatorWrapper):
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
 
-    def step(self):
+    def step(self) -> None:
         self.eps.data[0] = max(
             self.eps_end.item(),
             (
@@ -36,7 +43,7 @@ class EGreedyWrapper(ProbabilisticOperatorWrapper):
         )
 
     @set_exploration_mode(True)
-    def _dist_sample(self, dist, *input, **kwargs):
+    def _dist_sample(self, dist: d.Distribution, *input: Iterable[torch.Tensor], **kwargs: dict) -> torch.Tensor:
         out = self.probabilistic_operator._dist_sample(dist, *input, **kwargs)
         eps = self.eps.item()
         cond = (torch.rand(out[..., :1].shape, device=out.device) < eps).to(out.dtype)
@@ -48,17 +55,18 @@ class OrnsteinUhlenbeckProcessWrapper(ProbabilisticOperatorWrapper):
     def __init__(
             self,
             probabilistic_operator: ProbabilisticOperator,
-            eps_init=1.0,
-            eps_end=0.1,
-            annealing_num_steps=1000,
-            theta=0.15,
-            mu: float = 0.0,
-            sigma: float = 0.2,
-            dt: float = 1e-2,
-            x0=None,
-            sigma_min=None,
-            n_steps_annealing=1000,
-            key='action',
+            eps_init: Number = 1.0,
+            eps_end: Number = 0.1,
+            annealing_num_steps: int = 1000,
+            theta: Number = 0.15,
+            mu: Number = 0.0,
+            sigma: Number = 0.2,
+            dt: Number = 1e-2,
+            x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
+            sigma_min: Optional[Number] = None,
+            n_steps_annealing: int = 1000,
+            key: str = 'action',
+            safe: bool = True,
     ):
         super().__init__(probabilistic_operator)
         self.ou = OrnsteinUhlenbeckProcess(
@@ -79,9 +87,12 @@ class OrnsteinUhlenbeckProcessWrapper(ProbabilisticOperatorWrapper):
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
         self.out_keys = list(self.probabilistic_operator.out_keys) + [self.ou.out_keys]
+        self.safe = safe
+        if self.safe:
+            self.register_forward_hook(_forward_hook_safe_action)
 
-    def step(self):
-        if self.annealing_num_steps>0:
+    def step(self) -> None:
+        if self.annealing_num_steps > 0:
             self.eps.data[0] = max(
                 self.eps_end.item(),
                 (
@@ -90,7 +101,7 @@ class OrnsteinUhlenbeckProcessWrapper(ProbabilisticOperatorWrapper):
             )
 
     @set_exploration_mode(True)
-    def forward(self, tensor_dict):
+    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
         tensor_dict = super().forward(tensor_dict)
         tensor_dict = self.ou.add_sample(tensor_dict, self.eps.item())
         return tensor_dict
@@ -100,14 +111,14 @@ class OrnsteinUhlenbeckProcessWrapper(ProbabilisticOperatorWrapper):
 class OrnsteinUhlenbeckProcess:
     def __init__(
             self,
-            theta: float,
-            mu: float = 0.0,
-            sigma: float = 0.2,
-            dt: float = 1e-2,
-            x0=None,
-            sigma_min=None,
-            n_steps_annealing=1000,
-            key='action',
+            theta: Number,
+            mu: Number = 0.0,
+            sigma: Number = 0.2,
+            dt: Number = 1e-2,
+            x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
+            sigma_min: Optional[Number] = None,
+            n_steps_annealing: int = 1000,
+            key: str = 'action',
     ):
         self.mu = mu
         self.sigma = sigma
@@ -130,15 +141,15 @@ class OrnsteinUhlenbeckProcess:
         self.steps_key = f'steps_key_{id(self)}'
         self.out_keys = [self.key, self.noise_key, self.steps_key]
 
-    def _make_noise_pair(self, tensor_dict):
+    def _make_noise_pair(self, tensor_dict: _TensorDict) -> None:
         tensor_dict.set(self.noise_key,
-                      torch.zeros(tensor_dict.get(self.key).shape,
-                                  device=tensor_dict.device))
+                        torch.zeros(tensor_dict.get(self.key).shape,
+                                    device=tensor_dict.device))
         tensor_dict.set(self.steps_key,
-                      torch.zeros(torch.Size([*tensor_dict.batch_size, 1]), dtype=torch.long,
-                                  device=tensor_dict.device))
+                        torch.zeros(torch.Size([*tensor_dict.batch_size, 1]), dtype=torch.long,
+                                    device=tensor_dict.device))
 
-    def add_sample(self, tensor_dict, eps=1.0):
+    def add_sample(self, tensor_dict: _TensorDict, eps: Number = 1.0) -> _TensorDict:
 
         if not self.noise_key in set(tensor_dict.keys()):
             self._make_noise_pair(tensor_dict)
@@ -160,6 +171,6 @@ class OrnsteinUhlenbeckProcess:
         tensor_dict.set_(self.steps_key, n_steps + 1)
         return tensor_dict
 
-    def current_sigma(self, n_steps):
+    def current_sigma(self, n_steps: torch.Tensor) -> torch.Tensor:
         sigma = (self.m * n_steps + self.c).clamp_min(self.sigma_min)
         return sigma

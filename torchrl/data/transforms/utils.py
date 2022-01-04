@@ -1,6 +1,10 @@
+import contextlib
+from collections import Callable
+from typing import Tuple, Optional
+
 import torch
 from torch.utils._pytree import tree_map
-import contextlib
+
 
 @contextlib.contextmanager
 def no_dispatch():
@@ -10,9 +14,10 @@ def no_dispatch():
     finally:
         del guard
 
+
 class FiniteTensor(torch.Tensor):
     @staticmethod
-    def __new__(cls, elem, *args, **kwargs):
+    def __new__(cls, elem: torch.Tensor, *args, **kwargs):
         assert torch.isfinite(elem).all()
         return torch.Tensor._make_subclass(cls, elem, elem.requires_grad)
 
@@ -20,7 +25,7 @@ class FiniteTensor(torch.Tensor):
         return f"FiniteTensor({super().__repr__()})"
 
     @classmethod
-    def __torch_dispatch__(cls, func, types, args=(), kwargs=None):
+    def __torch_dispatch__(cls, func: Callable, types, args: Tuple = (), kwargs: Optional[dict] = None):
         # TODO: also explicitly recheck invariants on inplace/out mutation
         assert not kwargs
         with no_dispatch():

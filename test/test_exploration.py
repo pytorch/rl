@@ -1,18 +1,19 @@
+import pytest
 import torch
+from scipy.stats import ttest_1samp
 from torch import nn
+
+from torchrl.data import NdBoundedTensorSpec
+from torchrl.data.tensordict.tensordict import TensorDict
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.probabilistic_operators import Actor
 from torchrl.modules.probabilistic_operators.exploration import OrnsteinUhlenbeckProcess, \
     OrnsteinUhlenbeckProcessWrapper
-from torchrl.data.tensordict.tensordict import TensorDict
-from scipy.stats import ttest_1samp
-
-import pytest
 
 
-def test_ou(seed):
+def test_ou(seed=0):
     torch.manual_seed(seed)
-    td = TensorDict([], source={'action': torch.randn(3) / 10})
+    td = TensorDict({'action': torch.randn(3) / 10}, batch_size=[])
     ou = OrnsteinUhlenbeckProcess(10.0, mu=2.0, x0=-4, sigma=0.1, sigma_min=0.01)
 
     tds = []
@@ -39,7 +40,9 @@ def test_ou(seed):
 def test_ou_wrapper(device='cpu', d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     torch.manual_seed(seed)
     mapping_operator = nn.Linear(d_obs, d_act).to(device)
+    action_spec = NdBoundedTensorSpec(-torch.ones(d_act // 2), torch.ones(d_act // 2), (d_act // 2,))
     policy = Actor(
+        action_spec=action_spec,
         mapping_operator=mapping_operator,
         distribution_class=TanhNormal,
         default_interaction_mode="random"
@@ -62,7 +65,8 @@ def test_ou_wrapper(device='cpu', d_obs=4, d_act=6, batch=32, n_steps=100, seed=
     out = torch.stack(out, 0)
     out_noexp = torch.stack(out_noexp, 0)
     assert (out_noexp.get('action') != out.get('action')).all()
-    assert (out.get('action') <= 1.0).all() and (out.get('action') >= -1.0).all()
+    assert (out.get('action') <= 1.0).all(), out.get("action").min()
+    assert (out.get('action') >= -1.0).all(), out.get("action").max()
 
 
 if __name__ == "__main__":

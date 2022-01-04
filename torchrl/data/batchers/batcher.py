@@ -1,19 +1,18 @@
 from __future__ import annotations
 
+from numbers import Number
+from typing import Union, Tuple
+
+import torch
 from torch import nn
 
 from torchrl.data.batchers.utils import expand_as_right
 from torchrl.data.tensordict.tensordict import _TensorDict
 
-from typing import Union
-from numbers import Number
-
-import torch
-
 __all__ = ["MultiStep"]
 
 
-def _conv1d(reward: torch.Tensor, gammas: torch.Tensor, n_steps_max: int):
+def _conv1d(reward: torch.Tensor, gammas: torch.Tensor, n_steps_max: int) -> torch.Tensor:
     assert (
             reward.ndimension() == 3 and reward.shape[-1] == 1
     ), "Expected a B x T x 1 reward tensor"
@@ -23,7 +22,8 @@ def _conv1d(reward: torch.Tensor, gammas: torch.Tensor, n_steps_max: int):
     reward_pad = torch.conv1d(reward_pad, gammas).transpose(-1, -2)
     return reward_pad
 
-def _get_terminal(done, n_steps_max):
+
+def _get_terminal(done: torch.Tensor, n_steps_max: int) -> Tuple[torch.Tensor, torch.Tensor]:
     # terminal states (done or last)
     terminal = done.clone()
     terminal[:, -1] = done[:, -1] | (done.sum(1) != 1)
@@ -42,7 +42,8 @@ def _get_terminal(done, n_steps_max):
     )
     return terminal, post_terminal
 
-def _get_gamma(gamma: Number, reward: torch.Tensor, mask: torch.Tensor, n_steps_max: int):
+
+def _get_gamma(gamma: Number, reward: torch.Tensor, mask: torch.Tensor, n_steps_max: int) -> torch.Tensor:
     # Compute gamma for n-step value function
     gamma_masked = gamma * torch.ones_like(reward)
     gamma_masked = gamma_masked.masked_fill_(~mask, 1.0)
@@ -54,13 +55,14 @@ def _get_gamma(gamma: Number, reward: torch.Tensor, mask: torch.Tensor, n_steps_
     return gamma_masked[..., -1]
 
 
-def _get_steps_to_next_obs(nonterminal: torch.Tensor, n_steps_max: int):
+def _get_steps_to_next_obs(nonterminal: torch.Tensor, n_steps_max: int) -> torch.Tensor:
     steps_to_next_obs = nonterminal.flip(1).cumsum(1).flip(1)
     steps_to_next_obs.clamp_max_(n_steps_max + 1)
     return steps_to_next_obs
 
+
 def select_and_repeat(tensor: torch.Tensor, terminal: torch.Tensor, post_terminal: torch.Tensor, mask: torch.Tensor,
-                      n_steps_max: int):
+                      n_steps_max: int) -> torch.Tensor:
     T = tensor.shape[1]
     terminal = expand_as_right(terminal.squeeze(-1), tensor)
     last_tensor = (terminal * tensor).sum(1, True)
@@ -98,7 +100,7 @@ class MultiStep(nn.Module):
         if self.device != torch.device("cpu"):
             self.to(self.device)
 
-    def forward(self, tensor_dict: _TensorDict):
+    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
         assert (
                 tensor_dict.batch_dims == 2
         ), "Expected a tensordict with B x T x ... dimensions"
@@ -123,7 +125,8 @@ class MultiStep(nn.Module):
         # Discounted summed reward
         partial_return = _conv1d(reward, self.gammas, self.n_steps_max)
 
-        selected_td = tensor_dict.select(*[key for key in tensor_dict.keys() if (key.startswith("next_") or key=="done")])
+        selected_td = tensor_dict.select(
+            *[key for key in tensor_dict.keys() if (key.startswith("next_") or key == "done")])
 
         for key, item in selected_td.items():
             tensor_dict.set_(
@@ -142,5 +145,3 @@ class MultiStep(nn.Module):
 
         tensor_dict.set_("done", done)
         return tensor_dict
-
-

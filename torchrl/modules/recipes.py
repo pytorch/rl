@@ -1,6 +1,9 @@
+from numbers import Number
+from typing import Type, Optional, Tuple, Iterable
+
 import torch
 
-from torchrl.envs.common import _EnvWrapper
+from torchrl.envs.common import Specs
 from torchrl.modules.distributions import (
     Delta,
     TanhNormal,
@@ -10,6 +13,7 @@ from torchrl.modules.distributions import (
 from . import ActorCriticOperator
 from .models.models import DuelingCnnDQNet, DdpgCnnActor, DdpgCnnQNet, DdpgMlpQNet, DdpgMlpActor, MLP
 from .probabilistic_operators import QValueActor, DistributionalQValueActor, Actor, ProbabilisticOperator
+from ..data import TensorSpec
 
 DISTRIBUTIONS = {
     "delta": Delta,
@@ -22,18 +26,20 @@ __all__ = ["make_dqn_actor", "make_ddpg_actor"]
 
 
 def make_dqn_actor(
-        env_specs,
-        net_class=DuelingCnnDQNet,
-        net_kwargs={},
-        atoms=51,  # for distributional dqn
-        vmin=-3,
-        vmax=3,
-        actor_kwargs={},
-        in_key="observation_pixels",
-):
+        env_specs: Specs,
+        net_class: Type = DuelingCnnDQNet,
+        net_kwargs: Optional[dict] = None,
+        atoms: int = 51,  # for distributional dqn
+        vmin: Number = -3,
+        vmax: Number = 3,
+        actor_kwargs: Optional[dict] = None,
+        in_key: str = "observation_pixels",
+) -> Actor:
     default_net_kwargs = {"cnn_kwargs": {"depth": 3, "num_cells": 64, "out_features": 64}, }
+    net_kwargs = net_kwargs if net_kwargs is not None else dict()
     default_net_kwargs.update(net_kwargs)
 
+    actor_kwargs = actor_kwargs if actor_kwargs is not None else dict()
     distribution_class = DISTRIBUTIONS["delta"]
     out_features = env_specs["action_spec"].shape[0]
     actor_class = QValueActor
@@ -65,16 +71,21 @@ def make_dqn_actor(
 
 
 def make_ddpg_actor(
-        env_specs,
-        from_pixels=True,
-        actor_net_kwargs={},
-        value_net_kwargs={},
-        atoms=0,  # for distributional dqn
-        vmin=-3,
-        vmax=3,
-        actor_kwargs={},
-        value_kwargs={},
-):
+        env_specs: Specs,
+        from_pixels: bool = True,
+        actor_net_kwargs: Optional[dict] = None,
+        value_net_kwargs: Optional[dict] = None,
+        atoms: int = 0,  # for distributional dqn
+        vmin: Number = -3,
+        vmax: Number = 3,
+        actor_kwargs: Optional[dict] = None,
+        value_kwargs: Optional[dict] = None,
+) -> Tuple[Actor, ProbabilisticOperator]:
+    actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else dict()
+    value_net_kwargs = value_net_kwargs if value_net_kwargs is not None else dict()
+    actor_kwargs = actor_kwargs if actor_kwargs is not None else dict()
+    value_kwargs = value_kwargs if value_kwargs is not None else dict()
+
     out_features = env_specs["action_spec"].shape[0]
     actor_class = Actor
     if atoms:
@@ -134,24 +145,9 @@ def make_ddpg_actor(
     return actor, value
 
 
-def make_tensor_dict(env: _EnvWrapper, actor=None, ):
-    """Returns a zeroed-tensordict with fields matching those required for a full step
-    (action selection and environment step) in the environment
-    
-    """
-    with torch.no_grad():
-        tensor_dict = env.reset()
-        if actor is not None:
-            tensor_dict = tensor_dict.unsqueeze(0)
-            tensor_dict = actor(tensor_dict.to(next(actor.parameters()).device))
-            tensor_dict = tensor_dict.squeeze(0)
-        else:
-            tensor_dict.set("action", env.action_spec.rand(), inplace=False)
-        tensor_dict = env.step(tensor_dict.to("cpu"))
-        return tensor_dict
-
-
-def make_actor_critic_model(spec, in_keys=["observation_vector"], **kwargs):
+def make_actor_critic_model(spec: TensorSpec, in_keys: Optional[Iterable[str]] = None, **kwargs) -> ActorCriticOperator:
+    if in_keys is None:
+        in_keys = ["observation_vector"]
     common_mapping_operator = MLP(
         num_cells=[400, ],
         out_features=300,

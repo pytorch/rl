@@ -1,11 +1,7 @@
-import torch
+from numbers import Number
+from typing import Union
 
-# from https://github.com/H-Huang/rpc-rl-experiments/blob/6621f0aadb347d1c4e24bcf46517ac36907401ff/a3c/process.py#L14
-# TODO: create function / object that vectorises that
-# actor_loss = 0
-# critic_loss = 0
-# entropy_loss = 0
-# next_value = R
+import torch
 
 # for value, log_policy, reward, entropy in list(zip(values, log_policies, rewards, entropies))[::-1]:
 #     gae = gae * opt.gamma * opt.tau
@@ -15,16 +11,24 @@ import torch
 #     R = R * opt.gamma + reward
 #     critic_loss = critic_loss + (R - value) ** 2 / 2
 #     entropy_loss = entropy_loss + entropy
-from torchrl.data import TensorDict
 from torchrl.envs.utils import step_tensor_dict
 from .functional import generalized_advantage_estimate
+# from https://github.com/H-Huang/rpc-rl-experiments/blob/6621f0aadb347d1c4e24bcf46517ac36907401ff/a3c/process.py#L14
+# TODO: create function / object that vectorises that
+# actor_loss = 0
+# critic_loss = 0
+# entropy_loss = 0
+# next_value = R
+from ...data.tensordict.tensordict import _TensorDict
+from ...modules import ProbabilisticOperator
 
 
-def gae(values, log_prob_actions, rewards, entropies, gamma, tau):
+def gae(values: torch.Tensor, log_prob_actions: torch.Tensor, rewards: torch.Tensor, entropies: torch.Tensor,
+        gamma: Union[Number, torch.Tensor], tau: Number) -> torch.Tensor:
     # https://arxiv.org/pdf/1506.02438.pdf
     gaes = []
     for value, log_policy, reward, entropy in list(
-        zip(values, log_prob_actions, rewards, entropies)
+            zip(values, log_prob_actions, rewards, entropies)
     )[::-1]:
         if next_value is None:
             next_value = torch.zeros_like(value)
@@ -36,13 +40,14 @@ def gae(values, log_prob_actions, rewards, entropies, gamma, tau):
 
 
 class GAE:
-    def __init__(self, gamma, lamda, critic, average_rewards=True):
+    def __init__(self, gamma: Union[Number, torch.Tensor], lamda: Number, critic: ProbabilisticOperator,
+                 average_rewards: bool = True):
         self.gamma = gamma
         self.lamda = lamda
         self.critic = critic
         self.average_rewards = average_rewards
 
-    def __call__(self, tensor_dict: TensorDict):
+    def __call__(self, tensor_dict: _TensorDict) -> _TensorDict:
         assert tensor_dict.batch_dims >= 2
 
         gamma, lamda = self.gamma, self.lamda
@@ -53,8 +58,8 @@ class GAE:
         next_value = step_td.get("state_value")
         reward = tensor_dict.get("reward")
         if self.average_rewards:
-            reward = reward-reward.mean()
-            reward = reward/reward.std().clamp_min(1e-4)
+            reward = reward - reward.mean()
+            reward = reward / reward.std().clamp_min(1e-4)
         done = tensor_dict.get("done")
 
         adv, value_target = generalized_advantage_estimate(

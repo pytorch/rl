@@ -1,3 +1,5 @@
+from typing import Optional, Iterable, Union, Tuple, Type, Iterator
+
 import torch
 from torch import nn, distributions as d
 
@@ -8,19 +10,22 @@ from ..models.models import DistributionalDQNnet
 
 __all__ = ["Actor", "ActorCriticOperator", "QValueActor", "DistributionalQValueActor", ]
 
+from ...data import TensorSpec
+from ...data.tensordict.tensordict import _TensorDict
+
 
 class Actor(ProbabilisticOperator):
     def __init__(
             self,
-            action_spec,
+            action_spec: TensorSpec,
             mapping_operator: nn.Module,
-            distribution_class: d.Distribution = Delta,
-            distribution_kwargs: dict = dict(),
+            distribution_class: Type = Delta,
+            distribution_kwargs: Optional[dict] = None,
             default_interaction_mode: str = "mode",
-            _n_empirical_est=1000,
-            safe=False,
-            in_keys=None,
-            out_keys=None,
+            _n_empirical_est: int = 1000,
+            safe: bool = False,
+            in_keys: Optional[Iterable[str]] = None,
+            out_keys: Optional[Iterable[str]] = None,
             **kwargs,
     ):
         if in_keys is None:
@@ -41,13 +46,13 @@ class Actor(ProbabilisticOperator):
             **kwargs,
         )
 
-    def random_sample(self, out_shape):
+    def random_sample(self, out_shape: Union[torch.Size, Iterable[int]]) -> torch.Tensor:
         raise NotImplementedError
 
 
 class QValueHook:
     def __init__(
-            self, action_space, var_nums=None,
+            self, action_space: str, var_nums: Optional[int] = None,
     ):
         self.action_space = action_space
         self.var_nums = var_nums
@@ -57,26 +62,27 @@ class QValueHook:
             "binary": self._binary,
         }
 
-    def __call__(self, net, observation, values: torch.Tensor):
+    def __call__(self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor) -> Tuple[
+        torch.Tensor, torch.Tensor]:
         return self.fun_dict[self.action_space](values), values
 
     @staticmethod
-    def _one_hot(value: torch.Tensor):
+    def _one_hot(value: torch.Tensor) -> torch.Tensor:
         out = (value == value.max(dim=-1, keepdim=True)[0]).to(torch.long)
         return out
 
-    def _mult_one_hot(self, value: torch.Tensor, support):
+    def _mult_one_hot(self, value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
         values = value.split(self.var_nums, dim=-1)
         return torch.cat([QValueHook._one_hot(_value, ) for _value in values], -1, )
 
     @staticmethod
-    def _binary(value, support):
+    def _binary(value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
 
 class DistributionalQValueHook(QValueHook):
     def __init__(
-            self, action_space, support, var_nums=None,
+            self, action_space: str, support: torch.Tensor, var_nums: Optional[int] = None,
     ):
         self.action_space = action_space
         self.support = support
@@ -87,10 +93,11 @@ class DistributionalQValueHook(QValueHook):
             "binary": self._binary,
         }
 
-    def __call__(self, net, observation, values: torch.Tensor):
+    def __call__(self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor) -> Tuple[
+        torch.Tensor, torch.Tensor]:
         return self.fun_dict[self.action_space](values, self.support), values
 
-    def _support_expected(self, log_softmax_values: torch.Tensor, support: torch.Tensor):
+    def _support_expected(self, log_softmax_values: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
         support = support.to(log_softmax_values.device)
         assert log_softmax_values.shape[-2] == support.shape[-1], (
             "Support length and number of atoms in mapping_operator output should match, "
@@ -101,14 +108,14 @@ class DistributionalQValueHook(QValueHook):
             f"got a maximum value of {log_softmax_values.max():4.4f}")
         return (log_softmax_values.exp() * support.unsqueeze(-1)).sum(-2)
 
-    def _one_hot(self, value: torch.Tensor, support: torch.Tensor):
+    def _one_hot(self, value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
         assert isinstance(value, torch.Tensor), f"got value of type {value.__class__.__name__}"
         assert isinstance(support, torch.Tensor), f"got support of type {support.__class__.__name__}"
         value = self._support_expected(value, support)
         out = (value == value.max(dim=-1, keepdim=True)[0]).to(torch.long)
         return out
 
-    def _mult_one_hot(self, value: torch.Tensor, support: torch.Tensor):
+    def _mult_one_hot(self, value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
         values = value.split(self.var_nums, dim=-1)
         return torch.cat(
             [
@@ -119,13 +126,13 @@ class DistributionalQValueHook(QValueHook):
         )
 
     @staticmethod
-    def _binary(value, support):
+    def _binary(value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
 
 class QValueActor(Actor):
 
-    def __init__(self, *args, action_space="one_hot", **kwargs):
+    def __init__(self, *args, action_space: int = "one_hot", **kwargs):
         out_keys = [
             "action",
             "action_value",
@@ -138,7 +145,7 @@ class QValueActor(Actor):
             f"but got {self.distribution_class.__name__} instead."
         )
 
-    def random_sample(self, out_shape):
+    def random_sample(self, out_shape: Union[torch.Size, Iterable]) -> torch.Tensor:
         if self.action_space == "one_hot":
             values = torch.randn(out_shape, device=next(self.parameters()).device)
             out = rand_one_hot(values)
@@ -151,7 +158,7 @@ class QValueActor(Actor):
 
 
 class DistributionalQValueActor(QValueActor):
-    def __init__(self, *args, support, action_space="one_hot", **kwargs):
+    def __init__(self, *args, support: torch.Tensor, action_space: str = "one_hot", **kwargs):
         out_keys = [
             "action",
             "action_value",
@@ -176,16 +183,16 @@ class ActorCriticOperator(ProbabilisticOperator):
 
     def __init__(
             self,
-            spec,
-            in_keys,
+            spec: TensorSpec,
+            in_keys: Iterable[str],
             common_mapping_operator: nn.Module,
             policy_operator: nn.Module,
             value_operator: nn.Module,
-            out_keys=None,
-            policy_distribution_class: type = Categorical,
-            policy_distribution_kwargs: dict = dict(),
-            value_distribution_class: d.Distribution = Delta,
-            value_distribution_kwargs: dict = dict(),
+            out_keys: Optional[Iterable[str]] = None,
+            policy_distribution_class: Type = Categorical,
+            policy_distribution_kwargs: Optional[dict] = None,
+            value_distribution_class: Type = Delta,
+            value_distribution_kwargs: Optional[dict] = None,
             policy_interaction_mode: str = "mode",  # mode, random, mean
             value_interaction_mode: str = "mode",  # mode, random, mean
             **kwargs,
@@ -225,33 +232,33 @@ class ActorCriticOperator(ProbabilisticOperator):
         )
         self.out_keys = out_keys
 
-    def _get_mapping(self, tensor_dict):
+    def _get_mapping(self, tensor_dict: _TensorDict) -> _TensorDict:
         values = [tensor_dict.get(key) for key in self.in_keys]
         hidden_obs = self.mapping_operator(*values)
         tensor_dict.set("hidden_obs", hidden_obs)
         return tensor_dict
 
-    def get_dist(self, tensor_dict):
+    def get_dist(self, tensor_dict: _TensorDict) -> Tuple[d.Distribution, ...]:
         self._get_mapping(tensor_dict)
         value_dist, *value_tensors = self.value_po.get_dist(tensor_dict)
         policy_dist, *action_tensors = self.policy_po.get_dist(tensor_dict)
         return (policy_dist, value_dist, *action_tensors, *value_tensors)
 
-    def forward(self, tensor_dict):
+    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
         self._get_mapping(tensor_dict)
         self.policy_po(tensor_dict)
         self.value_po(tensor_dict)
         return tensor_dict
 
-    def get_policy_operator(self):
+    def get_policy_operator(self) -> ProbabilisticOperatorWrapper:
         return OperatorMaskWrapper(self, "policy_po")
 
-    def get_value_operator(self):
+    def get_value_operator(self) -> ProbabilisticOperatorWrapper:
         return OperatorMaskWrapper(self, "value_po")
 
 
 class OperatorMaskWrapper(ProbabilisticOperatorWrapper):
-    def __init__(self, parent_operator: ActorCriticOperator, target):
+    def __init__(self, parent_operator: ActorCriticOperator, target: str):
         super().__init__(getattr(parent_operator, target))
         self.target = target
         self.parent_operator = parent_operator
@@ -261,17 +268,17 @@ class OperatorMaskWrapper(ProbabilisticOperatorWrapper):
         ), f"{target} of OperatorMaskWrapper not found in the operator {type(parent_operator)}"
 
     @property
-    def target_operator(self):
+    def target_operator(self) -> ProbabilisticOperator:
         return getattr(self.parent_operator, self.target)
 
-    def get_dist(self, tensor_dict):
+    def get_dist(self, tensor_dict: _TensorDict) -> Tuple[d.Distribution, ...]:
         self.parent_operator._get_mapping(tensor_dict)
         dist, *tensors = self.target_operator.get_dist(tensor_dict)
         return (dist, *tensors)
 
     def named_parameters(
-            self, prefix: str="", recurse: bool=True, exclude_common_operator=False
-    ):
+            self, prefix: str = "", recurse: bool = True, exclude_common_operator=False
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
         assert recurse
 
         for n, p in self.target_operator.named_parameters(prefix=prefix):

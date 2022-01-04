@@ -4,7 +4,7 @@ import time
 from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
-from typing import Optional, Callable, Union, List, Iterable
+from typing import Optional, Callable, Union, List, Iterable, Tuple, Iterator
 
 import numpy as np
 import torch
@@ -13,39 +13,25 @@ from torch.utils.data import IterableDataset
 
 from torchrl.envs.utils import step_tensor_dict
 from torchrl.modules import ProbabilisticOperator
-from .utils import CloudpickleWrapper, split_trajectories
+from .utils import split_trajectories
 
 __all__ = ["SyncDataCollector", "aSyncDataCollector", "MultiaSyncDataCollector", "MultiSyncDataCollector"]
 
-from contextlib import contextmanager
+from ..data import TensorSpec
 
 from ..data.tensordict.tensordict import _TensorDict, TensorDict
+from ..data.utils import DEVICE_TYPING, CloudpickleWrapper
 from ..envs.common import _EnvClass
 
 TIMEOUT = 1.0
 MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
 
 
-class Timer:
-    def __init__(self):
-        self.time = time.time()
-
-    def __call__(self):
-        return time.time() - self.time
-
-
-@contextmanager
-def timeit():
-    # Code to acquire resource, e.g.:
-    t = Timer()
-    yield t
-
-
 class RandomPolicy:
-    def __init__(self, action_spec):
+    def __init__(self, action_spec: TensorSpec):
         self.action_spec = action_spec
 
-    def __call__(self, td):
+    def __call__(self, td: _TensorDict) -> _TensorDict:
         return td.set("action", self.action_spec.rand(td.batch_size))
 
 
@@ -54,17 +40,17 @@ class _DataCollector(IterableDataset):
             self,
             create_env_fn: Callable,
             policy: Union[ProbabilisticOperator, Callable],
-            iterator_len,
+            iterator_len: int,
             create_env_kwargs: Optional[dict] = None,
             max_steps_per_traj: int = -1,
             frames_per_batch: int = 200,
-            reset_at_each_iter=False,
-            batcher=None,
-            split_trajs=True,
+            reset_at_each_iter: bool = False,
+            batcher: Callable = None,
+            split_trajs: bool = True,
     ):
         raise NotImplementedError
 
-    def _get_policy_and_device(self, policy, device, env=None):
+    def _get_policy_and_device(self, policy: Callable, device: DEVICE_TYPING, env: Optional[_EnvClass] = None) -> None:
         if policy is None:
             assert env is not None, "env must be provided to _get_policy_and_device if policy is None"
             policy = RandomPolicy(env.action_spec)
@@ -81,18 +67,18 @@ class _DataCollector(IterableDataset):
             policy = deepcopy(policy).requires_grad_(False).to(device)
         self.policy = policy
 
-    def update_policy_weights_(self):
+    def update_policy_weights_(self) -> None:
         if self.get_weights_fn is not None:
             self.policy.load_state_dict(self.get_weights_fn())
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[_TensorDict]:
         return self.iterator()
 
-    def iterator(self):
+    def iterator(self) -> Iterator[_TensorDict]:
         raise NotImplementedError
 
     @staticmethod
-    def set_seed(self, seed):
+    def set_seed(self, seed: int) -> int:
         raise NotImplementedError
 
 
@@ -109,10 +95,10 @@ class SyncDataCollector(_DataCollector):
             reset_at_each_iter: bool = False,
             batcher: Optional[Callable] = None,
             split_trajs: bool = True,
-            device: Union[int, str, torch.device] = None,
-            passing_device="cpu",
-            seed=None,
-            pin_memory=False,
+            device: DEVICE_TYPING = None,
+            passing_device: DEVICE_TYPING = "cpu",
+            seed: Optional[int] = None,
+            pin_memory: bool = False,
     ):
         """
         Generic data collector for RL problems. Requires and environment and a policy.
@@ -172,10 +158,10 @@ class SyncDataCollector(_DataCollector):
         self._td_env = None
         self._td_policy = None
 
-    def set_seed(self, seed):
+    def set_seed(self, seed: int) -> int:
         return self.env.set_seed(seed)
 
-    def iterator(self, ):
+    def iterator(self) -> Iterator[_TensorDict]:
         total_frames = self.total_frames
         i = -1
         self._frames = 0
@@ -194,7 +180,7 @@ class SyncDataCollector(_DataCollector):
             if self._frames >= self.total_frames:
                 break
 
-    def _cast_to_policy(self, td: _TensorDict):
+    def _cast_to_policy(self, td: _TensorDict) -> _TensorDict:
         policy_device = self.device
         if hasattr(self.policy, 'in_keys'):
             td = td.select(*self.policy.in_keys)
@@ -206,7 +192,7 @@ class SyncDataCollector(_DataCollector):
             self._td_policy.update(td, inplace=True)
         return self._td_policy
 
-    def _cast_to_env(self, td: _TensorDict, dest=None):
+    def _cast_to_env(self, td: _TensorDict, dest: Optional[_TensorDict] = None) -> _TensorDict:
         env_device = self.env_device
         if dest is None:
             if self._td_env is None:
@@ -215,9 +201,9 @@ class SyncDataCollector(_DataCollector):
                 self._td_env.update(td, inplace=True)
             return self._td_env
         else:
-            dest.update(td, inplace=True)
+            return dest.update(td, inplace=True)
 
-    def _reset_if_necessary(self):
+    def _reset_if_necessary(self) -> None:
         done = self._tensor_dict.get("done")
         steps = self._tensor_dict.get("step_count")
         done_or_terminated = done | (steps == self.max_steps_per_traj)
@@ -233,7 +219,7 @@ class SyncDataCollector(_DataCollector):
             steps[done_or_terminated] = 0
 
     @torch.no_grad()
-    def rollout(self):
+    def rollout(self) -> _TensorDict:
         if self.reset_at_each_iter:
             self._tensor_dict.update(self.env.reset())
             self._tensor_dict.fill_("step_count", 0)
@@ -261,7 +247,7 @@ class SyncDataCollector(_DataCollector):
         return torch.stack(tensor_dict_out, len(self.env.batch_size),
                            out=self._tensor_dict_out)  # dim 0 for single env, dim 1 for batch
 
-    def reset(self):
+    def reset(self) -> None:
         self._tensor_dict.update(self.env.reset())
         self._tensor_dict.fill_("step_count", 0)
 
@@ -279,10 +265,10 @@ class MultiDataCollector(_DataCollector):
             reset_at_each_iter: bool = False,
             batcher: Optional[Callable] = None,
             split_trajs: bool = True,
-            device: Union[int, str, torch.device] = None,
+            device: DEVICE_TYPING = None,
             seed: Optional[int] = None,
             pin_memory: bool = False,
-            passing_device: Union[int, str, torch.device] = "cpu",
+            passing_device: DEVICE_TYPING = "cpu",
             update_at_each_batch: bool = True,
     ):
         """
@@ -316,10 +302,10 @@ class MultiDataCollector(_DataCollector):
         self._run_processes()
 
     @property
-    def _queue_len(self):
+    def _queue_len(self) -> int:
         raise NotImplementedError
 
-    def _run_processes(self):
+    def _run_processes(self) -> None:
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
@@ -350,10 +336,10 @@ class MultiDataCollector(_DataCollector):
             self.pipes.append(pipe_parent)
         self.queue_out = queue_out
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         self._shutdown_main()
 
-    def _shutdown_main(self):
+    def _shutdown_main(self) -> None:
         for idx in range(self.num_workers):
             self.pipes[idx].send((None, "close"))
             msg = self.pipes[idx].recv()
@@ -384,7 +370,7 @@ class MultiDataCollector(_DataCollector):
         self.reset()
         return seed
 
-    def reset(self, reset_idx: Optional[Iterable[bool]] = None):
+    def reset(self, reset_idx: Optional[Iterable[bool]] = None) -> None:
         if reset_idx is None:
             reset_idx = [True for _ in range(self.num_workers)]
         for idx in range(self.num_workers):
@@ -398,10 +384,10 @@ class MultiDataCollector(_DataCollector):
 
 class MultiSyncDataCollector(MultiDataCollector):
     @property
-    def _queue_len(self):
+    def _queue_len(self) -> int:
         return self.num_workers
 
-    def iterator(self):
+    def iterator(self) -> Iterator[_TensorDict]:
         i = -1
         frames = 0
         out_tensordicts_shared = OrderedDict()
@@ -458,7 +444,7 @@ class MultiaSyncDataCollector(MultiDataCollector):
         self.out_tensordicts = dict()
         self.running = False
 
-    def _get_from_queue(self, timeout=None):
+    def _get_from_queue(self, timeout=None) -> Tuple[int, int, torch.Tensor]:
         new_data, j = self.queue_out.get(timeout=timeout)
         if j == 0:
             data, idx = new_data
@@ -469,12 +455,12 @@ class MultiaSyncDataCollector(MultiDataCollector):
         return idx, j, out
 
     @property
-    def _queue_len(self):
+    def _queue_len(self) -> int:
         return 1
 
-    def iterator(self):
+    def iterator(self) -> Iterator[_TensorDict]:
         for i in range(self.num_workers):
-            if self.init_random_frames>0:
+            if self.init_random_frames > 0:
                 self.pipes[i].send((None, "continue_random"))
             else:
                 self.pipes[i].send((None, "continue"))
@@ -501,7 +487,7 @@ class MultiaSyncDataCollector(MultiDataCollector):
             # the function blocks here until the next item is asked, hence we send the message to the
             # worker to keep on working in the meantime before the yield statement
             if workers_frames[idx] < self.frames_per_worker:
-                if self._frames<self.init_random_frames:
+                if self._frames < self.init_random_frames:
                     msg = "continue_random"
                 else:
                     msg = "continue"
@@ -520,7 +506,7 @@ class MultiaSyncDataCollector(MultiDataCollector):
     #     for idx in range(self.num_workers):
     #         self.pipes[idx].send((idx, "continue"))
 
-    def reset(self, reset_idx: Optional[Iterable[bool]] = None):
+    def reset(self, reset_idx: Optional[Iterable[bool]] = None) -> None:
         super().reset(reset_idx)
         if self.queue_out.full():
             print('waiting')
@@ -528,7 +514,7 @@ class MultiaSyncDataCollector(MultiDataCollector):
         assert not self.queue_out.full()
         if self.running:
             for idx in range(self.num_workers):
-                if self._frames<self.init_random_frames:
+                if self._frames < self.init_random_frames:
                     self.pipes[idx].send((idx, "continue_random"))
                 else:
                     self.pipes[idx].send((idx, "continue"))
@@ -591,7 +577,7 @@ def main_async_collector(
         seed: Union[int, Iterable],
         pin_memory: bool,
         idx: int = 0,
-):
+) -> None:
     pipe_parent.close()
     dc = SyncDataCollector(
         create_env_fn,

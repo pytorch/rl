@@ -1,3 +1,6 @@
+from types import ModuleType
+from typing import List, Iterable, Optional
+
 import torch
 
 from torchrl.data import (
@@ -56,7 +59,7 @@ def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec
         )
 
 
-def _get_envs(to_dict=False):
+def _get_envs(to_dict=False) -> List:
     envs = gym.envs.registration.registry.env_specs.keys()
     envs = list(envs)
     envs = sorted(envs)
@@ -84,18 +87,18 @@ class GymEnv(GymLikeEnv):
     libname = "gym"
 
     @property
-    def available_envs(self):
+    def available_envs(self) -> List:
         return _get_envs()
 
     @property
-    def lib(self):
+    def lib(self) -> ModuleType:
         return gym
 
     def set_seed(self, seed: int) -> int:
         self.env.seed(seed)
         return seed
 
-    def _build_env(self, envname, taskname, from_pixels=False):
+    def _build_env(self, envname: str, taskname: str, from_pixels: bool = False) -> gym.core.Env:
         assert (
             _has_gym
         ), f"gym not found, unable to create {envname}. \
@@ -126,18 +129,18 @@ class GymEnv(GymLikeEnv):
         self._is_done = torch.zeros(1, dtype=torch.bool)
         return env
 
-    def close(self):
+    def close(self) -> bool:
         self.env.close()
 
 
-def _get_retro_envs():
+def _get_retro_envs() -> Iterable:
     if not _has_retro:
         return tuple()
     else:
         return retro.data.list_games()
 
 
-def _get_retro():
+def _get_retro() -> Optional[ModuleType]:
     if _has_retro:
         return retro
     else:

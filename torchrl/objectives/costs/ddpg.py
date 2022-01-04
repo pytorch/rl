@@ -1,6 +1,7 @@
+from __future__ import annotations
 from copy import deepcopy
 from numbers import Number
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 
 import torch
 
@@ -34,14 +35,15 @@ class DDPGLoss:
                 device = None
         self.device = device
 
-    def _get_networks(self):
+    def _get_networks(self) -> \
+            Tuple[ProbabilisticOperator, ProbabilisticOperator, ProbabilisticOperator, ProbabilisticOperator]:
         actor_network = self.actor_network
         value_network = self.value_network
         target_actor_network = self.actor_network
         target_value_network = self.value_network
         return actor_network, value_network, target_actor_network, target_value_network
 
-    def __call__(self, input_tensor_dict: _TensorDict):
+    def __call__(self, input_tensor_dict: _TensorDict) -> Tuple[torch.Tensor, torch.Tensor]:
         actor_network, value_network, target_actor_network, target_value_network = self._get_networks()
         device = self.device if self.device is not None else input_tensor_dict.device
         tensor_dict_device = input_tensor_dict.to(device)
@@ -67,15 +69,15 @@ class DDPGLoss:
         return actor_loss.mean(), value_loss.mean()
 
     @property
-    def target_value_network(self):
+    def target_value_network(self) -> ProbabilisticOperator:
         return self._get_networks()[-1]
 
     @property
-    def target_actor_network(self):
+    def target_actor_network(self) -> ProbabilisticOperator:
         return self._get_networks()[-2]
 
     def _actor_loss(self, tensor_dict: _TensorDict, actor_network: ProbabilisticOperator,
-                    value_network: ProbabilisticOperator):
+                    value_network: ProbabilisticOperator) -> torch.Tensor:
         td_copy = tensor_dict.select(*self.actor_in_keys).detach()
         td_copy = actor_network(td_copy)
         rg_status = next(value_network.parameters()).requires_grad
@@ -87,7 +89,7 @@ class DDPGLoss:
     def _value_loss(self, tensor_dict: _TensorDict, value_network: ProbabilisticOperator,
                     target_actor_network: ProbabilisticOperator,
                     target_value_network: ProbabilisticOperator, done: torch.Tensor,
-                    rewards: torch.Tensor, gamma: Number):
+                    rewards: torch.Tensor, gamma: Number) -> Tuple[torch.Tensor, torch.Tensor]:
         # value loss
         td_copy = tensor_dict.select(*value_network.in_keys).detach()
         value_network(td_copy)
@@ -122,7 +124,8 @@ class DoubleDDPGLoss(DDPGLoss):
         self._target_actor_network = deepcopy(self.actor_network)
         self._target_actor_network.requires_grad_(False)
 
-    def _get_networks(self):
+    def _get_networks(self) -> \
+            Tuple[ProbabilisticOperator, ProbabilisticOperator, ProbabilisticOperator, ProbabilisticOperator]:
         actor_network = self.actor_network
         value_network = self.value_network
         target_actor_network = self._target_actor_network

@@ -1,3 +1,5 @@
+from typing import Union, List, Callable, Any
+
 import numpy as np
 import torch
 
@@ -17,3 +19,22 @@ numpy_to_torch_dtype_dict = {
 torch_to_numpy_dtype_dict = {
     value: key for key, value in numpy_to_torch_dtype_dict.items()
 }
+DEVICE_TYPING = Union[torch.device, str, int]
+
+INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
+
+
+class CloudpickleWrapper(object):
+    def __init__(self, fn: Callable):
+        self.fn = fn
+
+    def __getstate__(self):
+        import cloudpickle
+        return cloudpickle.dumps(self.fn)
+
+    def __setstate__(self, ob: bytes):
+        import pickle
+        self.fn = pickle.loads(ob)
+
+    def __call__(self, **kwargs) -> Any:
+        return self.fn(**kwargs)

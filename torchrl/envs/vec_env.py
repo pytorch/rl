@@ -1,14 +1,14 @@
 import os
-from typing import Callable, Iterable, Union
+from multiprocessing import connection
+from typing import Callable, Iterable, Union, Optional
 
 import torch
 from torch import multiprocessing as mp
 
-from torchrl.data import TensorDict
+from torchrl.data import TensorDict, TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.envs.common import _EnvClass
-from torchrl.envs.utils import CloudpickleWrapper
-from torchrl.modules.recipes import make_tensor_dict
+from torchrl.data.utils import DEVICE_TYPING, CloudpickleWrapper
+from torchrl.envs.common import _EnvClass, make_tensor_dict
 
 __all__ = ["SerialEnv", "ParallelEnv"]
 
@@ -19,14 +19,14 @@ class _BatchedEnv(_EnvClass):
             num_workers: int,
             create_env_fn: Union[Callable, Iterable[Callable]],
             create_env_kwargs: dict = None,
-            device='cpu',
-            action_keys=None,
-            pin_memory=False,
-            selected_keys=None,
-            excluded_keys=None,
-            share_individual_td=False,
-            shared_memory=True,
-            memmap=False,
+            device: DEVICE_TYPING = 'cpu',
+            action_keys: Optional[Iterable[str]] = None,
+            pin_memory: bool = False,
+            selected_keys: Optional[Iterable[str]] = None,
+            excluded_keys: Optional[Iterable[str]] = None,
+            share_individual_td: bool = False,
+            shared_memory: bool = True,
+            memmap: bool = False,
     ):
         super().__init__(device=device)
         create_env_kwargs = dict() if create_env_kwargs is None else create_env_kwargs
@@ -61,21 +61,21 @@ class _BatchedEnv(_EnvClass):
         self._start_workers()
 
     @property
-    def action_spec(self):
+    def action_spec(self) -> TensorSpec:
         return self._action_spec
 
     @property
-    def observation_spec(self):
+    def observation_spec(self) -> TensorSpec:
         return self._observation_spec
 
     @property
-    def reward_spec(self):
+    def reward_spec(self) -> TensorSpec:
         return self._reward_spec
 
-    def is_done_set_fn(self, value):
+    def is_done_set_fn(self, value: bool) -> None:
         self._is_done = value.all()
 
-    def _create_td(self):
+    def _create_td(self) -> None:
         """
         Creates self.shared_tensor_dict_parent, a TensorDict used to store the most recent observations.
 
@@ -133,7 +133,7 @@ class _BatchedEnv(_EnvClass):
                   f"You can select keys to be synchronised by setting the selected_keys and/or excluded_keys "
                   f"arguments when creating the batched environment.")
 
-    def _start_workers(self):
+    def _start_workers(self) -> None:
         """
         Starts the various envs.
 
@@ -142,10 +142,10 @@ class _BatchedEnv(_EnvClass):
         """
         raise NotImplementedError
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}(\n\tenv={self._dummy_env}, \n\tbatch_size={self.batch_size})"
 
-    def __del__(self):
+    def __del__(self) -> None:
         if not self.is_closed:
             self.close()
 
@@ -153,7 +153,7 @@ class _BatchedEnv(_EnvClass):
 class SerialEnv(_BatchedEnv):
     _share_memory = False
 
-    def _start_workers(self):
+    def _start_workers(self) -> None:
         _num_workers = self.num_workers
 
         self._envs = []
@@ -171,18 +171,18 @@ class SerialEnv(_BatchedEnv):
 
         return self.shared_tensor_dict_parent
 
-    def _shutdown_workers(self):
+    def _shutdown_workers(self) -> None:
         for env in self._envs:
             env.close()
 
-    def __del__(self):
+    def __del__(self) -> None:
         self._shutdown_workers()
 
     def set_seed(self, seed: int) -> int:
         for i, env in enumerate(self._envs):
             env.set_seed(seed)
             if i < self.num_workers - 1:
-                seed = seed+1
+                seed = seed + 1
         return seed
 
     def _reset(self, tensor_dict: _TensorDict) -> _TensorDict:
@@ -205,7 +205,7 @@ class SerialEnv(_BatchedEnv):
 
 class ParallelEnv(_BatchedEnv):
 
-    def _start_workers(self):
+    def _start_workers(self) -> None:
         _num_workers = self.num_workers
         ctx = mp.get_context("spawn")
 
@@ -233,7 +233,7 @@ class ParallelEnv(_BatchedEnv):
         for channel, shared_tensor_dict in zip(self.parent_channels, self.shared_tensor_dicts):
             channel.send(("init", shared_tensor_dict))
 
-    def _step(self, tensor_dict: TensorDict, ) -> TensorDict:
+    def _step(self, tensor_dict: TensorDict) -> TensorDict:
         self._assert_tensordict_shape(tensor_dict)
 
         self.shared_tensor_dict_parent.update_(
@@ -251,7 +251,7 @@ class ParallelEnv(_BatchedEnv):
             keys = keys.union(data)
         return self.shared_tensor_dict_parent.select(*keys)
 
-    def _shutdown_workers(self):
+    def _shutdown_workers(self) -> None:
         for i, channel in enumerate(self.parent_channels):
             print(f'closing {i}')
             channel.send(("close", None))
@@ -263,7 +263,7 @@ class ParallelEnv(_BatchedEnv):
         for proc in self._workers:
             proc.join()
 
-    def close(self):
+    def close(self) -> None:
         print(f"closing {self.__class__.__name__}")
         self.is_closed = True
         self._shutdown_workers()
@@ -271,7 +271,7 @@ class ParallelEnv(_BatchedEnv):
     def set_seed(self, seed: int) -> int:
         for i, channel in enumerate(self.parent_channels):
             channel.send(("seed", seed))
-            if i < self.num_workers-1:
+            if i < self.num_workers - 1:
                 seed = seed + 1
         for channel in self.parent_channels:
             out, _ = channel.recv()
@@ -303,8 +303,9 @@ class ParallelEnv(_BatchedEnv):
 
 
 def _run_worker_pipe_shared_mem(
-        idx, parent_pipe, child_pipe, env_fun, env_fun_kwargs, pin_memory, action_keys, verbose=False,
-):
+        idx: int, parent_pipe: connection.Connection, child_pipe: connection.Connection, env_fun: Callable,
+        env_fun_kwargs: dict, pin_memory: bool, action_keys: dict, verbose: bool = False,
+) -> None:
     parent_pipe.close()
     pid = os.getpid()
     env = env_fun(**env_fun_kwargs)

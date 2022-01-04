@@ -1,9 +1,11 @@
 import math
+from numbers import Number
+from typing import Union
 
 import torch
 
 
-def c_val(log_pi, log_mu, c=1):
+def c_val(log_pi: torch.Tensor, log_mu: torch.Tensor, c: Number = 1):
     return (log_pi - log_mu).clamp_max(math.log(c)).exp()
 
 
@@ -14,7 +16,8 @@ def dv_val(rewards, vals, gamma, rho_bar, log_pi, log_mu):
     return dv, rho
 
 
-def vtrace(rewards, vals, log_pi, log_mu, gamma, rho_bar=1.0, c_bar=1.0):
+def vtrace(rewards: torch.Tensor, vals: torch.Tensor, log_pi: torch.Tensor, log_mu: torch.Tensor,
+           gamma: Union[torch.Tensor, Number], rho_bar: Number = 1.0, c_bar: Number = 1.0):
     T = vals.shape[1]
     if not isinstance(gamma, torch.Tensor):
         gamma = torch.full_like(vals, gamma)

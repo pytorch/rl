@@ -1,7 +1,11 @@
+from numbers import Number
+
 import torch
 
+
 def generalized_advantage_estimate(
-        gamma, lamda, value_old_state, value_new_state, reward, done
+        gamma: Number, lamda: Number, value_old_state: torch.Tensor, value_new_state: torch.Tensor,
+        reward: torch.Tensor, done: torch.Tensor
 ):
     """
     Get generalized advantage estimate of a trajectory

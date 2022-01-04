@@ -1,4 +1,5 @@
-from typing import Tuple
+from numbers import Number
+from typing import Tuple, Optional, Union
 
 import numpy as np
 import torch
@@ -22,7 +23,7 @@ else:
 __all__ = ["DMControlEnv"]
 
 
-def _dmcontrol_to_torchrl_spec_transform(spec, dtype=None) -> TensorSpec:
+def _dmcontrol_to_torchrl_spec_transform(spec, dtype: Optional[torch.dtype] = None) -> TensorSpec:
     if isinstance(spec, collections.OrderedDict):
         spec = {k: _dmcontrol_to_torchrl_spec_transform(item) for k, item in spec.items()}
         return CompositeSpec(**spec)
@@ -38,7 +39,7 @@ def _dmcontrol_to_torchrl_spec_transform(spec, dtype=None) -> TensorSpec:
         raise NotImplementedError
 
 
-def _get_envs(to_dict=True):
+def _get_envs(to_dict: bool = True) -> dict:
     if not _has_dmc:
         return dict()
     if not to_dict:
@@ -53,7 +54,7 @@ def _get_envs(to_dict=True):
     return d
 
 
-def _robust_to_tensor(array):
+def _robust_to_tensor(array: Union[Number, np.ndarray]) -> torch.Tensor:
     if isinstance(array, np.ndarray):
         return torch.tensor(array.copy())
     else:
@@ -65,7 +66,8 @@ class DMControlEnv(GymLikeEnv):
     libname = "dm_control"
     available_envs = _get_envs()
 
-    def _build_env(self, envname, taskname, seed=None, from_pixels=False, render_kwargs=None):
+    def _build_env(self, envname: str, taskname: str, seed: Optional[int] = None, from_pixels: bool = False,
+                   render_kwargs: Optional[dict] = None):
         assert (
             _has_dmc
         ), f"dm_control not found, unable to create {envname}: {taskname}. \
@@ -87,12 +89,12 @@ class DMControlEnv(GymLikeEnv):
         self._is_done = torch.zeros(1, dtype=torch.bool)
         return env
 
-    def _output_transform(self, timestep_tuple: Tuple[dm_env._environment.TimeStep]):
+    def _output_transform(self, timestep_tuple: Tuple[dm_env._environment.TimeStep]) -> Tuple[np.ndarray, Number, bool]:
         if type(timestep_tuple) is not tuple:
-            timestep_tuple = (timestep_tuple, )
+            timestep_tuple = (timestep_tuple)
         reward = timestep_tuple[0].reward
 
-        done = False # dm_control envs are non-terminating
+        done = False  # dm_control envs are non-terminating
         observation = timestep_tuple[0].observation
         return observation, reward, done
 

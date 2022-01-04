@@ -1,13 +1,16 @@
 from copy import deepcopy
+from numbers import Number
+from typing import Tuple, Optional
 from uuid import uuid1
 from warnings import warn
-from .utils import distance_loss
+
 import torch
-from torch.nn import functional as F
 
 from torchrl.data import TensorDict
-from torchrl.modules import QValueActor, DistributionalQValueActor, reset_noise
 from torchrl.envs.utils import step_tensor_dict
+from torchrl.modules import QValueActor, DistributionalQValueActor, reset_noise, ProbabilisticOperator
+from .utils import distance_loss
+
 __all__ = [
     "DQNLoss",
     "DoubleDQNLoss",
@@ -15,9 +18,14 @@ __all__ = [
     "DistributionalDoubleDQNLoss",
 ]
 
+from ...data.tensordict.tensordict import _TensorDict
+
+from ...data.utils import DEVICE_TYPING
+
 
 class DQNLoss:
-    def __init__(self, value_network: QValueActor, gamma, device=None, loss_function="l2"):
+    def __init__(self, value_network: QValueActor, gamma: Number, device: Optional[DEVICE_TYPING] = None,
+                 loss_function: str = "l2"):
         self.value_network = value_network
         self.value_network_in_keys = value_network.in_keys
         assert isinstance(value_network, QValueActor)
@@ -31,7 +39,7 @@ class DQNLoss:
                 device = None
         self.device = device
 
-    def __call__(self, input_tensor_dict):
+    def __call__(self, input_tensor_dict: _TensorDict) -> torch.Tensor:
         value_network, target_value_network = self._get_networks()
         device = self.device if self.device is not None else input_tensor_dict.device
         tensor_dict = input_tensor_dict.to(device)
@@ -66,17 +74,19 @@ class DQNLoss:
             rewards = rewards.to(torch.float)
             target_value = rewards + (gamma ** steps_to_next_obs) * target_value
 
-        input_tensor_dict.set("td_error", abs(pred_val_index-target_value).detach().unsqueeze(1).to(input_tensor_dict.device), inplace=True)
+        input_tensor_dict.set("td_error",
+                              abs(pred_val_index - target_value).detach().unsqueeze(-1).to(input_tensor_dict.device),
+                              inplace=True)
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
         return loss.mean()
 
-    def _get_networks(self):
+    def _get_networks(self) -> Tuple[ProbabilisticOperator, ProbabilisticOperator]:
         value_network = self.value_network
         target_value_network = self.value_network
         return value_network, target_value_network
 
     @property
-    def target_value_network(self):
+    def target_value_network(self) -> ProbabilisticOperator:
         return self._get_networks()[1]
 
 
@@ -86,14 +96,14 @@ class DoubleDQNLoss(DQNLoss):
         self._target_value_network = deepcopy(self.value_network)
         self._target_value_network.requires_grad_(False)
 
-    def _get_networks(self):
+    def _get_networks(self) -> Tuple[ProbabilisticOperator, ProbabilisticOperator]:
         value_network = self.value_network
         target_value_network = self._target_value_network
         return value_network, target_value_network
 
 
 class DistributionalDQNLoss:
-    def __init__(self, value_network, gamma, device=None):
+    def __init__(self, value_network: ProbabilisticOperator, gamma: Number, device: Optional[DEVICE_TYPING] = None):
         self.gamma = gamma
         assert isinstance(value_network, DistributionalQValueActor)
         self.value_network = value_network
@@ -105,7 +115,7 @@ class DistributionalDQNLoss:
                 device = None
         self.device = device
 
-    def __call__(self, input_tensor_dict):
+    def __call__(self, input_tensor_dict: _TensorDict) -> torch.Tensor:
         # from https://github.com/Kaixhin/Rainbow/blob/9ff5567ad1234ae0ed30d8471e8f13ae07119395/agent.py
         device = self.device
         tensor_dict = TensorDict(source=input_tensor_dict, batch_size=input_tensor_dict.batch_size).to(device)
@@ -205,10 +215,10 @@ class DistributionalDQNLoss:
         loss = loss.mean()
         return loss
 
-    def _reset_noise_target_net(self):
+    def _reset_noise_target_net(self) -> None:
         pass
 
-    def _get_networks(self):
+    def _get_networks(self) -> Tuple[ProbabilisticOperator, ProbabilisticOperator]:
         value_network = self.value_network
         return value_network, value_network
 
@@ -221,10 +231,10 @@ class DistributionalDoubleDQNLoss(DistributionalDQNLoss):
         self.counter = 0
 
     @property
-    def target_value_network(self):
+    def target_value_network(self) -> ProbabilisticOperator:
         return self._get_networks()[1]
 
-    def step(self):
+    def step(self) -> None:
         if self.counter == self.value_network_update_interval:
             self.counter = 0
             print("updating target value network")
@@ -232,7 +242,7 @@ class DistributionalDoubleDQNLoss(DistributionalDQNLoss):
         else:
             self.counter += 1
 
-    def _get_networks(self):
+    def _get_networks(self) -> Tuple[ProbabilisticOperator, ProbabilisticOperator]:
         value_network = self.value_network
         try:
             self._target_value_network.apply(reset_noise)
@@ -241,8 +251,8 @@ class DistributionalDoubleDQNLoss(DistributionalDQNLoss):
         target_value_network = self._target_value_network
         return value_network, target_value_network
 
-    def _reset_noise_target_net(self):
+    def _reset_noise_target_net(self) -> None:
         self.target_value_network.apply(reset_noise)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs) -> torch.Tensor:
         return super().__call__(*args, **kwargs)
