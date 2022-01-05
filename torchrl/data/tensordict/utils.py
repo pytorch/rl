@@ -35,7 +35,8 @@ def _getitem_batch_size(shape: torch.Size, items: Union[Tuple, torch.Tensor, Lis
     if all(isinstance(_item, torch.Tensor) for _item in items) and len(items) == len(shape):
         shape0 = items[0].shape
         for _item in items[1:]:
-            assert _item.shape == shape0, "all tensor indices must have the same shape"
+            if  _item.shape != shape0:
+                raise RuntimeError(f"all tensor indices must have the same shape, got {_item.shape} and {shape0}")
         return shape0
 
     for _item in items:

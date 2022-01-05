@@ -51,7 +51,8 @@ class PPOLoss:
     def _log_weight(self, tensor_dict: _TensorDict) -> Tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
         action = tensor_dict.get("action")
-        assert not action.requires_grad
+        if action.requires_grad:
+            raise RuntimeError("tensor_dict stored action requires grad.")
         tensor_dict_clone = tensor_dict.select(*self.actor.in_keys).clone()
 
         dist, *_ = self.actor.get_dist(tensor_dict_clone)
@@ -59,7 +60,9 @@ class PPOLoss:
         log_prob = log_prob.unsqueeze(-1)
 
         prev_log_prob = tensor_dict.get("action_log_prob")
-        assert not prev_log_prob.requires_grad
+        if prev_log_prob.requires_grad:
+            raise RuntimeError("tensor_dict prev_log_prob requires grad.")
+
         log_weight = log_prob - prev_log_prob
         return log_weight, dist
 
@@ -67,6 +70,9 @@ class PPOLoss:
 
         if "value_target" in tensor_dict.keys():
             value_target = tensor_dict.get("value_target")
+            if value_target.requires_grad:
+                raise RuntimeError("value_target retrieved from tensor_dict requires grad.")
+
         else:
             with torch.no_grad():
                 reward = tensor_dict.get("reward")
@@ -75,7 +81,6 @@ class PPOLoss:
                 value_target = reward + next_value * self.gamma
         tensor_dict_select = tensor_dict.select(*self.critic.in_keys).clone()
         value = self.critic(tensor_dict_select).get("state_value")
-        assert not value_target.requires_grad
         value_loss = distance_loss(value, value_target, loss_type=self.critic_loss_type)
         return self.critic_factor * value_loss
 
@@ -113,8 +118,9 @@ class ClipPPOLoss(PPOLoss):
     def __call__(self, tensor_dict: _TensorDict) -> _TensorDict:
         neg_loss = 0.0
         tensor_dict = tensor_dict.clone()
-        for k, it in tensor_dict.items():
-            assert not it.requires_grad
+        for key, value in tensor_dict.items():
+            if value.requires_grad:
+                raise RuntimeError(f"The key {key} returns a value that requires a gradient, consider detaching.")
         advantage = tensor_dict.get(self.advantage_key)
         log_weight, dist = self._log_weight(tensor_dict)
         # print(tensordict.get("action").min(), tensordict.get("action").max())

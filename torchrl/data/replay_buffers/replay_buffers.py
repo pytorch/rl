@@ -192,8 +192,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                  prefetch: Optional[int] = None) -> None:
         super(PrioritizedReplayBuffer, self).__init__(size, collate_fn,
                                                       pin_memory, prefetch)
-        assert alpha > 0
-        assert beta >= 0
+        if alpha <= 0:
+            raise ValueError(f"alpha must be strictly greater than 0, got alpha={alpha}")
+        if beta < 0:
+            raise ValueError(f"beta must be greater or equal to 0, got beta={beta}")
 
         self._alpha = alpha
         self._beta = beta
@@ -209,7 +211,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
         with self._replay_lock:
             p_min = self._min_tree.query(0, self._capacity)
-            assert p_min > 0
+            if p_min <= 0:
+                raise ValueError(f"p_min must be greater than 0, got p_min={p_min}")
             if isinstance(index, int):
                 data = self._storage[index]
                 weight = np.array(self._sum_tree[index])
@@ -266,9 +269,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         else:
             index = super(PrioritizedReplayBuffer, self).extend(data)
 
-        assert isinstance(
-            priority,
-            float) or len(priority) == 1 or len(priority) == len(index)
+        if not (isinstance(priority, Number) or len(priority) == 1 or len(priority) == len(index)):
+            raise RuntimeError("priority should be a scalar or an iterable of the same length as index")
 
         with self._replay_lock:
             self._sum_tree[index] = priority
@@ -303,8 +305,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         with self._replay_lock:
             p_sum = self._sum_tree.query(0, self._capacity)
             p_min = self._min_tree.query(0, self._capacity)
-            assert p_sum > 0
-            assert p_min > 0
+            if p_sum <= 0:
+                raise RuntimeError("negative p_sum")
+            if p_min <= 0:
+                raise RuntimeError("negative p_min")
             mass = np.random.uniform(0.0, p_sum, size=batch_size)
             index = self._sum_tree.scan_lower_bound(mass)
             if isinstance(index, torch.Tensor):
@@ -352,12 +356,12 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                         priority: Union[float, Tensor]) -> None:
         if isinstance(index, int):
             if not isinstance(priority, float):
-                assert len(priority) == 1
+                if len(priority) != 1:
+                    raise RuntimeError(f"priority length should be 1, got {len(priority)}")
                 priority = priority.item()
         else:
-            assert isinstance(
-                priority,
-                float) or len(priority) == 1 or len(index) == len(priority)
+            if not (isinstance(priority, Number) or len(priority) == 1 or len(index) == len(priority)):
+                raise RuntimeError("priority should be a number or an iterable of the same length as index")
             index = to_numpy(index)
             priority = to_numpy(priority)
 
@@ -391,7 +395,8 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         self.priority_key = priority_key
 
     def _get_priority(self, tensor_dict: _TensorDict) -> torch.Tensor:
-        assert not tensor_dict.batch_dims
+        if tensor_dict.batch_dims:
+            raise RuntimeError("expected void batch_size for input tensor_dict in rb._get_priority()")
         try:
             priority = tensor_dict.get(self.priority_key).item()
         except ValueError:

@@ -36,7 +36,8 @@ class Specs:
         self.env = env
 
     def __getitem__(self, item: str) -> Any:
-        assert item in self._keys, f"item must be one of {self._keys}"
+        if item not in self._keys:
+            raise KeyError(f"item must be one of {self._keys}")
         return getattr(self.env, item)
 
     def keys(self) -> dict:
@@ -104,15 +105,16 @@ class _EnvClass:
         self._cache = dict()
 
     def step(self, tensor_dict: _TensorDict) -> _TensorDict:
-        #  sanity check
-        assert (
-                tensor_dict.get("action").dtype is self.action_spec.dtype
-        ), f"expected action.dtype to be {self.action_spec.dtype} but got {tensor_dict.get('action').dtype}"
+        # sanity check
+        if tensor_dict.get("action").dtype is not self.action_spec.dtype:
+            raise TypeError(f"expected action.dtype to be {self.action_spec.dtype} "
+                            f"but got {tensor_dict.get('action').dtype}")
 
         tensor_dict_out = self._step(tensor_dict)
-        assert tensor_dict_out is not tensor_dict, "_EnvClass._step should return outplace changes to the input " \
-                                                   "tensordict. Consider emptying the TensorDict first " \
-                                                   "(tensordict.empty() or tensordict.select())"
+        if tensor_dict_out is tensor_dict:
+            raise RuntimeError("_EnvClass._step should return outplace changes to the input "
+                            "tensordict. Consider emptying the TensorDict first "
+                            "(tensordict.empty() or tensordict.select())")
         self.is_done = tensor_dict_out.get("done")
         self._current_tensordict = step_tensor_dict(tensor_dict_out)
 
@@ -120,13 +122,12 @@ class _EnvClass:
             obs = tensor_dict_out.get(key)
             self.observation_spec.type_check(obs, key)
 
-        assert (
-                tensor_dict_out.get("reward").dtype is self.reward_spec.dtype
-        ), f"expected reward.dtype to be {self.reward_spec.dtype} but got {tensor_dict_out.get('reward').dtype}"
+        if tensor_dict_out.get("reward").dtype is not self.reward_spec.dtype:
+            raise TypeError(f"expected reward.dtype to be {self.reward_spec.dtype} "
+                            f"but got {tensor_dict_out.get('reward').dtype}")
 
-        assert (
-                tensor_dict_out.get("done").dtype is torch.bool
-        ), f"expected done.dtype to be torch.bool but got {tensor_dict_out.get('done').dtype}"
+        if tensor_dict_out.get("done").dtype is not torch.bool:
+            raise TypeError(f"expected done.dtype to be torch.bool but got {tensor_dict_out.get('done').dtype}")
 
         tensor_dict.update(tensor_dict_out, inplace=True)
         return tensor_dict
@@ -174,8 +175,9 @@ class _EnvClass:
         raise NotImplementedError
 
     def _assert_tensordict_shape(self, tensor_dict: _TensorDict) -> None:
-        assert tensor_dict.batch_size == self.batch_size, f"Expected a tensor_dict with shape==env.shape, " \
-                                                          f"got {tensor_dict.batch_size} and {self.batch_size}"
+        if tensor_dict.batch_size != self.batch_size:
+            raise RuntimeError(f"Expected a tensor_dict with shape==env.shape, "
+                               f"got {tensor_dict.batch_size} and {self.batch_size}")
 
     def is_done_get_fn(self) -> bool:
         return self._is_done.all()
@@ -315,11 +317,9 @@ class _EnvWrapper(_EnvClass):
         self.wrapper_frame_skip = frame_skip  # this value can be changed if frame_skip is passed during env construction
 
         self.constructor_kwargs = kwargs
-        assert (envname in self.available_envs) and (
-            taskname in self.available_envs[envname]
-            if isinstance(self.available_envs, dict)
-            else True
-        ), f"{envname} with task {taskname} is unknown in {self.libname}"
+        if not ((envname in self.available_envs) and (
+                taskname in self.available_envs[envname] if isinstance(self.available_envs, dict) else True)):
+            raise RuntimeError(f"{envname} with task {taskname} is unknown in {self.libname}")
         self._build_env(envname, taskname, **kwargs)
 
     def _build_env(self, envname: str, taskname: str) -> None:
@@ -389,7 +389,8 @@ class GymLikeEnv(_EnvWrapper):
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
         """To be overwritten when step_outputs differ from Tuple[Observation: Union[np.ndarray, dict], reward: Number, done:Bool]"""
-        assert isinstance(step_outputs_tuple, tuple)
+        if not isinstance(step_outputs_tuple, tuple):
+            raise TypeError(f"Expected step_outputs_tuple type to be Tuple but got {type(step_outputs_tuple)}")
         return step_outputs_tuple
 
     def __repr__(self) -> str:

@@ -47,8 +47,10 @@ class ProbabilisticOperator(nn.Module):
 
         super().__init__()
 
-        assert out_keys, f"out_keys were not passed to {self.__class__.__name__}"
-        assert in_keys, f"in_keys were not passed to {self.__class__.__name__}"
+        if not out_keys:
+            raise RuntimeError(f"out_keys were not passed to {self.__class__.__name__}")
+        if not in_keys:
+            raise RuntimeError(f"in_keys were not passed to {self.__class__.__name__}")
         self.out_keys = out_keys
         self.in_keys = in_keys
 
@@ -113,10 +115,6 @@ class ProbabilisticOperator(nn.Module):
 
     def _write_to_tensor_dict(self, tensor_dict: _TensorDict, tensors: List) -> None:
         for _out_key, _tensor in zip(self.out_keys, tensors):
-            # try:
-            #     assert isinstance(_tensor, torch.Tensor)
-            #     tensordict.set_(_out_key, _tensor)
-            # except:
             tensor_dict.set(_out_key, _tensor)
 
     def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
@@ -148,9 +146,8 @@ class ProbabilisticOperator(nn.Module):
         if interaction_mode is None:
             interaction_mode = self.default_interaction_mode
 
-        assert isinstance(
-            dist, d.Distribution
-        ), f"type {type(dist)} not recognised by _dist_sample"
+        if not isinstance(            dist, d.Distribution        ):
+            raise TypeError(f"type {type(dist)} not recognised by _dist_sample")
 
         if interaction_mode == "mode":
             if hasattr(dist, "mode"):

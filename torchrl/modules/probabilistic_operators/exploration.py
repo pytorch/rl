@@ -28,9 +28,8 @@ class EGreedyWrapper(ProbabilisticOperatorWrapper):
         super().__init__(probabilistic_operator)
         self.register_buffer("eps_init", torch.tensor([eps_init]))
         self.register_buffer("eps_end", torch.tensor([eps_end]))
-        assert (
-                self.eps_end <= self.eps_init
-        ), "eps should decrease over time or be constant"
+        if self.eps_end > self.eps_init:
+            raise RuntimeError("eps should decrease over time or be constant")
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
 
@@ -81,9 +80,9 @@ class OrnsteinUhlenbeckProcessWrapper(ProbabilisticOperatorWrapper):
         )
         self.register_buffer("eps_init", torch.tensor([eps_init]))
         self.register_buffer("eps_end", torch.tensor([eps_end]))
-        assert (
-                self.eps_end <= self.eps_init
-        ), "eps should decrease over time or be constant"
+        if self.eps_end > self.eps_init:
+            raise ValueError("eps should decrease over time or be constant, "
+                             f"got eps_init={eps_init} and eps_end={eps_end}")
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
         self.out_keys = list(self.probabilistic_operator.out_keys) + [self.ou.out_keys]

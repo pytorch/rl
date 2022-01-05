@@ -27,7 +27,8 @@ def fast_map(func, *inputs):
 
 
 def stack_tensors(input):
-    assert len(input) > 0
+    if not len(input):
+        raise RuntimeError("input length must be non-null")
     if isinstance(input[0], torch.Tensor):
         size = input[0].size()
         if len(size) == 0:
@@ -41,7 +42,8 @@ def stack_tensors(input):
 
 
 def stack_fields(input):
-    assert len(input) > 0
+    if not len(input):
+        raise RuntimeError("stack_fields requires non-empty list if tensors")
     return fast_map(lambda *x: stack_tensors(x), *input)
 
 
@@ -74,7 +76,8 @@ def cat_fields_to_device(input, device,
 
 
 def cat_fields(input):
-    assert len(input) > 0
+    if not input:
+        raise RuntimeError("cat_fields requires a non-empty input collection.")
     return fast_map(lambda *x: torch.cat(x), *input)
 
 

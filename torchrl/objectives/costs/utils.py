@@ -60,7 +60,8 @@ class _TargetNetUpdate:
 
 class SoftUpdate(_TargetNetUpdate):
     def __init__(self, loss_module: Union["DQNLoss", "DDPGLoss"], eps: Number = 0.999):
-        assert eps < 1.0 and eps > 0.0
+        if not (eps < 1.0 and eps > 0.0):
+            raise ValueError(f"Got eps = {eps} when it was supposed to be between 0 and 1.")
         super(SoftUpdate, self).__init__(loss_module)
         self.eps = eps
 

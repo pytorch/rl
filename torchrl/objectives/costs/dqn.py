@@ -28,7 +28,8 @@ class DQNLoss:
                  loss_function: str = "l2"):
         self.value_network = value_network
         self.value_network_in_keys = value_network.in_keys
-        assert isinstance(value_network, QValueActor)
+        if not isinstance(value_network, QValueActor):
+            raise TypeError(f"DQNLoss requires value_network to be of QValueActor dtype, got {type(value_network)}")
         self.gamma = gamma
         self.loss_function = loss_function
         if device is None:
@@ -43,9 +44,13 @@ class DQNLoss:
         value_network, target_value_network = self._get_networks()
         device = self.device if self.device is not None else input_tensor_dict.device
         tensor_dict = input_tensor_dict.to(device)
-        assert tensor_dict.device == device, f"device {device} was expected for {tensor_dict.__class__.__name__} but {tensor_dict.device} was found"
+        if tensor_dict.device != device:
+            raise RuntimeError(f"device {device} was expected for "
+                               f"{tensor_dict.__class__.__name__} but {tensor_dict.device} was found")
         for k, t in tensor_dict.items():
-            assert t.device == device, f"found key value pair {k}-{t.shape} with device {t.device} when {device} was required"
+            if t.device != device:
+                raise RuntimeError(f"found key value pair {k}-{t.shape} "
+                                   f"with device {t.device} when {device} was required")
         action = tensor_dict.get("action")
         done = tensor_dict.get("done").squeeze(-1)
         rewards = tensor_dict.get("reward").squeeze(-1)
@@ -54,7 +59,8 @@ class DQNLoss:
 
         action = action.to(torch.float)
         td_copy = tensor_dict.clone()
-        assert td_copy.device == tensor_dict.device, f"{tensor_dict} and {td_copy} have different devices"
+        if td_copy.device != tensor_dict.device:
+            raise RuntimeError(f"{tensor_dict} and {td_copy} have different devices")
         value_network(td_copy)
         pred_val = td_copy.get("action_value")
         pred_val_index = (pred_val * action).sum(-1)
@@ -105,12 +111,14 @@ class DoubleDQNLoss(DQNLoss):
 class DistributionalDQNLoss:
     def __init__(self, value_network: ProbabilisticOperator, gamma: Number, device: Optional[DEVICE_TYPING] = None):
         self.gamma = gamma
-        assert isinstance(value_network, DistributionalQValueActor)
+        if not isinstance(value_network, DistributionalQValueActor):
+            raise TypeError("Expected value_network to be of type DistributionalQValueActor "
+                            f"but got {type(value_network)}")
         self.value_network = value_network
         if device is None:
             try:
                 device = next(value_network.parameters()).device
-            except:
+            except AttributeError:
                 # value_network does not have params, use obs
                 device = None
         self.device = device
@@ -120,9 +128,8 @@ class DistributionalDQNLoss:
         device = self.device
         tensor_dict = TensorDict(source=input_tensor_dict, batch_size=input_tensor_dict.batch_size).to(device)
         value_network, target_value_network = self._get_networks()
-        assert (
-                tensor_dict.batch_dims == 1
-        ), f"{self.__class__.__name___} expects a 1-dimensional tensor_dict as input"
+        if tensor_dict.batch_dims != 1:
+            raise RuntimeError(f"{self.__class__.__name___} expects a 1-dimensional tensor_dict as input")
         batch_size = tensor_dict.batch_size[0]
         support = value_network.support
         atoms = support.numel()
@@ -169,10 +176,13 @@ class DistributionalDQNLoss:
             support = support.to('cpu')
             pns_a = pns_a.to('cpu')
             Tz = reward + (1 - done.to(reward.dtype)) * discount * support
-            assert Tz.shape == torch.Size([batch_size, atoms])
+            if Tz.shape != torch.Size([batch_size, atoms]):
+                raise RuntimeError("Tz shape must be torch.Size([batch_size, atoms]), "
+                                   f"got Tz.shape={Tz.shape} and batch_size={batch_size}, atoms={atoms}")
             ## Clamp between supported values
             Tz = Tz.clamp_(min=Vmin, max=Vmax)
-            assert torch.isfinite(Tz).all()
+            if not torch.isfinite(Tz).all():
+                raise RuntimeError("Tz has some non-finite elements")
             ## Compute L2 projection of Tz onto fixed support z
             b = (Tz - Vmin) / delta_z  # b = (Tz - Vmin) / Δz
             l, u = b.floor().to(torch.int64), b.ceil().to(torch.int64)

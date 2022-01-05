@@ -48,7 +48,9 @@ class GAE:
         self.average_rewards = average_rewards
 
     def __call__(self, tensor_dict: _TensorDict) -> _TensorDict:
-        assert tensor_dict.batch_dims >= 2
+        if tensor_dict.batch_dims < 2:
+            raise RuntimeError("Expected input tensordict to have at least two dimensions, got"
+                               f"tensor_dict.batch_size = {tensor_dict.batch_size}")
 
         gamma, lamda = self.gamma, self.lamda
         self.critic(tensor_dict)

@@ -116,12 +116,13 @@ class TensorSpec:
         return val
 
     def assert_is_in(self, value):
-        assert self.is_in(
-            value), f"Encoding failed because value is not in space. " \
-                    f"Consider calling project(val) first. value was = {value}"
+        if not self.is_in(value):
+            raise RuntimeError(f"Encoding failed because value is not in space. "
+                               f"Consider calling project(val) first. value was = {value}")
 
     def type_check(self, value, key):
-        assert value.dtype is self.dtype, f"value.dtype={value.dtype} but {self.__class__.__name__}.dtype={self.dtype}"
+        if not value.dtype is self.dtype:
+            raise TypeError(f"value.dtype={value.dtype} but {self.__class__.__name__}.dtype={self.dtype}")
 
     def rand(self, shape=torch.Size([])):
         raise NotImplementedError
@@ -251,8 +252,11 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
                 shape = torch.Size([shape])
             elif not isinstance(shape, torch.Size):
                 shape = torch.Size(shape)
-            assert len(minimum.shape) == len(shape)
-            assert all(_s == _sa for _s, _sa in zip(shape, minimum.shape))
+            shape_err_msg = f"minimum and shape mismatch, got {minimum.shape} and {shape}"
+            if len(minimum.shape) != len(shape):
+                raise RuntimeError(shape_err_msg)
+            if not all(_s == _sa for _s, _sa in zip(shape, minimum.shape)):
+                raise RuntimeError(shape_err_msg)
         self.shape = shape
 
         super(BoundedTensorSpec, self).__init__(

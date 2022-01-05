@@ -424,11 +424,9 @@ class ObservationNorm(ObservationTransform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):
-            # assert self.observation_spec_key is not None, f"Class {self.__class__.__name__} requires " \
-            #                                               f"observation_spec_key to be set when observation_spec is of type Composite." \
-            #                                               f"Choose one of {list(observation_spec._specs.keys())}"
             key = [key.split("observation_")[-1] for key in self.keys]
-            assert len(set(key)) == 1
+            if len(set(key)) != 1:
+                raise RuntimeError(f"Too many compatible observation keys: {key}")
             key = key[0]
             _observation_spec = observation_spec[key]
         else:
@@ -452,7 +450,8 @@ class DataDependentObservationNorm(ObservationNorm):
         self.initialized = False
 
     def _init(self, obs: torch.Tensor) -> None:
-        assert torch.isfinite(obs).all()
+        if not torch.isfinite(obs).all():
+            raise ValueError("Non-finite observation found")
         loc = obs.mean(self.dims, True)
         scale = obs.std(self.dims, True).clamp_min(1e-6)
         loc = -loc / scale
@@ -510,7 +509,8 @@ class CatFrames(ObservationTransform):
         self.buffer = self.buffer[-self.N:]
         buffer = list(reversed(self.buffer))
         buffer = [buffer[0]] * (self.N - len(buffer)) + buffer
-        assert len(buffer) == self.N
+        if len(buffer) != self.N:
+            raise RuntimeError(f"actual buffer length ({buffer}) differs from expected ({N})")
         return torch.cat(buffer, self.cat_dim)
 
 
@@ -585,13 +585,16 @@ class DoubleToFloat(Transform):
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
         if "action" in self.keys:
-            assert action_spec.dtype is torch.double
+            if action_spec.dtype is not torch.double:
+                raise TypeError("action_spec.dtype is not double")
             self._transform_spec(action_spec)
             return action_spec
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if "reward" in self.keys:
-            assert reward_spec.dtype is torch.double
+            if reward_spec.dtype is not torch.double:
+                raise TypeError("reward_spec.dtype is not double")
+
             self._transform_spec(reward_spec)
             return reward_spec
 
@@ -612,7 +615,8 @@ class CatTensors(Transform):
         if keys is None:
             raise Exception("CatTensors requires keys to be non-empty")
         super().__init__(keys=keys)
-        assert "observation_" in out_key, "CatTensors is currently restricted to observation_* keys"
+        if "observation_" not in out_key:
+            raise KeyError("CatTensors is currently restricted to observation_* keys")
         self.out_key = out_key
         self.keys = sorted(list(self.keys))
 
@@ -628,7 +632,8 @@ class CatTensors(Transform):
         return tensor_dict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        assert isinstance(observation_spec, CompositeSpec)
+        if not isinstance(observation_spec, CompositeSpec):
+            raise TypeError("observation_spec is not of type CompositeSpec")
         keys = [key.split("observation_")[-1] for key in self.keys]
 
         if all([key in observation_spec for key in keys]):
@@ -654,7 +659,9 @@ class DiscreteActionProjection(Transform):
         self.n_out = n_out
 
     def _inv_apply(self, action: torch.Tensor) -> torch.Tensor:
-        assert action.shape[-1] >= self.n_out
+        if action.shape[-1] < self.n_out:
+            raise RuntimeError(f"action.shape[-1]={action.shape[-1]} is smaller than "
+                               f"DiscreteActionProjection.n_out={self.n_out}")
         action = action.argmax(-1)  # bool to int
         idx = action >= self.n_out
         if idx.any():

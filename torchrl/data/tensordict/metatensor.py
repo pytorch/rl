@@ -151,10 +151,14 @@ def _stack_meta(list_of_meta_tensors: Iterable[MetaTensor], dim: int = 0) -> Met
     shape0 = list_of_meta_tensors[0].shape
     dtype0 = list_of_meta_tensors[0].dtype
     for tensor in list_of_meta_tensors:
-        assert tensor.device == torch.device(
-            'meta'), f"Got a tensor with device {tensor.device} when expecting meta tensor"
-        assert tensor.shape == shape0, f"Stacking meta tensors of different shapes is not allowed, got shapes {shape0} and {tensor.shape}"
-        assert tensor.dtype == dtype0, f"Stacking meta tensors of different dtype is not allowed, got shapes {dtype0} and {tensor.dtype}"
+        if tensor.device != torch.device('meta'):
+            raise RuntimeError(f"Got a tensor with device {tensor.device} when expecting meta tensor")
+        if tensor.shape != shape0:
+            raise RuntimeError(f"Stacking meta tensors of different shapes is not allowed, "
+                               f"got shapes {shape0} and {tensor.shape}")
+        if tensor.dtype != dtype0:
+            raise TypeError(f"Stacking meta tensors of different dtype is not allowed, "
+                            f"got shapes {dtype0} and {tensor.dtype}")
     shape = []
     for i in range(len(shape0) + 1):
         if i == dim:

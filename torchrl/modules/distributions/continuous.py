@@ -40,12 +40,16 @@ class TanhNormal(D.TransformedDistribution):
             tanh_loc: bool = True,
             tanh_scale: bool = True,
     ):
+        err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
-            assert (max > min).all()
+            if not (max > min).all():
+                raise RuntimeError(err_msg)
         elif isinstance(max, Number) and isinstance(min, Number):
-            assert max > min
+            if not max > min:
+                raise RuntimeError(err_msg)
         else:
-            assert all(max > min)
+            if not all(max > min):
+                raise RuntimeError(err_msg)
 
         loc, scale = net_output.chunk(chunks=2, dim=-1)
         self.tanh_loc = tanh_loc
@@ -159,12 +163,16 @@ class TanhDelta(D.TransformedDistribution):
             rtol: Number = 1e-4,
             **kwargs,
     ):
+        minmax_msg = "max value has been found to be equal or less than min value"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
-            assert (max > min).all()
+            if not (max > min).all():
+                raise ValueError(minmax_msg)
         elif isinstance(max, Number) and isinstance(min, Number):
-            assert max > min
+            if max <= min:
+                raise ValueError(minmax_msg)
         else:
-            assert all(max > min)
+            if not all(max > min):
+                raise ValueError(minmax_msg)
 
         loc = net_output
         loc = loc + (max - min) / 2 + min

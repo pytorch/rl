@@ -469,7 +469,7 @@ class TestTensorDicts:
     def test_rename_key(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        with pytest.raises(AssertionError, match="already present in TensorDict"):
+        with pytest.raises(KeyError, match="already present in TensorDict"):
             td.rename_key("a", "b", safe=True)
         a = td.get("a")
         td.rename_key('a', 'z')
@@ -673,7 +673,7 @@ def test_stack_keys():
     assert not 'b' in td.keys()
     assert 'b' in td[1].keys()
     td.set('b', torch.randn(2, 10), inplace=False)  # overwrites
-    with pytest.raises(AssertionError):
+    with pytest.raises(KeyError):
         td.set_('c', torch.randn(2, 10))  # overwrites
     td.set_('b', torch.randn(2, 10))  # b has been set before
 
@@ -682,7 +682,7 @@ def test_stack_keys():
     td.get('c')
 
     td1.set('d', torch.randn(6))
-    with pytest.raises(AssertionError):
+    with pytest.raises(RuntimeError):
         td.get('d')
 
 

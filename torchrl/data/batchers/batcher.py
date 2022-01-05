@@ -13,9 +13,10 @@ __all__ = ["MultiStep"]
 
 
 def _conv1d(reward: torch.Tensor, gammas: torch.Tensor, n_steps_max: int) -> torch.Tensor:
-    assert (
+    if not (
             reward.ndimension() == 3 and reward.shape[-1] == 1
-    ), "Expected a B x T x 1 reward tensor"
+    ):
+        raise RuntimeError(f"Expected a B x T x 1 reward tensor, got reward.shape = {reward.shape}")
     reward_pad = torch.nn.functional.pad(
         reward, [0, 0, 0, n_steps_max]
     ).transpose(-1, -2)
@@ -27,7 +28,8 @@ def _get_terminal(done: torch.Tensor, n_steps_max: int) -> Tuple[torch.Tensor, t
     # terminal states (done or last)
     terminal = done.clone()
     terminal[:, -1] = done[:, -1] | (done.sum(1) != 1)
-    assert (terminal.sum(1) == 1).all()
+    if not (terminal.sum(1) == 1).all():
+        raise RuntimeError("Got more or less than one terminal state per episode.")
     post_terminal = terminal.cumsum(1).cumsum(1) >= 2
     post_terminal = torch.cat(
         [
@@ -87,9 +89,10 @@ def select_and_repeat(tensor: torch.Tensor, terminal: torch.Tensor, post_termina
 class MultiStep(nn.Module):
     def __init__(self, gamma: Number, n_steps_max: int, device: Union[int, torch.device, str] = "cpu"):
         super().__init__()
-        assert n_steps_max >= 0
-        assert 0 < gamma
-        assert gamma <= 1.0
+        if n_steps_max < 0:
+            raise ValueError("n_steps_max must be a null or positive integer")
+        if not (gamma > 0 and gamma <= 1):
+            raise ValueError(f"got out-of-bounds gamma decay: gamma={gamma}")
 
         self.gamma = gamma
         self.n_steps_max = n_steps_max
@@ -101,9 +104,8 @@ class MultiStep(nn.Module):
             self.to(self.device)
 
     def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
-        assert (
-                tensor_dict.batch_dims == 2
-        ), "Expected a tensordict with B x T x ... dimensions"
+        if tensor_dict.batch_dims != 2:
+            raise RuntimeError("Expected a tensordict with B x T x ... dimensions")
 
         done = tensor_dict.get("done")
         try:

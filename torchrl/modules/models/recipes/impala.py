@@ -94,7 +94,8 @@ class ImpalaNet(nn.Module):
             x = x.view(-1, *x.shape[-3:])
         else:
             x = x[mask]
-            assert x.ndimension() == 4, f"masked input should have 4 dimensions but got {x.ndimension()} instead"
+            if x.ndimension() != 4:
+                raise RuntimeError(f"masked input should have 4 dimensions but got {x.ndimension()} instead")
         x = self.convs(x)
         x = x.view(B * T, -1)
         x = self.fc(x)
@@ -127,9 +128,12 @@ class ImpalaNet(nn.Module):
         if self.one_hot:
             action = F.one_hot(action, policy_logits.shape[-1])
 
-        assert policy_logits.shape[:2] == batch_shape, policy_logits.shape
-        assert baseline.shape[:2] == batch_shape, baseline.shape
-        assert action.shape[:2] == batch_shape, action.shape
+        if policy_logits.shape[:2] != batch_shape:
+            raise RuntimeError("policy_logits and batch-shape mismatch")
+        if baseline.shape[:2] != batch_shape:
+            raise RuntimeError("baseline and batch-shape mismatch")
+        if action.shape[:2] != batch_shape:
+            raise RuntimeError("action and batch-shape mismatch")
 
         return (action, policy_logits, baseline), core_state
 

@@ -99,18 +99,17 @@ class GymEnv(GymLikeEnv):
         return seed
 
     def _build_env(self, envname: str, taskname: str, from_pixels: bool = False) -> gym.core.Env:
-        assert (
-            _has_gym
-        ), f"gym not found, unable to create {envname}. \
-            Consider downloading and installing dm_control from {self.git_url}"
-        assert (taskname == "") or (
-                taskname is None
-        ), f"gym does not support taskname, received {taskname} instead."
+        if not _has_gym:
+            raise RuntimeError(f"gym not found, unable to create {envname}. "
+                               f"Consider downloading and installing dm_control from {self.git_url}")
+        if not ((taskname == "") or (taskname is None)):
+            raise RuntimeError(f"gym does not support taskname, received {taskname} instead.")
         try:
             env = self.lib.make(envname, frameskip=self.frame_skip)
             self.wrapper_frame_skip = 1
         except TypeError as err:
-            assert "unexpected keyword argument 'frameskip" in str(err), f"TypeError: {err}"
+            if "unexpected keyword argument 'frameskip" not in str(err):
+                raise TypeError(err)
             env = self.lib.make(envname)
             self.wrapper_frame_skip = self.frame_skip
         self.env = env

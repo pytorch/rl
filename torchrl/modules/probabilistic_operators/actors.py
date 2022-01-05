@@ -99,18 +99,22 @@ class DistributionalQValueHook(QValueHook):
 
     def _support_expected(self, log_softmax_values: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
         support = support.to(log_softmax_values.device)
-        assert log_softmax_values.shape[-2] == support.shape[-1], (
-            "Support length and number of atoms in mapping_operator output should match, "
-            f"got self.support.shape={support.shape} and mapping_operator(...).shape={log_softmax_values.shape}"
-        )
-        assert (log_softmax_values <= 0).all(), (
-            f"input to QValueHook must be log-softmax values (which are expected to be non-positive numbers). "
-            f"got a maximum value of {log_softmax_values.max():4.4f}")
+        if log_softmax_values.shape[-2] != support.shape[-1]:
+            raise RuntimeError(
+                "Support length and number of atoms in mapping_operator output should match, "
+                f"got self.support.shape={support.shape} and mapping_operator(...).shape={log_softmax_values.shape}"
+            )
+        if (log_softmax_values > 0).any():
+            raise ValueError(
+                f"input to QValueHook must be log-softmax values (which are expected to be non-positive numbers). "
+                f"got a maximum value of {log_softmax_values.max():4.4f}")
         return (log_softmax_values.exp() * support.unsqueeze(-1)).sum(-2)
 
     def _one_hot(self, value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
-        assert isinstance(value, torch.Tensor), f"got value of type {value.__class__.__name__}"
-        assert isinstance(support, torch.Tensor), f"got support of type {support.__class__.__name__}"
+        if not isinstance(value, torch.Tensor):
+            raise TypeError(f"got value of type {value.__class__.__name__}")
+        if not isinstance(support, torch.Tensor):
+            raise TypeError(f"got support of type {support.__class__.__name__}")
         value = self._support_expected(value, support)
         out = (value == value.max(dim=-1, keepdim=True)[0]).to(torch.long)
         return out
@@ -140,10 +144,11 @@ class QValueActor(Actor):
         super().__init__(*args, out_keys=out_keys, **kwargs)
         self.action_space = action_space
         self.mapping_operator.register_forward_hook(QValueHook(self.action_space))
-        assert self.distribution_class is Delta, (
-            f"{self.__class__.__name__} expects a distribution_class Delta, "
-            f"but got {self.distribution_class.__name__} instead."
-        )
+        if not self.distribution_class is Delta:
+            raise TypeError(
+                f"{self.__class__.__name__} expects a distribution_class Delta, "
+                f"but got {self.distribution_class.__name__} instead."
+            )
 
     def random_sample(self, out_shape: Union[torch.Size, Iterable]) -> torch.Tensor:
         if self.action_space == "one_hot":
@@ -173,10 +178,11 @@ class DistributionalQValueActor(QValueActor):
         self.mapping_operator.register_forward_hook(
             DistributionalQValueHook(self.action_space, self.support)
         )
-        assert self.distribution_class is Delta, (
-            f"{self.__class__.__name__} expects a distribution_class Delta, "
-            f"but got {self.distribution_class.__name__} instead."
-        )
+        if self.distribution_class is not Delta:
+            raise TypeError(
+                f"{self.__class__.__name__} expects a distribution_class Delta, "
+                f"but got {self.distribution_class.__name__} instead."
+            )
 
 
 class ActorCriticOperator(ProbabilisticOperator):
@@ -197,7 +203,9 @@ class ActorCriticOperator(ProbabilisticOperator):
             value_interaction_mode: str = "mode",  # mode, random, mean
             **kwargs,
     ):
-        assert not out_keys, f"PolicyValueOperator out_keys are pre-defined and cannot be changed, got out_keys={out_keys}"
+        if out_keys:
+            raise RuntimeError("PolicyValueOperator out_keys are pre-defined and cannot be changed, "
+                               f"got out_keys={out_keys}")
         value_out_keys = ["state_value"]
         policy_out_keys = ["action", "action_log_prob"]
         out_keys = policy_out_keys + value_out_keys
@@ -263,9 +271,8 @@ class OperatorMaskWrapper(ProbabilisticOperatorWrapper):
         self.target = target
         self.parent_operator = parent_operator
         self.in_keys = parent_operator.in_keys
-        assert hasattr(
-            parent_operator, target
-        ), f"{target} of OperatorMaskWrapper not found in the operator {type(parent_operator)}"
+        if not hasattr(parent_operator, target):
+            raise AttributeError(f"{target} of OperatorMaskWrapper not found in the operator {type(parent_operator)}")
 
     @property
     def target_operator(self) -> ProbabilisticOperator:
@@ -279,7 +286,8 @@ class OperatorMaskWrapper(ProbabilisticOperatorWrapper):
     def named_parameters(
             self, prefix: str = "", recurse: bool = True, exclude_common_operator=False
     ) -> Iterator[Tuple[str, nn.Parameter]]:
-        assert recurse
+        if not recurse:
+            raise ValueError("OperatorMaskWrapper.named_parameters requires the recurse arg to be set to True")
 
         for n, p in self.target_operator.named_parameters(prefix=prefix):
             yield n, p

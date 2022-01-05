@@ -46,9 +46,6 @@ def _find_depth(depth: Optional[int], *list_or_ints: Iterable):
     if depth is None:
         for item in list_or_ints:
             if isinstance(item, (list, tuple)):
-                if depth is not None:
-                    assert depth == len(item)
-                    continue
                 depth = len(item)
     if depth is None:
         raise Exception(

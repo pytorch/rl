@@ -29,7 +29,8 @@ class MLP(nn.Sequential):
             layer_kwargs: Optional[dict] = None,
             activate_last_layer: bool = False,
     ):
-        assert out_features is not None, "out_feature must be specified for MLP."
+        if out_features is None:
+            raise ValueError("out_feature must be specified for MLP.")
 
         default_num_cells = 32
         if num_cells is None:
@@ -58,19 +59,16 @@ class MLP(nn.Sequential):
         if single_bias_last_layer:
             raise NotImplementedError
 
-        assert (
-                isinstance(num_cells, Iterable) or depth is not None
-        ), "If num_cells is provided as an integer, \
-            depth must be provided too."
+        if not (isinstance(num_cells, Iterable) or depth is not None):
+            raise RuntimeError("If num_cells is provided as an integer, \
+            depth must be provided too.")
         self.num_cells = (
             list(num_cells) if isinstance(num_cells, Iterable) else [num_cells] * depth
         )
         self.depth = depth if depth is not None else len(self.num_cells)
-        assert (
-                len(self.num_cells) == depth or depth is None
-        ), "depth and num_cells length conflict, \
-            consider matching or specifying a constan num_cells argument together with a a desired depth"
-
+        if not (len(self.num_cells) == depth or depth is None):
+            raise RuntimeError("depth and num_cells length conflict, \
+            consider matching or specifying a constan num_cells argument together with a a desired depth")
         layers = self._make_net()
         super().__init__(*layers)
 
@@ -147,14 +145,16 @@ class ConvNet(nn.Sequential):
                 _field,
                 (_value if isinstance(_value, Iterable) else [_value] * _depth),
             )
-            assert (
+            if not (
                     isinstance(_value, Iterable) or _depth is not None
-            ), f"If {_field} is provided as an integer, \
-                depth must be provided too."
-            assert len(getattr(self, _field)) == _depth or _depth is None, (
+            ):
+                raise RuntimeError(f"If {_field} is provided as an integer, "
+                                   "depth must be provided too.")
+            if not (len(getattr(self, _field)) == _depth or _depth is None):
+                raise RuntimeError(
                     f"depth={depth} and {_field}={len(getattr(self, _field))} length conflict, "
                     + f"consider matching or specifying a constan {_field} argument together with a a desired depth"
-            )
+                )
 
         self.out_features = self.num_cells[-1]
 
@@ -237,14 +237,14 @@ class DistributionalDQNnet(nn.Module):
 
     def __init__(self, DQNet: nn.Module):
         super().__init__()
-        assert (
-                not isinstance(DQNet.out_features, Number) and len(DQNet.out_features) > 1
-        ), self._wrong_out_feature_dims_error
+        if not (not isinstance(DQNet.out_features, Number) and len(DQNet.out_features) > 1):
+            raise RuntimeError(self._wrong_out_feature_dims_error)
         self.dqn = DQNet
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         q_values = self.dqn(x)
-        assert q_values.ndimension() >= 3, self._wrong_out_feature_dims_error
+        if q_values.ndimension() < 3:
+            raise RuntimeError(self._wrong_out_feature_dims_error)
         return F.log_softmax(q_values, dim=-2)
 
 

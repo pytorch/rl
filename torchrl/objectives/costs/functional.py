@@ -18,10 +18,11 @@ def cross_entropy_loss(log_policy: torch.Tensor, action: torch.Tensor, inplace: 
 
     """
     if action.shape == log_policy.shape:
-        assert action.dtype in (torch.bool, torch.long, torch.uint8), "Cross-entropy loss with "
-        assert ((action == 1).sum(
-            -1) == 1).all(), "Expected the action tensor to be a one hot encoding of the actions taken, " \
-                             "but got more/less than one non-null boolean index on the last dimension"
+        if action.dtype not in (torch.bool, torch.long, torch.uint8):
+            raise TypeError(f"Cross-entropy loss with {action.dtype} dtype is not permitted")
+        if not ((action == 1).sum(-1) == 1).all():
+            raise RuntimeError("Expected the action tensor to be a one hot encoding of the actions taken, " \
+                               "but got more/less than one non-null boolean index on the last dimension")
         if inplace:
             cross_entropy = log_policy.masked_fill_(action, 0.0).sum(-1)
         else:

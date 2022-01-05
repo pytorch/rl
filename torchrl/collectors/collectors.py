@@ -52,7 +52,8 @@ class _DataCollector(IterableDataset):
 
     def _get_policy_and_device(self, policy: Callable, device: DEVICE_TYPING, env: Optional[_EnvClass] = None) -> None:
         if policy is None:
-            assert env is not None, "env must be provided to _get_policy_and_device if policy is None"
+            if env is None:
+                raise ValueError("env must be provided to _get_policy_and_device if policy is None")
             policy = RandomPolicy(env.action_spec)
         try:
             policy_device = next(policy.parameters()).device
@@ -62,8 +63,8 @@ class _DataCollector(IterableDataset):
         self.get_weights_fn = None
         if policy_device != self.device:
             self.get_weights_fn = policy.state_dict
-            assert len(list(policy.parameters())) == 0 or next(policy.parameters()).is_shared(), \
-                "Provided policy parameters must be shared."
+            if not (len(list(policy.parameters())) == 0 or next(policy.parameters()).is_shared()):
+                raise RuntimeError("Provided policy parameters must be shared.")
             policy = deepcopy(policy).requires_grad_(False).to(device)
         self.policy = policy
 
@@ -343,7 +344,8 @@ class MultiDataCollector(_DataCollector):
         for idx in range(self.num_workers):
             self.pipes[idx].send((None, "close"))
             msg = self.pipes[idx].recv()
-            assert msg == "closed", f"got {msg}"
+            if msg != "closed":
+                raise RuntimeError(f"got {msg} but expected 'close'")
         for proc in self.procs:
             proc.join()
         self.queue_out.close()
@@ -363,7 +365,8 @@ class MultiDataCollector(_DataCollector):
         for idx in range(self.num_workers):
             self.pipes[idx].send((seed, "seed"))
             new_seed, msg = self.pipes[idx].recv()
-            assert msg == "seeded", f"got {msg}"
+            if msg != "seeded":
+                raise RuntimeError(f"Expected msg='seeded', got {msg}")
             seed = new_seed
             if idx < self.num_workers - 1:
                 seed = seed + 1
@@ -379,7 +382,8 @@ class MultiDataCollector(_DataCollector):
         for idx in range(self.num_workers):
             if reset_idx[idx]:
                 j, msg = self.pipes[idx].recv()
-                assert msg == "reset", f"got {msg}"
+                if msg != "reset":
+                    raise RuntimeError(f"Expected msg='reset', got {msg}")
 
 
 class MultiSyncDataCollector(MultiDataCollector):
@@ -511,7 +515,8 @@ class MultiaSyncDataCollector(MultiDataCollector):
         if self.queue_out.full():
             print('waiting')
             time.sleep(TIMEOUT)  # wait until queue is empty
-        assert not self.queue_out.full()
+        if self.queue_out.full():
+            raise Exception("self.queue_out is full")
         if self.running:
             for idx in range(self.num_workers):
                 if self._frames < self.init_random_frames:
@@ -606,7 +611,8 @@ def main_async_collector(
             # this is expected to happen if queue_out reached the timeout, but no new msg was waiting in the pipe
             # in that case, the main process probably expects the worker to continue collect data
             if has_timed_out:
-                assert msg in ("continue", "continue_random")
+                if msg not in ("continue", "continue_random"):
+                    raise RuntimeError(f"Unexpected message after time out: msg={msg}")
             else:
                 continue
         if msg in ("continue", "continue_random"):
@@ -654,7 +660,6 @@ def main_async_collector(
             pipe_child.send((j, "reset"))
             continue
         elif msg == "close":
-            # assert i == iterator_len - 1
             pipe_child.send("closed")
             break
         else:

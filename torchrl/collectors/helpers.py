@@ -156,7 +156,9 @@ def _make_collector(
         elif num_collectors is None:
             num_collectors = - (num_env // -num_env_per_collector)
         else:
-            assert num_env_per_collector * num_collectors >= num_env
+            if num_env_per_collector * num_collectors < num_env:
+                raise ValueError(f"num_env_per_collector * num_collectors={num_env_per_collector * num_collectors} "
+                                 f"has been found to be less than num_env={num_env}")
     else:
         try:
             num_env = num_env_per_collector * num_collectors
@@ -170,7 +172,8 @@ def _make_collector(
 
     env_fns_split = [env_fns[i:i + num_env_per_collector] for i in range(0, num_env, num_env_per_collector)]
     env_kwargs_split = [env_kwargs[i:i + num_env_per_collector] for i in range(0, num_env, num_env_per_collector)]
-    assert len(env_fns_split) == num_collectors
+    if len(env_fns_split) != num_collectors:
+        raise RuntimeError(f"num_collectors={num_collectors} differs from len(env_fns_split)={len(env_fns_split)}")
 
     if num_env_per_collector == 1:
         env_fns = [lambda: _env_fn[0](**_env_kwargs[0])

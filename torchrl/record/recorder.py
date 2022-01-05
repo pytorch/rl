@@ -27,15 +27,20 @@ class VideoRecorder(ObservationTransform):
             raise Exception("moviepy not found, VideoRecorder cannot be created")
 
     def _apply(self, observation):
-        assert observation.shape[-1] == 3 or observation.ndimension() == 2
+        if not (observation.shape[-1] == 3 or observation.ndimension() == 2):
+            raise RuntimeError(f"Invalid observation shape, got: {observation.shape}")
         observation_trsf = observation
         self.count += 1
         if self.count % self.skip == 0:
             if observation.ndimension() == 2:
                 observation_trsf = observation.unsqueeze(-3)
             else:
-                assert observation.ndimension() == 3
-                assert observation_trsf.shape[-1] == 3
+                if observation.ndimension() != 3:
+                    raise RuntimeError("observation is expected to have 3 dimensions, "
+                                       f"got {observation.ndimension()} instead")
+                if observation_trsf.shape[-1] != 3:
+                    raise RuntimeError("observation_trsf is expected to have 3 dimensions, "
+                                       f"got {observation_trsf.ndimension()} instead")
                 observation_trsf = observation_trsf.permute(2, 0, 1)
             self.obs.append(observation_trsf.cpu().to(torch.uint8))
         return observation

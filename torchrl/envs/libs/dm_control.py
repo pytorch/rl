@@ -68,10 +68,9 @@ class DMControlEnv(GymLikeEnv):
 
     def _build_env(self, envname: str, taskname: str, seed: Optional[int] = None, from_pixels: bool = False,
                    render_kwargs: Optional[dict] = None):
-        assert (
-            _has_dmc
-        ), f"dm_control not found, unable to create {envname}: {taskname}. \
-            Consider downloading and installing dm_control from {self.git_url}"
+        if not _has_dmc:
+            raise RuntimeError(f"dm_control not found, unable to create {envname}: {taskname}. \
+            Consider downloading and installing dm_control from {self.git_url}")
         self.from_pixels = from_pixels
         kwargs = dict()
         if seed is not None:

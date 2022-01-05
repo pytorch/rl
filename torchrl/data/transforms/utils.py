@@ -18,7 +18,8 @@ def no_dispatch():
 class FiniteTensor(torch.Tensor):
     @staticmethod
     def __new__(cls, elem: torch.Tensor, *args, **kwargs):
-        assert torch.isfinite(elem).all()
+        if not torch.isfinite(elem).all():
+            raise RuntimeError("FiniteTensor encountered a non-finite tensor.")
         return torch.Tensor._make_subclass(cls, elem, elem.requires_grad)
 
     def __repr__(self):
@@ -27,7 +28,8 @@ class FiniteTensor(torch.Tensor):
     @classmethod
     def __torch_dispatch__(cls, func: Callable, types, args: Tuple = (), kwargs: Optional[dict] = None):
         # TODO: also explicitly recheck invariants on inplace/out mutation
-        assert not kwargs
+        if kwargs:
+            raise Exception("Expected empty kwargs")
         with no_dispatch():
             rs = func(*args)
         return tree_map(lambda e: FiniteTensor(e) if isinstance(e, torch.Tensor) else e, rs)

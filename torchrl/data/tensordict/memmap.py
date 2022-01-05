@@ -51,8 +51,9 @@ class MemmapTensor(object):
         if not isinstance(elem, (torch.Tensor, MemmapTensor)):
             raise TypeError("convert input to torch.Tensor before calling MemmapTensor() on it.")
 
-        assert not elem.requires_grad, "MemmapTensor is incompatible with tensor.requires_grad. " \
-                                       "Consider calling tensor.detach() first."
+        if elem.requires_grad:
+            raise RuntimeError("MemmapTensor is incompatible with tensor.requires_grad. "
+                               "Consider calling tensor.detach() first.")
 
         self.idx = None
         self._memmap_array = None
@@ -168,8 +169,8 @@ class MemmapTensor(object):
         return self
 
     def set_transfer_ownership(self, value: bool = True) -> MemmapTensor:
-        assert isinstance(value,
-                          bool), f"value provided to set_transfer_ownership should be a boolean, got {type(value)}"
+        if not isinstance(value, bool):
+            raise TypeError(f"value provided to set_transfer_ownership should be a boolean, got {type(value)}")
         self.transfer_ownership = value
         return self
 

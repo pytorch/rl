@@ -33,9 +33,10 @@ class _BatchedEnv(_EnvClass):
         if callable(create_env_fn):
             create_env_fn = [create_env_fn for _ in range(num_workers)]
         else:
-            assert len(
-                create_env_fn) == num_workers, f"num_workers and len(create_env_fn) mismatch, " \
-                                               f"got {len(create_env_fn)} and {num_workers}"
+            if len(create_env_fn) != num_workers:
+                raise RuntimeError(
+                    f"num_workers and len(create_env_fn) mismatch, "
+                    f"got {len(create_env_fn)} and {num_workers}")
         if isinstance(create_env_kwargs, dict):
             create_env_kwargs = [create_env_kwargs for _ in range(num_workers)]
         self._dummy_env = create_env_fn[0](**create_env_kwargs[0])
@@ -49,7 +50,8 @@ class _BatchedEnv(_EnvClass):
         self.share_individual_td = share_individual_td
         self._share_memory = shared_memory
         self._memmap = memmap
-        assert not (self._share_memory and self._memmap), "memmap and shared memory are mutually exclusive features."
+        if (self._share_memory and self._memmap):
+            raise RuntimeError("memmap and shared memory are mutually exclusive features.")
 
         self.batch_size = torch.Size([self.num_workers, *self._dummy_env.batch_size])
         self._action_spec = self._dummy_env.action_spec
@@ -99,12 +101,14 @@ class _BatchedEnv(_EnvClass):
             else:
                 raise_no_selected_keys = True
             if self.action_keys is not None:
-                assert all(action_key in self.selected_keys for action_key in self.action_keys), \
-                    "One of the action keys is not part of the selected keys or is part of the excluded keys. Action " \
-                    "keys need to be part of the selected keys for env.step() to be called."
+                if not all(action_key in self.selected_keys for action_key in self.action_keys):
+                    raise KeyError(
+                        "One of the action keys is not part of the selected keys or is part of the excluded keys. Action " \
+                        "keys need to be part of the selected keys for env.step() to be called.")
             else:
                 self.action_keys = [key for key in self.selected_keys if key.startswith("action")]
-                assert len(self.action_keys), f"found 0 action keys in {sorted(list(self.selected_keys))}"
+                if not len(self.action_keys):
+                    raise RuntimeError(f"found 0 action keys in {sorted(list(self.selected_keys))}")
         shared_tensor_dict_parent = shared_tensor_dict_parent.select(*self.selected_keys)
         self.shared_tensor_dict_parent = shared_tensor_dict_parent.to(
             self.device
@@ -122,10 +126,13 @@ class _BatchedEnv(_EnvClass):
         else:
             if self._share_memory:
                 self.shared_tensor_dict_parent.share_memory_()
-                assert self.shared_tensor_dict_parent.is_shared()
+                if not self.shared_tensor_dict_parent.is_shared():
+                    raise RuntimeError("share_memory_() failed")
             elif self._memmap:
                 self.shared_tensor_dict_parent.memmap_()
-                assert self.shared_tensor_dict_parent.is_memmap()
+                if not self.shared_tensor_dict_parent.is_memmap():
+                    raise RuntimeError("memmap_() failed")
+
             self.shared_tensor_dicts = self.shared_tensor_dict_parent.unbind(0)
 
         if raise_no_selected_keys:
@@ -244,9 +251,10 @@ class ParallelEnv(_BatchedEnv):
 
         keys = set()
         for i in range(self.num_workers):
-            cmd, data = self.parent_channels[i].recv()
-            if cmd != "step_result":
-                assert cmd == "done"
+            msg, data = self.parent_channels[i].recv()
+            if msg != "step_result":
+                if msg != "done":
+                    raise RuntimeError(f"Expected 'done' but received {msg} from worker {i}")
             # data is the set of updated keys
             keys = keys.union(data)
         return self.shared_tensor_dict_parent.select(*keys)
@@ -256,7 +264,8 @@ class ParallelEnv(_BatchedEnv):
             print(f'closing {i}')
             channel.send(("close", None))
             msg, _ = channel.recv()
-            assert msg == "closing"
+            if msg != "closing":
+                raise RuntimeError(f"Expected 'closing' but received {msg} from worker {i}")
 
         for channel in self.parent_channels:
             channel.close()
@@ -274,8 +283,9 @@ class ParallelEnv(_BatchedEnv):
             if i < self.num_workers - 1:
                 seed = seed + 1
         for channel in self.parent_channels:
-            out, _ = channel.recv()
-            assert out == "seeded"
+            msg, _ = channel.recv()
+            if msg != "seeded":
+                raise RuntimeError(f"Expected 'seeded' but received {msg}")
         return seed
 
     def _reset(self, tensor_dict: _TensorDict) -> _TensorDict:
@@ -297,8 +307,10 @@ class ParallelEnv(_BatchedEnv):
                 continue
             cmd_in, new_keys = channel.recv()
             keys = keys.union(new_keys)
-            assert cmd_in == "reset_obs", f"received cmd {cmd_in} instead of reset_obs"
-        assert not self.shared_tensor_dict_parent.get("done").any()
+            if cmd_in != "reset_obs":
+                raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
+        if self.shared_tensor_dict_parent.get("done").any():
+            raise RuntimeError("Envs have just been reset but some are still done")
         return self.shared_tensor_dict_parent.select(*keys).clone()
 
 
@@ -318,7 +330,8 @@ def _run_worker_pipe_shared_mem(
         except EOFError:
             raise EOFError(f"proc {pid} failed, last command: {cmd}")
         if cmd == "close":
-            assert initialized, "call 'init' before closing"
+            if not initialized:
+                raise RuntimeError("call 'init' before closing")
             env.close()
             child_pipe.send(("closing", None))
             child_pipe.close()
@@ -327,7 +340,8 @@ def _run_worker_pipe_shared_mem(
             break
 
         elif cmd == "seed":
-            assert initialized, "call 'init' before closing"
+            if not initialized:
+                raise RuntimeError("call 'init' before closing")
             # torch.manual_seed(data)
             # np.random.seed(data)
             env.set_seed(data)
@@ -336,16 +350,19 @@ def _run_worker_pipe_shared_mem(
         elif cmd == "init":
             if verbose:
                 print(f"initializing {pid}")
-            assert not initialized, "worker already initialized"
+            if initialized:
+                raise RuntimeError("worker already initialized")
             i = 0
             tensor_dict = data
-            assert tensor_dict.is_shared() or tensor_dict.is_memmap()
+            if not (tensor_dict.is_shared() or tensor_dict.is_memmap()):
+                raise RuntimeError("tensor_dict must be placed in shared memory (share_memory_() or memmap_())")
             initialized = True
 
         elif cmd == "reset":
             if verbose:
                 print(f'resetting worker {pid}')
-            assert initialized, "call 'init' before resetting"
+            if not initialized:
+                raise RuntimeError("call 'init' before resetting")
             # _td = tensor_dict.select("observation").to(env.device).clone()
             _td = env.reset()
             keys = set(_td.keys())
@@ -354,17 +371,16 @@ def _run_worker_pipe_shared_mem(
             tensor_dict.update_(_td)
             child_pipe.send(("reset_obs", keys))
             just_reset = True
-            assert not env.is_done, \
-                f"{env.__class__.__name__}.is_done is {env.is_done}"
+            if env.is_done:
+                raise RuntimeError(f"{env.__class__.__name__}.is_done is {env.is_done} after reset")
 
         elif cmd == "step":
-            assert initialized, "called 'init' before step"
+            if not initialized:
+                raise RuntimeError("called 'init' before step")
             i += 1
             _td = tensor_dict.select(*action_keys).to(env.device).clone()
             if env.is_done:
-                print(f"Warning: calling step when env is done, just reset = {just_reset}")
-                print(f"updated keys: {keys}")
-                raise Exception
+                raise RuntimeError(f"calling step when env is done, just reset = {just_reset}")
             _td = env.step(_td)
             keys = set(_td.keys()) - {key for key in action_keys}
             if pin_memory:

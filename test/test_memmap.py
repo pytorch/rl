@@ -19,9 +19,9 @@ def test_grad():
     t = torch.tensor([1.0])
     MemmapTensor(t)
     t = t.requires_grad_()
-    with pytest.raises(AssertionError, match="MemmapTensor is incompatible with tensor.requires_grad"):
+    with pytest.raises(RuntimeError, match="MemmapTensor is incompatible with tensor.requires_grad"):
         MemmapTensor(t)
-    with pytest.raises(AssertionError, match="MemmapTensor is incompatible with tensor.requires_grad"):
+    with pytest.raises(RuntimeError, match="MemmapTensor is incompatible with tensor.requires_grad"):
         MemmapTensor(t + 1)
 
 
