@@ -1,7 +1,7 @@
 # TorchRL
 
 TorchRL is an open-source Reinforcement Learning library for PyTorch. 
-It provides pytorch-first, low and high level abstractions for RL that are intended to be efficient, docummented and properly tested. 
+It provides pytorch and python-first, low and high level abstractions for RL that are intended to be efficient, docummented and properly tested. 
 This repo attempts to align with the existing pytorch ecosystem libraries in that it has a dataset pillar ([torchrl/envs](torchrl/envs)), [transforms](torchrl/data/transforms), [models](torchrl/modules), data utilities (e.g. collectors and containers)... 
 TorchRL aims at having as few dependencies as possible (python standard library, numpy and pytorch). Common environment libraries (e.g. OpenAI gym) are only optional.
 
