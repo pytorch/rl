@@ -12,20 +12,31 @@ from ..probabilistic_operators import (
     ProbabilisticOperator,
 )
 
-__all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcess", "OrnsteinUhlenbeckProcessWrapper"]
+__all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
 
 from ...data.tensordict.tensordict import _TensorDict
 
 
 class EGreedyWrapper(ProbabilisticOperatorWrapper):
+    """
+    Epsilon-Greedy PO wrapper.
+
+    Args:
+        policy (ProbabilisticOperator): a deterministic policy
+        eps_init (scalar): initial epsilon value.
+            default: 1.0
+        eps_end (scalar): final epsilon value.
+            default: 0.1
+        annealing_num_steps (int): number of steps it will take for epsilon to reach the eps_end value
+    """
     def __init__(
             self,
-            probabilistic_operator: ProbabilisticOperator,
+            policy: ProbabilisticOperator,
             eps_init: Number = 1.0,
             eps_end: Number = 0.1,
             annealing_num_steps: int = 1000,
     ):
-        super().__init__(probabilistic_operator)
+        super().__init__(policy)
         self.register_buffer("eps_init", torch.tensor([eps_init]))
         self.register_buffer("eps_end", torch.tensor([eps_end]))
         if self.eps_end > self.eps_init:
@@ -34,6 +45,13 @@ class EGreedyWrapper(ProbabilisticOperatorWrapper):
         self.register_buffer("eps", torch.tensor([eps_init]))
 
     def step(self) -> None:
+        """
+        A step of epsilon decay.
+        After self.annealing_num_steps, this function is a no-op.
+
+        Returns: None
+
+        """
         self.eps.data[0] = max(
             self.eps_end.item(),
             (
@@ -46,14 +64,54 @@ class EGreedyWrapper(ProbabilisticOperatorWrapper):
         out = self.probabilistic_operator._dist_sample(dist, *input, **kwargs)
         eps = self.eps.item()
         cond = (torch.rand(out[..., :1].shape, device=out.device) < eps).to(out.dtype)
-        out = cond * self.probabilistic_operator.random_sample(out.shape) + (1 - cond) * out
+        out = cond * self.probabilistic_operator.random() + (1 - cond) * out
         return out
 
 
 class OrnsteinUhlenbeckProcessWrapper(ProbabilisticOperatorWrapper):
+    """
+    Ornstein-Uhlenbeck exploration policy wrapper as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+    https://arxiv.org/pdf/1509.02971.pdf.
+
+    The OU exploration is to be used with continuous control policies and introduces a auto-correlated exploration
+    noise. This enables a sort of 'structured' exploration.
+
+        Noise equation:
+            noise = prev_noise + theta * (mu - prev_noise) * dt + current_sigma * sqrt(dt) * W
+        Sigma equation:
+            current_sigma = (-(sigma - sigma_min) / (n_steps_annealing) * n_steps + sigma).clamp_min(sigma_min)
+
+    Args:
+        policy (ProbabilisticOperator): a policy
+        eps_init (scalar): initial epsilon value, determining the amount of noise to be added.
+            default: 1.0
+        eps_end (scalar): final epsilon value, determining the amount of noise to be added.
+            default: 0.1
+        annealing_num_steps (int): number of steps it will take for epsilon to reach the eps_end value.
+            default: 1000
+        theta (scalar): theta factor in the noise equation
+            default: 0.15
+        mu (scalar): OU average (mu in the noise equation).
+            default: 0.0
+        sigma (scalar): sigma value in the sigma equation.
+            default: 0.2
+        dt (scalar): dt in the noise equation.
+            default: 0.01
+        x0 (Tensor, ndarray, optional): initial value of the process.
+            default: 0.0
+        sigma_min (number, optional): sigma_min in the sigma equation.
+            default: None
+        n_steps_annealing (int): number of steps for the sigma annealing.
+            default: 1000
+        key (str): key of the action to be modified.
+            default: "action"
+        safe (bool): if True, actions that are out of bounds given the action specs will be projected in the space
+            given the `TensorSpec.project` heuristic.
+            default: True
+    """
     def __init__(
             self,
-            probabilistic_operator: ProbabilisticOperator,
+            policy: ProbabilisticOperator,
             eps_init: Number = 1.0,
             eps_end: Number = 0.1,
             annealing_num_steps: int = 1000,
@@ -67,8 +125,8 @@ class OrnsteinUhlenbeckProcessWrapper(ProbabilisticOperatorWrapper):
             key: str = 'action',
             safe: bool = True,
     ):
-        super().__init__(probabilistic_operator)
-        self.ou = OrnsteinUhlenbeckProcess(
+        super().__init__(policy)
+        self.ou = _OrnsteinUhlenbeckProcess(
             theta=theta,
             mu=mu,
             sigma=sigma,
@@ -107,7 +165,7 @@ class OrnsteinUhlenbeckProcessWrapper(ProbabilisticOperatorWrapper):
 
 
 # Based on http://math.stackexchange.com/questions/1287634/implementing-ornstein-uhlenbeck-in-matlab
-class OrnsteinUhlenbeckProcess:
+class _OrnsteinUhlenbeckProcess:
     def __init__(
             self,
             theta: Number,

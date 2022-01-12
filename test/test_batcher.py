@@ -9,6 +9,8 @@ from torchrl.data.tensordict.tensordict import TensorDict, assert_allclose_td
 @pytest.mark.parametrize("n", range(13))
 @pytest.mark.parametrize("key", ["observation", "observation_pixels", "observation_whatever"])
 def test_multistep(n, key, T=11):
+    torch.manual_seed(0)
+
     # mock data
     b = 5
 
@@ -65,6 +67,12 @@ def test_multistep(n, key, T=11):
     torch.testing.assert_allclose(
         ms_tensor_dict.get("gamma"), ms.gamma ** ms_tensor_dict.get("steps_to_next_obs")
     )
+
+    # test reward
+    if n > 0:
+        assert (ms_tensor_dict.get("reward") != ms_tensor_dict.get("original_reward")).any()
+    else:
+        assert (ms_tensor_dict.get("reward") == ms_tensor_dict.get("original_reward")).all()
 
 
 class TestSplits:
@@ -124,7 +132,8 @@ class TestSplits:
         for i in range(split_trajs.get("traj_ids").max()):
             idx_traj_id = out_mask.get("traj_ids") == i
             # (!=) == (xor)
-            c1 = (idx_traj_id.sum()-1 == i) and (out_mask.get("done")[idx_traj_id].sum() == 1) # option 1: trajectory is complete
+            c1 = (idx_traj_id.sum() - 1 == i) and (
+                        out_mask.get("done")[idx_traj_id].sum() == 1)  # option 1: trajectory is complete
             c2 = (out_mask.get("done")[idx_traj_id].sum() == 0)
             assert c1 != c2, f"traj_len={traj_len}, " \
                              f"num_workers={num_workers}, " \

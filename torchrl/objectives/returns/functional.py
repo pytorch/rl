@@ -9,12 +9,19 @@ def generalized_advantage_estimate(
 ):
     """
     Get generalized advantage estimate of a trajectory
-    gamma: exponential mean discount (scalar)
-    lamda: trajectory discount (scalar)
-    value_old_state: value function result with old_state input
-    value_new_state: value function result with new_state input
-    reward: agent reward of taking actions in the environment
-    done: flag for end of episode
+    Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
+    https://arxiv.org/pdf/1506.02438.pdf for more context.
+
+    Args:
+        gamma (scalar): exponential mean discount.
+        lamda (scalar): trajectory discount.
+        value_old_state (Tensor): value function result with old_state input.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        value_new_state (Tensor): value function result with new_state input.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        reward (Tensor): agent reward of taking actions in the environment.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        done (Tensor): boolean flag for end of episode.
     """
     not_done = 1 - done.to(value_new_state.dtype)
     batch_size, time_steps = not_done.shape[:2]

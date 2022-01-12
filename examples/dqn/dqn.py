@@ -296,7 +296,7 @@ if __name__ == "__main__":
         collector_helper = sync_sync_collector
 
     if args.multi_step:
-        ms = MultiStep(gamma=gamma, n_steps_max=args.n_steps_return, device=args.collector_device)
+        ms = MultiStep(gamma=gamma, n_steps_max=args.n_steps_return, )
     else:
         ms = None
 
@@ -404,7 +404,7 @@ if __name__ == "__main__":
                 with torch.no_grad():
                     value_model.eval()
                     td_record = env_record.rollout(
-                        policy=value_model, n_steps=10000, explore=False
+                        policy=value_model, n_steps=10000,
                     )
                     value_model.train()
                 print("dumping")

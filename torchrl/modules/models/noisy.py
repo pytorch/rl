@@ -14,8 +14,29 @@ from torchrl.data.utils import DEVICE_TYPING
 
 
 class NoisyLinear(nn.Linear):
-    def __init__(self, in_features: int, out_features: int, bias: bool = True, device: DEVICE_TYPING = None,
-                 dtype: torch.dtype = None,
+    """
+    Noisy Linear Layer, as presented in "Noisy Networks for Exploration", https://arxiv.org/abs/1706.10295v3
+
+    A Noisy Linear Layer is a linear layer with parametric noise added to the weights. This induced stochasticity can
+    be used in RL networks for the agent's policy to aid efficient exploration. The parameters of the noise are learned
+    with gradient descent along with any other remaining network weights. Factorized Gaussian
+    noise is the type of noise usually employed.
+
+
+    Args:
+        in_features (int): input features dimension
+        out_features (int): out features dimension
+        bias (bool): if True, a bias term will be added to the matrix multiplication: Ax + b.
+            default: True
+        device (str, int or torch.device, optional): device of the layer.
+            default: "cpu"
+        dtype (torch.dtype, optional): dtype of the parameters.
+            default: None
+        std_init (scalar): initial value of the Gaussian standard deviation before optimization.
+            default: 1.0
+    """
+    def __init__(self, in_features: int, out_features: int, bias: bool = True, device: Optional[DEVICE_TYPING] = None,
+                 dtype: Optional[torch.dtype] = None,
                  std_init: Number = 0.1):
         nn.Module.__init__(self)
         self.in_features = in_features
@@ -74,7 +95,28 @@ class NoisyLinear(nn.Linear):
 
 
 class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
-    def __init__(self, out_features: int, bias: bool = True, device: DEVICE_TYPING = None, dtype: torch.dtype = None,
+    """
+    Noisy Lazy Linear Layer.
+
+    This class makes the Noisy Linear layer lazy, in that the in_feature argument does not need to be passed at initialization
+    (but is inferred after the first call to the layer).
+
+    For more context on noisy layers, see the NoisyLinear class.
+
+    Args:
+        out_features (int): out features dimension
+        bias (bool): if True, a bias term will be added to the matrix multiplication: Ax + b.
+            default: True
+        device (str, int or torch.device, optional): device of the layer.
+            default: "cpu"
+        dtype (torch.dtype, optional): dtype of the parameters.
+            default: None
+        std_init (scalar): initial value of the Gaussian standard deviation before optimization.
+            default: 1.0
+    """
+
+    def __init__(self, out_features: int, bias: bool = True, device: Optional[DEVICE_TYPING] = None,
+                 dtype: Optional[torch.dtype] = None,
                  std_init: Number = 0.1):
         super().__init__(0, 0, False)
         self.out_features = out_features

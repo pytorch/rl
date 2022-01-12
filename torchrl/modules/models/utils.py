@@ -17,27 +17,50 @@ __all__ = [
 
 
 class SqueezeLayer(nn.Module):
-    def __init__(self, dims: Iterable=(-1,)):
+    """
+    Squeezing layer.
+    Squeezes some given singleton dimensions of an input tensor.
+
+    Args:
+         dims (iterable): dimensions to be squeezed
+            default: (-1,)
+
+    """
+
+    def __init__(self, dims: Iterable[int] = (-1,)):
         super().__init__()
         self.dims = dims
 
-    def forward(self, input: torch.Tensor)->torch.Tensor:
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
         for dim in self.dims:
             input = input.squeeze(dim)
         return input
 
 
-class Squeeze2dLayer(nn.Module):
-    def forward(self, x:torch.Tensor)->torch.Tensor:
-        return x.squeeze(-1).squeeze(-1)
+class Squeeze2dLayer(SqueezeLayer):
+    """
+    Squeezing layer for convolutional neural networks.
+    Squeezes the last two singleton dimensions of an input tensor.
+
+    """
+    def __init__(self):
+        super().__init__((-1, -2))
 
 
 class SquashDims(nn.Module):
-    def __init__(self, ndims_in:int=3):
+    """
+    A squashing layer.
+    Flattens the N last dimensions of an input tensor.
+
+    Args:
+        ndims_in (int): number of dimensions to be flattened.
+            default = 3
+    """
+    def __init__(self, ndims_in: int = 3):
         super().__init__()
         self.ndims_in = ndims_in
 
-    def forward(self, value:torch.Tensor)->torch.Tensor:
+    def forward(self, value: torch.Tensor) -> torch.Tensor:
         value = value.view(*value.shape[:-self.ndims_in], -1)
         return value
 

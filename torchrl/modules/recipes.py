@@ -8,7 +8,7 @@ from torchrl.modules.distributions import (
     Delta,
     TanhNormal,
     TanhDelta,
-    Categorical,
+    OneHotCategorical,
 )
 from . import ActorCriticOperator
 from .models.models import DuelingCnnDQNet, DdpgCnnActor, DdpgCnnQNet, DdpgMlpQNet, DdpgMlpActor, MLP
@@ -18,7 +18,7 @@ from ..data import TensorSpec
 DISTRIBUTIONS = {
     "delta": Delta,
     "tanh-normal": TanhNormal,
-    "categorical": Categorical,
+    "categorical": OneHotCategorical,
     "tanh-delta": TanhDelta,
 }
 
@@ -35,6 +35,28 @@ def make_dqn_actor(
         actor_kwargs: Optional[dict] = None,
         in_key: str = "observation_pixels",
 ) -> Actor:
+    """
+    DQN constructor helper function.
+
+    Args:
+        env_specs (Specs): specs container of the environment.
+        net_class (Type): class to be used.
+            default: DuelingCnnDQNet
+        net_kwargs (dict, optional): kwargs of the net_class type
+        atoms (int): number of atoms of the support when using distributional DQN
+            default: 51
+        vmin (scalar): minimum value of the support for distributional DQN
+            default: -3
+        vmax (scalar): maximum value of the support for distributional DQN
+            default: 3
+        actor_kwargs (dict, optional): kwargs for the QValueActor class.
+        in_key (str): tensordict key to be read by the QValueNetwork.
+            default: "observation_pixels"
+
+
+    Returns: A DQN policy operator.
+
+    """
     default_net_kwargs = {"cnn_kwargs": {"depth": 3, "num_cells": 64, "out_features": 64}, }
     net_kwargs = net_kwargs if net_kwargs is not None else dict()
     default_net_kwargs.update(net_kwargs)
@@ -81,6 +103,26 @@ def make_ddpg_actor(
         actor_kwargs: Optional[dict] = None,
         value_kwargs: Optional[dict] = None,
 ) -> Tuple[Actor, ProbabilisticOperator]:
+    """
+    DDPG constructor helper function.
+
+    Args:
+        env_specs (Specs): specs container of the environment.
+        from_pixels (bool): if True, the environment observation will be asumed to be pixels and a Conv net will be
+        needed. Otherwise, a state vector is assumed and an MLP is created.
+            default: True
+        actor_net_kwargs (dict, optional): kwargs for the DdpgCnnActor / DdpgMlpActor classes.
+        value_net_kwargs (dict, optional): kwargs for the DdpgCnnQNet / DdpgMlpQNet classes.
+        actor_kwargs (dict, optional): kwargs for the Actor class, called to instantiate the policy operator.
+        value_kwargs (dict, optional): kwargs for the ProbabilisticOperator class, called to instantiate the value
+            operator.
+
+    Returns: An actor and a value operators for DDPG.
+
+    For more details on DDPG, refer to "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+    https://arxiv.org/pdf/1509.02971.pdf.
+    """
+
     actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else dict()
     value_net_kwargs = value_net_kwargs if value_net_kwargs is not None else dict()
     actor_kwargs = actor_kwargs if actor_kwargs is not None else dict()
@@ -122,16 +164,21 @@ def make_ddpg_actor(
         "default_interaction_mode",
         "mode",
     )
-    value_net_default_kwargs = {}
-    value_net_default_kwargs.update(value_net_kwargs)
     if from_pixels:
+        value_net_default_kwargs = {}
+        value_net_default_kwargs.update(value_net_kwargs)
+
         in_keys = ["observation_pixels", "action"]
         out_keys = ["state_action_value"]
         q_net = DdpgCnnQNet(**value_net_default_kwargs)
     else:
+        value_net_default_kwargs1 = {'activation_class': torch.nn.ELU}
+        value_net_default_kwargs1.update(value_net_kwargs.get('mlp_net_kwargs_net1', {}))
+        value_net_default_kwargs2 = {'num_cells': [400, 300], 'depth': 2, 'activation_class': torch.nn.ELU}
+        value_net_default_kwargs2.update(value_net_kwargs.get('mlp_net_kwargs_net2', {}))
         in_keys = ["observation_vector", "action"]
         out_keys = ["state_action_value"]
-        q_net = DdpgMlpQNet(**value_net_default_kwargs)
+        q_net = DdpgMlpQNet(mlp_net_kwargs_net1=value_net_default_kwargs1, mlp_net_kwargs_net2=value_net_default_kwargs2)
 
     value = state_class(
         in_keys=in_keys,
@@ -145,7 +192,25 @@ def make_ddpg_actor(
     return actor, value
 
 
-def make_actor_critic_model(spec: TensorSpec, in_keys: Optional[Iterable[str]] = None, **kwargs) -> ActorCriticOperator:
+def make_actor_critic_model(
+        spec: TensorSpec,
+        in_keys: Optional[Iterable[str]] = None,
+        **kwargs) -> ActorCriticOperator:
+    """
+    Actor-critic model constructor helper function.
+    Currently constructs MLP networks with immutable default arguments as described in "Proximal Policy Optimization
+    Algorithms", https://arxiv.org/abs/1707.06347
+    Other configurations can easily be implemented by modifying this function at will.
+
+    Args:
+        spec (TensorSpec): action_spec descriptor
+        in_keys (Iterable[str], optional):
+            default: ["observation_vector"]
+        **kwargs: kwargs to be passed to the ActorCriticOperator.
+
+    Returns: A joined ActorCriticOperator.
+
+    """
     if in_keys is None:
         in_keys = ["observation_vector"]
     common_mapping_operator = MLP(

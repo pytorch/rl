@@ -9,7 +9,7 @@ import torch
 
 from .memmap import MemmapTensor
 from .utils import _getitem_batch_size
-from ..utils import DEVICE_TYPING
+from ..utils import DEVICE_TYPING, INDEX_TYPING
 
 META_HANDLED_FUNCTIONS = dict()
 
@@ -26,7 +26,29 @@ def implements_for_meta(torch_function) -> Callable:
 
 
 class MetaTensor:
-    def __init__(self, *shape,
+    """
+    MetaTensor is a custom class that stores the meta-information about a tensor without requiring to access the tensor.
+    This is intended to be used with tensors that have a high access cost. MetaTensor supports more operations than
+    tensors on 'meta' device (`torch.tensor(..., device='meta')`).
+    For instance, MetaTensor supports some operations on its shape and device, such as `mt.to(device)`, `mt.view(*new_shape)`,
+    `mt.expand(*expand_shape)` etc.
+
+    Args:
+        shape (iterable of integers): shape of the tensor. If the first element of "shape" is a torch.Tensor, the
+            MetaTensor is built with this tensor specs.
+        device (int, str or torch.device): device on which the tensor is stored.
+        dtype (torch.dtype): tensor dtype.
+
+    Examples:
+        >>> meta1 = MetaTensor(3,4, device=torch.device("cpu"))
+        >>> meta2 = MetaTensor(torch.randn(3,4,device="cuda:0",dtype=torch.double))
+        >>> assert meta1.device != meta2.device
+        >>> assert meta1.dtype != meta2.dtype
+        >>> assert meta1.expand(2, 3, 4).shape == torch.Size([2, 3, 4])
+        >>> assert torch.stack([MetaTensor(3,4) for _ in range(10)], 1).shape == torch.Size([3, 10, 4])
+    """
+
+    def __init__(self, *shape: int,
                  device: Optional[DEVICE_TYPING] = 'cpu',
                  dtype: torch.dtype = torch.float,
                  _is_shared: bool = False,
@@ -58,11 +80,24 @@ class MetaTensor:
         self.class_name = name
 
     def memmap_(self) -> MetaTensor:
+        """
+        Changes the storage of the MetaTensor to memmap.
+
+        Returns: self
+
+        """
         self._is_memmap = True
         self.class_name = "MemmapTensor"
         return self
 
     def share_memory_(self) -> MetaTensor:
+        """
+        Changes the storage of the MetaTensor to shared memory.
+
+        Returns: self
+
+        """
+
         self._is_shared = True
         self.class_name = "SharedTensor"
         return self
@@ -80,7 +115,13 @@ class MetaTensor:
         return self._ndim
 
     def clone(self) -> MetaTensor:
-        return MetaTensor(*self.shape, device=self.device, dtype=self.dtype)
+        """
+
+        Returns: a new MetaTensor with the same specs.
+
+        """
+        return MetaTensor(*self.shape, device=self.device, dtype=self.dtype, _is_shared=self.is_shared(),
+                          _is_memmap=self.is_memmap())
 
     def _to_meta(self) -> torch.Tensor:
         return torch.empty(*self.shape, dtype=self.dtype, device='meta')
@@ -100,7 +141,7 @@ class MetaTensor:
 
     def expand(self, *shape: Iterable) -> MetaTensor:
         shape = torch.Size([*shape, *self.shape])
-        return MetaTensor(shape, device=self.device, dtype=self.dtype)
+        return MetaTensor(*shape, device=self.device, dtype=self.dtype)
 
     def __repr__(self) -> str:
         return f"MetaTensor(shape={self.shape}, device={self.device}, dtype={self.dtype})"

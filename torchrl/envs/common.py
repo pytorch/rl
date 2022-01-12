@@ -9,7 +9,7 @@ from torch import nn
 
 from torchrl.data import CompositeSpec
 from torchrl.data import TensorDict
-from .utils import get_available_libraries, set_exploration_mode, step_tensor_dict
+from .utils import get_available_libraries, step_tensor_dict
 from ..data.tensordict.tensordict import _TensorDict
 from ..data.utils import DEVICE_TYPING
 
@@ -30,6 +30,15 @@ __all__ = ["Specs", "GymLikeEnv"]
 
 
 class Specs:
+    """
+    Container for action, observation and reward specs.
+    This class allows one to create an environment, retrieve all of the specs in a single data container (and access
+    them in one place) before erasing the environment from the workspace.
+
+    Args:
+        env (_EnvClass): environment from which the specs have to be read.
+
+    """
     _keys = {"action_spec", "observation_spec", "reward_spec", "from_pixels"}
 
     def __init__(self, env: _EnvClass):
@@ -89,11 +98,33 @@ class Specs:
 
 
 class _EnvClass:
+    """
+    Abstract environment parent class for TorchRL.
+
+    Properties:
+        - observation_spec (TensorSpec): sampling spec of the observations;
+        - action_spec (TensorSpec): sampling spec of the actions;
+        - reward_spec (TensorSpec): sampling spec of the rewards;
+        - batch_size (torch.Size): number of environments contained in the instance;
+        - device (torch.device): device where the env input and output are expected to live
+        - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the
+            last reset
+        - current_tensordict (_TensorDict): last tensordict returned by `reset` or `step`.
+
+    Methods:
+        step (_TensorDict -> _TensorDict): step in the environment
+        reset (_TensorDict, optional -> _TensorDict): reset the environment
+        set_seed (int -> int): sets the seed of the environment
+        rand_step (_TensorDict, optional -> _TensorDict): random step given the action spec
+        rollout (Callable, ... -> _TensorDict): executes a rollout in the environment with the given policy (or random
+            steps if no policy is provided)
+
+    """
     action_spec = None
     reward_spec = None
     observation_spec = None
     from_pixels = False
-    device = "cpu"
+    device = torch.device("cpu")
     batch_size = torch.Size([])
 
     def __init__(
@@ -105,6 +136,19 @@ class _EnvClass:
         self._cache = dict()
 
     def step(self, tensor_dict: _TensorDict) -> _TensorDict:
+        """
+        Makes a step in the environment.
+        Step accepts a single argument, tensor_dict, which usually carries an 'action' key which indicates the action
+        to be taken.
+        Step will call an out-place private method, _step, which is the method to be re-written by _EnvClass subclasses.
+
+        Args:
+            tensor_dict (_TensorDict): Tensordict containing the action to be taken.
+
+        Returns: the input tensor_dict, modified in place with the resulting observations, done state and reward
+            (+ others if needed).
+
+        """
         # sanity check
         if tensor_dict.get("action").dtype is not self.action_spec.dtype:
             raise TypeError(f"expected action.dtype to be {self.action_spec.dtype} "
@@ -113,8 +157,8 @@ class _EnvClass:
         tensor_dict_out = self._step(tensor_dict)
         if tensor_dict_out is tensor_dict:
             raise RuntimeError("_EnvClass._step should return outplace changes to the input "
-                            "tensordict. Consider emptying the TensorDict first "
-                            "(tensordict.empty() or tensordict.select())")
+                               "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
+                               "tensordict.select()) inside _step before writing new tensors onto this new instance.")
         self.is_done = tensor_dict_out.get("done")
         self._current_tensordict = step_tensor_dict(tensor_dict_out)
 
@@ -139,12 +183,27 @@ class _EnvClass:
         raise NotImplementedError
 
     def reset(self, tensor_dict: Optional[_TensorDict] = None) -> _TensorDict:
-        """resets the environment and writes the initial observation into reset_observation"""
+        """
+        Resets the environment.
+        As for step and _step, only the private method `_reset` should be overwritten by _EnvClass subclasses.
+
+        Args:
+            tensor_dict (_TensorDict, optional): tensor_dict to be used to contain the resulting new observation.
+                In some cases, this input can also be used to pass argument to the reset function.
+
+        Returns: a tensor_dict (or the input tensor_dict, if any), modified in place with the resulting observations.
+
+        """
         # if tensor_dict is None:
         #     tensor_dict = self.specs.build_tensor_dict()
         if tensor_dict is None:
             tensor_dict = TensorDict(device=self.device, batch_size=self.batch_size)
         tensor_dict_reset = self._reset(tensor_dict)
+        if tensor_dict_reset is tensor_dict:
+            raise RuntimeError("_EnvClass._reset should return outplace changes to the input "
+                               "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
+                               "tensordict.select()) inside _reset before writing new tensors onto this new instance.")
+
         self._current_tensordict = tensor_dict_reset
         self.is_done = tensor_dict_reset.get("done", torch.zeros(self.batch_size, dtype=torch.bool, device=self.device))
         if tensor_dict is not None:
@@ -155,6 +214,10 @@ class _EnvClass:
 
     @property
     def current_tensordict(self) -> _TensorDict:
+        """
+        Returns the last tensordict encountered after calling `reset` or `step`.
+
+        """
         return self._current_tensordict
 
     def set_seed(self, seed: int) -> int:
@@ -188,6 +251,16 @@ class _EnvClass:
     is_done = property(is_done_get_fn, is_done_set_fn)
 
     def rand_step(self, tensor_dict: Optional[_TensorDict] = None) -> _TensorDict:
+        """
+        Performs a random step in the environment given the action_spec attribute.
+
+        Args:
+            tensor_dict (_TensorDict, optional): tensordict where the resulting info should be written.
+
+        Returns: a tensordict object with the new observation after a random step in the environment. The action will
+            be stored with the "action" key.
+
+        """
         if tensor_dict is None:
             tensor_dict = self.current_tensordict  # TensorDict(batch_size=self.batch_size)
         action = self.action_spec.rand(self.batch_size)
@@ -196,63 +269,78 @@ class _EnvClass:
 
     @property
     def specs(self) -> Specs:
+        """
+
+        Returns a Specs container where all the environment specs are contained.
+        This feature allows one to create an environment, retrieve all of the specs in a single data container and then
+        erase the environment from the workspace.
+
+        """
         return Specs(self)
 
     def rollout(
-            self, policy: Optional[Callable] = None, n_steps: int = 1, callback: Optional[Callable] = None,
-            auto_reset: bool = True, explore: bool = True,
+            self, policy: Optional[Callable[[_TensorDict], _TensorDict]] = None,
+            n_steps: int = 1,
+            callback: Optional[Callable[[_TensorDict, ...], _TensorDict]] = None,
+            auto_reset: bool = True,
     ) -> _TensorDict:
-        with set_exploration_mode(explore):
-            try:
-                policy_device = next(policy.parameters()).device
-            except:
-                policy_device = "cpu"
+        """
 
-            if auto_reset:
-                tensor_dict = self.reset()
-            else:
-                tensor_dict = self.specs.build_tensor_dict().expand(*self.batch_size).contiguous()
-                tensor_dict.update(self.current_tensordict)
+        Args:
+            policy (callable, optional): callable to be called to compute the desired action. If no policy is provided,
+                actions will be called using `env.rand_step()`
+                default = None
+            n_steps (int, optional): maximum number of steps to be executed. The actual number of steps can be smaller if
+                the environment reaches a done state before n_steps have been executed.
+                default = 1
+            callback (callable, optional): function to be called at each iteration with the given TensorDict.
+            auto_reset (bool): if True, resets automatically the environment if it is in a done state when the rollout
+                is initiated.
+                default = True.
 
-            if policy is None:
-                policy = lambda td: td.set(
-                    "action", self.action_spec.rand(self.batch_size)
-                )
+        Returns: TensorDict object containing the resulting trajectory.
 
-            tensor_dicts = []
-            if not self.is_done:
-                for i in range(n_steps):
-                    td = tensor_dict.to(policy_device)
-                    td = policy(td)
-                    tensor_dict = td.to("cpu")
+        """
+        try:
+            policy_device = next(policy.parameters()).device
+        except:
+            policy_device = "cpu"
 
-                    tensor_dict = self.step(tensor_dict)
-                    tensor_dicts.append(tensor_dict.clone())
-                    if tensor_dict.get("done").all() or i == n_steps - 1:
-                        break
-                    tensor_dict = step_tensor_dict(tensor_dict)
+        if auto_reset:
+            tensor_dict = self.reset()
+        else:
+            tensor_dict = self.specs.build_tensor_dict().expand(*self.batch_size).contiguous()
+            tensor_dict.update(self.current_tensordict)
 
-                    if callback is not None:
-                        callback(self, tensor_dict)
-            else:
-                raise Exception(f"reset env before calling rollout!")
-            out_td = torch.stack(tensor_dicts, len(self.batch_size))
-            return out_td
+        if policy is None:
+            policy = lambda td: td.set(
+                "action", self.action_spec.rand(self.batch_size)
+            )
+
+        tensor_dicts = []
+        if not self.is_done:
+            for i in range(n_steps):
+                td = tensor_dict.to(policy_device)
+                td = policy(td)
+                tensor_dict = td.to("cpu")
+
+                tensor_dict = self.step(tensor_dict)
+                tensor_dicts.append(tensor_dict.clone())
+                if tensor_dict.get("done").all() or i == n_steps - 1:
+                    break
+                tensor_dict = step_tensor_dict(tensor_dict)
+
+                if callback is not None:
+                    callback(self, tensor_dict)
+        else:
+            raise Exception(f"reset env before calling rollout!")
+        out_td = torch.stack(tensor_dicts, len(self.batch_size))
+        return out_td
 
     def _select_observation_keys(self, tensor_dict: _TensorDict) -> Iterator[str]:
         for key in tensor_dict.keys():
             if key.rfind("observation") >= 0:
                 yield key
-
-    def return_current_tensordict(self) -> _TensorDict:
-        return self.current_tensordict
-
-    def close(self) -> None:
-        self.is_closed = True
-        try:
-            self.env.close()
-        except:
-            pass
 
     def _to_tensor(self, value: Union[dict, bool, Number, torch.Tensor, np.ndarray],
                    device: Optional[DEVICE_TYPING] = None,
@@ -294,6 +382,12 @@ class _EnvClass:
 
 
 class _EnvWrapper(_EnvClass):
+    """
+    Abstract environment wrapper class.
+    Unlike _EnvClass, _EnvWrapper comes with a `_build_env` private method that will be called upon instantiation.
+    Interfaces with other libraries should be coded using _EnvWrapper.
+    """
+
     git_url: str = ""
     available_envs: dict = {}
     libname: str = ""
@@ -305,6 +399,7 @@ class _EnvWrapper(_EnvClass):
             frame_skip: int = 1,
             dtype: Optional[np.dtype] = None,
             device: DEVICE_TYPING = "cpu",
+            seed: Optional[int] = None,
             **kwargs,
     ):
         super().__init__(
@@ -320,10 +415,51 @@ class _EnvWrapper(_EnvClass):
         if not ((envname in self.available_envs) and (
                 taskname in self.available_envs[envname] if isinstance(self.available_envs, dict) else True)):
             raise RuntimeError(f"{envname} with task {taskname} is unknown in {self.libname}")
-        self._build_env(envname, taskname, **kwargs)
+        self._build_env(envname, taskname, **kwargs)  # writes the self._env attribute
+        self._init_env(seed=seed)  # runs all the steps to have a ready-to-use env
 
-    def _build_env(self, envname: str, taskname: str) -> None:
+    def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
+        """
+        Runs all the necessary steps such that the environment is ready to use.
+        This step is intended to ensure that a seed is provided to the environment (if needed) and that the environment
+        is reset (if needed). For instance, DMControl envs require the env to be reset before being used, but Gym envs
+        don't.
+
+        Args:
+            seed (int, optional): seed to be set, if any.
+
+        Returns: the resulting seed
+
+        """
+
         raise NotImplementedError
+
+    def _build_env(self, envname: str, taskname: Optional[str] = None, **kwargs) -> None:
+        """
+        Creates an environment from the target library and stores it with the `_env` attribute.
+        When overwritten, this function should pass all the required kwargs to the env instantiation method.
+
+        Args:
+            envname (str): name of the environment
+            taskname: (str, optional): task to be performed, if any.
+
+        Returns: None
+
+        """
+        raise NotImplementedError
+
+    def close(self) -> None:
+        """
+        Closes the contained environment if possible.
+
+        Returns: None
+
+        """
+        self.is_closed = True
+        try:
+            self._env.close()
+        except AttributeError:
+            pass
 
 
 class GymLikeEnv(_EnvWrapper):
@@ -346,7 +482,7 @@ class GymLikeEnv(_EnvWrapper):
 
         reward = 0.0
         for _ in range(self.wrapper_frame_skip):
-            obs, _reward, done, *info = self._output_transform(self.env.step(action_np))
+            obs, _reward, done, *info = self._output_transform(self._env.step(action_np))
             if _reward is None:
                 _reward = 0.0
             reward += _reward
@@ -360,7 +496,7 @@ class GymLikeEnv(_EnvWrapper):
         reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
         done = self._to_tensor(done, dtype=torch.bool)
         self._is_done = done
-        self._last_obs_dict = obs_dict
+        self._current_tensordict = obs_dict
 
         tensor_dict_out = TensorDict(batch_size=tensor_dict.batch_size)
         for key, value in obs_dict.items():
@@ -369,8 +505,16 @@ class GymLikeEnv(_EnvWrapper):
         tensor_dict_out.set("done", done)
         return tensor_dict_out
 
+    def set_seed(self, seed: Optional[int] = None) -> Optional[int]:
+        if seed is not None:
+            torch.manual_seed(seed)
+        return self._set_seed(seed)
+
+    def _set_seed(self, seed: Optional[int]) -> Optional[int]:
+        raise NotImplementedError
+
     def _reset(self, tensor_dict: Optional[_TensorDict] = None) -> _TensorDict:
-        obs, *_ = self._output_transform((self.env.reset(),))
+        obs, *_ = self._output_transform((self._env.reset(),))
         tensor_dict_out = TensorDict(source=self._read_obs(obs), batch_size=self.batch_size)
         self._is_done = torch.zeros(1, dtype=torch.bool)
         tensor_dict_out.set("done", self._is_done)
@@ -397,15 +541,23 @@ class GymLikeEnv(_EnvWrapper):
         return f"{self.__class__.__name__}(env={self.envname}, task={self.taskname if self.taskname else None}, batch_size={self.batch_size})"
 
 
-def make_tensor_dict(env: _EnvWrapper, actor: Optional[nn.Module] = None) -> _TensorDict:
-    """Returns a zeroed-tensordict with fields matching those required for a full step
+def make_tensor_dict(
+        env: _EnvClass,
+        policy: Optional[Callable[[_TensorDict, ...], _TensorDict]] = None) -> _TensorDict:
+    """
+    Returns a zeroed-tensordict with fields matching those required for a full step
     (action selection and environment step) in the environment
+
+    Args:
+        env (_EnvWrapper): environment defining the observation, action and reward space;
+        policy (Callable, optional): policy corresponding to the environment.
+
     """
     with torch.no_grad():
         tensor_dict = env.reset()
-        if actor is not None:
+        if policy is not None:
             tensor_dict = tensor_dict.unsqueeze(0)
-            tensor_dict = actor(tensor_dict.to(next(actor.parameters()).device))
+            tensor_dict = policy(tensor_dict.to(next(policy.parameters()).device))
             tensor_dict = tensor_dict.squeeze(0)
         else:
             tensor_dict.set("action", env.action_spec.rand(), inplace=False)

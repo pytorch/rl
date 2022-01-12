@@ -129,6 +129,9 @@ parser.add_argument("--async_collection", action="store_true",
                          "configuration while the optimization loop is being done. If the algorithm is trained "
                          "synchronously, data collection and optimization will occur iteratively, not concurrently.")
 
+parser.add_argument("--reward_scaling", type=float, default=1.0,
+                    help="scale of the reward.")
+
 parser.add_argument("--noisy", action="store_true",
                     help="whether to use NoisyLinearLayers in the value network.")
 parser.add_argument("--distributional", action="store_true",
@@ -213,8 +216,9 @@ if __name__ == "__main__":
                 CatFrames(),
                 ObservationNorm(loc=-1.0, scale=2.0, keys=["next_observation_pixels"]),
             ]
+        if args.reward_scaling != 1.0:
+            transforms += [RewardScaling(0.0, args.reward_scaling)]
         transforms += [
-            RewardScaling(0.0, 1.05),  # just for fun
             FiniteTensorDictCheck(),
         ]
         if env_library is DMControlEnv:
@@ -317,13 +321,13 @@ if __name__ == "__main__":
         collector_helper = sync_sync_collector
 
     if args.multi_step:
-        ms = MultiStep(gamma=gamma, n_steps_max=args.n_steps_return, device=args.collector_device)
+        ms = MultiStep(gamma=gamma, n_steps_max=args.n_steps_return, )
     else:
         ms = None
 
     collector_helper_kwargs = {
         "env_fns": make_transformed_env if args.env_per_collector == 1 else make_parallel_env,
-        "env_kwargs": {},
+        "env_kwargs": {'stats': stats},
         "policy": actor_model_explore,
         "max_steps_per_traj": args.max_frames_per_traj,
         "frames_per_batch": T,
@@ -368,7 +372,10 @@ if __name__ == "__main__":
     writer = SummaryWriter(log_dir)
     torch.save(args, log_dir + "/args.t")
 
-    env_record = make_transformed_env(video_tag=video_tag, writer=writer, stats=stats)
+    env_record = make_transformed_env(
+        video_tag=video_tag,
+        writer=writer,
+        stats=stats)
     td_test = env_record.rollout(None, 100)
     t_optim = 0.0
     t_collection = 0.0
@@ -394,6 +401,7 @@ if __name__ == "__main__":
         collector.update_policy_weights_()
         _t_collection = time.time() - _t_collection
         t_collection = t_collection * 0.9 + _t_collection * 0.1
+
         reward_avg = (b.masked_select(b.get("mask").squeeze(-1)).get("reward")).mean().item()
         if optim_count > 0:
             if init_reward is None:
@@ -433,7 +441,7 @@ if __name__ == "__main__":
                     with torch.no_grad():
                         actor_model.eval()
                         td_record = env_record.rollout(
-                            policy=actor_model, n_steps=args.record_steps, explore=False
+                            policy=actor_model, n_steps=args.record_steps,
                         )
                         actor_model.train()
                     print("dumping")

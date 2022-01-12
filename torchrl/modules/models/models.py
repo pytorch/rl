@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Iterable, Type, Union, Optional, Tuple
+from typing import Iterable, Type, Union, Optional, Tuple, Callable
 
 import numpy as np
 import torch
@@ -13,13 +13,61 @@ __all__ = ["MLP", "ConvNet", "DuelingCnnDQNet", "DistributionalDQNnet", "DdpgCnn
 
 
 class MLP(nn.Sequential):
+    """
+    A multi-layer perceptron.
+
+    Args:
+        in_features (int, optional): number of input features;
+        out_features (int, list of int): number of output features. If iterable of integers, the output is reshaped to
+            the desired shape;
+        depth (int, optional): depth of the network. A depth of 0 will produce a single linear layer network with the
+            desired input and output size. A length of 1 will create 2 linear layers etc. If no depth is indicated,
+            the depth information should be contained in the num_cells argument (see below). If num_cells is an
+            iterable and depth is indicated, both should match: len(num_cells) must be equal to depth.
+        num_cells (int or Iterable[int], optional): number of cells of every layer in between the input and output. If
+            an integer is provided, every layer will have the same number of cells. If an iterable is provided,
+            the linear layers out_features will match the content of num_cells.
+            default: 32;
+        activation_class (Type): activation class to be used.
+            default: nn.Tanh
+        activation_kwargs (dict, optional): kwargs to be used with the activation class;
+        norm_class (Type, optional): normalization class, if any.
+        norm_kwargs (dict, optional): kwargs to be used with the normalization layers;
+        bias_last_layer (bool): if True, the last Linear layer will have a bias parameter.
+            default: True;
+        single_bias_last_layer (bool): if True, the last dimension of the bias of the last layer will be a singleton
+            dimension.
+            default: True;
+        layer_class (Type): class to be used for the linear layers;
+        layer_kwargs (dict, optional): kwargs for the linear layers;
+        activate_last_layer (bool): whether the MLP output should be activated. This is useful when the MLP output
+            is used as the input for another module.
+            default: False.
+
+    Examples:
+        All of the following examples provide valid, working MLPs
+        >>> mlp = MLP(in_features=3, out_features=6, depth=0) # MLP consisting of a single 3 x 6 linear layer
+        >>> print(mlp)
+        >>> mlp = MLP(in_features=3, out_features=6, depth=4, num_cells=32)
+        >>> print(mlp)
+        >>> mlp = MLP(out_features=6, depth=4, num_cells=32)  # LazyLinear for the first layer
+        >>> print(mlp)
+        >>> mlp = MLP(out_features=6, num_cells=[32, 33, 34, 35])  # defines the depth by the num_cells arg
+        >>> print(mlp)
+        >>> mlp = MLP(out_features=(6, 7), num_cells=[32, 33, 34, 35])  # returns a view of the output tensor with shape [*, 6, 7]
+        >>> print(mlp)
+        >>> mlp = MLP(out_features=(6, 7), num_cells=[32, 33, 34, 35], layer_class=NoisyLinear)  # uses NoisyLinear layers
+        >>> print(mlp)
+
+    """
+
     def __init__(
             self,
             in_features: Optional[int] = None,
-            out_features: Optional[int] = None,
+            out_features: [int, Iterable[int]] = None,
             depth: Optional[int] = None,
             num_cells: Optional[Union[Iterable, int]] = None,
-            activation_class: Type = nn.Tanh,
+            activation_class: Type[Callable] = nn.Tanh,
             activation_kwargs: Optional[dict] = None,
             norm_class: Optional[Type] = None,
             norm_kwargs: Optional[dict] = None,
@@ -104,14 +152,58 @@ class MLP(nn.Sequential):
 
 
 class ConvNet(nn.Sequential):
+    """
+    A convolutional neural network.
+
+        Args:
+        in_features (int, optional): number of input features;
+        depth (int, optional): depth of the network. A depth of 1 will produce a single linear layer network with the
+            desired input size, and with an output size equal to the last element of the num_cells argument.
+            If no depth is indicated, the depth information should be contained in the num_cells argument (see below).
+            If num_cells is an iterable and depth is indicated, both should match: len(num_cells) must be equal to
+            the depth.
+        num_cells (int or Iterable[int], optional): number of cells of every layer in between the input and output. If
+            an integer is provided, every layer will have the same number of cells. If an iterable is provided,
+            the linear layers out_features will match the content of num_cells.
+            default: [32, 32, 32];
+        kernel_sizes (int, Iterable[Union[int, Iterable[int]]]): Kernel size(s) of the conv network. If iterable, the length must match the
+            depth, defined by the num_cells or depth arguments.
+        strides (int or Iterable[int]): Stride(s) of the conv network. If iterable, the length must match the
+            depth, defined by the num_cells or depth arguments.
+        activation_class (Type): activation class to be used.
+            default: nn.Tanh
+        activation_kwargs (dict, optional): kwargs to be used with the activation class;
+        norm_class (Type, optional): normalization class, if any;
+        norm_kwargs (dict, optional): kwargs to be used with the normalization layers;
+        bias_last_layer (bool): if True, the last Linear layer will have a bias parameter.
+            default: True;
+        aggregator_class (Type): aggregator to use at the end of the chain.
+            default:  SquashDims;
+        aggregator_kwargs (dict, optional): kwargs for the aggregator_class;
+        squeeze_output (bool): whether the output should be squeezed of its singleton dimensions.
+            default: True.
+
+    Examples:
+        All of the following examples provide valid, working MLPs
+        >>> cnet = ConvNet(in_features=3, depth=1, num_cells=[32,]) # MLP consisting of a single 3 x 6 linear layer
+        >>> print(cnet)
+        >>> cnet = ConvNet(in_features=3, depth=4, num_cells=32)
+        >>> print(cnet)
+        >>> cnet = ConvNet(in_features=3, num_cells=[32, 33, 34, 35])  # defines the depth by the num_cells arg
+        >>> print(cnet)
+        >>> cnet = ConvNet(in_features=3, num_cells=[32, 33, 34, 35], kernel_sizes=[3, 4, 5, (2, 3)])  # defines kernels, possibly rectangular
+        >>> print(cnet)
+
+    """
+
     def __init__(
             self,
             in_features: Optional[int] = None,
             depth: Optional[int] = None,
             num_cells: Union[Iterable, int] = [32, 32, 32],
-            kernel_sizes: Union[Iterable, int] = 3,
+            kernel_sizes: Union[Iterable[Union[int, Iterable[int]]], int] = 3,
             strides: Union[Iterable, int] = 1,
-            actionvation_class: Type = nn.ReLU,
+            actionvation_class: Type = nn.ELU,
             activation_kwargs: Optional[dict] = None,
             norm_class: Type = None,
             norm_kwargs: Optional[dict] = None,
@@ -128,12 +220,13 @@ class ConvNet(nn.Sequential):
         self.norm_kwargs = norm_kwargs if norm_kwargs is not None else dict()
         self.bias_last_layer = bias_last_layer
         self.aggregator_class = aggregator_class
-        self.aggregator_kwargs = aggregator_kwargs if aggregator_kwargs is not None else {"ndims_in": 3},
+        self.aggregator_kwargs = aggregator_kwargs if aggregator_kwargs is not None else {"ndims_in": 3}
         self.squeeze_output = squeeze_output
         # self.single_bias_last_layer = single_bias_last_layer
 
-        self.depth = depth
         depth = _find_depth(depth, num_cells, kernel_sizes, strides)
+        self.depth = depth
+        assert depth > 0, "Null depth is not permitted with ConvNet."
 
         for _field, _value in zip(
                 ["num_cells", "kernel_sizes", "strides"],
@@ -197,24 +290,51 @@ class ConvNet(nn.Sequential):
 
 
 class DuelingCnnDQNet(nn.Module):
+    """
+    Creates a Dueling CNN Q-network, as presented in https://arxiv.org/abs/1511.06581
+
+    Args:
+        out_features (int): number of features for the advantage network
+        out_features_value (int): number of features for the value network
+        cnn_kwargs (dict, optional): kwargs for the feature network.
+            default: {
+                'num_cells': [32, 64, 64],
+                'strides': [4, 2, 1],
+                'kernels': [8, 4, 3],
+            }
+        mlp_kwargs (dict, optional): kwargs for the advantage and value network.
+            default: {
+                "depth": 1,
+                "activation_class": nn.ELU,
+                "num_cells": 512,
+                "bias_last_layer": True,
+            }
+
+    """
+
     def __init__(
-            self, out_features: int, out_features_value: int = 1, cnn_kwargs: Optional[dict] = None,
+            self, out_features: int,
+            out_features_value: int = 1,
+            cnn_kwargs: Optional[dict] = None,
             mlp_kwargs: Optional[dict] = None,
     ):
         super(DuelingCnnDQNet, self).__init__()
 
-        _cnn_kwargs = {}
+        cnn_kwargs = cnn_kwargs if cnn_kwargs is not None else dict()
+        _cnn_kwargs = {
+            'num_cells': [32, 64, 64],
+            'strides': [4, 2, 1],
+            'kernels': [8, 4, 3],
+        }
         _cnn_kwargs.update(cnn_kwargs)
-
         self.features = ConvNet(**_cnn_kwargs)
 
         _mlp_kwargs = {
             "depth": 1,
-            "activation_class": nn.ReLU,
+            "activation_class": nn.ELU,
             "num_cells": 512,
             "bias_last_layer": True,
         }
-        cnn_kwargs = cnn_kwargs if cnn_kwargs is not None else dict()
         mlp_kwargs = mlp_kwargs if mlp_kwargs is not None else dict()
         _mlp_kwargs.update(mlp_kwargs)
         self.out_features = out_features
@@ -233,6 +353,14 @@ class DuelingCnnDQNet(nn.Module):
 
 
 class DistributionalDQNnet(nn.Module):
+    """
+    Distributional Deep Q-Network.
+
+    Args:
+        DQNet (nn.Module): Q-Network with output length equal to the number of atoms:
+            output.shape = [*batch, #atoms, #actions].
+
+    """
     _wrong_out_feature_dims_error = "DistributionalDQNnet requires dqn output to be at least 3-dimensional, with dimensions Batch x #Atoms x #Actions"
 
     def __init__(self, DQNet: nn.Module):
@@ -255,14 +383,49 @@ def ddpg_init_last_layer(last_layer: nn.Module, scale: Number = 6e-4) -> None:
 
 
 class DdpgCnnActor(nn.Module):
+    """
+    DDPG Convolutional Actor class, as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+    https://arxiv.org/pdf/1509.02971.pdf
+
+    The DDPG Convolutional Actor takes as input an observation (some simple transformation of the observed pixels) and
+    returns an action vector from it.
+    It is trained to maximise the value returned by the DDPG Q Value network.
+
+    Args:
+        action_dim (int): length of the action vector.
+        conv_net_kwargs (dict, optional): kwargs for the ConvNet.
+            default: {
+            'in_features': None,
+            'num_cells': [32, 64, 64],
+            'kernel_sizes': [8, 4, 3],
+            'strides': [4, 2, 1],
+            'actionvation_class': nn.ELU,
+            'activation_kwargs': {'inplace': True},
+            'norm_class': None,
+            'aggregator_class': SquashDims,
+            'aggregator_kwargs': {"ndims_in": 3},
+            'squeeze_output': True,
+        }
+        mlp_net_kwargs: kwargs for MLP.
+            Default: {
+            'in_features': None,
+            'out_features': action_dim,
+            'depth': 2,
+            'num_cells': 200,
+            'activation_class': nn.ELU,
+            'activation_kwargs': {'inplace': True},
+            'bias_last_layer': True,
+        }
+    """
+
     def __init__(self, action_dim: int, conv_net_kwargs: Optional[dict] = None, mlp_net_kwargs: Optional[dict] = None):
         super().__init__()
         conv_net_default_kwargs = {
             'in_features': None,
-            'num_cells': [32, 32, 32],
-            'kernel_sizes': 3,
-            'strides': 1,
-            'actionvation_class': nn.ReLU,
+            'num_cells': [32, 64, 64],
+            'kernel_sizes': [8, 4, 3],
+            'strides': [4, 2, 1],
+            'actionvation_class': nn.ELU,
             'activation_kwargs': {'inplace': True},
             'norm_class': None,
             'aggregator_class': SquashDims,
@@ -276,7 +439,7 @@ class DdpgCnnActor(nn.Module):
             'out_features': action_dim,
             'depth': 2,
             'num_cells': 200,
-            'activation_class': nn.ReLU,
+            'activation_class': nn.ELU,
             'activation_kwargs': {'inplace': True},
             'bias_last_layer': True,
         }
@@ -292,6 +455,27 @@ class DdpgCnnActor(nn.Module):
 
 
 class DdpgMlpActor(nn.Module):
+    """
+    DDPG Actor class, as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+    https://arxiv.org/pdf/1509.02971.pdf
+
+    The DDPG Actor takes as input an observation vector and returns an action from it.
+    It is trained to maximise the value returned by the DDPG Q Value network.
+
+    Args:
+        action_dim (int): length of the action vector
+        mlp_net_kwargs (dict, optional): kwargs for MLP.
+            Default: {
+            'in_features': None,
+            'out_features': action_dim,
+            'depth': 2,
+            'num_cells': [400, 300],
+            'activation_class': nn.ELU,
+            'activation_kwargs': {'inplace': True},
+            'bias_last_layer': True,
+        }
+    """
+
     def __init__(self, action_dim: int, mlp_net_kwargs: Optional[dict] = None):
         super().__init__()
         mlp_net_default_kwargs = {
@@ -299,7 +483,7 @@ class DdpgMlpActor(nn.Module):
             'out_features': action_dim,
             'depth': 2,
             'num_cells': [400, 300],
-            'activation_class': nn.ReLU,
+            'activation_class': nn.ELU,
             'activation_kwargs': {'inplace': True},
             'bias_last_layer': True,
         }
@@ -314,6 +498,38 @@ class DdpgMlpActor(nn.Module):
 
 
 class DdpgCnnQNet(nn.Module):
+    """
+    DDPG Convolutional Q-value class, as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+    https://arxiv.org/pdf/1509.02971.pdf
+
+    The DDPG Q-value network takes as input an observation and an action, and returns a scalar from it.
+
+    Args:
+        conv_net_kwargs (dict, optional): kwargs for the convolutional network.
+            default: {
+            'in_features': None,
+            'num_cells': [32, 32, 32],
+            'kernel_sizes': 3,
+            'strides': 1,
+            'actionvation_class': nn.ELU,
+            'activation_kwargs': {'inplace': True},
+            'norm_class': None,
+            'aggregator_class': SquashDims,
+            'aggregator_kwargs': {"ndims_in": 3},
+            'squeeze_output': True,
+        }
+        mlp_net_kwargs (dict, optional): kwargs for MLP.
+            Default: {
+            'in_features': None,
+            'out_features': 1,
+            'depth': 2,
+            'num_cells': 200,
+            'activation_class': nn.ELU,
+            'activation_kwargs': {'inplace': True},
+            'bias_last_layer': True,
+        }
+    """
+
     def __init__(self, conv_net_kwargs: Optional[dict] = None, mlp_net_kwargs: Optional[dict] = None):
         super().__init__()
         conv_net_default_kwargs = {
@@ -321,7 +537,7 @@ class DdpgCnnQNet(nn.Module):
             'num_cells': [32, 32, 32],
             'kernel_sizes': 3,
             'strides': 1,
-            'actionvation_class': nn.ReLU,
+            'actionvation_class': nn.ELU,
             'activation_kwargs': {'inplace': True},
             'norm_class': None,
             'aggregator_class': SquashDims,
@@ -335,7 +551,7 @@ class DdpgCnnQNet(nn.Module):
             'out_features': 1,
             'depth': 2,
             'num_cells': 200,
-            'activation_class': nn.ReLU,
+            'activation_class': nn.ELU,
             'activation_kwargs': {'inplace': True},
             'bias_last_layer': True,
         }
@@ -351,20 +567,51 @@ class DdpgCnnQNet(nn.Module):
 
 
 class DdpgMlpQNet(nn.Module):
-    def __init__(self, mlp_net_kwargs: Optional[dict] = None):
+    """
+    DDPG Q-value MLP class, as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+    https://arxiv.org/pdf/1509.02971.pdf
+
+    The DDPG Q-value network takes as input an observation and an action, and returns a scalar from it.
+    Because actions are integrated later than observations, two networks are created.
+
+    Args:
+        mlp_net_kwargs_net1 (dict, optional): kwargs for MLP.
+            Default: {
+            'in_features': None,
+            'out_features': 400,
+            'depth': 0,
+            'num_cells': [],
+            'activation_class': nn.ELU,
+            'activation_kwargs': {'inplace': True},
+            'bias_last_layer': True,
+            'activate_last_layer': True,
+        }
+        mlp_net_kwargs_net2
+            Default: {
+            'in_features': None,
+            'out_features': 1,
+            'depth': 1,
+            'num_cells': [300, ],
+            'activation_class': nn.ELU,
+            'activation_kwargs': {'inplace': True},
+            'bias_last_layer': True,
+        }
+    """
+
+    def __init__(self, mlp_net_kwargs_net1: Optional[dict] = None, mlp_net_kwargs_net2: Optional[dict] = None):
         super().__init__()
         mlp1_net_default_kwargs = {
             'in_features': None,
             'out_features': 400,
             'depth': 0,
             'num_cells': [],
-            'activation_class': nn.ReLU,
+            'activation_class': nn.ELU,
             'activation_kwargs': {'inplace': True},
             'bias_last_layer': True,
             'activate_last_layer': True,
         }
-        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
-        mlp1_net_default_kwargs.update(mlp_net_kwargs)
+        mlp_net_kwargs_net1 = mlp_net_kwargs_net1 if mlp_net_kwargs_net1 is not None else dict()
+        mlp1_net_default_kwargs.update(mlp_net_kwargs_net1)
         self.mlp1 = MLP(**mlp1_net_default_kwargs)
 
         mlp2_net_default_kwargs = {
@@ -372,11 +619,12 @@ class DdpgMlpQNet(nn.Module):
             'out_features': 1,
             'depth': 1,
             'num_cells': [300, ],
-            'activation_class': nn.ReLU,
+            'activation_class': nn.ELU,
             'activation_kwargs': {'inplace': True},
             'bias_last_layer': True,
         }
-        mlp1_net_default_kwargs.update(mlp_net_kwargs)
+        mlp_net_kwargs_net2 = mlp_net_kwargs_net2 if mlp_net_kwargs_net2 is not None else dict()
+        mlp2_net_default_kwargs.update(mlp_net_kwargs_net2)
         self.mlp2 = MLP(**mlp2_net_default_kwargs)
         ddpg_init_last_layer(self.mlp2[-1], 6e-3)
 

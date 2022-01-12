@@ -302,7 +302,6 @@ if __name__ == "__main__":
                 td_record = env_record.rollout(
                     policy=actor_model,
                     n_steps=args.max_frames_per_traj,
-                    explore=False
                 )
                 actor_model.train()
             print("dumping")

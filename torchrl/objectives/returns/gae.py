@@ -22,24 +22,48 @@ from .functional import generalized_advantage_estimate
 from ...data.tensordict.tensordict import _TensorDict
 from ...modules import ProbabilisticOperator
 
-
-def gae(values: torch.Tensor, log_prob_actions: torch.Tensor, rewards: torch.Tensor, entropies: torch.Tensor,
-        gamma: Union[Number, torch.Tensor], tau: Number) -> torch.Tensor:
-    # https://arxiv.org/pdf/1506.02438.pdf
-    gaes = []
-    for value, log_policy, reward, entropy in list(
-            zip(values, log_prob_actions, rewards, entropies)
-    )[::-1]:
-        if next_value is None:
-            next_value = torch.zeros_like(value)
-        gae = gae * gamma * tau
-        gae = gae + reward + gamma * next_value.detach() - value.detach()
-        next_value = value
-        gaes.append(gae)
-    return torch.stack(gae)
-
+#
+# def gae(values: torch.Tensor, log_prob_actions: torch.Tensor, rewards: torch.Tensor, entropies: torch.Tensor,
+#         gamma: Union[Number, torch.Tensor], tau: Number) -> torch.Tensor:
+#     """
+#
+#     Args:
+#         values:
+#         log_prob_actions:
+#         rewards:
+#         entropies:
+#         gamma:
+#         tau:
+#
+#     Returns:
+#
+#     """
+#     gaes = []
+#     for value, log_policy, reward, entropy in list(
+#             zip(values, log_prob_actions, rewards, entropies)
+#     )[::-1]:
+#         if next_value is None:
+#             next_value = torch.zeros_like(value)
+#         gae = gae * gamma * tau
+#         gae = gae + reward + gamma * next_value.detach() - value.detach()
+#         next_value = value
+#         gaes.append(gae)
+#     return torch.stack(gae)
+#
 
 class GAE:
+    """
+    A class wrapper around the generalized advantage estimate functional.
+    Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
+    https://arxiv.org/pdf/1506.02438.pdf for more context.
+
+    Args:
+        gamma (scalar): exponential mean discount.
+        lamda (scalar): trajectory discount.
+        critic (ProbabilisticOperator): value operator used to retrieve the value estimates.
+        average_rewards (bool): if True, rewards will be standardized before the GAE is computed.
+    """
+
     def __init__(self, gamma: Union[Number, torch.Tensor], lamda: Number, critic: ProbabilisticOperator,
                  average_rewards: bool = True):
         self.gamma = gamma
@@ -48,6 +72,16 @@ class GAE:
         self.average_rewards = average_rewards
 
     def __call__(self, tensor_dict: _TensorDict) -> _TensorDict:
+        """
+        Computes the GAE given the data in tensor_dict.
+
+        Args:
+            tensor_dict (_TensorDict): A TensorDict containing the data (observation, action, reward, done state)
+                necessary to compute the value estimates and the GAE.
+
+        Returns: An updated TensorDict with an "advantage" and a "value_target" keys
+
+        """
         if tensor_dict.batch_dims < 2:
             raise RuntimeError("Expected input tensordict to have at least two dimensions, got"
                                f"tensor_dict.batch_size = {tensor_dict.batch_size}")

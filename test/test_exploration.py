@@ -7,14 +7,14 @@ from torchrl.data import NdBoundedTensorSpec
 from torchrl.data.tensordict.tensordict import TensorDict
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.probabilistic_operators import Actor
-from torchrl.modules.probabilistic_operators.exploration import OrnsteinUhlenbeckProcess, \
+from torchrl.modules.probabilistic_operators.exploration import _OrnsteinUhlenbeckProcess, \
     OrnsteinUhlenbeckProcessWrapper
 
 
 def test_ou(seed=0):
     torch.manual_seed(seed)
     td = TensorDict({'action': torch.randn(3) / 10}, batch_size=[])
-    ou = OrnsteinUhlenbeckProcess(10.0, mu=2.0, x0=-4, sigma=0.1, sigma_min=0.01)
+    ou = _OrnsteinUhlenbeckProcess(10.0, mu=2.0, x0=-4, sigma=0.1, sigma_min=0.01)
 
     tds = []
     for i in range(2000):

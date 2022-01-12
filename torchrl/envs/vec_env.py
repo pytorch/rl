@@ -14,11 +14,40 @@ __all__ = ["SerialEnv", "ParallelEnv"]
 
 
 class _BatchedEnv(_EnvClass):
+    """
+    Batched environment abstract class.
+
+    Args:
+        num_workers: number of workers (i.e. env instances) to be deployed simultaneously;
+        create_env_fn (callable or list of callables): function (or list of functions) to be used for the environment
+            creation;
+        create_env_kwargs (dict or list of dicts, optional): kwargs to be used with the environments being created;
+        device (str, int, torch.device): device of the environment;
+        action_keys (list of str, optional): list of keys that are to be considered policy-output. If the policy has it,
+            the attribute policy.out_keys can be used.
+            Providing the action_keys permit to select which keys to update after the policy is called, which can
+            drastically decrease the IO burden when the tensordict is placed in shared memory / memory map.
+        pin_memory (bool): if True and device is "cpu", calls `pin_memory` on the tensordicts when created.
+        selected_keys (list of str, optional): keys that have to be returned by the environment.
+            When creating a batch of environment, it might be the case that only some of the keys are to be returned.
+            For instance, if the environment returns 'observation_pixels' and 'observation_vector', the user might only
+            be interested in, say, 'observation_vector'. By indicating which keys must be returned in the tensordict,
+            one can easily control the amount of data occupied in memory (for instance to limit the memory size of a
+            replay buffer) and/or limit the amount of data passed from one process to the other;
+        excluded_keys (list of str, optional): list of keys to be excluded from the returned tensordicts.
+            See selected_keys for more details;
+        share_individual_td (bool): if True, a different tensordict is created for every process/worker and a lazy
+            stack is returned.
+            default = False;
+        shared_memory (bool): whether or not the returned tensordict will be placed in shared memory;
+        memmap (bool): whether or not the returned tensordict will be placed in memory map.
+
+    """
     def __init__(
             self,
             num_workers: int,
-            create_env_fn: Union[Callable, Iterable[Callable]],
-            create_env_kwargs: dict = None,
+            create_env_fn: Union[Callable[[], _EnvClass], Iterable[Callable[[], _EnvClass]]],
+            create_env_kwargs: Union[dict, Iterable[dict]] = None,
             device: DEVICE_TYPING = 'cpu',
             action_keys: Optional[Iterable[str]] = None,
             pin_memory: bool = False,
@@ -158,6 +187,10 @@ class _BatchedEnv(_EnvClass):
 
 
 class SerialEnv(_BatchedEnv):
+    """
+    Creates a series of environments in the same process.
+
+    """
     _share_memory = False
 
     def _start_workers(self) -> None:
@@ -211,7 +244,11 @@ class SerialEnv(_BatchedEnv):
 
 
 class ParallelEnv(_BatchedEnv):
+    """
+    Creates one environment per process.
+    TensorDicts are passed via shared memory or memory map.
 
+    """
     def _start_workers(self) -> None:
         _num_workers = self.num_workers
         ctx = mp.get_context("spawn")

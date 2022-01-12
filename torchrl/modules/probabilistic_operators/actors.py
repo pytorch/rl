@@ -1,9 +1,9 @@
-from typing import Optional, Iterable, Union, Tuple, Type, Iterator
+from typing import Optional, Iterable, Union, Tuple, Type, Iterator, Callable
 
 import torch
 from torch import nn, distributions as d
 
-from torchrl.modules.distributions import Delta, Categorical
+from torchrl.modules.distributions import Delta, OneHotCategorical
 from torchrl.modules.distributions.discrete import rand_one_hot
 from .common import ProbabilisticOperator, ProbabilisticOperatorWrapper
 from ..models.models import DistributionalDQNnet
@@ -15,6 +15,12 @@ from ...data.tensordict.tensordict import _TensorDict
 
 
 class Actor(ProbabilisticOperator):
+    """
+    General class for Actors in RL.
+    The Actor class comes with default values for the in_keys and out_keys arguments (["observation"] and ["action"],
+    respectively).
+
+    """
     def __init__(
             self,
             action_spec: TensorSpec,
@@ -46,11 +52,19 @@ class Actor(ProbabilisticOperator):
             **kwargs,
         )
 
-    def random_sample(self, out_shape: Union[torch.Size, Iterable[int]]) -> torch.Tensor:
-        raise NotImplementedError
-
-
 class QValueHook:
+    """
+    Q-Value hook for Q-value policies.
+    Given a the output of a mapping operator, representing the values of the different discrete actions available,
+    a QValueHook will transform these values into their argmax component.
+    Currently, this is returned as a one-hot encoding.
+
+    Args:
+        action_space (str): Action space. Must be one of "one-hot", "mult_one_hot" or "binary".
+        var_nums (int, optional): if action_space == "mult_one_hot", this value represents the cardinality of each
+            action component.
+
+    """
     def __init__(
             self, action_space: str, var_nums: Optional[int] = None,
     ):
@@ -81,6 +95,22 @@ class QValueHook:
 
 
 class DistributionalQValueHook(QValueHook):
+    """
+    Distributional Q-Value hook for Q-value policies.
+    Given a the output of a mapping operator, representing the values of the different discrete actions available,
+    a DistributionalQValueHook will transform these values into their argmax component using the provided support.
+    Currently, this is returned as a one-hot encoding.
+    For more details regarding Distributional DQN, refer to "A Distributional Perspective on Reinforcement Learning",
+    https://arxiv.org/pdf/1707.06887.pdf
+
+    Args:
+        action_space (str): Action space. Must be one of "one-hot", "mult_one_hot" or "binary".
+        support (torch.Tensor): support of the action values.
+        var_nums (int, optional): if action_space == "mult_one_hot", this value represents the cardinality of each
+            action component.
+
+    """
+
     def __init__(
             self, action_space: str, support: torch.Tensor, var_nums: Optional[int] = None,
     ):
@@ -135,7 +165,11 @@ class DistributionalQValueHook(QValueHook):
 
 
 class QValueActor(Actor):
+    """
+    DQN Actor subclass.
+    This class hooks the mapping_operator such that it returns a one-hot encoding of the argmax value.
 
+    """
     def __init__(self, *args, action_space: int = "one_hot", **kwargs):
         out_keys = [
             "action",
@@ -150,19 +184,25 @@ class QValueActor(Actor):
                 f"but got {self.distribution_class.__name__} instead."
             )
 
-    def random_sample(self, out_shape: Union[torch.Size, Iterable]) -> torch.Tensor:
-        if self.action_space == "one_hot":
-            values = torch.randn(out_shape, device=next(self.parameters()).device)
-            out = rand_one_hot(values)
-        else:
-            raise NotImplementedError(
-                f"{self.__class__.__name__}.random_sample is not implemented yet"
-                f" for action_space of type {self.action_space}"
-            )
-        return out
+    # def random_sample(self, out_shape: Union[torch.Size, Iterable]) -> torch.Tensor:
+    #     if self.action_space == "one_hot":
+    #         values = torch.randn(out_shape, device=next(self.parameters()).device)
+    #         out = rand_one_hot(values)
+    #     else:
+    #         raise NotImplementedError(
+    #             f"{self.__class__.__name__}.random_sample is not implemented yet"
+    #             f" for action_space of type {self.action_space}"
+    #         )
+    #     return out
 
 
 class DistributionalQValueActor(QValueActor):
+    """
+    Distributional DQN Actor subclass.
+    This class hooks the mapping_operator such that it returns a one-hot encoding of the argmax value on its support.
+
+    """
+
     def __init__(self, *args, support: torch.Tensor, action_space: str = "one_hot", **kwargs):
         out_keys = [
             "action",
@@ -187,15 +227,51 @@ class DistributionalQValueActor(QValueActor):
 
 class ActorCriticOperator(ProbabilisticOperator):
 
+    """
+    Actor-critic operator.
+
+    This class wraps together an actor and a critic that share a common observation embedding network:
+               Obs
+                v
+        observation_embedding
+            v    |     v
+          actor  |   critic
+            v    |     v
+          action |   value
+
+    To facilitate the workflow, this  class comes with a get_policy_operator() and get_value_operator() methods, which
+    will both return a stand-alone ProbabilisticOperator with the dedicated functionality.
+
+    Args:
+        spec (TensorSpec): spec of the action
+        in_keys (Iterable of str): keys of the input tensordict to be read by the common operator
+        common_mapping_operator (Callable or nn.Module): operator reading the tensordict keys and producing a common
+            embedding that is to be used by the actor and value network sub-modules.
+        policy_operator (Callable or nn.Module): actor sub-module.
+        value_operator (Callable or nn.Module): value network sub-module.
+        policy_distribution_class (Type): distribution class for the policy.
+            default: OneHotCategorical
+        policy_distribution_kwargs (dict, optional): kwargs for the policy dist.
+        value_distribution_class (Type): distribution class for the policy.
+            default: Delta
+        value_distribution_kwargs (dict, optional): kwargs for the value dist.
+        policy_interaction_mode (str): interaction mode for the policy.
+            default: "mode"
+        value_interaction_mode (str): interaction mode for the value network.
+            default: "mode"
+    """
+
+    # TODO: specs for action and value should be different. Use a CompositeSpec?
+
     def __init__(
             self,
             spec: TensorSpec,
             in_keys: Iterable[str],
-            common_mapping_operator: nn.Module,
-            policy_operator: nn.Module,
-            value_operator: nn.Module,
+            common_mapping_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
+            policy_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
+            value_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
             out_keys: Optional[Iterable[str]] = None,
-            policy_distribution_class: Type = Categorical,
+            policy_distribution_class: Type = OneHotCategorical,
             policy_distribution_kwargs: Optional[dict] = None,
             value_distribution_class: Type = Delta,
             value_distribution_kwargs: Optional[dict] = None,
@@ -259,13 +335,32 @@ class ActorCriticOperator(ProbabilisticOperator):
         return tensor_dict
 
     def get_policy_operator(self) -> ProbabilisticOperatorWrapper:
+        """
+
+        Returns a stand-alone policy operator that maps an observation to an action.
+
+        """
         return OperatorMaskWrapper(self, "policy_po")
 
     def get_value_operator(self) -> ProbabilisticOperatorWrapper:
+        """
+
+        Returns a stand-alone value network operator that maps an observation to a value estimate.
+
+        """
         return OperatorMaskWrapper(self, "value_po")
 
 
 class OperatorMaskWrapper(ProbabilisticOperatorWrapper):
+    """
+    Given an actor-critic object and a target network (policy or value network), acts as a stand-alone operator with the
+    dedicated functionality.
+
+    Args:
+        parent_operator (ActorCriticOperator): actor-critic containing the target network
+        target (str): name of the target network. By default, the policy network is named `actor_critic.policy_po` and
+            the value network is named `actor_critic.value_po`.
+    """
     def __init__(self, parent_operator: ActorCriticOperator, target: str):
         super().__init__(getattr(parent_operator, target))
         self.target = target

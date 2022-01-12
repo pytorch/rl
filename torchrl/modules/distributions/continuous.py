@@ -13,15 +13,46 @@ __all__ = ["TanhNormal", "Delta", "TanhDelta"]
 
 
 class SafeTanhTransform(D.TanhTransform):
+    """
+    TanhTransform subclass that ensured that the transformation is numerically invertible.
+
+    """
+    delta = 1e-4
+
     def _call(self, x: torch.Tensor) -> torch.Tensor:
         y = super()._call(x)
-        y = y.clamp(-1 + 1e-4, 1 - 1e-4)
+        y = y.clamp(-1 + self.delta, 1 - self.delta)
         return y
 
 
 class TanhNormal(D.TransformedDistribution):
     """
-    Implements a TanhNormal distribution with location scaling
+    Implements a TanhNormal distribution with location scaling.
+    Location scaling prevents the location to be "too far" from 0 when a TanhTransform is applied, which ultimately
+    leads to numerically unstable inverse transforms and poor gradient computation (e.g. gradient explosion).
+    In practice, the location is computed according to
+        loc = (loc / upscale).tanh() * upscale.
+
+
+    Args:
+        net_output (torch.Tensor): tensor containing the mean and std data. The distribution mean will be taken to be
+            the first half of net_output over the last dimension, and the std to be some (positive mapping of) the
+            second half of that tensor.
+            The mapping function for the std can be controlled via the scale_mapping argument;
+        upscale (torch.Tensor or number): 'a' scaling factor in the formula:
+             loc = (loc / upscale).tanh() * upscale;
+        min (torch.Tensor or number): minimum value of the distribution. Default = -1.0;
+        max (torch.Tensor or number): maximum value of the distribution. Default = 1.0;
+        scale_mapping (str): positive mapping function to be used with the std.
+            default = "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
+            choices: "softplus", "exp", "relu", "biased_softplus_1";
+        event_dims (int): number of dimensions describing the action.
+            default = 1;
+        tanh_loc (bool): if True, the above formula is used for the location scaling, otherwise the raw value is kept.
+            default: True;
+        tanh_scale (bool): if True, the above formula is used for the standard deviation scaling before positive
+            mapping, otherwise the raw value is kept.
+            default: False.
     """
 
     arg_constraints = {
@@ -38,7 +69,7 @@ class TanhNormal(D.TransformedDistribution):
             scale_mapping: str = "biased_softplus_1.0",
             event_dims: int = 1,
             tanh_loc: bool = True,
-            tanh_scale: bool = True,
+            tanh_scale: bool = False,
     ):
         err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
@@ -89,6 +120,16 @@ class TanhNormal(D.TransformedDistribution):
 
 
 def uniform_sample_tanhnormal(dist: TanhNormal, size=torch.Size([])) -> torch.Tensor:
+    """
+    Defines what uniform sampling looks like for a TanhNormal distribution.
+
+    Args:
+        dist (TanhNormal): distribution defining the space where the sampling should occur.
+        size (torch.Size): batch-size of the output tensor
+
+    Returns: a tensor sampled uniformly in the boundaries defined by the input distribution.
+
+    """
     return torch.rand_like(dist.sample(size)) * (dist.max - dist.min) + dist.min
 
 
@@ -96,6 +137,18 @@ UNIFORM[TanhNormal] = uniform_sample_tanhnormal
 
 
 class Delta(D.Distribution):
+    """
+    Delta distribution.
+
+    Args:
+        param (torch.Tensor): parameter of the delta distribution;
+        atol (numbe): absolute tolerance to consider that a tensor matches the distribution parameter;
+            default: 1e-6
+        rtol (numbe): relative tolerance to consider that a tensor matches the distribution parameter;
+            default: 1e-6
+        batch_shape (torch.Size): batch shape;
+        event_shape (torch.Size): shape of the outcome;
+    """
     arg_constraints = {}
 
     def __init__(
@@ -146,7 +199,21 @@ class Delta(D.Distribution):
 
 class TanhDelta(D.TransformedDistribution):
     """
-    Implements a Tanh transformed Delta distribution with location scaling
+    Implements a Tanh transformed Delta distribution.
+
+    Args:
+        net_output (torch.Tensor): parameter of the delta distribution;
+                min (torch.Tensor or number): minimum value of the distribution. Default = -1.0;
+        max (torch.Tensor or number): maximum value of the distribution. Default = 1.0;
+        event_dims (int): number of dimensions describing the action.
+            default = 1;
+        atol (numbe): absolute tolerance to consider that a tensor matches the distribution parameter;
+            default: 1e-6
+        rtol (numbe): relative tolerance to consider that a tensor matches the distribution parameter;
+            default: 1e-6
+        batch_shape (torch.Size): batch shape;
+        event_shape (torch.Size): shape of the outcome;
+
     """
 
     arg_constraints = {

@@ -1,6 +1,7 @@
 from copy import deepcopy
 from numbers import Number
 from typing import Optional, Any, Iterable, Union, List
+from warnings import warn
 
 import torch
 from torch import nn
@@ -32,6 +33,7 @@ __all__ = [
     "DoubleToFloat",
     "CatTensors",
     "NoopResetEnv",
+    "BinerizeReward",
 ]
 
 from ...envs.utils import step_tensor_dict
@@ -40,6 +42,19 @@ IMAGE_KEYS = ["next_observation", "next_observation_pixels"]
 
 
 class Transform(nn.Module):
+    """
+    Environment transform.
+    In principle, a transform receives a tensordict as input and returns (the same or another) tensordict as output,
+    where a series of keys have been modified or created.
+    When instantiating a new transform, it should always be possible to indicate what keys are to be read for the
+    transform by passing the `keys` argument to the constructor.
+    Transforms can be combined with environments with the TransformedEnv class, which takes as arguments am _EnvClass
+    instance and a transform.
+    Transforms can be concatenated using the `Compose` class.
+    They can be stateless or stateful (e.g. CatTransform). Because of this, Transforms support the `reset` operation,
+    which should reset the transform to its initial state (such that successive trajectories are kept independent).
+
+    """
     invertible = False
 
     def __init__(self, keys: Iterable):
@@ -47,6 +62,10 @@ class Transform(nn.Module):
         self.keys = keys
 
     def reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+        """
+        Resets a tranform if it is stateful.
+
+        """
         return tensor_dict
 
     def _check_inplace(self) -> None:
@@ -58,9 +77,19 @@ class Transform(nn.Module):
         pass
 
     def _apply(self, obs: torch.Tensor) -> None:
+        """
+        Applies the transform to a tensor.
+        This operation can be called multiple times (if multiples keys of the tensordict match the keys of the
+        transform).
+
+        """
         raise NotImplementedError
 
     def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
+        """
+        Reads the input tensordict, and for the selected keys, applies the transform.
+
+        """
         self._check_inplace()
         for _obs_key in tensor_dict.keys():
             if _obs_key in self.keys:
@@ -91,12 +120,37 @@ class Transform(nn.Module):
         return tensor_dict
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        """
+        Transforms the action spec such that the resulting spec matches transform mapping.
+        Args:
+            action_spec (TensorSpec): spec before the transform
+
+        Returns: expected spec after the transform
+
+        """
         return action_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        """
+        Transforms the observation spec such that the resulting spec matches transform mapping.
+        Args:
+            observation_spec (TensorSpec): spec before the transform
+
+        Returns: expected spec after the transform
+
+        """
         return observation_spec
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        """
+        Transforms the reward spec such that the resulting spec matches transform mapping.
+        Args:
+            reward_spec (TensorSpec): spec before the transform
+
+        Returns: expected spec after the transform
+
+        """
+
         return reward_spec
 
     def dump(self) -> None:
@@ -107,6 +161,23 @@ class Transform(nn.Module):
 
 
 class TransformedEnv(_EnvClass):
+    """
+    A transformed environment.
+
+    Args:
+        env (_EnvClass): original environment to be transformed.
+        transform (Transform): transform to apply to the tensordict resulting from env.step(td)
+        cache_specs (bool): if True, the specs will be cached once and for all after the first call (i.e. the
+            specs will be transformed only once). If the transform changes during training, the original spec transform
+            may not be valid anymore, in which case this value should be set to False.
+
+    Examples:
+        >>> env = GymEnv("Pendulum-v0")
+        >>> transform = RewardScaling(0.0, 1.0)
+        >>> transformed_env = TransformedEnv(env, transform)
+
+    """
+
     def __init__(self, env: _EnvClass, transform: Transform, cache_specs: bool = True, **kwargs):
         self.env = env
         self.transform = transform
@@ -122,6 +193,10 @@ class TransformedEnv(_EnvClass):
 
     @property
     def observation_spec(self) -> TensorSpec:
+        """
+        Observation spec of the transformed environment
+
+        """
         if self._observation_spec is None or not self.cache_specs:
             observation_spec = self.transform.transform_observation_spec(
                 deepcopy(self.env.observation_spec)
@@ -134,6 +209,11 @@ class TransformedEnv(_EnvClass):
 
     @property
     def action_spec(self) -> TensorSpec:
+        """
+        Action spec of the transformed environment
+
+        """
+
         if self._action_spec is None or not self.cache_specs:
             action_spec = self.transform.transform_action_spec(deepcopy(self.env.action_spec))
             if self.cache_specs:
@@ -144,6 +224,11 @@ class TransformedEnv(_EnvClass):
 
     @property
     def reward_spec(self) -> TensorSpec:
+        """
+        Reward spec of the transformed environment
+
+        """
+
         if self._reward_spec is None or not self.cache_specs:
             reward_spec = self.transform.transform_reward_spec(deepcopy(self.env.reward_spec))
             if self.cache_specs:
@@ -163,6 +248,10 @@ class TransformedEnv(_EnvClass):
         return tensor_dict_out
 
     def set_seed(self, seed: int) -> int:
+        """
+        Set the seeds of the environment
+
+        """
         return self.env.set_seed(seed)
 
     def _reset(self, tensor_dict: Optional[_TensorDict] = None):
@@ -200,6 +289,10 @@ class TransformedEnv(_EnvClass):
 
 
 class ObservationTransform(Transform):
+    """
+    Abstract class for transformations of the observations.
+
+    """
     inplace = False
 
     def __init__(self, keys: Optional[Iterable[str]] = None):
@@ -213,6 +306,16 @@ class ObservationTransform(Transform):
 
 
 class Compose(Transform):
+    """
+    Composes a chain of transforms.
+
+    Examples:
+        >>> env = GymEnv("Pendulum-v0")
+        >>> transforms = [RewardScaling(1.0, 1.0), RewardClipping(-2.0, 2.0)]
+        >>> transforms = Compose(*transforms)
+        >>> transformed_env = TransformedEnv(env, transforms)
+
+    """
     inplace = False
 
     def __init__(self, *transforms: Transform):
@@ -240,12 +343,11 @@ class Compose(Transform):
         return reward_spec
 
     def __getitem__(self, item: Union[int, slice, List]) -> Union:
-        transform = self.transforms[item]
-        if len(transform) == 1:
-            transform = transform[0]
-        if isinstance(item, int) or isinstance(transform, Transform):
-            return transform
-        return Compose(*self.transforms[item])
+        transform = self.transforms
+        transform = transform[item]
+        if not isinstance(transform, Transform):
+            return Compose(*self.transforms[item])
+        return transform
 
     def dump(self) -> None:
         for t in self:
@@ -265,6 +367,14 @@ class Compose(Transform):
 
 
 class ToTensorImage(ObservationTransform):
+    """
+    Transforms an observation image from a (... x W x H x 3) 0..255 uint8 tensor to a single/double precision floating
+    point (3 x W x H) tensor with values between 0 and 1.
+
+    Args:
+        unsqueeze (bool): if True, the observation tensor is unsqueezed along the first dimension. default=False.
+        dtype (optional): dtype to use for the resulting observations.
+    """
     inplace = False
 
     def __init__(self, unsqueeze: bool = False, dtype: Optional[torch.device] = None,
@@ -273,10 +383,10 @@ class ToTensorImage(ObservationTransform):
             keys = IMAGE_KEYS  # default
         super().__init__(keys=keys)
         self.unsqueeze = unsqueeze
-        self.dtype = dtype
+        self.dtype = dtype if dtype is not None else torch.get_default_dtype()
 
     def _apply(self, observation: torch.FloatTensor) -> torch.Tensor:
-        observation = observation.div(255)
+        observation = observation.div(255).to(self.dtype)
         observation = observation.permute(
             *list(range(observation.ndimension() - 3)), -1, -3, -2
         )
@@ -295,7 +405,7 @@ class ToTensorImage(ObservationTransform):
                 _observation_spec.shape[-2],
             ]
         )
-        _observation_spec.dtype = self.dtype if self.dtype is not None else torch.float32
+        _observation_spec.dtype = self.dtype
         observation_spec["pixels"] = _observation_spec
         return observation_spec
 
@@ -306,6 +416,13 @@ class ToTensorImage(ObservationTransform):
 
 
 class RewardClipping(Transform):
+    """
+    Clips the reward between clamp_min and clamp_max.
+
+    Args:
+        clip_min (scalar): minimum value of the resulting reward
+        clip_max (scalar): maximum value of the resulting reward
+    """
     inplace = True
 
     def __init__(self, clamp_min: Number = None, clamp_max: Number = None, keys: Optional[Iterable[str]] = None):
@@ -333,7 +450,39 @@ class RewardClipping(Transform):
             )
 
 
+class BinerizeReward(Transform):
+    """
+    Maps the reward to a binary value (0 or 1) if the reward is null or non-null, respectively.
+
+    """
+    inplace = True
+
+    def __init__(self, keys: Optional[Iterable[str]] = None):
+        if keys is None:
+            keys = ["reward"]
+        super().__init__(keys=keys)
+
+    def _apply(self, reward: torch.Tensor) -> torch.Tensor:
+        return (reward != 0.0).to(reward.dtype)
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        if isinstance(reward_spec, UnboundedContinuousTensorSpec):
+            return BoundedTensorSpec(0.0, 1.0, device=reward_spec.device, dtype=reward_spec.dtype)
+        else:
+            raise NotImplementedError(
+                f"{self.__class__.__name__}.transform_reward_spec not implemented for tensor spec of type {type(reward_spec).__name__}"
+            )
+
+
 class Resize(ObservationTransform):
+    """
+    Resizes an pixel observation.
+
+    Args:
+        w (int): resulting width
+        h (int): resulting height
+        interpolation (str): interpolation method
+    """
     inplace = False
 
     def __init__(self, w: int, h: int, interpolation: str = "bilinear", keys: Optional[Iterable[str]] = None):
@@ -365,6 +514,10 @@ class Resize(ObservationTransform):
 
 
 class GrayScale(ObservationTransform):
+    """
+    Turns a pixel observation to grayscale.
+
+    """
     inplace = False
 
     def __init__(self, keys: Optional[Iterable[str]] = None):
@@ -390,6 +543,18 @@ class GrayScale(ObservationTransform):
 
 
 class ObservationNorm(ObservationTransform):
+    """
+    Normalizes an observation according to
+        obs = obs * scale + loc
+
+    Args:
+        loc (number or tensor): location of the affine transform
+        scale (number or tensor): scale of the affine transform
+        standard_normal (bool): if True, the transform will be
+            obs = (obs-loc)/scale,
+            as it is done for standardization. default=False
+    """
+
     inplace = True
 
     def __init__(
@@ -439,10 +604,15 @@ class ObservationNorm(ObservationTransform):
 
 
 class DataDependentObservationNorm(ObservationNorm):
+    """
+    Experimental feature: Data dependent affine standardization.
+    """
     inplace = True
 
     def __init__(self, dims: Iterable[int] = (-1, -2), keys: Optional[Iterable[str]] = None,
                  ):
+        warn("DataDependentObservationNorm is an experimental feature under heavy development. It should not be used "
+             "in parallel distributed settings.")
         if keys is None:
             keys = ["next_observation", "next_observation_pixels", "next_observation_state"]
         super().__init__(keys=keys)
@@ -478,6 +648,15 @@ class DataDependentObservationNorm(ObservationNorm):
 
 
 class CatFrames(ObservationTransform):
+    """
+    Concatenates successive observation frames into a single tensor.
+    This can, for instance, account for movement/velocity of the observed feature.
+
+    Args:
+        N (int): number of observation to concatenate
+        cat_dim (int): dimension along which concatenate the observations.
+
+    """
     inplace = False
 
     def __init__(self, N: int = 4, cat_dim: int = -3, keys: Optional[Iterable[str]] = None):
@@ -515,6 +694,14 @@ class CatFrames(ObservationTransform):
 
 
 class RewardScaling(Transform):
+    """
+    Affine transform of the reward according to
+        reward = reward * scale + loc
+
+    Args:
+        loc (number or torch.Tensor): location of the affine transform
+        scale (number or torch.Tensor): scale of the affine transform
+    """
     inplace = True
 
     def __init__(self, loc: Union[Number, torch.Tensor], scale: Union[Number, torch.Tensor],
@@ -544,6 +731,10 @@ class RewardScaling(Transform):
 
 
 class FiniteTensorDictCheck(Transform):
+    """
+    This transform will check that all the items of the tensordict are finite, and raise an exception if they are not.
+
+    """
     inplace = False
 
     def __init__(self):
@@ -562,6 +753,10 @@ class FiniteTensorDictCheck(Transform):
 
 
 class DoubleToFloat(Transform):
+    """
+    Maps actions float to double before they are called on the environment.
+
+    """
     invertible = True
     inplace = False
 
@@ -608,6 +803,16 @@ class DoubleToFloat(Transform):
 
 
 class CatTensors(Transform):
+    """
+    Concatenates several keys toghether in a single tensor.
+    This is especially useful if multiple keys describe a single state (e.g. "observation_position" and
+    "observation_velocity")
+
+    Args:
+        keys (Iterable of str): keys to be concatenated
+        out_key: key of the resulting tensor.
+
+    """
     invertible = False
     inplace = False
 
@@ -651,33 +856,56 @@ class CatTensors(Transform):
 
 
 class DiscreteActionProjection(Transform):
+    """
+    Given a discrete action (from 1 to N) encoded as a one-hot vector and a maximum action index M (with M < N),
+    transforms the action such that action_out is at most M.
+    If the input action is > M, it is being replaced by a random value between N and M.
+    Otherwise the same action is kept.
+    This is intended to be used with policies applied over multiple discrete control environments with different action
+    space.
+
+    Args:
+        max_N (int): max number of action considered
+        M (int): resulting number of actions
+    """
     inplace = False
 
-    def __init__(self, n_in: int, n_out: int, action_key: str = "action"):
+    def __init__(self, max_N: int, M: int, action_key: str = "action"):
         super().__init__([action_key])
-        self.n_in = n_in
-        self.n_out = n_out
+        self.max_N = max_N
+        self.M = M
 
     def _inv_apply(self, action: torch.Tensor) -> torch.Tensor:
-        if action.shape[-1] < self.n_out:
+        if action.shape[-1] < self.M:
             raise RuntimeError(f"action.shape[-1]={action.shape[-1]} is smaller than "
-                               f"DiscreteActionProjection.n_out={self.n_out}")
+                               f"DiscreteActionProjection.M={self.M}")
         action = action.argmax(-1)  # bool to int
-        idx = action >= self.n_out
+        idx = action >= self.M
         if idx.any():
-            action[idx] = torch.randint(self.n_out, (idx.sum(),))
-        action = nn.functional.one_hot(action, self.n_out)
+            action[idx] = torch.randint(self.M, (idx.sum(),))
+        action = nn.functional.one_hot(action, self.M)
         return action
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
         shape = action_spec.shape
-        shape = torch.Size([*shape[:-1], self.n_in])
+        shape = torch.Size([*shape[:-1], self.max_N])
         action_spec.shape = shape
-        action_spec.space.n = self.n_in
+        action_spec.space.n = self.max_N
         return action_spec
 
 
 class NoopResetEnv(Transform):
+    """
+    Runs a series of random actions when an environment is reset.
+
+    Args:
+        env (_EnvClass): env on which the random actions have to be performed. Can be the same env as the one provided
+            to the TransformedEnv class
+        noops (int): number of actions performed after reset
+        random (bool): if False, the number of random ops will always be equal to the noops value. If True, the number
+            of random actions will be randomly selected between 0 and noops. Default=True.
+
+    """
     inplace = True
 
     def __init__(self, env: _EnvClass, noops: int = 30, random: bool = True):

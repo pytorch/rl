@@ -42,7 +42,7 @@ def tensordict_add():
     tensordict.set_("a", tensordict.get("a") + 1)
     tensordict.set("b", torch.zeros(*SIZE))
     if tensordict.is_memmap():
-        td = tensordict.clone().apply(set_transfer_ownership)
+        td = tensordict.clone().apply_(set_transfer_ownership)
         return td
     return tensordict
 

@@ -24,7 +24,18 @@ from ...data.utils import DEVICE_TYPING
 
 
 class DQNLoss:
-    def __init__(self, value_network: QValueActor, gamma: Number, device: Optional[DEVICE_TYPING] = None,
+    """
+    The DQN Loss class.
+    Args:
+        value_network (ProbabilisticOperator): a Q value operator.
+        gamma (scalar): a discount factor for return computation.
+        device (str, int or torch.device, optional): a device where the losses will be computed, if it can't be found
+            via the Q value operator.
+        loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+    """
+
+    def __init__(self, value_network: QValueActor,
+                 gamma: Number, device: Optional[DEVICE_TYPING] = None,
                  loss_function: str = "l2"):
         self.value_network = value_network
         self.value_network_in_keys = value_network.in_keys
@@ -41,6 +52,19 @@ class DQNLoss:
         self.device = device
 
     def __call__(self, input_tensor_dict: _TensorDict) -> torch.Tensor:
+        """
+        Computes the DQN loss given a tensordict sampled from the replay buffer.
+        This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
+            a priority to items in the tensordict.
+
+        Args:
+            input_tensor_dict (_TensorDict): a tensordict with keys ["done", "reward", "action"] and the in_keys of
+                the value network.
+
+        Returns: a tensor containing the DQN loss.
+
+        """
+
         value_network, target_value_network = self._get_networks()
         device = self.device if self.device is not None else input_tensor_dict.device
         tensor_dict = input_tensor_dict.to(device)
@@ -97,6 +121,21 @@ class DQNLoss:
 
 
 class DoubleDQNLoss(DQNLoss):
+    """
+    A Double DQN loss class.
+    This class duplicates the value network into a new target value network, which differs from the value networks used
+    for data collection in that it has a similar weight configuration but delayed of a certain number of optimization
+    steps. The target network should be updated from its original counterpart with some delay using dedicated classes
+    (SoftUpdate and HardUpdate in objectives.cost.utils).
+    More information on double DQN can be found in "Deep Reinforcement Learning with Double Q-learning",
+    https://arxiv.org/abs/1509.06461.
+
+    Note that the original network will be copied at initialization using the copy.deepcopy method: in some rare cases
+    this may lead to unexpected behaviours (for instance if the network changes in a way that won't be reflected by its
+    state_dict). Please report any such bug if encountered.
+
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._target_value_network = deepcopy(self.value_network)
@@ -109,7 +148,21 @@ class DoubleDQNLoss(DQNLoss):
 
 
 class DistributionalDQNLoss:
-    def __init__(self, value_network: ProbabilisticOperator, gamma: Number, device: Optional[DEVICE_TYPING] = None):
+    """
+    A distributional DQN loss class.
+    Distributional DQN uses a value network that outputs a distribution of values over a discrete support of discounted
+    returns (unlike regular DQN where the value network outputs a single point prediction of the disctounted return).
+
+    For more details regarding Distributional DQN, refer to "A Distributional Perspective on Reinforcement Learning",
+    https://arxiv.org/pdf/1707.06887.pdf
+
+    Args:
+        value_network (DistributionalQValueActor): the distributional Q value operator.
+        gamma (scalar): a discount factor for return computation.
+        device (str, int or torch.device, optional): a device where the losses will be computed, if it can't be found
+            via the value operator.
+    """
+    def __init__(self, value_network: DistributionalQValueActor, gamma: Number, device: Optional[DEVICE_TYPING] = None):
         self.gamma = gamma
         if not isinstance(value_network, DistributionalQValueActor):
             raise TypeError("Expected value_network to be of type DistributionalQValueActor "
@@ -234,6 +287,17 @@ class DistributionalDQNLoss:
 
 
 class DistributionalDoubleDQNLoss(DistributionalDQNLoss):
+    """
+    A distributional, double DQN loss class.
+    This class mixes distributional and double DQN losses.
+
+    For more details regarding Distributional DQN, refer to "A Distributional Perspective on Reinforcement Learning",
+    https://arxiv.org/pdf/1707.06887.pdf
+    More information on double DQN can be found in "Deep Reinforcement Learning with Double Q-learning",
+    https://arxiv.org/abs/1509.06461.
+
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._target_value_network = deepcopy(self.value_network)

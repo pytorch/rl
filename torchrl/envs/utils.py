@@ -9,6 +9,33 @@ AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
 
 def step_tensor_dict(tensor_dict: _TensorDict, next_tensor_dict: _TensorDict = None) -> _TensorDict:
+    """
+    Given a tensor_dict retrieved after a step, returns another tensordict with all the 'next_' prefixes are removed,
+    i.e. all the `'next_some_other_string'` keys will be renamed onto `'some_other_string'` keys.
+
+
+    Args:
+        tensor_dict (_TensorDict): tensordict with keys to be renamed
+        next_tensor_dict (_TensorDict, optional): destination tensordict
+
+    Returns: A new tensordict (or next_tensor_dict) with the "next_*" keys renamed without the "next_" prefix.
+
+    Examples:
+    This funtion allows for this kind of loop to be used:
+        >>> td_out = []
+        >>> env = make_env()
+        >>> policy = make_policy()
+        >>> td = env.current_tensordict
+        >>> for i in range(n_steps):
+        >>>     td = env.step(td)
+        >>>     next_td = step_tensor_dict(td)
+        >>>     assert next_td is not td # make sure that keys are not overwritten
+        >>>     td_out.append(td)
+        >>>     td = next_td
+        >>> td_out = torch.stack(td_out, 0)
+        >>> print(td_out) # should contain keys 'observation', 'next_observation', 'action', 'reward', 'done' or similar
+
+    """
     keys = [key for key in tensor_dict.keys() if key.rfind("next_") == 0]
     select_tensor_dict = tensor_dict.select(*keys).clone()
     for key in keys:
@@ -20,28 +47,62 @@ def step_tensor_dict(tensor_dict: _TensorDict, next_tensor_dict: _TensorDict = N
 
 
 def get_available_libraries():
+    """
+
+    Returns: all the supported libraries
+
+    """
     return SUPPORTED_LIBRARIES
 
 
 def _check_gym():
+    """
+
+    Returns: True if the gym library is installed
+
+    """
     return "gym" in AVAILABLE_LIBRARIES
 
 
 def _check_gym_atari():
+    """
+
+    Returns: True if the gym library is installed and atari envs can be found.
+
+    """
     if not _check_gym():
         return False
     return "atari-py" in AVAILABLE_LIBRARIES
 
 
 def _check_mario():
+    """
+
+    Returns: True if the "gym-super-mario-bros" library is installed.
+
+    """
+
     return "gym-super-mario-bros" in AVAILABLE_LIBRARIES
 
 
 def _check_dmcontrol():
+    """
+
+    Returns: True if the "dm-control" library is installed.
+
+    """
+
     return "dm-control" in AVAILABLE_LIBRARIES
 
 
 def _check_dmlab():
+    """
+
+    Returns: True if the "deepmind-lab" library is installed.
+
+    """
+
+
     return "deepmind-lab" in AVAILABLE_LIBRARIES
 
 

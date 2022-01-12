@@ -87,7 +87,17 @@ def select_and_repeat(tensor: torch.Tensor, terminal: torch.Tensor, post_termina
 
 
 class MultiStep(nn.Module):
-    def __init__(self, gamma: Number, n_steps_max: int, device: Union[int, torch.device, str] = "cpu"):
+    """
+    Multistep reward, as presented in 'Sutton, R. S. 1988. Learning to predict by the methods of temporal
+        differences. Machine learning 3(1):9–44.'
+
+    Args:
+        gamma: Discount factor for return computation
+        n_steps_max: maximum look-ahead steps.
+
+
+    """
+    def __init__(self, gamma: Number, n_steps_max: int, ):
         super().__init__()
         if n_steps_max < 0:
             raise ValueError("n_steps_max must be a null or positive integer")
@@ -99,11 +109,23 @@ class MultiStep(nn.Module):
         self.register_buffer('gammas', torch.tensor(
             [gamma ** i for i in range(n_steps_max + 1)], dtype=torch.float,
         ).reshape(1, 1, -1))
-        self.device = torch.device(device)
-        if self.device != torch.device("cpu"):
-            self.to(self.device)
 
     def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
+        """
+        Args:
+            tensor_dict: TennsorDict instance with Batch x Time-steps x ... dimensions
+                Must contain a "reward" and "done" key.
+                All keys that start with the "next_" prefix will be shifted by (at most) self.n_steps_max frames
+                The TensorDict will also be updated with new key-value pairs:
+                    - gamma: indicating the discount to be used for the next reward;
+                    - nonterminal: boolean value indicating whether a step is non-terminal (not done or not last of
+                        trajectory);
+                    - original_reward: previous reward collected in the environment (i.e. before multi-step);
+                and the "reward" values will be replaced by the newly computed rewards.
+
+        Returns: in-place transformation of the input tensordict.
+
+        """
         if tensor_dict.batch_dims != 2:
             raise RuntimeError("Expected a tensordict with B x T x ... dimensions")
 
@@ -143,7 +165,8 @@ class MultiStep(nn.Module):
         tensor_dict.set("gamma", gamma_masked)
         tensor_dict.set("steps_to_next_obs", steps_to_next_obs)
         tensor_dict.set("nonterminal", nonterminal)
-        tensor_dict.set("partial_return", partial_return)
+        tensor_dict.rename_key("reward", "original_reward")
+        tensor_dict.set("reward", partial_return)
 
         tensor_dict.set_("done", done)
         return tensor_dict

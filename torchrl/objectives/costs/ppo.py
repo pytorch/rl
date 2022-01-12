@@ -15,6 +15,39 @@ from torchrl.objectives.costs.utils import distance_loss
 
 
 class PPOLoss:
+    """
+    A parent PPO loss class.
+
+    PPO (Proximal Policy Optimisation) is a model-free, online RL algorithm that makes use of a recorded (batch of)
+    trajectories to perform several optimization steps, while actively preventing the updated policy to deviate too
+    much from its original parameter configuration.
+
+    PPO loss can be found in different flavours, depending on the way the constrained optimisation is implemented:
+        ClipPPOLoss and KLPENPPOLoss.
+    Unlike its subclasses, this class does not implement any regularisation and should therefore be used cautiously.
+
+    For more details regarding PPO, refer to: "Proximal Policy Optimization Algorithms",
+    https://arxiv.org/abs/1707.06347
+
+    Args:
+        actor (Actor): policy operator.
+        critic (ProbabilisticOperator): value operator.
+        advantage_key (str): the input tensordict key where the advantage is expected to be written.
+            default: "advantage"
+        entropy_bonus (bool): if True, an entropy bonus will be added to the loss to favour exploratory policies.
+        samples_mc_entropy (int): if the distribution retrieved from the policy operator does not have a closed form
+            formula for the entropy, a Monte-Carlo estimate will be used. samples_mc_entropy will control how many
+            samples will be used to compute this estimate.
+            default: 1
+        entropy_factor (scalar): entropy multiplier when computing the total loss.
+            default: 0.01
+        critic_factor (scalar): critic loss multiplier when computing the total loss.
+            default: 1.0
+        gamma (scalar): a discount factor for return computation.
+        loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+
+    """
+
     def __init__(
             self,
             actor: Actor,
@@ -25,7 +58,7 @@ class PPOLoss:
             entropy_factor: Number = 0.01,
             critic_factor: Number = 1.0,
             gamma: Number = 0.99,
-            critic_loss_type: str = "l2"
+            critic_loss_type: str = "smooth_l1"
     ):
         self.actor = actor
         self.critic = critic
@@ -81,7 +114,7 @@ class PPOLoss:
                 value_target = reward + next_value * self.gamma
         tensor_dict_select = tensor_dict.select(*self.critic.in_keys).clone()
         value = self.critic(tensor_dict_select).get("state_value")
-        value_loss = distance_loss(value, value_target, loss_type=self.critic_loss_type)
+        value_loss = distance_loss(value, value_target, loss_function=self.critic_loss_type)
         return self.critic_factor * value_loss
 
     def __call__(self, tensor_dict: _TensorDict) -> _TensorDict:
@@ -98,9 +131,37 @@ class PPOLoss:
 
 
 class ClipPPOLoss(PPOLoss):
+    """
+    Clipped PPO loss.
+
+    The clipped importance weighted loss is computed as follows:
+        loss = -min( weight * advantage, min(max(weight, 1-eps), 1+eps) * advantage)
+
+    Args:
+        actor (Actor): policy operator.
+        critic (ProbabilisticOperator): value operator.
+        advantage_key (str): the input tensordict key where the advantage is expected to be written.
+            default: "advantage"
+        clip_epsilon (scalar): weight clipping threshold in the clipped PPO loss equation.
+            default: 0.2
+        entropy_bonus (bool): if True, an entropy bonus will be added to the loss to favour exploratory policies.
+        samples_mc_entropy (int): if the distribution retrieved from the policy operator does not have a closed form
+            formula for the entropy, a Monte-Carlo estimate will be used. samples_mc_entropy will control how many
+            samples will be used to compute this estimate.
+            default: 1
+        entropy_factor (scalar): entropy multiplier when computing the total loss.
+            default: 0.01
+        critic_factor (scalar): critic loss multiplier when computing the total loss.
+            default: 1.0
+        gamma (scalar): a discount factor for return computation.
+        loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+
+    """
+
     def __init__(
             self,
-            actor: Actor, critic: ProbabilisticOperator,
+            actor: Actor,
+            critic: ProbabilisticOperator,
             advantage_key: str = "advantage",
             clip_epsilon: Number = 0.2,
             entropy_bonus: bool = True,
@@ -140,13 +201,47 @@ class ClipPPOLoss(PPOLoss):
 
 
 class KLPENPPOLoss(PPOLoss):
+    """
+    KL Penalty PPO loss.
+
+    The KL penalty loss has the following formula:
+        loss = loss - beta * KL(old_policy, new_policy)
+    The "beta" parameter is adapted on-the-fly to match a target KL divergence between the new and old policy, thus
+    favouring a certain level of distancing between the two while still preventing them to be too much apart.
+
+    Args:
+        actor (Actor): policy operator.
+        critic (ProbabilisticOperator): value operator.
+        advantage_key (str): the input tensordict key where the advantage is expected to be written.
+            default: "advantage"
+        dtarg (scalar): target KL divergence.
+        beta (scalar): initial KL divergence multiplier.
+            default: 1.0
+        increment (scalar): how much beta should be incremented if KL > dtarg. Valid range: increment >= 1.0
+            default: 2.0
+        decrement (scalar): how much beta should be decremented if KL < dtarg. Valid range: decrement <= 1.0
+            default: 0.5
+        entropy_bonus (bool): if True, an entropy bonus will be added to the loss to favour exploratory policies.
+        samples_mc_entropy (int): if the distribution retrieved from the policy operator does not have a closed form
+            formula for the entropy, a Monte-Carlo estimate will be used. samples_mc_entropy will control how many
+            samples will be used to compute this estimate.
+            default: 1
+        entropy_factor (scalar): entropy multiplier when computing the total loss.
+            default: 0.01
+        critic_factor (scalar): critic loss multiplier when computing the total loss.
+            default: 1.0
+        gamma (scalar): a discount factor for return computation.
+        critic_loss_type (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+
+    """
+
     def __init__(self,
                  actor: Actor,
                  critic: ProbabilisticOperator,
                  advantage_key="advantage",
                  dtarg: Number = 0.01,
                  beta: Number = 1.0,
-                 increment: int = 2,
+                 increment: Number = 2,
                  decrement: Number = 0.5,
                  samples_mc_kl: int = 1,
                  entropy_bonus: bool = True,
@@ -164,7 +259,11 @@ class KLPENPPOLoss(PPOLoss):
         self._beta_init = beta
         self.beta = beta
 
+        if increment < 1.0:
+            raise ValueError(f"increment should be >= 1.0 in KLPENPPOLoss, got {increment:4.4f}")
         self.increment = increment
+        if decrement > 1.0:
+            raise ValueError(f"decrement should be <= 1.0 in KLPENPPOLoss, got {decrement:4.4f}")
         self.decrement = decrement
         self.samples_mc_kl = samples_mc_kl
 

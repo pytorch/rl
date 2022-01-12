@@ -28,6 +28,9 @@ _accepted_classes = (torch.Tensor, MemmapTensor)
 
 
 class _TensorDict:
+    """
+    _TensorDict is an abstract parent class for TensorDicts, the torchrl data container.
+    """
     _safe = False
 
     def __init__(self, source: Optional[dict] = None):
@@ -35,27 +38,71 @@ class _TensorDict:
 
     @property
     def shape(self) -> torch.Size:
+        """
+        See _TensorDict.batch_size
+        """
         return self.batch_size
 
     @property
     def batch_size(self) -> torch.Size:
+        """
+        Shape of (or batch_size) of a TensorDict.
+        The shape of a tensordict corresponds to the common N first dimensions of the tensors it contains, where N is
+        an arbitrary number. The TensorDict shape is controlled by the user upon initialization (i.e. it is not
+        inferred from the tensor shapes) and it should not be changed dynamically.
+
+        Returns: a torch.Size object describing the TensorDict batch size.
+
+        """
         raise NotImplementedError
 
     @property
     def batch_dims(self) -> int:
+        """
+        Length of the tensordict batch size.
+
+        Returns: int describing the number of dimensions of the tensordict.
+
+        """
         return len(self.batch_size)
 
     @property
     def device(self) -> torch.device:
+        """
+        Device of a TensorDict. All tensors of a tensordict must live on the same device.
+
+        Returns: torch.device object indicating the device where the tensors are placed.
+
+        """
         raise NotImplementedError
 
     def is_shared(self, no_check=True) -> bool:
+        """
+        Checks if tensordict is in shared memory.
+
+        This is always True for CUDA tensordicts, except when stored as MemmapTensors.
+
+        Args:
+            no_check (bool, optional): checks if all tensors are in shared memory or not
+
+        """
+        if not no_check:
+            raise RuntimeError(f"no_check=False is not compatible with TensorDict of type {self.__class__.__name__}.")
         return all([item.is_shared() for key, item in self.items_meta()])
 
     def is_memmap(self) -> bool:
+        """
+        Checks if tensordict is stored with MemmapTensors.
+
+        """
+
         return all([item.is_memmap() for key, item in self.items_meta()])
 
     def numel(self) -> int:
+        """
+        Total number of elements in the batch.
+
+        """
         return math.prod(self.batch_size)
 
     def _check_batch_size(self) -> None:
@@ -78,24 +125,79 @@ class _TensorDict:
     def _check_device(self) -> None:
         raise NotImplementedError(f"{self.__class__.__name__}")
 
-    def set(self, key: str, item: COMPATIBLE_TYPES, **kwargs) -> _TensorDict:
+    def set(self, key: str, item: COMPATIBLE_TYPES, inplace=True, **kwargs) -> _TensorDict:
+        """
+        Sets a new key-value pair.
+
+        Args:
+            key (str): name of the value
+            item (torch.Tensor): value to be stored in the tensordict
+            inplace (bool): if True and if a key matches an existing key in the tensordict, then the update will occur
+                in-place for that key-value pair.
+
+        Returns: self
+
+        """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def set_(self, key: str, item: COMPATIBLE_TYPES) -> _TensorDict:
+        """
+        Sets a value to an existing key while keeping the original storage.
+
+        Args:
+            key (str): name of the value
+            item (torch.Tensor): value to be stored in the tensordict
+
+        Returns: self
+
+        """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
-    def get(self, key: str, default: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def get(self, key: str, default: Optional[torch.Tensor] = None) -> COMPATIBLE_TYPES:
+        """
+        Gets the value stored with the input key.
+
+        Args:
+            key (str): key to be queried.
+            default: default value if the key is not found in the tensordict.
+
+        Returns:
+
+        """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def _get_meta(self, key, **kwargs) -> MetaTensor:
         raise NotImplementedError(f"{self.__class__.__name__}")
 
-    def apply(self, fn: Callable) -> _TensorDict:
+    def apply_(self, fn: Callable) -> _TensorDict:
+        """
+        Applies a callable to all values stored in the tensordict and re-writes them in-place.
+        Args:
+            fn (Callable): function to be applied to the tensors in the tensordict.
+
+        Returns: self
+
+        """
         for key, item in self.items():
             item_trsf = fn(item)
             if item_trsf is not None:
                 self.set(key, item_trsf, inplace=True)
         return self
+
+    def apply(self, fn: Callable) -> _TensorDict:
+        """
+        Applies a callable to all values stored in the tensordict and sets them in a new tensordict.
+        Args:
+            fn (Callable): function to be applied to the tensors in the tensordict.
+
+        Returns: a new tensordict with transformed tensors.
+
+        """
+        td = TensorDict(batch_size=self.batch_size)
+        for key, item in self.items():
+            item_trsf = fn(item)
+            td.set(key, item_trsf)
+        return td
 
     def update(
             self,
@@ -103,10 +205,18 @@ class _TensorDict:
             clone: bool = False,
             inplace: bool = True,
             **kwargs) -> _TensorDict:
-        """updates the TensorDict with values from either a dictionary or another TensorDict.
-        Returns self.
-        If it is the same tensordict, this is a no-op.
-        kwargs to TensorDict.set (specifically, if one wants inplace=False) can be passed to this method.
+        """
+        Updates the TensorDict with values from either a dictionary or another TensorDict.
+
+        Args:
+            input_dict_or_td (_TensorDict or dict): Does not keyword arguments (unlike `dict.update()`).
+            clone (bool): whether the tensors in the input (tensor)dict should be cloned before being set.
+            inplace (bool): if True and if a key matches an existing key in the tensordict, then the update will occur
+                in-place for that key-value pair.
+            **kwargs: keyword arguments for the `TensorDict.set` method
+
+        Returns: self
+
         """
         if input_dict_or_td is self:
             # no op
@@ -120,7 +230,17 @@ class _TensorDict:
         return self
 
     def update_(self, input_dict_or_td: Union[dict, _TensorDict], clone: bool = False) -> _TensorDict:
-        """unlike TensorDict.update, this function will return an error if the key is unknown to the TensorDict"""
+        """
+        Updates the TensorDict in-place with values from either a dictionary or another TensorDict. Unlike
+        TensorDict.update, this function will throw an error if the key is unknown to the TensorDict
+
+        Args:
+            input_dict_or_td (_TensorDict or dict): Does not keyword arguments (unlike `dict.update()`).
+            clone (bool): whether the tensors in the input (tensor)dict should be cloned before being set.
+
+        Returns: self
+
+        """
         if input_dict_or_td is self:
             # no op
             return self
@@ -132,8 +252,27 @@ class _TensorDict:
             self.set_(key, value)
         return self
 
-    def update_at_(self, input_dict_or_td: Union[dict, _TensorDict], idx: Union[List, torch.Size],
+    def update_at_(self, input_dict_or_td: Union[dict, _TensorDict], idx: INDEX_TYPING,
                    clone: bool = False) -> _TensorDict:
+        """
+        Updates the TensorDict in-place at the specified index with values from either a dictionary or another
+        TensorDict. Unlike TensorDict.update, this function will throw an error if the key is unknown to the TensorDict.
+
+        Args:
+            input_dict_or_td (_TensorDict or dict): Does not keyword arguments (unlike `dict.update()`).
+            idx (int, torch.Tensor, iterable, slice): index of the tensordict where the update should occur.
+            clone (bool): whether the tensors in the input (tensor)dict should be cloned before being set.
+
+        Returns: self
+
+        Examples:
+            >>> td = TensorDict(source={'a': torch.zeros(3, 4, 5), 'b': torch.zeros(3, 4, 10)}, batch_size=[3, 4])
+            >>> td.update_at_(
+            >>>      TensorDict(source={'a': torch.ones(1, 4, 5), 'b': torch.ones(1, 4, 10)}, batch_size=[1, 4]),
+            >>>      slice(1, 2))
+
+        """
+
         for key, value in input_dict_or_td.items():
             if not isinstance(value, _accepted_classes):
                 raise TypeError(f"Expected value to be one of types {_accepted_classes} but got {type(value)}")
@@ -161,24 +300,62 @@ class _TensorDict:
         return tensor
 
     def pin_memory(self) -> _TensorDict:
+        """
+        Calls pin_memory() on the stored tensors.
+
+        """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def items(self) -> Generator:
+        """
+        Returns a generator of key-value pairs for the tensordict.
+
+        """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def items_meta(self) -> Generator:
+        """
+        Returns a generator of key-value pairs for the tensordict, where the values are MetaTensor instances
+        corresponding to the stored tensors.
+
+        """
+
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def keys(self) -> KeysView:
+        """
+        Returns a generator of tensordict keys.
+
+        """
+
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def expand(self, *shape: Iterable) -> _TensorDict:
+        """
+        Expands each tensors of the tensordict according to
+            tensor.expand(*shape, *tensor.shape)
+
+        Examples:
+            >>> td = TensorDict(source={'a': torch.zeros(3, 4, 5), 'b': torch.zeros(3, 4, 10)}, batch_size=[3, 4])
+            >>> td_expand = td.expand(10)
+            >>> assert td_expand.shape == torch.Size([10, 3, 4])
+            >>> assert td_expand.get("a").shape == torch.Size([10, 3, 4, 5])
+        """
+
         return TensorDict(
             source={key: value.expand(*shape, *value.shape) for key, value in self.items()},
             batch_size=[*shape, *self.batch_size]
         )
 
     def __eq__(self, other: _TensorDict) -> _TensorDict:
+        """
+        Compares a two tensordicts against each other, for evey key. The two tensordicts must have the same key set.
+
+        Returns: a new TensorDict instance with all tensors are boolean tensors of the same shape as the original
+        tensors.
+
+        """
+
         if not isinstance(other, _TensorDict):
             raise TypeError(
                 f"TensorDict comparision requires both objects to be _TensorDict subclass, got {type(other)}")
@@ -192,21 +369,71 @@ class _TensorDict:
         return TensorDict(batch_size=self.batch_size, source=d)
 
     def del_(self, key: str) -> None:
+        """
+        Deletes a key of the tensordict.
+
+        Args:
+            key (str): key to be deleted
+
+        Returns: self
+
+        """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def select(self, *keys: str) -> _TensorDict:
+        """
+        Selects the keys of the tensordict and returns an new tensordict with only the selected keys. The values are
+        not copied: in-place modifications a tensor of either of the original or new tensordict will result in a change
+        in both tensordicts.
+
+        Args:
+            *keys (str): keys to select
+
+        Returns: A new tensordict with the selected keys only.
+
+        """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def set_at_(self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING) -> _TensorDict:
+        """
+        Sets the values in-place at the index indicated by `idx`.
+
+        Args:
+            key (str): key to be modified.
+            value (torch.Tensor): value to be set at the index `idx`
+            idx: index where to write the values.
+
+        Returns: self
+
+        """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def copy_(self, tensor_dict: _TensorDict) -> _TensorDict:
+        """
+        See `_TensorDict.update_`.
+
+        """
         return self.update_(tensor_dict)
 
     def copy_at_(self, tensor_dict: _TensorDict, idx: INDEX_TYPING) -> _TensorDict:
+        """
+        See `_TensorDict.update_at_`.
+
+        """
         return self.update_at_(tensor_dict, idx)
 
     def get_at(self, key: str, idx: INDEX_TYPING, default: COMPATIBLE_TYPES = None) -> COMPATIBLE_TYPES:
+        """
+        Get the value of a tensordict from the key `key` at the index `idx`.
+
+        Args:
+            key (str): key to be retrieved.
+            idx (int, slice, torch.Tensor, iterable): index of the tensor.
+            default (torch.Tensor): default value to return if the key is not present in the tensordict.
+
+        Returns: indexed tensor.
+
+        """
         try:
             return self.get(key)[idx]
         except KeyError:
@@ -217,32 +444,77 @@ class _TensorDict:
             )
 
     def share_memory_(self) -> _TensorDict:
+        """
+        Places all the tensors in shared memory.
+
+        Returns: self.
+
+        """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def memmap_(self) -> _TensorDict:
+        """
+        Writes all tensors onto a MemmapTensor.
+
+        Returns: self.
+
+        """
+
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def detach_(self) -> _TensorDict:
+        """
+        Detach the tensors in the tensordict in-place.
+
+        Returns: self.
+
+        """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def detach(self) -> _TensorDict:
+        """
+        Detach the tensors in the tensordict.
+
+        Returns: a new tensordict with no tensor requiring gradient.
+
+        """
+
         return self.clone().detach_()
 
     def to_tensordict(self):
+        """
+        Returns a regular TensorDict instance from the _TensorDict.
+
+        Returns: a new TensorDict object containing the same values.
+
+        """
         return self.to(TensorDict)
 
     def zero_(self) -> _TensorDict:
+        """
+        Zeros all tensors in the tensordict in-place.
+
+        """
         for key in self.keys():
             self.fill_(key, 0)
         return self
 
     def unbind(self, dim: int) -> Tuple[_TensorDict, ...]:
+        """
+        Returns a tuple of indexed tensordicts unbound along the indicated dimension. Resulting tensordicts will share
+        the storage of the initial tensordict.
+
+        """
         idx = [(tuple(slice(None) for _ in range(dim)) + (i,)) for i in range(self.shape[dim])]
         return tuple(self[_idx] for _idx in idx)
 
     def clone(self, recursive: bool = True) -> _TensorDict:
-        """clones a tensordict.
-        For SubTensorDict objects, this will return a truncated version of the tensordict without access to parent tensordict."""
+        """
+        Clones a _TensorDict subclass instance onto a new TensorDict.
+
+        Args:
+            recursive (bool): if True, each tensor contained in the TensorDict will be copied too.
+        """
         return TensorDict(
             source={key: value.clone() if recursive else value for key, value in self.items()},
             batch_size=self.batch_size,
@@ -258,18 +530,73 @@ class _TensorDict:
         return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
     def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs: dict) -> _TensorDict:
+        """
+        Maps a _TensorDict subclass either on a new device or to another _TensorDict subclass (if permitted).
+        Casting tensors to a new dtype is not allowed, as tensordicts are not bound to contain a single tensor dtype.
+
+        Args:
+            dest (device or _TensorDict subclass): destination of the tensordict.
+
+        Returns: a new tensordict. If device indicated by dest differs from the tensordict device, this is a no-op.
+
+        """
         raise NotImplementedError
 
     def cpu(self) -> _TensorDict:
+        """
+        Casts a tensordict to cpu (if not already on cpu).
+
+        """
         return self.to('cpu')
 
-    def cuda(self) -> _TensorDict:
-        return self.to('cuda')
+    def cuda(self, device: int = 0) -> _TensorDict:
+        """
+        Casts a tensordict to a cuda device (if not already on it).
 
-    def masked_fill_(self, mask, value) -> _TensorDict:
+        """
+        return self.to(f'cuda:{device}')
+
+    def masked_fill_(self, mask: torch.Tensor, value: Union[Number, bool]) -> _TensorDict:
+        """
+        Fills the values corresponding to the mask with the desired value.
+
+        Args:
+            mask (boolean torch.Tensor): mask of values to be filled. Shape must match tensordict shape.
+            value: value to used to fill the tensors.
+
+        Returns: self
+
+        Examples:
+            >>> td = TensorDict(source={'a': torch.zeros(3, 4)}, batch_size=[3])
+            >>> mask = torch.tensor([True, False, False])
+            >>> td.masked_fill_(mask, 1.0)
+            >>> td.get("a")
+
+            result:
+                tensor([[1., 1., 1., 1.],
+                        [0., 0., 0., 0.],
+                        [0., 0., 0., 0.]])
+        """
         raise NotImplementedError
 
     def masked_select(self, mask: torch.Tensor) -> _TensorDict:
+        """
+        Masks all tensors of the TensorDict and return a new TensorDict instance with similar keys pointing to masked
+        values.
+
+        Args:
+            mask (torch.Tensor): boolean mask to be used for the tensors. Shape must match the TensorDict batch_size.
+
+        Examples:
+            >>> td = TensorDict(source={'a': torch.zeros(3, 4)}, batch_size=[3])
+            >>> mask = torch.tensor([True, False, False])
+            >>> td_mask = td.masked_select(mask)
+            >>> td_mask.get("a")
+
+            result:
+                tensor([[0., 0., 0., 0.]])
+
+        """
         d = dict()
         for key, value in self.items():
             mask_expand = mask.squeeze(-1)
@@ -281,22 +608,60 @@ class _TensorDict:
             batch_size=torch.Size([mask.sum()])
         )
 
+    def is_contiguous(self) -> bool:
+        """
+
+        Returns: boolean indicating if all the tensors are contiguous.
+
+        """
+        raise NotImplementedError
+
     def contiguous(self) -> _TensorDict:
-        self_copy = copy(self)
-        for key in self.keys():
-            self_copy.set_(key, self.get(key).contiguous())
-        return self_copy
+        """
+
+        Returns: a new tensordict of the same type with contiguous values (or self if values are already contiguous).
+
+        """
+        raise NotImplementedError
 
     def to_dict(self) -> dict:
+        """
+
+        Returns: dictionary with key-value pairs matching those of the tensordict.
+
+        """
         return {key: value for key, value in self.items()}
 
     def unsqueeze(self, dim: int) -> _TensorDict:
+        """
+        Unsqueeze all tensors for a dimension comprised in between -td.batch_dims and td.batch_dims and returns them
+        in a new tensordict.
+
+        Args:
+            dim (int): dimension along which to unsqueeze
+
+        """
+        if dim > self.batch_dims or dim < self.batch_dims:
+            raise RuntimeError(
+                "unsqueezing is allowed for dims comprised between -td.batch_dims and td.batch_dims only")
         if dim < 0:
             dim = self.batch_dims + dim + 1
         return UnsqueezedTensorDict(source=self, custom_op="unsqueeze", inv_op="squeeze", custom_op_kwargs={"dim": dim},
                                     inv_op_kwargs={"dim": dim})
 
     def squeeze(self, dim: int) -> _TensorDict:
+        """
+        Squeezes all tensors for a dimension comprised in between -td.batch_dims+1 and td.batch_dims-1 and returns them
+        in a new tensordict.
+
+        Args:
+            dim (int): dimension along which to squeeze
+
+        """
+        if dim >= self.batch_dims or dim <= self.batch_dims:
+            raise RuntimeError(
+                "unsqueezing is allowed for dims comprised between -td.batch_dims and td.batch_dims only")
+
         if dim < 0:
             dim = self.batch_dims + dim
         if dim >= self.batch_dims or self.batch_size[dim] != 1:
@@ -305,6 +670,26 @@ class _TensorDict:
                                   inv_op_kwargs={"dim": dim})
 
     def view(self, *shape: int, size: Optional[Union[List, Tuple, torch.Size]] = None) -> _TensorDict:
+        """
+        Returns a tensordict with views of the tensors according to a new shape, compatible with the tensordict
+        batch_size.
+
+        Args:
+            *shape (int): new shape of the resulting tensordict.
+            size: iterable
+
+        Returns: a new tensordict with the desired batch_size.
+
+        Examples:
+            >>> td = TensorDict(source={'a': torch.zeros(3,4,5), 'b': torch.zeros(3,4,10,1)}, batch_size=torch.Size([3, 4]))
+            >>> td_view = td.view(12)
+            >>> print(td_view.get("a").shape)  # torch.Size([12, 5])
+            >>> print(td_view.get("b").shape)  # torch.Size([12, 10, 1])
+            >>> td_view = td.view(-1, 4, 3)
+            >>> print(td_view.get("a").shape)  # torch.Size([1, 4, 3, 5])
+            >>> print(td_view.get("b").shape)  # torch.Size([1, 4, 3, 10, 1])
+
+        """
         if len(shape) == 0 and size is not None:
             return self.view(*size)
         elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
@@ -314,9 +699,6 @@ class _TensorDict:
         return ViewedTensorDict(source=self, custom_op='view', inv_op='view',
                                 custom_op_kwargs={'size': shape}, inv_op_kwargs={'size': self.batch_size})
 
-    def select(self, *keys: str, inplace: bool = False) -> _TensorDict:
-        raise NotImplementedError(f"{self.__class__.__name__}")
-
     def __repr__(self) -> str:
         fields = _td_fields(self)
         return (f"{type(self).__name__}("
@@ -324,7 +706,28 @@ class _TensorDict:
                 f"\n\tbatch_size={self.batch_size}, "
                 f"\n\tdevice={self.device})")
 
+    def all(self, dim: int = None) -> Union[bool, _TensorDict]:
+        """
+
+        Args:
+            dim (int, optional): if None, returns a boolean indicating whether all tensors return tensor.all() == True
+                If integer, all is called upon the dimension specified if and only if this dimension is compatible with
+                the tensordict shape.
+
+        """
+        if dim is not None and (dim >= self.batch_dims or dim <= -self.batch_dims):
+            raise RuntimeError("dim must be greater than -tensordict.batch_dims and smaller than tensordict.batchdims")
+        if dim is not None:
+            if dim < 0:
+                dim = self.batch_dims + dim
+            return TensorDict(source={key: value.all(dim=dim) for key, value in self.items()},
+                              batch_size=[b for i, b in enumerate(self.batch_size) if i != dim])
+        return all([value.all() for key, value in self.items()])
+
     def get_sub_tensor_dict(self, idx: INDEX_TYPING) -> _TensorDict:
+        """
+        Returns a SubTensorDict with the desired index.
+        """
         sub_td = SubTensorDict(
             source=self,
             idx=idx,
@@ -347,6 +750,22 @@ class _TensorDict:
         return len(list(self.keys()))
 
     def __getitem__(self, idx: INDEX_TYPING) -> _TensorDict:
+        """
+        Indexes all tensors according to idx and returns a new tensordict where the values share the storage of the
+        original tensors (even when the index is a torch.Tensor). Any in-place modification to the resulting
+        tensordict will impact the parent tensordict too.
+
+        Examples:
+            >>> td = TensorDict(source={'a': torch.zeros(3,4,5)}, batch_size=torch.Size([3, 4]))
+            >>> subtd = td[torch.zeros(1, dtype=torch.long)]
+            >>> assert subtd.shape == torch.Size([1,4])
+            >>> subtd.set("a", torch.ones(1,4,5))
+            >>> print(td.get("a"))  # first row is full of 1
+            >>> # Warning: this will not work as expected
+            >>> subtd.get("a")[:] = 2.0
+            >>> print(td.get("a"))  # values have not changed
+
+        """
         if isinstance(idx, Number):
             idx = (idx,)
         elif isinstance(idx, torch.Tensor) and idx.dtype == torch.bool:
@@ -372,9 +791,30 @@ class _TensorDict:
             self.set_at_(key, item, index)
 
     def rename_key(self, key1: str, key2: str, **kwargs: dict) -> _TensorDict:
+        """
+        Renames a key with a new string.
+
+        Args:
+            key1: key to be remaned
+            key2: new name
+
+        Returns: self
+
+        """
         raise NotImplementedError
 
-    def fill_(self, key: str, value: Number) -> _TensorDict:
+    def fill_(self, key: str, value: Union[Number, bool]) -> _TensorDict:
+        """
+        Fills a tensor pointed by the key with the a given value.
+
+        Args:
+            key (str): key to be remaned
+            value (Number, bool): value to use for the filling
+
+        Returns: self
+
+        """
+
         meta_tensor = self._get_meta(key)
         shape = meta_tensor.shape
         device = meta_tensor.device
@@ -384,6 +824,10 @@ class _TensorDict:
         return self
 
     def empty(self) -> _TensorDict:
+        """
+        Returns a new, empty tensordict with the same device and batch size.
+
+        """
         return self.select()
 
 
@@ -548,11 +992,6 @@ class TensorDict(_TensorDict):
             self._batch_dims = _batch_dims
         return TensorDict(source=d, batch_size=_batch_size)
 
-    def all(self, dim: int = None) -> bool:
-        if dim is not None:
-            raise NotImplementedError("TODO: td.all(dim=dim) is a missing feature")
-        return all([value.all() for key, value in self.items()])
-
     def set(self, key: str, value: COMPATIBLE_TYPES, inplace: bool = True, _run_checks: bool = True) -> TensorDict:
         """Sets a value in the TensorDict. If inplace=True (default), if the key already exists, set will call set_ (in place setting). 
         """
@@ -681,13 +1120,18 @@ class TensorDict(_TensorDict):
                 f"dest must be a string, torch.device or a TensorDict instance, {dest} not allowed"
             )
 
-    def masked_fill_(self, mask: torch.Tensor, value: Number) -> TensorDict:
+    def masked_fill_(self, mask: torch.Tensor, val: Union[Number, bool]) -> TensorDict:
         for key, value in self.items():
             mask_expand = expand_as_right(mask, value)
-            value.masked_fill_(mask_expand, value)
+            value.masked_fill_(mask_expand, val)
         return self
 
+    def is_contiguous(self) -> bool:
+        return all([value.is_contiguous() for _, value in self.items()])
+
     def contiguous(self) -> TensorDict:
+        if not self.is_contiguous():
+            return self.clone()
         return self
 
     def select(self, *keys: str, inplace: bool = False) -> TensorDict:
@@ -1018,7 +1462,12 @@ class SubTensorDict(_TensorDict):
         self._source = self._source.del_(key)
         return self
 
+    def is_contiguous(self) -> bool:
+        return all([value.is_contiguous() for _, value in self.items()])
+
     def contiguous(self) -> TensorDict:
+        if self.is_contiguous():
+            return self
         return TensorDict(batch_size=self.batch_size, source={key: value for key, value in self.items()})
 
     def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:
@@ -1179,8 +1628,11 @@ class LazyStackedTensorDict(_TensorDict):
             raise KeyError(f"key {key} not found in {list(self._valid_keys)}")
         return torch.stack([td._get_meta(key, **kwargs) for td in self.tensor_dicts], self.stack_dim)
 
+    def is_contiguous(self) -> bool:
+        return False
+
     def contiguous(self) -> TensorDict:
-        return super().clone()
+        return self.to(TensorDict)
 
     def clone(self, recursive: bool = True) -> LazyStackedTensorDict:
         if recursive:
@@ -1464,8 +1916,11 @@ class SavedTensorDict(_TensorDict):
     def items_meta(self) -> ItemsView:
         return self._tensor_dict_meta.items()
 
+    def is_contiguous(self) -> bool:
+        return False
+
     def contiguous(self) -> _TensorDict:
-        return self._load()
+        return self._load().contiguous()
 
     def clone(self, recursive: bool = True) -> SavedTensorDict:
         return self._load().to(SavedTensorDict)
@@ -1685,8 +2140,13 @@ class _CustomOpTensorDict(_TensorDict):
             batch_size=self.batch_size,
         )
 
+    def is_contiguous(self) -> bool:
+        return all([value.is_contiguous() for _, value in self.items()])
+
     def contiguous(self) -> TensorDict:
-        return self.clone()
+        if self.is_contiguous():
+            return self
+        return self.to(TensorDict)
 
     def rename_key(self, key1: str, key2: str, **kwargs) -> _CustomOpTensorDict:
         self._source.rename_key(key1, key2, **kwargs)

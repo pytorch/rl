@@ -6,17 +6,8 @@ from torch import nn
 from mocking_classes import DiscreteActionConvMockEnv, DiscreteActionVecMockEnv, DiscreteActionVecPolicy, \
     DiscreteActionConvPolicy
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
-from torchrl.collectors.helpers import sync_async_collector
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.data.transforms import (
-    TransformedEnv,
-    Resize,
-    Compose,
-    ToTensorImage,
-    RewardScaling,
-)
-from torchrl.envs import GymEnv, ParallelEnv
-from torchrl.modules import QValueActor
+from torchrl.envs import ParallelEnv
 
 
 def make_make_env(env_name="conv"):
@@ -25,6 +16,7 @@ def make_make_env(env_name="conv"):
             return DiscreteActionConvMockEnv()
         elif env_name == "vec":
             return DiscreteActionVecMockEnv()
+
     return make_transformed_env
 
 
@@ -32,9 +24,11 @@ def dummypolicy_vec():
     policy = DiscreteActionVecPolicy()
     return policy
 
+
 def dummypolicy_conv():
     policy = DiscreteActionConvPolicy()
     return policy
+
 
 def make_policy(env):
     if env == "conv":
@@ -206,6 +200,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
 
     assert_allclose_td(rollout1a, b1.select(*rollout1a.keys()))
 
+
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("collector_class", [SyncDataCollector, aSyncDataCollector])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
@@ -231,7 +226,7 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
             env.set_seed(seed)
             return env
 
-    max_steps_per_traj=20
+    max_steps_per_traj = 20
 
     policy = make_policy(env_name)
 
@@ -241,7 +236,7 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         policy=policy,
         frames_per_batch=1,
         max_steps_per_traj=max_steps_per_traj,
-        total_frames=2*num_env*max_steps_per_traj,
+        total_frames=2 * num_env * max_steps_per_traj,
         device='cpu',
         seed=seed,
         pin_memory=False
@@ -257,7 +252,7 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         policy=policy,
         frames_per_batch=10,
         max_steps_per_traj=max_steps_per_traj,
-        total_frames=2*num_env*max_steps_per_traj,
+        total_frames=2 * num_env * max_steps_per_traj,
         device='cpu',
         seed=seed,
         pin_memory=False
@@ -273,7 +268,7 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         policy=policy,
         frames_per_batch=20,
         max_steps_per_traj=max_steps_per_traj,
-        total_frames=2*num_env*max_steps_per_traj,
+        total_frames=2 * num_env * max_steps_per_traj,
         device='cpu',
         seed=seed,
         pin_memory=False

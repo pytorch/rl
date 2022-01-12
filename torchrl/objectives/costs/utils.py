@@ -8,29 +8,41 @@ from torch import nn
 from torch.nn import functional as F
 
 
-def distance_loss(v1: torch.Tensor, v2: torch.Tensor, loss_type: str) -> torch.Tensor:
-    if loss_type == "l2":
+def distance_loss(v1: torch.Tensor, v2: torch.Tensor, loss_function: str) -> torch.Tensor:
+    """
+    Computes a distance loss between two tensors.
+
+    Args:
+        v1 (Tensor): a tensor with a shape compatible with v2
+        v2 (Tensor): a tensor with a shape compatible with v1
+        loss_function (str): One of "l2", "l1" or "smooth_l1" representing which loss function is to be used.
+
+    Returns: A tensor of the shape v1.view_as(v2) or v2.view_as(v1) with values equal to the distance loss between the
+        two.
+
+    """
+    if loss_function == "l2":
         value_loss = F.mse_loss(
             v1,
             v2,
             reduction="none",
         )
 
-    elif loss_type == "l1":
+    elif loss_function == "l1":
         value_loss = F.l1_loss(
             v1,
             v2,
             reduction="none",
         )
 
-    elif loss_type == "smooth_l1":
+    elif loss_function == "smooth_l1":
         value_loss = F.smooth_l1_loss(
             v1,
             v2,
             reduction="none",
         )
     else:
-        raise NotImplementedError(f"Unknown loss {loss_type}")
+        raise NotImplementedError(f"Unknown loss {loss_function}")
     return value_loss
 
 
@@ -40,6 +52,13 @@ class ValueLoss:
 
 
 class _TargetNetUpdate:
+    """
+    An abstract class for target network update in Double DQN/DDPG.
+
+    Args:
+        loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
+
+    """
     def __init__(self, loss_module: Union["DQNLoss", "DDPGLoss"]):
         self.has_target_actor = hasattr(loss_module, '_target_actor_network')
         net = loss_module.value_network
@@ -59,6 +78,17 @@ class _TargetNetUpdate:
 
 
 class SoftUpdate(_TargetNetUpdate):
+    """
+    A soft-update class for target network update in Double DQN/DDPG.
+    This was proposed in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf
+
+    Args:
+        loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
+        eps (scalar): epsilon in the update equation:
+            param = prev_param * eps + new_param * (1-eps)
+            default: 0.999
+    """
+
     def __init__(self, loss_module: Union["DQNLoss", "DDPGLoss"], eps: Number = 0.999):
         if not (eps < 1.0 and eps > 0.0):
             raise ValueError(f"Got eps = {eps} when it was supposed to be between 0 and 1.")
@@ -74,6 +104,16 @@ class SoftUpdate(_TargetNetUpdate):
 
 
 class HardUpdate(_TargetNetUpdate):
+    """
+    A hard-update class for target network update in Double DQN/DDPG (by contrast with soft updates).
+    This was proposed in the original Double DQN paper: "Deep Reinforcement Learning with Double Q-learning",
+    https://arxiv.org/abs/1509.06461.
+
+    Args:
+        loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
+        value_network_update_interval (scalar): how often the target network should be updated.
+            default: 1000
+    """
     def __init__(self, loss_module: Union["DQNLoss", "DDPGLoss"], value_network_update_interval: Number = 1000):
         super(HardUpdate, self).__init__(loss_module)
         self.value_network_update_interval = value_network_update_interval
