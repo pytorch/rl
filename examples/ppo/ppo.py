@@ -97,7 +97,7 @@ parser.add_argument('--optimizer', default='adam', type=str, choices=["adam"],
 parser.add_argument("--grad_clip_norm", type=float, default=100.0,
                     help="value at which the total gradient norm should be clipped. Default=100.0")
 
-parser.add_argument("--collector_device", type=str, default="cpu",
+parser.add_argument("--collector_devices", nargs='+', default=["cpu"],
                     help="device on which the data collector should store the trajectories to be passed to this script."
                          "If the collector device differs from the policy device (cuda:0 if available), then the "
                          "weights of the collector policy are synchronized with collector.update_policy_weights_().")
@@ -247,8 +247,8 @@ if __name__ == "__main__":
         total_frames=args.total_frames,
         num_collectors=- args.num_workers // -args.env_per_collector,
         num_env_per_collector=args.env_per_collector,
-        device=args.collector_device,
-        passing_device=args.collector_device,
+        device=args.collector_devices,
+        passing_device=args.collector_devices,
     )
     collector.set_seed(args.seed)
 
@@ -269,7 +269,7 @@ if __name__ == "__main__":
 
     for k, batch_of_trajectories in enumerate(collector):
 
-        batch_of_trajectories = batch_of_trajectories.to(device)
+        batch_of_trajectories = batch_of_trajectories.contiguous().to(device)
         n_frames_per_batch = batch_of_trajectories.numel()
         frame_count += n_frames_per_batch
         batches = torch.ones(batch_of_trajectories.batch_size).nonzero()

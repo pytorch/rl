@@ -210,7 +210,7 @@ class ConvNet(nn.Sequential):
             bias_last_layer: bool = True,
             aggregator_class: Type = SquashDims,
             aggregator_kwargs: Optional[dict] = None,
-            squeeze_output: bool = True,
+            squeeze_output: bool = False,
     ):
 
         self.in_features = in_features

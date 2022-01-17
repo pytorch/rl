@@ -34,6 +34,7 @@ __all__ = [
     "CatTensors",
     "NoopResetEnv",
     "BinerizeReward",
+    "PinMemoryTransform",
 ]
 
 from ...envs.utils import step_tensor_dict
@@ -924,3 +925,14 @@ class NoopResetEnv(Transform):
             tensor_dict = self.env.rand_step()
 
         return step_tensor_dict(tensor_dict)
+
+class PinMemoryTransform(Transform):
+    """
+    Calls pin_memory on the tensordict to facilitate writing on CUDA devices.
+
+    """
+    def __init__(self):
+        super().__init__([])
+
+    def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
+        return tensor_dict.pin_memory()

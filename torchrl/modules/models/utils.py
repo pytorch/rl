@@ -61,7 +61,7 @@ class SquashDims(nn.Module):
         self.ndims_in = ndims_in
 
     def forward(self, value: torch.Tensor) -> torch.Tensor:
-        value = value.view(*value.shape[:-self.ndims_in], -1)
+        value = value.flatten(-self.ndims_in, -1)
         return value
 
 

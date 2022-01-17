@@ -7,7 +7,7 @@ from collections import OrderedDict
 from collections.abc import Iterable
 from copy import deepcopy, copy
 from numbers import Number
-from typing import Optional, Union, Tuple, List, Callable, Generator, Type, KeysView, ItemsView, Iterator
+from typing import Optional, Union, Tuple, List, Callable, Generator, Type, KeysView, ItemsView, Iterator, Sequence
 from warnings import warn
 
 import numpy as np
@@ -302,6 +302,13 @@ class _TensorDict:
     def pin_memory(self) -> _TensorDict:
         """
         Calls pin_memory() on the stored tensors.
+
+        """
+        raise NotImplementedError(f"{self.__class__.__name__}")
+
+    def is_pinned(self) -> bool:
+        """
+        CHecks if tensors are pinned.
 
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
@@ -867,7 +874,6 @@ class TensorDict(_TensorDict):
             for key, value in source.items():
                 if not isinstance(value, _accepted_classes):
                     raise TypeError(f"Expected value to be one of types {_accepted_classes} but got {type(value)}")
-
                 if map_item_to_device:
                     value = value.to(device)
                 self.set(key, value)
@@ -976,7 +982,7 @@ class TensorDict(_TensorDict):
         if self.device == torch.device("cpu"):
             for key, value in self.items():
                 if value.dtype in (torch.half, torch.float, torch.double):
-                    value.pin_memory()
+                    self.set(key, value.pin_memory(), inplace=False)
         return self
 
     def expand(self, *shape: int, inplace: bool = False) -> TensorDict:
@@ -1162,7 +1168,8 @@ class TensorDict(_TensorDict):
         return (f"{type(self).__name__}("
                 f"\n\tfields={{{fields}}}, "
                 f"\n\tshared={self.is_shared()}, "
-                f"\n\tbatch_size={self.batch_size})")
+                f"\n\tbatch_size={self.batch_size},"
+                f"\n\tdevice={self.device})")
 
 
 import functools
@@ -1264,7 +1271,7 @@ def cat(list_of_tensor_dicts: Iterable[_TensorDict], dim: int = 0, device: DEVIC
 
 
 @implements_for_td(torch.stack)
-def stack(list_of_tensor_dicts: Iterable[_TensorDict], dim: int = 0, out: _TensorDict = None) -> _TensorDict:
+def stack(list_of_tensor_dicts: Sequence[_TensorDict], dim: int = 0, out: _TensorDict = None, strict=False, contiguous=False) -> _TensorDict:
     if not list_of_tensor_dicts:
         raise RuntimeError("list_of_tensor_dicts cannot be empty")
     if dim < 0:
@@ -1283,17 +1290,34 @@ def stack(list_of_tensor_dicts: Iterable[_TensorDict], dim: int = 0, out: _Tenso
     batch_size = torch.Size(batch_size)
 
     if out is None:
-        return LazyStackedTensorDict(*list_of_tensor_dicts, stack_dim=dim, )
+        if contiguous:
+            out_td = TensorDict({
+                key: torch.stack([td.get(key) for td in list_of_tensor_dicts], dim)
+            for key in keys}, batch_size=batch_size)
+        else:
+            out_td = LazyStackedTensorDict(*list_of_tensor_dicts, stack_dim=dim, )
     else:
         out_td = out
         if out.batch_size != batch_size:
             raise RuntimeError("out.batch_size and stacked batch size must match, "
                                f"got out.batch_size={out.batch_size} and batch_size={batch_size}")
+        if strict:
+            out_keys = set(out_td.keys())
+            in_keys = set(keys)
+            if len(out_keys-in_keys)>0:
+                raise RuntimeError("The output tensordict has keys that are missing in the tensordict that has to be "
+                                   f"written: {out_keys-in_keys}. As per the call to `stack(..., strict=True)`, this "
+                                   f"is not permitted.")
+            elif len(in_keys-out_keys)>0:
+                raise RuntimeError("The resulting tensordict has keys that are missing in its destination: "
+                                   f"{in_keys-out_keys}. As per the call to `stack(..., strict=True)`, this "
+                                   f"is not permitted.")
+
         for key in keys:
             out_td.set(
                 key, torch.stack([td.get(key) for td in list_of_tensor_dicts], dim), inplace=True,
             )
-        return out_td
+    return out_td
 
 
 # @implements_for_td(torch.nn.utils.rnn.pad_sequence)
@@ -1632,7 +1656,7 @@ class LazyStackedTensorDict(_TensorDict):
         return False
 
     def contiguous(self) -> TensorDict:
-        return self.to(TensorDict)
+        return TensorDict({key:value for key, value in self.items()}, batch_size=self.batch_size)
 
     def clone(self, recursive: bool = True) -> LazyStackedTensorDict:
         if recursive:
@@ -1646,7 +1670,7 @@ class LazyStackedTensorDict(_TensorDict):
 
     def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs) -> _TensorDict:
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
-            return dest(source=self)
+            return dest(source=self, batch_size=self.batch_size)
         elif isinstance(dest, (torch.device, str, int)):
             if not isinstance(dest, torch.device):
                 dest = torch.device(dest)

@@ -247,9 +247,15 @@ class ProbabilisticOperator(nn.Module):
                 return dist.sample()
         else:
             raise NotImplementedError(f"unknown interaction_mode {interaction_mode}")
-
+    
+    @property
+    def device(self):
+        for p in self.parameters():
+            return p.device
+        return torch.device("cpu")
+    
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(mapping_operator={self.mapping_operator}, distribution_class={self.distribution_class})"
+        return f"{self.__class__.__name__}(mapping_operator={self.mapping_operator}, distribution_class={self.distribution_class}, device={self.device})"
 
 
 class ProbabilisticOperatorWrapper(nn.Module):

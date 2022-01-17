@@ -43,6 +43,7 @@ class _BatchedEnv(_EnvClass):
         memmap (bool): whether or not the returned tensordict will be placed in memory map.
 
     """
+
     def __init__(
             self,
             num_workers: int,
@@ -163,6 +164,8 @@ class _BatchedEnv(_EnvClass):
                     raise RuntimeError("memmap_() failed")
 
             self.shared_tensor_dicts = self.shared_tensor_dict_parent.unbind(0)
+        if self.pin_memory:
+            self.shared_tensor_dict_parent.pin_memory()
 
         if raise_no_selected_keys:
             print(f"\n {self.__class__.__name__}.shared_tensor_dict_parent is \n{self.shared_tensor_dict_parent}. \n"
@@ -184,6 +187,12 @@ class _BatchedEnv(_EnvClass):
     def __del__(self) -> None:
         if not self.is_closed:
             self.close()
+
+    def close(self):
+        return self.shutdown()
+
+    def shutdown(self):
+        pass
 
 
 class SerialEnv(_BatchedEnv):
@@ -249,6 +258,7 @@ class ParallelEnv(_BatchedEnv):
     TensorDicts are passed via shared memory or memory map.
 
     """
+
     def _start_workers(self) -> None:
         _num_workers = self.num_workers
         ctx = mp.get_context("spawn")
@@ -265,7 +275,8 @@ class ParallelEnv(_BatchedEnv):
                 args=(idx, channel1, channel2,
                       CloudpickleWrapper(self.create_env_fn[idx]),
                       self.create_env_kwargs[idx],
-                      self.pin_memory, self.action_keys),
+                      False,
+                      self.action_keys),
             )
             w.daemon = True
             w.start()
@@ -277,7 +288,7 @@ class ParallelEnv(_BatchedEnv):
         for channel, shared_tensor_dict in zip(self.parent_channels, self.shared_tensor_dicts):
             channel.send(("init", shared_tensor_dict))
 
-    def _step(self, tensor_dict: TensorDict) -> TensorDict:
+    def _step(self, tensor_dict: _TensorDict) -> _TensorDict:
         self._assert_tensordict_shape(tensor_dict)
 
         self.shared_tensor_dict_parent.update_(
@@ -303,6 +314,8 @@ class ParallelEnv(_BatchedEnv):
             msg, _ = channel.recv()
             if msg != "closing":
                 raise RuntimeError(f"Expected 'closing' but received {msg} from worker {i}")
+
+        del self.shared_tensor_dicts, self.shared_tensor_dict_parent
 
         for channel in self.parent_channels:
             channel.close()
@@ -352,7 +365,10 @@ class ParallelEnv(_BatchedEnv):
 
 
 def _run_worker_pipe_shared_mem(
-        idx: int, parent_pipe: connection.Connection, child_pipe: connection.Connection, env_fun: Callable,
+        idx: int,
+        parent_pipe: connection.Connection,
+        child_pipe: connection.Connection,
+        env_fun: Callable,
         env_fun_kwargs: dict, pin_memory: bool, action_keys: dict, verbose: bool = False,
 ) -> None:
     parent_pipe.close()
@@ -361,22 +377,17 @@ def _run_worker_pipe_shared_mem(
     i = -1
     initialized = False
 
+    # make sure that process can be closed
+    tensor_dict = None
+    _td = None
+    data = None
+
     while True:
         try:
             cmd, data = child_pipe.recv()
         except EOFError:
             raise EOFError(f"proc {pid} failed, last command: {cmd}")
-        if cmd == "close":
-            if not initialized:
-                raise RuntimeError("call 'init' before closing")
-            env.close()
-            child_pipe.send(("closing", None))
-            child_pipe.close()
-            if verbose:
-                print(f"closing {pid}")
-            break
-
-        elif cmd == "seed":
+        if cmd == "seed":
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
             # torch.manual_seed(data)
@@ -430,3 +441,16 @@ def _run_worker_pipe_shared_mem(
             data = (msg, keys)
             child_pipe.send(data)
             just_reset = False
+
+        if cmd == "close":
+            del tensor_dict, _td, data
+            if not initialized:
+                raise RuntimeError("call 'init' before closing")
+            env.close()
+            del env
+
+            child_pipe.send(("closing", None))
+            child_pipe.close()
+            if verbose:
+                print(f"{pid} closed")
+            break

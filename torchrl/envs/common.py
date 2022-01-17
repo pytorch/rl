@@ -174,6 +174,7 @@ class _EnvClass:
             raise TypeError(f"expected done.dtype to be torch.bool but got {tensor_dict_out.get('done').dtype}")
 
         tensor_dict.update(tensor_dict_out, inplace=True)
+        del tensor_dict_out
         return tensor_dict
 
     def _step(self, tensor_dict: _TensorDict, ) -> _TensorDict:
@@ -210,6 +211,7 @@ class _EnvClass:
             tensor_dict.update(tensor_dict_reset)
         else:
             tensor_dict = tensor_dict_reset
+        del tensor_dict_reset
         return tensor_dict
 
     @property
@@ -380,6 +382,8 @@ class _EnvClass:
             value = value.view(1)
         return value
 
+    def close(self):
+        pass
 
 class _EnvWrapper(_EnvClass):
     """

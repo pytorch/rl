@@ -33,7 +33,7 @@ def make_spec(spec_str):
 
 
 class _MockEnv(_EnvClass):
-    def __init__(self, seed: int = 0, ):
+    def __init__(self, seed: int = 100):
         super().__init__(device="cpu", dtype=torch.float, )
         self.set_seed(seed)
 
@@ -67,9 +67,11 @@ class DiscreteActionVecMockEnv(_MockEnv):
         return tensor_dict
 
     def _step(self, tensor_dict: _TensorDict, ) -> _TensorDict:
+        tensor_dict = tensor_dict.to(self.device)
         a = tensor_dict.get("action")
         assert (a.sum(-1) == 1).all()
         assert not self.is_done, "trying to execute step in done env"
+        
         obs = self._get_in_obs(self.current_tensordict.get(self.out_key)) + a / self.maxstep
         tensor_dict = tensor_dict.select()  # empty tensordict
         tensor_dict.set("next_" + self.out_key, self._get_out_obs(obs))

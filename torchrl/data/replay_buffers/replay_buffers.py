@@ -500,7 +500,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                  pin_memory: bool = False,
                  prefetch: Optional[int] = None) -> None:
         if collate_fn is None:
-            collate_fn = lambda x: torch.stack(x, 0)
+            collate_fn = lambda x: x#torch.stack(x, 0, contiguous=True)
         super(TensorDictPrioritizedReplayBuffer, self).__init__(size=size, alpha=alpha, beta=beta, eps=eps,
                                                                 collate_fn=collate_fn, pin_memory=pin_memory,
                                                                 prefetch=prefetch)

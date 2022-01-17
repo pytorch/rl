@@ -12,6 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from torchrl.collectors import sync_async_collector, sync_sync_collector
 from torchrl.data import MultiStep
+from torchrl.data.tensordict.tensordict import stack as td_stack
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer, TensorDictPrioritizedReplayBuffer
 from torchrl.data.transforms import (
     TransformedEnv,
@@ -61,10 +62,13 @@ parser.add_argument(
     "--loss_function", type=str, default="smooth_l1", choices=["l1", "l2", "smooth_l1"],
     help="loss function for the value network. Either one of l1, l2 or smooth_l1 (default)."
 )
-parser.add_argument("--collector_device", type=str, default="cpu",
+parser.add_argument("--collector_devices", nargs='+', default=["cpu"],
                     help="device on which the data collector should store the trajectories to be passed to this script."
                          "If the collector device differs from the policy device (cuda:0 if available), then the "
                          "weights of the collector policy are synchronized with collector.update_policy_weights_().")
+parser.add_argument("--pin_memory", action="store_true",
+                    help="if True, the data collector will call pin_memory before dispatching tensordicts onto the "
+                         "passing device.")
 parser.add_argument("--value_network_update_interval", type=int, default=1000,
                     help="how often the target value network weights are updated (in number of updates)."
                          "If soft-updates are used, the value is translated into a moving average decay by using the "
@@ -253,10 +257,12 @@ if __name__ == "__main__":
 
 
     def make_parallel_env(**kwargs):
-        return ParallelEnv(
+        env = ParallelEnv(
             num_workers=args.env_per_collector,
             create_env_fn=make_transformed_env,
-            create_env_kwargs=kwargs)
+            create_env_kwargs=kwargs,
+            pin_memory=args.pin_memory)
+        return env
 
 
     if torch.cuda.device_count() > 0:
@@ -265,9 +271,9 @@ if __name__ == "__main__":
         device = "cpu"
     print(f"device is {device}")
     # Create an example environment
-    env = make_transformed_env()
-    env.set_seed(args.seed)
-    env_specs = env.specs  # TODO: use env.sepcs
+    init_env = make_transformed_env()
+    init_env.set_seed(args.seed)
+    env_specs = init_env.specs  # TODO: use env.sepcs
     linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
     # Create the actor network. For dqn, the actor is actually a Q-value-network. make_actor will figure out that
 
@@ -292,25 +298,26 @@ if __name__ == "__main__":
         annealing_num_steps=annealing_frames).to(device)
 
     with torch.no_grad():
-        td = env.reset()
+        td = init_env.reset()
         td_device = td.to(device)
         td_device = td_device.unsqueeze(0)
         td_device = actor_model(td_device)  # for init
         value_model(td_device)  # for init
         td = td_device.squeeze(0).to("cpu")
         t0 = time.time()
-        env.step(td)  # for sanity check
+        init_env.step(td)  # for sanity check
 
         stats = None
         if args.from_vector:
-            td = env.rollout(n_steps=args.init_env_steps)
+            td = init_env.rollout(n_steps=args.init_env_steps)
             stats = {"loc": td.get("observation_vector").mean(0), "scale": td.get("observation_vector").std(0)}
 
     actor_model_explore = actor_model_explore.share_memory()
 
     # get rid of env
     try:
-        env.close()
+        init_env.close()
+        del init_env
     except:
         pass
     del td
@@ -324,7 +331,8 @@ if __name__ == "__main__":
         ms = MultiStep(gamma=gamma, n_steps_max=args.n_steps_return, )
     else:
         ms = None
-
+    
+    args.collector_devices = args.collector_devices if len(args.collector_devices)>1 else args.collector_devices[0]
     collector_helper_kwargs = {
         "env_fns": make_transformed_env if args.env_per_collector == 1 else make_parallel_env,
         "env_kwargs": {'stats': stats},
@@ -335,9 +343,10 @@ if __name__ == "__main__":
         "batcher": ms,
         "num_env_per_collector": 1,  # we already took care of building the make_parallel_env function above
         "num_collectors": - args.num_workers // -args.env_per_collector,
-        "passing_device": args.collector_device,
-        "device": args.collector_device,
+        "devices": args.collector_devices,
+        "passing_devices": args.collector_devices,
         "init_random_frames": args.init_random_frames,
+        "pin_memory": args.pin_memory,
     }
 
     collector = collector_helper(**collector_helper_kwargs)
@@ -347,8 +356,10 @@ if __name__ == "__main__":
         buffer = ReplayBuffer(args.buffer_size, collate_fn=lambda x: torch.stack(x, 0), pin_memory=device != "cpu")
     else:
         buffer = TensorDictPrioritizedReplayBuffer(args.buffer_size, alpha=0.7, beta=0.5,
-                                                   collate_fn=lambda x: torch.stack(x, 0),
-                                                   pin_memory=device != "cpu")
+                                                   # collate_fn=lambda x: td_stack(x, 0, contiguous=True),
+                                                   collate_fn=lambda x: torch.stack(x, 0).contiguous(),
+                                                   pin_memory=device != "cpu",
+                                                  prefetch=4)
 
     pbar = tqdm.tqdm(total=args.total_frames)
     params = list(actor_model.parameters()) + list(value_model.parameters())
@@ -421,7 +432,7 @@ if __name__ == "__main__":
         _t_optim = time.time()
 
         # Split rollouts in single events
-        b = b[b.get("mask").squeeze(-1)]
+        b = b[b.get("mask").squeeze(-1)].cpu()
 
         frame_count += b.numel()
 
@@ -466,8 +477,8 @@ if __name__ == "__main__":
                 optim_count += 1
 
                 # Sample from buffer
-                td = buffer.sample(args.batch_size).contiguous()
-
+                td = buffer.sample(args.batch_size)
+                
                 # Train value network
                 loss_actor, loss_value = loss_module(td)
                 loss = loss_actor.mean() + loss_value.mean()
@@ -487,3 +498,7 @@ if __name__ == "__main__":
         _t_optim = time.time() - _t_optim
         t_optim = t_optim * 0.9 + _t_optim * 0.1
         _t_collection = time.time()
+
+    env_record.close()
+    collector.shutdown()
+    del b, collector, buffer, actor_model, value_model, optim, env_record

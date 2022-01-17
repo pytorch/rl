@@ -56,7 +56,7 @@ parser.add_argument(
     "--loss_function", type=str, default="smooth_l1", choices=["l1", "l2", "smooth_l1"],
     help="loss function for the value network. Either one of l1, l2 or smooth_l1 (default)."
 )
-parser.add_argument("--collector_device", type=str, default="cpu",
+parser.add_argument("--collector_devices", nargs='+', default=["cpu"],
                     help="device on which the data collector should store the trajectories to be passed to this script."
                          "If the collector device differs from the policy device (cuda:0 if available), then the "
                          "weights of the collector policy are synchronized with collector.update_policy_weights_().")
@@ -310,8 +310,8 @@ if __name__ == "__main__":
         "batcher": ms,
         "num_env_per_collector": 1,  # we already took care of building the make_parallel_env function above
         "num_collectors": - args.num_workers // -args.env_per_collector,
-        "passing_device": args.collector_device,
-        "device": args.collector_device,
+        "devices": args.collector_devices,
+        "passing_devices": args.collector_devices,
     }
 
     collector = collector_helper(**collector_helper_kwargs)
@@ -321,7 +321,7 @@ if __name__ == "__main__":
         buffer = ReplayBuffer(args.buffer_size, collate_fn=lambda x: torch.stack(x, 0), pin_memory=device != "cpu")
     else:
         buffer = TensorDictPrioritizedReplayBuffer(args.buffer_size, alpha=0.7, beta=0.5,
-                                                   collate_fn=lambda x: torch.stack(x, 0),
+                                                   collate_fn=lambda x: torch.stack(x, 0).contiguous(),
                                                    pin_memory=device != "cpu")
 
     pbar = tqdm.tqdm(total=args.total_frames)
@@ -390,9 +390,9 @@ if __name__ == "__main__":
         _t_optim = time.time()
 
         # Split rollouts in single events
-        b = b.cpu().masked_select(b.get("mask").squeeze(-1))
+        b = b[b.get("mask").squeeze(-1)].cpu()
 
-        frame_count += b.shape[0]
+        frame_count += b.numel()
         # Add single events to buffer
         buffer.extend(b)
 
@@ -425,7 +425,7 @@ if __name__ == "__main__":
 
             optim_count += 1
             # Sample from buffer
-            td = buffer.sample(args.batch_size).contiguous()
+            td = buffer.sample(args.batch_size)
 
             # Train value network
             loss = loss_module(td)

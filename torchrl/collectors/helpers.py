@@ -104,7 +104,7 @@ def sync_sync_collector(
                            batcher=batcher,
                            num_env_per_collector=num_env_per_collector,
                            num_collectors=num_collectors,
-                           passing_device=passing_device, **kwargs)
+                           **kwargs)
 
 
 def _make_collector(
@@ -118,7 +118,6 @@ def _make_collector(
         batcher: Optional[Callable] = None,
         num_env_per_collector: Optional[int] = None,
         num_collectors: Optional[int] = None,
-        passing_device="cpu",
         **kwargs) -> MultiDataCollector:
     if env_kwargs is None:
         env_kwargs = dict()
@@ -162,6 +161,5 @@ def _make_collector(
         max_steps_per_traj=max_steps_per_traj,
         frames_per_batch=frames_per_batch,
         batcher=batcher,
-        passing_device=passing_device,
         **kwargs,
     )
