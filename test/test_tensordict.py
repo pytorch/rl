@@ -513,6 +513,22 @@ class TestTensorDicts:
         with pytest.raises(RuntimeError, match="differs from the source batch size"):
             td[idx] = td_clone
 
+    @pytest.mark.parametrize("td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"])
+    @pytest.mark.parametrize("dim", [0, 1])
+    @pytest.mark.parametrize("chunks", [1, 2])
+    def test_chunk(self, td_name, dim, chunks):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        if len(td.shape) - 1 < dim:
+            pytest.mark.skip(f"no dim {dim} in td")
+            return
+
+        chunks = min(td.shape[dim], chunks)
+        td_chunks = td.chunk(chunks, dim)
+        assert len(td_chunks) == chunks
+        assert sum([_td.shape[dim] for _td in td_chunks]) == td.shape[dim]
+        assert (torch.cat(td_chunks, dim) == td).all()
+
 
 @pytest.mark.parametrize("index0", [None, slice(None)])
 def test_set_sub_key(index0):

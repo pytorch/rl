@@ -200,8 +200,8 @@ class TensorSpec:
 
         """
         if not self.is_in(value):
-            raise RuntimeError(f"Encoding failed because value is not in space. "
-                               f"Consider calling project(val) first. value was = {value}")
+            raise AssertionError(f"Encoding failed because value is not in space. "
+                                 f"Consider calling project(val) first. value was = {value}")
 
     def type_check(self, value: torch.Tensor, key=None):
         """
@@ -245,15 +245,20 @@ class BoundedTensorSpec(TensorSpec):
                  device: Optional[DEVICE_TYPING] = None,
                  dtype: Optional[Union[str, torch.dtype]] = None):
         dtype, device = _default_dtype_and_device(dtype, device)
-        if not isinstance(minimum, torch.Tensor):
+        if not isinstance(minimum, torch.Tensor) or minimum.dtype is not dtype:
             minimum = torch.tensor(minimum, dtype=dtype, device=device)
-        if not isinstance(maximum, torch.Tensor):
+        if not isinstance(maximum, torch.Tensor) or maximum.dtype is not dtype:
             maximum = torch.tensor(maximum, dtype=dtype, device=device)
         super().__init__((1,), ContinuousBox(minimum, maximum), device, dtype)
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
         a, b = self.space
-        return torch.zeros(*shape, *self.shape, device=self.device).uniform_() * (b - a) + a
+        out = torch.zeros(*shape, *self.shape, dtype=self.dtype, device=self.device).uniform_() * (b - a) + a
+        if (out > b).any():
+            out[out > b] = b.expand_as(out)[out > b]
+        if (out < a).any():
+            out[out < a] = a.expand_as(out)[out < a]
+        return out
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         minimum = self.space.minimum.to(val.device)
@@ -376,11 +381,13 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
         dtype (str or torch.dtype, optional): dtype of the tensors.
     """
 
-    def __init__(self, minimum: Union[Number, torch.Tensor, np.ndarray],
-                 maximum: Union[Number, torch.Tensor, np.ndarray],
-                 shape: Optional[torch.Size] = None,
-                 device: Optional[DEVICE_TYPING] = None,
-                 dtype: Optional[Union[torch.dtype, str]] = None):
+    def __init__(
+            self,
+            minimum: Union[Number, torch.Tensor, np.ndarray],
+            maximum: Union[Number, torch.Tensor, np.ndarray],
+            shape: Optional[torch.Size] = None,
+            device: Optional[DEVICE_TYPING] = None,
+            dtype: Optional[Union[torch.dtype, str]] = None):
         dtype, device = _default_dtype_and_device(dtype, device)
         if dtype is None:
             dtype = torch.get_default_dtype()
@@ -391,7 +398,10 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
             minimum = torch.tensor(minimum, dtype=dtype, device=device)
         if not isinstance(maximum, torch.Tensor):
             maximum = torch.tensor(maximum, dtype=dtype, device=device)
-
+        if dtype is not None and minimum.dtype is not dtype:
+            minimum = minimum.to(dtype)
+        if dtype is not None and maximum.dtype is not dtype:
+            maximum = maximum.to(dtype)
         err_msg = "NdBoundedTensorSpec requires the shape to be explicitely (via the shape argument) or " \
                   "implicitely defined (via either the minimum or the maximum or both). If the maximum and/or the " \
                   "minimum have a non-singleton shape, they must match the provided shape if this one is set " \
@@ -477,6 +487,9 @@ class BinaryDiscreteTensorSpec(TensorSpec):
         index = index.expand(*tensor_to_index.shape[:-1], index.shape[-1])
         return tensor_to_index.gather(-1, index)
 
+    def is_in(self, val: torch.Tensor) -> bool:
+        return ((val == 0) | (val == 1)).all()
+
 
 @dataclass
 class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
@@ -518,26 +531,24 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         ).squeeze(-2)
         return x
 
-    def encode(self, val: torch.Tensor) -> torch.Tensor:
-        x = torch.cat(
-            [
-                super(MultOneHotDiscreteTensorSpec, self).encode(v, space)
-                for v, space in zip(val, self.space)
-            ],
-            0,
-        )
-        return x
+    def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
+        if not isinstance(val, torch.Tensor):
+            val = torch.tensor(val)
+
+        x = []
+        for v, space in zip(val.unbind(-1), self.space):
+            if not (v<space.n).all():
+                raise RuntimeError(f"value {v} is greater than the allowed max {space.n}")
+            x.append(super(MultOneHotDiscreteTensorSpec, self).encode(v, space))
+        return torch.cat(x, -1)
 
     def _split(self, val: torch.Tensor) -> torch.Tensor:
-        vals = val.split([space.n for space in self.space], -1)
+        vals = val.split([space.n for space in self.space], dim=-1)
         return vals
 
     def to_numpy(self, val: torch.Tensor) -> np.ndarray:
         vals = self._split(val)
-        try:
-            out = np.concatenate(tuple(val.argmax(-1).numpy() for val in vals), -1)
-        except ValueError:
-            out = np.array(tuple(val.argmax(-1).numpy() for val in vals))
+        out = torch.stack([val.argmax(-1) for val in vals], -1).numpy()
         return out
 
     def index(self, index: torch.Tensor, tensor_to_index: torch.Tensor) -> torch.Tensor:

@@ -66,6 +66,9 @@ class _TensorDict:
         """
         return len(self.batch_size)
 
+    def ndimension(self):
+        return self.batch_dims
+
     @property
     def device(self) -> torch.device:
         """
@@ -529,16 +532,19 @@ class _TensorDict:
             raise ValueError(f"chunks must be a strictly positive integer, got {chunks}.")
         indices = []
         _idx_start = 0
-        interval = _idx_end = self.batch_size[dim] // chunks
+        if chunks > 1:
+            interval = _idx_end = self.batch_size[dim] // chunks
+        else:
+            interval = _idx_end = self.batch_size[dim]
         for c in range(chunks):
             indices.append(slice(_idx_start, _idx_end))
             _idx_start = _idx_end
-            if c < chunks - 1:
+            if c < chunks - 2:
                 _idx_end = _idx_end + interval
             else:
                 _idx_end = self.batch_size[dim]
         if dim < 0:
-            dim = len(self.batch_size)+dim
+            dim = len(self.batch_size) + dim
         return tuple(self[(*[slice(None) for _ in range(dim)], idx)] for idx in indices)
 
     def clone(self, recursive: bool = True) -> _TensorDict:
@@ -674,11 +680,13 @@ class _TensorDict:
             dim (int): dimension along which to unsqueeze
 
         """
-        if dim > self.batch_dims or dim < self.batch_dims:
-            raise RuntimeError(
-                "unsqueezing is allowed for dims comprised between -td.batch_dims and td.batch_dims only")
         if dim < 0:
             dim = self.batch_dims + dim + 1
+
+        if (dim > self.batch_dims) or (dim < 0):
+            raise RuntimeError(
+                f"unsqueezing is allowed for dims comprised between -td.batch_dims and td.batch_dims only. Got "
+                f"dim={dim} with a batch size of {self.batch_size}.")
         return UnsqueezedTensorDict(source=self, custom_op="unsqueeze", inv_op="squeeze", custom_op_kwargs={"dim": dim},
                                     inv_op_kwargs={"dim": dim})
 
@@ -691,12 +699,14 @@ class _TensorDict:
             dim (int): dimension along which to squeeze
 
         """
-        if dim >= self.batch_dims or dim <= self.batch_dims:
-            raise RuntimeError(
-                "unsqueezing is allowed for dims comprised between -td.batch_dims and td.batch_dims only")
-
         if dim < 0:
             dim = self.batch_dims + dim
+
+        if self.batch_dims and (dim >= self.batch_dims or dim < 0):
+            raise RuntimeError(
+                f"squeezing is allowed for dims comprised between 0 and td.batch_dims only. Got dim={dim}"
+                f" and batch_size={self.batch_size}.")
+
         if dim >= self.batch_dims or self.batch_size[dim] != 1:
             return self
         return SqueezedTensorDict(source=self, custom_op="squeeze", inv_op="unsqueeze", custom_op_kwargs={"dim": dim},
@@ -1395,7 +1405,7 @@ class SubTensorDict(_TensorDict):
     """
     _safe = False
 
-    def __init__(self, source: _TensorDict, idx: INDEX_TYPING):
+    def __init__(self, source: _TensorDict, idx: INDEX_TYPING, batch_size: Optional[Iterable[int]]=None):
         if not isinstance(source, _TensorDict):
             raise TypeError(f"Expected source to be a subclass of _TensorDict, got {type(source)}")
         self._source = source
@@ -1404,12 +1414,13 @@ class SubTensorDict(_TensorDict):
         else:
             idx = tuple(idx)
         self.idx = idx
-        self._batch_size = self.batch_size
+        self._batch_size = _getitem_batch_size(self._source.batch_size, self.idx)
+        if batch_size is not None and batch_size != self.batch_size:
+            raise RuntimeError("batch_size does not match self.batch_size.")
 
     @property
     def batch_size(self) -> torch.Size:
-        batch_size = _getitem_batch_size(self._source.batch_size, self.idx)
-        return batch_size
+        return self._batch_size
 
     @property
     def device(self) -> DEVICE_TYPING:
@@ -1580,7 +1591,7 @@ def merge_tensor_dicts(*tensor_dicts: _TensorDict) -> TensorDict:
 class LazyStackedTensorDict(_TensorDict):
     _safe = False
 
-    def __init__(self, *tensor_dicts: List[TensorDict], stack_dim: int = 0):
+    def __init__(self, *tensor_dicts: List[TensorDict], stack_dim: int = 0, batch_size:Optional[Iterable[int]]=None):
         # sanity check
         N = len(tensor_dicts)
         if not isinstance(tensor_dicts[0], _TensorDict):
@@ -1590,7 +1601,7 @@ class LazyStackedTensorDict(_TensorDict):
             raise RuntimeError(f"stack_dim must be non negative, got stack_dim={stack_dim}")
         if not N:
             raise RuntimeError("at least one tensordict must be provided to StackedTensorDict to be instantiated")
-        batch_size = tensor_dicts[0].batch_size
+        _batch_size = tensor_dicts[0].batch_size
         device = tensor_dicts[0].device
 
         for i, td in enumerate(tensor_dicts[1:]):
@@ -1602,16 +1613,18 @@ class LazyStackedTensorDict(_TensorDict):
             if device != _device:
                 raise RuntimeError(f"devices differ, got {device} and {_device}")
             _keys = set(td.keys())
-            if _bs != batch_size:
+            if _bs != _batch_size:
                 raise RuntimeError(f"batch sizes in tensor_dicts differs, StackedTensorDict cannot be created. Got "
-                                   f"td[0].batch_size={batch_size} and td[i].batch_size={_bs} ")
+                                   f"td[0].batch_size={_batch_size} and td[i].batch_size={_bs} ")
         self.tensor_dicts = list(tensor_dicts)
         self.stack_dim = stack_dim
-        self._batch_size = self._compute_batch_size(batch_size, stack_dim, N)
+        self._batch_size = self._compute_batch_size(_batch_size, stack_dim, N)
         self._batch_dims = len(self._batch_size)
         self._update_valid_keys()
         self._meta_dict = dict()
         self._meta_dict.update({k: value for k, value in self.items_meta()})
+        if batch_size is not None and batch_size != self.batch_size:
+            raise RuntimeError("batch_size does not match self.batch_size.")
 
     @property
     def device(self) -> DEVICE_TYPING:
@@ -1642,9 +1655,11 @@ class LazyStackedTensorDict(_TensorDict):
 
     @staticmethod
     def _compute_batch_size(batch_size: torch.Size, stack_dim: int, N: int) -> torch.Size:
-        s_list = list(reversed(list(batch_size)))
-        s = torch.Size([s_list.pop() if i != stack_dim else N for i in range(len(batch_size) + 1)])
-        return s
+        # s_list = list(reversed(list(batch_size)))
+        # s = torch.Size([s_list.pop() if i != stack_dim else N for i in range(len(batch_size) + 1)])
+        s = list(batch_size)
+        s.insert(stack_dim, N)
+        return torch.Size(s)
 
     def set(self, key: str, tensor: COMPATIBLE_TYPES, **kwargs) -> LazyStackedTensorDict:
         if self.batch_size != tensor.shape[:self.batch_dims]:
@@ -1872,7 +1887,7 @@ class LazyStackedTensorDict(_TensorDict):
 class SavedTensorDict(_TensorDict):
     _safe = False
 
-    def __init__(self, source: _TensorDict, device=None):
+    def __init__(self, source: _TensorDict, device=None, batch_size: Optional[Iterable[int]]=None):
         if not isinstance(source, _TensorDict):
             raise TypeError(f"Expected source to be a _TensorDict instance, "
                             f"but got {type(source)} instead.")
@@ -1886,6 +1901,8 @@ class SavedTensorDict(_TensorDict):
                     'cpu'
         td = source
         self._save(td)
+        if batch_size is not None and batch_size != self.batch_size:
+            raise RuntimeError("batch_size does not match self.batch_size.")
 
     def _save(self, tensor_dict: _TensorDict) -> None:
         self._keys = list(tensor_dict.keys())
@@ -2065,7 +2082,8 @@ class _CustomOpTensorDict(_TensorDict):
             custom_op: str,
             inv_op: Optional[str] = None,
             custom_op_kwargs: Optional[dict] = None,
-            inv_op_kwargs: Optional[dict] = None
+            inv_op_kwargs: Optional[dict] = None,
+            batch_size: Optional[Iterable[int]]=None
     ):
         """
         Encodes lazy operations on tensors contained in a TensorDict.
@@ -2085,6 +2103,9 @@ class _CustomOpTensorDict(_TensorDict):
         self.inv_op = inv_op
         self.custom_op_kwargs = custom_op_kwargs if custom_op_kwargs is not None else {}
         self.inv_op_kwargs = inv_op_kwargs if inv_op_kwargs is not None else {}
+        if batch_size is not None and batch_size != self.batch_size:
+            raise RuntimeError("batch_size does not match self.batch_size.")
+
 
     def _update_custom_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:
         """
