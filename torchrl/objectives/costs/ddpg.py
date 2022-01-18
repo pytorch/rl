@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from copy import deepcopy
 from numbers import Number
 from typing import Optional, Union, Tuple
@@ -8,7 +9,8 @@ import torch
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import step_tensor_dict
 from torchrl.modules import ProbabilisticOperator
-from torchrl.objectives.costs.utils import distance_loss
+from torchrl.modules.probabilistic_operators.actors import ActorCriticWrapper
+from torchrl.objectives.costs.utils import distance_loss, next_state_value
 
 
 class DDPGLoss:
@@ -22,6 +24,7 @@ class DDPGLoss:
             via the value operator.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
     """
+
     def __init__(self,
                  actor_network: ProbabilisticOperator,
                  value_network: ProbabilisticOperator,
@@ -80,8 +83,6 @@ class DDPGLoss:
             value_network,
             target_actor_network,
             target_value_network,
-            done,
-            rewards,
             gamma)
         input_tensor_dict.set(
             "td_error",
@@ -110,32 +111,20 @@ class DDPGLoss:
 
     def _value_loss(self, tensor_dict: _TensorDict, value_network: ProbabilisticOperator,
                     target_actor_network: ProbabilisticOperator,
-                    target_value_network: ProbabilisticOperator, done: torch.Tensor,
-                    rewards: torch.Tensor, gamma: Number) -> Tuple[torch.Tensor, torch.Tensor]:
+                    target_value_network: ProbabilisticOperator,
+                    ) -> Tuple[torch.Tensor, torch.Tensor]:
         # value loss
         td_copy = tensor_dict.select(*value_network.in_keys).detach()
         value_network(td_copy)
         pred_val = td_copy.get("state_action_value").squeeze(-1)
-        try:
-            steps_to_next_obs = tensor_dict.get("steps_to_next_obs").squeeze(-1)
-        except KeyError:
-            steps_to_next_obs = 1
 
-        with torch.no_grad():
-            next_td = step_tensor_dict(tensor_dict) # next_observation -> observation
-            next_td = next_td.select(*target_actor_network.in_keys)
-            target_actor_network(next_td) # select an action
-            target_value_network(next_td) # compute value of (s', a')
-            pred_next_val_detach = next_td.get("state_action_value").squeeze(-1)
-            done = done.to(torch.float)
-            target_value = (1 - done) * pred_next_val_detach
-            rewards = rewards.to(torch.float)
-            target_value = rewards + (gamma ** steps_to_next_obs) * target_value
+        actor_critic = ActorCriticWrapper(target_actor_network, target_value_network)
+        target_value = next_state_value(tensor_dict, actor_critic, gamma=self.gamma)
 
-        td_error = pred_val - target_value
+        # td_error = pred_val - target_value
         value_loss = distance_loss(pred_val, target_value, loss_function=self.loss_funtion)
 
-        return value_loss, td_error
+        return value_loss, value_loss
 
 
 class DoubleDDPGLoss(DDPGLoss):
@@ -149,6 +138,7 @@ class DoubleDDPGLoss(DDPGLoss):
     state_dict). Please report any such bug if encountered.
 
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._target_value_network = deepcopy(self.value_network)

@@ -110,14 +110,16 @@ class TanhNormal(D.TransformedDistribution):
             t = D.ComposeTransform(
                 [t, D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)]
             )
-        try:
-            base = D.Independent(D.Normal(self.loc, self.scale), event_dims)
-        except:
-            self.loc
-            self.scale
+        base = D.Independent(D.Normal(self.loc, self.scale), event_dims)
 
         super().__init__(base, t)
 
+    @property
+    def mode(self):
+        m = self.base_dist.base_dist.mean
+        for t in self.transforms:
+            m = t(m)
+        return m
 
 def uniform_sample_tanhnormal(dist: TanhNormal, size=torch.Size([])) -> torch.Tensor:
     """

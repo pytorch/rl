@@ -15,6 +15,11 @@ __all__ = ["MLP", "ConvNet", "DuelingCnnDQNet", "DistributionalDQNnet", "DdpgCnn
 class MLP(nn.Sequential):
     """
     A multi-layer perceptron.
+    If MLP receives more than one input, it concatenates them all along the last dimension before passing the
+    resulting tensor through the network. This is aimed at allowing for a seamless interface with calls of the type of
+        >>> model(state, action)  # compute state-action value
+    In the future, this feature may be moved to the ProbabilisticOperator, though it would require it to handle
+    different cases (vectors, images, ...)
 
     Args:
         in_features (int, optional): number of input features;
@@ -143,6 +148,9 @@ class MLP(nn.Sequential):
         return layers
 
     def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
+        if len(inputs) > 1:
+            inputs = (torch.cat([*inputs], -1),)
+
         out = super().forward(*inputs)
         if not isinstance(self.out_features, Number):
             out = out.view(*out.shape[:-1], *self.out_features)

@@ -59,7 +59,7 @@ class EGreedyWrapper(ProbabilisticOperatorWrapper):
             ).item(),
         )
 
-    @set_exploration_mode(True)
+    @set_exploration_mode("random")
     def _dist_sample(self, dist: d.Distribution, *input: Iterable[torch.Tensor], **kwargs: dict) -> torch.Tensor:
         out = self.probabilistic_operator._dist_sample(dist, *input, **kwargs)
         eps = self.eps.item()
@@ -157,7 +157,7 @@ class OrnsteinUhlenbeckProcessWrapper(ProbabilisticOperatorWrapper):
                 ).item(),
             )
 
-    @set_exploration_mode(True)
+    @set_exploration_mode("random")
     def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
         tensor_dict = super().forward(tensor_dict)
         tensor_dict = self.ou.add_sample(tensor_dict, self.eps.item())

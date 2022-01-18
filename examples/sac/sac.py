@@ -3,6 +3,8 @@ import datetime
 import os
 import sys
 import uuid
+from typing import Optional
+from warnings import warn
 
 import numpy as np
 import torch
@@ -11,7 +13,7 @@ from torch import multiprocessing as mp
 from torch.utils.tensorboard import SummaryWriter
 
 from torchrl.collectors import sync_async_collector, sync_sync_collector
-from torchrl.data import MultiStep
+from torchrl.data import MultiStep, DEVICE_TYPING
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer, TensorDictPrioritizedReplayBuffer
 from torchrl.data.transforms import (
     TransformedEnv,
@@ -27,10 +29,11 @@ from torchrl.data.transforms import (
     CatTensors,
 )
 from torchrl.envs import GymEnv, RetroEnv, DMControlEnv, ParallelEnv
-from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, make_ddpg_actor, NoisyLinear, \
+from torchrl.envs.utils import set_exploration_mode
+from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, make_sac_model, NoisyLinear, \
     reset_noise
-from torchrl.objectives import DDPGLoss, DoubleDDPGLoss, SoftUpdate, \
-    HardUpdate
+from torchrl.objectives import SACLoss, SoftUpdate, HardUpdate
+from torchrl.objectives.costs.sac import DoubleSACLoss
 from torchrl.record.recorder import VideoRecorder, TensorDictRecorder
 
 if sys.platform == "darwin":
@@ -46,6 +49,11 @@ parser.add_argument("--env_name", type=str, default="cheetah",
 parser.add_argument("--env_task", type=str, default="run",
                     help="task (if any) for the environment. Default=run")
 
+parser.add_argument("--loss", type=str, default="double", choices=["double", "single"],
+                    help="whether double or single DDPG loss should be used. Default=double")
+parser.add_argument("--soft_update", action="store_true",
+                    help="whether soft-update should be used with double DDPG loss.")
+
 parser.add_argument("--record_video", action="store_true",
                     help="whether a video of the task should be rendered during logging.")
 parser.add_argument("--from_vector", action="store_true",
@@ -53,10 +61,6 @@ parser.add_argument("--from_vector", action="store_true",
 parser.add_argument("--exp_name", type=str, default="",
                     help="experiment name. Used for logging directory. "
                          "A date and uuid will be joined to account for multiple experiments with the same name.")
-parser.add_argument("--loss", type=str, default="double", choices=["double", "single"],
-                    help="whether double or single DDPG loss should be used. Default=double")
-parser.add_argument("--soft_update", action="store_true",
-                    help="whether soft-update should be used with double DDPG loss.")
 parser.add_argument(
     "--loss_function", type=str, default="smooth_l1", choices=["l1", "l2", "smooth_l1"],
     help="loss function for the value network. Either one of l1, l2 or smooth_l1 (default)."
@@ -132,7 +136,7 @@ parser.add_argument("--async_collection", action="store_true",
                          "configuration while the optimization loop is being done. If the algorithm is trained "
                          "synchronously, data collection and optimization will occur iteratively, not concurrently.")
 
-parser.add_argument("--reward_scaling", type=float, default=1.0,
+parser.add_argument("--reward_scaling", type=float, default=10.0,
                     help="scale of the reward.")
 
 parser.add_argument("--noisy", action="store_true",
@@ -150,10 +154,16 @@ parser.add_argument("--prb", action="store_true",
                     help="whether a Prioritized replay buffer should be used instead of a more basic circular one.")
 parser.add_argument("--init_random_frames", type=int, default=5000,
                     help="Initial number of random frames used before the policy is being used. Default=5000.")
+parser.add_argument("--ou_exploration", action="store_true",
+                    help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
+                         "efficient entropy-based exploration, this should be left for experimentation only.")
 
-parser.add_argument("--init_env_steps", type=int, default=250,
+parser.add_argument("--init_env_steps", type=int, default=1000,
                     help="number of random steps to compute normalizing constants")
-
+parser.add_argument("--double_qvalue", action="store_true",
+                    help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
+                         "use two different qvalue networks trained independently and choose the lowest value "
+                         "predicted to predict the state action value")
 parser.add_argument("--seed", type=int, default=42,
                     help="seed used for the environment, pytorch and numpy.")
 
@@ -163,10 +173,29 @@ env_library_map = {
     "dm_control": DMControlEnv,
 }
 
+
+class InPlaceSampler:
+    def __init__(self, device: Optional[DEVICE_TYPING] = None):
+        self.out = None
+        self.device = torch.device(device)
+
+    def __call__(self, list_of_tds):
+        if self.out is None:
+            self.out = torch.stack(list_of_tds, 0).contiguous()
+            if self.device is not None:
+                self.out = self.out.to(self.device)
+        else:
+            torch.stack(list_of_tds, 0, out=self.out)
+        return self.out
+
+
 if __name__ == "__main__":
     mp.set_start_method("spawn")
 
     args = parser.parse_args()
+
+    if not args.from_vector:
+        raise NotImplementedError("SAC from pixels is currently not implemented. Please use the --from_vector flag.")
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -189,12 +218,14 @@ if __name__ == "__main__":
         raise NotImplementedError
     else:
         loss_kwargs.update({'loss_function': args.loss_function})
-        if args.loss == "single":
-            loss_class = DDPGLoss
-        elif args.loss == "double":
-            loss_class = DoubleDDPGLoss
+        if args.loss == "double":
+            loss_class = DoubleSACLoss
+            loss_kwargs.update({
+                'delay_actor': False,
+                'delay_qvalue': False,
+            })
         else:
-            raise NotImplementedError
+            loss_class = SACLoss
 
 
     def make_transformed_env(video_tag="", writer=None, stats=None):
@@ -274,34 +305,52 @@ if __name__ == "__main__":
     init_env.set_seed(args.seed)
     env_specs = init_env.specs  # TODO: use env.sepcs
     linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
-    # Create the actor network. For dqn, the actor is actually a Q-value-network. make_actor will figure out that
+    if args.noisy:
+        warn("the --noisy flag should be used cautiously with SAC as it is not a custom feature of this algorithm.")
 
-    actor_model, value_model = make_ddpg_actor(
-        env_specs=env_specs,
-        atoms=args.atoms if args.distributional else None,
-        from_pixels=not args.from_vector,
+    out = make_sac_model(
+        action_spec=env_specs["action_spec"],
         actor_net_kwargs={
-            "mlp_net_kwargs": {
-                "layer_class": linear_layer_class},
+            "layer_class": linear_layer_class,
+        },
+        qvalue_net_kwargs={
+            "layer_class": linear_layer_class
         },
         value_net_kwargs={
-            "mlp_net_kwargs": {
-                "layer_class": linear_layer_class},
+            "layer_class": linear_layer_class
         },
+        double_qvalue=args.double_qvalue,
     )
+    if args.double_qvalue:
+        actor_model, qvalue_model, qvalue_model_bis, value_model = out
+        qvalue_model_bis = qvalue_model_bis.to(device)
+    else:
+        actor_model, qvalue_model, value_model = out
+        qvalue_model_bis = None
     actor_model = actor_model.to(device)
+    qvalue_model = qvalue_model.to(device)
     value_model = value_model.to(device)
 
-    actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-        actor_model,
-        annealing_num_steps=annealing_frames).to(device)
+    # in_keys = set(actor_model.in_keys).union(critic_model.in_keys).union(value_model.in_keys)
+
+    if args.ou_exploration:
+        actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
+            actor_model,
+            annealing_num_steps=annealing_frames).to(device)
+    else:
+        actor_model_explore = actor_model
 
     with torch.no_grad():
         td = init_env.reset()
         td_device = td.to(device)
         td_device = td_device.unsqueeze(0)
+
         td_device = actor_model(td_device)  # for init
         value_model(td_device)  # for init
+        qvalue_model(td_device)  # for init
+        if args.double_qvalue:
+            qvalue_model_bis(td_device)  # for init
+
         td = td_device.squeeze(0).to("cpu")
         t0 = time.time()
         init_env.step(td)  # for sanity check
@@ -330,8 +379,8 @@ if __name__ == "__main__":
         ms = MultiStep(gamma=gamma, n_steps_max=args.n_steps_return, )
     else:
         ms = None
-    
-    args.collector_devices = args.collector_devices if len(args.collector_devices)>1 else args.collector_devices[0]
+
+    args.collector_devices = args.collector_devices if len(args.collector_devices) > 1 else args.collector_devices[0]
     collector_helper_kwargs = {
         "env_fns": make_transformed_env if args.env_per_collector == 1 else make_parallel_env,
         "env_kwargs": {'stats': stats},
@@ -352,16 +401,30 @@ if __name__ == "__main__":
     collector.set_seed(args.seed)
 
     if not args.prb:
-        buffer = ReplayBuffer(args.buffer_size, collate_fn=lambda x: torch.stack(x, 0), pin_memory=device != "cpu")
+        buffer = ReplayBuffer(
+            args.buffer_size,
+            collate_fn=InPlaceSampler(device),
+            pin_memory=device != "cpu")
     else:
-        buffer = TensorDictPrioritizedReplayBuffer(args.buffer_size, alpha=0.7, beta=0.5,
-                                                   # collate_fn=lambda x: td_stack(x, 0, contiguous=True),
-                                                   collate_fn=lambda x: torch.stack(x, 0).contiguous(),
-                                                   pin_memory=device != "cpu",
-                                                  prefetch=4)
+        buffer = TensorDictPrioritizedReplayBuffer(
+            args.buffer_size,
+            alpha=0.7,
+            beta=0.5,
+            collate_fn=InPlaceSampler(device),
+            pin_memory=device != "cpu",
+        )
 
     pbar = tqdm.tqdm(total=args.total_frames)
-    params = list(actor_model.parameters()) + list(value_model.parameters())
+    loss_module = loss_class(
+        actor_network=actor_model,
+        qvalue_network=qvalue_model,
+        value_network=value_model,
+        qvalue_network_bis=qvalue_model_bis,
+        gamma=gamma,
+        **loss_kwargs
+    )
+
+    params = list(loss_module.parameters())
     optim = torch.optim.Adam(
         params=params,
         lr=args.lr, weight_decay=args.wd
@@ -374,7 +437,7 @@ if __name__ == "__main__":
     gv = 0.0
 
     log_dir = "/".join(
-        ["ddpg_logging", exp_name, str(datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")), str(uuid.uuid1())])
+        ["sac_logging", exp_name, str(datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")), str(uuid.uuid1())])
     if args.record_video:
         video_tag = log_dir + "/"
     else:
@@ -391,20 +454,21 @@ if __name__ == "__main__":
     t_collection = 0.0
     _t_collection = time.time()
 
-    loss_module = loss_class(
-        actor_model, value_model, gamma=gamma, **loss_kwargs
-    )
     target_net_updater = None
+
+    # TODO: double loss
     if args.loss == "double":
         if args.soft_update:
             target_net_updater = SoftUpdate(loss_module, 1 - 1 / args.value_network_update_interval)
         else:
             target_net_updater = HardUpdate(loss_module, args.value_network_update_interval)
+        # assert len(target_net_updater.net_pairs) == 3, "length of target_net_updater nets should be 3"
         print(f"optim_count: {optim_count}, updating target network")
         target_net_updater.init_()
     else:
         assert not args.soft_update, "soft-update is supposed to be used with double DDPG loss. " \
                                      "Consider using --loss=double or discarding the soft_update flag."
+
     i = -1
     for b in collector:
         i += 1
@@ -423,7 +487,6 @@ if __name__ == "__main__":
                 f"gn: {gv:4.2f}, "
                 f"frames: {frame_count}, "
                 f"optims: {optim_count}, "
-                f"eps: {actor_model_explore.eps.item():4.2f}, "
                 f"#rb: {len(buffer)}, "
                 f"optim: {t_optim:4.2f}s, collection: {t_collection:4.2f}s"
             )
@@ -448,7 +511,7 @@ if __name__ == "__main__":
                 # logging
                 if optim_count > 0 and ((optim_count % args.log_interval) == 0 or optim_count == 1):
                     print("recording")
-                    with torch.no_grad():
+                    with torch.no_grad(), set_exploration_mode("mode"):
                         actor_model.eval()
                         td_record = env_record.rollout(
                             policy=actor_model, n_steps=args.record_steps,
@@ -460,29 +523,32 @@ if __name__ == "__main__":
                     if init_rewards_noexplore is None:
                         init_rewards_noexplore = rewards_noexplore
                     writer.add_scalar("loss", loss.item(), frame_count)
-                    writer.add_scalar("loss_actor", loss_actor.item(), frame_count)
-                    writer.add_scalar("loss_value", loss_value.item(), frame_count)
+                    writer.add_scalar("actor_loss", actor_loss.item(), frame_count)
+                    writer.add_scalar("qvalue_loss", qvalue_loss.item(), frame_count)
+                    writer.add_scalar("value_loss", value_loss.item(), frame_count)
                     writer.add_scalar("reward_avg", reward_avg, frame_count)
                     writer.add_scalar("rewards_noexplore", rewards_noexplore, frame_count)
                     writer.add_scalar("grad norm", gv, frame_count)
                     torch.save(
                         {
-                            "net": loss_module.value_network.state_dict(),
-                            "target_net": loss_module.target_value_network.state_dict(),
+                            "actor_net": loss_module.actor_network.state_dict(),
+                            "qnet": loss_module.qvalue_network.state_dict(),
+                            "vnet": loss_module.value_network.state_dict(),
                         },
-                        log_dir + "/ddpg_nets.t",
+                        log_dir + "/sac_nets.t",
                     )
 
                 optim_count += 1
 
                 # Sample from buffer
                 td = buffer.sample(args.batch_size)
-                
+
                 # Train value network
-                loss_actor, loss_value = loss_module(td)
-                loss = loss_actor.mean() + loss_value.mean()
+                actor_loss, qvalue_loss, value_loss = loss_module(td)
+
                 if args.prb:
                     buffer.update_priority(td)
+                loss = actor_loss + qvalue_loss + value_loss
                 loss.backward()
                 gv = torch.nn.utils.clip_grad.clip_grad_norm_(
                     params, args.grad_clip_norm
@@ -491,9 +557,10 @@ if __name__ == "__main__":
                 optim.zero_grad()
                 if target_net_updater is not None:
                     target_net_updater.step()
-            for _ in range(b.numel()):
-                # 1 step per frame
-                actor_model_explore.step()
+            if args.ou_exploration:
+                for _ in range(b.numel()):
+                    # 1 step per frame
+                    actor_model_explore.step()
         _t_optim = time.time() - _t_optim
         t_optim = t_optim * 0.9 + _t_optim * 0.1
         _t_collection = time.time()

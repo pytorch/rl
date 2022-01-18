@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Union
 
 import pkg_resources
 from torch.autograd.grad_mode import _DecoratorContextManager
@@ -131,11 +131,23 @@ SUPPORTED_LIBRARIES = {
     "gym-super-mario-bros": _check_mario(),
 }
 
-EXPLORATION_MODE = False
+EXPLORATION_MODE = None
 
 
 class set_exploration_mode(_DecoratorContextManager):
-    def __init__(self, mode: bool = True):
+    """
+    Sets the exploration mode of all ProbabilisticOperators to the desired mode.
+
+    Args:
+        mode (str): mode to use when the policy is being called.
+
+    Examples:
+        >>> policy = Actor(action_spec, mapping_operator=network, default_interaction_mode="mode")
+        >>> env.rollout(policy=policy, n_steps=100)  # rollout with the "mode" interaction mode
+        >>> with set_exploration_mode("random"):
+        >>>     env.rollout(policy=policy, n_steps=100)  # rollout with the "random" interaction mode
+    """
+    def __init__(self, mode: str = "mode"):
         super().__init__()
         self.mode = mode
 
@@ -149,5 +161,5 @@ class set_exploration_mode(_DecoratorContextManager):
         EXPLORATION_MODE = self.prev
 
 
-def exploration_mode() -> bool:
+def exploration_mode() -> Union[str, None]:
     return EXPLORATION_MODE

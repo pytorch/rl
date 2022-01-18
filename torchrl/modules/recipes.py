@@ -1,7 +1,8 @@
 from numbers import Number
-from typing import Type, Optional, Tuple, Iterable
+from typing import Type, Optional, Tuple, Iterable, Union
 
 import torch
+from torch import nn
 
 from torchrl.envs.common import Specs
 from torchrl.modules.distributions import (
@@ -10,10 +11,10 @@ from torchrl.modules.distributions import (
     TanhDelta,
     OneHotCategorical,
 )
-from . import ActorCriticOperator
+from . import ActorValueOperator
 from .models.models import DuelingCnnDQNet, DdpgCnnActor, DdpgCnnQNet, DdpgMlpQNet, DdpgMlpActor, MLP
 from .probabilistic_operators import QValueActor, DistributionalQValueActor, Actor, ProbabilisticOperator
-from ..data import TensorSpec
+from ..data import TensorSpec, UnboundedContinuousTensorSpec
 
 DISTRIBUTIONS = {
     "delta": Delta,
@@ -22,7 +23,7 @@ DISTRIBUTIONS = {
     "tanh-delta": TanhDelta,
 }
 
-__all__ = ["make_dqn_actor", "make_ddpg_actor"]
+__all__ = ["make_dqn_actor", "make_ddpg_actor", "make_sac_model"]
 
 
 def make_dqn_actor(
@@ -178,7 +179,8 @@ def make_ddpg_actor(
         value_net_default_kwargs2.update(value_net_kwargs.get('mlp_net_kwargs_net2', {}))
         in_keys = ["observation_vector", "action"]
         out_keys = ["state_action_value"]
-        q_net = DdpgMlpQNet(mlp_net_kwargs_net1=value_net_default_kwargs1, mlp_net_kwargs_net2=value_net_default_kwargs2)
+        q_net = DdpgMlpQNet(mlp_net_kwargs_net1=value_net_default_kwargs1,
+                            mlp_net_kwargs_net2=value_net_default_kwargs2)
 
     value = state_class(
         in_keys=in_keys,
@@ -192,12 +194,12 @@ def make_ddpg_actor(
     return actor, value
 
 
-def make_actor_critic_model(
+def make_actor_value_model(
         spec: TensorSpec,
         in_keys: Optional[Iterable[str]] = None,
-        **kwargs) -> ActorCriticOperator:
+        **kwargs) -> ActorValueOperator:
     """
-    Actor-critic model constructor helper function.
+    Actor-value model constructor helper function.
     Currently constructs MLP networks with immutable default arguments as described in "Proximal Policy Optimization
     Algorithms", https://arxiv.org/abs/1707.06347
     Other configurations can easily be implemented by modifying this function at will.
@@ -227,12 +229,117 @@ def make_actor_critic_model(
         out_features=1,
     )
     policy_distribution_class = TanhNormal
-    return ActorCriticOperator(spec=spec,
-                               in_keys=in_keys,
-                               common_mapping_operator=common_mapping_operator,
-                               policy_operator=policy_operator,
-                               value_operator=value_operator,
-                               policy_distribution_class=policy_distribution_class,
-                               policy_interaction_mode="random",
-                               **kwargs
-                               )
+    return ActorValueOperator(spec=spec,
+                              in_keys=in_keys,
+                              common_mapping_operator=common_mapping_operator,
+                              policy_operator=policy_operator,
+                              value_operator=value_operator,
+                              policy_distribution_class=policy_distribution_class,
+                              policy_interaction_mode="random",
+                              **kwargs
+                              )
+
+
+def make_sac_model(
+        action_spec: TensorSpec,
+        in_keys: Optional[Iterable[str]] = None,
+        actor_net_kwargs=None,
+        qvalue_net_kwargs=None,
+        value_net_kwargs=None,
+        double_qvalue=True,
+        **kwargs) -> Union[
+    Tuple[Actor, ProbabilisticOperator, ProbabilisticOperator],
+    Tuple[Actor, ProbabilisticOperator, ProbabilisticOperator, ProbabilisticOperator]
+]:
+    """
+    Actor, Q-value and value model constructor helper function for SAC.
+    Follows default parameters proposed in SAC original paper: https://arxiv.org/pdf/1801.01290.pdf.
+    Other configurations can easily be implemented by modifying this function at will.
+
+    Args:
+        action_spec (TensorSpec): action_spec descriptor
+        in_keys (Iterable[str], optional):
+            default: ["observation_vector"]
+        **kwargs: kwargs to be passed to the ActorCriticOperator.
+
+    Returns: A joined ActorCriticOperator.
+
+    """
+    if actor_net_kwargs is None:
+        actor_net_kwargs = {}
+    if value_net_kwargs is None:
+        value_net_kwargs = {}
+    if qvalue_net_kwargs is None:
+        qvalue_net_kwargs = {}
+
+    if in_keys is None:
+        in_keys = ["observation_vector"]
+
+    actor_net_kwargs_default = {
+        'num_cells': [256, 256],
+        'out_features': 2 * action_spec.shape[-1],
+        'activation_class': nn.ELU,
+    }
+    actor_net_kwargs_default.update(actor_net_kwargs)
+    actor_net = MLP(
+        **actor_net_kwargs_default
+    )
+
+    qvalue_net_kwargs_default = {
+        'num_cells': [256, 256],
+        'out_features': 1,
+        'activation_class': nn.ELU,
+    }
+    qvalue_net_kwargs_default.update(qvalue_net_kwargs)
+    qvalue_net = MLP(
+        **qvalue_net_kwargs_default,
+    )
+    if double_qvalue:
+        qvalue_net_bis = MLP(
+            **qvalue_net_kwargs_default
+        )
+
+    value_net_kwargs_default = {
+        'num_cells': [256, 256],
+        'out_features': 1,
+        'activation_class': nn.ELU,
+    }
+    value_net_kwargs_default.update(value_net_kwargs)
+    value_net = MLP(
+        **value_net_kwargs_default,
+    )
+
+    value_spec = UnboundedContinuousTensorSpec()
+
+    actor = Actor(
+        action_spec=action_spec,
+        in_keys=in_keys,
+        mapping_operator=actor_net,
+        distribution_class=TanhNormal,
+        default_interaction_mode="random",
+    )
+    qvalue = ProbabilisticOperator(
+        spec=value_spec,
+        in_keys=["action"] + in_keys,
+        out_keys=["state_action_value"],
+        mapping_operator=qvalue_net,
+        distribution_class=Delta
+    )
+    if double_qvalue:
+        qvalue_bis = ProbabilisticOperator(
+            spec=value_spec,
+            in_keys=["action"] + in_keys,
+            out_keys=["state_action_value"],
+            mapping_operator=qvalue_net_bis,
+            distribution_class=Delta
+        )
+    value = ProbabilisticOperator(
+        spec=value_spec,
+        in_keys=in_keys,
+        out_keys=["state_value"],
+        mapping_operator=value_net,
+        distribution_class=Delta
+    )
+    if double_qvalue:
+        return actor, qvalue, qvalue_bis, value
+    return actor, qvalue, value

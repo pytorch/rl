@@ -50,7 +50,7 @@ class MetaTensor:
 
     def __init__(self, *shape: int,
                  device: Optional[DEVICE_TYPING] = 'cpu',
-                 dtype: torch.dtype = torch.float,
+                 dtype: torch.dtype = torch.get_default_dtype(),
                  _is_shared: bool = False,
                  _is_memmap: bool = False
                  ):
@@ -186,33 +186,26 @@ class MetaTensor:
         return MetaTensor(new_shape, device=self.device, dtype=self.dtype)
 
 
-def _stack_meta(list_of_meta_tensors: Iterable[MetaTensor], dim: int = 0) -> MetaTensor:
+def _stack_meta(list_of_meta_tensors: Iterable[MetaTensor], dim: int = 0, dtype: torch.dtype = torch.float,
+                device: DEVICE_TYPING = "cpu", safe: bool = False) -> MetaTensor:
     if not len(list_of_meta_tensors):
-        return torch.tensor([], device='meta')
-    shape0 = list_of_meta_tensors[0].shape
-    dtype0 = list_of_meta_tensors[0].dtype
-    for tensor in list_of_meta_tensors:
-        if tensor.device != torch.device('meta'):
-            raise RuntimeError(f"Got a tensor with device {tensor.device} when expecting meta tensor")
-        if tensor.shape != shape0:
-            raise RuntimeError(f"Stacking meta tensors of different shapes is not allowed, "
-                               f"got shapes {shape0} and {tensor.shape}")
-        if tensor.dtype != dtype0:
-            raise TypeError(f"Stacking meta tensors of different dtype is not allowed, "
-                            f"got shapes {dtype0} and {tensor.dtype}")
-    shape = []
-    for i in range(len(shape0) + 1):
-        if i == dim:
-            shape.append(len(list_of_meta_tensors))
-        else:
-            shape.append(shape0[0])
-            shape0 = shape0[1:]
-    return torch.zeros(*shape, device='meta', dtype=dtype0)
+        raise RuntimeError("empty list of meta tensors is not supported")
+    shape = list_of_meta_tensors[0].shape
+    if safe:
+        for tensor in list_of_meta_tensors:
+            if tensor.shape != shape:
+                raise RuntimeError(f"Stacking meta tensors of different shapes is not allowed, "
+                                   f"got shapes {shape} and {tensor.shape}")
+            if tensor.dtype != dtype:
+                raise TypeError(f"Stacking meta tensors of different dtype is not allowed, "
+                                f"got shapes {dtype} and {tensor.dtype}")
+    shape = [s for s in shape]
+    shape.insert(dim, len(list_of_meta_tensors))
+    return MetaTensor(*shape, dtype=dtype, device=device)
 
 
 @implements_for_meta(torch.stack)
-def stack_meta(list_of_meta_tensors: Iterable[MetaTensor], dim: int = 0) -> MetaTensor:
-    dtype = list_of_meta_tensors[0].dtype if len(list_of_meta_tensors) else torch.float
+def stack_meta(list_of_meta_tensors: Iterable[MetaTensor], dim: int = 0, safe: bool = False) -> MetaTensor:
+    dtype = list_of_meta_tensors[0].dtype if len(list_of_meta_tensors) else torch.get_default_dtype()
     device = list_of_meta_tensors[0].device if len(list_of_meta_tensors) else torch.device('cpu')
-    _meta = _stack_meta([t._to_meta() for t in list_of_meta_tensors], dim=dim)
-    return MetaTensor(_meta, dtype=dtype, device=device)
+    return _stack_meta(list_of_meta_tensors, dim=dim, dtype=dtype, device=device, safe=safe)

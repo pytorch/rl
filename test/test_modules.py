@@ -6,7 +6,7 @@ from torch import nn
 
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
-from torchrl.modules import QValueActor, ActorCriticOperator
+from torchrl.modules import QValueActor, ActorValueOperator
 from torchrl.modules.models import *
 
 
@@ -95,8 +95,8 @@ def test_actorcritic():
     common_mapping_operator = nn.Linear(3, 4)
     policy_operator = nn.Linear(4, 5)
     value_operator = nn.Linear(4, 1)
-    op = ActorCriticOperator(spec=spec, in_keys=in_keys, common_mapping_operator=common_mapping_operator,
-                             policy_operator=policy_operator, value_operator=value_operator)
+    op = ActorValueOperator(spec=spec, in_keys=in_keys, common_mapping_operator=common_mapping_operator,
+                            policy_operator=policy_operator, value_operator=value_operator)
     td = TensorDict(source={"obs": torch.randn(4, 3)}, batch_size=[4, ])
     td_total = op(td.clone())
     policy_op = op.get_policy_operator()

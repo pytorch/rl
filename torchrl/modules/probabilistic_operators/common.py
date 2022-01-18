@@ -6,6 +6,7 @@ from torch import nn, distributions as d
 
 from torchrl.data import TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.envs.utils import exploration_mode
 from torchrl.modules.distributions import Delta, distributions_maps
 
 __all__ = [
@@ -165,7 +166,7 @@ class ProbabilisticOperator(nn.Module):
         if not len(tensor_dict.batch_size):
             tensor_dict_unsqueezed = tensor_dict.unsqueeze(0)
         dist, *tensors = self.get_dist(tensor_dict_unsqueezed)
-        out_tensor = self._dist_sample(dist)
+        out_tensor = self._dist_sample(dist, interaction_mode=exploration_mode())
         self._write_to_tensor_dict(tensor_dict_unsqueezed, [out_tensor] + list(tensors))
         if self.return_log_prob:
             log_prob = dist.log_prob(out_tensor)
@@ -223,13 +224,13 @@ class ProbabilisticOperator(nn.Module):
             if hasattr(dist, "mode"):
                 return dist.mode
             else:
-                raise NotImplementedError("method {type(dist)}.mode is not implemented")
+                raise NotImplementedError(f"method {type(dist)}.mode is not implemented")
 
         elif interaction_mode == "median":
             if hasattr(dist, "median"):
                 return dist.median
             else:
-                raise NotImplementedError("method {type(dist)}.median is not implemented")
+                raise NotImplementedError(f"method {type(dist)}.median is not implemented")
 
         elif interaction_mode == "mean":
             try:

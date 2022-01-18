@@ -4,13 +4,12 @@ import torch
 from torch import nn, distributions as d
 
 from torchrl.modules.distributions import Delta, OneHotCategorical
-from torchrl.modules.distributions.discrete import rand_one_hot
 from .common import ProbabilisticOperator, ProbabilisticOperatorWrapper
 from ..models.models import DistributionalDQNnet
 
-__all__ = ["Actor", "ActorCriticOperator", "QValueActor", "DistributionalQValueActor", ]
+__all__ = ["Actor", "ActorValueOperator", "QValueActor", "DistributionalQValueActor", ]
 
-from ...data import TensorSpec
+from ...data import TensorSpec, CompositeSpec
 from ...data.tensordict.tensordict import _TensorDict
 
 
@@ -21,6 +20,7 @@ class Actor(ProbabilisticOperator):
     respectively).
 
     """
+
     def __init__(
             self,
             action_spec: TensorSpec,
@@ -52,6 +52,7 @@ class Actor(ProbabilisticOperator):
             **kwargs,
         )
 
+
 class QValueHook:
     """
     Q-Value hook for Q-value policies.
@@ -65,6 +66,7 @@ class QValueHook:
             action component.
 
     """
+
     def __init__(
             self, action_space: str, var_nums: Optional[int] = None,
     ):
@@ -170,6 +172,7 @@ class QValueActor(Actor):
     This class hooks the mapping_operator such that it returns a one-hot encoding of the argmax value.
 
     """
+
     def __init__(self, *args, action_space: int = "one_hot", **kwargs):
         out_keys = [
             "action",
@@ -225,12 +228,11 @@ class DistributionalQValueActor(QValueActor):
             )
 
 
-class ActorCriticOperator(ProbabilisticOperator):
-
+class ActorValueOperator(ProbabilisticOperator):
     """
-    Actor-critic operator.
+    Actor-value operator.
 
-    This class wraps together an actor and a critic that share a common observation embedding network:
+    This class wraps together an actor and a value model that share a common observation embedding network:
                Obs
                 v
         observation_embedding
@@ -351,17 +353,179 @@ class ActorCriticOperator(ProbabilisticOperator):
         return OperatorMaskWrapper(self, "value_po")
 
 
+class ActorCriticOperator(ProbabilisticOperator):
+    """
+    Actor-critic operator.
+
+    This class wraps together an actor and a value model that share a common observation embedding network:
+               Obs
+                v
+        observation_embedding
+            v    |     v
+          actor  |   critic
+            v    |     v
+          action |   value
+
+    To facilitate the workflow, this  class comes with a get_policy_operator() and get_value_operator() methods, which
+    will both return a stand-alone ProbabilisticOperator with the dedicated functionality.
+
+    Args:
+        spec (TensorSpec): spec of the action
+        in_keys (Iterable of str): keys of the input tensordict to be read by the common operator
+        common_mapping_operator (Callable or nn.Module): operator reading the tensordict keys and producing a common
+            embedding that is to be used by the actor and value network sub-modules.
+        policy_operator (Callable or nn.Module): actor sub-module.
+        value_operator (Callable or nn.Module): value network sub-module.
+        policy_distribution_class (Type): distribution class for the policy.
+            default: OneHotCategorical
+        policy_distribution_kwargs (dict, optional): kwargs for the policy dist.
+        value_distribution_class (Type): distribution class for the policy.
+            default: Delta
+        value_distribution_kwargs (dict, optional): kwargs for the value dist.
+        policy_interaction_mode (str): interaction mode for the policy.
+            default: "mode"
+        value_interaction_mode (str): interaction mode for the value network.
+            default: "mode"
+    """
+
+    # TODO: specs for action and value should be different. Use a CompositeSpec?
+
+    def __init__(
+            self,
+            spec: TensorSpec,
+            in_keys: Iterable[str],
+            common_mapping_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
+            policy_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
+            critic_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
+            out_keys: Optional[Iterable[str]] = None,
+            policy_distribution_class: Type = OneHotCategorical,
+            policy_distribution_kwargs: Optional[dict] = None,
+            critic_distribution_class: Type = Delta,
+            critic_distribution_kwargs: Optional[dict] = None,
+            policy_interaction_mode: str = "mode",  # mode, random, mean
+            critic_interaction_mode: str = "mode",  # mode, random, mean
+            **kwargs,
+    ):
+        if out_keys:
+            raise RuntimeError("PolicyValueOperator out_keys are pre-defined and cannot be changed, "
+                               f"got out_keys={out_keys}")
+        critic_out_keys = ["state_action_value"]
+        policy_out_keys = ["action", "action_log_prob"]
+        out_keys = policy_out_keys + critic_out_keys
+        super().__init__(
+            spec=spec,
+            mapping_operator=common_mapping_operator,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            **kwargs,
+        )
+
+        self.critic_po = ProbabilisticOperator(
+            spec,
+            in_keys=["hidden_obs", "action"],
+            out_keys=critic_out_keys,
+            mapping_operator=critic_operator,
+            distribution_class=critic_distribution_class,
+            distribution_kwargs=critic_distribution_kwargs,
+            default_interaction_mode=critic_interaction_mode,
+            **kwargs,
+        )
+        self.policy_po = Actor(
+            spec,
+            in_keys=["hidden_obs"],
+            out_keys=policy_out_keys,
+            mapping_operator=policy_operator,
+            distribution_class=policy_distribution_class,
+            distribution_kwargs=policy_distribution_kwargs,
+            default_interaction_mode=policy_interaction_mode,
+            return_log_prob=True,
+            **kwargs,
+        )
+        self.out_keys = out_keys
+
+    def _get_mapping(self, tensor_dict: _TensorDict) -> _TensorDict:
+        values = [tensor_dict.get(key) for key in self.in_keys]
+        hidden_obs = self.mapping_operator(*values)
+        tensor_dict.set("hidden_obs", hidden_obs)
+        return tensor_dict
+
+    def get_dist(self, tensor_dict: _TensorDict) -> Tuple[d.Distribution, ...]:
+        raise NotImplementedError(
+            "TODO: get_dist for ActorCritic should return a joint distribution over action and value.")
+
+    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
+        self._get_mapping(tensor_dict)
+        self.policy_po(tensor_dict)
+        self.critic_po(tensor_dict)
+        return tensor_dict
+
+    def get_policy_operator(self) -> ProbabilisticOperatorWrapper:
+        """
+
+        Returns a stand-alone policy operator that maps an observation to an action.
+
+        """
+        return OperatorMaskWrapper(self, "policy_po")
+
+    def get_critic_operator(self) -> ProbabilisticOperatorWrapper:
+        """
+
+        Returns a stand-alone critic network operator that maps an observation to a critic estimate.
+
+        """
+        return OperatorMaskWrapper(self, "critic_po")
+
+
+class ActorCriticWrapper(ProbabilisticOperator):
+    def __init__(self, policy_po: ProbabilisticOperator, critic_po: ProbabilisticOperator):
+        in_keys = policy_po.in_keys
+        out_keys = policy_po.out_keys + critic_po.out_keys
+        super().__init__(
+            spec=CompositeSpec(action=policy_po.spec, state_action_value=critic_po.spec),
+            mapping_operator=nn.Identity(),
+            in_keys=in_keys,
+            out_keys=out_keys,
+        )
+        self.policy_po = policy_po
+        self.critic_po = critic_po
+
+    def get_dist(self, tensor_dict: _TensorDict) -> Tuple[d.Distribution, ...]:
+        raise NotImplementedError(
+            "TODO: get_dist for ActorCritic should return a joint distribution over action and value.")
+
+    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
+        self.policy_po(tensor_dict)
+        self.critic_po(tensor_dict)
+        return tensor_dict
+
+    def get_policy_operator(self) -> ProbabilisticOperatorWrapper:
+        """
+
+        Returns a stand-alone policy operator that maps an observation to an action.
+
+        """
+        return self.policy_po
+
+    def get_critic_operator(self) -> ProbabilisticOperatorWrapper:
+        """
+
+        Returns a stand-alone critic network operator that maps a state-action pair to a critic estimate.
+
+        """
+        return self.critic_po
+
 class OperatorMaskWrapper(ProbabilisticOperatorWrapper):
     """
     Given an actor-critic object and a target network (policy or value network), acts as a stand-alone operator with the
     dedicated functionality.
 
     Args:
-        parent_operator (ActorCriticOperator): actor-critic containing the target network
+        parent_operator (ActorValueOperator): actor-critic containing the target network
         target (str): name of the target network. By default, the policy network is named `actor_critic.policy_po` and
             the value network is named `actor_critic.value_po`.
     """
-    def __init__(self, parent_operator: ActorCriticOperator, target: str):
+
+    def __init__(self, parent_operator: ActorValueOperator, target: str):
         super().__init__(getattr(parent_operator, target))
         self.target = target
         self.parent_operator = parent_operator

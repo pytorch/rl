@@ -515,6 +515,32 @@ class _TensorDict:
         idx = [(tuple(slice(None) for _ in range(dim)) + (i,)) for i in range(self.shape[dim])]
         return tuple(self[_idx] for _idx in idx)
 
+    def chunk(self, chunks: int, dim: int = 0) -> Tuple[_TensorDict, ...]:
+        """
+        Attempts to split a tendordict into the specified number of chunks. Each chunk is a view of the input
+        tensordict.
+
+        Args:
+            chunks (int): number of chunks to return
+            dim (int): dimension along which to split the tensordict
+
+        """
+        if chunks < 1:
+            raise ValueError(f"chunks must be a strictly positive integer, got {chunks}.")
+        indices = []
+        _idx_start = 0
+        interval = _idx_end = self.batch_size[dim] // chunks
+        for c in range(chunks):
+            indices.append(slice(_idx_start, _idx_end))
+            _idx_start = _idx_end
+            if c < chunks - 1:
+                _idx_end = _idx_end + interval
+            else:
+                _idx_end = self.batch_size[dim]
+        if dim < 0:
+            dim = len(self.batch_size)+dim
+        return tuple(self[(*[slice(None) for _ in range(dim)], idx)] for idx in indices)
+
     def clone(self, recursive: bool = True) -> _TensorDict:
         """
         Clones a _TensorDict subclass instance onto a new TensorDict.
@@ -846,6 +872,7 @@ class TensorDict(_TensorDict):
             source: Optional[Union[_TensorDict, dict]] = None,
             batch_size: Optional[Union[list, tuple, torch.Size, int]] = None,
             device: Optional[DEVICE_TYPING] = None,
+            _meta_source: Optional[dict] = None,
     ):
         self._tensor_dict = dict()
         self._tensor_dict_meta = OrderedDict()
@@ -876,7 +903,8 @@ class TensorDict(_TensorDict):
                     raise TypeError(f"Expected value to be one of types {_accepted_classes} but got {type(value)}")
                 if map_item_to_device:
                     value = value.to(device)
-                self.set(key, value)
+                _meta_val = None if _meta_source is None else _meta_source[key]
+                self.set(key, value, _meta_val=_meta_val)
         self._check_batch_size()
         self._check_device()
 
@@ -998,8 +1026,16 @@ class TensorDict(_TensorDict):
             self._batch_dims = _batch_dims
         return TensorDict(source=d, batch_size=_batch_size)
 
-    def set(self, key: str, value: COMPATIBLE_TYPES, inplace: bool = True, _run_checks: bool = True) -> TensorDict:
-        """Sets a value in the TensorDict. If inplace=True (default), if the key already exists, set will call set_ (in place setting). 
+    def set(
+            self,
+            key: str,
+            value: COMPATIBLE_TYPES,
+            inplace: bool = True,
+            _run_checks: bool = True,
+            _meta_val: Optional[MetaTensor] = None
+    ) -> TensorDict:
+        """
+        Sets a value in the TensorDict. If inplace=True (default), if the key already exists, set will call set_ (in place setting).
         """
         value = self._process_tensor(
             value, check_tensor_shape=_run_checks, check_shared=_run_checks,
@@ -1007,7 +1043,7 @@ class TensorDict(_TensorDict):
         if key in self._tensor_dict and inplace:
             return self.set_(key, value)
         self._tensor_dict[key] = value
-        self._tensor_dict_meta[key] = MetaTensor(value)
+        self._tensor_dict_meta[key] = MetaTensor(value) if _meta_val is None else _meta_val
         return self
 
     def del_(self, key: str) -> TensorDict:
@@ -1271,7 +1307,8 @@ def cat(list_of_tensor_dicts: Iterable[_TensorDict], dim: int = 0, device: DEVIC
 
 
 @implements_for_td(torch.stack)
-def stack(list_of_tensor_dicts: Sequence[_TensorDict], dim: int = 0, out: _TensorDict = None, strict=False, contiguous=False) -> _TensorDict:
+def stack(list_of_tensor_dicts: Sequence[_TensorDict], dim: int = 0, out: _TensorDict = None, strict=False,
+          contiguous=False) -> _TensorDict:
     if not list_of_tensor_dicts:
         raise RuntimeError("list_of_tensor_dicts cannot be empty")
     if dim < 0:
@@ -1293,7 +1330,7 @@ def stack(list_of_tensor_dicts: Sequence[_TensorDict], dim: int = 0, out: _Tenso
         if contiguous:
             out_td = TensorDict({
                 key: torch.stack([td.get(key) for td in list_of_tensor_dicts], dim)
-            for key in keys}, batch_size=batch_size)
+                for key in keys}, batch_size=batch_size)
         else:
             out_td = LazyStackedTensorDict(*list_of_tensor_dicts, stack_dim=dim, )
     else:
@@ -1304,13 +1341,13 @@ def stack(list_of_tensor_dicts: Sequence[_TensorDict], dim: int = 0, out: _Tenso
         if strict:
             out_keys = set(out_td.keys())
             in_keys = set(keys)
-            if len(out_keys-in_keys)>0:
+            if len(out_keys - in_keys) > 0:
                 raise RuntimeError("The output tensordict has keys that are missing in the tensordict that has to be "
-                                   f"written: {out_keys-in_keys}. As per the call to `stack(..., strict=True)`, this "
+                                   f"written: {out_keys - in_keys}. As per the call to `stack(..., strict=True)`, this "
                                    f"is not permitted.")
-            elif len(in_keys-out_keys)>0:
+            elif len(in_keys - out_keys) > 0:
                 raise RuntimeError("The resulting tensordict has keys that are missing in its destination: "
-                                   f"{in_keys-out_keys}. As per the call to `stack(..., strict=True)`, this "
+                                   f"{in_keys - out_keys}. As per the call to `stack(..., strict=True)`, this "
                                    f"is not permitted.")
 
         for key in keys:
@@ -1573,6 +1610,8 @@ class LazyStackedTensorDict(_TensorDict):
         self._batch_size = self._compute_batch_size(batch_size, stack_dim, N)
         self._batch_dims = len(self._batch_size)
         self._update_valid_keys()
+        self._meta_dict = dict()
+        self._meta_dict.update({k: value for k, value in self.items_meta()})
 
     @property
     def device(self) -> DEVICE_TYPING:
@@ -1648,6 +1687,8 @@ class LazyStackedTensorDict(_TensorDict):
         return torch.stack(tensors, self.stack_dim)
 
     def _get_meta(self, key: str, **kwargs) -> MetaTensor:
+        if key in self._meta_dict:
+            return self._meta_dict[key]
         if key not in self.valid_keys:
             raise KeyError(f"key {key} not found in {list(self._valid_keys)}")
         return torch.stack([td._get_meta(key, **kwargs) for td in self.tensor_dicts], self.stack_dim)
@@ -1656,7 +1697,11 @@ class LazyStackedTensorDict(_TensorDict):
         return False
 
     def contiguous(self) -> TensorDict:
-        return TensorDict({key:value for key, value in self.items()}, batch_size=self.batch_size)
+        return TensorDict(
+            source={key: value for key, value in self.items()},
+            batch_size=self.batch_size,
+            _meta_source={k: value for k, value in self.items_meta()}
+        )
 
     def clone(self, recursive: bool = True) -> LazyStackedTensorDict:
         if recursive:

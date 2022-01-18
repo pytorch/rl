@@ -1,5 +1,4 @@
 import datetime
-import math
 import os.path
 import time
 import uuid
@@ -26,7 +25,7 @@ from torchrl.data.transforms import (
     DoubleToFloat,
     CatTensors, )
 from torchrl.envs import GymEnv, RetroEnv, DMControlEnv
-from torchrl.modules.recipes import make_actor_critic_model
+from torchrl.modules.recipes import make_actor_value_model
 from torchrl.objectives.costs.ppo import ClipPPOLoss, KLPENPPOLoss
 from torchrl.objectives.returns.gae import GAE
 from torchrl.record.recorder import VideoRecorder, TensorDictRecorder
@@ -214,7 +213,7 @@ if __name__ == "__main__":
     env.set_seed(args.seed)
     env_specs = env.specs  # TODO: use env.sepcs
     action_spec = env_specs["action_spec"]
-    actor_critic_model = make_actor_critic_model(action_spec, save_dist_params=args.loss_class == "kl").to(device)
+    actor_critic_model = make_actor_value_model(action_spec, save_dist_params=args.loss_class == "kl").to(device)
     actor_model = actor_critic_model.get_policy_operator()
     critic_model = actor_critic_model.get_value_operator()
 

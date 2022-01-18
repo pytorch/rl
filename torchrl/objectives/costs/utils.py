@@ -7,6 +7,24 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.envs.utils import step_tensor_dict
+from torchrl.modules import ProbabilisticOperator
+
+
+class _context_manager():
+    def __init__(self, value=True):
+        self.value = value
+        self.prev = []
+
+    def __call__(self, func):
+        @functools.wraps(func)
+        def decorate_context(*args, **kwargs):
+            with self:
+                return func(*args, **kwargs)
+
+        return decorate_context
+
 
 def distance_loss(v1: torch.Tensor, v2: torch.Tensor, loss_function: str) -> torch.Tensor:
     """
@@ -59,13 +77,17 @@ class _TargetNetUpdate:
         loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
 
     """
-    def __init__(self, loss_module: Union["DQNLoss", "DDPGLoss"]):
-        self.has_target_actor = hasattr(loss_module, '_target_actor_network')
-        net = loss_module.value_network
-        target_net = loss_module.target_value_network
-        if self.has_target_actor:
-            net = nn.ModuleList((net, loss_module.actor_network))
-            target_net = nn.ModuleList((target_net, loss_module.target_actor_network))
+
+    def __init__(self, loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"], ):
+        self.net_pairs = {
+            key: '_target_' + key for key in ("actor_network", "value_network", "qvalue_network",) if
+            hasattr(loss_module, '_target_' + key)
+        }
+        if not len(self.net_pairs):
+            raise RuntimeError("No module found")
+        net = nn.ModuleList([getattr(loss_module, key) for key in self.net_pairs])
+        target_net = nn.ModuleList([getattr(loss_module, value) for key, value in self.net_pairs.items()])
+
         self.net = net
         self.target_net = target_net
 
@@ -89,7 +111,7 @@ class SoftUpdate(_TargetNetUpdate):
             default: 0.999
     """
 
-    def __init__(self, loss_module: Union["DQNLoss", "DDPGLoss"], eps: Number = 0.999):
+    def __init__(self, loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"], eps: Number = 0.999):
         if not (eps < 1.0 and eps > 0.0):
             raise ValueError(f"Got eps = {eps} when it was supposed to be between 0 and 1.")
         super(SoftUpdate, self).__init__(loss_module)
@@ -114,7 +136,9 @@ class HardUpdate(_TargetNetUpdate):
         value_network_update_interval (scalar): how often the target network should be updated.
             default: 1000
     """
-    def __init__(self, loss_module: Union["DQNLoss", "DDPGLoss"], value_network_update_interval: Number = 1000):
+
+    def __init__(self, loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
+                 value_network_update_interval: Number = 1000):
         super(HardUpdate, self).__init__(loss_module)
         self.value_network_update_interval = value_network_update_interval
         self.counter = 0
@@ -125,7 +149,67 @@ class HardUpdate(_TargetNetUpdate):
                 f'{self.__class__.__name__} must be initialized (`{self.__class__.__name__}.init_()`) before calling step()')
         if self.counter == self.value_network_update_interval:
             self.counter = 0
-            print("updating target value network")
             self.target_net.load_state_dict(self.net.state_dict())
         else:
             self.counter += 1
+
+
+class hold_out_net(_context_manager):
+    def __init__(self, network: nn.Module) -> None:
+        self.network = network
+        try:
+            self.p_example = next(network.parameters())
+        except StopIteration as err:
+            raise RuntimeError("hold_out_net requires the network parameter set to be non-empty.")
+        self._prev_state = []
+
+    def __enter__(self) -> None:
+        self._prev_state.append(self.p_example.requires_grad)
+        self.network.requires_grad_(False)
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.network.requires_grad_(self._prev_state.pop())
+
+
+@torch.no_grad()
+def next_state_value(
+        tensor_dict: _TensorDict, operator: ProbabilisticOperator,
+        next_val_key: str = "state_action_value", gamma: Number = 0.99,
+) -> torch.Tensor:
+    """
+    Computes the next state value (without gradient) to compute a target for the MSE loss
+        L = Sum[ (q_value - target_value)^2 ]
+    The target value is computed as
+        r + gamma ** n_steps_to_next * value_next_state
+    If the reward is the immediate reward, n_steps_to_next=1. If N-steps rewards are used, n_steps_to_next is gathered
+    from the input tensordict.
+
+    Args:
+        tensor_dict (_TensorDict): Tensordict containing a reward and done key (and a n_steps_to_next key for n-steps
+            rewards).
+        operator (ProbabilisticOperator): the value function operator. Should write a 'next_val_key' key-value in the
+            input tensordict when called.
+        next_val_key (str): key where the next value will be written.
+            Default: 'state_action_value'
+        gamma (Number): return discount rate.
+            default: 0.99
+
+    Returns:
+        a Tensor of the size of the input tensordict containing the predicted value state.
+    """
+    try:
+        steps_to_next_obs = tensor_dict.get("steps_to_next_obs").squeeze(-1)
+    except KeyError:
+        steps_to_next_obs = 1
+
+    rewards = tensor_dict.get("reward").squeeze(-1)
+    done = tensor_dict.get("done").squeeze(-1)
+    next_td = step_tensor_dict(tensor_dict)  # next_observation -> observation
+    next_td = next_td.select(*operator.in_keys)
+    operator(next_td)
+    pred_next_val_detach = next_td.get(next_val_key).squeeze(-1)
+    done = done.to(torch.float)
+    target_value = (1 - done) * pred_next_val_detach
+    rewards = rewards.to(torch.float)
+    target_value = rewards + (gamma ** steps_to_next_obs) * target_value
+    return target_value

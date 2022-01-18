@@ -10,6 +10,7 @@ from torchrl.modules import DistributionalQValueActor, QValueActor
 from torchrl.modules.distributions.continuous import Delta
 from torchrl.modules.models.models import MLP
 from torchrl.objectives import DQNLoss, DoubleDQNLoss, DistributionalDQNLoss, DistributionalDoubleDQNLoss
+from torchrl.objectives.costs.utils import hold_out_net
 
 
 def get_devices():
@@ -31,7 +32,7 @@ class TestDQN:
 
     def _create_mock_distributional_actor(self, batch=2, obs_dim=3, action_dim=4, atoms=5, vmin=1, vmax=5):
         # Actor
-        action_spec = MultOneHotDiscreteTensorSpec([atoms]*action_dim)
+        action_spec = MultOneHotDiscreteTensorSpec([atoms] * action_dim)
         support = torch.linspace(vmin, vmax, atoms, dtype=torch.float)
         mapping_operator = MLP(obs_dim, (atoms, action_dim))
         actor = DistributionalQValueActor(action_spec=action_spec, mapping_operator=mapping_operator, support=support,
@@ -137,6 +138,41 @@ class TestDQN:
         loss = loss_fn(td)
         loss.backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
+
+
+def test_hold_out():
+    net = torch.nn.Linear(3, 4)
+    x = torch.randn(1, 3)
+    x_rg = torch.randn(1, 3, requires_grad=True)
+    y = net(x)
+    assert y.requires_grad
+    with hold_out_net(net):
+        y = net(x)
+        assert not y.requires_grad
+        y = net(x_rg)
+        assert y.requires_grad
+
+    y = net(x)
+    assert y.requires_grad
+
+    # nested case
+    with hold_out_net(net):
+        y = net(x)
+        assert not y.requires_grad
+        with hold_out_net(net):
+            y = net(x)
+            assert not y.requires_grad
+            y = net(x_rg)
+            assert y.requires_grad
+
+    y = net(x)
+    assert y.requires_grad
+
+    # exception
+    with pytest.raises(RuntimeError, match="hold_out_net requires the network parameter set to be non-empty."):
+        net = torch.nn.Sequential()
+        with hold_out_net(net):
+            pass
 
 
 if __name__ == "__main__":

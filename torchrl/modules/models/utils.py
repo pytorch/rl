@@ -43,6 +43,7 @@ class Squeeze2dLayer(SqueezeLayer):
     Squeezes the last two singleton dimensions of an input tensor.
 
     """
+
     def __init__(self):
         super().__init__((-1, -2))
 
@@ -56,6 +57,7 @@ class SquashDims(nn.Module):
         ndims_in (int): number of dimensions to be flattened.
             default = 3
     """
+
     def __init__(self, ndims_in: int = 3):
         super().__init__()
         self.ndims_in = ndims_in
