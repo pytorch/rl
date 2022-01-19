@@ -77,7 +77,7 @@ parser.add_argument("--frame_skip", type=int, default=4,
                          "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
                          "the actual number of frames retrieved will be 200e6. Default=4.")
 
-parser.add_argument("--frames_per_batch", type=int, default=200,
+parser.add_argument("--frames_per_batch", type=int, default=1000,
                     help="number of steps executed in the environment per collection."
                          "This value represents how many steps will the data collector execute and return in *each*"
                          "environment that has been created in between two rounds of optimization "
@@ -86,11 +86,12 @@ parser.add_argument("--frames_per_batch", type=int, default=200,
                          "settings, which can make the accessing of data a computational bottleneck. "
                          "High values will on the other hand lead to greater tensor sizes in memory and disk to be "
                          "written and read at each global iteration. One should look at the number of frames per second"
-                         "in the log to assess the efficiency of the configuration.")
+                         "in the log to assess the efficiency of the configuration."
+                         "Default=1000")
 
 parser.add_argument("--total_frames", type=int, default=50000000,
-                    help="total number of frames collected for training. Does not account for frame_skip and should"
-                         "be corrected accordingly. Default=50e6.")
+                    help="total number of frames collected for training. Does account for frame_skip (i.e. will be "
+                         "divided by frame_skip and counted accordingly). Default=50e6.")
 parser.add_argument("--annealing_frames", type=int, default=1000000,
                     help="Number of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.")
 parser.add_argument("--num_workers", type=int, default=16,
@@ -160,6 +161,11 @@ if __name__ == "__main__":
     mp.set_start_method("spawn")
 
     args = parser.parse_args()
+
+    ## Adapt all frame counts wrt frame_skip
+    args.total_frames = args.total_frames // args.frame_skip
+    args.frames_per_batch = args.frames_per_batch // args.frame_skip
+    args.annealing_frames = args.annealing_frames // args.frame_skip
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)

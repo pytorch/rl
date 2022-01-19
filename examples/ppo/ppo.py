@@ -55,12 +55,12 @@ parser.add_argument("--loss_class", type=str, default="clip", choices=["clip", "
 parser.add_argument('--training_sub_steps', default=10, type=int,
                     help="number of optimization steps on a batch of rollouts before another round of rollout "
                          "is collected.")
-parser.add_argument("--frames_per_batch", type=int, default=250,
+parser.add_argument("--frames_per_batch", type=int, default=1000,
                     help="number of steps executed in the environment per collection."
                          "This value represents how many steps will the data collector execute and return in *each*"
                          "environment that has been created in between two rounds of optimization "
                          "(see the training_sub_steps above). ")
-parser.add_argument("--max_frames_per_traj", type=int, default=250,
+parser.add_argument("--max_frames_per_traj", type=int, default=1000,
                     help="Number of steps before a reset of the environment is called (if it has not been flagged "
                          "as done).")
 parser.add_argument("--num_workers", type=int, default=16,
@@ -79,7 +79,7 @@ parser.add_argument("--frame_skip", type=int, default=4,
                          "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
                          "the actual number of frames retrieved will be 200e6. Default=4.")
 
-parser.add_argument("--init_env_steps", type=int, default=250,
+parser.add_argument("--init_env_steps", type=int, default=1000,
                     help="number of random steps to compute normalizing constants")
 
 parser.add_argument('--lamda', default=0.95, type=float,
@@ -130,6 +130,10 @@ if __name__ == "__main__":
     mp.set_start_method("spawn")
 
     args = parser.parse_args()
+    args.frames_per_batch = args.frames_per_batch//args.frame_skip
+    args.max_frames_per_traj = args.max_frames_per_traj//args.frame_skip
+    args.init_env_steps = args.init_env_steps//args.frame_skip
+
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
