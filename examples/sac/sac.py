@@ -27,6 +27,7 @@ from torchrl.data.transforms import (
     FiniteTensorDictCheck,
     DoubleToFloat,
     CatTensors,
+    VecNorm,
 )
 from torchrl.envs import GymEnv, RetroEnv, DMControlEnv, ParallelEnv
 from torchrl.envs.utils import set_exploration_mode
@@ -167,6 +168,13 @@ parser.add_argument("--double_qvalue", action="store_true",
 parser.add_argument("--seed", type=int, default=42,
                     help="seed used for the environment, pytorch and numpy.")
 
+parser.add_argument("--vecnorm", action="store_true",
+                    help="Normalizes the environment observation and reward outputs with the running statistics "
+                         "obtained across processes.")
+parser.add_argument("--norm_rewards", action="store_true",
+                    help="If True, rewards will be normalized on the fly. This may interfere with SAC update rule and "
+                         "should be used cautiously.")
+
 env_library_map = {
     "gym": GymEnv,
     "retro": RetroEnv,
@@ -236,8 +244,11 @@ if __name__ == "__main__":
         else:
             loss_class = SACLoss
 
+    vecnorm = args.vecnorm
 
-    def make_transformed_env(video_tag="", writer=None, stats=None):
+
+    def make_transformed_env(video_tag="", writer=None, stats=None, shared_td_norm=None, norm_obs_only=False):
+        norm_obs_only = norm_obs_only or not args.norm_rewards
         env_kwargs = {
             'envname': env_name,
             "device": "cpu",
@@ -259,7 +270,7 @@ if __name__ == "__main__":
                 CatFrames(),
                 ObservationNorm(loc=-1.0, scale=2.0, keys=["next_observation_pixels"]),
             ]
-        if args.reward_scaling != 1.0:
+        if args.reward_scaling != 1.0 and (not vecnorm or norm_obs_only):
             transforms += [RewardScaling(0.0, args.reward_scaling)]
         transforms += [
             FiniteTensorDictCheck(),
@@ -267,15 +278,20 @@ if __name__ == "__main__":
         if env_library is DMControlEnv:
             selected_keys = ["next_" + key for key in keys if key.startswith("observation") and "pixels" not in key]
             if args.from_vector:
-                if stats is None:
-                    stats = {"loc": 0.0, "scale": 1.0}
                 transforms += [
                     CatTensors(keys=selected_keys,
-                               out_key="next_observation_vector"),
-                    ObservationNorm(**stats, keys=["next_observation_vector"], standard_normal=True),
-                    DoubleToFloat(keys=["action", "next_observation_vector", "reward"]),
-                    # DMControl requires double-precision
-                ]
+                               out_key="next_observation_vector"), ]
+                if not vecnorm:
+                    if stats is None:
+                        stats = {"loc": 0.0, "scale": 1.0}
+                    transforms += [ObservationNorm(**stats, keys=["next_observation_vector"], standard_normal=True), ]
+                else:
+                    transforms += [VecNorm(
+                        keys=["next_observation_vector", "reward"] if not norm_obs_only else ["next_observation_vector"],
+                        shared_td=shared_td_norm,
+                        decay=0.9999)]
+                transforms += [
+                    DoubleToFloat(keys=["action", "next_observation_vector", "reward"]), ]
             else:
                 transforms += [
                     CatTensors(keys=selected_keys,
@@ -365,9 +381,12 @@ if __name__ == "__main__":
         init_env.step(td)  # for sanity check
 
         stats = None
-        if args.from_vector:
+        shared_td_norm = None
+        if args.from_vector and not vecnorm:
             td = init_env.rollout(n_steps=args.init_env_steps)
             stats = {"loc": td.get("observation_vector").mean(0), "scale": td.get("observation_vector").std(0)}
+        elif args.from_vector and vecnorm:
+            shared_td_norm = VecNorm.build_td_for_shared_vecnorm(init_env)
 
     actor_model_explore = actor_model_explore.share_memory()
 
@@ -392,7 +411,7 @@ if __name__ == "__main__":
     args.collector_devices = args.collector_devices if len(args.collector_devices) > 1 else args.collector_devices[0]
     collector_helper_kwargs = {
         "env_fns": make_transformed_env if args.env_per_collector == 1 else make_parallel_env,
-        "env_kwargs": {'stats': stats},
+        "env_kwargs": {'stats': stats} if not vecnorm else {"shared_td_norm": shared_td_norm},
         "policy": actor_model_explore,
         "max_steps_per_traj": args.max_frames_per_traj,
         "frames_per_batch": T,
@@ -457,7 +476,10 @@ if __name__ == "__main__":
     env_record = make_transformed_env(
         video_tag=video_tag,
         writer=writer,
-        stats=stats)
+        stats=stats,
+        shared_td_norm=shared_td_norm,
+        norm_obs_only=True,
+    )
     td_test = env_record.rollout(None, 100)
     t_optim = 0.0
     t_collection = 0.0
@@ -506,6 +528,7 @@ if __name__ == "__main__":
         b = b[b.get("mask").squeeze(-1)].cpu()
 
         frame_count += b.numel()
+        total_frame_count = frame_count * args.frame_skip
 
         # Add single events to buffer
         buffer.extend(b)
@@ -522,6 +545,7 @@ if __name__ == "__main__":
                     print("recording")
                     with torch.no_grad(), set_exploration_mode("mode"):
                         actor_model.eval()
+                        env_record.transform.eval()
                         td_record = env_record.rollout(
                             policy=actor_model, n_steps=args.record_steps,
                         )
@@ -531,13 +555,13 @@ if __name__ == "__main__":
                     rewards_noexplore = td_record.get("reward").mean().item()
                     if init_rewards_noexplore is None:
                         init_rewards_noexplore = rewards_noexplore
-                    writer.add_scalar("loss", loss.item(), frame_count)
-                    writer.add_scalar("actor_loss", actor_loss.item(), frame_count)
-                    writer.add_scalar("qvalue_loss", qvalue_loss.item(), frame_count)
-                    writer.add_scalar("value_loss", value_loss.item(), frame_count)
-                    writer.add_scalar("reward_avg", reward_avg, frame_count)
-                    writer.add_scalar("rewards_noexplore", rewards_noexplore, frame_count)
-                    writer.add_scalar("grad norm", gv, frame_count)
+                    writer.add_scalar("loss", loss.item(), total_frame_count)
+                    writer.add_scalar("actor_loss", actor_loss.item(), total_frame_count)
+                    writer.add_scalar("qvalue_loss", qvalue_loss.item(), total_frame_count)
+                    writer.add_scalar("value_loss", value_loss.item(), total_frame_count)
+                    writer.add_scalar("reward_avg", reward_avg, total_frame_count)
+                    writer.add_scalar("rewards_noexplore", rewards_noexplore, total_frame_count)
+                    writer.add_scalar("grad norm", gv, total_frame_count)
                     torch.save(
                         {
                             "actor_net": loss_module.actor_network.state_dict(),

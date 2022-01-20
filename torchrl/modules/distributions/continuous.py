@@ -66,7 +66,7 @@ class TanhNormal(D.TransformedDistribution):
             upscale: Union[torch.Tensor, Number] = 5.0,
             min: Union[torch.Tensor, Number] = -1.0,
             max: Union[torch.Tensor, Number] = 1.0,
-            scale_mapping: str = "biased_softplus_1.0",
+            scale_mapping: str = "biased_softplus_0.1",
             event_dims: int = 1,
             tanh_loc: bool = True,
             tanh_scale: bool = False,

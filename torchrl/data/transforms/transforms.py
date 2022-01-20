@@ -12,7 +12,7 @@ from torchvision.transforms.functional_tensor import (
 from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec, CompositeSpec, BoundedTensorSpec, ContinuousBox, \
     NdUnboundedContinuousTensorSpec, TensorSpec
 from torchrl.data.tensordict.tensordict import TensorDict, _TensorDict
-from torchrl.envs.common import _EnvClass
+from torchrl.envs.common import _EnvClass, make_tensor_dict
 from . import functional as F
 from .utils import FiniteTensor
 
@@ -35,6 +35,7 @@ __all__ = [
     "NoopResetEnv",
     "BinerizeReward",
     "PinMemoryTransform",
+    "VecNorm",
 ]
 
 from ...envs.utils import step_tensor_dict
@@ -805,7 +806,7 @@ class DoubleToFloat(Transform):
 
 class CatTensors(Transform):
     """
-    Concatenates several keys toghether in a single tensor.
+    Concatenates several keys in a single tensor.
     This is especially useful if multiple keys describe a single state (e.g. "observation_position" and
     "observation_velocity")
 
@@ -926,13 +927,177 @@ class NoopResetEnv(Transform):
 
         return step_tensor_dict(tensor_dict)
 
+
 class PinMemoryTransform(Transform):
     """
     Calls pin_memory on the tensordict to facilitate writing on CUDA devices.
 
     """
+
     def __init__(self):
         super().__init__([])
 
     def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
         return tensor_dict.pin_memory()
+
+
+def _sum_left(val, dest):
+    while val.ndimension() > dest.ndimension():
+        val = val.sum(0)
+    return val
+
+
+class VecNorm(Transform):
+    """
+    Moving average normalization layer for torchrl environments.
+    VecNorm keeps track of the summary statistics of a dataset to standardize it on-the-fly.
+    If the transform is in 'eval' mode, the running statistics are not updated.
+
+    If multiple processes are running a similar environment, one can pass a _TensorDict instance that is placed in
+    shared memory: if so, every time the normalization layer is queried it will update the values for all processes that
+    share the same reference.
+
+    Args:
+        keys (iterable of str, optional): keys to be updated.
+            default: ["next_observation", "reward"]
+        shared_td (_TensorDict, optional): A shared tensordict containing the keys of the transform.
+        decay (number): decay rate of the moving average.
+            default: 0.99
+        eps (number): lower bound of the running standard deviation (for numerical underflow).
+            default: 1e-4
+
+    Examples:
+        >>> t = VecNorm()
+        >>> env = make_env()
+        >>> env = TransformedEnv(env, t)
+        >>> tds = []
+        >>> for _ in range(1000):
+        >>>     td = env.rand_step()
+        >>>     if td.get("done"):
+        >>>         env.reset()
+        >>>     tds.append(td)
+        >>> tds = torch.stack(tds, 0)
+        >>> print(tds.get("next_observation").mean(0), tds.get("next_observation").std(0)) # should print values around 0 and 1, respectively
+    """
+    inplace = True
+
+    def __init__(
+            self,
+            keys: Optional[Iterable[str]] = None,
+            shared_td: Optional[_TensorDict] = None,
+            decay: Number = 0.9999,
+            eps: Number = 1e-4
+    ) -> None:
+        if keys is None:
+            keys = ["next_observation", "reward"]
+        super().__init__(keys)
+        self._td = shared_td
+        if shared_td is not None and not (shared_td.is_shared() or shared_td.is_memmap()):
+            raise RuntimeError("shared_td must be either in shared memory or a memmap tensordict.")
+        if shared_td is not None:
+            for key in keys:
+                if (key + "_sum" not in shared_td.keys()) or \
+                        (key+"_ssq" not in shared_td.keys()) or \
+                        (key+"_count" not in shared_td.keys()):
+                    raise KeyError(f"key {key} not present in the shared tensordict with keys {shared_td.keys()}")
+
+        self.decay = decay
+        self.eps = eps
+
+    def _call(self, tensordict: _TensorDict) -> _TensorDict:
+        for key in self.keys:
+            if key not in tensordict.keys():
+                continue
+            self._init(tensordict, key)
+            # update anb standardize
+            new_val = self._update(key, tensordict.get(key), N=max(1, tensordict.numel()))
+
+            tensordict.set_(key, new_val)
+        return tensordict
+
+    def _init(self, tensordict: _TensorDict, key: str) -> None:
+        if self._td is None or key+'_sum' not in self._td.keys():
+            td_view = tensordict.view(-1)
+            td_select = td_view[0]
+            d = {
+                key + '_sum': torch.zeros_like(td_select.get(key))
+            }
+            d.update({
+                key + '_ssq': torch.zeros_like(td_select.get(key))
+            })
+            d.update({
+                key + '_count': torch.zeros(1, device=td_select.get(key).device, dtype=torch.float)
+            })
+            if self._td is None:
+                self._td = TensorDict(d, batch_size=[])
+            else:
+                self._td.update(d)
+        else:
+            pass
+
+    def _update(self, key, value, N) -> torch.Tensor:
+        _sum = self._td.get(key + "_sum")
+        _ssq = self._td.get(key + "_ssq")
+        _count = self._td.get(key + "_count")
+
+        if self.training:
+            value_sum = _sum_left(value, _sum)
+            value_ssq = _sum_left(value.pow(2), _ssq)
+
+            _sum = self.decay * _sum + value_sum
+            _ssq = self.decay * _ssq + value_ssq
+            _count = self.decay * _count + N
+
+            self._td.set_(key + "_sum", _sum)
+            self._td.set_(key + "_ssq", _ssq)
+            self._td.set_(key + "_count", _count)
+
+        mean = _sum / _count
+        std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
+        return (value - mean) / std.clamp_min(self.eps)
+
+    @staticmethod
+    def build_td_for_shared_vecnorm(
+            env: _EnvClass,
+            keys_prefix: Optional[Iterable[str]] = None,
+            memmap: bool = False
+    ) -> _TensorDict:
+        """
+        Creates a shared tensordict that can be sent to different processes for normalization across processes.
+
+        Args:
+            env (_EnvClass): example environment to be used to create the tensordict
+            keys_prefix (iterable of str, optional): prefix of the keys that have to be normalized.
+                default: ["next_", "reward"]
+            memmap (bool): if True, the resulting tensordict will be cast into memmory map (using `memmap_()`).
+                Otherwise, the tensordict will be placed in shared memory.
+
+        Returns: A memory in shared memory to be sent to each process.
+
+        Examples:
+            >>> # on main process
+            >>> queue = mp.Queue()
+            >>> env = make_env()
+            >>> td_shared = VecNorm.build_td_for_shared_vecnorm(env, ["next_observation", "reward"])
+            >>> assert td_shared.is_shared()
+            >>> queue.put(td_shared)
+            >>> # on workers
+            >>> v = VecNorm(shared_td=queue.get())
+            >>> env = TransformedEnv(make_env(), v)
+
+        """
+        if keys_prefix is None:
+            keys_prefix = ["next_", "reward"]
+        td = make_tensor_dict(env)
+        keys = set(key for key in td.keys() if any(key.startswith(_prefix) for _prefix in keys_prefix))
+        td_select = td.select(*keys)
+        if td.batch_dims:
+            raise RuntimeError(f"VecNorm should be used with non-batched environments. Got batch_size={td.batch_size}")
+        for key in keys:
+            td_select.set(key + '_ssq', td_select.get(key).clone())
+            td_select.set(key + '_count', torch.zeros(*td.batch_size, 1, device=td_select.device, dtype=torch.float))
+            td_select.rename_key(key, key + '_sum')
+        td_select.zero_()
+        if memmap:
+            return td_select.memmap_()
+        return td_select.share_memory_()

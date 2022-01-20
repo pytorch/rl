@@ -106,7 +106,7 @@ class _TensorDict:
         Total number of elements in the batch.
 
         """
-        return math.prod(self.batch_size)
+        return max(1, math.prod(self.batch_size))
 
     def _check_batch_size(self) -> None:
         bs = [value.shape[:self.batch_dims] for key, value in self.items_meta()]
@@ -1069,13 +1069,14 @@ class TensorDict(_TensorDict):
         return self
 
     def set_(self, key: str, value: COMPATIBLE_TYPES) -> TensorDict:
-        value = self._process_tensor(value, check_device=False, check_shared=False)
         if key in self.keys():
+            value = self._process_tensor(value, check_device=False, check_shared=False)
             target_shape = self._get_meta(key).shape
             if (value.shape != target_shape):
                 raise RuntimeError(f"calling set_(\"{key}\", tensor) with tensors of "
                                    f"different shape: got tensor.shape={value.shape} and get(\"{key}\").shape={target_shape}")
-            self._tensor_dict[key].copy_(value)
+            if value is not self._tensor_dict[key]:
+                self._tensor_dict[key].copy_(value)
         else:
             raise AttributeError(
                 f"key {key} not found in tensordict, "

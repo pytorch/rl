@@ -26,7 +26,7 @@ dtype_map = {
     torch.bool: bool,
 }
 
-__all__ = ["Specs", "GymLikeEnv"]
+__all__ = ["Specs", "GymLikeEnv", "make_tensor_dict"]
 
 
 class Specs:
@@ -161,7 +161,6 @@ class _EnvClass:
                                "tensordict.select()) inside _step before writing new tensors onto this new instance.")
         self.is_done = tensor_dict_out.get("done")
         self._current_tensordict = step_tensor_dict(tensor_dict_out)
-
         for key in self._select_observation_keys(tensor_dict_out):
             obs = tensor_dict_out.get(key)
             self.observation_spec.type_check(obs, key)
@@ -220,7 +219,10 @@ class _EnvClass:
         Returns the last tensordict encountered after calling `reset` or `step`.
 
         """
-        return self._current_tensordict
+        try:
+            return self._current_tensordict
+        except AttributeError:
+            print(f"env {self} does not have a _current_tensordict attribute. Consider calling reset() before step().")
 
     def set_seed(self, seed: int) -> int:
         """
