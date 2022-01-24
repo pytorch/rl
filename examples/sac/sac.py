@@ -3,7 +3,8 @@ import datetime
 import os
 import sys
 import uuid
-from typing import Optional
+from numbers import Number
+from typing import Optional, Tuple
 from warnings import warn
 
 import numpy as np
@@ -43,27 +44,27 @@ if sys.platform == "darwin":
 import time
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--env_library", type=str, default="dm_control", choices=["dm_control", "gym"],
+parser.add_argument("--env_library", type=str, default="gym", choices=["dm_control", "gym"],
                     help="env_library used for the simulated environment. Default=dm_control")
-parser.add_argument("--env_name", type=str, default="cheetah",
+parser.add_argument("--env_name", type=str, default="Humanoid-v2",
                     help="name of the environment to be created. Default=cheetah")
-parser.add_argument("--env_task", type=str, default="run",
+parser.add_argument("--env_task", type=str, default="",
                     help="task (if any) for the environment. Default=run")
 
 parser.add_argument("--loss", type=str, default="double", choices=["double", "single"],
-                    help="whether double or single DDPG loss should be used. Default=double")
-parser.add_argument("--soft_update", action="store_true",
-                    help="whether soft-update should be used with double DDPG loss.")
+                    help="whether double or single SAC loss should be used. Default=double")
+parser.add_argument("--hard_update", action="store_true",
+                    help="whether soft-update should be used with double SAC loss (default) or hard updates.")
 
 parser.add_argument("--record_video", action="store_true",
                     help="whether a video of the task should be rendered during logging.")
-parser.add_argument("--from_vector", action="store_true",
-                    help="whether the environment output should be pixels (default) or the state vector(s).")
+parser.add_argument("--from_pixels", action="store_true",
+                    help="whether the environment output should be state vector(s) (default) or the pixels.")
 parser.add_argument("--exp_name", type=str, default="",
                     help="experiment name. Used for logging directory. "
                          "A date and uuid will be joined to account for multiple experiments with the same name.")
 parser.add_argument(
-    "--loss_function", type=str, default="smooth_l1", choices=["l1", "l2", "smooth_l1"],
+    "--loss_function", type=str, default="l2", choices=["l1", "l2", "smooth_l1"],
     help="loss function for the value network. Either one of l1, l2 or smooth_l1 (default)."
 )
 parser.add_argument("--collector_devices", nargs='+', default=["cpu"],
@@ -77,14 +78,14 @@ parser.add_argument("--value_network_update_interval", type=int, default=1000,
                     help="how often the target value network weights are updated (in number of updates)."
                          "If soft-updates are used, the value is translated into a moving average decay by using the "
                          "formula decay=1-1/args.value_network_update_interval. Default=1000")
-parser.add_argument("--optim_steps_per_collection", type=int, default=200,
+parser.add_argument("--optim_steps_per_collection", type=int, default=500,
                     help="Number of optimization steps in between two collection of data. See frames_per_batch below."
                          "Default=200")
-parser.add_argument("--batch_size", type=int, default=64,
+parser.add_argument("--batch_size", type=int, default=256,
                     help="batch size of the TensorDict retrieved from the replay buffer. Default=64.")
 parser.add_argument("--buffer_size", type=int, default=1000000,
                     help="buffer size, in number of frames stored. Default=1e6")
-parser.add_argument("--frame_skip", type=int, default=4,
+parser.add_argument("--frame_skip", type=int, default=1,
                     help="frame_skip for the environment. Note that this value does NOT impact the buffer size,"
                          "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
                          "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
@@ -104,7 +105,7 @@ parser.add_argument("--frames_per_batch", type=int, default=1000,
                          "written and read at each global iteration. One should look at the number of frames per second"
                          "in the log to assess the efficiency of the configuration.")
 
-parser.add_argument("--log_interval", type=int, default=1000,
+parser.add_argument("--log_interval", type=int, default=10000,
                     help="logging interval, in terms of optimization steps. Default=1000.")
 parser.add_argument("--record_steps", type=int, default=1000,
                     help="maximum number of steps used for the recorded environment. Default=1000.")
@@ -112,11 +113,11 @@ parser.add_argument("--record_steps", type=int, default=1000,
 parser.add_argument("--total_frames", type=int, default=50000000,
                     help="total number of frames collected for training. Does account for frame_skip (i.e. will be "
                          "divided by the frame_skip). Default=50e6.")
-parser.add_argument("--annealing_frames", type=int, default=1000000,
+parser.add_argument("--annealing_frames", type=int, default=0,
                     help="Number of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.")
-parser.add_argument("--num_workers", type=int, default=16,
+parser.add_argument("--num_workers", type=int, default=32,
                     help="Number of workers used for data collection. ")
-parser.add_argument("--env_per_collector", default=1, type=int,
+parser.add_argument("--env_per_collector", default=8, type=int,
                     help="Number of environments per collector. If the env_per_collector is in the range: "
                          "1<env_per_collector<=num_workers, then the collector runs"
                          "ceil(num_workers/env_per_collector) in parallel and executes the policy steps synchronously "
@@ -124,11 +125,11 @@ parser.add_argument("--env_per_collector", default=1, type=int,
 
 parser.add_argument("--gamma", type=float, default=0.99,
                     help="Decay factor for return computation. Default=0.99.")
-parser.add_argument("--lr", type=float, default=2e-4,
+parser.add_argument("--lr", type=float, default=3e-4,
                     help="Learning rate used for the optimizer. Default=2e-4.")
 parser.add_argument("--wd", type=float, default=0.0,
                     help="Weight-decay to be used with the optimizer. Default=0.0.")
-parser.add_argument("--grad_clip_norm", type=float, default=100.0,
+parser.add_argument("--grad_clip_norm", type=float, default=1000.0,
                     help="value at which the total gradient norm should be clipped. Default=100.0")
 
 parser.add_argument("--async_collection", action="store_true",
@@ -137,7 +138,7 @@ parser.add_argument("--async_collection", action="store_true",
                          "configuration while the optimization loop is being done. If the algorithm is trained "
                          "synchronously, data collection and optimization will occur iteratively, not concurrently.")
 
-parser.add_argument("--reward_scaling", type=float, default=10.0,
+parser.add_argument("--reward_scaling", type=float,
                     help="scale of the reward.")
 
 parser.add_argument("--noisy", action="store_true",
@@ -153,7 +154,7 @@ parser.add_argument("--n_steps_return", type=int, default=3,
                          "reward computation.")
 parser.add_argument("--prb", action="store_true",
                     help="whether a Prioritized replay buffer should be used instead of a more basic circular one.")
-parser.add_argument("--init_random_frames", type=int, default=5000,
+parser.add_argument("--init_random_frames", type=int, default=0,
                     help="Initial number of random frames used before the policy is being used. Default=5000.")
 parser.add_argument("--ou_exploration", action="store_true",
                     help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
@@ -161,10 +162,10 @@ parser.add_argument("--ou_exploration", action="store_true",
 
 parser.add_argument("--init_env_steps", type=int, default=1000,
                     help="number of random steps to compute normalizing constants")
-parser.add_argument("--double_qvalue", action="store_true",
+parser.add_argument("--single_qvalue", action="store_true",
                     help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
                          "use two different qvalue networks trained independently and choose the lowest value "
-                         "predicted to predict the state action value")
+                         "predicted to predict the state action value. This can be disabled by using this flag.")
 parser.add_argument("--seed", type=int, default=42,
                     help="seed used for the environment, pytorch and numpy.")
 
@@ -180,6 +181,40 @@ env_library_map = {
     "retro": RetroEnv,
     "dm_control": DMControlEnv,
 }
+
+DEFAULT_REWARD_SCALING = {
+    "Hopper-v1": 5,
+    "Walker2d-v1": 5,
+    "HalfCheetah-v1": 5,
+    "cheetah": 5,
+    "Ant-v2": 5,
+    "Humanoid-v2": 20,
+    "humanoid": 100,
+}
+
+
+def get_reward_norms(args: argparse.Namespace, reward_scaling: Number) -> Tuple[float, float]:
+    """
+    For logging purposes, rewards should be displayed in their original scale.
+    However, for training we usually modify this scale.
+    This function returns a normalizing factor for training and testing such that results can be compared against other
+    implementations.
+
+    """
+    training_reward_norm = 1.0
+    if not (vecnorm and args.norm_rewards):
+        training_reward_norm = training_reward_norm * reward_scaling
+    if args.multi_step:
+        gfac = 1.0
+        for i in range(1, args.n_steps_return):
+            gfac += args.gamma ** i
+        training_reward_norm *= gfac
+
+    testing_reward_norm = 1.0
+    if not (vecnorm and args.norm_rewards):
+        testing_reward_norm = testing_reward_norm * reward_scaling
+
+    return training_reward_norm, testing_reward_norm
 
 
 class InPlaceSampler:
@@ -211,8 +246,13 @@ if __name__ == "__main__":
     args.init_random_frames = args.init_random_frames // args.frame_skip
     args.init_env_steps = args.init_env_steps // args.frame_skip
 
-    if not args.from_vector:
-        raise NotImplementedError("SAC from pixels is currently not implemented. Please use the --from_vector flag.")
+    double_qvalue = not args.single_qvalue
+    if args.from_pixels:
+        raise NotImplementedError("SAC from pixels is currently not implemented.")
+
+    reward_scaling = args.reward_scaling
+    if not isinstance(reward_scaling, float):
+        reward_scaling = DEFAULT_REWARD_SCALING.get(args.env_name, 5.0)
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -253,7 +293,7 @@ if __name__ == "__main__":
             'envname': env_name,
             "device": "cpu",
             'frame_skip': args.frame_skip,
-            'from_pixels': not args.from_vector or len(video_tag),
+            'from_pixels': args.from_pixels or len(video_tag),
         }
         if env_library is DMControlEnv:
             env_kwargs.update({'taskname': env_task})
@@ -262,7 +302,7 @@ if __name__ == "__main__":
         )
         keys = env.reset().keys()
         transforms = []
-        if not args.from_vector:
+        if args.from_pixels:
             transforms += [
                 ToTensorImage(),
                 Resize(84, 84),
@@ -270,34 +310,31 @@ if __name__ == "__main__":
                 CatFrames(),
                 ObservationNorm(loc=-1.0, scale=2.0, keys=["next_observation_pixels"]),
             ]
-        if args.reward_scaling != 1.0 and (not vecnorm or norm_obs_only):
-            transforms += [RewardScaling(0.0, args.reward_scaling)]
-        transforms += [
-            FiniteTensorDictCheck(),
-        ]
+        if reward_scaling != 1.0 and (not vecnorm or norm_obs_only):
+            transforms.append(RewardScaling(0.0, reward_scaling))
+        transforms.append(FiniteTensorDictCheck())
+
+        selected_keys = ["next_" + key for key in keys if key.startswith("observation") and "pixels" not in key]
+        out_key = "next_observation_vector"
+        transforms.append(CatTensors(keys=selected_keys, out_key=out_key))
+
+        double_to_float_list = []
         if env_library is DMControlEnv:
-            selected_keys = ["next_" + key for key in keys if key.startswith("observation") and "pixels" not in key]
-            if args.from_vector:
-                transforms += [
-                    CatTensors(keys=selected_keys,
-                               out_key="next_observation_vector"), ]
-                if not vecnorm:
-                    if stats is None:
-                        stats = {"loc": 0.0, "scale": 1.0}
-                    transforms += [ObservationNorm(**stats, keys=["next_observation_vector"], standard_normal=True), ]
-                else:
-                    transforms += [VecNorm(
-                        keys=["next_observation_vector", "reward"] if not norm_obs_only else ["next_observation_vector"],
-                        shared_td=shared_td_norm,
-                        decay=0.9999)]
-                transforms += [
-                    DoubleToFloat(keys=["action", "next_observation_vector", "reward"]), ]
+            double_to_float_list += ["reward", "action"]  # DMControl requires double-precision
+        if not args.from_pixels:
+            if not vecnorm:
+                if stats is None: stats = {"loc": 0.0, "scale": 1.0}
+                transforms.append(ObservationNorm(**stats, keys=[out_key], standard_normal=True))
             else:
-                transforms += [
-                    CatTensors(keys=selected_keys,
-                               out_key="next_observation_vector"),
-                    DoubleToFloat(keys=["action", "reward"]),  # DMControl requires double-precision
-                ]
+                transforms.append(VecNorm(
+                    keys=[out_key, "reward"] if not norm_obs_only else [out_key],
+                    shared_td=shared_td_norm,
+                    decay=0.9999))
+
+            double_to_float_list.append(out_key)
+            transforms.append(DoubleToFloat(keys=double_to_float_list))
+        else:
+            transforms.append(DoubleToFloat(keys=double_to_float_list))
         if len(video_tag):
             transforms = [
                 VideoRecorder(
@@ -344,9 +381,9 @@ if __name__ == "__main__":
         value_net_kwargs={
             "layer_class": linear_layer_class
         },
-        double_qvalue=args.double_qvalue,
+        double_qvalue=double_qvalue,
     )
-    if args.double_qvalue:
+    if double_qvalue:
         actor_model, qvalue_model, qvalue_model_bis, value_model = out
         qvalue_model_bis = qvalue_model_bis.to(device)
     else:
@@ -373,7 +410,7 @@ if __name__ == "__main__":
         td_device = actor_model(td_device)  # for init
         value_model(td_device)  # for init
         qvalue_model(td_device)  # for init
-        if args.double_qvalue:
+        if double_qvalue:
             qvalue_model_bis(td_device)  # for init
 
         td = td_device.squeeze(0).to("cpu")
@@ -382,10 +419,13 @@ if __name__ == "__main__":
 
         stats = None
         shared_td_norm = None
-        if args.from_vector and not vecnorm:
+        if not args.from_pixels and not vecnorm:
             td = init_env.rollout(n_steps=args.init_env_steps)
-            stats = {"loc": td.get("observation_vector").mean(0), "scale": td.get("observation_vector").std(0)}
-        elif args.from_vector and vecnorm:
+            stats = {
+                "loc": td.get("observation_vector").mean(0),
+                "scale": td.get("observation_vector").std(0)
+            }
+        elif not args.from_pixels and vecnorm:
             shared_td_norm = VecNorm.build_td_for_shared_vecnorm(init_env)
 
     actor_model_explore = actor_model_explore.share_memory()
@@ -489,7 +529,7 @@ if __name__ == "__main__":
 
     # TODO: double loss
     if args.loss == "double":
-        if args.soft_update:
+        if not args.hard_update:
             target_net_updater = SoftUpdate(loss_module, 1 - 1 / args.value_network_update_interval)
         else:
             target_net_updater = HardUpdate(loss_module, args.value_network_update_interval)
@@ -497,10 +537,11 @@ if __name__ == "__main__":
         print(f"optim_count: {optim_count}, updating target network")
         target_net_updater.init_()
     else:
-        assert not args.soft_update, "soft-update is supposed to be used with double DDPG loss. " \
-                                     "Consider using --loss=double or discarding the soft_update flag."
+        assert not args.hard_update, "hard/soft-update are supposed to be used with double SAC loss. " \
+                                     "Consider using --loss=double or discarding the hard_update flag."
 
     i = -1
+
     for b in collector:
         i += 1
         collector.update_policy_weights_()
@@ -508,12 +549,15 @@ if __name__ == "__main__":
         t_collection = t_collection * 0.9 + _t_collection * 0.1
 
         reward_avg = (b.masked_select(b.get("mask").squeeze(-1)).get("reward")).mean().item()
+        training_reward_norm, testing_reward_norm = get_reward_norms(args, reward_scaling)
         if optim_count > 0:
             if init_reward is None:
                 init_reward = reward_avg
             pbar.set_description(
-                f"reward (expl): {reward_avg:4.4f} (init={init_reward:4.2f}), "
-                f"reward (no expl): {rewards_noexplore:4.4f} (init={init_rewards_noexplore:4.2f}), "
+                f"reward (expl): {reward_avg / training_reward_norm:4.4f} "
+                f"(init={init_reward / training_reward_norm:4.2f}), "
+                f"reward (no expl): {rewards_noexplore / testing_reward_norm:4.4f} "
+                f"(init={init_rewards_noexplore / testing_reward_norm:4.2f}), "
                 f"loss: {loss.mean():4.4f}, "
                 f"gn: {gv:4.2f}, "
                 f"frames: {frame_count}, "
@@ -559,8 +603,8 @@ if __name__ == "__main__":
                     writer.add_scalar("actor_loss", actor_loss.item(), total_frame_count)
                     writer.add_scalar("qvalue_loss", qvalue_loss.item(), total_frame_count)
                     writer.add_scalar("value_loss", value_loss.item(), total_frame_count)
-                    writer.add_scalar("reward_avg", reward_avg, total_frame_count)
-                    writer.add_scalar("rewards_noexplore", rewards_noexplore, total_frame_count)
+                    writer.add_scalar("reward_avg", reward_avg / training_reward_norm, total_frame_count)
+                    writer.add_scalar("rewards_noexplore", rewards_noexplore / testing_reward_norm, total_frame_count)
                     writer.add_scalar("grad norm", gv, total_frame_count)
                     torch.save(
                         {

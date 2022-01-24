@@ -316,6 +316,10 @@ def make_sac_model(
         in_keys=in_keys,
         mapping_operator=actor_net,
         distribution_class=TanhNormal,
+        distribution_kwargs={
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum
+        },
         default_interaction_mode="random",
     )
     qvalue = ProbabilisticOperator(

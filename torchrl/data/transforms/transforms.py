@@ -774,18 +774,22 @@ class DoubleToFloat(Transform):
         return obs.to(torch.double)
 
     def _transform_spec(self, spec: TensorSpec) -> None:
-        spec.dtype = torch.float
-        space = spec.space
-        if isinstance(space, ContinuousBox):
-            space.minimum = space.minimum.to(torch.float)
-            space.maximum = space.maximum.to(torch.float)
+        if isinstance(spec, CompositeSpec):
+            for key in spec:
+                self._transform_spec(spec[key])
+        else:
+            spec.dtype = torch.float
+            space = spec.space
+            if isinstance(space, ContinuousBox):
+                space.minimum = space.minimum.to(torch.float)
+                space.maximum = space.maximum.to(torch.float)
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
         if "action" in self.keys:
             if action_spec.dtype is not torch.double:
                 raise TypeError("action_spec.dtype is not double")
             self._transform_spec(action_spec)
-            return action_spec
+        return action_spec
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if "reward" in self.keys:
@@ -793,14 +797,20 @@ class DoubleToFloat(Transform):
                 raise TypeError("reward_spec.dtype is not double")
 
             self._transform_spec(reward_spec)
-            return reward_spec
+        return reward_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         keys = [key for key in self.keys if "observation" in key]
         if keys:
             keys = [key.split("observation_")[-1] for key in keys]
+        if len(keys)>1:
+            if not isinstance(observation_spec, CompositeSpec):
+                raise TypeError(f"observation_spec was found to be of type {type(observation_spec)} when CompositeSpec "
+                                f"was expected (as more than one observation key has to be converted to float).")
             for key in keys:
                 self._transform_spec(observation_spec[key])
+        elif len(keys):
+            self._transform_spec(observation_spec)
         return observation_spec
 
 
@@ -826,6 +836,8 @@ class CatTensors(Transform):
             raise KeyError("CatTensors is currently restricted to observation_* keys")
         self.out_key = out_key
         self.keys = sorted(list(self.keys))
+        if ("reward" in self.keys) or ("action" in self.keys) or ("reward" in self.keys):
+            raise RuntimeError("Concatenating observations and reward / action / done state is not allowed.")
 
     def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
         if all([key in tensor_dict.keys() for key in self.keys]):
@@ -840,7 +852,9 @@ class CatTensors(Transform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if not isinstance(observation_spec, CompositeSpec):
-            raise TypeError("observation_spec is not of type CompositeSpec")
+            # then there is a single tensor to be concatenated
+            return observation_spec
+
         keys = [key.split("observation_")[-1] for key in self.keys]
 
         if all([key in observation_spec for key in keys]):
@@ -997,8 +1011,8 @@ class VecNorm(Transform):
         if shared_td is not None:
             for key in keys:
                 if (key + "_sum" not in shared_td.keys()) or \
-                        (key+"_ssq" not in shared_td.keys()) or \
-                        (key+"_count" not in shared_td.keys()):
+                        (key + "_ssq" not in shared_td.keys()) or \
+                        (key + "_count" not in shared_td.keys()):
                     raise KeyError(f"key {key} not present in the shared tensordict with keys {shared_td.keys()}")
 
         self.decay = decay
@@ -1016,7 +1030,7 @@ class VecNorm(Transform):
         return tensordict
 
     def _init(self, tensordict: _TensorDict, key: str) -> None:
-        if self._td is None or key+'_sum' not in self._td.keys():
+        if self._td is None or key + '_sum' not in self._td.keys():
             td_view = tensordict.view(-1)
             td_select = td_view[0]
             d = {

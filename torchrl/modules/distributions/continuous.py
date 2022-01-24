@@ -66,7 +66,7 @@ class TanhNormal(D.TransformedDistribution):
             upscale: Union[torch.Tensor, Number] = 5.0,
             min: Union[torch.Tensor, Number] = -1.0,
             max: Union[torch.Tensor, Number] = 1.0,
-            scale_mapping: str = "biased_softplus_0.1",
+            scale_mapping: str = "biased_softplus_1.0",
             event_dims: int = 1,
             tanh_loc: bool = True,
             tanh_scale: bool = False,
@@ -93,6 +93,8 @@ class TanhNormal(D.TransformedDistribution):
                 scale = scale / upscale
             scale = scale.tanh() * upscale
 
+        max = max.to(loc.device)
+        min = min.to(loc.device)
         loc = loc + (max - min) / 2 + min
 
         self.loc = loc
