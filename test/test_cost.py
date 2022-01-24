@@ -3,8 +3,8 @@ import torch
 from torch import nn
 
 from torchrl.data import TensorDict, NdBoundedTensorSpec, MultOneHotDiscreteTensorSpec
-from torchrl.data.batchers.batcher import MultiStep
-from torchrl.data.batchers.utils import expand_as_right
+from torchrl.data.postprocs.postprocs import MultiStep
+from torchrl.data.postprocs.utils import expand_as_right
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.modules import DistributionalQValueActor, QValueActor
 from torchrl.modules.distributions.continuous import Delta

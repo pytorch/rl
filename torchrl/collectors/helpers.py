@@ -101,7 +101,7 @@ def sync_sync_collector(
                            max_steps_per_traj=max_steps_per_traj,
                            frames_per_batch=frames_per_batch,
                            total_frames=total_frames,
-                           batcher=batcher,
+                           postproc=postproc,
                            num_env_per_collector=num_env_per_collector,
                            num_collectors=num_collectors,
                            **kwargs)
@@ -111,11 +111,11 @@ def _make_collector(
         collector_class: Type,
         env_fns: Union[Callable, List[Callable]],
         env_kwargs: Optional[Union[dict, List[dict]]],
-        policy: Callable[[_TensorDict, ...], _TensorDict],
+        policy: Callable[[_TensorDict], _TensorDict],
         max_steps_per_traj: int = -1,
         frames_per_batch: int = 200,
         total_frames: Optional[int] = None,
-        batcher: Optional[Callable] = None,
+        postproc: Optional[Callable] = None,
         num_env_per_collector: Optional[int] = None,
         num_collectors: Optional[int] = None,
         **kwargs) -> MultiDataCollector:
@@ -160,6 +160,6 @@ def _make_collector(
         total_frames=total_frames,
         max_steps_per_traj=max_steps_per_traj,
         frames_per_batch=frames_per_batch,
-        batcher=batcher,
+        postproc=postproc,
         **kwargs,
     )

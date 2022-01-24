@@ -347,7 +347,7 @@ if __name__ == "__main__":
         "max_steps_per_traj": args.max_frames_per_traj,
         "frames_per_batch": T,
         "total_frames": args.total_frames,
-        "batcher": ms,
+        "postproc": ms,
         "num_env_per_collector": 1,  # we already took care of building the make_parallel_env function above
         "num_collectors": - args.num_workers // -args.env_per_collector,
         "devices": args.collector_devices,

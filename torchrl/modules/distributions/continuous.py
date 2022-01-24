@@ -85,16 +85,25 @@ class TanhNormal(D.TransformedDistribution):
         loc, scale = net_output.chunk(chunks=2, dim=-1)
         self.tanh_loc = tanh_loc
         if tanh_loc:
-            if upscale != 1.0:
+            if (isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()) or \
+                    (not isinstance(upscale, torch.Tensor) and upscale != 1.0):
+                upscale = upscale if not isinstance(upscale, torch.Tensor) else upscale.to(loc.device)
                 loc = loc / upscale
             loc = loc.tanh() * upscale
         if tanh_scale:
-            if upscale != 1.0:
+            if (isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()) or \
+                    (not isinstance(upscale, torch.Tensor) and upscale != 1.0):
+                upscale = upscale if not isinstance(upscale, torch.Tensor) else upscale.to(loc.device)
                 scale = scale / upscale
             scale = scale.tanh() * upscale
 
-        max = max.to(loc.device)
-        min = min.to(loc.device)
+        if isinstance(max, torch.Tensor):
+            max = max.to(loc.device)
+        if isinstance(min, torch.Tensor):
+            min = min.to(loc.device)
+        self.min = min
+        self.max = max
+
         loc = loc + (max - min) / 2 + min
 
         self.loc = loc
@@ -122,6 +131,7 @@ class TanhNormal(D.TransformedDistribution):
         for t in self.transforms:
             m = t(m)
         return m
+
 
 def uniform_sample_tanhnormal(dist: TanhNormal, size=torch.Size([])) -> torch.Tensor:
     """

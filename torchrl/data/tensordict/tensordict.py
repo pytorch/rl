@@ -15,7 +15,7 @@ import torch
 
 from .memmap import MemmapTensor
 from .metatensor import MetaTensor
-from ..batchers.utils import expand_as_right
+from ..postprocs.utils import expand_as_right
 
 __all__ = ["TensorDict", "SubTensorDict", "merge_tensor_dicts", "LazyStackedTensorDict", "SavedTensorDict"]
 

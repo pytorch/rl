@@ -81,6 +81,9 @@ class _DataCollector(IterableDataset):
         except:
             policy_device = torch.device(device) if device is not None else torch.device('cpu')
         device = torch.device(device) if device is not None else policy_device
+        if device is None:
+            # if device cannot be found in policy and is not specified, set cpu
+            device = torch.device("cpu")
         get_weights_fn = None
         if policy_device != device:
             get_weights_fn = policy.state_dict
@@ -137,7 +140,7 @@ class SyncDataCollector(_DataCollector):
             default=-1 (i.e. no random frames)
         reset_at_each_iter (bool): Whether or not environments should be reset for each batch.
             default=False.
-        batcher (Callable, optional): A Batcher is an object that will read a batch of data and return it in a useful format for training.
+        postproc (Callable, optional): A Batcher is an object that will read a batch of data and return it in a useful format for training.
             default: None.
         split_trajs (bool): Boolean indicating whether the resulting TensorDict should be split according to the trajectories.
             See utils.split_trajectories for more information.
@@ -159,15 +162,15 @@ class SyncDataCollector(_DataCollector):
 
     def __init__(
             self,
-            create_env_fn: Callable,
-            policy: Optional[Union[ProbabilisticOperator, Callable]] = None,
+            create_env_fn: Callable[[], _EnvClass],
+            policy: Optional[Union[ProbabilisticOperator, Callable[[_TensorDict], _TensorDict]]] = None,
             total_frames: Optional[int] = -1,
             create_env_kwargs: Optional[dict] = None,
             max_steps_per_traj: int = -1,
             frames_per_batch: int = 200,
             init_random_frames: int = -1,
             reset_at_each_iter: bool = False,
-            batcher: Optional[Callable] = None,
+            postproc: Optional[Callable[[_TensorDict], _TensorDict]] = None,
             split_trajs: bool = True,
             device: DEVICE_TYPING = None,
             passing_device: DEVICE_TYPING = "cpu",
@@ -185,7 +188,7 @@ class SyncDataCollector(_DataCollector):
         self.env: _EnvClass = env
 
         self.policy, self.device, self.get_weights_fn = self._get_policy_and_device(
-            policy=policy, 
+            policy=policy,
             device=device,
             env=env)
         print(f"policy: {self.policy}")
@@ -199,21 +202,21 @@ class SyncDataCollector(_DataCollector):
         self.total_frames = total_frames
         self.reset_at_each_iter = reset_at_each_iter
         self.init_random_frames = init_random_frames
-        self.batcher = batcher
-        if self.batcher is not None:
-            self.batcher.to(self.passing_device)
+        self.postproc = postproc
+        if self.postproc is not None:
+            self.postproc.to(self.passing_device)
         self.max_steps_per_traj = max_steps_per_traj
         self.frames_per_batch = frames_per_batch
         self.pin_memory = pin_memory
 
         self.passing_device = torch.device(passing_device)
-        
+
         self._tensor_dict = env.reset().to(self.passing_device)
         self._tensor_dict.set("step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int))
         self._tensor_dict_out = TensorDict(
             batch_size=[*self.env.batch_size, self.frames_per_batch],
             device=self.passing_device)
-        
+
         self.return_in_place = return_in_place
         self.split_trajs = split_trajs
         if self.return_in_place and self.split_trajs:
@@ -264,8 +267,8 @@ class SyncDataCollector(_DataCollector):
 
             if self.split_trajs:
                 tensor_dict_out = split_trajectories(tensor_dict_out)
-            if self.batcher is not None:
-                tensor_dict_out = self.batcher(tensor_dict_out)
+            if self.postproc is not None:
+                tensor_dict_out = self.postproc(tensor_dict_out)
             yield tensor_dict_out
             del tensor_dict_out
             if self._frames >= self.total_frames:
@@ -395,7 +398,8 @@ class MultiDataCollector(_DataCollector):
             default=-1 (i.e. no random frames)
         reset_at_each_iter (bool): Whether or not environments should be reset for each batch.
             default=False.
-        batcher (callable, optional): A Batcher is an object that will read a batch of data and return it in a useful format for training.
+        postproc (callable, optional): A PostProcessor is an object that will read a batch of data and process it in a
+            useful format for training.
             default: None.
         split_trajs (bool): Boolean indicating whether the resulting TensorDict should be split according to the trajectories.
             See utils.split_trajectories for more information.
@@ -415,15 +419,15 @@ class MultiDataCollector(_DataCollector):
 
     def __init__(
             self,
-            create_env_fn: Iterable[Callable],
-            policy: Optional[Union[ProbabilisticOperator, Callable]] = None,
+            create_env_fn: Iterable[Callable[[], _EnvClass]],
+            policy: Optional[Union[ProbabilisticOperator, Callable[[_TensorDict], _TensorDict]]] = None,
             total_frames: Optional[int] = -1,
             create_env_kwargs: Optional[Iterable[dict]] = None,
             max_steps_per_traj: int = -1,
             frames_per_batch: int = 200,
             init_random_frames: int = -1,
             reset_at_each_iter: bool = False,
-            batcher: Optional[Callable] = None,
+            postproc: Optional[Callable[[_TensorDict], _TensorDict]] = None,
             split_trajs: bool = True,
             devices: DEVICE_TYPING = None,
             seed: Optional[int] = None,
@@ -462,12 +466,12 @@ class MultiDataCollector(_DataCollector):
                              f"Found {type(devices)} instead.")
         self._policy_dict = {}
         self._get_weights_fn_dict = {}
-        for _device in devices:
+        for i, _device in enumerate(devices):
             _policy, _device, _get_weight_fn = self._get_policy_and_device(policy, _device, )
             if _device not in self._policy_dict:
                 self._policy_dict[_device] = _policy
                 self._get_weights_fn_dict[_device] = _get_weight_fn
-                
+            devices[i] = _device
         self.devices = devices
 
         if isinstance(passing_devices, (str, int, torch.device)):
@@ -482,10 +486,10 @@ class MultiDataCollector(_DataCollector):
 
         self.total_frames = total_frames if total_frames > 0 else float("inf")
         self.reset_at_each_iter = reset_at_each_iter
-        self.batchers = dict()
-        if batcher is not None:
+        self.postprocs = dict()
+        if postproc is not None:
             for _device in self.passing_devices:
-                self.batchers[_device] = deepcopy(batcher).to(_device)
+                self.postprocs[_device] = deepcopy(postproc).to(_device)
         self.max_steps_per_traj = max_steps_per_traj
         self.frames_per_batch = frames_per_batch
         self.seed = seed
@@ -493,7 +497,8 @@ class MultiDataCollector(_DataCollector):
         self.pin_memory = pin_memory
         self.init_random_frames = init_random_frames
         self.update_at_each_batch = update_at_each_batch
-        self.frames_per_worker = -(self.total_frames // -self.num_workers) if total_frames>0 else np.inf# ceil(total_frames/num_workers)
+        self.frames_per_worker = -(
+                self.total_frames // -self.num_workers) if total_frames > 0 else np.inf  # ceil(total_frames/num_workers)
         self._run_processes()
 
     def update_policy_weights_(self) -> None:
@@ -521,10 +526,10 @@ class MultiDataCollector(_DataCollector):
                 'create_env_fn': CloudpickleWrapper(env_fun),
                 'create_env_kwargs': env_fun_kwargs,
                 'policy': self._policy_dict[_device],
-                'frames_per_worker':self.frames_per_worker,
+                'frames_per_worker': self.frames_per_worker,
                 'max_steps_per_traj': self.max_steps_per_traj,
                 'frames_per_batch': self.frames_per_batch,
-                'reset_at_each_iter':self.reset_at_each_iter,
+                'reset_at_each_iter': self.reset_at_each_iter,
                 'device': _device,
                 'passing_device': _passing_device,
                 'seed': self.seed,
@@ -557,15 +562,15 @@ class MultiDataCollector(_DataCollector):
         self.closed = True
         for idx in range(self.num_workers):
             self.pipes[idx].send((None, "close"))
-        
+
         for idx in range(self.num_workers):
             msg = self.pipes[idx].recv()
             if msg != "closed":
                 raise RuntimeError(f"got {msg} but expected 'close'")
-        
+
         for proc in self.procs:
             proc.join()
-        
+
         self.queue_out.close()
         for pipe in self.pipes:
             pipe.close()
@@ -677,8 +682,8 @@ class MultiSyncDataCollector(MultiDataCollector):
                 frames += out.get("mask").sum()
             else:
                 frames += math.prod(out.shape)
-            if self.batchers:
-                out = self.batchers[out.device](out)
+            if self.postprocs:
+                out = self.postprocs[out.device](out)
             yield out
 
         del out_tensordicts_shared
@@ -735,8 +740,8 @@ class MultiaSyncDataCollector(MultiDataCollector):
                 out = split_trajectories(out)
             self._frames += worker_frames
             workers_frames[idx] = workers_frames[idx] + worker_frames
-            if self.batchers:
-                out = self.batchers[out.device](out)
+            if self.postprocs:
+                out = self.postprocs[out.device](out)
 
             # the function blocks here until the next item is asked, hence we send the message to the
             # worker to keep on working in the meantime before the yield statement
@@ -790,16 +795,17 @@ class aSyncDataCollector(MultiaSyncDataCollector):
 
     def __init__(
             self,
-            create_env_fn: Callable,
-            policy: Optional[Union[ProbabilisticOperator, Callable]] = None,
+            create_env_fn: Callable[[], _EnvClass],
+            policy: Optional[Union[ProbabilisticOperator, Callable[[_TensorDict], _TensorDict]]] = None,
             total_frames: Optional[int] = -1,
             create_env_kwargs: Optional[dict] = None,
             max_steps_per_traj: int = -1,
             frames_per_batch: int = 200,
             reset_at_each_iter: bool = False,
-            batcher: Optional[Callable] = None,
+            postproc: Optional[Callable[[_TensorDict], _TensorDict]] = None,
             split_trajs: bool = True,
-            device: Union[int, str, torch.device] = None,
+            device: Optional[Union[int, str, torch.device]] = None,
+            passing_device: Union[int, str, torch.device] = "cpu",
             seed: Optional[int] = None,
             pin_memory: bool = False,
     ):
@@ -811,9 +817,10 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             max_steps_per_traj=max_steps_per_traj,
             frames_per_batch=frames_per_batch,
             reset_at_each_iter=reset_at_each_iter,
-            batcher=batcher,
+            postproc=postproc,
             split_trajs=split_trajs,
-            device=device,
+            devices=[device] if device is not None else None,
+            passing_devices=[passing_device],
             seed=seed,
             pin_memory=pin_memory,
         )
@@ -823,9 +830,9 @@ def _main_async_collector(
         pipe_parent: connection.Connection,
         pipe_child: connection.Connection,
         queue_out: queues.Queue,
-        create_env_fn: Callable,
+        create_env_fn: Callable[[], _EnvClass],
         create_env_kwargs: dict,
-        policy: Callable[[_TensorDict, ...], _TensorDict],
+        policy: Callable[[_TensorDict], _TensorDict],
         frames_per_worker: int,
         max_steps_per_traj: int,
         frames_per_batch: int,
@@ -838,10 +845,10 @@ def _main_async_collector(
         verbose: bool = False,
 ) -> None:
     pipe_parent.close()
-    
-    # init variables that will be cleared when closing
+
+    #  init variables that will be cleared when closing
     tensor_dict = data = d = data_in = dc = dc_iter = None
-    
+
     dc = SyncDataCollector(
         create_env_fn,
         create_env_kwargs=create_env_kwargs,
@@ -850,7 +857,7 @@ def _main_async_collector(
         max_steps_per_traj=max_steps_per_traj,
         frames_per_batch=frames_per_batch,
         reset_at_each_iter=reset_at_each_iter,
-        batcher=None,
+        postproc=None,
         split_trajs=False,
         device=device,
         seed=seed,
@@ -862,7 +869,7 @@ def _main_async_collector(
         print("Sync data collector created")
     dc_iter = iter(dc)
     j = 0
-    
+
     has_timed_out = False
     while True:
         _timeout = TIMEOUT if not has_timed_out else 1e-3

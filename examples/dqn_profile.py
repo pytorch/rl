@@ -212,7 +212,7 @@ if __name__ == "__main__":
         pass_tensors_through_queues=args.pass_tensors_through_queues,
         device=args.collector_device,
         reset_at_each_iter=args.reset_at_each_iter,
-        batcher = ms
+        postproc = ms
     )
 
     if not args.prb:
