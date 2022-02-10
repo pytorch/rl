@@ -5,9 +5,13 @@ from torch import nn
 
 from mocking_classes import DiscreteActionConvMockEnv, DiscreteActionVecMockEnv, DiscreteActionVecPolicy, \
     DiscreteActionConvPolicy
+from torchrl.agents.env_creator import EnvCreator
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
+from torchrl.collectors.collectors import RandomPolicy, MultiSyncDataCollector, MultiaSyncDataCollector
 from torchrl.data.tensordict.tensordict import assert_allclose_td
+from torchrl.data.transforms import TransformedEnv, VecNorm
 from torchrl.envs import ParallelEnv
+from torchrl.envs.libs.gym import _has_gym
 
 
 def make_make_env(env_name="conv"):
@@ -282,6 +286,98 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     assert_allclose_td(data1, data20)
     assert_allclose_td(data10, data20)
 
+
+@pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
+def test_collector_vecnorm_envcreator():
+    """
+    High level test of the following pipeline:
+     (1) Design a function that creates an environment with VecNorm
+     (2) Wrap that function in an EnvCreator to instantiate the shared tensordict
+     (3) Create a ParallelEnv that dispatches this env across workers
+     (4) Run several ParallelEnv synchronously
+    The function tests that the tensordict gathered from the workers match at certain moments in time, and that they
+    are modified after the collector is run for more steps.
+
+    """
+    from torchrl.envs import GymEnv
+    env_make = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v0"), VecNorm()))
+    env_make = ParallelEnv(4, env_make)
+
+    policy = RandomPolicy(env_make.action_spec)
+    c = MultiSyncDataCollector([env_make, env_make], policy=policy, total_frames=int(1e6))
+    final_seed = c.set_seed(0)
+    assert final_seed == 7
+
+    c_iter = iter(c)
+    next(c_iter)
+    next(c_iter)
+
+    s = c.state_dict()
+
+    td1 = s["worker0"]["worker3"]['_extra_state'].clone()
+    td2 = s["worker1"]["worker0"]['_extra_state'].clone()
+    assert (td1 == td2).all()
+
+    next(c_iter)
+    next(c_iter)
+
+    s = c.state_dict()
+
+    td3 = s["worker0"]["worker3"]['_extra_state'].clone()
+    td4 = s["worker1"]["worker0"]['_extra_state'].clone()
+    assert (td3 == td4).all()
+    assert (td1 != td4).any()
+
+    del c
+
+
+@pytest.mark.parametrize("use_async", [False, True])
+@pytest.mark.skipif(torch.cuda.device_count() <= 1, reason="no cuda device found")
+def test_update_weights(use_async):
+    policy = torch.nn.Linear(3, 4).cuda(1)
+    policy.share_memory()
+    collector_class = MultiSyncDataCollector if not use_async else MultiaSyncDataCollector
+    collector = collector_class(
+        [lambda: DiscreteActionVecMockEnv()] * 3,
+        policy=policy,
+        devices=[torch.device("cuda:0")] * 3,
+        passing_devices=[torch.device("cuda:0")] * 3,
+    )
+    # collect state_dict
+    state_dict = collector.state_dict()
+    policy_state_dict = policy.state_dict()
+    for worker in range(3):
+        for k in state_dict[f'worker{worker}']['policy_state_dict']:
+            torch.testing.assert_allclose(state_dict[f'worker{worker}']['policy_state_dict'][k],
+                                          policy_state_dict[k].cpu())
+
+    # change policy weights
+    for p in policy.parameters():
+        p.data += torch.randn_like(p)
+
+    # collect state_dict
+    state_dict = collector.state_dict()
+    policy_state_dict = policy.state_dict()
+    # check they don't match
+    for worker in range(3):
+        for k in state_dict[f'worker{worker}']['policy_state_dict']:
+            with pytest.raises(AssertionError):
+                torch.testing.assert_allclose(state_dict[f'worker{worker}']['policy_state_dict'][k],
+                                              policy_state_dict[k].cpu())
+
+    # update weights
+    collector.update_policy_weights_()
+
+    # collect state_dict
+    state_dict = collector.state_dict()
+    policy_state_dict = policy.state_dict()
+    for worker in range(3):
+        for k in state_dict[f'worker{worker}']['policy_state_dict']:
+            torch.testing.assert_allclose(state_dict[f'worker{worker}']['policy_state_dict'][k],
+                                          policy_state_dict[k].cpu())
+
+    collector.shutdown()
+    del collector
 
 def weight_reset(m):
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):

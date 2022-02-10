@@ -19,7 +19,7 @@ On the high-level end, it provides:
 - various tools for distributed learning (e.g. [memory mapped tensors](torchrl/data/tensordict/memmap.py));
 - various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/probabilistic_operators/actors.py));
 - [exploration wrappers](torchrl/modules/probabilistic_operators/exploration.py);
-- various [recipes](torchrl/modules/recipes.py) to build models that correspond to the environment being deployed.
+- various [recipes](torchrl/agents/helpers/models.py) to build models that correspond to the environment being deployed.
 
 A series of [examples](examples/) are provided with an illustrative purpose:
 - [DQN (and add-ons up to Rainbow)](examples/dqn/dqn.py)

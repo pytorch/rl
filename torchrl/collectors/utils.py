@@ -31,23 +31,15 @@ def split_trajectories(rollout_tensor_dict: _TensorDict) -> _TensorDict:
     splits = traj_ids.view(-1)
     splits = [(splits == i).sum().item() for i in splits.unique_consecutive()]
     out_splits = {
-        key: _d
-            .contiguous()
-            .view(-1, *_d.shape[ndim:])
-            .split(splits, 0)
+        key: _d.contiguous().view(-1, *_d.shape[ndim:]).split(splits, 0)
         for key, _d in rollout_tensor_dict.items()
         # if key not in ("step_count", "traj_ids")
     }
     # select complete rollouts
     dones = out_splits["done"]
     valid_ids = list(range(len(dones)))
-    out_splits = {
-        key: [_out[i] for i in valid_ids] for key, _out in out_splits.items()
-    }
-    mask = [
-        torch.ones_like(_out, dtype=torch.bool)
-        for _out in out_splits["done"]
-    ]
+    out_splits = {key: [_out[i] for i in valid_ids] for key, _out in out_splits.items()}
+    mask = [torch.ones_like(_out, dtype=torch.bool) for _out in out_splits["done"]]
     out_splits["mask"] = mask
     out_dict = {
         key: torch.nn.utils.rnn.pad_sequence(_o, batch_first=True)
@@ -56,5 +48,8 @@ def split_trajectories(rollout_tensor_dict: _TensorDict) -> _TensorDict:
     td = TensorDict(
         source=out_dict,
         device=rollout_tensor_dict.device,
-        batch_size=out_dict["mask"].shape[:-1])
+        batch_size=out_dict["mask"].shape[:-1],
+    )
+    if (out_dict["done"].sum(1) > 1).any():
+        raise RuntimeError("Got more than one done per trajectory")
     return td

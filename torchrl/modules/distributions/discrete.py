@@ -31,7 +31,14 @@ class OneHotCategorical(D.Categorical):
      of the discrete tensors.
 
     """
-    def __init__(self, logits: Optional[torch.Tensor] = None, probs: Optional[torch.Tensor] = None, *args, **kwargs):
+
+    def __init__(
+        self,
+        logits: Optional[torch.Tensor] = None,
+        probs: Optional[torch.Tensor] = None,
+        *args,
+        **kwargs
+    ):
         logits = _treat_categorical_params(logits)
         probs = _treat_categorical_params(probs)
         return super().__init__(probs=probs, logits=logits, *args, **kwargs)
@@ -46,7 +53,9 @@ class OneHotCategorical(D.Categorical):
         else:
             return (self.probs == self.probs.max(-1, True)[0]).to(torch.long)
 
-    def sample(self, sample_shape: Union[torch.Size, Iterable]=torch.Size([])) -> torch.Tensor:
+    def sample(
+        self, sample_shape: Union[torch.Size, Iterable] = torch.Size([])
+    ) -> torch.Tensor:
         out = super().sample(sample_shape=sample_shape)
         out = torch.nn.functional.one_hot(out).to(torch.long)
         return out

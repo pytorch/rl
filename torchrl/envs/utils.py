@@ -8,7 +8,9 @@ from torchrl.data.tensordict.tensordict import _TensorDict
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
 
-def step_tensor_dict(tensor_dict: _TensorDict, next_tensor_dict: _TensorDict = None) -> _TensorDict:
+def step_tensor_dict(
+    tensor_dict: _TensorDict, next_tensor_dict: _TensorDict = None
+) -> _TensorDict:
     """
     Given a tensor_dict retrieved after a step, returns another tensordict with all the 'next_' prefixes are removed,
     i.e. all the `'next_some_other_string'` keys will be renamed onto `'some_other_string'` keys.
@@ -102,7 +104,6 @@ def _check_dmlab():
 
     """
 
-
     return "deepmind-lab" in AVAILABLE_LIBRARIES
 
 
@@ -147,6 +148,7 @@ class set_exploration_mode(_DecoratorContextManager):
         >>> with set_exploration_mode("random"):
         >>>     env.rollout(policy=policy, n_steps=100)  # rollout with the "random" interaction mode
     """
+
     def __init__(self, mode: str = "mode"):
         super().__init__()
         self.mode = mode

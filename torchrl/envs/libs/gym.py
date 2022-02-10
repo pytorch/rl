@@ -74,12 +74,13 @@ def _get_gym():
 
 
 def _is_from_pixels(observation_space):
-    return (isinstance(observation_space, gym.spaces.Box)
-            and (observation_space.low == 0).all()
-            and (observation_space.high == 255).all()
-            and observation_space.low.shape[-1] == 3
-            and observation_space.low.ndim == 3
-            )
+    return (
+        isinstance(observation_space, gym.spaces.Box)
+        and (observation_space.low == 0).all()
+        and (observation_space.high == 255).all()
+        and observation_space.low.shape[-1] == 3
+        and observation_space.low.ndim == 3
+    )
 
 
 class GymEnv(GymLikeEnv):
@@ -108,15 +109,23 @@ class GymEnv(GymLikeEnv):
         self._env.seed(seed)
         return seed
 
-    def _build_env(self,
-                   envname: str,
-                   taskname: str,
-                   from_pixels: bool = False) -> gym.core.Env:
+    def _build_env(
+        self,
+        envname: str,
+        taskname: str,
+        from_pixels: bool = False,
+        pixels_only: bool = False,
+    ) -> gym.core.Env:
+        self.pixels_only = pixels_only
         if not _has_gym:
-            raise RuntimeError(f"gym not found, unable to create {envname}. "
-                               f"Consider downloading and installing dm_control from {self.git_url}")
+            raise RuntimeError(
+                f"gym not found, unable to create {envname}. "
+                f"Consider downloading and installing dm_control from {self.git_url}"
+            )
         if not ((taskname == "") or (taskname is None)):
-            raise ValueError(f"gym does not support taskname, received {taskname} instead.")
+            raise ValueError(
+                f"gym does not support taskname, received {taskname} instead."
+            )
         try:
             env = self.lib.make(envname, frameskip=self.frame_skip)
             self.wrapper_frame_skip = 1
@@ -131,16 +140,20 @@ class GymEnv(GymLikeEnv):
         self.from_pixels = from_pixels
         if from_pixels:
             self._env.reset()
-            self._env = PixelObservationWrapper(self._env, )  # False)
+            self._env = PixelObservationWrapper(self._env, pixels_only)
 
         self.action_spec = _gym_to_torchrl_spec_transform(self._env.action_space)
-        self.observation_spec = _gym_to_torchrl_spec_transform(self._env.observation_space)
-        self.reward_spec = UnboundedContinuousTensorSpec(device=self.device, )  # default
+        self.observation_spec = _gym_to_torchrl_spec_transform(
+            self._env.observation_space
+        )
+        self.reward_spec = UnboundedContinuousTensorSpec(
+            device=self.device,
+        )  # default
 
     def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
         if seed is not None:
             seed = self.set_seed(seed)
-        self.reset() # make sure that _current_observation and _is_done are populated
+        self.reset()  # make sure that _current_observation and _is_done are populated
         return seed
 
 

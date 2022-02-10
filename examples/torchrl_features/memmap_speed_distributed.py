@@ -1,4 +1,4 @@
-import argparse
+import configargparse
 import os
 import torch.distributed.rpc as rpc
 import torch
@@ -7,7 +7,7 @@ import time
 import timeit
 from torch import multiprocessing as mp
 
-parser = argparse.ArgumentParser()
+parser = configargparse.ArgumentParser()
 parser.add_argument("--rank", default=-1, type=int)
 parser.add_argument("--world_size", default=2, type=int)
 parser.add_argument("--tensortype", default="memmap", type=str)

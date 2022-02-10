@@ -1,4 +1,4 @@
-import argparse
+import configargparse
 import os
 import time
 
@@ -8,7 +8,7 @@ import torch.distributed.rpc as rpc
 from torchrl.data import TensorDict
 from torchrl.data.tensordict.memmap import set_transfer_ownership
 
-parser = argparse.ArgumentParser()
+parser = configargparse.ArgumentParser()
 parser.add_argument("--world_size", default=2, type=int)
 parser.add_argument("--rank", default=-1, type=int)
 parser.add_argument("--task", default=1, type=int)

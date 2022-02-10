@@ -24,13 +24,14 @@ class biased_softplus(nn.Module):
         min_val (scalar): minimum value of the transform.
             default: 0.1
     """
-    def __init__(self, bias: Number, min_val: Number=0.1):
+
+    def __init__(self, bias: Number, min_val: Number = 0.1):
         super().__init__()
-        self.bias = inv_softplus(bias-min_val)
+        self.bias = inv_softplus(bias - min_val)
         self.min_val = min_val
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.nn.functional.softplus(x + self.bias)+self.min_val
+        return torch.nn.functional.softplus(x + self.bias) + self.min_val
 
 
 def mappings(key: str) -> Callable:

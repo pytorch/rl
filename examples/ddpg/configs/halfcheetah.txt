@@ -1,0 +1,7 @@
+env_name=HalfCheetah-v2
+env_task=
+env_library=gym
+async_collection
+record_video
+normalize_rewards_online
+tanh_normal_tanh

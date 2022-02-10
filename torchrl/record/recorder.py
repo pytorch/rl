@@ -24,16 +24,18 @@ class VideoRecorder(ObservationTransform):
     """
 
     def __init__(
-            self,
-            writer: SummaryWriter,
-            tag: str,
-            keys: Optional[Iterable[str]] = None,
-            skip: int = 2, **kwargs):
+        self,
+        writer: SummaryWriter,
+        tag: str,
+        keys: Optional[Iterable[str]] = None,
+        skip: int = 2,
+        **kwargs,
+    ):
         if keys is None:
             keys = ["next_observation_pixels"]
 
         super().__init__(keys=keys)
-        video_kwargs = {'fps': 6}
+        video_kwargs = {"fps": 6}
         video_kwargs.update(kwargs)
         self.video_kwargs = video_kwargs
         self.iter = 0
@@ -57,11 +59,15 @@ class VideoRecorder(ObservationTransform):
                 observation_trsf = observation.unsqueeze(-3)
             else:
                 if observation.ndimension() != 3:
-                    raise RuntimeError("observation is expected to have 3 dimensions, "
-                                       f"got {observation.ndimension()} instead")
+                    raise RuntimeError(
+                        "observation is expected to have 3 dimensions, "
+                        f"got {observation.ndimension()} instead"
+                    )
                 if observation_trsf.shape[-1] != 3:
-                    raise RuntimeError("observation_trsf is expected to have 3 dimensions, "
-                                       f"got {observation_trsf.ndimension()} instead")
+                    raise RuntimeError(
+                        "observation_trsf is expected to have 3 dimensions, "
+                        f"got {observation_trsf.ndimension()} instead"
+                    )
                 observation_trsf = observation_trsf.permute(2, 0, 1)
             self.obs.append(observation_trsf.cpu().to(torch.uint8))
         return observation
@@ -99,7 +105,14 @@ class TensorDictRecorder(Transform):
             default: 4
 
     """
-    def __init__(self, out_file_base: str, skip_reset: bool=True, skip: int=4, keys: Optional[Iterable[str]]=None):
+
+    def __init__(
+        self,
+        out_file_base: str,
+        skip_reset: bool = True,
+        skip: int = 4,
+        keys: Optional[Iterable[str]] = None,
+    ):
         if keys is None:
             keys = []
 
@@ -124,7 +137,9 @@ class TensorDictRecorder(Transform):
         td = self.td
         if self.skip_reset:
             td = td[1:]
-        torch.save(torch.stack(td, 0).contiguous(), f"{self.out_file_base}_tensor_dict.t")
+        torch.save(
+            torch.stack(td, 0).contiguous(), f"{self.out_file_base}_tensor_dict.t"
+        )
         self.iter += 1
         self.count = 0
         del self.td

@@ -1,5 +1,6 @@
 __all__ = ["SoftUpdate", "HardUpdate", "distance_loss"]
 
+import functools
 from numbers import Number
 from typing import Union
 
@@ -12,7 +13,7 @@ from torchrl.envs.utils import step_tensor_dict
 from torchrl.modules import ProbabilisticOperator
 
 
-class _context_manager():
+class _context_manager:
     def __init__(self, value=True):
         self.value = value
         self.prev = []
@@ -26,7 +27,9 @@ class _context_manager():
         return decorate_context
 
 
-def distance_loss(v1: torch.Tensor, v2: torch.Tensor, loss_function: str) -> torch.Tensor:
+def distance_loss(
+    v1: torch.Tensor, v2: torch.Tensor, loss_function: str, strict_shape: bool = True
+) -> torch.Tensor:
     """
     Computes a distance loss between two tensors.
 
@@ -34,11 +37,18 @@ def distance_loss(v1: torch.Tensor, v2: torch.Tensor, loss_function: str) -> tor
         v1 (Tensor): a tensor with a shape compatible with v2
         v2 (Tensor): a tensor with a shape compatible with v1
         loss_function (str): One of "l2", "l1" or "smooth_l1" representing which loss function is to be used.
+        strict_shape (bool): if False, v1 and v2 are allowed to have a different shape.
+            Default is True.
 
     Returns: A tensor of the shape v1.view_as(v2) or v2.view_as(v1) with values equal to the distance loss between the
         two.
 
     """
+    if v1.shape != v2.shape and strict_shape:
+        raise RuntimeError(
+            f"The input tensors have shapes {v1.shape} and {v2.shape} which are incompatible."
+        )
+
     if loss_function == "l2":
         value_loss = F.mse_loss(
             v1,
@@ -78,15 +88,25 @@ class _TargetNetUpdate:
 
     """
 
-    def __init__(self, loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"], ):
+    def __init__(
+        self,
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
+    ):
         self.net_pairs = {
-            key: '_target_' + key for key in ("actor_network", "value_network", "qvalue_network",) if
-            hasattr(loss_module, '_target_' + key)
+            key: "_target_" + key
+            for key in (
+                "actor_network",
+                "value_network",
+                "qvalue_network",
+            )
+            if hasattr(loss_module, "_target_" + key)
         }
         if not len(self.net_pairs):
             raise RuntimeError("No module found")
         net = nn.ModuleList([getattr(loss_module, key) for key in self.net_pairs])
-        target_net = nn.ModuleList([getattr(loss_module, value) for key, value in self.net_pairs.items()])
+        target_net = nn.ModuleList(
+            [getattr(loss_module, value) for key, value in self.net_pairs.items()]
+        )
 
         self.net = net
         self.target_net = target_net
@@ -94,7 +114,9 @@ class _TargetNetUpdate:
         self.initialized = False
 
     def init_(self) -> None:
-        for (n1, p1), (n2, p2) in zip(self.net.named_parameters(), self.target_net.named_parameters()):
+        for (n1, p1), (n2, p2) in zip(
+            self.net.named_parameters(), self.target_net.named_parameters()
+        ):
             p2.data.copy_(p1.data)
         self.initialized = True
 
@@ -111,17 +133,24 @@ class SoftUpdate(_TargetNetUpdate):
             default: 0.999
     """
 
-    def __init__(self, loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"], eps: Number = 0.999):
+    def __init__(
+        self, loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"], eps: Number = 0.999
+    ):
         if not (eps < 1.0 and eps > 0.0):
-            raise ValueError(f"Got eps = {eps} when it was supposed to be between 0 and 1.")
+            raise ValueError(
+                f"Got eps = {eps} when it was supposed to be between 0 and 1."
+            )
         super(SoftUpdate, self).__init__(loss_module)
         self.eps = eps
 
     def step(self) -> None:
         if not self.initialized:
             raise Exception(
-                f'{self.__class__.__name__} must be initialized (`{self.__class__.__name__}.init_()`) before calling step()')
-        for (n1, p1), (n2, p2) in zip(self.net.named_parameters(), self.target_net.named_parameters()):
+                f"{self.__class__.__name__} must be initialized (`{self.__class__.__name__}.init_()`) before calling step()"
+            )
+        for (n1, p1), (n2, p2) in zip(
+            self.net.named_parameters(), self.target_net.named_parameters()
+        ):
             p2.data.copy_(p2.data * self.eps + p1.data * (1 - self.eps))
 
 
@@ -137,8 +166,11 @@ class HardUpdate(_TargetNetUpdate):
             default: 1000
     """
 
-    def __init__(self, loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
-                 value_network_update_interval: Number = 1000):
+    def __init__(
+        self,
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
+        value_network_update_interval: Number = 1000,
+    ):
         super(HardUpdate, self).__init__(loss_module)
         self.value_network_update_interval = value_network_update_interval
         self.counter = 0
@@ -146,7 +178,8 @@ class HardUpdate(_TargetNetUpdate):
     def step(self) -> None:
         if not self.initialized:
             raise Exception(
-                f'{self.__class__.__name__} must be initialized (`{self.__class__.__name__}.init_()`) before calling step()')
+                f"{self.__class__.__name__} must be initialized (`{self.__class__.__name__}.init_()`) before calling step()"
+            )
         if self.counter == self.value_network_update_interval:
             self.counter = 0
             self.target_net.load_state_dict(self.net.state_dict())
@@ -160,7 +193,9 @@ class hold_out_net(_context_manager):
         try:
             self.p_example = next(network.parameters())
         except StopIteration as err:
-            raise RuntimeError("hold_out_net requires the network parameter set to be non-empty.")
+            raise RuntimeError(
+                "hold_out_net requires the network parameter set to be non-empty."
+            )
         self._prev_state = []
 
     def __enter__(self) -> None:
@@ -173,8 +208,10 @@ class hold_out_net(_context_manager):
 
 @torch.no_grad()
 def next_state_value(
-        tensor_dict: _TensorDict, operator: ProbabilisticOperator,
-        next_val_key: str = "state_action_value", gamma: Number = 0.99,
+    tensor_dict: _TensorDict,
+    operator: ProbabilisticOperator,
+    next_val_key: str = "state_action_value",
+    gamma: Number = 0.99,
 ) -> torch.Tensor:
     """
     Computes the next state value (without gradient) to compute a target for the MSE loss

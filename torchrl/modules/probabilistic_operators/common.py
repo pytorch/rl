@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 from numbers import Number
 from typing import Tuple, List, Iterable, Type, Optional, Union, Any, Callable
 
 import torch
 from torch import nn, distributions as d
 
-from torchrl.data import TensorSpec
+from torchrl.data import TensorSpec, DEVICE_TYPING
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.distributions import Delta, distributions_maps
@@ -20,12 +22,12 @@ def _forward_hook_safe_action(module, tensor_dict_in, tensor_dict_out):
         try:
             tensor_dict_out.set_(
                 module.out_keys[0],
-                module.spec.project(tensor_dict_out.get(module.out_keys[0]))
+                module.spec.project(tensor_dict_out.get(module.out_keys[0])),
             )
         except RuntimeError:
             tensor_dict_out.set(
                 module.out_keys[0],
-                module.spec.project(tensor_dict_out.get(module.out_keys[0]))
+                module.spec.project(tensor_dict_out.get(module.out_keys[0])),
             )
 
 
@@ -73,18 +75,18 @@ class ProbabilisticOperator(nn.Module):
     """
 
     def __init__(
-            self,
-            spec: TensorSpec,
-            mapping_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
-            out_keys: Iterable[str],
-            in_keys: Iterable[str],
-            distribution_class: Type = Delta,
-            distribution_kwargs: Optional[dict] = None,
-            default_interaction_mode: str = "mode",
-            _n_empirical_est: int = 1000,
-            return_log_prob: bool = False,
-            safe: bool = False,
-            save_dist_params: bool = False,
+        self,
+        spec: TensorSpec,
+        mapping_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
+        out_keys: Iterable[str],
+        in_keys: Iterable[str],
+        distribution_class: Type = Delta,
+        distribution_kwargs: Optional[dict] = None,
+        default_interaction_mode: str = "mode",
+        _n_empirical_est: int = 1000,
+        return_log_prob: bool = False,
+        safe: bool = False,
+        save_dist_params: bool = False,
     ):
 
         super().__init__()
@@ -108,13 +110,17 @@ class ProbabilisticOperator(nn.Module):
         if isinstance(distribution_class, str):
             distribution_class = distributions_maps.get(distribution_class.lower())
         self.distribution_class = distribution_class
-        self.distribution_kwargs = distribution_kwargs if distribution_kwargs is not None else dict()
+        self.distribution_kwargs = (
+            distribution_kwargs if distribution_kwargs is not None else dict()
+        )
         self.return_log_prob = return_log_prob
 
         self.default_interaction_mode = default_interaction_mode
         self.interact = False
 
-    def get_dist(self, tensor_dict: _TensorDict) -> Tuple[torch.distributions.Distribution, ...]:
+    def get_dist(
+        self, tensor_dict: _TensorDict
+    ) -> Tuple[torch.distributions.Distribution, ...]:
         """
         Calls the mapping_operator using the tensors retrieved from the 'in_keys' attribute and returns a distribution
         using its output.
@@ -137,7 +143,9 @@ class ProbabilisticOperator(nn.Module):
 
         return (dist, *tensors)
 
-    def build_dist_from_params(self, params: Tuple[torch.Tensor, ...]) -> Tuple[d.Distribution, int]:
+    def build_dist_from_params(
+        self, params: Tuple[torch.Tensor, ...]
+    ) -> Tuple[d.Distribution, int]:
         """
         Given a tuple of temsors, returns a distribution object and the number of parameters used for it.
 
@@ -152,9 +160,7 @@ class ProbabilisticOperator(nn.Module):
             if hasattr(self.distribution_class, "num_params")
             else 1
         )
-        dist = self.distribution_class(
-            *params[:num_params], **self.distribution_kwargs
-        )
+        dist = self.distribution_class(*params[:num_params], **self.distribution_kwargs)
         return dist, num_params
 
     def _write_to_tensor_dict(self, tensor_dict: _TensorDict, tensors: List) -> None:
@@ -171,7 +177,9 @@ class ProbabilisticOperator(nn.Module):
         if self.return_log_prob:
             log_prob = dist.log_prob(out_tensor)
             log_prob = log_prob.unsqueeze(-1)
-            tensor_dict_unsqueezed.set("_".join([self.out_keys[0], "log_prob"]), log_prob)
+            tensor_dict_unsqueezed.set(
+                "_".join([self.out_keys[0], "log_prob"]), log_prob
+            )
         return tensor_dict
 
     def random(self, tensor_dict: _TensorDict) -> _TensorDict:
@@ -213,7 +221,9 @@ class ProbabilisticOperator(nn.Module):
         tensor_dict.set(self.out_keys[0] + "_log_prob", lp)
         return tensor_dict
 
-    def _dist_sample(self, dist: d.Distribution, interaction_mode: bool = None, eps: Number = None) -> torch.Tensor:
+    def _dist_sample(
+        self, dist: d.Distribution, interaction_mode: bool = None, eps: Number = None
+    ) -> torch.Tensor:
         if interaction_mode is None:
             interaction_mode = self.default_interaction_mode
 
@@ -224,13 +234,17 @@ class ProbabilisticOperator(nn.Module):
             if hasattr(dist, "mode"):
                 return dist.mode
             else:
-                raise NotImplementedError(f"method {type(dist)}.mode is not implemented")
+                raise NotImplementedError(
+                    f"method {type(dist)}.mode is not implemented"
+                )
 
         elif interaction_mode == "median":
             if hasattr(dist, "median"):
                 return dist.median
             else:
-                raise NotImplementedError(f"method {type(dist)}.median is not implemented")
+                raise NotImplementedError(
+                    f"method {type(dist)}.median is not implemented"
+                )
 
         elif interaction_mode == "mean":
             try:
@@ -248,13 +262,19 @@ class ProbabilisticOperator(nn.Module):
                 return dist.sample()
         else:
             raise NotImplementedError(f"unknown interaction_mode {interaction_mode}")
-    
+
     @property
     def device(self):
         for p in self.parameters():
             return p.device
         return torch.device("cpu")
-    
+
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> ProbabilisticOperator:
+        if self.spec is not None:
+            self.spec = self.spec.to(dest)
+        out = super().to(dest)
+        return out
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(mapping_operator={self.mapping_operator}, distribution_class={self.distribution_class}, device={self.device})"
 
@@ -279,12 +299,15 @@ class ProbabilisticOperatorWrapper(nn.Module):
         >>>             return self.probabilistic_operator(tensordict)
 
     """
+
     def __init__(self, probabilistic_operator: ProbabilisticOperator):
         super().__init__()
         self.probabilistic_operator = probabilistic_operator
         if len(self.probabilistic_operator._forward_hooks):
             for pre_hook in self.probabilistic_operator._forward_hooks:
-                self.register_forward_hook(self.probabilistic_operator._forward_hooks[pre_hook])
+                self.register_forward_hook(
+                    self.probabilistic_operator._forward_hooks[pre_hook]
+                )
 
     def __getattr__(self, name: str) -> Any:
         try:

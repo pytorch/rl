@@ -13,6 +13,7 @@ import torch
 #     entropy_loss = entropy_loss + entropy
 from torchrl.envs.utils import step_tensor_dict
 from .functional import generalized_advantage_estimate
+
 # from https://github.com/H-Huang/rpc-rl-experiments/blob/6621f0aadb347d1c4e24bcf46517ac36907401ff/a3c/process.py#L14
 # TODO: create function / object that vectorises that
 # actor_loss = 0
@@ -51,6 +52,7 @@ from ...modules import ProbabilisticOperator
 #     return torch.stack(gae)
 #
 
+
 class GAE:
     """
     A class wrapper around the generalized advantage estimate functional.
@@ -62,14 +64,23 @@ class GAE:
         lamda (scalar): trajectory discount.
         critic (ProbabilisticOperator): value operator used to retrieve the value estimates.
         average_rewards (bool): if True, rewards will be standardized before the GAE is computed.
+        gradient_mode (bool): if True, gradients are propagated throught the computation of the value function.
+            Default is False.
     """
 
-    def __init__(self, gamma: Union[Number, torch.Tensor], lamda: Number, critic: ProbabilisticOperator,
-                 average_rewards: bool = True):
+    def __init__(
+        self,
+        gamma: Union[Number, torch.Tensor],
+        lamda: Number,
+        critic: ProbabilisticOperator,
+        average_rewards: bool = False,
+        gradient_mode: bool = False,
+    ):
         self.gamma = gamma
         self.lamda = lamda
         self.critic = critic
         self.average_rewards = average_rewards
+        self.gradient_mode = gradient_mode
 
     def __call__(self, tensor_dict: _TensorDict) -> _TensorDict:
         """
@@ -82,24 +93,33 @@ class GAE:
         Returns: An updated TensorDict with an "advantage" and a "value_target" keys
 
         """
-        if tensor_dict.batch_dims < 2:
-            raise RuntimeError("Expected input tensordict to have at least two dimensions, got"
-                               f"tensor_dict.batch_size = {tensor_dict.batch_size}")
+        with torch.set_grad_enabled(self.gradient_mode):
+            if tensor_dict.batch_dims < 2:
+                raise RuntimeError(
+                    "Expected input tensordict to have at least two dimensions, got"
+                    f"tensor_dict.batch_size = {tensor_dict.batch_size}"
+                )
+            reward = tensor_dict.get("reward")
+            if self.average_rewards:
+                reward = reward - reward.mean()
+                reward = reward / reward.std().clamp_min(1e-4)
+                tensor_dict.set_(
+                    "reward", reward
+                )  # we must update the rewards if they are used later in the code
 
-        gamma, lamda = self.gamma, self.lamda
-        self.critic(tensor_dict)
-        value = tensor_dict.get("state_value")
-        step_td = step_tensor_dict(tensor_dict)
-        self.critic(step_td)
-        next_value = step_td.get("state_value")
-        reward = tensor_dict.get("reward")
-        if self.average_rewards:
-            reward = reward - reward.mean()
-            reward = reward / reward.std().clamp_min(1e-4)
-        done = tensor_dict.get("done")
+            gamma, lamda = self.gamma, self.lamda
+            self.critic(tensor_dict)
+            value = tensor_dict.get("state_value")
 
-        adv, value_target = generalized_advantage_estimate(
-            gamma, lamda, value, next_value, reward, done)
-        tensor_dict.set("advantage", adv)
-        tensor_dict.set("value_target", value_target)
-        return tensor_dict
+            step_td = step_tensor_dict(tensor_dict)
+            self.critic(step_td)
+            next_value = step_td.get("state_value")
+
+            done = tensor_dict.get("done")
+
+            adv, value_target = generalized_advantage_estimate(
+                gamma, lamda, value, next_value, reward, done
+            )
+            tensor_dict.set("advantage", adv)
+            tensor_dict.set("value_target", value_target)
+            return tensor_dict

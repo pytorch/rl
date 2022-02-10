@@ -1,0 +1,7 @@
+env_name=cheetah
+env_task=run
+env_library=dm_control
+async_collection
+record_video
+normalize_rewards_online
+tanh_normal_tanh

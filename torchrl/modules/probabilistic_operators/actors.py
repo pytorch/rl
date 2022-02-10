@@ -7,9 +7,14 @@ from torchrl.modules.distributions import Delta, OneHotCategorical
 from .common import ProbabilisticOperator, ProbabilisticOperatorWrapper
 from ..models.models import DistributionalDQNnet
 
-__all__ = ["Actor", "ActorValueOperator", "QValueActor", "DistributionalQValueActor", ]
+__all__ = [
+    "Actor",
+    "ActorValueOperator",
+    "QValueActor",
+    "DistributionalQValueActor",
+]
 
-from ...data import TensorSpec, CompositeSpec
+from ...data import TensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
 from ...data.tensordict.tensordict import _TensorDict
 
 
@@ -22,17 +27,17 @@ class Actor(ProbabilisticOperator):
     """
 
     def __init__(
-            self,
-            action_spec: TensorSpec,
-            mapping_operator: nn.Module,
-            distribution_class: Type = Delta,
-            distribution_kwargs: Optional[dict] = None,
-            default_interaction_mode: str = "mode",
-            _n_empirical_est: int = 1000,
-            safe: bool = False,
-            in_keys: Optional[Iterable[str]] = None,
-            out_keys: Optional[Iterable[str]] = None,
-            **kwargs,
+        self,
+        action_spec: TensorSpec,
+        mapping_operator: nn.Module,
+        distribution_class: Type = Delta,
+        distribution_kwargs: Optional[dict] = None,
+        default_interaction_mode: str = "mode",
+        _n_empirical_est: int = 1000,
+        safe: bool = False,
+        in_keys: Optional[Iterable[str]] = None,
+        out_keys: Optional[Iterable[str]] = None,
+        **kwargs,
     ):
         if in_keys is None:
             in_keys = ["observation"]
@@ -53,6 +58,27 @@ class Actor(ProbabilisticOperator):
         )
 
 
+class ValueOperator(ProbabilisticOperator):
+    def __init__(
+        self,
+        mapping_operator: nn.Module,
+        in_keys: Optional[Iterable[str]] = None,
+        out_keys: Optional[Iterable[str]] = None,
+    ) -> None:
+
+        if in_keys is None:
+            in_keys = ["observation"]
+        if out_keys is None:
+            out_keys = ["state_value"]
+        value_spec = UnboundedContinuousTensorSpec()
+        super().__init__(
+            value_spec,
+            mapping_operator=mapping_operator,
+            in_keys=in_keys,
+            out_keys=out_keys,
+        )
+
+
 class QValueHook:
     """
     Q-Value hook for Q-value policies.
@@ -68,7 +94,9 @@ class QValueHook:
     """
 
     def __init__(
-            self, action_space: str, var_nums: Optional[int] = None,
+        self,
+        action_space: str,
+        var_nums: Optional[int] = None,
     ):
         self.action_space = action_space
         self.var_nums = var_nums
@@ -78,8 +106,9 @@ class QValueHook:
             "binary": self._binary,
         }
 
-    def __call__(self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor) -> Tuple[
-        torch.Tensor, torch.Tensor]:
+    def __call__(
+        self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         return self.fun_dict[self.action_space](values), values
 
     @staticmethod
@@ -89,7 +118,15 @@ class QValueHook:
 
     def _mult_one_hot(self, value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
         values = value.split(self.var_nums, dim=-1)
-        return torch.cat([QValueHook._one_hot(_value, ) for _value in values], -1, )
+        return torch.cat(
+            [
+                QValueHook._one_hot(
+                    _value,
+                )
+                for _value in values
+            ],
+            -1,
+        )
 
     @staticmethod
     def _binary(value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
@@ -114,7 +151,10 @@ class DistributionalQValueHook(QValueHook):
     """
 
     def __init__(
-            self, action_space: str, support: torch.Tensor, var_nums: Optional[int] = None,
+        self,
+        action_space: str,
+        support: torch.Tensor,
+        var_nums: Optional[int] = None,
     ):
         self.action_space = action_space
         self.support = support
@@ -125,11 +165,14 @@ class DistributionalQValueHook(QValueHook):
             "binary": self._binary,
         }
 
-    def __call__(self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor) -> Tuple[
-        torch.Tensor, torch.Tensor]:
+    def __call__(
+        self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         return self.fun_dict[self.action_space](values, self.support), values
 
-    def _support_expected(self, log_softmax_values: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
+    def _support_expected(
+        self, log_softmax_values: torch.Tensor, support: torch.Tensor
+    ) -> torch.Tensor:
         support = support.to(log_softmax_values.device)
         if log_softmax_values.shape[-2] != support.shape[-1]:
             raise RuntimeError(
@@ -139,7 +182,8 @@ class DistributionalQValueHook(QValueHook):
         if (log_softmax_values > 0).any():
             raise ValueError(
                 f"input to QValueHook must be log-softmax values (which are expected to be non-positive numbers). "
-                f"got a maximum value of {log_softmax_values.max():4.4f}")
+                f"got a maximum value of {log_softmax_values.max():4.4f}"
+            )
         return (log_softmax_values.exp() * support.unsqueeze(-1)).sum(-2)
 
     def _one_hot(self, value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
@@ -206,7 +250,9 @@ class DistributionalQValueActor(QValueActor):
 
     """
 
-    def __init__(self, *args, support: torch.Tensor, action_space: str = "one_hot", **kwargs):
+    def __init__(
+        self, *args, support: torch.Tensor, action_space: str = "one_hot", **kwargs
+    ):
         out_keys = [
             "action",
             "action_value",
@@ -214,7 +260,7 @@ class DistributionalQValueActor(QValueActor):
         super(QValueActor, self).__init__(*args, out_keys=out_keys, **kwargs)
         self.action_space = action_space
 
-        self.register_buffer('support', support)
+        self.register_buffer("support", support)
         self.action_space = action_space
         if not isinstance(self.mapping_operator, DistributionalDQNnet):
             self.mapping_operator = DistributionalDQNnet(self.mapping_operator)
@@ -261,29 +307,33 @@ class ActorValueOperator(ProbabilisticOperator):
             default: "mode"
         value_interaction_mode (str): interaction mode for the value network.
             default: "mode"
+        return_log_prob (bool): if True, the action_log_prob will be written in the tensordict.
+            default is False.
     """
 
     # TODO: specs for action and value should be different. Use a CompositeSpec?
 
     def __init__(
-            self,
-            spec: TensorSpec,
-            in_keys: Iterable[str],
-            common_mapping_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
-            policy_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
-            value_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
-            out_keys: Optional[Iterable[str]] = None,
-            policy_distribution_class: Type = OneHotCategorical,
-            policy_distribution_kwargs: Optional[dict] = None,
-            value_distribution_class: Type = Delta,
-            value_distribution_kwargs: Optional[dict] = None,
-            policy_interaction_mode: str = "mode",  # mode, random, mean
-            value_interaction_mode: str = "mode",  # mode, random, mean
-            **kwargs,
+        self,
+        spec: TensorSpec,
+        in_keys: Iterable[str],
+        common_mapping_operator: Union[
+            Callable[[torch.Tensor], torch.Tensor], nn.Module
+        ],
+        policy_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
+        value_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
+        out_keys: Optional[Iterable[str]] = None,
+        policy_distribution_class: Type = OneHotCategorical,
+        policy_distribution_kwargs: Optional[dict] = None,
+        policy_interaction_mode: str = "mode",  # mode, random, mean,
+        return_log_prob: bool = False,
+        **kwargs,
     ):
         if out_keys:
-            raise RuntimeError("PolicyValueOperator out_keys are pre-defined and cannot be changed, "
-                               f"got out_keys={out_keys}")
+            raise RuntimeError(
+                "PolicyValueOperator out_keys are pre-defined and cannot be changed, "
+                f"got out_keys={out_keys}"
+            )
         value_out_keys = ["state_value"]
         policy_out_keys = ["action", "action_log_prob"]
         out_keys = policy_out_keys + value_out_keys
@@ -295,15 +345,10 @@ class ActorValueOperator(ProbabilisticOperator):
             **kwargs,
         )
 
-        self.value_po = ProbabilisticOperator(
-            spec,
+        self.value_po = ValueOperator(
             in_keys=["hidden_obs"],
             out_keys=value_out_keys,
             mapping_operator=value_operator,
-            distribution_class=value_distribution_class,
-            distribution_kwargs=value_distribution_kwargs,
-            default_interaction_mode=value_interaction_mode,
-            **kwargs,
         )
         self.policy_po = Actor(
             spec,
@@ -313,7 +358,7 @@ class ActorValueOperator(ProbabilisticOperator):
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             default_interaction_mode=policy_interaction_mode,
-            return_log_prob=True,
+            return_log_prob=return_log_prob,
             **kwargs,
         )
         self.out_keys = out_keys
@@ -361,10 +406,12 @@ class ActorCriticOperator(ProbabilisticOperator):
                Obs
                 v
         observation_embedding
-            v    |     v
-          actor  |   critic
-            v    |     v
-          action |   value
+            v
+          actor
+            v
+          action   >   critic
+                         v
+                       value
 
     To facilitate the workflow, this  class comes with a get_policy_operator() and get_value_operator() methods, which
     will both return a stand-alone ProbabilisticOperator with the dedicated functionality.
@@ -391,24 +438,24 @@ class ActorCriticOperator(ProbabilisticOperator):
     # TODO: specs for action and value should be different. Use a CompositeSpec?
 
     def __init__(
-            self,
-            spec: TensorSpec,
-            in_keys: Iterable[str],
-            common_mapping_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
-            policy_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
-            critic_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
-            out_keys: Optional[Iterable[str]] = None,
-            policy_distribution_class: Type = OneHotCategorical,
-            policy_distribution_kwargs: Optional[dict] = None,
-            critic_distribution_class: Type = Delta,
-            critic_distribution_kwargs: Optional[dict] = None,
-            policy_interaction_mode: str = "mode",  # mode, random, mean
-            critic_interaction_mode: str = "mode",  # mode, random, mean
-            **kwargs,
+        self,
+        spec: TensorSpec,
+        in_keys: Iterable[str],
+        common_mapping_operator: Union[
+            Callable[[torch.Tensor], torch.Tensor], nn.Module
+        ],
+        policy_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
+        out_keys: Optional[Iterable[str]] = None,
+        policy_distribution_class: Type = OneHotCategorical,
+        policy_distribution_kwargs: Optional[dict] = None,
+        policy_interaction_mode: str = "mode",  # mode, random, mean
+        **kwargs,
     ):
         if out_keys:
-            raise RuntimeError("PolicyValueOperator out_keys are pre-defined and cannot be changed, "
-                               f"got out_keys={out_keys}")
+            raise RuntimeError(
+                "PolicyValueOperator out_keys are pre-defined and cannot be changed, "
+                f"got out_keys={out_keys}"
+            )
         critic_out_keys = ["state_action_value"]
         policy_out_keys = ["action", "action_log_prob"]
         out_keys = policy_out_keys + critic_out_keys
@@ -420,15 +467,9 @@ class ActorCriticOperator(ProbabilisticOperator):
             **kwargs,
         )
 
-        self.critic_po = ProbabilisticOperator(
-            spec,
+        self.critic_po = ValueOperator(
             in_keys=["hidden_obs", "action"],
             out_keys=critic_out_keys,
-            mapping_operator=critic_operator,
-            distribution_class=critic_distribution_class,
-            distribution_kwargs=critic_distribution_kwargs,
-            default_interaction_mode=critic_interaction_mode,
-            **kwargs,
         )
         self.policy_po = Actor(
             spec,
@@ -451,7 +492,8 @@ class ActorCriticOperator(ProbabilisticOperator):
 
     def get_dist(self, tensor_dict: _TensorDict) -> Tuple[d.Distribution, ...]:
         raise NotImplementedError(
-            "TODO: get_dist for ActorCritic should return a joint distribution over action and value.")
+            "TODO: get_dist for ActorCritic should return a joint distribution over action and value."
+        )
 
     def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
         self._get_mapping(tensor_dict)
@@ -477,11 +519,13 @@ class ActorCriticOperator(ProbabilisticOperator):
 
 
 class ActorCriticWrapper(ProbabilisticOperator):
-    def __init__(self, policy_po: ProbabilisticOperator, critic_po: ProbabilisticOperator):
+    def __init__(self, policy_po: ProbabilisticOperator, critic_po: ValueOperator):
         in_keys = policy_po.in_keys
         out_keys = policy_po.out_keys + critic_po.out_keys
         super().__init__(
-            spec=CompositeSpec(action=policy_po.spec, state_action_value=critic_po.spec),
+            spec=CompositeSpec(
+                action=policy_po.spec, state_action_value=critic_po.spec
+            ),
             mapping_operator=nn.Identity(),
             in_keys=in_keys,
             out_keys=out_keys,
@@ -491,7 +535,8 @@ class ActorCriticWrapper(ProbabilisticOperator):
 
     def get_dist(self, tensor_dict: _TensorDict) -> Tuple[d.Distribution, ...]:
         raise NotImplementedError(
-            "TODO: get_dist for ActorCritic should return a joint distribution over action and value.")
+            "TODO: get_dist for ActorCritic should return a joint distribution over action and value."
+        )
 
     def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
         self.policy_po(tensor_dict)
@@ -514,6 +559,15 @@ class ActorCriticWrapper(ProbabilisticOperator):
         """
         return self.critic_po
 
+    def get_value_operator(self) -> ProbabilisticOperatorWrapper:
+        """
+
+        Returns a stand-alone value network operator that maps a state description to a value estimate.
+
+        """
+        return self.critic_po
+
+
 class OperatorMaskWrapper(ProbabilisticOperatorWrapper):
     """
     Given an actor-critic object and a target network (policy or value network), acts as a stand-alone operator with the
@@ -531,7 +585,9 @@ class OperatorMaskWrapper(ProbabilisticOperatorWrapper):
         self.parent_operator = parent_operator
         self.in_keys = parent_operator.in_keys
         if not hasattr(parent_operator, target):
-            raise AttributeError(f"{target} of OperatorMaskWrapper not found in the operator {type(parent_operator)}")
+            raise AttributeError(
+                f"{target} of OperatorMaskWrapper not found in the operator {type(parent_operator)}"
+            )
 
     @property
     def target_operator(self) -> ProbabilisticOperator:
@@ -543,13 +599,17 @@ class OperatorMaskWrapper(ProbabilisticOperatorWrapper):
         return (dist, *tensors)
 
     def named_parameters(
-            self, prefix: str = "", recurse: bool = True, exclude_common_operator=False
+        self, prefix: str = "", recurse: bool = True, exclude_common_operator=False
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         if not recurse:
-            raise ValueError("OperatorMaskWrapper.named_parameters requires the recurse arg to be set to True")
+            raise ValueError(
+                "OperatorMaskWrapper.named_parameters requires the recurse arg to be set to True"
+            )
 
         for n, p in self.target_operator.named_parameters(prefix=prefix):
             yield n, p
         if not exclude_common_operator:
-            for n, p in self.parent_operator.mapping_operator.named_parameters(prefix=prefix):
+            for n, p in self.parent_operator.mapping_operator.named_parameters(
+                prefix=prefix
+            ):
                 yield n, p

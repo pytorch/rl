@@ -48,24 +48,36 @@ class MetaTensor:
         >>> assert torch.stack([MetaTensor(3,4) for _ in range(10)], 1).shape == torch.Size([3, 10, 4])
     """
 
-    def __init__(self, *shape: int,
-                 device: Optional[DEVICE_TYPING] = 'cpu',
-                 dtype: torch.dtype = torch.get_default_dtype(),
-                 _is_shared: bool = False,
-                 _is_memmap: bool = False
-                 ):
+    def __init__(
+        self,
+        *shape: int,
+        device: Optional[DEVICE_TYPING] = "cpu",
+        dtype: torch.dtype = torch.get_default_dtype(),
+        _is_shared: bool = False,
+        _is_memmap: bool = False,
+    ):
 
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
             shape = tensor.shape
-            _is_shared = tensor.is_shared() if tensor.device != torch.device('meta') else _is_shared
-            _is_memmap = isinstance(tensor, MemmapTensor) if tensor.device != torch.device('meta') else _is_memmap
-            device = tensor.device if tensor.device != torch.device('meta') else device
+            _is_shared = (
+                tensor.is_shared()
+                if tensor.device != torch.device("meta")
+                else _is_shared
+            )
+            _is_memmap = (
+                isinstance(tensor, MemmapTensor)
+                if tensor.device != torch.device("meta")
+                else _is_memmap
+            )
+            device = tensor.device if tensor.device != torch.device("meta") else device
             dtype = tensor.dtype
         if not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
         self.shape = shape
-        self.device = torch.device(device) if not isinstance(device, torch.device) else device
+        self.device = (
+            torch.device(device) if not isinstance(device, torch.device) else device
+        )
         self.dtype = dtype
         self._ndim = len(shape)
         self._numel = np.prod(shape)
@@ -120,21 +132,30 @@ class MetaTensor:
         Returns: a new MetaTensor with the same specs.
 
         """
-        return MetaTensor(*self.shape, device=self.device, dtype=self.dtype, _is_shared=self.is_shared(),
-                          _is_memmap=self.is_memmap())
+        return MetaTensor(
+            *self.shape,
+            device=self.device,
+            dtype=self.dtype,
+            _is_shared=self.is_shared(),
+            _is_memmap=self.is_memmap(),
+        )
 
     def _to_meta(self) -> torch.Tensor:
-        return torch.empty(*self.shape, dtype=self.dtype, device='meta')
+        return torch.empty(*self.shape, dtype=self.dtype, device="meta")
 
     def __getitem__(self, item: INDEX_TYPING) -> MetaTensor:
         shape = _getitem_batch_size(self.shape, item)
-        return MetaTensor(*shape, dtype=self.dtype, device=self.device, _is_shared=self.is_shared())
+        return MetaTensor(
+            *shape, dtype=self.dtype, device=self.device, _is_shared=self.is_shared()
+        )
 
-    def __torch_function__(self, func: Callable, types, args: Tuple = (), kwargs: Optional[dict] = None):
+    def __torch_function__(
+        self, func: Callable, types, args: Tuple = (), kwargs: Optional[dict] = None
+    ):
         if kwargs is None:
             kwargs = {}
         if func not in META_HANDLED_FUNCTIONS or not all(
-                issubclass(t, (torch.Tensor, MetaTensor)) for t in types
+            issubclass(t, (torch.Tensor, MetaTensor)) for t in types
         ):
             return NotImplemented
         return META_HANDLED_FUNCTIONS[func](*args, **kwargs)
@@ -144,7 +165,9 @@ class MetaTensor:
         return MetaTensor(*shape, device=self.device, dtype=self.dtype)
 
     def __repr__(self) -> str:
-        return f"MetaTensor(shape={self.shape}, device={self.device}, dtype={self.dtype})"
+        return (
+            f"MetaTensor(shape={self.shape}, device={self.device}, dtype={self.dtype})"
+        )
 
     def unsqueeze(self, dim: int) -> MetaTensor:
         clone = self.clone()
@@ -175,37 +198,60 @@ class MetaTensor:
         clone.shape = torch.Size(new_shape)
         return clone
 
-    def view(self, *shape: Iterable, size: Optional[Union[List, Tuple, torch.Size]] = None) -> MetaTensor:
+    def view(
+        self, *shape: Iterable, size: Optional[Union[List, Tuple, torch.Size]] = None
+    ) -> MetaTensor:
         if len(shape) == 0 and size is not None:
             return self.view(*size)
         elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
             return self.view(*shape[0])
         elif not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
-        new_shape = torch.zeros(self.shape, device='meta').view(*shape)
+        new_shape = torch.zeros(self.shape, device="meta").view(*shape)
         return MetaTensor(new_shape, device=self.device, dtype=self.dtype)
 
 
-def _stack_meta(list_of_meta_tensors: Iterable[MetaTensor], dim: int = 0, dtype: torch.dtype = torch.float,
-                device: DEVICE_TYPING = "cpu", safe: bool = False) -> MetaTensor:
+def _stack_meta(
+    list_of_meta_tensors: Iterable[MetaTensor],
+    dim: int = 0,
+    dtype: torch.dtype = torch.float,
+    device: DEVICE_TYPING = "cpu",
+    safe: bool = False,
+) -> MetaTensor:
     if not len(list_of_meta_tensors):
         raise RuntimeError("empty list of meta tensors is not supported")
     shape = list_of_meta_tensors[0].shape
     if safe:
         for tensor in list_of_meta_tensors:
             if tensor.shape != shape:
-                raise RuntimeError(f"Stacking meta tensors of different shapes is not allowed, "
-                                   f"got shapes {shape} and {tensor.shape}")
+                raise RuntimeError(
+                    f"Stacking meta tensors of different shapes is not allowed, "
+                    f"got shapes {shape} and {tensor.shape}"
+                )
             if tensor.dtype != dtype:
-                raise TypeError(f"Stacking meta tensors of different dtype is not allowed, "
-                                f"got shapes {dtype} and {tensor.dtype}")
+                raise TypeError(
+                    f"Stacking meta tensors of different dtype is not allowed, "
+                    f"got shapes {dtype} and {tensor.dtype}"
+                )
     shape = [s for s in shape]
     shape.insert(dim, len(list_of_meta_tensors))
     return MetaTensor(*shape, dtype=dtype, device=device)
 
 
 @implements_for_meta(torch.stack)
-def stack_meta(list_of_meta_tensors: Iterable[MetaTensor], dim: int = 0, safe: bool = False) -> MetaTensor:
-    dtype = list_of_meta_tensors[0].dtype if len(list_of_meta_tensors) else torch.get_default_dtype()
-    device = list_of_meta_tensors[0].device if len(list_of_meta_tensors) else torch.device('cpu')
-    return _stack_meta(list_of_meta_tensors, dim=dim, dtype=dtype, device=device, safe=safe)
+def stack_meta(
+    list_of_meta_tensors: Iterable[MetaTensor], dim: int = 0, safe: bool = False
+) -> MetaTensor:
+    dtype = (
+        list_of_meta_tensors[0].dtype
+        if len(list_of_meta_tensors)
+        else torch.get_default_dtype()
+    )
+    device = (
+        list_of_meta_tensors[0].device
+        if len(list_of_meta_tensors)
+        else torch.device("cpu")
+    )
+    return _stack_meta(
+        list_of_meta_tensors, dim=dim, dtype=dtype, device=device, safe=safe
+    )

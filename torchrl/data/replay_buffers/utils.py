@@ -16,8 +16,7 @@ def pin_memory(data: Tensor) -> Tensor:
 
 
 def to_numpy(data: Tensor) -> np.ndarray:
-    return data.detach().cpu().numpy() if isinstance(data, torch.Tensor) else \
-        data
+    return data.detach().cpu().numpy() if isinstance(data, torch.Tensor) else data
 
 
 def fast_map(func, *inputs):
@@ -51,9 +50,9 @@ def first_field(data) -> Tensor:
     return next(iter(tree.flatten(data)))
 
 
-def to_torch(data: Tensor, device,
-             pin_memory: bool = False,
-             non_blocking: bool = False) -> torch.Tensor:
+def to_torch(
+    data: Tensor, device, pin_memory: bool = False, non_blocking: bool = False
+) -> torch.Tensor:
     if isinstance(data, np.generic):
         return torch.tensor(data, device=device)
 
@@ -68,9 +67,9 @@ def to_torch(data: Tensor, device,
     return data
 
 
-def cat_fields_to_device(input, device,
-                         pin_memory: bool = False,
-                         non_blocking: bool = False):
+def cat_fields_to_device(
+    input, device, pin_memory: bool = False, non_blocking: bool = False
+):
     input_on_device = fields_to_device(input, device, pin_memory, non_blocking)
     return cat_fields(input_on_device)
 
@@ -81,9 +80,9 @@ def cat_fields(input):
     return fast_map(lambda *x: torch.cat(x), *input)
 
 
-def fields_to_device(input, device,
-                     pin_memory: bool = False,
-                     non_blocking: bool = False):
+def fields_to_device(
+    input, device, pin_memory: bool = False, non_blocking: bool = False
+):
     if device is None or device == "cpu" or device == torch.device("cpu"):
         if pin_memory:
             return tree.map_structure(lambda x: x.cpu().pin_memory(), input)
@@ -91,7 +90,8 @@ def fields_to_device(input, device,
             return tree.map_structure(lambda x: x.cpu(), input)
     else:
         if pin_memory:
-            return tree.map_structure(lambda x: x.pin_memory().to(
-                device, non_blocking=non_blocking), input)
+            return tree.map_structure(
+                lambda x: x.pin_memory().to(device, non_blocking=non_blocking), input
+            )
         else:
             return tree.map_structure(lambda x: x.cuda(device), input)

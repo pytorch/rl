@@ -4,6 +4,7 @@ import torch
 import yaml
 from scipy.stats import chisquare
 
+from torchrl.agents.env_creator import EnvCreator
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
@@ -159,6 +160,19 @@ def test_parallel_env(env_name, frame_skip, transformed):
     td_parallel = env_parallel.rollout(n_steps=100)
     assert_allclose_td(td_serial, td_parallel)
 
+def test_parallel_env_shutdown():
+    env_make = EnvCreator(lambda: GymEnv("Pendulum-v0"))
+    env = ParallelEnv(4, env_make)
+    env.reset()
+    assert not env.is_closed
+    env.rand_step()
+    assert not env.is_closed
+    env.close()
+    assert env.is_closed
+    env.reset()
+    assert not env.is_closed
+    env.shutdown()
+    assert env.is_closed
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="no cuda device detected")
 @pytest.mark.parametrize("env_name", ["Pong-v0", "Pendulum-v0"])

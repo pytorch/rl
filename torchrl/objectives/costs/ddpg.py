@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from copy import deepcopy
 from numbers import Number
-from typing import Optional, Union, Tuple
+from typing import Tuple
 
 import torch
 
-from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.envs.utils import step_tensor_dict
-from torchrl.modules import ProbabilisticOperator
+from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.modules import ProbabilisticOperator, reset_noise
 from torchrl.modules.probabilistic_operators.actors import ActorCriticWrapper
-from torchrl.objectives.costs.utils import distance_loss, next_state_value
+from torchrl.objectives.costs.utils import distance_loss, next_state_value, hold_out_net
+from .common import _LossModule
 
 
-class DDPGLoss:
+class DDPGLoss(_LossModule):
     """
     The DDPG Loss class.
     Args:
@@ -25,14 +25,14 @@ class DDPGLoss:
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
     """
 
-    def __init__(self,
-                 actor_network: ProbabilisticOperator,
-                 value_network: ProbabilisticOperator,
-                 gamma: Number,
-                 device: Optional[Union[str, int, torch.device]] = None,
-                 loss_function: str = "l2",
-                 ):
-
+    def __init__(
+        self,
+        actor_network: ProbabilisticOperator,
+        value_network: ProbabilisticOperator,
+        gamma: Number,
+        loss_function: str = "l2",
+    ) -> None:
+        super().__init__()
         self.value_network = value_network
         self.actor_network = actor_network
         self.actor_in_keys = actor_network.in_keys
@@ -40,23 +40,21 @@ class DDPGLoss:
         self.gamma = gamma
         self.loss_funtion = loss_function
 
-        if device is None:
-            try:
-                device = next(value_network.parameters()).device
-            except:
-                # value_network does not have params, use obs
-                device = None
-        self.device = device
-
-    def _get_networks(self) -> \
-            Tuple[ProbabilisticOperator, ProbabilisticOperator, ProbabilisticOperator, ProbabilisticOperator]:
+    def _get_networks(
+        self,
+    ) -> Tuple[
+        ProbabilisticOperator,
+        ProbabilisticOperator,
+        ProbabilisticOperator,
+        ProbabilisticOperator,
+    ]:
         actor_network = self.actor_network
         value_network = self.value_network
         target_actor_network = self.actor_network
         target_value_network = self.value_network
         return actor_network, value_network, target_actor_network, target_value_network
 
-    def __call__(self, input_tensor_dict: _TensorDict) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __call__(self, input_tensor_dict: _TensorDict) -> TensorDict:
         """
         Computes the DDPG losses given a tensordict sampled from the replay buffer.
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
@@ -69,50 +67,74 @@ class DDPGLoss:
         Returns: a tuple of 2 tensors containing the DDPG loss.
 
         """
-        actor_network, value_network, target_actor_network, target_value_network = self._get_networks()
-        device = self.device if self.device is not None else input_tensor_dict.device
-        tensor_dict_device = input_tensor_dict.to(device)
-
-        done = tensor_dict_device.get("done").squeeze(-1)
-        rewards = tensor_dict_device.get("reward").squeeze(-1)
-
-        gamma = self.gamma
-
-        value_loss, td_error = self._value_loss(
-            tensor_dict_device,
+        (
+            actor_network,
             value_network,
             target_actor_network,
             target_value_network,
-            gamma)
+        ) = self._get_networks()
+        if not input_tensor_dict.device == actor_network.device:
+            raise RuntimeError(
+                f"Got device={input_tensor_dict.device} but actor_network.device={actor_network.device} "
+                f"(self.device={self.device})"
+            )
+        if not input_tensor_dict.device == value_network.device:
+            raise RuntimeError(
+                f"Got device={input_tensor_dict.device} but value_network.device={value_network.device} "
+                f"(self.device={self.device})"
+            )
+
+        loss_value, td_error, pred_val, target_value = self._loss_value(
+            input_tensor_dict,
+            value_network,
+            target_actor_network,
+            target_value_network,
+        )
         input_tensor_dict.set(
             "td_error",
-            abs(td_error.detach().unsqueeze(1).to(input_tensor_dict.device)),
-            inplace=True)
-        actor_loss = self._actor_loss(tensor_dict_device, actor_network, value_network)
-        return actor_loss.mean(), value_loss.mean()
+            td_error.detach().unsqueeze(1).to(input_tensor_dict.device),
+            inplace=True,
+        )
+        loss_actor = self._loss_actor(input_tensor_dict, actor_network, value_network)
+        return TensorDict(
+            source={
+                "loss_actor": loss_actor.mean(),
+                "loss_value": loss_value.mean(),
+                "pred_value": pred_val.mean().detach(),
+                "target_value": target_value.mean().detach(),
+                "pred_value_max": pred_val.max().detach(),
+                "target_value_max": target_value.max().detach(),
+            },
+            batch_size=[],
+        )
 
     @property
     def target_value_network(self) -> ProbabilisticOperator:
-        return self._get_networks()[-1]
+        return self.value_network
 
     @property
     def target_actor_network(self) -> ProbabilisticOperator:
-        return self._get_networks()[-2]
+        return self.actor_network
 
-    def _actor_loss(self, tensor_dict: _TensorDict, actor_network: ProbabilisticOperator,
-                    value_network: ProbabilisticOperator) -> torch.Tensor:
+    def _loss_actor(
+        self,
+        tensor_dict: _TensorDict,
+        actor_network: ProbabilisticOperator,
+        value_network: ProbabilisticOperator,
+    ) -> torch.Tensor:
         td_copy = tensor_dict.select(*self.actor_in_keys).detach()
         td_copy = actor_network(td_copy)
-        rg_status = next(value_network.parameters()).requires_grad
-        value_network.requires_grad_(False)
-        td_copy = value_network(td_copy)
-        value_network.requires_grad_(rg_status)
+        with hold_out_net(value_network):
+            td_copy = value_network(td_copy)
         return -td_copy.get("state_action_value")
 
-    def _value_loss(self, tensor_dict: _TensorDict, value_network: ProbabilisticOperator,
-                    target_actor_network: ProbabilisticOperator,
-                    target_value_network: ProbabilisticOperator,
-                    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _loss_value(
+        self,
+        tensor_dict: _TensorDict,
+        value_network: ProbabilisticOperator,
+        target_actor_network: ProbabilisticOperator,
+        target_value_network: ProbabilisticOperator,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # value loss
         td_copy = tensor_dict.select(*value_network.in_keys).detach()
         value_network(td_copy)
@@ -122,9 +144,11 @@ class DDPGLoss:
         target_value = next_state_value(tensor_dict, actor_critic, gamma=self.gamma)
 
         # td_error = pred_val - target_value
-        value_loss = distance_loss(pred_val, target_value, loss_function=self.loss_funtion)
+        loss_value = distance_loss(
+            pred_val, target_value, loss_function=self.loss_funtion
+        )
 
-        return value_loss, value_loss
+        return loss_value, abs(pred_val - target_value), pred_val, target_value
 
 
 class DoubleDDPGLoss(DDPGLoss):
@@ -146,10 +170,26 @@ class DoubleDDPGLoss(DDPGLoss):
         self._target_actor_network = deepcopy(self.actor_network)
         self._target_actor_network.requires_grad_(False)
 
-    def _get_networks(self) -> \
-            Tuple[ProbabilisticOperator, ProbabilisticOperator, ProbabilisticOperator, ProbabilisticOperator]:
+    def _get_networks(
+        self,
+    ) -> Tuple[
+        ProbabilisticOperator,
+        ProbabilisticOperator,
+        ProbabilisticOperator,
+        ProbabilisticOperator,
+    ]:
         actor_network = self.actor_network
         value_network = self.value_network
-        target_actor_network = self._target_actor_network
-        target_value_network = self._target_value_network
+        target_actor_network = self.target_actor_network
+        target_value_network = self.target_value_network
         return actor_network, value_network, target_actor_network, target_value_network
+
+    @property
+    def target_value_network(self) -> ProbabilisticOperator:
+        self._target_value_network.apply(reset_noise)
+        return self._target_value_network
+
+    @property
+    def target_actor_network(self) -> ProbabilisticOperator:
+        self._target_actor_network.apply(reset_noise)
+        return self._target_actor_network

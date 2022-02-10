@@ -1,0 +1,14 @@
+env_name=humanoid
+env_task=walk
+env_library=dm_control
+optim_steps_per_collection=10
+lamda=0.95
+normalize_rewards_online
+record_video
+max_frames_per_traj=1000
+record_interval=200
+lr=3e-4
+entropy_factor=1e-4
+frame_skip=4
+tanh_normal_tanh
+init_with_lag

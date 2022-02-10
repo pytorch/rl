@@ -35,23 +35,57 @@ class NoisyLinear(nn.Linear):
         std_init (scalar): initial value of the Gaussian standard deviation before optimization.
             default: 1.0
     """
-    def __init__(self, in_features: int, out_features: int, bias: bool = True, device: Optional[DEVICE_TYPING] = None,
-                 dtype: Optional[torch.dtype] = None,
-                 std_init: Number = 0.1):
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool = True,
+        device: Optional[DEVICE_TYPING] = None,
+        dtype: Optional[torch.dtype] = None,
+        std_init: Number = 0.1,
+    ):
         nn.Module.__init__(self)
         self.in_features = in_features
         self.out_features = out_features
         self.std_init = std_init
 
         self.weight_mu = nn.Parameter(
-            torch.empty(out_features, in_features, device=device, dtype=dtype, requires_grad=True))
+            torch.empty(
+                out_features,
+                in_features,
+                device=device,
+                dtype=dtype,
+                requires_grad=True,
+            )
+        )
         self.weight_sigma = nn.Parameter(
-            torch.empty(out_features, in_features, device=device, dtype=dtype, requires_grad=True))
-        self.register_buffer("weight_epsilon", torch.empty(out_features, in_features, device=device, dtype=dtype))
+            torch.empty(
+                out_features,
+                in_features,
+                device=device,
+                dtype=dtype,
+                requires_grad=True,
+            )
+        )
+        self.register_buffer(
+            "weight_epsilon",
+            torch.empty(out_features, in_features, device=device, dtype=dtype),
+        )
         if bias:
-            self.bias_mu = nn.Parameter(torch.empty(out_features, device=device, dtype=dtype, requires_grad=True))
-            self.bias_sigma = nn.Parameter(torch.empty(out_features, device=device, dtype=dtype, requires_grad=True))
-            self.register_buffer("bias_epsilon", torch.empty(out_features, device=device, dtype=dtype))
+            self.bias_mu = nn.Parameter(
+                torch.empty(
+                    out_features, device=device, dtype=dtype, requires_grad=True
+                )
+            )
+            self.bias_sigma = nn.Parameter(
+                torch.empty(
+                    out_features, device=device, dtype=dtype, requires_grad=True
+                )
+            )
+            self.register_buffer(
+                "bias_epsilon", torch.empty(out_features, device=device, dtype=dtype)
+            )
         else:
             self.bias_mu = None
         self.reset_parameters()
@@ -115,20 +149,29 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
             default: 1.0
     """
 
-    def __init__(self, out_features: int, bias: bool = True, device: Optional[DEVICE_TYPING] = None,
-                 dtype: Optional[torch.dtype] = None,
-                 std_init: Number = 0.1):
+    def __init__(
+        self,
+        out_features: int,
+        bias: bool = True,
+        device: Optional[DEVICE_TYPING] = None,
+        dtype: Optional[torch.dtype] = None,
+        std_init: Number = 0.1,
+    ):
         super().__init__(0, 0, False)
         self.out_features = out_features
         self.std_init = std_init
 
         self.weight_mu = UninitializedParameter(device=device, dtype=dtype)
         self.weight_sigma = UninitializedParameter(device=device, dtype=dtype)
-        self.register_buffer("weight_epsilon", UninitializedBuffer(device=device, dtype=dtype))
+        self.register_buffer(
+            "weight_epsilon", UninitializedBuffer(device=device, dtype=dtype)
+        )
         if bias:
             self.bias_mu = UninitializedParameter(device=device, dtype=dtype)
             self.bias_sigma = UninitializedParameter(device=device, dtype=dtype)
-            self.register_buffer("bias_epsilon", UninitializedBuffer(device=device, dtype=dtype))
+            self.register_buffer(
+                "bias_epsilon", UninitializedBuffer(device=device, dtype=dtype)
+            )
         else:
             self.bias_mu = None
         self.reset_parameters()
@@ -167,5 +210,5 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
 
 
 def reset_noise(layer) -> None:
-    if hasattr(layer, 'reset_noise'):
+    if hasattr(layer, "reset_noise"):
         layer.reset_noise()

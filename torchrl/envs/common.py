@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from numbers import Number
 from typing import Optional, Tuple, Callable, Union, Any, Iterator
 
 import numpy as np
 import torch
-from torch import nn
 
 from torchrl.data import CompositeSpec
 from torchrl.data import TensorDict
@@ -39,6 +39,7 @@ class Specs:
         env (_EnvClass): environment from which the specs have to be read.
 
     """
+
     _keys = {"action_spec", "observation_spec", "reward_spec", "from_pixels"}
 
     def __init__(self, env: _EnvClass):
@@ -53,33 +54,26 @@ class Specs:
         return self._keys
 
     def build_tensor_dict(
-            self, next_observation: bool = True, log_prob: bool = False
+        self, next_observation: bool = True, log_prob: bool = False
     ) -> _TensorDict:
         """returns a TensorDict with empty tensors of the desired shape"""
         # build a tensordict from specs
         td = TensorDict(batch_size=torch.Size([]))
         action_placeholder = torch.zeros(
-            self["action_spec"].shape,
-            dtype=self["action_spec"].dtype
+            self["action_spec"].shape, dtype=self["action_spec"].dtype
         )
         if not isinstance(self["observation_spec"], CompositeSpec):
             observation_placeholder = torch.zeros(
-                self["observation_spec"].shape,
-                dtype=self["observation_spec"].dtype
+                self["observation_spec"].shape, dtype=self["observation_spec"].dtype
             )
-            td.set(f"observation",
-                   observation_placeholder)
+            td.set(f"observation", observation_placeholder)
         else:
             for i, key in enumerate(self["observation_spec"]):
                 item = self["observation_spec"][key]
-                observation_placeholder = torch.zeros(
-                    item.shape, dtype=item.dtype
-                )
-                td.set(f"observation_{key}",
-                       observation_placeholder)
+                observation_placeholder = torch.zeros(item.shape, dtype=item.dtype)
+                td.set(f"observation_{key}", observation_placeholder)
                 if next_observation:
-                    td.set(f"next_observation_{key}",
-                           observation_placeholder.clone())
+                    td.set(f"next_observation_{key}", observation_placeholder.clone())
 
         reward_placeholder = torch.zeros(
             self["reward_spec"].shape, dtype=self["reward_spec"].dtype
@@ -120,6 +114,7 @@ class _EnvClass:
             steps if no policy is provided)
 
     """
+
     action_spec = None
     reward_spec = None
     observation_spec = None
@@ -128,7 +123,9 @@ class _EnvClass:
     batch_size = torch.Size([])
 
     def __init__(
-            self, device: DEVICE_TYPING = "cpu", dtype: Optional[Union[torch.dtype, np.dtype]] = None,
+        self,
+        device: DEVICE_TYPING = "cpu",
+        dtype: Optional[Union[torch.dtype, np.dtype]] = None,
     ):
         self.device = device
         self.dtype = dtype_map.get(dtype, dtype)
@@ -151,14 +148,18 @@ class _EnvClass:
         """
         # sanity check
         if tensor_dict.get("action").dtype is not self.action_spec.dtype:
-            raise TypeError(f"expected action.dtype to be {self.action_spec.dtype} "
-                            f"but got {tensor_dict.get('action').dtype}")
+            raise TypeError(
+                f"expected action.dtype to be {self.action_spec.dtype} "
+                f"but got {tensor_dict.get('action').dtype}"
+            )
 
         tensor_dict_out = self._step(tensor_dict)
         if tensor_dict_out is tensor_dict:
-            raise RuntimeError("_EnvClass._step should return outplace changes to the input "
-                               "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
-                               "tensordict.select()) inside _step before writing new tensors onto this new instance.")
+            raise RuntimeError(
+                "_EnvClass._step should return outplace changes to the input "
+                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
+                "tensordict.select()) inside _step before writing new tensors onto this new instance."
+            )
         self.is_done = tensor_dict_out.get("done")
         self._current_tensordict = step_tensor_dict(tensor_dict_out)
         for key in self._select_observation_keys(tensor_dict_out):
@@ -166,17 +167,38 @@ class _EnvClass:
             self.observation_spec.type_check(obs, key)
 
         if tensor_dict_out.get("reward").dtype is not self.reward_spec.dtype:
-            raise TypeError(f"expected reward.dtype to be {self.reward_spec.dtype} "
-                            f"but got {tensor_dict_out.get('reward').dtype}")
+            raise TypeError(
+                f"expected reward.dtype to be {self.reward_spec.dtype} "
+                f"but got {tensor_dict_out.get('reward').dtype}"
+            )
 
         if tensor_dict_out.get("done").dtype is not torch.bool:
-            raise TypeError(f"expected done.dtype to be torch.bool but got {tensor_dict_out.get('done').dtype}")
+            raise TypeError(
+                f"expected done.dtype to be torch.bool but got {tensor_dict_out.get('done').dtype}"
+            )
 
         tensor_dict.update(tensor_dict_out, inplace=True)
         del tensor_dict_out
         return tensor_dict
 
-    def _step(self, tensor_dict: _TensorDict, ) -> _TensorDict:
+    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
+        if destination is not None:
+            return destination
+        return OrderedDict()
+
+    def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
+        pass
+
+    def eval(self) -> _EnvClass:
+        return self
+
+    def train(self, mode: bool = True) -> _EnvClass:
+        return self
+
+    def _step(
+        self,
+        tensor_dict: _TensorDict,
+    ) -> _TensorDict:
         raise NotImplementedError
 
     def _reset(self, tensor_dict: _TensorDict) -> _TensorDict:
@@ -200,12 +222,20 @@ class _EnvClass:
             tensor_dict = TensorDict(device=self.device, batch_size=self.batch_size)
         tensor_dict_reset = self._reset(tensor_dict)
         if tensor_dict_reset is tensor_dict:
-            raise RuntimeError("_EnvClass._reset should return outplace changes to the input "
-                               "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
-                               "tensordict.select()) inside _reset before writing new tensors onto this new instance.")
+            raise RuntimeError(
+                "_EnvClass._reset should return outplace changes to the input "
+                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
+                "tensordict.select()) inside _reset before writing new tensors onto this new instance."
+            )
 
         self._current_tensordict = tensor_dict_reset
-        self.is_done = tensor_dict_reset.get("done", torch.zeros(self.batch_size, dtype=torch.bool, device=self.device))
+        self.is_done = tensor_dict_reset.get(
+            "done", torch.zeros(self.batch_size, dtype=torch.bool, device=self.device)
+        )
+        if self.is_done:
+            raise RuntimeError(
+                f"Env {self} was done after reset. This is (currently) not allowed."
+            )
         if tensor_dict is not None:
             tensor_dict.update(tensor_dict_reset)
         else:
@@ -222,7 +252,9 @@ class _EnvClass:
         try:
             return self._current_tensordict
         except AttributeError:
-            print(f"env {self} does not have a _current_tensordict attribute. Consider calling reset() before step().")
+            print(
+                f"env {self} does not have a _current_tensordict attribute. Consider calling reset() before step()."
+            )
 
     def set_seed(self, seed: int) -> int:
         """
@@ -243,8 +275,10 @@ class _EnvClass:
 
     def _assert_tensordict_shape(self, tensor_dict: _TensorDict) -> None:
         if tensor_dict.batch_size != self.batch_size:
-            raise RuntimeError(f"Expected a tensor_dict with shape==env.shape, "
-                               f"got {tensor_dict.batch_size} and {self.batch_size}")
+            raise RuntimeError(
+                f"Expected a tensor_dict with shape==env.shape, "
+                f"got {tensor_dict.batch_size} and {self.batch_size}"
+            )
 
     def is_done_get_fn(self) -> bool:
         return self._is_done.all()
@@ -266,7 +300,9 @@ class _EnvClass:
 
         """
         if tensor_dict is None:
-            tensor_dict = self.current_tensordict  # TensorDict(batch_size=self.batch_size)
+            tensor_dict = (
+                self.current_tensordict
+            )  # TensorDict(batch_size=self.batch_size)
         action = self.action_spec.rand(self.batch_size)
         tensor_dict.set("action", action)
         return self.step(tensor_dict)
@@ -283,10 +319,11 @@ class _EnvClass:
         return Specs(self)
 
     def rollout(
-            self, policy: Optional[Callable[[_TensorDict], _TensorDict]] = None,
-            n_steps: int = 1,
-            callback: Optional[Callable[[_TensorDict, ...], _TensorDict]] = None,
-            auto_reset: bool = True,
+        self,
+        policy: Optional[Callable[[_TensorDict], _TensorDict]] = None,
+        n_steps: int = 1,
+        callback: Optional[Callable[[_TensorDict, ...], _TensorDict]] = None,
+        auto_reset: bool = True,
     ) -> _TensorDict:
         """
 
@@ -313,13 +350,13 @@ class _EnvClass:
         if auto_reset:
             tensor_dict = self.reset()
         else:
-            tensor_dict = self.specs.build_tensor_dict().expand(*self.batch_size).contiguous()
+            tensor_dict = (
+                self.specs.build_tensor_dict().expand(*self.batch_size).contiguous()
+            )
             tensor_dict.update(self.current_tensordict)
 
         if policy is None:
-            policy = lambda td: td.set(
-                "action", self.action_spec.rand(self.batch_size)
-            )
+            policy = lambda td: td.set("action", self.action_spec.rand(self.batch_size))
 
         tensor_dicts = []
         if not self.is_done:
@@ -346,12 +383,18 @@ class _EnvClass:
             if key.rfind("observation") >= 0:
                 yield key
 
-    def _to_tensor(self, value: Union[dict, bool, Number, torch.Tensor, np.ndarray],
-                   device: Optional[DEVICE_TYPING] = None,
-                   dtype: Optional[torch.dtype] = None) -> Union[torch.Tensor, dict]:
+    def _to_tensor(
+        self,
+        value: Union[dict, bool, Number, torch.Tensor, np.ndarray],
+        device: Optional[DEVICE_TYPING] = None,
+        dtype: Optional[torch.dtype] = None,
+    ) -> Union[torch.Tensor, dict]:
 
         if isinstance(value, dict):
-            return {_key: self._to_tensor(_value, dtype=dtype, device=device) for _key, _value in value.items()}
+            return {
+                _key: self._to_tensor(_value, dtype=dtype, device=device)
+                for _key, _value in value.items()
+            }
         elif isinstance(value, (bool, Number)):
             value = np.array(value)
 
@@ -387,6 +430,7 @@ class _EnvClass:
     def close(self):
         pass
 
+
 class _EnvWrapper(_EnvClass):
     """
     Abstract environment wrapper class.
@@ -399,17 +443,18 @@ class _EnvWrapper(_EnvClass):
     libname: str = ""
 
     def __init__(
-            self,
-            envname: str,
-            taskname: str = "",
-            frame_skip: int = 1,
-            dtype: Optional[np.dtype] = None,
-            device: DEVICE_TYPING = "cpu",
-            seed: Optional[int] = None,
-            **kwargs,
+        self,
+        envname: str,
+        taskname: str = "",
+        frame_skip: int = 1,
+        dtype: Optional[np.dtype] = None,
+        device: DEVICE_TYPING = "cpu",
+        seed: Optional[int] = None,
+        **kwargs,
     ):
         super().__init__(
-            device=device, dtype=dtype,
+            device=device,
+            dtype=dtype,
         )
         self.envname = envname
         self.taskname = taskname
@@ -418,9 +463,17 @@ class _EnvWrapper(_EnvClass):
         self.wrapper_frame_skip = frame_skip  # this value can be changed if frame_skip is passed during env construction
 
         self.constructor_kwargs = kwargs
-        if not ((envname in self.available_envs) and (
-                taskname in self.available_envs[envname] if isinstance(self.available_envs, dict) else True)):
-            raise RuntimeError(f"{envname} with task {taskname} is unknown in {self.libname}")
+        if not (
+            (envname in self.available_envs)
+            and (
+                taskname in self.available_envs[envname]
+                if isinstance(self.available_envs, dict)
+                else True
+            )
+        ):
+            raise RuntimeError(
+                f"{envname} with task {taskname} is unknown in {self.libname}"
+            )
         self._build_env(envname, taskname, **kwargs)  # writes the self._env attribute
         self._init_env(seed=seed)  # runs all the steps to have a ready-to-use env
 
@@ -440,7 +493,9 @@ class _EnvWrapper(_EnvClass):
 
         raise NotImplementedError
 
-    def _build_env(self, envname: str, taskname: Optional[str] = None, **kwargs) -> None:
+    def _build_env(
+        self, envname: str, taskname: Optional[str] = None, **kwargs
+    ) -> None:
         """
         Creates an environment from the target library and stores it with the `_env` attribute.
         When overwritten, this function should pass all the required kwargs to the env instantiation method.
@@ -488,7 +543,9 @@ class GymLikeEnv(_EnvWrapper):
 
         reward = 0.0
         for _ in range(self.wrapper_frame_skip):
-            obs, _reward, done, *info = self._output_transform(self._env.step(action_np))
+            obs, _reward, done, *info = self._output_transform(
+                self._env.step(action_np)
+            )
             if _reward is None:
                 _reward = 0.0
             reward += _reward
@@ -521,7 +578,9 @@ class GymLikeEnv(_EnvWrapper):
 
     def _reset(self, tensor_dict: Optional[_TensorDict] = None) -> _TensorDict:
         obs, *_ = self._output_transform((self._env.reset(),))
-        tensor_dict_out = TensorDict(source=self._read_obs(obs), batch_size=self.batch_size)
+        tensor_dict_out = TensorDict(
+            source=self._read_obs(obs), batch_size=self.batch_size
+        )
         self._is_done = torch.zeros(1, dtype=torch.bool)
         tensor_dict_out.set("done", self._is_done)
         return tensor_dict_out
@@ -529,9 +588,7 @@ class GymLikeEnv(_EnvWrapper):
     def _read_obs(self, observations: torch.Tensor) -> dict:
         observations = self.observation_spec.encode(observations)
         if isinstance(observations, dict):
-            obs_dict = {
-                f"observation_{key}": obs for key, obs in observations.items()
-            }
+            obs_dict = {f"observation_{key}": obs for key, obs in observations.items()}
         else:
             obs_dict = {"observation": observations}
         obs_dict = self._to_tensor(obs_dict)
@@ -540,7 +597,9 @@ class GymLikeEnv(_EnvWrapper):
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
         """To be overwritten when step_outputs differ from Tuple[Observation: Union[np.ndarray, dict], reward: Number, done:Bool]"""
         if not isinstance(step_outputs_tuple, tuple):
-            raise TypeError(f"Expected step_outputs_tuple type to be Tuple but got {type(step_outputs_tuple)}")
+            raise TypeError(
+                f"Expected step_outputs_tuple type to be Tuple but got {type(step_outputs_tuple)}"
+            )
         return step_outputs_tuple
 
     def __repr__(self) -> str:
@@ -548,8 +607,8 @@ class GymLikeEnv(_EnvWrapper):
 
 
 def make_tensor_dict(
-        env: _EnvClass,
-        policy: Optional[Callable[[_TensorDict, ...], _TensorDict]] = None) -> _TensorDict:
+    env: _EnvClass, policy: Optional[Callable[[_TensorDict, ...], _TensorDict]] = None
+) -> _TensorDict:
     """
     Returns a zeroed-tensordict with fields matching those required for a full step
     (action selection and environment step) in the environment

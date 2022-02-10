@@ -3,6 +3,8 @@ import warnings
 
 import torch
 import os
+
+
 def is_module_available(*modules: str) -> bool:
     r"""Returns if a top-level module with :attr:`name` exists *without**
     importing it. This is generally safer than try-catch block around a
@@ -12,8 +14,9 @@ def is_module_available(*modules: str) -> bool:
     """
     return all(importlib.util.find_spec(m) is not None for m in modules)
 
+
 def _init_extension():
-    if not is_module_available('torchrl._torchrl'):
-        warnings.warn('torchrl C++ extension is not available.')
+    if not is_module_available("torchrl._torchrl"):
+        warnings.warn("torchrl C++ extension is not available.")
         return
     from torchrl import _torchrl
