@@ -29,6 +29,21 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 - [SAC](examples/sac/sac.py)
 and many more to come!
 
+## Running examples
+Examples are coded in a very similar way but the configuration may change from one algorithm to the other (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)
+To train an algorithm it is therefore advised to do use the predefined configurations that are found in the `configs` sub-folder in each algorithm directory:
+```
+python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt
+```
+Note that using the config files requires the [configargparse](https://pypi.org/project/ConfigArgParse/) library. 
+
+One can also overwrite the config parameters using flags, e.g.
+```
+python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt --frame_skip=2 --collection_devices=cuda:1
+```
+
+Each example will write a tensorboard log in a dedicated folder, e.g. `ppo_logging/...`.
+
 ## Contributing
 Internal collaborations to torchrl are welcome! Feel free to fork, submit issues and PRs.
 
