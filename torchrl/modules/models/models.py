@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Iterable, Type, Union, Optional, Tuple, Callable
+from typing import Iterable, Type, Union, Optional, Tuple, Callable, Dict
 
 import numpy as np
 import torch
@@ -22,6 +22,7 @@ __all__ = [
     "DdpgCnnQNet",
     "DdpgMlpActor",
     "DdpgMlpQNet",
+    "LSTMNet",
 ]
 
 
@@ -694,3 +695,41 @@ class DdpgMlpQNet(nn.Module):
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         value = self.mlp2(torch.cat([self.mlp1(observation), action], -1))
         return value
+
+
+class LSTMNet(nn.Module):
+    """
+    An embedder for an LSTM followed by an MLP.
+
+    """
+
+    def __init__(self, lstm_kwargs: Dict, mlp_kwargs: Dict) -> None:
+        super().__init__()
+        self.lstm = nn.LSTMCell(**lstm_kwargs)
+        self.mlp = MLP(**mlp_kwargs)
+
+    def forward(
+        self,
+        input: torch.Tensor,
+        hidden0: Optional[torch.Tensor] = None,
+        hidden1: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if hidden1 is None and hidden0 is None:
+            hidden = None
+        elif hidden1 is not None and hidden0 is not None:
+            hidden = (hidden0, hidden1)
+        else:
+            raise RuntimeError(f"got type(hidden0)={type(hidden0)} and type(hidden1)={type(hidden1)}")
+        shape = None
+        if input.ndimension() > 2:
+            shape = input.shape
+            input = input.flatten(0, input.ndimension() - 2)
+            hidden = tuple(
+                _hidden.flatten(0, _hidden.ndimension() - 2) if _hidden is not None else None for _hidden in hidden
+            )
+        y0, hidden = self.lstm(input, hidden)
+        y = self.mlp(y0)
+        out = (y, y0, hidden)
+        if shape is not None:
+            out = tuple(_out.reshape(*shape[:-1], _out.shape[-1]) for _out in out)
+        return out

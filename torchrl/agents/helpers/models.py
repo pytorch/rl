@@ -22,7 +22,7 @@ from torchrl.modules.models.models import (
     DdpgMlpQNet,
     DdpgMlpActor,
     MLP,
-    ConvNet,
+    ConvNet, LSTMNet,
 )
 from torchrl.modules.probabilistic_operators import (
     QValueActor,
@@ -253,7 +253,7 @@ def make_ppo_model(
     proof_environment: _EnvClass,
     args: ArgumentParser,
     device: DEVICE_TYPING,
-    in_keys: Optional[Iterable[str]] = None,
+    in_keys_actor: Optional[Iterable[str]] = None,
     **kwargs,
 ) -> ActorValueOperator:
     """
@@ -264,7 +264,7 @@ def make_ppo_model(
 
     Args:
         spec (TensorSpec): action_spec descriptor
-        in_keys (Iterable[str], optional):
+        in_keys_actor (Iterable[str], optional):
             default: ["observation_vector"]
         **kwargs: kwargs to be passed to the ActorCriticOperator.
 
@@ -275,12 +275,16 @@ def make_ppo_model(
     specs = proof_environment.specs  # TODO: use env.sepcs
     action_spec = specs["action_spec"]
 
-    if args.from_pixels and in_keys is None:
-        in_keys = ["observation_pixels"]
-    elif in_keys is None:
-        in_keys = ["observation_vector"]
+    if args.from_pixels and in_keys_actor is None:
+        in_keys_actor = ["observation_pixels"]
+        in_keys_critic = ["observation_pixels"]
+    elif in_keys_actor is None:
+        in_keys_actor = ["observation_vector"]
+        in_keys_critic = ["observation_vector"]
+    out_keys = ["action"]
 
     if action_spec.domain == "continuous":
+        out_features = 2 * action_spec.shape[-1]
         if args.distribution == "tanh_normal":
             policy_distribution_kwargs = {
                 "min": action_spec.space.minimum,
@@ -288,7 +292,6 @@ def make_ppo_model(
                 "tanh_loc": args.tanh_normal_tanh,
             }
             policy_distribution_class = TanhNormal
-
         elif args.distribution == "truncated_normal":
             policy_distribution_kwargs = {
                 "min": action_spec.space.minimum,
@@ -296,15 +299,19 @@ def make_ppo_model(
                 "tanh_loc": args.tanh_normal_tanh,
             }
             policy_distribution_class = TruncatedNormal
-
-    else:
+    elif action_spec.domain == "discrete":
+        out_features = action_spec.shape[-1]
         policy_distribution_kwargs = {}
         policy_distribution_class = OneHotCategorical
+    else:
+        raise NotImplementedError(
+            f"actions with domain {action_spec.domain} are not supported"
+        )
 
     if args.shared_mapping:
         if args.from_pixels:
-            if in_keys is None:
-                in_keys = ["observation_pixels"]
+            if in_keys_actor is None:
+                in_keys_actor = ["observation_pixels"]
             common_mapping_operator = ConvNet(
                 bias_last_layer=True,
                 depth=None,
@@ -313,6 +320,8 @@ def make_ppo_model(
                 strides=[4, 2, 1],
             )
         else:
+            if args.lstm:
+                raise NotImplementedError("lstm not yet compatible with shared mapping for PPO")
             common_mapping_operator = MLP(
                 num_cells=[
                     400,
@@ -321,21 +330,10 @@ def make_ppo_model(
                 activate_last_layer=True,
             )
 
-        # For continuous control
-        if action_spec.domain == "continuous":
-            policy_net = MLP(
-                num_cells=[200],
-                out_features=2 * action_spec.shape[-1],
-            )
-        elif action_spec.domain == "discrete":
-            policy_net = MLP(
-                num_cells=[200],
-                out_features=action_spec.shape[-1],
-            )
-        else:
-            raise NotImplementedError(
-                f"actions with domain {action_spec.domain} are not supported"
-            )
+        policy_net = MLP(
+            num_cells=[200],
+            out_features=out_features,
+        )
 
         value_net = MLP(
             num_cells=[200],
@@ -343,7 +341,7 @@ def make_ppo_model(
         )
         actor_value = ActorValueOperator(
             spec=action_spec,
-            in_keys=in_keys,
+            in_keys=in_keys_actor,
             common_mapping_operator=common_mapping_operator,
             policy_operator=policy_net,
             value_operator=value_net,
@@ -355,27 +353,28 @@ def make_ppo_model(
             **kwargs,
         ).to(device)
     else:
-        # For continuous control
-        if action_spec.domain == "continuous":
-            policy_net = MLP(
-                num_cells=[400, 300],
-                out_features=2 * action_spec.shape[-1],
+        if args.lstm:
+            policy_net = LSTMNet(
+                lstm_kwargs={
+                    'input_size': specs["observation_spec"]["vector"].shape[0],
+                    'hidden_size': 256},
+                mlp_kwargs={'num_cells': [256], 'out_features': out_features},
             )
-        elif action_spec.domain == "discrete":
-            policy_net = MLP(
-                num_cells=[400, 300],
-                out_features=action_spec.shape[-1],
-            )
+            in_keys_actor += ["hidden0", "hidden1"]
+            out_keys += ["hidden0", "hidden1"]
         else:
-            raise NotImplementedError(
-                f"actions with domain {action_spec.domain} are not supported"
+            policy_net = MLP(
+                num_cells=[400, 300],
+                out_features=out_features,
             )
+
         policy_po = Actor(
             action_spec,
             policy_net,
             policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
-            in_keys=in_keys,
+            in_keys=in_keys_actor,
+            out_keys=out_keys,
             return_log_prob=True,
             save_dist_params=True,
         )
@@ -386,7 +385,7 @@ def make_ppo_model(
         )
         value_po = ValueOperator(
             value_net,
-            in_keys=in_keys,
+            in_keys=in_keys_critic,
         )
         actor_value = ActorCriticWrapper(policy_po, value_po).to(device)
 
@@ -545,7 +544,7 @@ def parser_model_args_continuous(
             "--ou_exploration",
             action="store_true",
             help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
-            "efficient entropy-based exploration, this should be left for experimentation only.",
+                 "efficient entropy-based exploration, this should be left for experimentation only.",
         )
 
     if algorithm == "SAC":
@@ -554,8 +553,8 @@ def parser_model_args_continuous(
             action="store_false",
             dest="double_qvalue",
             help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
-            "use two different qvalue networks trained independently and choose the lowest value "
-            "predicted to predict the state action value. This can be disabled by using this flag.",
+                 "use two different qvalue networks trained independently and choose the lowest value "
+                 "predicted to predict the state action value. This can be disabled by using this flag.",
         )
 
     if algorithm in ("SAC", "PPO"):
@@ -570,6 +569,12 @@ def parser_model_args_continuous(
             type=str,
             default="tanh_normal",
             help="if True, uses a Tanh-Normal-Tanh distribution for the policy",
+        )
+    if algorithm == "PPO":
+        parser.add_argument(
+            "--lstm",
+            action="store_true",
+            help="if True, uses an LSTM for the policy.",
         )
 
     return parser

@@ -22,8 +22,6 @@ __all__ = [
     "MultiSyncDataCollector",
 ]
 
-from ..agents.env_creator import EnvCreator
-
 from ..data import TensorSpec
 
 from ..data.tensordict.tensordict import _TensorDict, TensorDict
@@ -76,7 +74,7 @@ class _DataCollector(IterableDataset):
     def _get_policy_and_device(
         self,
         create_env_fn: Optional[
-            Union[_EnvClass, EnvCreator, Iterable[Callable[[], _EnvClass]]]
+            Union[_EnvClass, "EnvCreator", Iterable[Callable[[], _EnvClass]]]
         ] = None,
         create_env_kwargs: Optional[dict] = None,
         policy: Optional[
@@ -214,7 +212,7 @@ class SyncDataCollector(_DataCollector):
 
     def __init__(
         self,
-        create_env_fn: Union[_EnvClass, EnvCreator, Iterable[Callable[[], _EnvClass]]],
+        create_env_fn: Union[_EnvClass, "EnvCreator", Iterable[Callable[[], _EnvClass]]],
         policy: Optional[
             Union[ProbabilisticOperator, Callable[[_TensorDict], _TensorDict]]
         ] = None,
@@ -1010,7 +1008,7 @@ def _main_async_collector(
     pipe_parent: connection.Connection,
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
-    create_env_fn: Union[_EnvClass, EnvCreator, Callable[[], _EnvClass]],
+    create_env_fn: Union[_EnvClass, "EnvCreator", Callable[[], _EnvClass]],
     create_env_kwargs: dict,
     policy: Callable[[_TensorDict], _TensorDict],
     frames_per_worker: int,

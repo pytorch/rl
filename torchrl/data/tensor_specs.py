@@ -692,7 +692,9 @@ class CompositeSpec(TensorSpec):
         return out
 
     def __repr__(self) -> str:
-        return f"CompositeSpec({', '.join([item.__repr__() for k, item in self._specs.items()])})"
+        sub_str = [f'{k}: {item.__repr__()}' for k, item in self._specs.items()]
+        sub_str = ', '.join(sub_str)
+        return f"CompositeSpec({sub_str})"
 
     def type_check(self, value, key):
         for _key in self:
