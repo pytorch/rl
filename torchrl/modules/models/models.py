@@ -718,7 +718,11 @@ class LSTMNet(nn.Module):
         if hidden1 is None and hidden0 is None:
             hidden = None
         elif hidden1 is not None and hidden0 is not None:
-            hidden = (hidden0.transpose(0, 1), hidden1.transpose(0, 1))
+            # we only need the first hidden state
+            if hidden0.ndimension() == 4:
+                hidden0 = hidden0[:, 0]
+                hidden1 = hidden1[:, 0]
+            hidden = (hidden0.transpose(-3, -2), hidden1.transpose(-3, -2))
         else:
             raise RuntimeError(f"got type(hidden0)={type(hidden0)} and type(hidden1)={type(hidden1)}")
         squeeze = False
