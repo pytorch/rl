@@ -262,7 +262,7 @@ class Agent:
         collected_frames = 0
         for i, batch in enumerate(self.collector):
             if "mask" in batch.keys():
-                current_frames = batch.get("mask").sum() * self.frame_skip
+                current_frames = batch.get("mask").sum().item() * self.frame_skip
             else:
                 current_frames = batch.numel() * self.frame_skip
             collected_frames += current_frames
