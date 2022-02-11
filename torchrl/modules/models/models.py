@@ -705,19 +705,18 @@ class LSTMNet(nn.Module):
 
     """
 
-    def __init__(self, lstm_kwargs: Dict, mlp_kwargs: Dict) -> None:
+    def __init__(self, out_features, lstm_kwargs: Dict, mlp_kwargs: Dict) -> None:
         super().__init__()
         lstm_kwargs.update({'batch_first': True})
-        self.lstm = nn.LSTM(**lstm_kwargs)
         self.mlp = MLP(**mlp_kwargs)
+        self.lstm = nn.LSTM(**lstm_kwargs)
+        self.linear = nn.LazyLinear(out_features)
 
-    def forward(
-        self,
-        input: torch.Tensor,
-        hidden0_in: Optional[torch.Tensor] = None,
-        hidden1_in: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-
+    def _lstm(self,
+              input: torch.Tensor,
+              hidden0_in: Optional[torch.Tensor] = None,
+              hidden1_in: Optional[torch.Tensor] = None,
+              ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         squeeze = False
         if input.ndimension() == 2:
             squeeze = True
@@ -744,7 +743,7 @@ class LSTMNet(nn.Module):
         y0, hidden = self.lstm(input, hidden)
         # dim 0 in hidden is num_layers, but that will conflict with tensordict
         hidden = tuple(_h.transpose(0, 1) for _h in hidden)
-        y = self.mlp(y0)
+        y = self.linear(y0)
 
         out = [y, hidden0_in, hidden1_in, *hidden]
         if squeeze:
@@ -752,5 +751,15 @@ class LSTMNet(nn.Module):
         else:
             # we pad the hidden states with zero to make tensordict happy
             for i in range(3, 5):
-                out[i] = torch.stack([torch.zeros_like(out[i]) for _ in range(input.shape[1]-1)] + [out[i]], 1)
+                out[i] = torch.stack([torch.zeros_like(out[i]) for _ in range(input.shape[1] - 1)] + [out[i]], 1)
         return tuple(out)
+
+    def forward(
+        self,
+        input: torch.Tensor,
+        hidden0_in: Optional[torch.Tensor] = None,
+        hidden1_in: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+
+        input = self.mlp(input)
+        return self._lstm(input, hidden0_in, hidden1_in)

@@ -355,10 +355,11 @@ def make_ppo_model(
     else:
         if args.lstm:
             policy_net = LSTMNet(
+                out_features=out_features,
                 lstm_kwargs={
-                    'input_size': specs["observation_spec"]["vector"].shape[0],
+                    'input_size': 256,
                     'hidden_size': 256},
-                mlp_kwargs={'num_cells': [256], 'out_features': out_features},
+                mlp_kwargs={'num_cells': [256, 256], 'out_features': 256},
             )
             in_keys_actor += ["hidden0", "hidden1"]
             out_keys += ["hidden0", "hidden1", "next_hidden0", "next_hidden1"]

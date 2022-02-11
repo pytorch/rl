@@ -270,10 +270,15 @@ class Agent:
                     batch = batch[batch.get("mask").squeeze(-1)]
                 else:
                     batch = batch.reshape(-1)
+                reward_training = batch.get("reward").mean().item()
                 batch = batch.cpu()
                 self.replay_buffer.extend(batch)
             else:
-                pass
+                if "mask" in batch.keys():
+                    reward_training = batch.get("reward")[batch.get("mask").squeeze(-1)].mean().item()
+                else:
+                    reward_training = batch.get("reward").mean().item()
+
             if self.normalize_rewards_online:
                 reward = batch.get("reward")
                 self._update_reward_stats(reward)
@@ -282,7 +287,6 @@ class Agent:
                 self.steps(batch)
             self._collector_scheduler_step(i, current_frames)
 
-            reward_training = batch.get("reward").mean().item()
             self._log(reward_training=reward_training)
             if self.progress_bar:
                 self._pbar.update(current_frames)
