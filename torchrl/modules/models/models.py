@@ -705,7 +705,8 @@ class LSTMNet(nn.Module):
 
     def __init__(self, lstm_kwargs: Dict, mlp_kwargs: Dict) -> None:
         super().__init__()
-        self.lstm = nn.LSTMCell(**lstm_kwargs)
+        lstm_kwargs.update({'batch_first': True})
+        self.lstm = nn.LSTM(**lstm_kwargs)
         self.mlp = MLP(**mlp_kwargs)
 
     def forward(
@@ -717,19 +718,18 @@ class LSTMNet(nn.Module):
         if hidden1 is None and hidden0 is None:
             hidden = None
         elif hidden1 is not None and hidden0 is not None:
-            hidden = (hidden0, hidden1)
+            hidden = (hidden0.transpose(0, 1), hidden1.transpose(0, 1))
         else:
             raise RuntimeError(f"got type(hidden0)={type(hidden0)} and type(hidden1)={type(hidden1)}")
-        shape = None
-        if input.ndimension() > 2:
-            shape = input.shape
-            input = input.flatten(0, input.ndimension() - 2)
-            hidden = tuple(
-                _hidden.flatten(0, _hidden.ndimension() - 2) if _hidden is not None else None for _hidden in hidden
-            )
+        squeeze = False
+        if input.ndimension() == 1:
+            squeeze = True
+            input = input.unsqueeze(1)
         y0, hidden = self.lstm(input, hidden)
+        # dim 0 in hidden is num_layers, but that will conflict with tensordict
+        hidden = tuple(_h.transpose(0, 1) for _h in hidden)
         y = self.mlp(y0)
-        out = (y, y0, hidden)
-        if shape is not None:
-            out = tuple(_out.reshape(*shape[:-1], _out.shape[-1]) for _out in out)
-        return out
+        out = [y, *hidden]
+        if squeeze:
+            out[0] = out[0].squeeze(1)
+        return tuple(out)
