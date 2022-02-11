@@ -38,10 +38,9 @@ def step_tensor_dict(
         >>> print(td_out) # should contain keys 'observation', 'next_observation', 'action', 'reward', 'done' or similar
 
     """
-    keys = [key for key in tensor_dict.keys() if (key.rfind("next_") == 0 or key.rfind("hidden") == 0)]
-    keys_to_rename = [key for key in tensor_dict.keys() if key.rfind("next_") == 0]
+    keys = [key for key in tensor_dict.keys() if key.rfind("next_") == 0]
     select_tensor_dict = tensor_dict.select(*keys).clone()
-    for key in keys_to_rename:
+    for key in keys:
         select_tensor_dict.rename_key(key, key[5:], safe=True)
     if next_tensor_dict is not None:
         return next_tensor_dict.update(select_tensor_dict)

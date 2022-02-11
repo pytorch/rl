@@ -361,7 +361,7 @@ def make_ppo_model(
                 mlp_kwargs={'num_cells': [256], 'out_features': out_features},
             )
             in_keys_actor += ["hidden0", "hidden1"]
-            out_keys += ["hidden0", "hidden1"]
+            out_keys += ["hidden0", "hidden1", "next_hidden0", "next_hidden1"]
         else:
             policy_net = MLP(
                 num_cells=[400, 300],
