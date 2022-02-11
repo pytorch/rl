@@ -722,7 +722,7 @@ class LSTMNet(nn.Module):
             if hidden0.ndimension() == 4:
                 hidden0 = hidden0[:, 0]
                 hidden1 = hidden1[:, 0]
-            hidden = (hidden0.transpose(-3, -2), hidden1.transpose(-3, -2))
+            hidden = (hidden0.transpose(-3, -2).contiguous(), hidden1.transpose(-3, -2).contiguous())
         else:
             raise RuntimeError(f"got type(hidden0)={type(hidden0)} and type(hidden1)={type(hidden1)}")
         squeeze = False
