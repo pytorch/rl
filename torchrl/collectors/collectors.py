@@ -407,26 +407,26 @@ class SyncDataCollector(_DataCollector):
         self._tensor_dict.set("traj_ids", torch.arange(n).unsqueeze(-1))
 
         tensor_dict_out = []
-        for t in range(self.frames_per_batch):
-            if self._frames < self.init_random_frames:
-                self.env.rand_step(self._tensor_dict)
-            else:
-                td_cast = self._cast_to_policy(self._tensor_dict)
-                with set_exploration_mode(self.exploration_mode):
+        with set_exploration_mode(self.exploration_mode):
+            for t in range(self.frames_per_batch):
+                if self._frames < self.init_random_frames:
+                    self.env.rand_step(self._tensor_dict)
+                else:
+                    td_cast = self._cast_to_policy(self._tensor_dict)
                     td_cast = self.policy(td_cast)
-                self._cast_to_env(td_cast, self._tensor_dict)
-                self.env.step(self._tensor_dict)
+                    self._cast_to_env(td_cast, self._tensor_dict)
+                    self.env.step(self._tensor_dict)
 
-            step_count = self._tensor_dict.get("step_count")
-            step_count += 1
-            tensor_dict_out.append(self._tensor_dict.clone())
+                step_count = self._tensor_dict.get("step_count")
+                step_count += 1
+                tensor_dict_out.append(self._tensor_dict.clone())
 
-            self._reset_if_necessary()
-            self._tensor_dict.update(step_tensor_dict(self._tensor_dict))
-        if self.return_in_place and len(self._tensor_dict_out.keys()) > 0:
-            tensor_dict_out = torch.stack(tensor_dict_out, len(self.env.batch_size))
-            tensor_dict_out = tensor_dict_out.select(*self._tensor_dict_out.keys())
-            return self._tensor_dict_out.update_(tensor_dict_out)
+                self._reset_if_necessary()
+                self._tensor_dict.update(step_tensor_dict(self._tensor_dict))
+            if self.return_in_place and len(self._tensor_dict_out.keys()) > 0:
+                tensor_dict_out = torch.stack(tensor_dict_out, len(self.env.batch_size))
+                tensor_dict_out = tensor_dict_out.select(*self._tensor_dict_out.keys())
+                return self._tensor_dict_out.update_(tensor_dict_out)
         return torch.stack(
             tensor_dict_out, len(self.env.batch_size), out=self._tensor_dict_out
         )  # dim 0 for single env, dim 1 for batch

@@ -224,6 +224,8 @@ class ClipPPOLoss(PPOLoss):
             # of the weights.
             lw = log_weight.squeeze()
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
+            batch = log_weight.shape[0]
+
         if not advantage.shape == log_weight.shape:
             raise RuntimeError(
                 f"advantage.shape and log_weight.shape do not match (got {advantage.shape} "
@@ -247,7 +249,7 @@ class ClipPPOLoss(PPOLoss):
         if self.critic_factor:
             loss_critic = self.loss_critic(tensor_dict)
             td_out.set("loss_critic", loss_critic.mean())
-        td_out.set("ESS", ess.mean())
+        td_out.set("ESS", ess.mean()/batch)
         return td_out
 
 

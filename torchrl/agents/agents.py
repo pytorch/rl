@@ -261,7 +261,10 @@ class Agent:
 
         collected_frames = 0
         for i, batch in enumerate(self.collector):
-            current_frames = batch.numel() * self.frame_skip
+            if "mask" in batch.keys():
+                current_frames = batch.get("mask").sum() * self.frame_skip
+            else:
+                current_frames = batch.numel() * self.frame_skip
             collected_frames += current_frames
             self._collected_frames = collected_frames
 
@@ -287,6 +290,9 @@ class Agent:
                 self.steps(batch)
             self._collector_scheduler_step(i, current_frames)
 
+            print(
+                f"batch shape: {batch.shape}, reward: {reward_training}, mask range: "
+                f"{batch.get('mask').sum(1).min()}-{batch.get('mask').sum(1).max()}, numel: {batch.get('mask').sum()}")
             self._log(reward_training=reward_training)
             if self.progress_bar:
                 self._pbar.update(current_frames)
@@ -409,7 +415,7 @@ class Agent:
         if "mask" in batch.keys():
             # if a valid mask is present, it's important to sample only valid steps
             traj_len = batch.get("mask").sum(1).squeeze()
-            sub_traj_len = min(sub_traj_len, traj_len.min().int())
+            sub_traj_len = min(sub_traj_len, traj_len.min().int().item())
         else:
             traj_len = (
                 torch.ones(batch.shape[0], device=batch.device, dtype=torch.bool)
@@ -443,6 +449,8 @@ class Agent:
             ),
             batch_size=(batch_size, sub_traj_len),
         )
+        if "mask" in batch.keys() and not td.get("mask").all():
+            raise RuntimeError("Sampled invalid steps")
         return td
 
     def _grad_clip(self) -> float:
