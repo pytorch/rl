@@ -13,8 +13,8 @@ from torchrl.modules.distributions import (
     TanhNormal,
     TanhDelta,
     OneHotCategorical,
+    TruncatedNormal,
 )
-from torchrl.modules.distributions.continuous import TruncatedNormal
 from torchrl.modules.models.models import (
     DuelingCnnDQNet,
     DdpgCnnActor,
@@ -290,6 +290,7 @@ def make_ppo_model(
                 "min": action_spec.space.minimum,
                 "max": action_spec.space.maximum,
                 "tanh_loc": args.tanh_normal_tanh,
+                "scale_mapping": f"biased_softplus_{args.default_policy_scale}",
             }
             policy_distribution_class = TanhNormal
         elif args.distribution == "truncated_normal":
@@ -297,6 +298,7 @@ def make_ppo_model(
                 "min": action_spec.space.minimum,
                 "max": action_spec.space.maximum,
                 "tanh_loc": args.tanh_normal_tanh,
+                "scale_mapping": f"biased_softplus_{args.default_policy_scale}",
             }
             policy_distribution_class = TruncatedNormal
     elif action_spec.domain == "discrete":
@@ -407,6 +409,7 @@ def make_sac_model(
     double_qvalue=True,
     device: DEVICE_TYPING = "cpu",
     tanh_normal_tanh: bool = True,
+    default_policy_scale: float = 1.0,
     **kwargs,
 ) -> nn.ModuleList:
     """
@@ -478,6 +481,7 @@ def make_sac_model(
             "min": action_spec.space.minimum,
             "max": action_spec.space.maximum,
             "tanh_loc": tanh_normal_tanh,
+            "scale_mapping": f"biased_softplus_{default_policy_scale}",
         },
         default_interaction_mode="random",
     )
@@ -564,6 +568,11 @@ def parser_model_args_continuous(
             "--tanh-normal-tanh",
             action="store_true",
             help="if True, uses a Tanh-Normal transform for the policy location",
+        )
+        parser.add_argument(
+            "--default_policy_scale",
+            default=1.0,
+            help="Default policy scale parameter",
         )
         parser.add_argument(
             "--distribution",
