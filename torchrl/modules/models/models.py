@@ -736,4 +736,8 @@ class LSTMNet(nn.Module):
         out = [y, *hidden]
         if squeeze:
             out[0] = out[0].squeeze(1)
+        else:
+            # we pad the hidden states with zero to make tensordict happy
+            for i in range(1, 3):
+                out[i] = torch.stack([torch.zeros_like(out[i]) for _ in range(input.shape[1]-1)] + [out[i]], 1)
         return tuple(out)
