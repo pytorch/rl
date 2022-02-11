@@ -288,6 +288,7 @@ class SyncDataCollector(_DataCollector):
             )
         self._td_env = None
         self._td_policy = None
+        self._has_been_done = None
         self.closed = False
 
     def set_seed(self, seed: int) -> int:
@@ -365,10 +366,14 @@ class SyncDataCollector(_DataCollector):
         done = self._tensor_dict.get("done")
         steps = self._tensor_dict.get("step_count")
         done_or_terminated = done | (steps == self.max_frames_per_traj)
-        if self._iter == 0 and self.init_with_lag:
-            done_or_terminated = done_or_terminated | torch.zeros_like(
-                done_or_terminated
-            ).bernoulli_(1 / self.max_frames_per_traj)
+        if self._has_been_done is None:
+            self._has_been_done = done_or_terminated
+        else:
+            self._has_been_done = self._has_been_done | done_or_terminated
+        if not self._has_been_done.all() and self.init_with_lag:
+            _reset = torch.zeros_like(done_or_terminated).bernoulli_(1 / self.max_frames_per_traj)
+            _reset[self._has_been_done] = False
+            done_or_terminated = done_or_terminated | _reset
         if done_or_terminated.any():
             traj_ids = self._tensor_dict.get("traj_ids").clone()
             steps = steps.clone()
