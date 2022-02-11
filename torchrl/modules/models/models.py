@@ -722,7 +722,7 @@ class LSTMNet(nn.Module):
         else:
             raise RuntimeError(f"got type(hidden0)={type(hidden0)} and type(hidden1)={type(hidden1)}")
         squeeze = False
-        if input.ndimension() == 1:
+        if input.ndimension() == 2:
             squeeze = True
             input = input.unsqueeze(1)
         y0, hidden = self.lstm(input, hidden)
