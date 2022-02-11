@@ -728,7 +728,7 @@ class LSTMNet(nn.Module):
         squeeze = False
         if input.ndimension() == 2:
             squeeze = True
-            input = input.unsqueeze(1)
+            input = input.unsqueeze(1).contiguous()
         y0, hidden = self.lstm(input, hidden)
         # dim 0 in hidden is num_layers, but that will conflict with tensordict
         hidden = tuple(_h.transpose(0, 1) for _h in hidden)
