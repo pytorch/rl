@@ -290,9 +290,6 @@ class Agent:
                 self.steps(batch)
             self._collector_scheduler_step(i, current_frames)
 
-            print(
-                f"batch shape: {batch.shape}, reward: {reward_training}, mask range: "
-                f"{batch.get('mask').sum(1).min()}-{batch.get('mask').sum(1).max()}, numel: {batch.get('mask').sum()}")
             self._log(reward_training=reward_training)
             if self.progress_bar:
                 self._pbar.update(current_frames)
