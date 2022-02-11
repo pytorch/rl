@@ -114,6 +114,10 @@ class Agent:
             Default is False
         sub_traj_len (int, optional): length of the trajectories that sub-samples must have in online settings.
             Default is -1 (i.e. takes the full length of the trajectory)
+        min_sub_traj_len (int, optional): minimum value of `sub_traj_len`, in case some elements of the batch contain
+            few steps.
+            Default is -1 (i.e. no minimum value)
+
     """
 
     # trackers
@@ -150,6 +154,7 @@ class Agent:
         save_agent_file: Optional[Union[str, pathlib.Path]] = None,
         normalize_rewards_online: bool = False,
         sub_traj_len: int = -1,
+        min_sub_traj_len: int = -1,
     ) -> None:
 
         # objects
@@ -189,6 +194,7 @@ class Agent:
         self.save_agent_file = save_agent_file
         self.normalize_rewards_online = normalize_rewards_online
         self.sub_traj_len = sub_traj_len
+        self.min_sub_traj_len = min_sub_traj_len
 
     def save_agent(self) -> None:
         _save = False
@@ -405,6 +411,7 @@ class Agent:
         If the batch has two or more dimensions, it is assumed that the first dimension represents the batch,
         and the second the time. If so, the resulting subsample will contain consecutive samples across time.
         """
+
         if batch.ndimension() == 1:
             return batch[torch.randperm(batch.shape[0])[: self.batch_size]]
 
@@ -412,14 +419,17 @@ class Agent:
         if "mask" in batch.keys():
             # if a valid mask is present, it's important to sample only valid steps
             traj_len = batch.get("mask").sum(1).squeeze()
-            sub_traj_len = min(sub_traj_len, traj_len.min().int().item())
+            sub_traj_len = max(self.min_sub_traj_len, min(sub_traj_len, traj_len.min().int().item()))
         else:
             traj_len = (
                 torch.ones(batch.shape[0], device=batch.device, dtype=torch.bool)
                 * batch.shape[1]
             )
+        valid_trajectories = torch.arange(batch.shape[0])[traj_len >= sub_traj_len]
+
         batch_size = self.batch_size // sub_traj_len
-        traj_idx = torch.randint(batch.shape[0], (batch_size,), device=batch.device)
+        traj_idx = valid_trajectories[torch.randint(valid_trajectories.numel(), (batch_size,), device=batch.device)]
+
         if sub_traj_len < batch.shape[1]:
             _traj_len = traj_len[traj_idx]
             seq_idx = (
