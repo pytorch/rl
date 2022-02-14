@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import OrderedDict
 from numbers import Number
 from typing import Optional, Tuple, Callable, Union, Any, Iterator
@@ -255,6 +256,9 @@ class _EnvClass:
             print(
                 f"env {self} does not have a _current_tensordict attribute. Consider calling reset() before step()."
             )
+
+    def numel(self) -> int:
+        return math.prod(self.batch_size)
 
     def set_seed(self, seed: int) -> int:
         """

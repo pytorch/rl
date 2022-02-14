@@ -246,6 +246,7 @@ class SyncDataCollector(_DataCollector):
             env = create_env_fn
 
         self.env: _EnvClass = env
+        self.n_env = self.env.numel()
 
         self.policy, self.device, self.get_weights_fn = self._get_policy_and_device(
             create_env_fn=create_env_fn,
@@ -264,7 +265,7 @@ class SyncDataCollector(_DataCollector):
         if self.postproc is not None:
             self.postproc.to(self.passing_device)
         self.max_frames_per_traj = max_frames_per_traj
-        self.frames_per_batch = frames_per_batch
+        self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.pin_memory = pin_memory
         self.exploration_mode = exploration_mode
         self.init_with_lag = init_with_lag and max_frames_per_traj > 0
@@ -492,7 +493,7 @@ class SyncDataCollector(_DataCollector):
             self.policy.load_state_dict(state_dict["policy_state_dict"], **kwargs)
 
 
-class MultiDataCollector(_DataCollector):
+class _MultiDataCollector(_DataCollector):
     """
     Runs a given number of DataCollectors on separate processes.
     Args:
@@ -644,6 +645,10 @@ class MultiDataCollector(_DataCollector):
         )  # ceil(total_frames/num_workers)
         self._run_processes()
 
+    @property
+    def frames_per_batch_worker(self):
+        raise NotImplementedError
+
     def update_policy_weights_(self) -> None:
         for _device in self._policy_dict:
             if self._get_weights_fn_dict[_device] is not None:
@@ -679,7 +684,7 @@ class MultiDataCollector(_DataCollector):
                 "policy": self._policy_dict[_device],
                 "frames_per_worker": self.frames_per_worker,
                 "max_frames_per_traj": self.max_frames_per_traj,
-                "frames_per_batch": self.frames_per_batch,
+                "frames_per_batch": self.frames_per_batch_worker,
                 "reset_at_each_iter": self.reset_at_each_iter,
                 "device": _device,
                 "passing_device": _passing_device,
@@ -802,13 +807,17 @@ class MultiDataCollector(_DataCollector):
                 raise RuntimeError(f"Expected msg='loaded', got {msg}")
 
 
-class MultiSyncDataCollector(MultiDataCollector):
+class MultiSyncDataCollector(_MultiDataCollector):
     """
     Runs a given number of DataCollectors on separate processes synchronously: the collection starts when the next
     item of the collector is queried, and no environment step is computed in between the reception of a batch of
     trajectory and the start of the next collection.
     This class can be safely used with online RL algorithms.
     """
+
+    @property
+    def frames_per_batch_worker(self):
+        return - (- self.frames_per_batch // self.num_workers)
 
     @property
     def _queue_len(self) -> int:
@@ -868,7 +877,7 @@ class MultiSyncDataCollector(MultiDataCollector):
         self._shutdown_main()
 
 
-class MultiaSyncDataCollector(MultiDataCollector):
+class MultiaSyncDataCollector(_MultiDataCollector):
     """
     Runs a given number of DataCollectors on separate processes asynchronously: the collection keeps on occuring on
     all processes even between the time the batch of rollouts is collected and the next call to the iterator.
@@ -879,6 +888,10 @@ class MultiaSyncDataCollector(MultiDataCollector):
         super().__init__(*args, **kwargs)
         self.out_tensordicts = dict()
         self.running = False
+
+    @property
+    def frames_per_batch_worker(self):
+        return self.frames_per_batch
 
     def _get_from_queue(self, timeout=None) -> Tuple[int, int, _TensorDict]:
         new_data, j = self.queue_out.get(timeout=timeout)
