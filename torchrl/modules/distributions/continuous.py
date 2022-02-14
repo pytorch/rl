@@ -10,7 +10,7 @@ from torchrl.modules.utils import mappings
 from .truncated_normal import TruncatedNormal as _TruncatedNormal
 from .utils import UNIFORM
 
-__all__ = ["TanhNormal", "Delta", "TanhDelta"]
+__all__ = ["TanhNormal", "Delta", "TanhDelta", "TruncatedNormal"]
 
 
 class SafeTanhTransform(D.TanhTransform):

@@ -22,8 +22,6 @@ __all__ = [
     "MultiSyncDataCollector",
 ]
 
-from ..agents.env_creator import EnvCreator
-
 from ..data import TensorSpec
 
 from ..data.tensordict.tensordict import _TensorDict, TensorDict
@@ -76,7 +74,7 @@ class _DataCollector(IterableDataset):
     def _get_policy_and_device(
         self,
         create_env_fn: Optional[
-            Union[_EnvClass, EnvCreator, Iterable[Callable[[], _EnvClass]]]
+            Union[_EnvClass, "EnvCreator", Iterable[Callable[[], _EnvClass]]]
         ] = None,
         create_env_kwargs: Optional[dict] = None,
         policy: Optional[
@@ -214,7 +212,7 @@ class SyncDataCollector(_DataCollector):
 
     def __init__(
         self,
-        create_env_fn: Union[_EnvClass, EnvCreator, Iterable[Callable[[], _EnvClass]]],
+        create_env_fn: Union[_EnvClass, "EnvCreator", Iterable[Callable[[], _EnvClass]]],
         policy: Optional[
             Union[ProbabilisticOperator, Callable[[_TensorDict], _TensorDict]]
         ] = None,
@@ -290,6 +288,7 @@ class SyncDataCollector(_DataCollector):
             )
         self._td_env = None
         self._td_policy = None
+        self._has_been_done = None
         self.closed = False
 
     def set_seed(self, seed: int) -> int:
@@ -367,10 +366,14 @@ class SyncDataCollector(_DataCollector):
         done = self._tensor_dict.get("done")
         steps = self._tensor_dict.get("step_count")
         done_or_terminated = done | (steps == self.max_frames_per_traj)
-        if self._iter == 0 and self.init_with_lag:
-            done_or_terminated = done_or_terminated | torch.zeros_like(
-                done_or_terminated
-            ).bernoulli_(1 / self.max_frames_per_traj)
+        if self._has_been_done is None:
+            self._has_been_done = done_or_terminated
+        else:
+            self._has_been_done = self._has_been_done | done_or_terminated
+        if not self._has_been_done.all() and self.init_with_lag:
+            _reset = torch.zeros_like(done_or_terminated).bernoulli_(1 / self.max_frames_per_traj)
+            _reset[self._has_been_done] = False
+            done_or_terminated = done_or_terminated | _reset
         if done_or_terminated.any():
             traj_ids = self._tensor_dict.get("traj_ids").clone()
             steps = steps.clone()
@@ -409,26 +412,26 @@ class SyncDataCollector(_DataCollector):
         self._tensor_dict.set("traj_ids", torch.arange(n).unsqueeze(-1))
 
         tensor_dict_out = []
-        for t in range(self.frames_per_batch):
-            if self._frames < self.init_random_frames:
-                self.env.rand_step(self._tensor_dict)
-            else:
-                td_cast = self._cast_to_policy(self._tensor_dict)
-                with set_exploration_mode(self.exploration_mode):
+        with set_exploration_mode(self.exploration_mode):
+            for t in range(self.frames_per_batch):
+                if self._frames < self.init_random_frames:
+                    self.env.rand_step(self._tensor_dict)
+                else:
+                    td_cast = self._cast_to_policy(self._tensor_dict)
                     td_cast = self.policy(td_cast)
-                self._cast_to_env(td_cast, self._tensor_dict)
-                self.env.step(self._tensor_dict)
+                    self._cast_to_env(td_cast, self._tensor_dict)
+                    self.env.step(self._tensor_dict)
 
-            step_count = self._tensor_dict.get("step_count")
-            step_count += 1
-            tensor_dict_out.append(self._tensor_dict.clone())
+                step_count = self._tensor_dict.get("step_count")
+                step_count += 1
+                tensor_dict_out.append(self._tensor_dict.clone())
 
-            self._reset_if_necessary()
-            self._tensor_dict.update(step_tensor_dict(self._tensor_dict))
-        if self.return_in_place and len(self._tensor_dict_out.keys()) > 0:
-            tensor_dict_out = torch.stack(tensor_dict_out, len(self.env.batch_size))
-            tensor_dict_out = tensor_dict_out.select(*self._tensor_dict_out.keys())
-            return self._tensor_dict_out.update_(tensor_dict_out)
+                self._reset_if_necessary()
+                self._tensor_dict.update(step_tensor_dict(self._tensor_dict))
+            if self.return_in_place and len(self._tensor_dict_out.keys()) > 0:
+                tensor_dict_out = torch.stack(tensor_dict_out, len(self.env.batch_size))
+                tensor_dict_out = tensor_dict_out.select(*self._tensor_dict_out.keys())
+                return self._tensor_dict_out.update_(tensor_dict_out)
         return torch.stack(
             tensor_dict_out, len(self.env.batch_size), out=self._tensor_dict_out
         )  # dim 0 for single env, dim 1 for batch
@@ -1010,7 +1013,7 @@ def _main_async_collector(
     pipe_parent: connection.Connection,
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
-    create_env_fn: Union[_EnvClass, EnvCreator, Callable[[], _EnvClass]],
+    create_env_fn: Union[_EnvClass, "EnvCreator", Callable[[], _EnvClass]],
     create_env_kwargs: dict,
     policy: Callable[[_TensorDict], _TensorDict],
     frames_per_worker: int,
