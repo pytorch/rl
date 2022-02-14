@@ -230,7 +230,7 @@ class SyncDataCollector(_DataCollector):
         pin_memory: bool = False,
         return_in_place: bool = False,
         exploration_mode: str = "random",
-        init_with_lag: bool = True,
+        init_with_lag: bool = False,
     ):
         if seed is not None:
             torch.manual_seed(seed)
@@ -395,7 +395,7 @@ class SyncDataCollector(_DataCollector):
             )
             steps[done_or_terminated] = 0
             self._tensor_dict.set("traj_ids", traj_ids)  # no ops if they already match
-            self._tensor_dict.set("steps", steps)
+            self._tensor_dict.set("step_count", steps)
 
     @torch.no_grad()
     def rollout(self) -> _TensorDict:

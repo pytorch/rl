@@ -46,7 +46,6 @@ def make_policy(env):
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_concurrent_collector_consistency(num_env, env_name, seed=100):
-    print("concurrent")
     if num_env == 1:
         def env_fn(seed):
             env = make_make_env(env_name)()
@@ -59,14 +58,13 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=100):
             return env
     policy = make_policy(env_name)
 
-    print("\tserial")
     collector = SyncDataCollector(
         create_env_fn=env_fn,
         create_env_kwargs={'seed': seed},
         policy=policy,
         frames_per_batch=20,
-        max_steps_per_traj=20,
-        total_frames=200,
+        max_frames_per_traj=2000,
+        total_frames=20000,
         device='cpu',
         pin_memory=False,
     )
@@ -79,15 +77,15 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=100):
             break
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b2)
+    collector.shutdown()
 
-    print("\tparallel")
     ccollector = aSyncDataCollector(
         create_env_fn=env_fn,
         create_env_kwargs={'seed': seed},
         policy=policy,
         frames_per_batch=20,
-        max_steps_per_traj=20,
-        total_frames=200,
+        max_frames_per_traj=2000,
+        total_frames=20000,
         pin_memory=False,
     )
     for i, d in enumerate(ccollector):
@@ -97,18 +95,67 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=100):
             b2c = d
         else:
             break
-    print(b1c)
     with pytest.raises(AssertionError):
         assert_allclose_td(b1c, b2c)
+
     assert_allclose_td(b1c, b1)
     assert_allclose_td(b2c, b2)
+
+    ccollector.shutdown()
+
+
+@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("env_name", ["vec", "conv"])
+def test_collector_batch_size(num_env, env_name, seed=100):
+    if num_env == 1:
+        def env_fn():
+            env = make_make_env(env_name)()
+            return env
+    else:
+        def env_fn():
+            env = ParallelEnv(num_workers=num_env, create_env_fn=make_make_env(env_name))
+            return env
+
+    policy = make_policy(env_name)
+
+    torch.manual_seed(0)
+    np.random.seed(0)
+    num_workers = 4
+    frames_per_batch = 20
+    ccollector = MultiaSyncDataCollector(
+        create_env_fn=[env_fn for _ in range(num_workers)],
+        policy=policy,
+        frames_per_batch=frames_per_batch,
+        max_frames_per_traj=20,
+        total_frames=frames_per_batch * 100,
+        pin_memory=False,
+    )
+    ccollector.set_seed(seed)
+    for i, b in enumerate(ccollector):
+        assert b.numel() == - (- frames_per_batch // num_env) * num_env
+        if i == 5:
+            break
+    ccollector.shutdown()
+
+    ccollector = MultiSyncDataCollector(
+        create_env_fn=[env_fn for _ in range(num_workers)],
+        policy=policy,
+        frames_per_batch=frames_per_batch,
+        max_frames_per_traj=20,
+        total_frames=frames_per_batch * 100,
+        pin_memory=False,
+    )
+    ccollector.set_seed(seed)
+    for i, b in enumerate(ccollector):
+        assert b.numel() == - (- frames_per_batch // num_env // num_workers) * num_env * num_workers
+        if i == 5:
+            break
     ccollector.shutdown()
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_concurrent_collector_seed(num_env, env_name, seed=100):
-    print("concurrent")
     if num_env == 1:
         def env_fn():
             env = make_make_env(env_name)()
@@ -127,7 +174,7 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
         create_env_kwargs={},
         policy=policy,
         frames_per_batch=20,
-        max_steps_per_traj=20,
+        max_frames_per_traj=20,
         total_frames=300,
         pin_memory=False,
     )
@@ -151,7 +198,6 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
-    print("collector")
     if num_env == 1:
         def env_fn(seed):
             env = make_make_env(env_name)()
@@ -183,8 +229,8 @@ def test_collector_consistency(num_env, env_name, seed=100):
         create_env_fn=env_fn,
         create_env_kwargs={'seed': seed},
         policy=policy,
-        frames_per_batch=20,
-        max_steps_per_traj=20,
+        frames_per_batch=20 * num_env,
+        max_frames_per_traj=20,
         total_frames=200,
         device='cpu',
         pin_memory=False,
@@ -199,7 +245,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
         # rollouts collected through DataCollector are padded using pad_sequence, which introduces a first dimension
         rollout1a = rollout1a.unsqueeze(0)
     assert (
-            rollout1a.batch_size == b1.batch_size
+        rollout1a.batch_size == b1.batch_size
     ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
 
     assert_allclose_td(rollout1a, b1.select(*rollout1a.keys()))
@@ -230,7 +276,7 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
             env.set_seed(seed)
             return env
 
-    max_steps_per_traj = 20
+    max_frames_per_traj = 20
 
     policy = make_policy(env_name)
 
@@ -239,8 +285,8 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         create_env_kwargs={'seed': seed},
         policy=policy,
         frames_per_batch=1,
-        max_steps_per_traj=max_steps_per_traj,
-        total_frames=2 * num_env * max_steps_per_traj,
+        max_frames_per_traj=max_frames_per_traj,
+        total_frames=2 * num_env * max_frames_per_traj,
         device='cpu',
         seed=seed,
         pin_memory=False
@@ -255,8 +301,8 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         create_env_kwargs={'seed': seed},
         policy=policy,
         frames_per_batch=10,
-        max_steps_per_traj=max_steps_per_traj,
-        total_frames=2 * num_env * max_steps_per_traj,
+        max_frames_per_traj=max_frames_per_traj,
+        total_frames=2 * num_env * max_frames_per_traj,
         device='cpu',
         seed=seed,
         pin_memory=False
@@ -271,8 +317,8 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         create_env_kwargs={'seed': seed},
         policy=policy,
         frames_per_batch=20,
-        max_steps_per_traj=max_steps_per_traj,
-        total_frames=2 * num_env * max_steps_per_traj,
+        max_frames_per_traj=max_frames_per_traj,
+        total_frames=2 * num_env * max_frames_per_traj,
         device='cpu',
         seed=seed,
         pin_memory=False
@@ -379,10 +425,11 @@ def test_update_weights(use_async):
     collector.shutdown()
     del collector
 
+
 def weight_reset(m):
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
         m.reset_parameters()
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, '--capture', 'no'])
+    pytest.main([__file__, '--capture', 'no', '--exitfirst'])
