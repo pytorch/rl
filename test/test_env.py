@@ -12,7 +12,12 @@ from torchrl.data.tensor_specs import (
     NdBoundedTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
-from torchrl.data.transforms import TransformedEnv, Compose, ToTensorImage, RewardClipping
+from torchrl.data.transforms import (
+    TransformedEnv,
+    Compose,
+    ToTensorImage,
+    RewardClipping,
+)
 from torchrl.data.transforms.transforms import DiscreteActionProjection
 from torchrl.envs import gym, GymEnv
 from torchrl.envs.utils import step_tensor_dict
@@ -28,25 +33,31 @@ def _make_atari_env(atari_env):
     n_act = action_spec.shape[-1]
     return lambda **kwargs: TransformedEnv(
         GymEnv(atari_env + "-ram-v0", **kwargs),
-        DiscreteActionProjection(n_in=18, n_out=n_act))
+        DiscreteActionProjection(n_in=18, n_out=n_act),
+    )
 
-@pytest.mark.skipif("Pong-v0" not in _get_gym_envs(), reason="no Atari OpenAI Gym env available")
+
+@pytest.mark.skipif(
+    "Pong-v0" not in _get_gym_envs(), reason="no Atari OpenAI Gym env available"
+)
 def test_composite_env():
     num_workers = 10
     frameskip = 2
     create_env_fn = [
-        _make_atari_env(atari_env) for atari_env in atari_confs['atari_envs'][:num_workers]
+        _make_atari_env(atari_env)
+        for atari_env in atari_confs["atari_envs"][:num_workers]
     ]
-    kwargs = {'frame_skip': frameskip}
+    kwargs = {"frame_skip": frameskip}
 
-    random_policy = lambda td: td.set("action", torch.nn.functional.one_hot(torch.randint(18, (*td.batch_size, )), 18))
+    random_policy = lambda td: td.set(
+        "action", torch.nn.functional.one_hot(torch.randint(18, (*td.batch_size,)), 18)
+    )
     p = SerialEnv(num_workers, create_env_fn, create_env_kwargs=kwargs)
     p.set_seed(list(range(num_workers)))
     torch.manual_seed(0)
     rollout1 = p.rollout(n_steps=100, policy=random_policy)
     p.close()
     del p
-
 
     p = ParallelEnv(num_workers, create_env_fn, create_env_kwargs=kwargs)
     p.set_seed(list(range(num_workers)))
@@ -76,7 +87,9 @@ def test_env_seed(env_name, frame_skip, seed=0):
     assert_allclose_td(td0a, td0b.select(*td0a.keys()))
     assert_allclose_td(td1a, td1b)
 
-    env.set_seed(seed=seed + 10, )
+    env.set_seed(
+        seed=seed + 10,
+    )
     td0c = env.reset()
     td1c = env.step(td0c.clone().set("action", action))
 
@@ -124,17 +137,22 @@ def test_parallel_env(env_name, frame_skip, transformed):
         if env_name == "Pong-v0":
             create_env_fn = lambda: TransformedEnv(
                 GymEnv(env_name, frame_skip=frame_skip),
-                Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
+                Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
             )
         else:
             create_env_fn = lambda: TransformedEnv(
                 GymEnv(env_name, frame_skip=frame_skip),
-                Compose(*[RewardClipping(0, 0.1)])
+                Compose(*[RewardClipping(0, 0.1)]),
             )
     env0 = create_env_fn()
     env_parallel = ParallelEnv(N, create_env_fn)
     env_serial = SerialEnv(N, create_env_fn)
-    td = TensorDict(source={"action": env0.action_spec.rand((N,))}, batch_size=[N, ])
+    td = TensorDict(
+        source={"action": env0.action_spec.rand((N,))},
+        batch_size=[
+            N,
+        ],
+    )
     td1 = env_parallel.step(td)
     assert not td1.is_shared()
     assert "done" in td1.keys()
@@ -142,15 +160,24 @@ def test_parallel_env(env_name, frame_skip, transformed):
 
     with pytest.raises(AssertionError):
         # number of actions does not match number of workers
-        td = TensorDict(source={"action": env0.action_spec.rand((N - 1,))}, batch_size=[N - 1])
+        td = TensorDict(
+            source={"action": env0.action_spec.rand((N - 1,))}, batch_size=[N - 1]
+        )
         td1 = env_parallel.step(td)
 
-    td_reset = TensorDict(source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()}, batch_size=[N, ])
+    td_reset = TensorDict(
+        source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
+        batch_size=[
+            N,
+        ],
+    )
     env_parallel.reset(tensor_dict=td_reset)
 
     T = 100
     td = env_parallel.rollout(policy=None, n_steps=T)
-    assert td.shape == torch.Size([N, T]) or td.get("done").sum(1).all(), f"{td.shape}, {td.get('done').sum(1)}"
+    assert (
+        td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
+    ), f"{td.shape}, {td.get('done').sum(1)}"
 
     torch.manual_seed(0)
     env_serial.set_seed([0 for _ in range(N)])
@@ -159,6 +186,7 @@ def test_parallel_env(env_name, frame_skip, transformed):
     env_parallel.set_seed([0 for _ in range(N)])
     td_parallel = env_parallel.rollout(n_steps=100)
     assert_allclose_td(td_serial, td_parallel)
+
 
 def test_parallel_env_shutdown():
     env_make = EnvCreator(lambda: GymEnv("Pendulum-v0"))
@@ -174,6 +202,7 @@ def test_parallel_env_shutdown():
     env.shutdown()
     assert env.is_closed
 
+
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="no cuda device detected")
 @pytest.mark.parametrize("env_name", ["Pong-v0", "Pendulum-v0"])
 @pytest.mark.parametrize("frame_skip", [4, 1])
@@ -188,12 +217,12 @@ def test_parallel_env_device(env_name, frame_skip, transformed, device):
         if env_name == "Pong-v0":
             create_env_fn = lambda: TransformedEnv(
                 GymEnv(env_name, frame_skip=frame_skip),
-                Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
+                Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
             )
         else:
             create_env_fn = lambda: TransformedEnv(
                 GymEnv(env_name, frame_skip=frame_skip),
-                Compose(*[RewardClipping(0, 0.1)])
+                Compose(*[RewardClipping(0, 0.1)]),
             )
     env_parallel = ParallelEnv(N, create_env_fn, device=device)
     out = env_parallel.rollout(n_steps=20)
@@ -314,11 +343,13 @@ def test_current_tensordict():
     env.set_seed(0)
     tensor_dict = env.reset()
     assert_allclose_td(tensor_dict, env.current_tensordict)
-    tensor_dict = env.step(TensorDict(source={"action": env.action_spec.rand()}, batch_size=[]))
+    tensor_dict = env.step(
+        TensorDict(source={"action": env.action_spec.rand()}, batch_size=[])
+    )
     assert_allclose_td(step_tensor_dict(tensor_dict), env.current_tensordict)
 
 
 # TODO: test for frame-skip
 
 if __name__ == "__main__":
-    pytest.main([__file__, '--capture', 'no'])
+    pytest.main([__file__, "--capture", "no"])

@@ -212,7 +212,9 @@ class SyncDataCollector(_DataCollector):
 
     def __init__(
         self,
-        create_env_fn: Union[_EnvClass, "EnvCreator", Iterable[Callable[[], _EnvClass]]],
+        create_env_fn: Union[
+            _EnvClass, "EnvCreator", Iterable[Callable[[], _EnvClass]]
+        ],
         policy: Optional[
             Union[ProbabilisticOperator, Callable[[_TensorDict], _TensorDict]]
         ] = None,
@@ -372,7 +374,9 @@ class SyncDataCollector(_DataCollector):
         else:
             self._has_been_done = self._has_been_done | done_or_terminated
         if not self._has_been_done.all() and self.init_with_lag:
-            _reset = torch.zeros_like(done_or_terminated).bernoulli_(1 / self.max_frames_per_traj)
+            _reset = torch.zeros_like(done_or_terminated).bernoulli_(
+                1 / self.max_frames_per_traj
+            )
             _reset[self._has_been_done] = False
             done_or_terminated = done_or_terminated | _reset
         if done_or_terminated.any():
@@ -479,15 +483,13 @@ class SyncDataCollector(_DataCollector):
         else:
             env_state_dict = OrderedDict()
 
-        if hasattr(self.policy, 'state_dict'):
+        if hasattr(self.policy, "state_dict"):
             policy_state_dict = self.policy.state_dict()
             state_dict = OrderedDict(
                 policy_state_dict=policy_state_dict, env_state_dict=env_state_dict
             )
         else:
-            state_dict = OrderedDict(
-                env_state_dict=env_state_dict
-            )
+            state_dict = OrderedDict(env_state_dict=env_state_dict)
 
         if destination is not None:
             destination.update(state_dict)
@@ -826,7 +828,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     @property
     def frames_per_batch_worker(self):
-        return - (- self.frames_per_batch // self.num_workers)
+        return -(-self.frames_per_batch // self.num_workers)
 
     @property
     def _queue_len(self) -> int:

@@ -284,7 +284,9 @@ class Agent:
                 self.replay_buffer.extend(batch)
             else:
                 if "mask" in batch.keys():
-                    reward_training = batch.get("reward")[batch.get("mask").squeeze(-1)].mean().item()
+                    reward_training = (
+                        batch.get("reward")[batch.get("mask").squeeze(-1)].mean().item()
+                    )
                 else:
                     reward_training = batch.get("reward").mean().item()
 
@@ -419,7 +421,9 @@ class Agent:
         if "mask" in batch.keys():
             # if a valid mask is present, it's important to sample only valid steps
             traj_len = batch.get("mask").sum(1).squeeze()
-            sub_traj_len = max(self.min_sub_traj_len, min(sub_traj_len, traj_len.min().int().item()))
+            sub_traj_len = max(
+                self.min_sub_traj_len, min(sub_traj_len, traj_len.min().int().item())
+            )
         else:
             traj_len = (
                 torch.ones(batch.shape[0], device=batch.device, dtype=torch.bool)
@@ -428,7 +432,11 @@ class Agent:
         valid_trajectories = torch.arange(batch.shape[0])[traj_len >= sub_traj_len]
 
         batch_size = self.batch_size // sub_traj_len
-        traj_idx = valid_trajectories[torch.randint(valid_trajectories.numel(), (batch_size,), device=batch.device)]
+        traj_idx = valid_trajectories[
+            torch.randint(
+                valid_trajectories.numel(), (batch_size,), device=batch.device
+            )
+        ]
 
         if sub_traj_len < batch.shape[1]:
             _traj_len = traj_len[traj_idx]

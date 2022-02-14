@@ -9,7 +9,12 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.modules import DistributionalQValueActor, QValueActor
 from torchrl.modules.distributions.continuous import Delta
 from torchrl.modules.models.models import MLP
-from torchrl.objectives import DQNLoss, DoubleDQNLoss, DistributionalDQNLoss, DistributionalDoubleDQNLoss
+from torchrl.objectives import (
+    DQNLoss,
+    DoubleDQNLoss,
+    DistributionalDQNLoss,
+    DistributionalDoubleDQNLoss,
+)
 from torchrl.objectives.costs.utils import hold_out_net
 
 
@@ -25,18 +30,30 @@ class TestDQN:
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4):
         # Actor
-        action_spec = NdBoundedTensorSpec(-torch.ones(action_dim), torch.ones(action_dim), (action_dim,))
+        action_spec = NdBoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
         mapping_operator = nn.Linear(obs_dim, action_dim)
-        actor = QValueActor(action_spec=action_spec, mapping_operator=mapping_operator, distribution_class=Delta)
+        actor = QValueActor(
+            action_spec=action_spec,
+            mapping_operator=mapping_operator,
+            distribution_class=Delta,
+        )
         return actor
 
-    def _create_mock_distributional_actor(self, batch=2, obs_dim=3, action_dim=4, atoms=5, vmin=1, vmax=5):
+    def _create_mock_distributional_actor(
+        self, batch=2, obs_dim=3, action_dim=4, atoms=5, vmin=1, vmax=5
+    ):
         # Actor
         action_spec = MultOneHotDiscreteTensorSpec([atoms] * action_dim)
         support = torch.linspace(vmin, vmax, atoms, dtype=torch.float)
         mapping_operator = MLP(obs_dim, (atoms, action_dim))
-        actor = DistributionalQValueActor(action_spec=action_spec, mapping_operator=mapping_operator, support=support,
-                                          distribution_class=Delta)
+        actor = DistributionalQValueActor(
+            action_spec=action_spec,
+            mapping_operator=mapping_operator,
+            support=support,
+            distribution_class=Delta,
+        )
         return actor
 
     def _create_mock_data_dqn(self, batch=2, obs_dim=3, action_dim=4, atoms=None):
@@ -45,7 +62,9 @@ class TestDQN:
         next_obs = torch.randn(batch, obs_dim)
         if atoms:
             action_value = torch.randn(batch, atoms, action_dim).softmax(-2)
-            action = (action_value[..., 0, :] == action_value[..., 0, :].max(-1, True)[0]).to(torch.long)
+            action = (
+                action_value[..., 0, :] == action_value[..., 0, :].max(-1, True)[0]
+            ).to(torch.long)
         else:
             action_value = torch.randn(batch, action_dim)
             action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
@@ -64,14 +83,18 @@ class TestDQN:
         )
         return td
 
-    def _create_seq_mock_data_dqn(self, batch=2, T=4, obs_dim=3, action_dim=4, atoms=None):
+    def _create_seq_mock_data_dqn(
+        self, batch=2, T=4, obs_dim=3, action_dim=4, atoms=None
+    ):
         #  create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim)
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
         if atoms:
             action_value = torch.randn(batch, T, atoms, action_dim).softmax(-2)
-            action = (action_value[..., 0, :] == action_value[..., 0, :].max(-1, True)[0]).to(torch.long)
+            action = (
+                action_value[..., 0, :] == action_value[..., 0, :].max(-1, True)[0]
+            ).to(torch.long)
         else:
             action_value = torch.randn(batch, T, action_dim)
             action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
@@ -87,7 +110,8 @@ class TestDQN:
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
-                "action_value": action_value * expand_as_right(mask.to(obs.dtype).squeeze(-1), action_value),
+                "action_value": action_value
+                * expand_as_right(mask.to(obs.dtype).squeeze(-1), action_value),
             },
         )
         return td
@@ -118,7 +142,9 @@ class TestDQN:
             loss = loss_fn(td)
         if n == 0:
             assert_allclose_td(td, ms_td.select(*list(td.keys())))
-            assert abs(loss - loss_ms) < 1e-3, f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
+            assert (
+                abs(loss - loss_ms) < 1e-3
+            ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
         else:
             with pytest.raises(AssertionError):
                 torch.testing.assert_allclose(loss, loss_ms)
@@ -126,7 +152,9 @@ class TestDQN:
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
     @pytest.mark.parametrize("atoms", range(4, 10))
-    @pytest.mark.parametrize("loss_class", (DistributionalDQNLoss, DistributionalDoubleDQNLoss))
+    @pytest.mark.parametrize(
+        "loss_class", (DistributionalDQNLoss, DistributionalDoubleDQNLoss)
+    )
     @pytest.mark.parametrize("device", get_devices())
     def test_distributional_dqn(self, atoms, loss_class, device, gamma=0.9):
         torch.manual_seed(self.seed)
@@ -169,7 +197,10 @@ def test_hold_out():
     assert y.requires_grad
 
     # exception
-    with pytest.raises(RuntimeError, match="hold_out_net requires the network parameter set to be non-empty."):
+    with pytest.raises(
+        RuntimeError,
+        match="hold_out_net requires the network parameter set to be non-empty.",
+    ):
         net = torch.nn.Sequential()
         with hold_out_net(net):
             pass

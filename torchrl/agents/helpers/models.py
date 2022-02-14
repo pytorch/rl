@@ -22,7 +22,8 @@ from torchrl.modules.models.models import (
     DdpgMlpQNet,
     DdpgMlpActor,
     MLP,
-    ConvNet, LSTMNet,
+    ConvNet,
+    LSTMNet,
 )
 from torchrl.modules.probabilistic_operators import (
     QValueActor,
@@ -323,7 +324,9 @@ def make_ppo_model(
             )
         else:
             if args.lstm:
-                raise NotImplementedError("lstm not yet compatible with shared mapping for PPO")
+                raise NotImplementedError(
+                    "lstm not yet compatible with shared mapping for PPO"
+                )
             common_mapping_operator = MLP(
                 num_cells=[
                     400,
@@ -358,10 +361,8 @@ def make_ppo_model(
         if args.lstm:
             policy_net = LSTMNet(
                 out_features=out_features,
-                lstm_kwargs={
-                    'input_size': 256,
-                    'hidden_size': 256},
-                mlp_kwargs={'num_cells': [256, 256], 'out_features': 256},
+                lstm_kwargs={"input_size": 256, "hidden_size": 256},
+                mlp_kwargs={"num_cells": [256, 256], "out_features": 256},
             )
             in_keys_actor += ["hidden0", "hidden1"]
             out_keys += ["hidden0", "hidden1", "next_hidden0", "next_hidden1"]
@@ -549,7 +550,7 @@ def parser_model_args_continuous(
             "--ou_exploration",
             action="store_true",
             help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
-                 "efficient entropy-based exploration, this should be left for experimentation only.",
+            "efficient entropy-based exploration, this should be left for experimentation only.",
         )
 
     if algorithm == "SAC":
@@ -558,8 +559,8 @@ def parser_model_args_continuous(
             action="store_false",
             dest="double_qvalue",
             help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
-                 "use two different qvalue networks trained independently and choose the lowest value "
-                 "predicted to predict the state action value. This can be disabled by using this flag.",
+            "use two different qvalue networks trained independently and choose the lowest value "
+            "predicted to predict the state action value. This can be disabled by using this flag.",
         )
 
     if algorithm in ("SAC", "PPO"):

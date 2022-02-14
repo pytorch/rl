@@ -707,16 +707,17 @@ class LSTMNet(nn.Module):
 
     def __init__(self, out_features, lstm_kwargs: Dict, mlp_kwargs: Dict) -> None:
         super().__init__()
-        lstm_kwargs.update({'batch_first': True})
+        lstm_kwargs.update({"batch_first": True})
         self.mlp = MLP(**mlp_kwargs)
         self.lstm = nn.LSTM(**lstm_kwargs)
         self.linear = nn.LazyLinear(out_features)
 
-    def _lstm(self,
-              input: torch.Tensor,
-              hidden0_in: Optional[torch.Tensor] = None,
-              hidden1_in: Optional[torch.Tensor] = None,
-              ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _lstm(
+        self,
+        input: torch.Tensor,
+        hidden0_in: Optional[torch.Tensor] = None,
+        hidden1_in: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         squeeze = False
         if input.ndimension() == 2:
             squeeze = True
@@ -726,10 +727,19 @@ class LSTMNet(nn.Module):
         if hidden1_in is None and hidden0_in is None:
             shape = (batch, steps) if not squeeze else (batch,)
             hidden0_in, hidden1_in = [
-                torch.zeros(*shape, self.lstm.num_layers, self.lstm.hidden_size, device=input.device,
-                            dtype=input.dtype) for _ in range(2)]
+                torch.zeros(
+                    *shape,
+                    self.lstm.num_layers,
+                    self.lstm.hidden_size,
+                    device=input.device,
+                    dtype=input.dtype,
+                )
+                for _ in range(2)
+            ]
         elif hidden1_in is None or hidden0_in is None:
-            raise RuntimeError(f"got type(hidden0)={type(hidden0_in)} and type(hidden1)={type(hidden1_in)}")
+            raise RuntimeError(
+                f"got type(hidden0)={type(hidden0_in)} and type(hidden1)={type(hidden1_in)}"
+            )
 
         # we only need the first hidden state
         if not squeeze:
@@ -738,7 +748,10 @@ class LSTMNet(nn.Module):
         else:
             _hidden0_in = hidden0_in
             _hidden1_in = hidden1_in
-        hidden = (_hidden0_in.transpose(-3, -2).contiguous(), _hidden1_in.transpose(-3, -2).contiguous())
+        hidden = (
+            _hidden0_in.transpose(-3, -2).contiguous(),
+            _hidden1_in.transpose(-3, -2).contiguous(),
+        )
 
         y0, hidden = self.lstm(input, hidden)
         # dim 0 in hidden is num_layers, but that will conflict with tensordict
@@ -751,7 +764,11 @@ class LSTMNet(nn.Module):
         else:
             # we pad the hidden states with zero to make tensordict happy
             for i in range(3, 5):
-                out[i] = torch.stack([torch.zeros_like(out[i]) for _ in range(input.shape[1] - 1)] + [out[i]], 1)
+                out[i] = torch.stack(
+                    [torch.zeros_like(out[i]) for _ in range(input.shape[1] - 1)]
+                    + [out[i]],
+                    1,
+                )
         return tuple(out)
 
     def forward(

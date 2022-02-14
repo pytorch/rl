@@ -249,7 +249,7 @@ class ClipPPOLoss(PPOLoss):
         if self.critic_factor:
             loss_critic = self.loss_critic(tensor_dict)
             td_out.set("loss_critic", loss_critic.mean())
-        td_out.set("ESS", ess.mean()/batch)
+        td_out.set("ESS", ess.mean() / batch)
         return td_out
 
 

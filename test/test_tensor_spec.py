@@ -58,7 +58,17 @@ def test_unbounded(dtype):
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
-@pytest.mark.parametrize("shape", [[], torch.Size([3, ])])
+@pytest.mark.parametrize(
+    "shape",
+    [
+        [],
+        torch.Size(
+            [
+                3,
+            ]
+        ),
+    ],
+)
 def test_ndbounded(dtype, shape):
     torch.manual_seed(0)
     np.random.seed(0)
@@ -74,8 +84,9 @@ def test_ndbounded(dtype, shape):
         r = ts.rand(shape)
         assert r.dtype is _dtype
         assert r.shape == torch.Size([*shape, 10])
-        assert (r >= lb.to(dtype)).all() and (r <= ub.to(
-            dtype)).all(), f"{r[r <= lb] - lb.expand_as(r)[r <= lb]} -- {r[r >= ub] - ub.expand_as(r)[r >= ub]} "
+        assert (r >= lb.to(dtype)).all() and (
+            r <= ub.to(dtype)
+        ).all(), f"{r[r <= lb] - lb.expand_as(r)[r <= lb]} -- {r[r >= ub] - ub.expand_as(r)[r >= ub]} "
         ts.to_numpy(r)
         assert ts.is_in(r)
         ts.encode(lb + torch.rand(10) * (ub - lb))
@@ -89,19 +100,39 @@ def test_ndbounded(dtype, shape):
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
 @pytest.mark.parametrize("n", range(3, 10))
-@pytest.mark.parametrize("shape", [[], torch.Size([3, ])])
+@pytest.mark.parametrize(
+    "shape",
+    [
+        [],
+        torch.Size(
+            [
+                3,
+            ]
+        ),
+    ],
+)
 def test_ndunbounded(dtype, n, shape):
     torch.manual_seed(0)
     np.random.seed(0)
 
-    ts = NdUnboundedContinuousTensorSpec(shape=[n, ], dtype=dtype)
+    ts = NdUnboundedContinuousTensorSpec(
+        shape=[
+            n,
+        ],
+        dtype=dtype,
+    )
 
     if dtype is None:
         dtype = torch.get_default_dtype()
 
     for _ in range(100):
         r = ts.rand(shape)
-        assert r.shape == torch.Size([*shape, n, ])
+        assert r.shape == torch.Size(
+            [
+                *shape,
+                n,
+            ]
+        )
         ts.to_numpy(r)
         assert ts.is_in(r)
         assert r.dtype is dtype
@@ -109,7 +140,17 @@ def test_ndunbounded(dtype, n, shape):
 
 
 @pytest.mark.parametrize("n", range(3, 10))
-@pytest.mark.parametrize("shape", [[], torch.Size([3, ])])
+@pytest.mark.parametrize(
+    "shape",
+    [
+        [],
+        torch.Size(
+            [
+                3,
+            ]
+        ),
+    ],
+)
 def test_binary(n, shape):
     torch.manual_seed(0)
     np.random.seed(0)
@@ -117,22 +158,51 @@ def test_binary(n, shape):
     ts = BinaryDiscreteTensorSpec(n)
     for _ in range(100):
         r = ts.rand(shape)
-        assert r.shape == torch.Size([*shape, n, ])
+        assert r.shape == torch.Size(
+            [
+                *shape,
+                n,
+            ]
+        )
         assert ts.is_in(r)
         assert ((r == 0) | (r == 1)).all()
         assert (ts.encode(r.numpy()) == r).all()
         assert (ts.encode(ts.to_numpy(r)) == r).all()
 
 
-@pytest.mark.parametrize("ns", [[5, ], [5, 2, 3], [4, 4, 1]])
-@pytest.mark.parametrize("shape", [[], torch.Size([3, ])])
+@pytest.mark.parametrize(
+    "ns",
+    [
+        [
+            5,
+        ],
+        [5, 2, 3],
+        [4, 4, 1],
+    ],
+)
+@pytest.mark.parametrize(
+    "shape",
+    [
+        [],
+        torch.Size(
+            [
+                3,
+            ]
+        ),
+    ],
+)
 def test_mult_onehot(shape, ns):
     torch.manual_seed(0)
     np.random.seed(0)
     ts = MultOneHotDiscreteTensorSpec(nvec=ns)
     for _ in range(100):
         r = ts.rand(shape)
-        assert r.shape == torch.Size([*shape, sum(ns), ])
+        assert r.shape == torch.Size(
+            [
+                *shape,
+                sum(ns),
+            ]
+        )
         assert ts.is_in(r)
         assert ((r == 0) | (r == 1)).all()
         rsplit = r.split(ns, dim=-1)
@@ -144,13 +214,25 @@ def test_mult_onehot(shape, ns):
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
-@pytest.mark.parametrize("shape", [[], torch.Size([3, ])])
+@pytest.mark.parametrize(
+    "shape",
+    [
+        [],
+        torch.Size(
+            [
+                3,
+            ]
+        ),
+    ],
+)
 def test_composite(shape, dtype):
     torch.manual_seed(0)
     np.random.seed(0)
 
     ts = CompositeSpec(
-        obs=NdBoundedTensorSpec(torch.zeros(3,32,32), torch.ones(3,32,32), dtype=dtype),
+        obs=NdBoundedTensorSpec(
+            torch.zeros(3, 32, 32), torch.ones(3, 32, 32), dtype=dtype
+        ),
         act=NdUnboundedContinuousTensorSpec((7,), dtype=dtype),
     )
     if dtype is None:
@@ -159,9 +241,10 @@ def test_composite(shape, dtype):
     rand_td = ts.rand(shape)
     assert rand_td.shape == torch.Size(shape)
     assert rand_td.get("obs").shape == torch.Size([*shape, 3, 32, 32])
-    assert rand_td.get('obs').dtype == dtype
+    assert rand_td.get("obs").dtype == dtype
     assert rand_td.get("act").shape == torch.Size([*shape, 7])
-    assert rand_td.get('act').dtype == dtype
+    assert rand_td.get("act").dtype == dtype
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -27,9 +27,7 @@ def _test_vecnorm_subproc(idx, queue_out: mp.Queue, queue_in: mp.Queue):
     reward_ssq = t._td.get("reward_ssq").clone()
     reward_count = t._td.get("reward_ssq").clone()
 
-    queue_out.put((
-        obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count
-    ))
+    queue_out.put((obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count))
 
 
 @pytest.mark.parametrize("nprc", [2, 5])
@@ -40,7 +38,14 @@ def test_vecnorm_parallel(nprc):
     for idx in range(nprc):
         prc_queue_in = mp.Queue(1)
         prc_queue_out = mp.Queue(1)
-        p = mp.Process(target=_test_vecnorm_subproc, args=(idx, prc_queue_in, prc_queue_out,))
+        p = mp.Process(
+            target=_test_vecnorm_subproc,
+            args=(
+                idx,
+                prc_queue_in,
+                prc_queue_out,
+            ),
+        )
         p.start()
         prc_queue_out.put(td)
         prcs.append(p)
@@ -69,7 +74,14 @@ def test_vecnorm_parallel(nprc):
         assert (reward_ssq == _reward_ssq).all()
         assert (reward_count == _reward_count).all()
 
-        obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = _obs_sum, _obs_ssq, _obs_count, _reward_sum, _reward_ssq, _reward_count
+        obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
+            _obs_sum,
+            _obs_ssq,
+            _obs_count,
+            _reward_sum,
+            _reward_ssq,
+            _reward_count,
+        )
 
 
 def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.Queue):
@@ -88,9 +100,7 @@ def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.
     reward_ssq = t._td.get("reward_ssq").clone()
     reward_count = t._td.get("reward_ssq").clone()
 
-    queue_out.put((
-        obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count
-    ))
+    queue_out.put((obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count))
 
 
 @pytest.mark.parametrize("nprc", [2, 5])
@@ -101,7 +111,15 @@ def test_vecnorm_parallel_auto(nprc):
     for idx in range(nprc):
         prc_queue_in = mp.Queue(1)
         prc_queue_out = mp.Queue(1)
-        p = mp.Process(target=_test_vecnorm_subproc_auto, args=(idx, make_env, prc_queue_in, prc_queue_out,))
+        p = mp.Process(
+            target=_test_vecnorm_subproc_auto,
+            args=(
+                idx,
+                make_env,
+                prc_queue_in,
+                prc_queue_out,
+            ),
+        )
         p.start()
         prcs.append(p)
         queues.append((prc_queue_in, prc_queue_out))
@@ -130,7 +148,14 @@ def test_vecnorm_parallel_auto(nprc):
         assert (reward_ssq == _reward_ssq).all()
         assert (reward_count == _reward_count).all()
 
-        obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = _obs_sum, _obs_ssq, _obs_count, _reward_sum, _reward_ssq, _reward_count
+        obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
+            _obs_sum,
+            _obs_ssq,
+            _obs_count,
+            _reward_sum,
+            _reward_ssq,
+            _reward_count,
+        )
 
 
 def _run_parallelenv(parallel_env, queue_in, queue_out):
@@ -201,4 +226,4 @@ def test_vecnorm(parallel, thr=0.2):
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, '--capture', 'no'])
+    pytest.main([__file__, "--capture", "no"])

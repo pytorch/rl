@@ -5,11 +5,19 @@ import pytest
 import torch
 from torch import nn
 
-from mocking_classes import DiscreteActionConvMockEnv, DiscreteActionVecMockEnv, DiscreteActionVecPolicy, \
-    DiscreteActionConvPolicy
+from mocking_classes import (
+    DiscreteActionConvMockEnv,
+    DiscreteActionVecMockEnv,
+    DiscreteActionVecPolicy,
+    DiscreteActionConvPolicy,
+)
 from torchrl.agents.env_creator import EnvCreator
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
-from torchrl.collectors.collectors import RandomPolicy, MultiSyncDataCollector, MultiaSyncDataCollector
+from torchrl.collectors.collectors import (
+    RandomPolicy,
+    MultiSyncDataCollector,
+    MultiaSyncDataCollector,
+)
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.data.transforms import TransformedEnv, VecNorm
 from torchrl.envs import ParallelEnv
@@ -49,25 +57,31 @@ def make_policy(env):
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_concurrent_collector_consistency(num_env, env_name, seed=100):
     if num_env == 1:
+
         def env_fn(seed):
             env = make_make_env(env_name)()
             env.set_seed(seed)
             return env
+
     else:
+
         def env_fn(seed):
-            env = ParallelEnv(num_workers=num_env, create_env_fn=make_make_env(env_name))
+            env = ParallelEnv(
+                num_workers=num_env, create_env_fn=make_make_env(env_name)
+            )
             env.set_seed(seed)
             return env
+
     policy = make_policy(env_name)
 
     collector = SyncDataCollector(
         create_env_fn=env_fn,
-        create_env_kwargs={'seed': seed},
+        create_env_kwargs={"seed": seed},
         policy=policy,
         frames_per_batch=20,
         max_frames_per_traj=2000,
         total_frames=20000,
-        device='cpu',
+        device="cpu",
         pin_memory=False,
     )
     for i, d in enumerate(collector):
@@ -83,7 +97,7 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=100):
 
     ccollector = aSyncDataCollector(
         create_env_fn=env_fn,
-        create_env_kwargs={'seed': seed},
+        create_env_kwargs={"seed": seed},
         policy=policy,
         frames_per_batch=20,
         max_frames_per_traj=2000,
@@ -110,12 +124,17 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=100):
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_collector_batch_size(num_env, env_name, seed=100):
     if num_env == 1:
+
         def env_fn():
             env = make_make_env(env_name)()
             return env
+
     else:
+
         def env_fn():
-            env = ParallelEnv(num_workers=num_env, create_env_fn=make_make_env(env_name))
+            env = ParallelEnv(
+                num_workers=num_env, create_env_fn=make_make_env(env_name)
+            )
             return env
 
     policy = make_policy(env_name)
@@ -134,7 +153,7 @@ def test_collector_batch_size(num_env, env_name, seed=100):
     )
     ccollector.set_seed(seed)
     for i, b in enumerate(ccollector):
-        assert b.numel() == - (- frames_per_batch // num_env) * num_env
+        assert b.numel() == -(-frames_per_batch // num_env) * num_env
         if i == 5:
             break
     ccollector.shutdown()
@@ -149,7 +168,10 @@ def test_collector_batch_size(num_env, env_name, seed=100):
     )
     ccollector.set_seed(seed)
     for i, b in enumerate(ccollector):
-        assert b.numel() == - (- frames_per_batch // num_env // num_workers) * num_env * num_workers
+        assert (
+            b.numel()
+            == -(-frames_per_batch // num_env // num_workers) * num_env * num_workers
+        )
         if i == 5:
             break
     ccollector.shutdown()
@@ -159,12 +181,17 @@ def test_collector_batch_size(num_env, env_name, seed=100):
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_concurrent_collector_seed(num_env, env_name, seed=100):
     if num_env == 1:
+
         def env_fn():
             env = make_make_env(env_name)()
             return env
+
     else:
+
         def env_fn():
-            env = ParallelEnv(num_workers=num_env, create_env_fn=make_make_env(env_name))
+            env = ParallelEnv(
+                num_workers=num_env, create_env_fn=make_make_env(env_name)
+            )
             return env
 
     policy = make_policy(env_name)
@@ -201,13 +228,18 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
     if num_env == 1:
+
         def env_fn(seed):
             env = make_make_env(env_name)()
             env.set_seed(seed)
             return env
+
     else:
+
         def env_fn(seed):
-            env = ParallelEnv(num_workers=num_env, create_env_fn=make_make_env(env_name))
+            env = ParallelEnv(
+                num_workers=num_env, create_env_fn=make_make_env(env_name)
+            )
             env.set_seed(seed)
             return env
 
@@ -229,12 +261,12 @@ def test_collector_consistency(num_env, env_name, seed=100):
 
     collector = SyncDataCollector(
         create_env_fn=env_fn,
-        create_env_kwargs={'seed': seed},
+        create_env_kwargs={"seed": seed},
         policy=policy,
         frames_per_batch=20 * num_env,
         max_frames_per_traj=20,
         total_frames=200,
-        device='cpu',
+        device="cpu",
         pin_memory=False,
     )
     collector = iter(collector)
@@ -261,13 +293,18 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     Tests that various frames_per_batch lead to the same results
     """
     if num_env == 1:
+
         def env_fn(seed):
             env = make_make_env(env_name)()
             env.set_seed(seed)
             return env
+
     else:
+
         def env_fn(seed):
-            env = ParallelEnv(num_workers=num_env, create_env_fn=make_make_env(env_name))
+            env = ParallelEnv(
+                num_workers=num_env, create_env_fn=make_make_env(env_name)
+            )
             env.set_seed(seed)
             return env
 
@@ -280,14 +317,14 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
 
     collector1 = collector_class(
         create_env_fn=env_fn,
-        create_env_kwargs={'seed': seed},
+        create_env_kwargs={"seed": seed},
         policy=policy,
-        frames_per_batch=1*num_env,
+        frames_per_batch=1 * num_env,
         max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
-        device='cpu',
+        device="cpu",
         seed=seed,
-        pin_memory=False
+        pin_memory=False,
     )
     count = 0
     data1 = []
@@ -305,14 +342,14 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
 
     collector10 = collector_class(
         create_env_fn=env_fn,
-        create_env_kwargs={'seed': seed},
+        create_env_kwargs={"seed": seed},
         policy=policy,
-        frames_per_batch=10*num_env,
+        frames_per_batch=10 * num_env,
         max_frames_per_traj=20,
         total_frames=2 * num_env * max_frames_per_traj,
-        device='cpu',
+        device="cpu",
         seed=seed,
-        pin_memory=False
+        pin_memory=False,
     )
     count = 0
     data10 = []
@@ -330,14 +367,14 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
 
     collector20 = collector_class(
         create_env_fn=env_fn,
-        create_env_kwargs={'seed': seed},
+        create_env_kwargs={"seed": seed},
         policy=policy,
-        frames_per_batch=20*num_env,
+        frames_per_batch=20 * num_env,
         max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
-        device='cpu',
+        device="cpu",
         seed=seed,
-        pin_memory=False
+        pin_memory=False,
     )
     count = 0
     data20 = []
@@ -369,11 +406,14 @@ def test_collector_vecnorm_envcreator():
 
     """
     from torchrl.envs import GymEnv
+
     env_make = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v0"), VecNorm()))
     env_make = ParallelEnv(4, env_make)
 
     policy = RandomPolicy(env_make.action_spec)
-    c = MultiSyncDataCollector([env_make, env_make], policy=policy, total_frames=int(1e6))
+    c = MultiSyncDataCollector(
+        [env_make, env_make], policy=policy, total_frames=int(1e6)
+    )
     final_seed = c.set_seed(0)
     assert final_seed == 7
 
@@ -383,8 +423,8 @@ def test_collector_vecnorm_envcreator():
 
     s = c.state_dict()
 
-    td1 = s["worker0"]['env_state_dict']["worker3"]['_extra_state'].clone()
-    td2 = s["worker1"]['env_state_dict']["worker0"]['_extra_state'].clone()
+    td1 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"].clone()
+    td2 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"].clone()
     assert (td1 == td2).all()
 
     next(c_iter)
@@ -392,8 +432,8 @@ def test_collector_vecnorm_envcreator():
 
     s = c.state_dict()
 
-    td3 = s["worker0"]['env_state_dict']["worker3"]['_extra_state'].clone()
-    td4 = s["worker1"]['env_state_dict']["worker0"]['_extra_state'].clone()
+    td3 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"].clone()
+    td4 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"].clone()
     assert (td3 == td4).all()
     assert (td1 != td4).any()
 
@@ -405,7 +445,9 @@ def test_collector_vecnorm_envcreator():
 def test_update_weights(use_async):
     policy = torch.nn.Linear(3, 4).cuda(1)
     policy.share_memory()
-    collector_class = MultiSyncDataCollector if not use_async else MultiaSyncDataCollector
+    collector_class = (
+        MultiSyncDataCollector if not use_async else MultiaSyncDataCollector
+    )
     collector = collector_class(
         [lambda: DiscreteActionVecMockEnv()] * 3,
         policy=policy,
@@ -416,9 +458,11 @@ def test_update_weights(use_async):
     state_dict = collector.state_dict()
     policy_state_dict = policy.state_dict()
     for worker in range(3):
-        for k in state_dict[f'worker{worker}']['policy_state_dict']:
-            torch.testing.assert_allclose(state_dict[f'worker{worker}']['policy_state_dict'][k],
-                                          policy_state_dict[k].cpu())
+        for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
+            torch.testing.assert_allclose(
+                state_dict[f"worker{worker}"]["policy_state_dict"][k],
+                policy_state_dict[k].cpu(),
+            )
 
     # change policy weights
     for p in policy.parameters():
@@ -429,10 +473,12 @@ def test_update_weights(use_async):
     policy_state_dict = policy.state_dict()
     # check they don't match
     for worker in range(3):
-        for k in state_dict[f'worker{worker}']['policy_state_dict']:
+        for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
             with pytest.raises(AssertionError):
-                torch.testing.assert_allclose(state_dict[f'worker{worker}']['policy_state_dict'][k],
-                                              policy_state_dict[k].cpu())
+                torch.testing.assert_allclose(
+                    state_dict[f"worker{worker}"]["policy_state_dict"][k],
+                    policy_state_dict[k].cpu(),
+                )
 
     # update weights
     collector.update_policy_weights_()
@@ -441,9 +487,11 @@ def test_update_weights(use_async):
     state_dict = collector.state_dict()
     policy_state_dict = policy.state_dict()
     for worker in range(3):
-        for k in state_dict[f'worker{worker}']['policy_state_dict']:
-            torch.testing.assert_allclose(state_dict[f'worker{worker}']['policy_state_dict'][k],
-                                          policy_state_dict[k].cpu())
+        for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
+            torch.testing.assert_allclose(
+                state_dict[f"worker{worker}"]["policy_state_dict"][k],
+                policy_state_dict[k].cpu(),
+            )
 
     collector.shutdown()
     del collector
@@ -456,4 +504,4 @@ def weight_reset(m):
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
-    pytest.main([__file__, '--capture', 'no', '--exitfirst'] + unknown)
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

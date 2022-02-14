@@ -6,9 +6,17 @@ import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
 
 from torchrl.agents.helpers.agents import parser_agent_args, make_agent
-from torchrl.agents.helpers.collectors import parser_collector_args_offline, make_collector_offline
-from torchrl.agents.helpers.envs import parser_env_args, transformed_env_constructor, parallel_env_constructor, \
-    correct_for_frame_skip, get_stats_random_rollout
+from torchrl.agents.helpers.collectors import (
+    parser_collector_args_offline,
+    make_collector_offline,
+)
+from torchrl.agents.helpers.envs import (
+    parser_env_args,
+    transformed_env_constructor,
+    parallel_env_constructor,
+    correct_for_frame_skip,
+    get_stats_random_rollout,
+)
 from torchrl.agents.helpers.losses import parser_loss_args_offline, make_sac_loss
 from torchrl.agents.helpers.models import parser_model_args_continuous, make_sac_model
 from torchrl.agents.helpers.recorder import parser_recorder_args
@@ -19,7 +27,9 @@ from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 
 def make_args():
     parser = configargparse.ArgumentParser()
-    parser.add_argument('-c', '--config', required=True, is_config_file=True, help='config file path')
+    parser.add_argument(
+        "-c", "--config", required=True, is_config_file=True, help="config file path"
+    )
     parser_agent_args(parser)
     parser_collector_args_offline(parser)
     parser_env_args(parser)
@@ -50,9 +60,20 @@ if __name__ == "__main__":
     if not isinstance(args.reward_scaling, float):
         args.reward_scaling = DEFAULT_REWARD_SCALING.get(args.env_name, 5.0)
 
-    device = torch.device("cpu") if torch.cuda.device_count() == 0 else torch.device('cuda:0')
+    device = (
+        torch.device("cpu")
+        if torch.cuda.device_count() == 0
+        else torch.device("cuda:0")
+    )
 
-    exp_name = "_".join(["SAC", args.exp_name, str(uuid.uuid4())[:8], datetime.now().strftime("%y_%m_%d-%H_%M_%S")])
+    exp_name = "_".join(
+        [
+            "SAC",
+            args.exp_name,
+            str(uuid.uuid4())[:8],
+            datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
+        ]
+    )
     writer = SummaryWriter(f"sac_logging/{exp_name}")
     video_tag = exp_name if args.record_video else ""
 
@@ -68,8 +89,7 @@ if __name__ == "__main__":
     actor_model_explore = model[0]
     if args.ou_exploration:
         actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-            actor_model_explore,
-            annealing_num_steps=args.annealing_frames
+            actor_model_explore, annealing_num_steps=args.annealing_frames
         ).to(device)
     if device == torch.device("cpu"):
         # mostly for debugging
@@ -90,11 +110,8 @@ if __name__ == "__main__":
     replay_buffer = make_replay_buffer(device, args)
 
     recorder = transformed_env_constructor(
-        args,
-        video_tag=video_tag,
-        norm_obs_only=True,
-        stats=stats,
-        writer=writer)()
+        args, video_tag=video_tag, norm_obs_only=True, stats=stats, writer=writer
+    )()
 
     # remove video recorder from recorder to have matching state_dict keys
     if args.record_video:
@@ -116,6 +133,7 @@ if __name__ == "__main__":
         actor_model_explore,
         replay_buffer,
         writer,
-        args)
+        args,
+    )
 
     agent.train()

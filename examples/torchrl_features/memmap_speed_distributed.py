@@ -17,9 +17,7 @@ OBSERVER_NAME = "worker{}"
 
 str_init_method = "tcp://localhost:10000"
 options = rpc.TensorPipeRpcBackendOptions(
-    _transports=["uv"],
-    num_worker_threads=16,
-    init_method=str_init_method
+    _transports=["uv"], num_worker_threads=16, init_method=str_init_method
 )
 
 global tensor
@@ -43,14 +41,17 @@ if __name__ == "__main__":
     world_size = args.world_size
     tensortype = args.tensortype
 
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '29500'
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "29500"
 
     if rank == 0:
-        rpc.init_rpc(AGENT_NAME, rank=rank, world_size=world_size,
-                     backend=rpc.BackendType.TENSORPIPE,
-                     rpc_backend_options=options
-                     )
+        rpc.init_rpc(
+            AGENT_NAME,
+            rank=rank,
+            world_size=world_size,
+            backend=rpc.BackendType.TENSORPIPE,
+            rpc_backend_options=options,
+        )
         # create tensor
         tensor = torch.zeros(10000, 10000)
         if tensortype == "memmap":
@@ -79,8 +80,12 @@ if __name__ == "__main__":
         print(f"{tensortype}, time spent: {time.time() - t0: 4.4f}")
 
     else:
-        rpc.init_rpc(OBSERVER_NAME.format(rank), rank=rank, world_size=world_size,
-                     backend=rpc.BackendType.TENSORPIPE,
-                     rpc_backend_options=options)
+        rpc.init_rpc(
+            OBSERVER_NAME.format(rank),
+            rank=rank,
+            world_size=world_size,
+            backend=rpc.BackendType.TENSORPIPE,
+            rpc_backend_options=options,
+        )
 
     rpc.shutdown()
