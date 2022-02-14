@@ -131,7 +131,7 @@ class ProbabilisticOperator(nn.Module):
         Returns: a distribution along with other tensors returned by the mapping_operator.
 
         """
-        tensors = [tensor_dict.get(key) for key in self.in_keys]
+        tensors = [tensor_dict.get(key, None) for key in self.in_keys]
         out_tensors = self.mapping_operator(*tensors)
         if isinstance(out_tensors, torch.Tensor):
             out_tensors = (out_tensors,)

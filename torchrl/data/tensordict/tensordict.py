@@ -41,7 +41,7 @@ from .utils import _sub_index, _getitem_batch_size
 from ..utils import INDEX_TYPING, DEVICE_TYPING
 
 TD_HANDLED_FUNCTIONS = dict()
-COMPATIBLE_TYPES = Union[torch.Tensor]  # leaves space for _TensorDict
+COMPATIBLE_TYPES = Union[torch.Tensor, None]  # leaves space for _TensorDict
 _accepted_classes = (torch.Tensor, MemmapTensor)
 
 
@@ -181,7 +181,17 @@ class _TensorDict(Mapping):
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
-    def get(self, key: str, default: Optional[torch.Tensor] = None) -> COMPATIBLE_TYPES:
+    def _default_get(self, key: str, default: Union[None, str, torch.Tensor] = "_no_default_") -> COMPATIBLE_TYPES:
+        if not isinstance(default, str):
+            return default
+        if default == "_no_default_":
+            raise KeyError(
+                f"key {key} not found in {self.__class__.__name__} with keys {sorted(list(self.keys()))}"
+            )
+        else:
+            raise ValueError(f"default should be None or a torch.Tensor instance, got {default}")
+
+    def get(self, key: str, default: Union[None, str, torch.Tensor] = "_no_default_") -> COMPATIBLE_TYPES:
         """
         Gets the value stored with the input key.
 
@@ -838,7 +848,7 @@ class _TensorDict(Mapping):
 
         d = {}
         for key, item in self.items():
-            d[key] = item.reshape(*shape, *item.shape[self.ndimension() :])
+            d[key] = item.reshape(*shape, *item.shape[self.ndimension():])
         if len(d):
             batch_size = d[key].shape[: len(shape)]
         else:
@@ -1349,18 +1359,14 @@ class TensorDict(_TensorDict):
             tensor_in[idx] = value
         return self
 
-    def get(self, key: str, default: Optional[torch.Tensor] = None) -> COMPATIBLE_TYPES:
+    def get(self, key: str, default: Union[None, str, torch.Tensor] = "_no_default_") -> COMPATIBLE_TYPES:
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
         try:
             return self._tensor_dict[key]
         except KeyError:
-            if default is not None:
-                return default
-            raise KeyError(
-                f"key {key} not found in {self.__class__.__name__} with keys {sorted(list(self.keys()))}"
-            )
+            return self._default_get(key, default)
 
     def _get_meta(self, key: str) -> MetaTensor:
         if not isinstance(key, str):
@@ -1520,11 +1526,11 @@ def assert_allclose_td(
         input2 = expected.get(key)
         mse = (
             (input1.to(torch.float) - input2.to(torch.float))
-            .pow(2)
-            .sum()
-            .div(input1.numel())
-            .sqrt()
-            .item()
+                .pow(2)
+                .sum()
+                .div(input1.numel())
+                .sqrt()
+                .item()
         )
 
         default_msg = f"key {key} does not match, got mse = {mse:4.4f}"
@@ -1762,7 +1768,7 @@ class SubTensorDict(_TensorDict):
         parent = self.get_parent_tensor_dict()
         tensor_expand = torch.zeros(
             *parent.batch_size,
-            *tensor.shape[self.batch_dims :],
+            *tensor.shape[self.batch_dims:],
             dtype=tensor.dtype,
             device=self.device,
         )
@@ -2081,10 +2087,10 @@ class LazyStackedTensorDict(_TensorDict):
         return self
 
     def get(
-        self, key: str, default: Optional[torch.Tensor] = None, **kwargs
+        self, key: str, default: Union[None, str, torch.Tensor] = "_no_default_", **kwargs
     ) -> COMPATIBLE_TYPES:
         if not (key in self.valid_keys):
-            raise KeyError(f"key {key} not found in {list(self._valid_keys)}")
+            return self._default_get(key, default)
         tensors = [td.get(key, default=default, **kwargs) for td in self.tensor_dicts]
         shapes = set(tensor.shape for tensor in tensors)
         if len(shapes) != 1:
@@ -2375,7 +2381,7 @@ class SavedTensorDict(_TensorDict):
         for k in self._keys:
             yield k
 
-    def get(self, key: str, default: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def get(self, key: str, default: Union[None, str, torch.Tensor] = "_no_default_") -> COMPATIBLE_TYPES:
         td = self._load()
         return td.get(key, default=default)
 
@@ -2619,17 +2625,20 @@ class _CustomOpTensorDict(_TensorDict):
     def get(
         self,
         key: str,
-        default: Optional[torch.Tensor] = None,
+        default: Union[None, str, torch.Tensor] = "_no_default_",
         _return_original_tensor: bool = False,
     ) -> Union[Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:
-        source_meta_tensor = self._source._get_meta(key)
-        item = self._source.get(key, default)
-        transformed_tensor = getattr(item, self.custom_op)(
-            **self._update_custom_op_kwargs(source_meta_tensor)
-        )
-        if not _return_original_tensor:
-            return transformed_tensor
-        return transformed_tensor, item
+        try:
+            source_meta_tensor = self._source._get_meta(key)
+            item = self._source.get(key, default)
+            transformed_tensor = getattr(item, self.custom_op)(
+                **self._update_custom_op_kwargs(source_meta_tensor)
+            )
+            if not _return_original_tensor:
+                return transformed_tensor
+            return transformed_tensor, item
+        except KeyError:
+            return self._default_get(key, default)
 
     def set(self, key: str, value: COMPATIBLE_TYPES, **kwargs) -> _CustomOpTensorDict:
         if self.inv_op is None:
@@ -2772,7 +2781,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dim = torch.Size(
             [
                 *self.custom_op_kwargs.get("size"),
-                *source_meta_tensor.shape[self._source.batch_dims :],
+                *source_meta_tensor.shape[self._source.batch_dims:],
             ]
         )
         new_dict = deepcopy(self.custom_op_kwargs)
@@ -2783,7 +2792,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dim = torch.Size(
             [
                 *self.inv_op_kwargs.get("size"),
-                *source_meta_tensor.shape[self._source.batch_dims :],
+                *source_meta_tensor.shape[self._source.batch_dims:],
             ]
         )
         new_dict = deepcopy(self.inv_op_kwargs)
