@@ -479,10 +479,16 @@ class SyncDataCollector(_DataCollector):
         else:
             env_state_dict = OrderedDict()
 
-        policy_state_dict = self.policy.state_dict()
-        state_dict = OrderedDict(
-            policy_state_dict=policy_state_dict, env_state_dict=env_state_dict
-        )
+        if hasattr(self.policy, 'state_dict'):
+            policy_state_dict = self.policy.state_dict()
+            state_dict = OrderedDict(
+                policy_state_dict=policy_state_dict, env_state_dict=env_state_dict
+            )
+        else:
+            state_dict = OrderedDict(
+                env_state_dict=env_state_dict
+            )
+
         if destination is not None:
             destination.update(state_dict)
             return destination

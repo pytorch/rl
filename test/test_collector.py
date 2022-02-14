@@ -1,3 +1,5 @@
+import argparse
+
 import numpy as np
 import pytest
 import torch
@@ -257,13 +259,6 @@ def test_collector_consistency(num_env, env_name, seed=100):
 def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     """
     Tests that various frames_per_batch lead to the same results
-    Args:
-        num_env:
-        env_name:
-        seed:
-
-    Returns:
-
     """
     if num_env == 1:
         def env_fn(seed):
@@ -280,54 +275,82 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
 
     policy = make_policy(env_name)
 
+    def make_frames_per_batch(frames_per_batch):
+        return -(-frames_per_batch // num_env) * num_env
+
     collector1 = collector_class(
         create_env_fn=env_fn,
         create_env_kwargs={'seed': seed},
         policy=policy,
-        frames_per_batch=1,
-        max_frames_per_traj=max_frames_per_traj,
+        frames_per_batch=1*num_env,
+        max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
         device='cpu',
         seed=seed,
         pin_memory=False
     )
+    count = 0
     data1 = []
     for d in collector1:
         data1.append(d)
+        count += d.shape[1]
+        if count > max_frames_per_traj:
+            break
+
     data1 = torch.cat(data1, 1)
+    data1 = data1[:, :max_frames_per_traj]
+
+    collector1.shutdown()
+    del collector1
 
     collector10 = collector_class(
         create_env_fn=env_fn,
         create_env_kwargs={'seed': seed},
         policy=policy,
-        frames_per_batch=10,
-        max_frames_per_traj=max_frames_per_traj,
+        frames_per_batch=10*num_env,
+        max_frames_per_traj=20,
         total_frames=2 * num_env * max_frames_per_traj,
         device='cpu',
         seed=seed,
         pin_memory=False
     )
+    count = 0
     data10 = []
     for d in collector10:
         data10.append(d)
+        count += d.shape[1]
+        if count > max_frames_per_traj:
+            break
+
     data10 = torch.cat(data10, 1)
+    data10 = data10[:, :max_frames_per_traj]
+
+    collector10.shutdown()
+    del collector10
 
     collector20 = collector_class(
         create_env_fn=env_fn,
         create_env_kwargs={'seed': seed},
         policy=policy,
-        frames_per_batch=20,
-        max_frames_per_traj=max_frames_per_traj,
+        frames_per_batch=20*num_env,
+        max_frames_per_traj=2000,
         total_frames=2 * num_env * max_frames_per_traj,
         device='cpu',
         seed=seed,
         pin_memory=False
     )
+    count = 0
     data20 = []
     for d in collector20:
         data20.append(d)
+        count += d.shape[1]
+        if count > max_frames_per_traj:
+            break
+
+    collector20.shutdown()
+    del collector20
     data20 = torch.cat(data20, 1)
-    data20 = data20[:, :data10.shape[1]]
+    data20 = data20[:, :max_frames_per_traj]
 
     assert_allclose_td(data1, data20)
     assert_allclose_td(data10, data20)
@@ -360,8 +383,8 @@ def test_collector_vecnorm_envcreator():
 
     s = c.state_dict()
 
-    td1 = s["worker0"]["worker3"]['_extra_state'].clone()
-    td2 = s["worker1"]["worker0"]['_extra_state'].clone()
+    td1 = s["worker0"]['env_state_dict']["worker3"]['_extra_state'].clone()
+    td2 = s["worker1"]['env_state_dict']["worker0"]['_extra_state'].clone()
     assert (td1 == td2).all()
 
     next(c_iter)
@@ -369,8 +392,8 @@ def test_collector_vecnorm_envcreator():
 
     s = c.state_dict()
 
-    td3 = s["worker0"]["worker3"]['_extra_state'].clone()
-    td4 = s["worker1"]["worker0"]['_extra_state'].clone()
+    td3 = s["worker0"]['env_state_dict']["worker3"]['_extra_state'].clone()
+    td4 = s["worker1"]['env_state_dict']["worker0"]['_extra_state'].clone()
     assert (td3 == td4).all()
     assert (td1 != td4).any()
 
@@ -432,4 +455,5 @@ def weight_reset(m):
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, '--capture', 'no', '--exitfirst'])
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, '--capture', 'no', '--exitfirst'] + unknown)
