@@ -4,7 +4,7 @@ from typing import Union, Callable, List, Optional, Type
 from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
-    MultiDataCollector,
+    _MultiDataCollector,
     _DataCollector,
 )
 from torchrl.data import MultiStep
@@ -137,7 +137,7 @@ def _make_collector(
     num_env_per_collector: Optional[int] = None,
     num_collectors: Optional[int] = None,
     **kwargs,
-) -> MultiDataCollector:
+) -> _MultiDataCollector:
     if env_kwargs is None:
         env_kwargs = dict()
     if isinstance(env_fns, list):
