@@ -10,6 +10,7 @@ from ..models.models import DistributionalDQNnet
 __all__ = [
     "Actor",
     "ActorValueOperator",
+    "ValueOperator",
     "QValueActor",
     "DistributionalQValueActor",
 ]
@@ -69,7 +70,7 @@ class ValueOperator(ProbabilisticOperator):
         if in_keys is None:
             in_keys = ["observation"]
         if out_keys is None:
-            out_keys = ["state_value"]
+            out_keys = ["state_value"] if "action" not in in_keys else ["state_action_value"]
         value_spec = UnboundedContinuousTensorSpec()
         super().__init__(
             value_spec,
@@ -230,18 +231,6 @@ class QValueActor(Actor):
                 f"{self.__class__.__name__} expects a distribution_class Delta, "
                 f"but got {self.distribution_class.__name__} instead."
             )
-
-    # def random_sample(self, out_shape: Union[torch.Size, Iterable]) -> torch.Tensor:
-    #     if self.action_space == "one_hot":
-    #         values = torch.randn(out_shape, device=next(self.parameters()).device)
-    #         out = rand_one_hot(values)
-    #     else:
-    #         raise NotImplementedError(
-    #             f"{self.__class__.__name__}.random_sample is not implemented yet"
-    #             f" for action_space of type {self.action_space}"
-    #         )
-    #     return out
-
 
 class DistributionalQValueActor(QValueActor):
     """

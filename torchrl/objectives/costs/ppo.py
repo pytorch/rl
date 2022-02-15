@@ -128,13 +128,14 @@ class PPOLoss(_LossModule):
         )
         return self.critic_factor * loss_value
 
-    def __call__(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
         if self.advantage_module is not None:
             tensor_dict = self.advantage_module(tensor_dict)
         tensor_dict = tensor_dict.clone()
         advantage = tensor_dict.get(self.advantage_key)
         log_weight, dist = self._log_weight(tensor_dict)
         neg_loss = (log_weight.exp() * advantage).mean()
+        print(log_weight)
         td_out = TensorDict({"loss_objective": -neg_loss.mean()}, [])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
@@ -206,7 +207,7 @@ class ClipPPOLoss(PPOLoss):
             math.log1p(self.clip_epsilon),
         )
 
-    def __call__(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
         if self.advantage_module is not None:
             tensor_dict = self.advantage_module(tensor_dict)
         tensor_dict = tensor_dict.clone()
@@ -335,7 +336,7 @@ class KLPENPPOLoss(PPOLoss):
         self.decrement = decrement
         self.samples_mc_kl = samples_mc_kl
 
-    def __call__(self, tensor_dict: _TensorDict) -> TensorDict:
+    def forward(self, tensor_dict: _TensorDict) -> TensorDict:
         if self.advantage_module is not None:
             tensor_dict = self.advantage_module(tensor_dict)
         tensor_dict = tensor_dict.clone()

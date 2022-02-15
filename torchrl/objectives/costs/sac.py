@@ -90,6 +90,14 @@ class SACLoss(_LossModule):
         if not self.fixed_alpha:
             yield self.log_alpha
 
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, Parameter]]:
+        _valid = set(self.parameters())
+        for name, param in super().named_parameters():
+            if param in _valid:
+                yield name, param
+
     @property
     def target_value_network(self):
         return self.value_network
@@ -118,7 +126,7 @@ class SACLoss(_LossModule):
             "At least one of the networks of SACLoss must have trainable parameters."
         )
 
-    def __call__(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: _TensorDict) -> _TensorDict:
         device = self.device
         td_device = tensordict.to(device)
 
