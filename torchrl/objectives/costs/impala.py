@@ -13,7 +13,7 @@ class QValEstimator:
     def device(self) -> torch.device:
         return next(self.value_model.parameters()).device
 
-    def __call__(self, tensordict: _TensorDict) -> None:
+    def forward(self, tensordict: _TensorDict) -> None:
         tensordict_device = tensordict.to(self.device)
         self.value_model_device(tensordict_device)  # udpates the value key
         gamma = tensordict_device.get("gamma")
@@ -26,7 +26,7 @@ class QValEstimator:
 
 
 class VTraceEstimator:
-    def __call__(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: _TensorDict) -> _TensorDict:
         tensordict_device = tensordict.to(device)
         rewards = tensordict_device.get("reward")
         vals = tensordict_device.get("value")
@@ -42,7 +42,7 @@ class VTraceEstimator:
 
 
 class ImpalaLoss:
-    def __call__(self, tensordict):
+    def forward(self, tensordict):
         tensordict_device = tensordict.to(device)
         self.q_val_estimator(tensordict_device)
         self.v_trace_estimator(tensordict_device)

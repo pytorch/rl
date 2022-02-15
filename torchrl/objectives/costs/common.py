@@ -10,7 +10,7 @@ from torchrl.data.tensordict.tensordict import _TensorDict
 
 
 class _LossModule(nn.Module):
-    def __call__(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: _TensorDict) -> _TensorDict:
         raise NotImplementedError
 
     def _networks(self) -> Iterator[nn.Module]:

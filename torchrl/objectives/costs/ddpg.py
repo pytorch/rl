@@ -54,7 +54,7 @@ class DDPGLoss(_LossModule):
         target_value_network = self.value_network
         return actor_network, value_network, target_actor_network, target_value_network
 
-    def __call__(self, input_tensor_dict: _TensorDict) -> TensorDict:
+    def forward(self, input_tensor_dict: _TensorDict) -> TensorDict:
         """
         Computes the DDPG losses given a tensordict sampled from the replay buffer.
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
@@ -92,7 +92,7 @@ class DDPGLoss(_LossModule):
         )
         input_tensor_dict.set(
             "td_error",
-            td_error.detach().unsqueeze(1).to(input_tensor_dict.device),
+            td_error.detach().unsqueeze(input_tensor_dict.ndimension()).to(input_tensor_dict.device),
             inplace=True,
         )
         loss_actor = self._loss_actor(input_tensor_dict, actor_network, value_network)

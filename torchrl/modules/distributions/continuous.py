@@ -26,6 +26,11 @@ class SafeTanhTransform(D.TanhTransform):
         y = y.clamp(-1 + self.delta, 1 - self.delta)
         return y
 
+    def _inverse(self, y: torch.Tensor) -> torch.Tensor:
+        y = y.clamp(-1 + self.delta, 1 - self.delta)
+        x = super()._inverse(y)
+        return x
+
 
 class TruncatedNormal(D.Independent):
     """

@@ -51,7 +51,7 @@ class DQNLoss(_LossModule):
         self.gamma = gamma
         self.loss_function = loss_function
 
-    def __call__(self, input_tensor_dict: _TensorDict) -> TensorDict:
+    def forward(self, input_tensor_dict: _TensorDict) -> TensorDict:
         """
         Computes the DQN loss given a tensordict sampled from the replay buffer.
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
@@ -189,7 +189,7 @@ class DistributionalDQNLoss(_LossModule):
             )
         self.value_network = value_network
 
-    def __call__(self, input_tensor_dict: _TensorDict) -> TensorDict:
+    def forward(self, input_tensor_dict: _TensorDict) -> TensorDict:
         # from https://github.com/Kaixhin/Rainbow/blob/9ff5567ad1234ae0ed30d8471e8f13ae07119395/agent.py
         device = self.device
         tensor_dict = TensorDict(
@@ -354,5 +354,5 @@ class DistributionalDoubleDQNLoss(DistributionalDQNLoss):
         self._target_value_network.apply(reset_noise)
         return self._target_value_network
 
-    def __call__(self, *args, **kwargs) -> torch.Tensor:
-        return super().__call__(*args, **kwargs)
+    def forward(self, *args, **kwargs) -> torch.Tensor:
+        return super().forward(*args, **kwargs)
