@@ -4,7 +4,7 @@ import torch
 import yaml
 from scipy.stats import chisquare
 
-from torchrl.agents.env_creator import EnvCreator
+from torchrl.agents import EnvCreator
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,

@@ -176,7 +176,6 @@ class ProbabilisticOperator(nn.Module):
         self._write_to_tensor_dict(tensor_dict_unsqueezed, [out_tensor] + list(tensors))
         if self.return_log_prob:
             log_prob = dist.log_prob(out_tensor)
-            log_prob = log_prob.unsqueeze(-1)
             tensor_dict_unsqueezed.set(
                 "_".join([self.out_keys[0], "log_prob"]), log_prob
             )

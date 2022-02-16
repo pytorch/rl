@@ -1,3 +1,6 @@
+import argparse
+
+import numpy as np
 import pytest
 import torch
 
@@ -7,18 +10,21 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td
 
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
-def test_prb(priority_key):
+@pytest.mark.parametrize("contiguous", [True, False])
+def test_prb(priority_key, contiguous):
+    torch.manual_seed(0)
+    np.random.seed(0)
     rb = TensorDictPrioritizedReplayBuffer(
         5,
         alpha=0.7,
         beta=0.9,
-        collate_fn=lambda x: torch.stack(x, 0),
+        collate_fn=None if contiguous else lambda x: torch.stack(x, 0),
         priority_key=priority_key,
     )
     td1 = TensorDict(
         source={
             "a": torch.randn(3, 1),
-            priority_key: torch.rand(3, 1),
+            priority_key: torch.rand(3, 1)/10,
             "_idx": torch.arange(3).view(3, 1),
         },
         batch_size=[3],
@@ -37,7 +43,7 @@ def test_prb(priority_key):
     td2 = TensorDict(
         source={
             "a": torch.randn(5, 1),
-            priority_key: torch.rand(5, 1),
+            priority_key: torch.rand(5, 1)/10,
             "_idx": torch.arange(5).view(5, 1),
         },
         batch_size=[5],
@@ -53,29 +59,35 @@ def test_prb(priority_key):
     assert_allclose_td(td2[s.get("_idx").squeeze()].select("a"), s.select("a"))
 
     # test strong update
+    # get all indices that match first item
+    idx = s.get("_idx")
+    idx_match = (idx == idx[0]).nonzero()[:, 0]
     s.set_at_(
         priority_key,
         torch.ones(
-            1,
+            idx_match.numel(),
         )
-        * 10000,
-        0,
+        * 100000000,
+        idx_match,
     )
+    val = s.get("a")[0]
+
     idx0 = s.get("_idx")[0]
     rb.update_priority(s)
     s = rb.sample(5)
-    assert s.get("a").unique().numel() == 1
-    assert td2[idx0].get(priority_key) == td2.get(priority_key).max()
+    assert (val == s.get("a")).sum() >= 1
     torch.testing.assert_allclose(
         td2[idx0].get("a").view(1), s.get("a").unique().view(1)
     )
 
     # test updating values of original td
     td2.set_("a", torch.ones_like(td2.get("a")))
+    s = rb.sample(5)
     torch.testing.assert_allclose(
         td2[idx0].get("a").view(1), s.get("a").unique().view(1)
     )
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "--capture", "no"])
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

@@ -1242,9 +1242,10 @@ class TensorDict(_TensorDict):
                 f"batch dimension mismatch, got self.batch_size={self.batch_size} "
                 f"and tensor.shape[:self.batch_dims]={tensor.shape[: self.batch_dims]}"
             )
+
         # minimum ndimension is 1
-        if tensor.ndimension() == 0:
-            tensor = tensor.view(1)
+        if tensor.ndimension()-self.ndimension() == 0:
+            tensor = tensor.unsqueeze(-1)
         return tensor
 
     def pin_memory(self) -> TensorDict:
@@ -1641,19 +1642,13 @@ def stack(
     batch_size = torch.Size(batch_size)
 
     if out is None:
+        out_td = LazyStackedTensorDict(
+            *list_of_tensor_dicts,
+            stack_dim=dim,
+        )
         if contiguous:
-            out_td = TensorDict(
-                {
-                    key: torch.stack([td.get(key) for td in list_of_tensor_dicts], dim)
-                    for key in keys
-                },
-                batch_size=batch_size,
-            )
-        else:
-            out_td = LazyStackedTensorDict(
-                *list_of_tensor_dicts,
-                stack_dim=dim,
-            )
+            out_td = out_td.contiguous()
+        return out_td
     else:
         out_td = out
         if out.batch_size != batch_size:
