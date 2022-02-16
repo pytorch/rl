@@ -1,27 +1,11 @@
 from argparse import ArgumentParser, Namespace
 
-__all__ = ["parser_replay_args", "InPlaceSampler", "make_replay_buffer"]
-
-from typing import Optional
+__all__ = ["parser_replay_args", "make_replay_buffer"]
 
 import torch
 
 from torchrl.data import ReplayBuffer, TensorDictPrioritizedReplayBuffer, DEVICE_TYPING
-
-
-class InPlaceSampler:
-    def __init__(self, device: Optional[DEVICE_TYPING] = None):
-        self.out = None
-        self.device = torch.device(device)
-
-    def __call__(self, list_of_tds):
-        if self.out is None:
-            self.out = torch.stack(list_of_tds, 0).contiguous()
-            if self.device is not None:
-                self.out = self.out.to(self.device)
-        else:
-            torch.stack(list_of_tds, 0, out=self.out)
-        return self.out
+from torchrl.data.replay_buffers.replay_buffers import InPlaceSampler
 
 
 def make_replay_buffer(device: DEVICE_TYPING, args: Namespace) -> ReplayBuffer:

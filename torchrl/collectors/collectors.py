@@ -30,8 +30,8 @@ from ..data.utils import DEVICE_TYPING, CloudpickleWrapper
 from ..envs.common import _EnvClass
 from ..envs.vec_env import _BatchedEnv
 
-TIMEOUT = 1.0
-MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
+_TIMEOUT = 1.0
+_MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
 
 
 class RandomPolicy:
@@ -976,7 +976,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         super().reset(reset_idx)
         if self.queue_out.full():
             print("waiting")
-            time.sleep(TIMEOUT)  # wait until queue is empty
+            time.sleep(_TIMEOUT)  # wait until queue is empty
         if self.queue_out.full():
             raise Exception("self.queue_out is full")
         if self.running:
@@ -1077,7 +1077,7 @@ def _main_async_collector(
 
     has_timed_out = False
     while True:
-        _timeout = TIMEOUT if not has_timed_out else 1e-3
+        _timeout = _TIMEOUT if not has_timed_out else 1e-3
         if pipe_child.poll(_timeout):
             data_in, msg = pipe_child.recv()
             if verbose:
@@ -1100,7 +1100,7 @@ def _main_async_collector(
                 dc.init_random_frames = -1
 
             d = next(dc_iter)
-            if pipe_child.poll(MIN_TIMEOUT):
+            if pipe_child.poll(_MIN_TIMEOUT):
                 # in this case, main send a message to the worker while it was busy collecting trajectories.
                 # In that case, we skip the collected trajectory and get the message from main. This is faster than
                 # sending the trajectory in the queue until timeout when it's never going to be received.
@@ -1120,7 +1120,7 @@ def _main_async_collector(
                     )
                 data = idx  # flag the worker that has sent its data
             try:
-                queue_out.put((data, j), timeout=TIMEOUT)
+                queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
                     print(f"worker {idx} successfully sent data")
                 j += 1

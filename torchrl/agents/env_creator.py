@@ -9,7 +9,7 @@ from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import _EnvClass
 
-__all__ = ["env_creator"]
+__all__ = ["EnvCreator"]
 
 
 class EnvCreator:
@@ -80,7 +80,8 @@ class EnvCreator:
                 item_to_update.copy_(item)
 
     def __repr__(self) -> str:
-        return f"EnvCreator({self.create_env_fn}({', '.join([f'{key}: {type(item)}' for key, item in self.create_env_kwargs])}))"
+        substr = ', '.join([f'{key}: {type(item)}' for key, item in self.create_env_kwargs])
+        return f"EnvCreator({self.create_env_fn}({substr}))"
 
 
 def env_creator(fun: Callable) -> EnvCreator:

@@ -5,6 +5,7 @@ import threading
 from numbers import Number
 from typing import Optional, Tuple, Union, List, Any, Callable, Iterable
 
+import torch
 from torchrl._torchrl import SumSegmentTree, MinSegmentTree
 
 from .utils import *
@@ -18,7 +19,9 @@ __all__ = [
     "create_prioritized_replay_buffer",
 ]
 
-from ..tensordict.tensordict import _TensorDict
+from .. import DEVICE_TYPING
+
+from ..tensordict.tensordict import _TensorDict, stack as stack_td
 from ..utils import DEVICE_TYPING
 
 
@@ -299,9 +302,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             data = self._collate_fn(data)
         # weight = np.power(weight / (p_min + self._eps), -self._beta)
         weight = np.power(weight / p_min, -self._beta)
-        x = first_field(data)
-        if isinstance(x, torch.Tensor):
-            weight = to_torch(weight, x.device, self._pin_memory)
+        # x = first_field(data)
+        # if isinstance(x, torch.Tensor):
+        device = data.device if hasattr(data, 'device') else torch.device("cpu")
+        weight = to_torch(weight, device, self._pin_memory)
         return data, weight
 
     @property
@@ -382,7 +386,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         return self._add_or_extend(data, priority, False)
 
     @pin_memory_output
-    def _sample(self, batch_size: int) -> Tuple[Any, np.ndarray, torch.Tensor]:
+    def _sample(self, batch_size: int) -> Tuple[Any, torch.Tensor, torch.Tensor]:
         with self._replay_lock:
             p_sum = self._sum_tree.query(0, self._capacity)
             p_min = self._min_tree.query(0, self._capacity)
@@ -411,9 +415,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         # weight = np.power(weight / (p_min + self._eps), -self._beta)
         weight = np.power(weight / p_min, -self._beta)
 
-        x = first_field(data)
-        if isinstance(x, torch.Tensor):
-            weight = to_torch(weight, x.device, self._pin_memory)
+        # x = first_field(data)  # avoid calling tree.flatten
+        # if isinstance(x, torch.Tensor):
+        device = data.device if hasattr(data, 'device') else torch.device("cpu")
+        weight = to_torch(weight, device, self._pin_memory)
         return data, weight, index
 
     def sample(self, batch_size: int) -> Tuple[Any, np.ndarray, torch.Tensor]:
@@ -522,7 +527,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         prefetch: Optional[int] = None,
     ) -> None:
         if collate_fn is None:
-            collate_fn = lambda x: x  # torch.stack(x, 0, contiguous=True)
+            collate_fn = lambda x: stack_td(x, 0, contiguous=True)
         super(TensorDictPrioritizedReplayBuffer, self).__init__(
             size=size,
             alpha=alpha,
@@ -670,3 +675,20 @@ def create_prioritized_replay_buffer(
     return PrioritizedReplayBuffer(
         size, alpha, beta, eps, collate_fn, pin_memory, prefetch
     )
+
+
+class InPlaceSampler:
+    def __init__(self, device: Optional[DEVICE_TYPING] = None):
+        self.out = None
+        if device is None:
+            device = "cpu"
+        self.device = torch.device(device)
+
+    def __call__(self, list_of_tds):
+        if self.out is None:
+            self.out = torch.stack(list_of_tds, 0).contiguous()
+            if self.device is not None:
+                self.out = self.out.to(self.device)
+        else:
+            torch.stack(list_of_tds, 0, out=self.out)
+        return self.out

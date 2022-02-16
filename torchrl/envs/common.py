@@ -427,8 +427,6 @@ class _EnvClass:
             value = value.to(device)
         # if dtype is not None:
         #     value = value.to(dtype)
-        if value.ndimension() == 0:
-            value = value.view(1)
         return value
 
     def close(self):
