@@ -1,19 +1,24 @@
 from typing import Optional, Iterable, Union, Tuple, Type, Iterator, Callable
 
+import functorch
+import numpy as np
 import torch
-from torch import nn, distributions as d
+from torch import nn, distributions as d, Tensor
 
 from torchrl.modules.distributions import Delta, OneHotCategorical
-from .common import ProbabilisticOperator, ProbabilisticOperatorWrapper
+from .common import ProbabilisticOperator, ProbabilisticOperatorWrapper, VMapProbabilisticOperator
 from ..models.models import DistributionalDQNnet
 
 __all__ = [
     "Actor",
     "ActorValueOperator",
     "ValueOperator",
+    "VMapValueOperator",
     "QValueActor",
     "DistributionalQValueActor",
 ]
+
+from ..utils.functorch import get_submodule_functional
 
 from ...data import TensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
 from ...data.tensordict.tensordict import _TensorDict
@@ -30,7 +35,7 @@ class Actor(ProbabilisticOperator):
     def __init__(
         self,
         action_spec: TensorSpec,
-        mapping_operator: nn.Module,
+        module: nn.Module,
         distribution_class: Type = Delta,
         distribution_kwargs: Optional[dict] = None,
         default_interaction_mode: str = "mode",
@@ -47,7 +52,7 @@ class Actor(ProbabilisticOperator):
 
         super().__init__(
             action_spec,
-            mapping_operator=mapping_operator,
+            module=module,
             distribution_class=distribution_class,
             distribution_kwargs=distribution_kwargs,
             default_interaction_mode=default_interaction_mode,
@@ -62,7 +67,7 @@ class Actor(ProbabilisticOperator):
 class ValueOperator(ProbabilisticOperator):
     def __init__(
         self,
-        mapping_operator: nn.Module,
+        module: nn.Module,
         in_keys: Optional[Iterable[str]] = None,
         out_keys: Optional[Iterable[str]] = None,
     ) -> None:
@@ -74,10 +79,22 @@ class ValueOperator(ProbabilisticOperator):
         value_spec = UnboundedContinuousTensorSpec()
         super().__init__(
             value_spec,
-            mapping_operator=mapping_operator,
+            module=module,
             in_keys=in_keys,
             out_keys=out_keys,
         )
+
+
+class VMapValueOperator(VMapProbabilisticOperator, ValueOperator):
+    def __init__(
+        self,
+        module: Callable,
+        expand_dim: Iterable[int],
+        in_keys: Optional[Iterable[str]] = None,
+        out_keys: Optional[Iterable[str]] = None,
+    ) -> None:
+        ValueOperator.__init__(self, module, in_keys, out_keys)
+        self.expand_dim = expand_dim
 
 
 class QValueHook:
@@ -91,6 +108,9 @@ class QValueHook:
         action_space (str): Action space. Must be one of "one-hot", "mult_one_hot" or "binary".
         var_nums (int, optional): if action_space == "mult_one_hot", this value represents the cardinality of each
             action component.
+
+    Examples:
+        TODO
 
     """
 
@@ -149,6 +169,9 @@ class DistributionalQValueHook(QValueHook):
         var_nums (int, optional): if action_space == "mult_one_hot", this value represents the cardinality of each
             action component.
 
+    Examples:
+        TODO
+
     """
 
     def __init__(
@@ -177,8 +200,8 @@ class DistributionalQValueHook(QValueHook):
         support = support.to(log_softmax_values.device)
         if log_softmax_values.shape[-2] != support.shape[-1]:
             raise RuntimeError(
-                "Support length and number of atoms in mapping_operator output should match, "
-                f"got self.support.shape={support.shape} and mapping_operator(...).shape={log_softmax_values.shape}"
+                "Support length and number of atoms in module output should match, "
+                f"got self.support.shape={support.shape} and module(...).shape={log_softmax_values.shape}"
             )
         if (log_softmax_values > 0).any():
             raise ValueError(
@@ -214,7 +237,10 @@ class DistributionalQValueHook(QValueHook):
 class QValueActor(Actor):
     """
     DQN Actor subclass.
-    This class hooks the mapping_operator such that it returns a one-hot encoding of the argmax value.
+    This class hooks the module such that it returns a one-hot encoding of the argmax value.
+
+    Examples:
+        TODO
 
     """
 
@@ -225,17 +251,21 @@ class QValueActor(Actor):
         ]
         super().__init__(*args, out_keys=out_keys, **kwargs)
         self.action_space = action_space
-        self.mapping_operator.register_forward_hook(QValueHook(self.action_space))
+        self.module.register_forward_hook(QValueHook(self.action_space))
         if not self.distribution_class is Delta:
             raise TypeError(
                 f"{self.__class__.__name__} expects a distribution_class Delta, "
                 f"but got {self.distribution_class.__name__} instead."
             )
 
+
 class DistributionalQValueActor(QValueActor):
     """
     Distributional DQN Actor subclass.
-    This class hooks the mapping_operator such that it returns a one-hot encoding of the argmax value on its support.
+    This class hooks the module such that it returns a one-hot encoding of the argmax value on its support.
+
+    Examples:
+        TODO
 
     """
 
@@ -251,9 +281,9 @@ class DistributionalQValueActor(QValueActor):
 
         self.register_buffer("support", support)
         self.action_space = action_space
-        if not isinstance(self.mapping_operator, DistributionalDQNnet):
-            self.mapping_operator = DistributionalDQNnet(self.mapping_operator)
-        self.mapping_operator.register_forward_hook(
+        if not isinstance(self.module, DistributionalDQNnet):
+            self.module = DistributionalDQNnet(self.module)
+        self.module.register_forward_hook(
             DistributionalQValueHook(self.action_space, self.support)
         )
         if self.distribution_class is not Delta:
@@ -282,10 +312,10 @@ class ActorValueOperator(ProbabilisticOperator):
     Args:
         spec (TensorSpec): spec of the action
         in_keys (Iterable of str): keys of the input tensordict to be read by the common operator
-        common_mapping_operator (Callable or nn.Module): operator reading the tensordict keys and producing a common
+        common_module (Callable or nn.Module): operator reading the tensordict keys and producing a common
             embedding that is to be used by the actor and value network sub-modules.
-        policy_operator (Callable or nn.Module): actor sub-module.
-        value_operator (Callable or nn.Module): value network sub-module.
+        policy_module (Callable or nn.Module): actor sub-module.
+        value_module (Callable or nn.Module): value network sub-module.
         policy_distribution_class (Type): distribution class for the policy.
             default: OneHotCategorical
         policy_distribution_kwargs (dict, optional): kwargs for the policy dist.
@@ -298,6 +328,10 @@ class ActorValueOperator(ProbabilisticOperator):
             default: "mode"
         return_log_prob (bool): if True, the action_log_prob will be written in the tensordict.
             default is False.
+
+    Examples:
+        TODO
+
     """
 
     # TODO: specs for action and value should be different. Use a CompositeSpec?
@@ -306,11 +340,7 @@ class ActorValueOperator(ProbabilisticOperator):
         self,
         spec: TensorSpec,
         in_keys: Iterable[str],
-        common_mapping_operator: Union[
-            Callable[[torch.Tensor], torch.Tensor], nn.Module
-        ],
-        policy_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
-        value_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
+        modules: functorch.FunctionalModuleWithBuffers,
         out_keys: Optional[Iterable[str]] = None,
         policy_distribution_class: Type = OneHotCategorical,
         policy_distribution_kwargs: Optional[dict] = None,
@@ -318,6 +348,16 @@ class ActorValueOperator(ProbabilisticOperator):
         return_log_prob: bool = False,
         **kwargs,
     ):
+        common_module, policy_module, value_module = modules.stateless_model
+        common_module = get_submodule_functional(common_module, modules)
+        policy_module = get_submodule_functional(policy_module, modules)
+        value_module = get_submodule_functional(value_module, modules)
+
+        self._param_len = [0,]+list(np.cumsum([len(module.param_names) for module in (common_module, policy_module,
+                                                                            value_module)]))
+        self._buffer_len = [0,]+list(np.cumsum([len(module.buffer_names) for module in (common_module, policy_module,
+                                                                              value_module)]))
+
         if out_keys:
             raise RuntimeError(
                 "PolicyValueOperator out_keys are pre-defined and cannot be changed, "
@@ -326,9 +366,10 @@ class ActorValueOperator(ProbabilisticOperator):
         value_out_keys = ["state_value"]
         policy_out_keys = ["action", "action_log_prob"]
         out_keys = policy_out_keys + value_out_keys
+
         super().__init__(
             spec=spec,
-            mapping_operator=common_mapping_operator,
+            module=common_module,
             in_keys=in_keys,
             out_keys=out_keys,
             **kwargs,
@@ -337,13 +378,13 @@ class ActorValueOperator(ProbabilisticOperator):
         self.value_po = ValueOperator(
             in_keys=["hidden_obs"],
             out_keys=value_out_keys,
-            mapping_operator=value_operator,
+            module=value_module,
         )
         self.policy_po = Actor(
             spec,
             in_keys=["hidden_obs"],
             out_keys=policy_out_keys,
-            mapping_operator=policy_operator,
+            module=policy_module,
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             default_interaction_mode=policy_interaction_mode,
@@ -351,23 +392,52 @@ class ActorValueOperator(ProbabilisticOperator):
             **kwargs,
         )
         self.out_keys = out_keys
+        self.modules = modules
 
-    def _get_mapping(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _split_params(
+        self,
+        params: Iterable[Tensor],
+        buffers: Iterable[Tensor]
+    ) -> Iterable[Tensor]:
+        param_split = [params[i:j] for i, j in zip(self._param_len[:-1], self._param_len[1:])]  # type: ignore
+        buffer_split = [buffers[i:j] for i, j in zip(self._buffer_len[:-1], self._buffer_len[1:])]  # type: ignore
+        return *param_split, *buffer_split
+
+    def _map(
+        self,
+        tensor_dict: _TensorDict,
+        common_params: Iterable[Tensor],
+        common_buffers: Iterable[Tensor],
+    ) -> _TensorDict:
         values = [tensor_dict.get(key) for key in self.in_keys]
-        hidden_obs = self.mapping_operator(*values)
+        hidden_obs = self.module(common_params, common_buffers, *values)
         tensor_dict.set("hidden_obs", hidden_obs)
         return tensor_dict
 
-    def get_dist(self, tensor_dict: _TensorDict) -> Tuple[d.Distribution, ...]:
-        self._get_mapping(tensor_dict)
+    def get_dist(
+        self,
+        tensor_dict: _TensorDict,
+        params: Iterable[Tensor],
+        buffers: Iterable[Tensor],
+    ) -> Tuple[d.Distribution, ...]:
+        common_params, policy_params, value_params, common_buffers, policy_buffers, value_buffers = \
+            self._split_params(params, buffers)
+        tensor_dict = self._map(tensor_dict, common_params, common_buffers)
         value_dist, *value_tensors = self.value_po.get_dist(tensor_dict)
         policy_dist, *action_tensors = self.policy_po.get_dist(tensor_dict)
         return (policy_dist, value_dist, *action_tensors, *value_tensors)
 
-    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
-        self._get_mapping(tensor_dict)
-        self.policy_po(tensor_dict)
-        self.value_po(tensor_dict)
+    def forward(
+        self,
+        tensor_dict: _TensorDict,
+        params: Iterable[Tensor],
+        buffers: Iterable[Tensor],
+    ) -> _TensorDict:
+        common_params, policy_params, value_params, common_buffers, policy_buffers, value_buffers = \
+            self._split_params(params, buffers)
+        tensor_dict = self._map(tensor_dict, common_params, common_buffers)
+        tensor_dict = self.policy_po(tensor_dict, policy_params, policy_buffers)
+        tensor_dict = self.value_po(tensor_dict, value_params, value_buffers)
         return tensor_dict
 
     def get_policy_operator(self) -> ProbabilisticOperatorWrapper:
@@ -408,7 +478,7 @@ class ActorCriticOperator(ProbabilisticOperator):
     Args:
         spec (TensorSpec): spec of the action
         in_keys (Iterable of str): keys of the input tensordict to be read by the common operator
-        common_mapping_operator (Callable or nn.Module): operator reading the tensordict keys and producing a common
+        common_module (Callable or nn.Module): operator reading the tensordict keys and producing a common
             embedding that is to be used by the actor and value network sub-modules.
         policy_operator (Callable or nn.Module): actor sub-module.
         value_operator (Callable or nn.Module): value network sub-module.
@@ -430,7 +500,7 @@ class ActorCriticOperator(ProbabilisticOperator):
         self,
         spec: TensorSpec,
         in_keys: Iterable[str],
-        common_mapping_operator: Union[
+        common_module: Union[
             Callable[[torch.Tensor], torch.Tensor], nn.Module
         ],
         policy_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
@@ -450,7 +520,7 @@ class ActorCriticOperator(ProbabilisticOperator):
         out_keys = policy_out_keys + critic_out_keys
         super().__init__(
             spec=spec,
-            mapping_operator=common_mapping_operator,
+            module=common_module,
             in_keys=in_keys,
             out_keys=out_keys,
             **kwargs,
@@ -464,7 +534,7 @@ class ActorCriticOperator(ProbabilisticOperator):
             spec,
             in_keys=["hidden_obs"],
             out_keys=policy_out_keys,
-            mapping_operator=policy_operator,
+            module=policy_operator,
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             default_interaction_mode=policy_interaction_mode,
@@ -475,7 +545,7 @@ class ActorCriticOperator(ProbabilisticOperator):
 
     def _get_mapping(self, tensor_dict: _TensorDict) -> _TensorDict:
         values = [tensor_dict.get(key) for key in self.in_keys]
-        hidden_obs = self.mapping_operator(*values)
+        hidden_obs = self.module(*values)
         tensor_dict.set("hidden_obs", hidden_obs)
         return tensor_dict
 
@@ -515,7 +585,7 @@ class ActorCriticWrapper(ProbabilisticOperator):
             spec=CompositeSpec(
                 action=policy_po.spec, state_action_value=critic_po.spec
             ),
-            mapping_operator=nn.Identity(),
+            module=nn.Identity(),
             in_keys=in_keys,
             out_keys=out_keys,
         )
@@ -583,7 +653,7 @@ class OperatorMaskWrapper(ProbabilisticOperatorWrapper):
         return getattr(self.parent_operator, self.target)
 
     def get_dist(self, tensor_dict: _TensorDict) -> Tuple[d.Distribution, ...]:
-        self.parent_operator._get_mapping(tensor_dict)
+        self.parent_operator._map(tensor_dict)
         dist, *tensors = self.target_operator.get_dist(tensor_dict)
         return (dist, *tensors)
 
@@ -598,7 +668,7 @@ class OperatorMaskWrapper(ProbabilisticOperatorWrapper):
         for n, p in self.target_operator.named_parameters(prefix=prefix):
             yield n, p
         if not exclude_common_operator:
-            for n, p in self.parent_operator.mapping_operator.named_parameters(
+            for n, p in self.parent_operator.module.named_parameters(
                 prefix=prefix
             ):
                 yield n, p

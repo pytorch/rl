@@ -90,19 +90,19 @@ def test_value_based_policy():
                 l.bias.data.zero_()
         return net
 
-    actor = QValueActor(action_spec, mapping_operator=make_net(), safe=True)
+    actor = QValueActor(action_spec, module=make_net(), safe=True)
     obs = torch.zeros(2, obs_dim)
     td = TensorDict(batch_size=[2], source={"observation": obs})
     action = actor(td).get("action")
     assert (action.sum(-1) == 1).all()
 
-    actor = QValueActor(action_spec, mapping_operator=make_net(), safe=False)
+    actor = QValueActor(action_spec, module=make_net(), safe=False)
     obs = torch.randn(2, obs_dim)
     td = TensorDict(batch_size=[2], source={"observation": obs})
     action = actor(td).get("action")
     assert (action.sum(-1) == 1).all()
 
-    actor = QValueActor(action_spec, mapping_operator=make_net(), safe=False)
+    actor = QValueActor(action_spec, module=make_net(), safe=False)
     obs = torch.zeros(2, obs_dim)
     td = TensorDict(batch_size=[2], source={"observation": obs})
     action = actor(td).get("action")
@@ -113,15 +113,15 @@ def test_value_based_policy():
 def test_actorcritic():
     spec = None
     in_keys = ["obs"]
-    common_mapping_operator = nn.Linear(3, 4)
+    common_module = nn.Linear(3, 4)
     policy_operator = nn.Linear(4, 5)
     value_operator = nn.Linear(4, 1)
     op = ActorValueOperator(
         spec=spec,
         in_keys=in_keys,
-        common_mapping_operator=common_mapping_operator,
-        policy_operator=policy_operator,
-        value_operator=value_operator,
+        common_module=common_module,
+        policy_module=policy_operator,
+        value_module=value_operator,
     )
     td = TensorDict(
         source={"obs": torch.randn(4, 3)},
@@ -143,7 +143,7 @@ def test_actorcritic():
     )
 
     value_params = set(
-        list(op.value_po.parameters()) + list(op.mapping_operator.parameters())
+        list(op.value_po.parameters()) + list(op.module.parameters())
     )
     value_params2 = set(value_op.parameters())
     assert len(value_params.difference(value_params2)) == 0 and len(
@@ -151,7 +151,7 @@ def test_actorcritic():
     ) == len(value_params)
 
     policy_params = set(
-        list(op.policy_po.parameters()) + list(op.mapping_operator.parameters())
+        list(op.policy_po.parameters()) + list(op.module.parameters())
     )
     policy_params2 = set(policy_op.parameters())
     assert len(policy_params.difference(policy_params2)) == 0 and len(

@@ -75,6 +75,12 @@ class _TensorDict(Mapping):
         """
         raise NotImplementedError
 
+    def size(self, dim: Optional[int] = None) -> torch.Size:
+        if dim is None:
+            return self.batch_size
+        else:
+            return self.batch_size[dim]
+
     @property
     def batch_dims(self) -> int:
         """
@@ -85,7 +91,10 @@ class _TensorDict(Mapping):
         """
         return len(self.batch_size)
 
-    def ndimension(self):
+    def ndimension(self) -> int:
+        return self.batch_dims
+
+    def dim(self) -> int:
         return self.batch_dims
 
     @property
@@ -854,7 +863,7 @@ class _TensorDict(Mapping):
 
         d = {}
         for key, item in self.items():
-            d[key] = item.reshape(*shape, *item.shape[self.ndimension() :])
+            d[key] = item.reshape(*shape, *item.shape[self.ndimension():])
         if len(d):
             batch_size = d[key].shape[: len(shape)]
         else:
@@ -1230,13 +1239,16 @@ class TensorDict(_TensorDict):
             tensor = torch.tensor(tensor, device=self.device)
         if check_device and self.device and tensor.device is not self.device:
             tensor = tensor.to(self.device)
-        if check_shared:
-            if self.is_shared():
-                tensor = tensor.share_memory_()
-            elif self.is_memmap():
-                tensor = MemmapTensor(tensor)
-            elif tensor.is_shared() and len(self):
-                tensor = tensor.clone()
+        try:
+            if check_shared:
+                if self.is_shared():
+                    tensor = tensor.share_memory_()
+                elif self.is_memmap():
+                    tensor = MemmapTensor(tensor)
+                elif tensor.is_shared() and len(self):
+                    tensor = tensor.clone()
+        except:
+            warn(f"check_shared for tensor {type(tensor)} with shape {tensor.shape} failed")
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
             raise RuntimeError(
                 f"batch dimension mismatch, got self.batch_size={self.batch_size} "
@@ -1244,7 +1256,7 @@ class TensorDict(_TensorDict):
             )
 
         # minimum ndimension is 1
-        if tensor.ndimension()-self.ndimension() == 0:
+        if tensor.ndimension() - self.ndimension() == 0:
             tensor = tensor.unsqueeze(-1)
         return tensor
 
@@ -1535,11 +1547,11 @@ def assert_allclose_td(
         input2 = expected.get(key)
         mse = (
             (input1.to(torch.float) - input2.to(torch.float))
-            .pow(2)
-            .sum()
-            .div(input1.numel())
-            .sqrt()
-            .item()
+                .pow(2)
+                .sum()
+                .div(input1.numel())
+                .sqrt()
+                .item()
         )
 
         default_msg = f"key {key} does not match, got mse = {mse:4.4f}"
@@ -1771,7 +1783,7 @@ class SubTensorDict(_TensorDict):
         parent = self.get_parent_tensor_dict()
         tensor_expand = torch.zeros(
             *parent.batch_size,
-            *tensor.shape[self.batch_dims :],
+            *tensor.shape[self.batch_dims:],
             dtype=tensor.dtype,
             device=self.device,
         )
@@ -2789,7 +2801,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dim = torch.Size(
             [
                 *self.custom_op_kwargs.get("size"),
-                *source_meta_tensor.shape[self._source.batch_dims :],
+                *source_meta_tensor.shape[self._source.batch_dims:],
             ]
         )
         new_dict = deepcopy(self.custom_op_kwargs)
@@ -2800,7 +2812,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dim = torch.Size(
             [
                 *self.inv_op_kwargs.get("size"),
-                *source_meta_tensor.shape[self._source.batch_dims :],
+                *source_meta_tensor.shape[self._source.batch_dims:],
             ]
         )
         new_dict = deepcopy(self.inv_op_kwargs)

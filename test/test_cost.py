@@ -41,10 +41,10 @@ class TestDQN:
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        mapping_operator = nn.Linear(obs_dim, action_dim)
+        module = nn.Linear(obs_dim, action_dim)
         actor = QValueActor(
             action_spec=action_spec,
-            mapping_operator=mapping_operator,
+            module=module,
             distribution_class=Delta,
         )
         return actor
@@ -55,10 +55,10 @@ class TestDQN:
         # Actor
         action_spec = MultOneHotDiscreteTensorSpec([atoms] * action_dim)
         support = torch.linspace(vmin, vmax, atoms, dtype=torch.float)
-        mapping_operator = MLP(obs_dim, (atoms, action_dim))
+        module = MLP(obs_dim, (atoms, action_dim))
         actor = DistributionalQValueActor(
             action_spec=action_spec,
-            mapping_operator=mapping_operator,
+            module=module,
             support=support,
             distribution_class=Delta,
         )
@@ -186,10 +186,10 @@ class TestDDPG:
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        mapping_operator = nn.Linear(obs_dim, action_dim)
+        module = nn.Linear(obs_dim, action_dim)
         actor = Actor(
             action_spec=action_spec,
-            mapping_operator=mapping_operator,
+            module=module,
             distribution_class=Delta,
         )
         return actor
@@ -204,9 +204,9 @@ class TestDDPG:
             def forward(self, obs, act):
                 return self.linear(torch.cat([obs, act], -1))
 
-        mapping_operator = ValueClass()
+        module = ValueClass()
         value = ValueOperator(
-            mapping_operator=mapping_operator,
+            module=module,
             in_keys=["observation", "action"],
         )
         return value
@@ -317,10 +317,10 @@ class TestSAC:
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        mapping_operator = nn.Linear(obs_dim, 2 * action_dim)
+        module = nn.Linear(obs_dim, 2 * action_dim)
         actor = Actor(
             action_spec=action_spec,
-            mapping_operator=mapping_operator,
+            module=module,
             distribution_class=TanhNormal,
         )
         return actor
@@ -334,17 +334,17 @@ class TestSAC:
             def forward(self, obs, act):
                 return self.linear(torch.cat([obs, act], -1))
 
-        mapping_operator = ValueClass()
+        module = ValueClass()
         qvalue = ValueOperator(
-            mapping_operator=mapping_operator,
+            module=module,
             in_keys=["observation", "action"],
         )
         return qvalue
 
     def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4):
-        mapping_operator = nn.Linear(obs_dim, 1)
+        module = nn.Linear(obs_dim, 1)
         value = ValueOperator(
-            mapping_operator=mapping_operator,
+            module=module,
             in_keys=["observation"],
         )
         return value
@@ -469,19 +469,19 @@ class TestPPO:
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        mapping_operator = nn.Linear(obs_dim, 2 * action_dim)
+        module = nn.Linear(obs_dim, 2 * action_dim)
         actor = Actor(
             action_spec=action_spec,
-            mapping_operator=mapping_operator,
+            module=module,
             distribution_class=TanhNormal,
             save_dist_params=True,
         )
         return actor
 
     def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4):
-        mapping_operator = nn.Linear(obs_dim, 1)
+        module = nn.Linear(obs_dim, 1)
         value = ValueOperator(
-            mapping_operator=mapping_operator,
+            module=module,
             in_keys=["observation"],
         )
         return value

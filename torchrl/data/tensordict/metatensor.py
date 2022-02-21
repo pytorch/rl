@@ -60,11 +60,14 @@ class MetaTensor:
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
             shape = tensor.shape
-            _is_shared = (
-                tensor.is_shared()
-                if tensor.device != torch.device("meta")
-                else _is_shared
-            )
+            try:
+                _is_shared = (
+                    tensor.is_shared()
+                    if tensor.device != torch.device("meta")
+                    else _is_shared
+                )
+            except:
+                _is_shared = False
             _is_memmap = (
                 isinstance(tensor, MemmapTensor)
                 if tensor.device != torch.device("meta")

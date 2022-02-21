@@ -109,7 +109,7 @@ def make_dqn_actor(proof_environment: _EnvClass, device, args) -> Actor:
     model = actor_class(
         in_keys=[in_key],
         action_spec=env_specs["action_spec"],
-        mapping_operator=net,
+        module=net,
         distribution_class=distribution_class,
         # variable_size=variable_size,
         safe=True,
@@ -192,7 +192,7 @@ def make_ddpg_actor(
     actor = actor_class(
         in_keys=in_keys,
         action_spec=env_specs["action_spec"],
-        mapping_operator=actor_net,
+        module=actor_net,
         distribution_class=action_distribution_class,
         safe=True,
         **actor_kwargs,
@@ -235,7 +235,7 @@ def make_ddpg_actor(
     value = state_class(
         in_keys=in_keys,
         out_keys=out_keys,
-        mapping_operator=q_net,
+        module=q_net,
     )
 
     module = torch.nn.ModuleList([actor, value]).to(device)
@@ -315,7 +315,7 @@ def make_ppo_model(
         if args.from_pixels:
             if in_keys_actor is None:
                 in_keys_actor = ["observation_pixels"]
-            common_mapping_operator = ConvNet(
+            common_module = ConvNet(
                 bias_last_layer=True,
                 depth=None,
                 num_cells=[32, 64, 64],
@@ -327,7 +327,7 @@ def make_ppo_model(
                 raise NotImplementedError(
                     "lstm not yet compatible with shared mapping for PPO"
                 )
-            common_mapping_operator = MLP(
+            common_module = MLP(
                 num_cells=[
                     400,
                 ],
@@ -347,9 +347,9 @@ def make_ppo_model(
         actor_value = ActorValueOperator(
             spec=action_spec,
             in_keys=in_keys_actor,
-            common_mapping_operator=common_mapping_operator,
-            policy_operator=policy_net,
-            value_operator=value_net,
+            common_module=common_module,
+            policy_module=policy_net,
+            value_module=value_net,
             policy_distribution_class=policy_distribution_class,
             policy_interaction_mode="random",
             policy_distribution_kwargs=policy_distribution_kwargs,
@@ -476,7 +476,7 @@ def make_sac_model(
     actor = Actor(
         action_spec=action_spec,
         in_keys=in_keys,
-        mapping_operator=actor_net,
+        module=actor_net,
         distribution_class=TanhNormal,
         distribution_kwargs={
             "min": action_spec.space.minimum,
@@ -490,7 +490,7 @@ def make_sac_model(
         spec=value_spec,
         in_keys=["action"] + in_keys,
         out_keys=["state_action_value"],
-        mapping_operator=qvalue_net,
+        module=qvalue_net,
         distribution_class=Delta,
     )
     if double_qvalue:
@@ -498,14 +498,14 @@ def make_sac_model(
             spec=value_spec,
             in_keys=["action"] + in_keys,
             out_keys=["state_action_value"],
-            mapping_operator=qvalue_net_bis,
+            module=qvalue_net_bis,
             distribution_class=Delta,
         )
     value = ProbabilisticOperator(
         spec=value_spec,
         in_keys=in_keys,
         out_keys=["state_value"],
-        mapping_operator=value_net,
+        module=value_net,
         distribution_class=Delta,
     )
     if double_qvalue:

@@ -143,7 +143,7 @@ class set_exploration_mode(_DecoratorContextManager):
         mode (str): mode to use when the policy is being called.
 
     Examples:
-        >>> policy = Actor(action_spec, mapping_operator=network, default_interaction_mode="mode")
+        >>> policy = Actor(action_spec, module=network, default_interaction_mode="mode")
         >>> env.rollout(policy=policy, n_steps=100)  # rollout with the "mode" interaction mode
         >>> with set_exploration_mode("random"):
         >>>     env.rollout(policy=policy, n_steps=100)  # rollout with the "random" interaction mode

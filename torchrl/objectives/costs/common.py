@@ -10,6 +10,7 @@ from torchrl.data.tensordict.tensordict import _TensorDict
 
 
 class _LossModule(nn.Module):
+
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         raise NotImplementedError
 

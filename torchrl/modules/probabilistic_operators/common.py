@@ -3,9 +3,9 @@ from __future__ import annotations
 from numbers import Number
 from typing import Tuple, List, Iterable, Type, Optional, Union, Any, Callable
 
+import functorch
 import torch
-from torch import nn, distributions as d
-
+from torch import nn, distributions as d, Tensor
 from torchrl.data import TensorSpec, DEVICE_TYPING
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import exploration_mode
@@ -14,6 +14,7 @@ from torchrl.modules.distributions import Delta, distributions_maps
 __all__ = [
     "ProbabilisticOperator",
     "ProbabilisticOperatorWrapper",
+    "VMapProbabilisticOperator",
 ]
 
 
@@ -29,6 +30,23 @@ def _forward_hook_safe_action(module, tensor_dict_in, tensor_dict_out):
                 module.out_keys[0],
                 module.spec.project(tensor_dict_out.get(module.out_keys[0])),
             )
+
+
+def _unsqueeze_if_needed(fun):
+    def new_fun(self, tensor_dict, *args, **kwargs):
+        tensor_dict_unsqueezed = tensor_dict
+        unsqueeze = False
+        if not len(tensor_dict.batch_size):
+            # unsqueeze will return a view of the original tensor_dict. Updates of this view will be reflected in the
+            # orignal tensor_dict, hence we can return and there is no need to squeeze it back.
+            unsqueeze = True
+            tensor_dict_unsqueezed = tensor_dict.unsqueeze(-1)
+        tensor_dict_unsqueezed = fun(self, tensor_dict_unsqueezed, *args, **kwargs)
+        if unsqueeze:
+            return tensor_dict_unsqueezed.squeeze(-1)  # tensor_dict_unsqueezed.squeeze(0) is tensor_dict should be True
+        return tensor_dict_unsqueezed
+
+    return new_fun
 
 
 class ProbabilisticOperator(nn.Module):
@@ -50,10 +68,10 @@ class ProbabilisticOperator(nn.Module):
     Args:
         spec (TensorSpec): specs of the output tensor. Used when calling prob_operator.random() to generate random
             values in the target space.
-        mapping_operator (Callable or nn.Module): callable used to map the input to the output parameter space.
+        module (Callable or nn.Module): callable used to map the input to the output parameter space.
         out_keys (iterable of str): keys to be written to the input tensordict. The length of out_keys must match the
             number of tensors returned by the distribution sampling method.
-        in_keys (iterable of str): keys to be read from input tensordict and passed to the mapping_operator. If it
+        in_keys (iterable of str): keys to be read from input tensordict and passed to the module. If it
             contains more than one element, the values will be passed in the order given by the in_keys iterable.
         distribution_class (Type): a torch.distributions.Distribution class to be used for sampling.
         distribution_kwargs (dict, optional): kwargs to be passed to the distribution.
@@ -68,7 +86,7 @@ class ProbabilisticOperator(nn.Module):
             If this value is out of bounds, it is projected back onto the desired space using the `TensorSpec.project`
             method.
             default = False
-        save_dist_params (bool): if True, the parameters of the distribution (i.e. the output of the mapping_operator)
+        save_dist_params (bool): if True, the parameters of the distribution (i.e. the output of the module)
             will be written to the tensordict along with the sample. Those parameters can be used later on to
             re-compute the original distribution later on.
             default: False
@@ -77,7 +95,7 @@ class ProbabilisticOperator(nn.Module):
     def __init__(
         self,
         spec: TensorSpec,
-        mapping_operator: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
+        module: Union[Callable[[torch.Tensor], torch.Tensor], nn.Module],
         out_keys: Iterable[str],
         in_keys: Iterable[str],
         distribution_class: Type = Delta,
@@ -105,7 +123,7 @@ class ProbabilisticOperator(nn.Module):
         self.save_dist_params = save_dist_params
         self._n_empirical_est = _n_empirical_est
 
-        self.mapping_operator = mapping_operator
+        self.module = module
 
         if isinstance(distribution_class, str):
             distribution_class = distributions_maps.get(distribution_class.lower())
@@ -118,21 +136,30 @@ class ProbabilisticOperator(nn.Module):
         self.default_interaction_mode = default_interaction_mode
         self.interact = False
 
+    # def __setattr__(self, key: str, value: Any) -> None:
+    #     if isinstance(value, nn.Module) and len(list(value.parameters())) and \
+    #         not isinstance(value, (functorch.FunctionalModuleWithBuffers, functorch.FunctionalModule)):
+    #         raise ValueError("Only stateless modules of type functorch.FunctionalModuleWithBuffers or "
+    #                          f"functorch.FunctionalModule are permitted in ProbabilisticOperators. Got {type(value)}.")
+    #     super().__setattr__(key, value)
+
     def get_dist(
-        self, tensor_dict: _TensorDict
+        self, tensor_dict: _TensorDict,
+        params: Iterable[Tensor],
+        buffers: Iterable[Tensor],
     ) -> Tuple[torch.distributions.Distribution, ...]:
         """
-        Calls the mapping_operator using the tensors retrieved from the 'in_keys' attribute and returns a distribution
+        Calls the module using the tensors retrieved from the 'in_keys' attribute and returns a distribution
         using its output.
 
         Args:
             tensor_dict (_TensorDict): tensordict with the input values for the creation of the distribution.
 
-        Returns: a distribution along with other tensors returned by the mapping_operator.
+        Returns: a distribution along with other tensors returned by the module.
 
         """
         tensors = [tensor_dict.get(key, None) for key in self.in_keys]
-        out_tensors = self.mapping_operator(*tensors)
+        out_tensors = self.module(params, buffers, *tensors)
         if isinstance(out_tensors, torch.Tensor):
             out_tensors = (out_tensors,)
         if self.save_dist_params:
@@ -144,7 +171,7 @@ class ProbabilisticOperator(nn.Module):
         return (dist, *tensors)
 
     def build_dist_from_params(
-        self, params: Tuple[torch.Tensor, ...]
+        self, params: Iterable[torch.Tensor]
     ) -> Tuple[d.Distribution, int]:
         """
         Given a tuple of temsors, returns a distribution object and the number of parameters used for it.
@@ -163,23 +190,43 @@ class ProbabilisticOperator(nn.Module):
         dist = self.distribution_class(*params[:num_params], **self.distribution_kwargs)
         return dist, num_params
 
-    def _write_to_tensor_dict(self, tensor_dict: _TensorDict, tensors: List) -> None:
-        for _out_key, _tensor in zip(self.out_keys, tensors):
+    def _write_to_tensor_dict(
+        self,
+        tensor_dict: _TensorDict,
+        tensors: List,
+        keys: Optional[Iterable[str]] = None
+    ) -> _TensorDict:
+        if keys is None:
+            keys = self.out_keys
+        for _out_key, _tensor in zip(keys, tensors):
             tensor_dict.set(_out_key, _tensor)
+        return tensor_dict
 
-    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
+    @_unsqueeze_if_needed
+    def forward(
+        self,
+        tensor_dict: _TensorDict,
+        params: Iterable[Tensor],
+        buffers: Iterable[Tensor],
+    ) -> _TensorDict:
         tensor_dict_unsqueezed = tensor_dict
+        unsqueeze = False
         if not len(tensor_dict.batch_size):
+            # unsqueeze will return a view of the original tensor_dict. Updates of this view will be reflected in the
+            # orignal tensor_dict, hence we can return and there is no need to squeeze it back.
+            unsqueeze = True
             tensor_dict_unsqueezed = tensor_dict.unsqueeze(0)
-        dist, *tensors = self.get_dist(tensor_dict_unsqueezed)
+        dist, *tensors = self.get_dist(tensor_dict_unsqueezed, params, buffers)
         out_tensor = self._dist_sample(dist, interaction_mode=exploration_mode())
-        self._write_to_tensor_dict(tensor_dict_unsqueezed, [out_tensor] + list(tensors))
+        tensor_dict_unsqueezed = self._write_to_tensor_dict(tensor_dict_unsqueezed, [out_tensor] + list(tensors))
         if self.return_log_prob:
             log_prob = dist.log_prob(out_tensor)
             tensor_dict_unsqueezed.set(
                 "_".join([self.out_keys[0], "log_prob"]), log_prob
             )
-        return tensor_dict
+        if unsqueeze:
+            return tensor_dict  # tensor_dict_unsqueezed.squeeze(0) is tensor_dict should be True
+        return tensor_dict_unsqueezed
 
     def random(self, tensor_dict: _TensorDict) -> _TensorDict:
         """
@@ -202,9 +249,15 @@ class ProbabilisticOperator(nn.Module):
         """
         return self.random(tensordict)
 
-    def log_prob(self, tensor_dict: _TensorDict) -> _TensorDict:
+    @_unsqueeze_if_needed
+    def log_prob(
+        self,
+        tensor_dict: _TensorDict,
+        params: Iterable[Tensor],
+        buffers: Iterable[Tensor],
+    ) -> _TensorDict:
         """
-        Samples/computes an action using the mapping_operator and writes this value onto the input tensordict along
+        Samples/computes an action using the module and writes this value onto the input tensordict along
         with its log-probability.
 
         Args:
@@ -215,13 +268,16 @@ class ProbabilisticOperator(nn.Module):
                 f"{out_keys[0]}_log_prob" key containing the log-probability of the first output.
 
         """
-        dist, *_ = self.get_dist(tensor_dict)
+        dist, *_ = self.get_dist(tensor_dict, params, buffers)
         lp = dist.log_prob(tensor_dict.get(self.out_keys[0]))
-        tensor_dict.set(self.out_keys[0] + "_log_prob", lp)
+        tensor_dict = self._write_to_tensor_dict(tensor_dict, lp, keys=[self.out_keys[0] + "_log_prob"])
         return tensor_dict
 
     def _dist_sample(
-        self, dist: d.Distribution, interaction_mode: bool = None, eps: Number = None
+        self,
+        dist: d.Distribution,
+        interaction_mode: bool = None,
+        eps: Number = None
     ) -> torch.Tensor:
         if interaction_mode is None:
             interaction_mode = self.default_interaction_mode
@@ -275,8 +331,26 @@ class ProbabilisticOperator(nn.Module):
         return out
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(mapping_operator={self.mapping_operator}, distribution_class={self.distribution_class}, device={self.device})"
+        return f"{self.__class__.__name__}(module={self.module}, distribution_class={self.distribution_class}, device={self.device})"
 
+
+class VMapProbabilisticOperator(ProbabilisticOperator):
+    def __init__(
+        self,
+        *args,
+        expand_dim: Iterable[int],
+        **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.expand_dim = expand_dim
+
+    def _write_to_tensor_dict(
+        self,
+        tensor_dict: _TensorDict,
+        tensors: List,
+        keys: Optional[Iterable[str]] = None
+    ) -> _TensorDict:
+        tensor_dict = tensor_dict.expand(*self.expand_dim)
+        return super()._write_to_tensor_dict(tensor_dict, tensors, keys)
 
 class ProbabilisticOperatorWrapper(nn.Module):
     """
@@ -291,11 +365,11 @@ class ProbabilisticOperatorWrapper(nn.Module):
         This class can be used for exploration wrappers
         >>> class EpsilonGreedyExploration(ProbabilisticOperatorWrapper):
         >>>     eps = 0.1
-        >>>     def forward(self, tensordict):
+        >>>     def forward(self, tensordict, params, buffers):
         >>>         if torch.rand(1)<self.eps:
         >>>             return self.random(tensordict)
         >>>         else:
-        >>>             return self.probabilistic_operator(tensordict)
+        >>>             return self.probabilistic_operator(tensordict, params, buffers)
 
     """
 

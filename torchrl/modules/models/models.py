@@ -178,8 +178,6 @@ class MLP(nn.Sequential):
         out = super().forward(*inputs)
         if not isinstance(self.out_features, Number):
             out = out.view(*out.shape[:-1], *self.out_features)
-        if not torch.isfinite(out).all():
-            print(out)
         return out
 
 

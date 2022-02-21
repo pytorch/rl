@@ -106,8 +106,10 @@ class NoisyLinear(nn.Linear):
         if self.bias_mu is not None:
             self.bias_epsilon.copy_(epsilon_out)
 
-    def _scale_noise(self, size: Union[torch.Size, Iterable]) -> torch.Tensor:
-        x = torch.randn(size, device=self.weight_mu.device)
+    def _scale_noise(self, size: Union[torch.Size, Iterable], device: torch.device = None) -> torch.Tensor:
+        if device is None:
+            device = self.weight_mu.device
+        x = torch.randn(size, device=device)
         return x.sign().mul_(x.abs().sqrt_())
 
     @property
