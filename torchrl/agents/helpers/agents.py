@@ -11,7 +11,7 @@ from torchrl.agents.agents import Agent
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import _EnvClass
-from torchrl.modules import ProbabilisticOperatorWrapper
+from torchrl.modules import TDModuleWrapper
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 
@@ -27,7 +27,7 @@ def make_agent(
     loss_module: _LossModule,
     recorder: _EnvClass,
     target_net_updater: Optional[_TargetNetUpdate],
-    policy_exploration: Optional[ProbabilisticOperatorWrapper],
+    policy_exploration: Optional[TDModuleWrapper],
     replay_buffer: Optional[ReplayBuffer],
     writer: Optional[SummaryWriter],
     args: Namespace,

@@ -1,4 +1,4 @@
-from argparse import ArgumentParser
+from argparse import Namespace, ArgumentParser
 from numbers import Number
 from typing import Optional, Iterable
 
@@ -25,13 +25,13 @@ from torchrl.modules.models.models import (
     ConvNet,
     LSTMNet,
 )
-from torchrl.modules.probabilistic_operators import (
+from torchrl.modules.td_module import (
     QValueActor,
     DistributionalQValueActor,
     Actor,
-    ProbabilisticOperator,
+    ProbabilisticTDModule,
 )
-from torchrl.modules.probabilistic_operators.actors import (
+from torchrl.modules.td_module.actors import (
     ValueOperator,
     ActorCriticWrapper,
 )
@@ -53,14 +53,37 @@ __all__ = [
 ]
 
 
-def make_dqn_actor(proof_environment: _EnvClass, device, args) -> Actor:
+def make_dqn_actor(proof_environment: _EnvClass, device: torch.device, args: Namespace) -> Actor:
     """
     DQN constructor helper function.
 
     Args:
-        TODO
+        proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec.
+        device (torch.device): device on which the model must be cast
+        args (argparse.Namespace): arguments of the DQN script
 
     Returns: A DQN policy operator.
+
+    Examples:
+        >>> from torchrl.agents.helpers.models import make_dqn_actor, parser_model_args_discrete
+        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.data.transforms import ToTensorImage, TransformedEnv
+        >>> import argparse
+        >>> proof_environment = TransformedEnv(GymEnv("Pong-v0", pixels_only=True), ToTensorImage())
+        >>> device = torch.device("cpu")
+        >>> args = parser_model_args_discrete(argparse.ArgumentParser()).parse_args([])
+        >>> actor = make_dqn_actor(proof_environment, device, args)
+        >>> td = proof_environment.reset()
+        >>> print(actor(td))
+        TensorDict(
+            fields={done: Tensor(torch.Size([1]), dtype=torch.bool),
+                observation_pixels: Tensor(torch.Size([3, 210, 160]), dtype=torch.float32),
+                action: Tensor(torch.Size([6]), dtype=torch.int64),
+                action_value: Tensor(torch.Size([6]), dtype=torch.float32)},
+            shared=False,
+            batch_size=torch.Size([]),
+            device=cpu)
+
 
     """
     env_specs = proof_environment.specs
@@ -81,7 +104,6 @@ def make_dqn_actor(proof_environment: _EnvClass, device, args) -> Actor:
     }
     in_key = "observation_pixels"
 
-    distribution_class = DISTRIBUTIONS["delta"]
     out_features = env_specs["action_spec"].shape[0]
     actor_class = QValueActor
     actor_kwargs = {}
@@ -101,17 +123,10 @@ def make_dqn_actor(proof_environment: _EnvClass, device, args) -> Actor:
         **default_net_kwargs,
     )
 
-    actor_kwargs.setdefault(
-        "default_interaction_mode",
-        "mode",
-    )
-
     model = actor_class(
+        spec=env_specs["action_spec"],
         in_keys=[in_key],
-        action_spec=env_specs["action_spec"],
-        mapping_operator=net,
-        distribution_class=distribution_class,
-        # variable_size=variable_size,
+        module=net,
         safe=True,
         **actor_kwargs,
     ).to(device)
@@ -149,13 +164,16 @@ def make_ddpg_actor(
         actor_net_kwargs (dict, optional): kwargs for the DdpgCnnActor / DdpgMlpActor classes.
         value_net_kwargs (dict, optional): kwargs for the DdpgCnnQNet / DdpgMlpQNet classes.
         actor_kwargs (dict, optional): kwargs for the Actor class, called to instantiate the policy operator.
-        value_kwargs (dict, optional): kwargs for the ProbabilisticOperator class, called to instantiate the value
+        value_kwargs (dict, optional): kwargs for the ProbabilisticTDModule class, called to instantiate the value
             operator.
 
     Returns: An actor and a value operators for DDPG.
 
     For more details on DDPG, refer to "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
     https://arxiv.org/pdf/1509.02971.pdf.
+
+    Examples:
+        >>> TODO
     """
 
     actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else dict()
@@ -192,7 +210,7 @@ def make_ddpg_actor(
     actor = actor_class(
         in_keys=in_keys,
         action_spec=env_specs["action_spec"],
-        mapping_operator=actor_net,
+        module=actor_net,
         distribution_class=action_distribution_class,
         safe=True,
         **actor_kwargs,
@@ -235,7 +253,7 @@ def make_ddpg_actor(
     value = state_class(
         in_keys=in_keys,
         out_keys=out_keys,
-        mapping_operator=q_net,
+        module=q_net,
     )
 
     module = torch.nn.ModuleList([actor, value]).to(device)
@@ -252,7 +270,7 @@ def make_ddpg_actor(
 
 def make_ppo_model(
     proof_environment: _EnvClass,
-    args: ArgumentParser,
+    args: Namespace,
     device: DEVICE_TYPING,
     in_keys_actor: Optional[Iterable[str]] = None,
     **kwargs,
@@ -315,7 +333,7 @@ def make_ppo_model(
         if args.from_pixels:
             if in_keys_actor is None:
                 in_keys_actor = ["observation_pixels"]
-            common_mapping_operator = ConvNet(
+            common_module = ConvNet(
                 bias_last_layer=True,
                 depth=None,
                 num_cells=[32, 64, 64],
@@ -327,7 +345,7 @@ def make_ppo_model(
                 raise NotImplementedError(
                     "lstm not yet compatible with shared mapping for PPO"
                 )
-            common_mapping_operator = MLP(
+            common_module = MLP(
                 num_cells=[
                     400,
                 ],
@@ -347,7 +365,7 @@ def make_ppo_model(
         actor_value = ActorValueOperator(
             spec=action_spec,
             in_keys=in_keys_actor,
-            common_mapping_operator=common_mapping_operator,
+            common_module=common_module,
             policy_operator=policy_net,
             value_operator=value_net,
             policy_distribution_class=policy_distribution_class,
@@ -476,7 +494,7 @@ def make_sac_model(
     actor = Actor(
         action_spec=action_spec,
         in_keys=in_keys,
-        mapping_operator=actor_net,
+        module=actor_net,
         distribution_class=TanhNormal,
         distribution_kwargs={
             "min": action_spec.space.minimum,
@@ -486,26 +504,26 @@ def make_sac_model(
         },
         default_interaction_mode="random",
     )
-    qvalue = ProbabilisticOperator(
+    qvalue = ProbabilisticTDModule(
         spec=value_spec,
         in_keys=["action"] + in_keys,
         out_keys=["state_action_value"],
-        mapping_operator=qvalue_net,
+        module=qvalue_net,
         distribution_class=Delta,
     )
     if double_qvalue:
-        qvalue_bis = ProbabilisticOperator(
+        qvalue_bis = ProbabilisticTDModule(
             spec=value_spec,
             in_keys=["action"] + in_keys,
             out_keys=["state_action_value"],
-            mapping_operator=qvalue_net_bis,
+            module=qvalue_net_bis,
             distribution_class=Delta,
         )
-    value = ProbabilisticOperator(
+    value = ProbabilisticTDModule(
         spec=value_spec,
         in_keys=in_keys,
         out_keys=["state_value"],
-        mapping_operator=value_net,
+        module=value_net,
         distribution_class=Delta,
     )
     if double_qvalue:
@@ -551,6 +569,17 @@ def parser_model_args_continuous(
             action="store_true",
             help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
             "efficient entropy-based exploration, this should be left for experimentation only.",
+        )
+        parser.add_argument(
+            "--distributional",
+            action="store_true",
+            help="whether a distributional loss should be used (TODO: not implemented yet).",
+        )
+        parser.add_argument(
+            "--atoms",
+            type=int,
+            default=51,
+            help="number of atoms used for the distributional loss (TODO)",
         )
 
     if algorithm == "SAC":
@@ -606,6 +635,17 @@ def parser_model_args_discrete(parser: ArgumentParser) -> ArgumentParser:
         "--noisy",
         action="store_true",
         help="whether to use NoisyLinearLayers in the value network.",
+    )
+    parser.add_argument(
+        "--distributional",
+        action="store_true",
+        help="whether a distributional loss should be used.",
+    )
+    parser.add_argument(
+        "--atoms",
+        type=int,
+        default=51,
+        help="number of atoms used for the distributional loss",
     )
 
     return parser

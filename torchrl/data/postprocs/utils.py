@@ -2,6 +2,7 @@ from typing import Iterable
 
 import torch
 
+__all__ = ["expand_right", "expand_as_right"]
 
 def expand_as_right(tensor: torch.Tensor, dest: torch.Tensor):
     """Expand a tensor on the right to match another tensor shape.

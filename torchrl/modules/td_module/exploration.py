@@ -7,9 +7,9 @@ from torch import distributions as d
 
 from torchrl.envs.utils import set_exploration_mode, exploration_mode
 from .common import _forward_hook_safe_action
-from ..probabilistic_operators import (
-    ProbabilisticOperatorWrapper,
-    ProbabilisticOperator,
+from ..td_module import (
+    TDModuleWrapper,
+    ProbabilisticTDModule,
 )
 
 __all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
@@ -17,12 +17,12 @@ __all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
 from ...data.tensordict.tensordict import _TensorDict
 
 
-class EGreedyWrapper(ProbabilisticOperatorWrapper):
+class EGreedyWrapper(TDModuleWrapper):
     """
     Epsilon-Greedy PO wrapper.
 
     Args:
-        policy (ProbabilisticOperator): a deterministic policy
+        policy (ProbabilisticTDModule): a deterministic policy
         eps_init (scalar): initial epsilon value.
             default: 1.0
         eps_end (scalar): final epsilon value.
@@ -32,7 +32,7 @@ class EGreedyWrapper(ProbabilisticOperatorWrapper):
 
     def __init__(
         self,
-        policy: ProbabilisticOperator,
+        policy: ProbabilisticTDModule,
         eps_init: Number = 1.0,
         eps_end: Number = 0.1,
         annealing_num_steps: int = 1000,
@@ -80,7 +80,7 @@ class EGreedyWrapper(ProbabilisticOperatorWrapper):
         return out
 
 
-class OrnsteinUhlenbeckProcessWrapper(ProbabilisticOperatorWrapper):
+class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
     """
     Ornstein-Uhlenbeck exploration policy wrapper as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
     https://arxiv.org/pdf/1509.02971.pdf.
@@ -100,7 +100,7 @@ class OrnsteinUhlenbeckProcessWrapper(ProbabilisticOperatorWrapper):
     zeroing the tensordict at reset time.
 
     Args:
-        policy (ProbabilisticOperator): a policy
+        policy (ProbabilisticTDModule): a policy
         eps_init (scalar): initial epsilon value, determining the amount of noise to be added.
             default: 1.0
         eps_end (scalar): final epsilon value, determining the amount of noise to be added.
@@ -130,7 +130,7 @@ class OrnsteinUhlenbeckProcessWrapper(ProbabilisticOperatorWrapper):
 
     def __init__(
         self,
-        policy: ProbabilisticOperator,
+        policy: ProbabilisticTDModule,
         eps_init: Number = 1.0,
         eps_end: Number = 0.1,
         annealing_num_steps: int = 1000,

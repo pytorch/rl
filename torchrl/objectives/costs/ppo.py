@@ -7,7 +7,7 @@ from torch import distributions as d
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import step_tensor_dict
-from torchrl.modules import Actor, ProbabilisticOperator
+from torchrl.modules import Actor, ProbabilisticTDModule
 
 __all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
 
@@ -33,7 +33,7 @@ class PPOLoss(_LossModule):
 
     Args:
         actor (Actor): policy operator.
-        critic (ProbabilisticOperator): value operator.
+        critic (ProbabilisticTDModule): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
         entropy_bonus (bool): if True, an entropy bonus will be added to the loss to favour exploratory policies.
@@ -53,7 +53,7 @@ class PPOLoss(_LossModule):
     def __init__(
         self,
         actor: Actor,
-        critic: ProbabilisticOperator,
+        critic: ProbabilisticTDModule,
         advantage_key: str = "advantage",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
@@ -156,7 +156,7 @@ class ClipPPOLoss(PPOLoss):
 
     Args:
         actor (Actor): policy operator.
-        critic (ProbabilisticOperator): value operator.
+        critic (ProbabilisticTDModule): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
         clip_epsilon (scalar): weight clipping threshold in the clipped PPO loss equation.
@@ -178,7 +178,7 @@ class ClipPPOLoss(PPOLoss):
     def __init__(
         self,
         actor: Actor,
-        critic: ProbabilisticOperator,
+        critic: ProbabilisticTDModule,
         advantage_key: str = "advantage",
         clip_epsilon: Number = 0.2,
         entropy_bonus: bool = True,
@@ -265,7 +265,7 @@ class KLPENPPOLoss(PPOLoss):
 
     Args:
         actor (Actor): policy operator.
-        critic (ProbabilisticOperator): value operator.
+        critic (ProbabilisticTDModule): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
         dtarg (scalar): target KL divergence.
@@ -292,7 +292,7 @@ class KLPENPPOLoss(PPOLoss):
     def __init__(
         self,
         actor: Actor,
-        critic: ProbabilisticOperator,
+        critic: ProbabilisticTDModule,
         advantage_key="advantage",
         dtarg: Number = 0.01,
         beta: Number = 1.0,

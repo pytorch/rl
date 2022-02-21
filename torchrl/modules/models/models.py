@@ -32,7 +32,7 @@ class MLP(nn.Sequential):
     If MLP receives more than one input, it concatenates them all along the last dimension before passing the
     resulting tensor through the network. This is aimed at allowing for a seamless interface with calls of the type of
         >>> model(state, action)  # compute state-action value
-    In the future, this feature may be moved to the ProbabilisticOperator, though it would require it to handle
+    In the future, this feature may be moved to the ProbabilisticTDModule, though it would require it to handle
     different cases (vectors, images, ...)
 
     Args:

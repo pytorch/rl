@@ -7,8 +7,8 @@ from typing import Tuple
 import torch
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.modules import ProbabilisticOperator, reset_noise
-from torchrl.modules.probabilistic_operators.actors import ActorCriticWrapper
+from torchrl.modules import ProbabilisticTDModule, reset_noise
+from torchrl.modules.td_module.actors import ActorCriticWrapper
 from torchrl.objectives.costs.utils import distance_loss, next_state_value, hold_out_net
 from .common import _LossModule
 
@@ -17,8 +17,8 @@ class DDPGLoss(_LossModule):
     """
     The DDPG Loss class.
     Args:
-        actor_network (ProbabilisticOperator): a policy operator.
-        value_network (ProbabilisticOperator): a Q value operator.
+        actor_network (ProbabilisticTDModule): a policy operator.
+        value_network (ProbabilisticTDModule): a Q value operator.
         gamma (scalar): a discount factor for return computation.
         device (str, int or torch.device, optional): a device where the losses will be computed, if it can't be found
             via the value operator.
@@ -27,8 +27,8 @@ class DDPGLoss(_LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticOperator,
-        value_network: ProbabilisticOperator,
+        actor_network: ProbabilisticTDModule,
+        value_network: ProbabilisticTDModule,
         gamma: Number,
         loss_function: str = "l2",
     ) -> None:
@@ -43,10 +43,10 @@ class DDPGLoss(_LossModule):
     def _get_networks(
         self,
     ) -> Tuple[
-        ProbabilisticOperator,
-        ProbabilisticOperator,
-        ProbabilisticOperator,
-        ProbabilisticOperator,
+        ProbabilisticTDModule,
+        ProbabilisticTDModule,
+        ProbabilisticTDModule,
+        ProbabilisticTDModule,
     ]:
         actor_network = self.actor_network
         value_network = self.value_network
@@ -109,18 +109,18 @@ class DDPGLoss(_LossModule):
         )
 
     @property
-    def target_value_network(self) -> ProbabilisticOperator:
+    def target_value_network(self) -> ProbabilisticTDModule:
         return self.value_network
 
     @property
-    def target_actor_network(self) -> ProbabilisticOperator:
+    def target_actor_network(self) -> ProbabilisticTDModule:
         return self.actor_network
 
     def _loss_actor(
         self,
         tensor_dict: _TensorDict,
-        actor_network: ProbabilisticOperator,
-        value_network: ProbabilisticOperator,
+        actor_network: ProbabilisticTDModule,
+        value_network: ProbabilisticTDModule,
     ) -> torch.Tensor:
         td_copy = tensor_dict.select(*self.actor_in_keys).detach()
         td_copy = actor_network(td_copy)
@@ -131,9 +131,9 @@ class DDPGLoss(_LossModule):
     def _loss_value(
         self,
         tensor_dict: _TensorDict,
-        value_network: ProbabilisticOperator,
-        target_actor_network: ProbabilisticOperator,
-        target_value_network: ProbabilisticOperator,
+        value_network: ProbabilisticTDModule,
+        target_actor_network: ProbabilisticTDModule,
+        target_value_network: ProbabilisticTDModule,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # value loss
         td_copy = tensor_dict.select(*value_network.in_keys).detach()
@@ -173,10 +173,10 @@ class DoubleDDPGLoss(DDPGLoss):
     def _get_networks(
         self,
     ) -> Tuple[
-        ProbabilisticOperator,
-        ProbabilisticOperator,
-        ProbabilisticOperator,
-        ProbabilisticOperator,
+        ProbabilisticTDModule,
+        ProbabilisticTDModule,
+        ProbabilisticTDModule,
+        ProbabilisticTDModule,
     ]:
         actor_network = self.actor_network
         value_network = self.value_network
@@ -185,11 +185,11 @@ class DoubleDDPGLoss(DDPGLoss):
         return actor_network, value_network, target_actor_network, target_value_network
 
     @property
-    def target_value_network(self) -> ProbabilisticOperator:
+    def target_value_network(self) -> ProbabilisticTDModule:
         self._target_value_network.apply(reset_noise)
         return self._target_value_network
 
     @property
-    def target_actor_network(self) -> ProbabilisticOperator:
+    def target_actor_network(self) -> ProbabilisticTDModule:
         self._target_actor_network.apply(reset_noise)
         return self._target_actor_network

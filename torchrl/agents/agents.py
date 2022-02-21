@@ -29,7 +29,7 @@ from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.transforms import TransformedEnv
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import ProbabilisticOperatorWrapper, reset_noise
+from torchrl.modules import TDModuleWrapper, reset_noise
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 
@@ -67,7 +67,7 @@ class Agent:
         recorder (_EnvClass, optional): An environment instance to be used for testing.
         optim_scheduler (optim.lr_scheduler._LRScheduler, optional): learning rate scheduler.
         target_net_updater (_TargetNetUpdate, optional): a target network updater.
-        policy_exploration (ProbabilisticOperator, optional): a policy instance used for
+        policy_exploration (ProbabilisticTDModule, optional): a policy instance used for
             (1) updating the exploration noise schedule
             (2) testing the policy on the recorder.
             Given that this instance is supposed to both explore and render the performance of the policy, it should
@@ -137,7 +137,7 @@ class Agent:
         recorder: Optional[_EnvClass] = None,
         optim_scheduler: Optional[optim.lr_scheduler._LRScheduler] = None,
         target_net_updater: Optional[_TargetNetUpdate] = None,
-        policy_exploration: Optional[ProbabilisticOperatorWrapper] = None,
+        policy_exploration: Optional[TDModuleWrapper] = None,
         replay_buffer: Optional[ReplayBuffer] = None,
         writer: Optional[SummaryWriter] = None,
         update_weights_interval: int = -1,

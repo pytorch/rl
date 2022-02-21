@@ -18,8 +18,8 @@ On the high-level end, it provides:
 - [interfaces for environments](torchrl/envs) from common libraries (OpenAI gym, deepmind control lab, etc.) and [wrappers for parallel execution](torchrl/envs/vec_env.py), as well as a new pytorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py);
 - [environment transforms](torchrl/data/transforms/transforms.py), which process and prepare the data coming out of the environments to be used by the agent;
 - various tools for distributed learning (e.g. [memory mapped tensors](torchrl/data/tensordict/memmap.py));
-- various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/probabilistic_operators/actors.py));
-- [exploration wrappers](torchrl/modules/probabilistic_operators/exploration.py);
+- various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/td_module/actors.py));
+- [exploration wrappers](torchrl/modules/td_module/exploration.py);
 - various [recipes](torchrl/agents/helpers/models.py) to build models that correspond to the environment being deployed.
 
 A series of [examples](examples/) are provided with an illustrative purpose:
