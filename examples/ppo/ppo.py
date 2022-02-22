@@ -33,12 +33,6 @@ def make_args():
     parser_env_args(parser)
     parser_loss_args_ppo(parser)
     parser_model_args_continuous(parser, "PPO")
-    parser.add_argument(
-        "--shared_mapping",
-        "--shared-mapping",
-        action="store_true",
-        help="if True, the first layers of the actor-critic are shared.",
-    )
 
     parser_recorder_args(parser)
     return parser

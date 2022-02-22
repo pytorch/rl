@@ -400,7 +400,8 @@ class DistributionalDQNnet(nn.Module):
 
     """
 
-    _wrong_out_feature_dims_error = "DistributionalDQNnet requires dqn output to be at least 3-dimensional, with dimensions Batch x #Atoms x #Actions"
+    _wrong_out_feature_dims_error = "DistributionalDQNnet requires dqn output to be at least 3-dimensional, " \
+                                    "with dimensions Batch x #Atoms x #Actions"
 
     def __init__(self, DQNet: nn.Module):
         super().__init__()

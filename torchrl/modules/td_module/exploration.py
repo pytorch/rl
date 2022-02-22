@@ -1,20 +1,19 @@
 from numbers import Number
-from typing import Iterable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
-from torch import distributions as d
 
-from torchrl.envs.utils import set_exploration_mode, exploration_mode
-from .common import _forward_hook_safe_action
-from ..td_module import (
-    TDModuleWrapper,
-    ProbabilisticTDModule,
-)
+from torchrl.data import expand_as_right
+from torchrl.envs.utils import exploration_mode
+from torchrl.modules.td_module.common import (_forward_hook_safe_action,
+                                              TDModuleWrapper,
+                                              TDModule,
+                                              )
 
 __all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
 
-from ...data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import _TensorDict
 
 
 class EGreedyWrapper(TDModuleWrapper):
@@ -22,17 +21,40 @@ class EGreedyWrapper(TDModuleWrapper):
     Epsilon-Greedy PO wrapper.
 
     Args:
-        policy (ProbabilisticTDModule): a deterministic policy
+        policy (TDModule): a deterministic policy.
         eps_init (scalar): initial epsilon value.
             default: 1.0
         eps_end (scalar): final epsilon value.
             default: 0.1
         annealing_num_steps (int): number of steps it will take for epsilon to reach the eps_end value
+
+    Examples:
+        >>> from torchrl.modules import EGreedyWrapper, Actor
+        >>> from torchrl.data import NdBoundedTensorSpec, TensorDict
+        >>> import torch
+        >>> torch.manual_seed(0)
+        >>> spec = NdBoundedTensorSpec(-1, 1, torch.Size([4]))
+        >>> module = torch.nn.Linear(4, 4, bias=False)
+        >>> policy = Actor(spec, module=module)
+        >>> explorative_policy = EGreedyWrapper(policy, eps_init=0.2)
+        >>> td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
+        >>> print(explorative_policy(td).get("action"))
+        tensor([[ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [-0.6986, -0.9366, -0.5837,  0.8596],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000,  0.0000]], grad_fn=<CopyBackwards>)
+
     """
 
     def __init__(
         self,
-        policy: ProbabilisticTDModule,
+        policy: TDModule,
         eps_init: Number = 1.0,
         eps_end: Number = 0.1,
         annealing_num_steps: int = 1000,
@@ -63,21 +85,20 @@ class EGreedyWrapper(TDModuleWrapper):
                 ).item(),
             )
 
-    def _dist_sample(
-        self, dist: d.Distribution, *input: Iterable[torch.Tensor], **kwargs: dict
-    ) -> torch.Tensor:
-        out = self.probabilistic_operator._dist_sample(dist, *input, **kwargs)
+    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+        tensordict = self.td_module.forward(tensordict)
         if exploration_mode() == "random" or exploration_mode() is None:
+            out = tensordict.get(self.td_module.out_keys[0])
             eps = self.eps.item()
-            cond = (torch.rand(out[..., :1].shape, device=out.device) < eps).to(
-                out.dtype
-            )
+            cond = (torch.rand(tensordict.shape, device=tensordict.device) < eps).to(out.dtype)
+            cond = expand_as_right(cond, out)
             out = (
                 cond
-                * self.probabilistic_operator.spec.rand(out.shape[:-1]).to(out.device)
+                * self.td_module.spec.rand(tensordict.shape).to(out.device)
                 + (1 - cond) * out
             )
-        return out
+            tensordict.set(self.td_module.out_keys[0], out)
+        return tensordict
 
 
 class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
@@ -100,7 +121,7 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
     zeroing the tensordict at reset time.
 
     Args:
-        policy (ProbabilisticTDModule): a policy
+        policy (TDModule): a policy
         eps_init (scalar): initial epsilon value, determining the amount of noise to be added.
             default: 1.0
         eps_end (scalar): final epsilon value, determining the amount of noise to be added.
@@ -126,11 +147,23 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
         safe (bool): if True, actions that are out of bounds given the action specs will be projected in the space
             given the `TensorSpec.project` heuristic.
             default: True
+
+    Examples:
+        >>> from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
+        >>> from torchrl.data import NdBoundedTensorSpec, TensorDict
+        >>> import torch
+        >>> torch.manual_seed(0)
+        >>> spec = NdBoundedTensorSpec(-1, 1, torch.Size([4]))
+        >>> module = torch.nn.Linear(4, 4, bias=False)
+        >>> policy = Actor(spec, module=module)
+        >>> explorative_policy = OrnsteinUhlenbeckProcessWrapper(policy)
+        >>> td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
+        >>> print(explorative_policy(td))
     """
 
     def __init__(
         self,
-        policy: ProbabilisticTDModule,
+        policy: TDModule,
         eps_init: Number = 1.0,
         eps_end: Number = 0.1,
         annealing_num_steps: int = 1000,
@@ -164,7 +197,7 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
             )
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
-        self.out_keys = list(self.probabilistic_operator.out_keys) + [self.ou.out_keys]
+        self.out_keys = list(self.td_module.out_keys) + [self.ou.out_keys]
         self.safe = safe
         if self.safe:
             self.register_forward_hook(_forward_hook_safe_action)
@@ -230,17 +263,17 @@ class _OrnsteinUhlenbeckProcess:
         self.dt = dt
         self.x0 = x0 if x0 is not None else 0.0
         self.key = key
-        self._noise_key = f"ou_prev_noise"
-        self._steps_key = f"ou_steps"
+        self._noise_key = f"_ou_prev_noise"
+        self._steps_key = f"_ou_steps"
         self.out_keys = [self.key, self.noise_key, self.steps_key]
 
     @property
     def noise_key(self):
-        return self._noise_key + str(id(self))
+        return self._noise_key# + str(id(self))
 
     @property
     def steps_key(self):
-        return self._steps_key + str(id(self))
+        return self._steps_key# + str(id(self))
 
     def _make_noise_pair(self, tensor_dict: _TensorDict) -> None:
         tensor_dict.set(

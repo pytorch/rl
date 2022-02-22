@@ -369,7 +369,7 @@ class Agent:
 
             # sum all keys that start with 'loss_'
             loss = sum(
-                [item for key, item in losses_td.items() if key.startswith("loss_")]
+                [item for key, item in losses_td.items() if key.startswith("loss")]
             )
             loss.backward()
             if average_losses is None:

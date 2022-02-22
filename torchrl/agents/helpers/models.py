@@ -5,9 +5,9 @@ from typing import Optional, Iterable
 import torch
 from torch import nn
 
-from torchrl.data import TensorSpec, UnboundedContinuousTensorSpec, DEVICE_TYPING
-from torchrl.envs.common import Specs, _EnvClass
-from torchrl.modules import ActorValueOperator, NoisyLinear
+from torchrl.data import UnboundedContinuousTensorSpec, DEVICE_TYPING
+from torchrl.envs.common import _EnvClass
+from torchrl.modules import ActorValueOperator, NoisyLinear, TDModule
 from torchrl.modules.distributions import (
     Delta,
     TanhNormal,
@@ -33,7 +33,7 @@ from torchrl.modules.td_module import (
 )
 from torchrl.modules.td_module.actors import (
     ValueOperator,
-    ActorCriticWrapper,
+    ActorCriticWrapper, ProbabilisticActor,
 )
 
 DISTRIBUTIONS = {
@@ -142,30 +142,30 @@ def make_dqn_actor(proof_environment: _EnvClass, device: torch.device, args: Nam
 
 def make_ddpg_actor(
     proof_environment: _EnvClass,
-    from_pixels: bool = True,
-    noisy: bool = False,
+    from_pixels: bool,
+    noisy: bool,
     actor_net_kwargs: Optional[dict] = None,
     value_net_kwargs: Optional[dict] = None,
     atoms: int = 0,  # for distributional dqn
     vmin: Number = -3,
     vmax: Number = 3,
-    actor_kwargs: Optional[dict] = None,
     device: DEVICE_TYPING = "cpu",
 ) -> torch.nn.ModuleList:
     """
     DDPG constructor helper function.
 
     Args:
-        env_specs (Specs): specs container of the environment.
-        from_pixels (bool): if True, the environment observation will be asumed to be pixels and a Conv net will be
-        noisy (bool): if True, a noisy layer will be used for the value network
-        needed. Otherwise, a state vector is assumed and an MLP is created.
-            default: True
-        actor_net_kwargs (dict, optional): kwargs for the DdpgCnnActor / DdpgMlpActor classes.
-        value_net_kwargs (dict, optional): kwargs for the DdpgCnnQNet / DdpgMlpQNet classes.
-        actor_kwargs (dict, optional): kwargs for the Actor class, called to instantiate the policy operator.
-        value_kwargs (dict, optional): kwargs for the ProbabilisticTDModule class, called to instantiate the value
-            operator.
+        proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec
+        from_pixels (bool): if True, data is assumed to be an image content.
+        noisy (bool): whether or not to use noisy linear layers.
+        actor_net_kwargs (dict, optional): kwargs to be used for the policy network (either DdpgCnnActor or
+            DdpgMlpActor).
+        value_net_kwargs (dict, optional): kwargs to be used for the policy network (either DdpgCnnQNet or
+            DdpgMlpQNet).
+        atoms (int, optional): not implemented.
+        vmin (scalar, optional): not implemented.
+        vmax (scalar, optional): not implemented.
+        device (torch.device, optional): device on which the model must be cast. Default is "cpu".
 
     Returns: An actor and a value operators for DDPG.
 
@@ -173,27 +173,54 @@ def make_ddpg_actor(
     https://arxiv.org/pdf/1509.02971.pdf.
 
     Examples:
-        >>> TODO
+        >>> from torchrl.agents.helpers.models import make_ddpg_actor, parser_model_args_continuous
+        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.data.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
+        >>> import argparse
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
+        ...    CatTensors(["next_observation"], "next_observation_vector")))
+        >>> device = torch.device("cpu")
+        >>> args = parser_model_args_continuous(argparse.ArgumentParser(), algorithm="DDPG").parse_args([])
+        >>> actor, value = make_ddpg_actor(
+        ...     proof_environment,
+        ...     device=device,
+        ...     from_pixels=False,
+        ...     noisy=args.noisy)
+        >>> td = proof_environment.reset()
+        >>> print(actor(td))
+        TensorDict(
+            fields={done: Tensor(torch.Size([1]), dtype=torch.bool),
+                observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                action: Tensor(torch.Size([6]), dtype=torch.float32)},
+            shared=False,
+            batch_size=torch.Size([]),
+            device=cpu)
+        >>> print(value(td))
+        TensorDict(
+            fields={done: Tensor(torch.Size([1]), dtype=torch.bool),
+                observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                action: Tensor(torch.Size([6]), dtype=torch.float32),
+                state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
+            shared=False,
+            batch_size=torch.Size([]),
+            device=cpu)
     """
 
     actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else dict()
     value_net_kwargs = value_net_kwargs if value_net_kwargs is not None else dict()
-    actor_kwargs = actor_kwargs if actor_kwargs is not None else dict()
 
     linear_layer_class = torch.nn.Linear if not noisy else NoisyLinear
 
     env_specs = proof_environment.specs
     out_features = env_specs["action_spec"].shape[0]
-    actor_class = Actor
+
+    # We use a ProbabilisticActor to make sure that we map the network output to the right space using a TanhDelta
+    # distribution.
+    actor_class = ProbabilisticActor
     if atoms:
         raise NotImplementedError
         # https://arxiv.org/pdf/1804.08617.pdf
 
-    action_distribution_class = DISTRIBUTIONS["tanh-delta"]
-    actor_kwargs.setdefault(
-        "default_interaction_mode",
-        "mode",
-    )
     actor_net_default_kwargs = {
         "action_dim": out_features,
         "mlp_net_kwargs": {"layer_class": linear_layer_class},
@@ -209,11 +236,14 @@ def make_ddpg_actor(
 
     actor = actor_class(
         in_keys=in_keys,
-        action_spec=env_specs["action_spec"],
+        spec=env_specs["action_spec"],
         module=actor_net,
-        distribution_class=action_distribution_class,
         safe=True,
-        **actor_kwargs,
+        distribution_class=TanhDelta,
+        distribution_kwargs={
+            "min": env_specs["action_spec"].space.minimum,
+            "max": env_specs["action_spec"].space.maximum,
+        }
     )
 
     state_class = ValueOperator
@@ -282,19 +312,60 @@ def make_ppo_model(
     Other configurations can easily be implemented by modifying this function at will.
 
     Args:
-        spec (TensorSpec): action_spec descriptor
-        in_keys_actor (Iterable[str], optional):
-            default: ["observation_vector"]
-        **kwargs: kwargs to be passed to the ActorCriticOperator.
+        proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec
+        args (argparse.Namespace): arguments of the PPO script
+        device (torch.device): device on which the model must be cast.
+        in_keys_actor (iterable of strings, optional): observation key to be read by the actor, usually one of
+            `'observation_vector'` or `'observation_pixels'`. If none is provided, one of these two keys is chosen based on
+            the `args.from_pixels` argument.
 
     Returns: A joined ActorCriticOperator.
 
+    Examples:
+        >>> from torchrl.agents.helpers.models import make_ppo_model, parser_model_args_continuous
+        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.data.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
+        >>> import argparse
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
+        ...    CatTensors(["next_observation"], "next_observation_vector")))
+        >>> device = torch.device("cpu")
+        >>> args = parser_model_args_continuous(
+        ...         argparse.ArgumentParser(), algorithm="PPO").parse_args(["--shared_mapping"])
+        >>> actor_value = make_ppo_model(
+        ...     proof_environment,
+        ...     device=device,
+        ...     args=args,
+        ...     )
+        >>> actor = actor_value.get_policy_operator()
+        >>> value = actor_value.get_value_operator()
+        >>> td = proof_environment.reset()
+        >>> print(actor(td.clone()))
+        TensorDict(
+            fields={done: Tensor(torch.Size([1]), dtype=torch.bool),
+                observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                hidden: Tensor(torch.Size([300]), dtype=torch.float32),
+                action_dist_param_0: Tensor(torch.Size([12]), dtype=torch.float32),
+                action: Tensor(torch.Size([6]), dtype=torch.float32),
+                action_log_prob: Tensor(torch.Size([1]), dtype=torch.float32)},
+            shared=False,
+            batch_size=torch.Size([]),
+            device=cpu)
+        >>> print(value(td.clone()))
+        TensorDict(
+            fields={done: Tensor(torch.Size([1]), dtype=torch.bool),
+                observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                hidden: Tensor(torch.Size([300]), dtype=torch.float32),
+                state_value: Tensor(torch.Size([1]), dtype=torch.float32)},
+            shared=False,
+            batch_size=torch.Size([]),
+            device=cpu)
+
     """
-    proof_environment.set_seed(args.seed)
+    # proof_environment.set_seed(args.seed)
     specs = proof_environment.specs  # TODO: use env.sepcs
     action_spec = specs["action_spec"]
 
-    if args.from_pixels and in_keys_actor is None:
+    if in_keys_actor is None and proof_environment.from_pixels:
         in_keys_actor = ["observation_pixels"]
         in_keys_critic = ["observation_pixels"]
     elif in_keys_actor is None:
@@ -308,7 +379,7 @@ def make_ppo_model(
             policy_distribution_kwargs = {
                 "min": action_spec.space.minimum,
                 "max": action_spec.space.maximum,
-                "tanh_loc": args.tanh_normal_tanh,
+                "tanh_loc": args.tanh_loc,
                 "scale_mapping": f"biased_softplus_{args.default_policy_scale}",
             }
             policy_distribution_class = TanhNormal
@@ -316,7 +387,7 @@ def make_ppo_model(
             policy_distribution_kwargs = {
                 "min": action_spec.space.minimum,
                 "max": action_spec.space.maximum,
-                "tanh_loc": args.tanh_normal_tanh,
+                "tanh_loc": args.tanh_loc,
                 "scale_mapping": f"biased_softplus_{args.default_policy_scale}",
             }
             policy_distribution_class = TruncatedNormal
@@ -330,7 +401,7 @@ def make_ppo_model(
         )
 
     if args.shared_mapping:
-        if args.from_pixels:
+        if proof_environment.from_pixels:
             if in_keys_actor is None:
                 in_keys_actor = ["observation_pixels"]
             common_module = ConvNet(
@@ -352,28 +423,36 @@ def make_ppo_model(
                 out_features=300,
                 activate_last_layer=True,
             )
+        common_operator = TDModule(
+            spec=None,
+            module=common_module,
+            in_keys=in_keys_actor,
+            out_keys=["hidden"]
+        )
 
         policy_net = MLP(
             num_cells=[200],
             out_features=out_features,
         )
-
+        policy_operator = ProbabilisticActor(
+            spec=action_spec,
+            module=policy_net,
+            in_keys=["hidden"],
+            default_interaction_mode="random",
+            distribution_class=policy_distribution_class,
+            distribution_kwargs=policy_distribution_kwargs,
+            return_log_prob=True,
+            save_dist_params=True,
+        )
         value_net = MLP(
             num_cells=[200],
             out_features=1,
         )
+        value_operator = ValueOperator(value_net, in_keys=["hidden"])
         actor_value = ActorValueOperator(
-            spec=action_spec,
-            in_keys=in_keys_actor,
-            common_module=common_module,
-            policy_operator=policy_net,
-            value_operator=value_net,
-            policy_distribution_class=policy_distribution_class,
-            policy_interaction_mode="random",
-            policy_distribution_kwargs=policy_distribution_kwargs,
-            return_log_prob=True,
-            save_dist_params=True,
-            **kwargs,
+            common_operator=common_operator,
+            policy_operator=policy_operator,
+            value_operator=value_operator
         ).to(device)
     else:
         if args.lstm:
@@ -390,10 +469,10 @@ def make_ppo_model(
                 out_features=out_features,
             )
 
-        policy_po = Actor(
+        policy_po = ProbabilisticActor(
             action_spec,
             policy_net,
-            policy_distribution_class,
+            distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             in_keys=in_keys_actor,
             out_keys=out_keys,
@@ -427,7 +506,7 @@ def make_sac_model(
     value_net_kwargs=None,
     double_qvalue=True,
     device: DEVICE_TYPING = "cpu",
-    tanh_normal_tanh: bool = True,
+    tanh_loc: bool = True,
     default_policy_scale: float = 1.0,
     **kwargs,
 ) -> nn.ModuleList:
@@ -437,14 +516,65 @@ def make_sac_model(
     Other configurations can easily be implemented by modifying this function at will.
 
     Args:
-        action_spec (TensorSpec): action_spec descriptor
-        in_keys (Iterable[str], optional):
-            default: ["observation_vector"]
-        device (str, int or torch.device): device where the modules will live.
-            default: "cpu"
-        **kwargs: kwargs to be passed to the ActorCriticOperator.
+        proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec
+        in_keys (iterable of strings, optional): observation key to be read by the actor, usually one of
+            `'observation_vector'` or `'observation_pixels'`. If none is provided, one of these two keys is chosen
+             based on the `args.from_pixels` argument.
+        actor_net_kwargs (dict, optional): kwargs of the actor MLP.
+        qvalue_net_kwargs (dict, optional): kwargs of the qvalue MLP.
+        value_net_kwargs (dict, optional): kwargs of the value MLP.
+        double_qvalue (bool, optional): whether an ensemble of 2 qvalue networks should be used.
+        device (torch.device, optional): device on which the model must be cast. Default is "cpu".
+        tanh_loc (bool, optional): whether to use a tanh scaling for the distribution location parameter.
+            Default is True.
+        default_policy_scale (positive scalar, optional): Default scale of the policy distribution (i.e. standard
+            deviation of the normal distribution when the network output is 0). Caution: a higher standard
+            deviation may not lead to a more entropic distribution, as a Tanh transform is applied to the
+            generated variables. The maximum entropy configuration is with a standard deviation of 0.87. Default is 1.0.
+    Returns: A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
 
-    Returns: A joined ActorCriticOperator.
+    Examples:
+        >>> from torchrl.agents.helpers.models import make_sac_model, parser_model_args_continuous
+        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.data.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
+        >>> import argparse
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
+        ...    CatTensors(["next_observation"], "next_observation_vector")))
+        >>> device = torch.device("cpu")
+        >>> args = parser_model_args_continuous(
+        ...         argparse.ArgumentParser(), algorithm="PPO").parse_args(["--shared_mapping"])
+        >>> model = make_sac_model(
+        ...     proof_environment,
+        ...     device=device,
+        ...     )
+        >>> actor, qvalue, qvalue2, value = model
+        >>> td = proof_environment.reset()
+        >>> print(actor(td))
+        TensorDict(
+            fields={done: Tensor(torch.Size([1]), dtype=torch.bool),
+                observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                action: Tensor(torch.Size([6]), dtype=torch.float32)},
+            shared=False,
+            batch_size=torch.Size([]),
+            device=cpu)
+        >>> print(qvalue(td.clone()))
+        TensorDict(
+            fields={done: Tensor(torch.Size([1]), dtype=torch.bool),
+                observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                action: Tensor(torch.Size([6]), dtype=torch.float32),
+                state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
+            shared=False,
+            batch_size=torch.Size([]),
+            device=cpu)
+        >>> print(value(td.clone()))
+        TensorDict(
+            fields={done: Tensor(torch.Size([1]), dtype=torch.bool),
+                observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                action: Tensor(torch.Size([6]), dtype=torch.float32),
+                state_value: Tensor(torch.Size([1]), dtype=torch.float32)},
+            shared=False,
+            batch_size=torch.Size([]),
+            device=cpu)
 
     """
     td = proof_environment.reset()
@@ -491,40 +621,31 @@ def make_sac_model(
 
     value_spec = UnboundedContinuousTensorSpec()
 
-    actor = Actor(
-        action_spec=action_spec,
+    actor = ProbabilisticActor(
+        spec=action_spec,
         in_keys=in_keys,
         module=actor_net,
         distribution_class=TanhNormal,
         distribution_kwargs={
             "min": action_spec.space.minimum,
             "max": action_spec.space.maximum,
-            "tanh_loc": tanh_normal_tanh,
+            "tanh_loc": tanh_loc,
             "scale_mapping": f"biased_softplus_{default_policy_scale}",
         },
         default_interaction_mode="random",
     )
-    qvalue = ProbabilisticTDModule(
-        spec=value_spec,
+    qvalue = ValueOperator(
         in_keys=["action"] + in_keys,
-        out_keys=["state_action_value"],
         module=qvalue_net,
-        distribution_class=Delta,
     )
     if double_qvalue:
-        qvalue_bis = ProbabilisticTDModule(
-            spec=value_spec,
+        qvalue_bis = ValueOperator(
             in_keys=["action"] + in_keys,
-            out_keys=["state_action_value"],
-            module=qvalue_net_bis,
-            distribution_class=Delta,
+            module=qvalue_net,
         )
-    value = ProbabilisticTDModule(
-        spec=value_spec,
+    value = ValueOperator(
         in_keys=in_keys,
-        out_keys=["state_value"],
         module=value_net,
-        distribution_class=Delta,
     )
     if double_qvalue:
         model = nn.ModuleList([actor, qvalue, qvalue_bis, value]).to(device)
@@ -568,7 +689,7 @@ def parser_model_args_continuous(
             "--ou_exploration",
             action="store_true",
             help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
-            "efficient entropy-based exploration, this should be left for experimentation only.",
+                 "efficient entropy-based exploration, this should be left for experimentation only.",
         )
         parser.add_argument(
             "--distributional",
@@ -588,14 +709,14 @@ def parser_model_args_continuous(
             action="store_false",
             dest="double_qvalue",
             help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
-            "use two different qvalue networks trained independently and choose the lowest value "
-            "predicted to predict the state action value. This can be disabled by using this flag.",
+                 "use two different qvalue networks trained independently and choose the lowest value "
+                 "predicted to predict the state action value. This can be disabled by using this flag.",
         )
 
     if algorithm in ("SAC", "PPO"):
         parser.add_argument(
-            "--tanh_normal_tanh",
-            "--tanh-normal-tanh",
+            "--tanh_loc",
+            "--tanh-loc",
             action="store_true",
             help="if True, uses a Tanh-Normal transform for the policy location",
         )
@@ -615,6 +736,12 @@ def parser_model_args_continuous(
             "--lstm",
             action="store_true",
             help="if True, uses an LSTM for the policy.",
+        )
+        parser.add_argument(
+            "--shared_mapping",
+            "--shared-mapping",
+            action="store_true",
+            help="if True, the first layers of the actor-critic are shared.",
         )
 
     return parser

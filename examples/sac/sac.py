@@ -82,7 +82,7 @@ if __name__ == "__main__":
         proof_env,
         double_qvalue=args.double_qvalue,
         device=device,
-        tanh_normal_tanh=args.tanh_normal_tanh,
+        tanh_loc=args.tanh_loc,
         default_policy_scale=args.default_policy_scale,
     )
     loss_module, target_net_updater = make_sac_loss(model, args)

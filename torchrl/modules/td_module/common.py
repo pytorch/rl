@@ -131,7 +131,7 @@ class TDModule(nn.Module):
         if not len(tensor_dict.batch_size):
             unsqueeze = True
             tensor_dict_unsqueezed = tensor_dict.unsqueeze(-1)
-        tensors = tuple(tensor_dict.get(in_key) for in_key in self.in_keys)
+        tensors = tuple(tensor_dict_unsqueezed.get(in_key) for in_key in self.in_keys)
         tensors = self.module(*tensors)
         if isinstance(tensors, Tensor):
             tensors = (tensors,)
@@ -524,7 +524,7 @@ class TDModuleWrapper(nn.Module):
         ...     eps = 0.1
         ...     def forward(self, tensordict):
         ...         rand_output_clone = self.random(tensordict.clone())
-        ...         det_output_clone = self.probabilistic_operator(tensordict.clone())
+        ...         det_output_clone = self.td_module(tensordict.clone())
         ...         rand_output_idx = torch.rand(tensordict.shape, device=rand_output_clone.device) < self.eps
         ...         for key in self.out_keys:
         ...             _rand_output = rand_output_clone.get(key)
@@ -545,11 +545,11 @@ class TDModuleWrapper(nn.Module):
 
     def __init__(self, probabilistic_operator: TDModule):
         super().__init__()
-        self.probabilistic_operator = probabilistic_operator
-        if len(self.probabilistic_operator._forward_hooks):
-            for pre_hook in self.probabilistic_operator._forward_hooks:
+        self.td_module = probabilistic_operator
+        if len(self.td_module._forward_hooks):
+            for pre_hook in self.td_module._forward_hooks:
                 self.register_forward_hook(
-                    self.probabilistic_operator._forward_hooks[pre_hook]
+                    self.td_module._forward_hooks[pre_hook]
                 )
 
     def __getattr__(self, name: str) -> Any:
@@ -557,10 +557,10 @@ class TDModuleWrapper(nn.Module):
             return super().__getattr__(name)
         except:
             if name not in self.__dict__:
-                return getattr(self._modules["probabilistic_operator"], name)
+                return getattr(self._modules["td_module"], name)
             else:
                 raise AttributeError(
                     f"attribute {name} not recognised in {type(self).__name__}"
                 )
 
-    forward = ProbabilisticTDModule.forward
+    forward = TDModule.forward
