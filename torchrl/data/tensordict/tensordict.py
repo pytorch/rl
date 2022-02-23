@@ -240,9 +240,9 @@ class _TensorDict(Mapping):
 
         """
         if batch_size is None:
-            td = TensorDict(batch_size=self.batch_size)
+            td = TensorDict({}, batch_size=self.batch_size)
         else:
-            td = TensorDict(batch_size=torch.Size(batch_size))
+            td = TensorDict({}, batch_size=torch.Size(batch_size))
         for key, item in self.items():
             item_trsf = fn(item)
             td.set(key, item_trsf)
@@ -1005,11 +1005,15 @@ class _TensorDict(Mapping):
             idx = (idx,)
         elif isinstance(idx, torch.Tensor) and idx.dtype == torch.bool:
             return self.masked_select(idx)
+
+        contiguous_input = (int, slice)
+        return_simple_view = isinstance(idx, contiguous_input) or \
+                             (isinstance(idx, tuple) and all(isinstance(_idx, contiguous_input) for _idx in idx))
         if not self.batch_size:
             raise RuntimeError(
                 "indexing a tensordict with td.batch_dims==0 is not permitted"
             )
-        if not isinstance(idx, (torch.Tensor, list, tuple)) and not self.is_memmap():
+        if return_simple_view and not self.is_memmap():
             return TensorDict(
                 source={key: item[idx] for key, item in self.items()},
                 batch_size=_getitem_batch_size(self.batch_size, idx),
@@ -1413,9 +1417,10 @@ class TensorDict(_TensorDict):
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
-        value = self._process_tensor(
-            value, check_tensor_shape=False, check_device=False
-        )
+        # do we need this?
+        # value = self._process_tensor(
+        #     value, check_tensor_shape=False, check_device=False
+        # )
         if key not in self.keys():
             raise KeyError(f"did not find key {key} in {self.__class__.__name__}")
         tensor_in = self._tensor_dict[key]
@@ -1655,7 +1660,7 @@ def cat(
     # check that all tensordict match
     keys = _check_keys(list_of_tensor_dicts, strict=True)
     if out is None:
-        out_td = TensorDict(device=device, batch_size=batch_size)
+        out_td = TensorDict({}, device=device, batch_size=batch_size)
         for key in keys:
             out_td.set(
                 key, torch.cat([td.get(key) for td in list_of_tensor_dicts], dim)
@@ -1796,10 +1801,10 @@ class SubTensorDict(_TensorDict):
         >>> td = TensorDict(source, batch_size)
         >>> td_index = td[:, 2]
         >>> print(type(td_index), td_index.shape)
-        <class 'torchrl.data.tensordict.tensordict.SubTensorDict'> torch.Size([3])
+        <class 'torchrl.data.tensordict.tensordict.TensorDict'> torch.Size([3])
         >>> td_index = td[:, slice(None)]
         >>> print(type(td_index), td_index.shape)
-        <class 'torchrl.data.tensordict.tensordict.SubTensorDict'> torch.Size([3, 4])
+        <class 'torchrl.data.tensordict.tensordict.TensorDict'> torch.Size([3, 4])
         >>> td_index = td[:, torch.Tensor([0, 2]).to(torch.long)]
         >>> print(type(td_index), td_index.shape)
         <class 'torchrl.data.tensordict.tensordict.SubTensorDict'> torch.Size([3, 2])
@@ -1989,6 +1994,14 @@ class SubTensorDict(_TensorDict):
     def del_(self, key: str) -> _TensorDict:
         self._source = self._source.del_(key)
         return self
+
+    def clone(self, recursive: bool = True) -> SubTensorDict:
+        if not recursive:
+            return copy(self)
+        return SubTensorDict(
+            source=self._source,
+            idx=self.idx,
+        )
 
     def is_contiguous(self) -> bool:
         return all([value.is_contiguous() for _, value in self.items()])
@@ -2904,6 +2917,7 @@ class UnsqueezedTensorDict(_CustomOpTensorDict):
         >>> print(td_unsqueeze.squeeze(-1) is td)
         True
     """
+
     def squeeze(self, dim: int) -> _TensorDict:
         if dim < 0:
             dim = self.batch_dims + dim
@@ -2917,6 +2931,7 @@ class SqueezedTensorDict(_CustomOpTensorDict):
     A lazy view on a squeezed TensorDict.
     See the `UnsqueezedTensorDict` class documentation for more information.
     """
+
     def unsqueeze(self, dim: int) -> _TensorDict:
         if dim < 0:
             dim = self.batch_dims + dim + 1
