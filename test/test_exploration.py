@@ -46,7 +46,7 @@ def test_ou_wrapper(device="cpu", d_obs=4, d_act=6, batch=32, n_steps=100, seed=
         -torch.ones(d_act // 2), torch.ones(d_act // 2), (d_act // 2,)
     )
     policy = Actor(
-        action_spec=action_spec,
+        spec=action_spec,
         module=module,
         distribution_class=TanhNormal,
         default_interaction_mode="random",

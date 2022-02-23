@@ -12,7 +12,7 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.modules import DistributionalQValueActor, QValueActor
 from torchrl.modules.distributions.continuous import Delta, TanhNormal
 from torchrl.modules.models.models import MLP
-from torchrl.modules.td_module.actors import ValueOperator, Actor
+from torchrl.modules.td_module.actors import ValueOperator, Actor, ProbabilisticActor
 from torchrl.objectives import (
     DQNLoss,
     DoubleDQNLoss,
@@ -47,9 +47,8 @@ class TestDQN:
         )
         module = nn.Linear(obs_dim, action_dim)
         actor = QValueActor(
-            action_spec=action_spec,
+            spec=action_spec,
             module=module,
-            distribution_class=Delta,
         )
         return actor
 
@@ -61,10 +60,9 @@ class TestDQN:
         support = torch.linspace(vmin, vmax, atoms, dtype=torch.float)
         module = MLP(obs_dim, (atoms, action_dim))
         actor = DistributionalQValueActor(
-            action_spec=action_spec,
+            spec=action_spec,
             module=module,
             support=support,
-            distribution_class=Delta,
         )
         return actor
 
@@ -192,9 +190,8 @@ class TestDDPG:
         )
         module = nn.Linear(obs_dim, action_dim)
         actor = Actor(
-            action_spec=action_spec,
+            spec=action_spec,
             module=module,
-            distribution_class=Delta,
         )
         return actor
 
@@ -322,8 +319,8 @@ class TestSAC:
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Linear(obs_dim, 2 * action_dim)
-        actor = Actor(
-            action_spec=action_spec,
+        actor = ProbabilisticActor(
+            spec=action_spec,
             module=module,
             distribution_class=TanhNormal,
         )
@@ -478,8 +475,8 @@ class TestPPO:
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Linear(obs_dim, 2 * action_dim)
-        actor = Actor(
-            action_spec=action_spec,
+        actor = ProbabilisticActor(
+            spec=action_spec,
             module=module,
             distribution_class=TanhNormal,
             save_dist_params=True,

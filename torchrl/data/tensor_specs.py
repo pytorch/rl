@@ -446,6 +446,12 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
             "minimum have a non-singleton shape, they must match the provided shape if this one is set "
             "explicitely."
         )
+        if shape is not None and not isinstance(shape, torch.Size):
+            if isinstance(shape, int):
+                shape = torch.Size([shape])
+            else:
+                shape = torch.Size(list(shape))
+
         if maximum.ndimension():
             if shape is not None and shape != maximum.shape:
                 raise RuntimeError(err_msg)

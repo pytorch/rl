@@ -49,9 +49,9 @@ class RandomPolicy:
 
         Examples:
             >>> from torchrl.data.tensor_specs import NdBoundedTensorSpec
-            >>> from torchrl.data.tensordict import TensorDict()
+            >>> from torchrl.data.tensordict import TensorDict
             >>> action_spec = NdBoundedTensorSpec(-torch.ones(3), torch.ones(3))
-            >>> actor = RandomPolicy(action_spec=action_spec)
+            >>> actor = RandomPolicy(spec=action_spec)
             >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
         """
         self.action_spec = action_spec
@@ -282,6 +282,7 @@ class SyncDataCollector(_DataCollector):
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
         self._tensor_dict_out = TensorDict(
+            {},
             batch_size=[*self.env.batch_size, self.frames_per_batch],
             device=self.passing_device,
         )

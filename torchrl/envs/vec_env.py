@@ -280,17 +280,17 @@ class SerialEnv(_BatchedEnv):
     ) -> TensorDict:
         self._assert_tensordict_shape(tensor_dict)
 
-        self.shared_tensor_dict_parent.update_(tensor_dict.select(*self.action_keys))
+        self.shared_tensor_dict_parent.update_(tensor_dict)
         for i in range(self.num_workers):
             self._envs[i].step(self.shared_tensor_dicts[i])
 
         return self.shared_tensor_dict_parent
 
-    @_check_start
     def _shutdown_workers(self) -> None:
-        for env in self._envs:
-            env.close()
-        del self._envs
+        if not self.is_closed:
+            for env in self._envs:
+                env.close()
+            del self._envs
 
     def __del__(self) -> None:
         self.close()

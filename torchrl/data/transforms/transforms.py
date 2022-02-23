@@ -257,12 +257,12 @@ class TransformedEnv(_EnvClass):
 
     def _step(self, tensor_dict: _TensorDict) -> _TensorDict:
         selected_keys = [key for key in tensor_dict.keys() if "action" in key]
-        tensor_dict_in = tensor_dict.select(*selected_keys)
+        tensor_dict_in = tensor_dict.select(*selected_keys).clone()
         tensor_dict_in = self.transform.inv(tensor_dict_in)
         tensor_dict_out = self.env._step(tensor_dict_in).to(self.device)
         # tensor_dict should already have been processed by the transforms
         # for logging purposes
-        tensor_dict_out = self.transform(tensor_dict_out.clone())
+        tensor_dict_out = self.transform(tensor_dict_out)
         return tensor_dict_out
 
     def set_seed(self, seed: int) -> int:

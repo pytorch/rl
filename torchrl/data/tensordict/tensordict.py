@@ -1761,7 +1761,7 @@ def pad_sequence_td(
     # check that all tensordict match
     keys = _check_keys(list_of_tensor_dicts)
     if out is None:
-        out_td = TensorDict(device=device)
+        out_td = TensorDict({}, [], device=device)
         for key in keys:
             out_td.set(
                 key,
@@ -2059,7 +2059,7 @@ def merge_tensor_dicts(*tensor_dicts: _TensorDict) -> TensorDict:
     d = tensor_dicts[0].to_dict()
     for td in tensor_dicts[1:]:
         d.update(td.to_dict())
-    return TensorDict(device=td.device).update(d)
+    return TensorDict({}, [], device=td.device).update(d)
 
 
 class LazyStackedTensorDict(_TensorDict):
