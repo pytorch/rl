@@ -572,4 +572,5 @@ class TDModuleWrapper(nn.Module):
                     f"attribute {name} not recognised in {type(self).__name__}"
                 )
 
-    forward = TDModule.forward
+    def forward(self, *args, **kwargs):
+        return self.td_module.forward(*args, **kwargs)
