@@ -91,8 +91,10 @@ class TDModule(nn.Module):
         self.safe = safe
         if safe:
             if spec is None:
-                raise RuntimeError("`TDModule(spec=None, safe=True)` is not a valid configuration as the tensor "
-                                   "specs are not specified")
+                raise RuntimeError(
+                    "`TDModule(spec=None, safe=True)` is not a valid configuration as the tensor "
+                    "specs are not specified"
+                )
             self.register_forward_hook(_forward_hook_safe_action)
 
         self.module = module
@@ -104,7 +106,9 @@ class TDModule(nn.Module):
     @spec.setter
     def _spec_set(self, spec: TensorSpec) -> None:
         if not isinstance(spec, TensorSpec):
-            raise RuntimeError(f"Trying to set an object of type {type(spec)} as a tensorspec.")
+            raise RuntimeError(
+                f"Trying to set an object of type {type(spec)} as a tensorspec."
+            )
         self._spec = spec
 
     def __setattr__(self, key: str, value: Any) -> None:
@@ -114,10 +118,7 @@ class TDModule(nn.Module):
         return super().__setattr__(key, value)
 
     def _write_to_tensor_dict(
-        self,
-        tensor_dict: _TensorDict,
-        tensors: List,
-        out_keys: Iterable[str] = None
+        self, tensor_dict: _TensorDict, tensors: List, out_keys: Iterable[str] = None
     ) -> _TensorDict:
         if out_keys is None:
             out_keys = self.out_keys
@@ -261,7 +262,9 @@ class ProbabilisticTDModule(TDModule):
         save_dist_params: bool = False,
     ):
 
-        super().__init__(spec=spec, module=module, out_keys=out_keys, in_keys=in_keys, safe=safe)
+        super().__init__(
+            spec=spec, module=module, out_keys=out_keys, in_keys=in_keys, safe=safe
+        )
 
         self.save_dist_params = save_dist_params
         self._n_empirical_est = _n_empirical_est
@@ -479,16 +482,24 @@ class TDSequence(TDModule):
             if (in_key not in in_keys) and (in_key not in out_keys):
                 in_keys.append(in_key)
         if not len(in_keys):
-            raise RuntimeError(f"in_keys empty. Please ensure that there is at least one input key that is not part "
-                               f"of the output key set.")
-        out_keys = [out_key for i, out_key in enumerate(out_keys) if out_key not in out_keys[i + 1:]]
+            raise RuntimeError(
+                f"in_keys empty. Please ensure that there is at least one input key that is not part "
+                f"of the output key set."
+            )
+        out_keys = [
+            out_key
+            for i, out_key in enumerate(out_keys)
+            if out_key not in out_keys[i + 1 :]
+        ]
 
-        super().__init__(spec=None, module=nn.ModuleList(list(modules)), in_keys=in_keys, out_keys=out_keys)
+        super().__init__(
+            spec=None,
+            module=nn.ModuleList(list(modules)),
+            in_keys=in_keys,
+            out_keys=out_keys,
+        )
 
-    def forward(
-        self,
-        tensor_dict: _TensorDict
-    ) -> _TensorDict:
+    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
         for module in self.module:  # type: ignore
             tensor_dict = module(tensor_dict)
         return tensor_dict
@@ -548,9 +559,7 @@ class TDModuleWrapper(nn.Module):
         self.td_module = probabilistic_operator
         if len(self.td_module._forward_hooks):
             for pre_hook in self.td_module._forward_hooks:
-                self.register_forward_hook(
-                    self.td_module._forward_hooks[pre_hook]
-                )
+                self.register_forward_hook(self.td_module._forward_hooks[pre_hook])
 
     def __getattr__(self, name: str) -> Any:
         try:

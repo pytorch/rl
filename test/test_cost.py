@@ -21,7 +21,11 @@ from torchrl.objectives import (
     DDPGLoss,
     DoubleDDPGLoss,
     SACLoss,
-    DoubleSACLoss, PPOLoss, ClipPPOLoss, KLPENPPOLoss, GAE
+    DoubleSACLoss,
+    PPOLoss,
+    ClipPPOLoss,
+    KLPENPPOLoss,
+    GAE,
 )
 from torchrl.objectives.costs.utils import hold_out_net
 
@@ -119,7 +123,7 @@ class TestDQN:
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
                 "action_value": action_value
-                                * expand_as_right(mask.to(obs.dtype).squeeze(-1), action_value),
+                * expand_as_right(mask.to(obs.dtype).squeeze(-1), action_value),
             },
         )
         return td
@@ -412,7 +416,9 @@ class TestSAC:
         qvalue = self._create_mock_qvalue()
         qvalue2 = self._create_mock_qvalue()
         value = self._create_mock_value()
-        loss_fn = loss_class(actor, qvalue, value, qvalue2, gamma=0.9, loss_function="l2")
+        loss_fn = loss_class(
+            actor, qvalue, value, qvalue2, gamma=0.9, loss_function="l2"
+        )
 
         loss = loss_fn(td)
         sum([item for _, item in loss.items()]).backward()
@@ -430,7 +436,9 @@ class TestSAC:
         qvalue = self._create_mock_qvalue()
         qvalue2 = self._create_mock_qvalue()
         value = self._create_mock_value()
-        loss_fn = loss_class(actor, qvalue, value, qvalue2, gamma=0.9, loss_function="l2")
+        loss_fn = loss_class(
+            actor, qvalue, value, qvalue2, gamma=0.9, loss_function="l2"
+        )
 
         ms = MultiStep(gamma=gamma, n_steps_max=n)
 
@@ -538,9 +546,10 @@ class TestPPO:
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
-                "action_log_prob": torch.randn_like(action[..., :1]) / 10 * mask.to(obs.dtype),
-                "action_dist_param_0": params *
-                                       mask.to(obs.dtype),
+                "action_log_prob": torch.randn_like(action[..., :1])
+                / 10
+                * mask.to(obs.dtype),
+                "action_dist_param_0": params * mask.to(obs.dtype),
             },
         )
         return td
@@ -553,7 +562,9 @@ class TestPPO:
         actor = self._create_mock_actor()
         value = self._create_mock_value()
         gae = GAE(gamma=0.9, lamda=0.9, critic=value)
-        loss_fn = loss_class(actor, value, advantage_module=gae, gamma=0.9, loss_critic_type="l2")
+        loss_fn = loss_class(
+            actor, value, advantage_module=gae, gamma=0.9, loss_critic_type="l2"
+        )
 
         loss = loss_fn(td)
         sum([item for _, item in loss.items()]).backward()

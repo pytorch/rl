@@ -4,6 +4,7 @@ import pathlib
 import warnings
 from collections import OrderedDict
 from numbers import Number
+from textwrap import indent
 from typing import Dict, Callable, Optional, Union
 
 import numpy as np
@@ -504,16 +505,42 @@ class Agent:
     @torch.no_grad()
     @set_exploration_mode("mode")
     def record(self) -> None:
-        self.policy_exploration.eval()
-        self.recorder.eval()
-        if isinstance(self.recorder, TransformedEnv):
-            self.recorder.transform.eval()
-        td_record = self.recorder.rollout(
-            policy=self.policy_exploration,
-            n_steps=self.record_frames,
+        if self.recorder is not None:
+            self.policy_exploration.eval()
+            self.recorder.eval()
+            if isinstance(self.recorder, TransformedEnv):
+                self.recorder.transform.eval()
+            td_record = self.recorder.rollout(
+                policy=self.policy_exploration,
+                n_steps=self.record_frames,
+            )
+            self.policy_exploration.train()
+            self.recorder.train()
+            reward = td_record.get("reward").mean() / self.frame_skip
+            self._log(reward_evaluation=reward)
+            self.recorder.transform.dump()
+
+    def __repr__(self) -> str:
+        loss_str = indent(f"loss={self.loss_module}", 4 * " ")
+        policy_str = indent(f"policy_exploration={self.policy_exploration}", 4 * " ")
+        collector_str = indent(f"collector={self.collector}", 4 * " ")
+        buffer_str = indent(f"buffer={self.replay_buffer}", 4 * " ")
+        optimizer_str = indent(f"optimizer={self.optimizer}", 4 * " ")
+        target_net_updater = indent(
+            f"target_net_updater={self.target_net_updater}", 4 * " "
         )
-        self.policy_exploration.train()
-        self.recorder.train()
-        reward = td_record.get("reward").mean() / self.frame_skip
-        self._log(reward_evaluation=reward)
-        self.recorder.transform.dump()
+        writer = indent(f"writer={self.writer}", 4 * " ")
+
+        string = "\n".join(
+            [
+                loss_str,
+                policy_str,
+                collector_str,
+                buffer_str,
+                optimizer_str,
+                target_net_updater,
+                writer,
+            ]
+        )
+        string = f"Agent(\n{string})"
+        return string

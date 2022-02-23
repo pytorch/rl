@@ -17,6 +17,7 @@ class _LossModule(nn.Module):
     Splitting the loss in its component can then be used by the agent to log the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
     """
+
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         """
         It is designed to read an input TensorDict and return another tensordict

@@ -80,7 +80,9 @@ class EnvCreator:
                 item_to_update.copy_(item)
 
     def __repr__(self) -> str:
-        substr = ', '.join([f'{key}: {type(item)}' for key, item in self.create_env_kwargs])
+        substr = ", ".join(
+            [f"{key}: {type(item)}" for key, item in self.create_env_kwargs]
+        )
         return f"EnvCreator({self.create_env_fn}({substr}))"
 
 

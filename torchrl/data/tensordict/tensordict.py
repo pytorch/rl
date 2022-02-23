@@ -7,6 +7,7 @@ from collections import OrderedDict, Mapping
 from collections.abc import Iterable
 from copy import deepcopy, copy
 from numbers import Number
+from textwrap import indent
 from typing import (
     Optional,
     Union,
@@ -25,9 +26,11 @@ from warnings import warn
 import numpy as np
 import torch
 
-from .memmap import MemmapTensor
-from .metatensor import MetaTensor
-from ..postprocs.utils import expand_as_right
+from torchrl.data.postprocs.utils import expand_as_right
+from torchrl.data.tensordict.memmap import MemmapTensor
+from torchrl.data.tensordict.metatensor import MetaTensor
+from torchrl.data.tensordict.utils import _sub_index, _getitem_batch_size
+from torchrl.data.utils import INDEX_TYPING, DEVICE_TYPING
 
 __all__ = [
     "TensorDict",
@@ -36,9 +39,6 @@ __all__ = [
     "LazyStackedTensorDict",
     "SavedTensorDict",
 ]
-
-from .utils import _sub_index, _getitem_batch_size
-from ..utils import INDEX_TYPING, DEVICE_TYPING
 
 TD_HANDLED_FUNCTIONS = dict()
 COMPATIBLE_TYPES = Union[torch.Tensor, None]  # leaves space for _TensorDict
@@ -854,7 +854,7 @@ class _TensorDict(Mapping):
 
         d = {}
         for key, item in self.items():
-            d[key] = item.reshape(*shape, *item.shape[self.ndimension() :])
+            d[key] = item.reshape(*shape, *item.shape[self.ndimension():])
         if len(d):
             batch_size = d[key].shape[: len(shape)]
         else:
@@ -904,12 +904,12 @@ class _TensorDict(Mapping):
 
     def __repr__(self) -> str:
         fields = _td_fields(self)
-        return (
-            f"{type(self).__name__}("
-            f"\n\tfields={{{fields}}}, "
-            f"\n\tbatch_size={self.batch_size}, "
-            f"\n\tdevice={self.device})"
-        )
+        field_str = indent(f"fields={fields}", 4 * " ")
+        batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
+        device_str = indent(f"device={self.device}", 4 * " ")
+        is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
+        string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
+        return f"{type(self).__name__}(\n{string})"
 
     def all(self, dim: int = None) -> Union[bool, _TensorDict]:
         """
@@ -1009,7 +1009,7 @@ class _TensorDict(Mapping):
             raise RuntimeError(
                 "indexing a tensordict with td.batch_dims==0 is not permitted"
             )
-        if not isinstance(idx, (torch.Tensor, list)) and not self.is_memmap():
+        if not isinstance(idx, (torch.Tensor, list, tuple)) and not self.is_memmap():
             return TensorDict(
                 source={key: item[idx] for key, item in self.items()},
                 batch_size=_getitem_batch_size(self.batch_size, idx),
@@ -1071,20 +1071,84 @@ class _TensorDict(Mapping):
 
 
 class TensorDict(_TensorDict):
+    """
+    A batched dictionary of tensors.
+    TensorDict is a tensor container where all tensors are stored in a key-value pair fashion and where each element
+    shares at least the following features:
+        - device;
+        - memory location (shared, memory-mapped array, ...);
+        - batch size (i.e. n^th first dimensions).
+    TensorDict instances support many regular tensor operations as long as they are dtype-independent (as a
+    TensorDict instance can contain tensors of many different dtypes). Those operations include (but are not limited
+    to):
+         - operations on shape: when a shape operation is called (indexing, reshape, view, expand, transpose, permute,
+            unsqueeze, squeeze, masking etc), the operations is done as if it was done on a tensor of the same shape as
+            the batch size then expended to the right, e.g.:
+
+            >>> td = TensorDict({'a': torch.zeros(3,4,5)}, batch_size=[3, 4])
+            >>> td_unsqueeze = td.unsqueeze(-1)  # returns a TensorDict of batch size [3, 4, 1]
+            >>> td_view = td.view(-1)  # returns a TensorDict of batch size [12]
+            >>> a_view = td.view(-1).get("a")  # returns a tensor of batch size [12, 4]
+
+        - casting operations: a TensorDict can be cast on a different device or another TensorDict type using
+
+            >>> td_cpu = td.to("cpu")
+            >>> td_savec = td.to(SavedTensorDict)  # TensorDict saved on disk
+            >>> dictionary = td.to_dict()
+
+            A call of the `.to()` method with a dtype will return an error.
+
+        - Cloning, contiguous
+        - Reading: `td.get(key)`, `td.get_at(key, index)`
+        - Content modification: `td.set(key, value)`, `td.set_(key, value)`, `td.update(td_or_dict)`,
+        `td.update_(td_or_dict)`, `td.fill_(key, value)`, `td.rename_key(old_name, new_name)`, etc.
+        - Operations on multiple tensordicts: `torch.cat(tensordict_list, dim)`, `torch.stack(tensordict_list, dim)`,
+        `td1 == td2` etc.
+
+    Args:
+        source (TensorDict or dictionary): a data source. If empty, the tensordict can be populated subsequently.
+        batch_size (iterable of int, optional): a batch size for the tensordict. The batch size is immutable and can
+            only be modified by calling operations that create a new TensorDict. Unless the source is another
+            TensorDict, the batch_size argument must be provided as it won't be inferred from the data.
+        device (torch.device or compatible type, optional): a device for the TensorDict. If the source is non-empty
+            and the device is missing, it will be inferred from the input dictionary, assuming that all tensors are
+            on the same device.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.data import TensorDict
+        >>> source = {'random': torch.randn(3, 4), 'zeros': torch.zeros(3, 4, 5)}
+        >>> batch_size = [3]
+        >>> td = TensorDict(source, batch_size)
+        >>> print(td.shape)  # equivalent to td.batch_size
+        torch.Size([3])
+        >>> td_unqueeze = td.unsqueeze(-1)
+        >>> print(td_unqueeze.get("zeros").shape)
+        torch.Size([3, 1, 4, 5])
+        >>> print(td_unqueeze[0].shape)
+        torch.Size([1])
+        >>> print(td_unqueeze.view(-1).shape)
+        torch.Size([3])
+        >>> print((td.clone()==td).all())
+        True
+
+    TODO: split, transpose, permute
+
+    """
     _safe = True
 
     def __init__(
         self,
-        source: Optional[Union[_TensorDict, dict]] = None,
-        batch_size: Optional[Union[list, tuple, torch.Size, int]] = None,
+        source: Union[_TensorDict, dict],
+        batch_size: Optional[Union[Iterable[int], torch.Size, int]] = None,
         device: Optional[DEVICE_TYPING] = None,
         _meta_source: Optional[dict] = None,
     ):
         self._tensor_dict = dict()
         self._tensor_dict_meta = OrderedDict()
-        if source is None:
-            source = dict()
-
+        if not isinstance(source, (_TensorDict, dict)):
+            raise ValueError("A TensorDict source is expected to be a _TensorDict sub-type or a dictionary, "
+                             f"found type(source)={type(source)}.")
         if isinstance(
             batch_size,
             (
@@ -1102,7 +1166,7 @@ class TensorDict(_TensorDict):
         elif isinstance(source, _TensorDict):
             self._batch_size = source.batch_size
         else:
-            raise Exception(
+            raise ValueError(
                 "batch size was not specified when creating the TensorDict instance and it could not be "
                 "retrieved from source."
             )
@@ -1244,7 +1308,7 @@ class TensorDict(_TensorDict):
             )
 
         # minimum ndimension is 1
-        if tensor.ndimension()-self.ndimension() == 0:
+        if tensor.ndimension() - self.ndimension() == 0:
             tensor = tensor.unsqueeze(-1)
         return tensor
 
@@ -1535,11 +1599,11 @@ def assert_allclose_td(
         input2 = expected.get(key)
         mse = (
             (input1.to(torch.float) - input2.to(torch.float))
-            .pow(2)
-            .sum()
-            .div(input1.numel())
-            .sqrt()
-            .item()
+                .pow(2)
+                .sum()
+                .div(input1.numel())
+                .sqrt()
+                .item()
         )
 
         default_msg = f"key {key} does not match, got mse = {mse:4.4f}"
@@ -1622,11 +1686,9 @@ def stack(
 ) -> _TensorDict:
     if not list_of_tensor_dicts:
         raise RuntimeError("list_of_tensor_dicts cannot be empty")
-    if dim < 0:
-        raise RuntimeError(
-            f"negative dim in torch.stack(list_of_tensor_dicts, dim=dim) not allowed, got dim={dim}"
-        )
     batch_size = list_of_tensor_dicts[0].batch_size
+    if dim < 0:
+        dim = len(batch_size) + dim + 1
     if len(list_of_tensor_dicts) > 1:
         for td in list_of_tensor_dicts[1:]:
             if td.batch_size != list_of_tensor_dicts[0].batch_size:
@@ -1720,7 +1782,43 @@ def pad_sequence_td(
 
 
 class SubTensorDict(_TensorDict):
-    """A TensorDict that only sees an index of the stored tensors"""
+    """
+    A TensorDict that only sees an index of the stored tensors.
+
+    By default, indexing a tensordict with an iterable will result in a SubTensorDict. This is done such that a
+    TensorDict indexed with non-contiguous index (e.g. a Tensor) will still point to the original memory location (
+    unlike regular indexing of tensors).
+
+    Examples:
+        >>> from torchrl.data import TensorDict, SubTensorDict
+        >>> source = {'random': torch.randn(3, 4, 5, 6), 'zeros': torch.zeros(3, 4, 1, dtype=torch.bool)}
+        >>> batch_size = torch.Size([3, 4])
+        >>> td = TensorDict(source, batch_size)
+        >>> td_index = td[:, 2]
+        >>> print(type(td_index), td_index.shape)
+        <class 'torchrl.data.tensordict.tensordict.SubTensorDict'> torch.Size([3])
+        >>> td_index = td[:, slice(None)]
+        >>> print(type(td_index), td_index.shape)
+        <class 'torchrl.data.tensordict.tensordict.SubTensorDict'> torch.Size([3, 4])
+        >>> td_index = td[:, torch.Tensor([0, 2]).to(torch.long)]
+        >>> print(type(td_index), td_index.shape)
+        <class 'torchrl.data.tensordict.tensordict.SubTensorDict'> torch.Size([3, 2])
+        >>> td_index.fill_('zeros', 1)
+        >>> print(td.get('zeros'))  # the indexed tensors are updated with Trues
+        tensor([[[True],
+                 [ False],
+                 [True],
+                 [ False]],
+                [[True],
+                 [False],
+                 [True],
+                 [False]],
+                [[True],
+                 [False],
+                 [True],
+                 [False]]])
+
+    """
 
     _safe = False
 
@@ -1771,7 +1869,7 @@ class SubTensorDict(_TensorDict):
         parent = self.get_parent_tensor_dict()
         tensor_expand = torch.zeros(
             *parent.batch_size,
-            *tensor.shape[self.batch_dims :],
+            *tensor.shape[self.batch_dims:],
             dtype=tensor.dtype,
             device=self.device,
         )
@@ -1952,13 +2050,36 @@ def merge_tensor_dicts(*tensor_dicts: _TensorDict) -> TensorDict:
 
 
 class LazyStackedTensorDict(_TensorDict):
+    """
+    A Lazy stack of TensorDicts.
+    When stacking TensorDicts together, the default behaviour is to put them in a stack that is not instantiated.
+    This allows to seamlessly work with stacks of tensordicts with operations that will affect the original
+    tensordicts.
+
+    Args:
+         *tensor_dicts (TensorDict instances): a list of tensordict with same batch size.
+         stack_dim (int): a dimension (between `-td.ndimension()` and `td.ndimension()-1` along which the stack should
+             be performed.
+
+    Examples:
+        >>> from torchrl.data import TensorDict
+        >>> import torch
+        >>> tds = [TensorDict({'a': torch.randn(3, 4)}, batch_size=[3]) for _ in range(10)]
+        >>> td_stack = torch.stack(tds, -1)
+        >>> print(td_stack.shape)
+        torch.Size([3, 10])
+        >>> print(td_stack.get("a").shape)
+        torch.Size([3, 10, 4])
+        >>> print(td_stack[:, 0] is tds[0])
+        True
+    """
     _safe = False
 
     def __init__(
         self,
-        *tensor_dicts: List[TensorDict],
+        *tensor_dicts: List[_TensorDict],
         stack_dim: int = 0,
-        batch_size: Optional[Iterable[int]] = None,
+        batch_size: Optional[Iterable[int]] = None,  # TODO: remove
     ):
         # sanity check
         N = len(tensor_dicts)
@@ -2767,6 +2888,22 @@ class _CustomOpTensorDict(_TensorDict):
 
 
 class UnsqueezedTensorDict(_CustomOpTensorDict):
+    """
+    A lazy view on an unsqueezed TensorDict.
+    When calling `tensordict.unsqueeze(dim)`, a lazy view of this operation is returned such that the following code
+    snippet works without raising an exception:
+        >>> assert tensordict.unsqueeze(dim).squeeze(dim) is tensordict
+
+    Examples:
+        >>> from torchrl.data import TensorDict
+        >>> import torch
+        >>> td = TensorDict({'a': torch.randn(3, 4)}, batch_size=[3])
+        >>> td_unsqueeze = td.unsqueeze(-1)
+        >>> print(td_unsqueeze.shape)
+        torch.Size([3, 1])
+        >>> print(td_unsqueeze.squeeze(-1) is td)
+        True
+    """
     def squeeze(self, dim: int) -> _TensorDict:
         if dim < 0:
             dim = self.batch_dims + dim
@@ -2776,6 +2913,10 @@ class UnsqueezedTensorDict(_CustomOpTensorDict):
 
 
 class SqueezedTensorDict(_CustomOpTensorDict):
+    """
+    A lazy view on a squeezed TensorDict.
+    See the `UnsqueezedTensorDict` class documentation for more information.
+    """
     def unsqueeze(self, dim: int) -> _TensorDict:
         if dim < 0:
             dim = self.batch_dims + dim + 1
@@ -2789,7 +2930,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dim = torch.Size(
             [
                 *self.custom_op_kwargs.get("size"),
-                *source_meta_tensor.shape[self._source.batch_dims :],
+                *source_meta_tensor.shape[self._source.batch_dims:],
             ]
         )
         new_dict = deepcopy(self.custom_op_kwargs)
@@ -2800,7 +2941,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dim = torch.Size(
             [
                 *self.inv_op_kwargs.get("size"),
-                *source_meta_tensor.shape[self._source.batch_dims :],
+                *source_meta_tensor.shape[self._source.batch_dims:],
             ]
         )
         new_dict = deepcopy(self.inv_op_kwargs)

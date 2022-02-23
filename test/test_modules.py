@@ -142,17 +142,13 @@ def test_actorcritic():
         td_total.get("state_value"), td_value.get("state_value")
     )
 
-    value_params = set(
-        list(op.value_po.parameters()) + list(op.module.parameters())
-    )
+    value_params = set(list(op.value_po.parameters()) + list(op.module.parameters()))
     value_params2 = set(value_op.parameters())
     assert len(value_params.difference(value_params2)) == 0 and len(
         value_params.intersection(value_params2)
     ) == len(value_params)
 
-    policy_params = set(
-        list(op.policy_po.parameters()) + list(op.module.parameters())
-    )
+    policy_params = set(list(op.policy_po.parameters()) + list(op.module.parameters()))
     policy_params2 = set(policy_op.parameters())
     assert len(policy_params.difference(policy_params2)) == 0 and len(
         policy_params.intersection(policy_params2)

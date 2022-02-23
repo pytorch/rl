@@ -4,7 +4,12 @@ import torch
 from torch import nn, distributions as d
 
 from torchrl.modules.distributions import Delta, OneHotCategorical
-from torchrl.modules.td_module.common import ProbabilisticTDModule, TDModuleWrapper, TDModule, TDSequence
+from torchrl.modules.td_module.common import (
+    ProbabilisticTDModule,
+    TDModuleWrapper,
+    TDModule,
+    TDSequence,
+)
 from torchrl.modules.models.models import DistributionalDQNnet
 
 __all__ = [
@@ -62,6 +67,7 @@ class Actor(TDModule):
             out_keys=out_keys,
             **kwargs,
         )
+
 
 class ProbabilisticActor(ProbabilisticTDModule):
     """
@@ -153,7 +159,9 @@ class ValueOperator(TDModule):
         if in_keys is None:
             in_keys = ["observation"]
         if out_keys is None:
-            out_keys = ["state_value"] if "action" not in in_keys else ["state_action_value"]
+            out_keys = (
+                ["state_value"] if "action" not in in_keys else ["state_action_value"]
+            )
         value_spec = UnboundedContinuousTensorSpec()
         super().__init__(
             value_spec,
@@ -211,7 +219,9 @@ class QValueHook:
             "binary": self._binary,
         }
         if action_space not in self.fun_dict:
-            raise ValueError(f"action_space must be one of {list(self.fun_dict.keys())}")
+            raise ValueError(
+                f"action_space must be one of {list(self.fun_dict.keys())}"
+            )
 
     def __call__(
         self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor
@@ -381,6 +391,7 @@ class QValueActor(Actor):
         super().__init__(*args, out_keys=out_keys, **kwargs)
         self.action_space = action_space
         self.module.register_forward_hook(QValueHook(self.action_space))
+
 
 class DistributionalQValueActor(QValueActor):
     """
@@ -636,9 +647,11 @@ class ActorCriticOperator(ActorValueOperator):
         return self
 
     def get_value_operator(self) -> TDModuleWrapper:
-        raise RuntimeError("value_operator is the term used for operators that associate a value with a "
-                           "state/observation. This class computes the value of a state-action pair: to get the "
-                           "network computing this value, please call td_sequence.get_critic_operator()")
+        raise RuntimeError(
+            "value_operator is the term used for operators that associate a value with a "
+            "state/observation. This class computes the value of a state-action pair: to get the "
+            "network computing this value, please call td_sequence.get_critic_operator()"
+        )
 
 
 class ActorCriticWrapper(TDSequence):

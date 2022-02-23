@@ -6,10 +6,11 @@ import torch
 
 from torchrl.data import expand_as_right
 from torchrl.envs.utils import exploration_mode
-from torchrl.modules.td_module.common import (_forward_hook_safe_action,
-                                              TDModuleWrapper,
-                                              TDModule,
-                                              )
+from torchrl.modules.td_module.common import (
+    _forward_hook_safe_action,
+    TDModuleWrapper,
+    TDModule,
+)
 
 __all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
 
@@ -90,11 +91,12 @@ class EGreedyWrapper(TDModuleWrapper):
         if exploration_mode() == "random" or exploration_mode() is None:
             out = tensordict.get(self.td_module.out_keys[0])
             eps = self.eps.item()
-            cond = (torch.rand(tensordict.shape, device=tensordict.device) < eps).to(out.dtype)
+            cond = (torch.rand(tensordict.shape, device=tensordict.device) < eps).to(
+                out.dtype
+            )
             cond = expand_as_right(cond, out)
             out = (
-                cond
-                * self.td_module.spec.rand(tensordict.shape).to(out.device)
+                cond * self.td_module.spec.rand(tensordict.shape).to(out.device)
                 + (1 - cond) * out
             )
             tensordict.set(self.td_module.out_keys[0], out)
@@ -269,11 +271,11 @@ class _OrnsteinUhlenbeckProcess:
 
     @property
     def noise_key(self):
-        return self._noise_key# + str(id(self))
+        return self._noise_key  # + str(id(self))
 
     @property
     def steps_key(self):
-        return self._steps_key# + str(id(self))
+        return self._steps_key  # + str(id(self))
 
     def _make_noise_pair(self, tensor_dict: _TensorDict) -> None:
         tensor_dict.set(

@@ -33,7 +33,8 @@ from torchrl.modules.td_module import (
 )
 from torchrl.modules.td_module.actors import (
     ValueOperator,
-    ActorCriticWrapper, ProbabilisticActor,
+    ActorCriticWrapper,
+    ProbabilisticActor,
 )
 
 DISTRIBUTIONS = {
@@ -53,7 +54,9 @@ __all__ = [
 ]
 
 
-def make_dqn_actor(proof_environment: _EnvClass, device: torch.device, args: Namespace) -> Actor:
+def make_dqn_actor(
+    proof_environment: _EnvClass, device: torch.device, args: Namespace
+) -> Actor:
     """
     DQN constructor helper function.
 
@@ -243,7 +246,7 @@ def make_ddpg_actor(
         distribution_kwargs={
             "min": env_specs["action_spec"].space.minimum,
             "max": env_specs["action_spec"].space.maximum,
-        }
+        },
     )
 
     state_class = ValueOperator
@@ -424,10 +427,7 @@ def make_ppo_model(
                 activate_last_layer=True,
             )
         common_operator = TDModule(
-            spec=None,
-            module=common_module,
-            in_keys=in_keys_actor,
-            out_keys=["hidden"]
+            spec=None, module=common_module, in_keys=in_keys_actor, out_keys=["hidden"]
         )
 
         policy_net = MLP(
@@ -452,7 +452,7 @@ def make_ppo_model(
         actor_value = ActorValueOperator(
             common_operator=common_operator,
             policy_operator=policy_operator,
-            value_operator=value_operator
+            value_operator=value_operator,
         ).to(device)
     else:
         if args.lstm:
@@ -689,7 +689,7 @@ def parser_model_args_continuous(
             "--ou_exploration",
             action="store_true",
             help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
-                 "efficient entropy-based exploration, this should be left for experimentation only.",
+            "efficient entropy-based exploration, this should be left for experimentation only.",
         )
         parser.add_argument(
             "--distributional",
@@ -709,8 +709,8 @@ def parser_model_args_continuous(
             action="store_false",
             dest="double_qvalue",
             help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
-                 "use two different qvalue networks trained independently and choose the lowest value "
-                 "predicted to predict the state action value. This can be disabled by using this flag.",
+            "use two different qvalue networks trained independently and choose the lowest value "
+            "predicted to predict the state action value. This can be disabled by using this flag.",
         )
 
     if algorithm in ("SAC", "PPO"):

@@ -19,8 +19,6 @@ __all__ = [
     "create_prioritized_replay_buffer",
 ]
 
-from .. import DEVICE_TYPING
-
 from ..tensordict.tensordict import _TensorDict, stack as stack_td
 from ..utils import DEVICE_TYPING
 
@@ -237,6 +235,10 @@ class ReplayBuffer:
 
             return ret
 
+    def __repr__(self) -> str:
+        string = f"{self.__class__.__name__}(size={len(self)}, pin_memory={self._pin_memory})"
+        return string
+
 
 class PrioritizedReplayBuffer(ReplayBuffer):
     """
@@ -304,7 +306,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         weight = np.power(weight / p_min, -self._beta)
         # x = first_field(data)
         # if isinstance(x, torch.Tensor):
-        device = data.device if hasattr(data, 'device') else torch.device("cpu")
+        device = data.device if hasattr(data, "device") else torch.device("cpu")
         weight = to_torch(weight, device, self._pin_memory)
         return data, weight
 
@@ -417,7 +419,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
         # x = first_field(data)  # avoid calling tree.flatten
         # if isinstance(x, torch.Tensor):
-        device = data.device if hasattr(data, 'device') else torch.device("cpu")
+        device = data.device if hasattr(data, "device") else torch.device("cpu")
         weight = to_torch(weight, device, self._pin_memory)
         return data, weight, index
 
@@ -490,6 +492,17 @@ class TensorDictReplayBuffer(ReplayBuffer):
     """
     TensorDict-specific wrapper around the ReplayBuffer class.
     """
+
+    def __init__(
+        self,
+        size: int,
+        collate_fn: Optional[Callable] = None,
+        pin_memory: bool = False,
+        prefetch: Optional[int] = None,
+    ):
+        if collate_fn is None:
+            collate_fn = lambda x: stack_td(x, 0, contiguous=True)
+        super().__init__(size, collate_fn, pin_memory, prefetch)
 
     def sample(self, size: int) -> Any:
         return super(TensorDictReplayBuffer, self).sample(size)[0]

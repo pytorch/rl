@@ -4,6 +4,7 @@ import time
 from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
+from textwrap import indent
 from typing import Optional, Callable, Union, Tuple, Iterator, Iterable
 
 import numpy as np
@@ -156,6 +157,10 @@ class _DataCollector(IterableDataset):
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         raise NotImplementedError
+
+    def __repr__(self) -> str:
+        string = f"{self.__class__.__name__}()"
+        return string
 
 
 class SyncDataCollector(_DataCollector):
@@ -502,6 +507,13 @@ class SyncDataCollector(_DataCollector):
             self.env.load_state_dict(state_dict["env_state_dict"], **kwargs)
         if strict or "policy_state_dict" in state_dict:
             self.policy.load_state_dict(state_dict["policy_state_dict"], **kwargs)
+
+    def __repr__(self) -> str:
+        env_str = indent(f"env={self.env}", 4 * " ")
+        policy_str = indent(f"policy={self.policy}", 4 * " ")
+        td_out_str = indent(f"td_out={self._tensor_dict_out}", 4 * " ")
+        string = f"{self.__class__.__name__}(\n{env_str},\n{policy_str},\n{td_out_str})"
+        return string
 
 
 class _MultiDataCollector(_DataCollector):
