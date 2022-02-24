@@ -137,13 +137,13 @@ EXPLORATION_MODE = None
 
 class set_exploration_mode(_DecoratorContextManager):
     """
-    Sets the exploration mode of all ProbabilisticOperators to the desired mode.
+    Sets the exploration mode of all ProbabilisticTDModules to the desired mode.
 
     Args:
         mode (str): mode to use when the policy is being called.
 
     Examples:
-        >>> policy = Actor(action_spec, mapping_operator=network, default_interaction_mode="mode")
+        >>> policy = Actor(action_spec, module=network, default_interaction_mode="mode")
         >>> env.rollout(policy=policy, n_steps=100)  # rollout with the "mode" interaction mode
         >>> with set_exploration_mode("random"):
         >>>     env.rollout(policy=policy, n_steps=100)  # rollout with the "random" interaction mode

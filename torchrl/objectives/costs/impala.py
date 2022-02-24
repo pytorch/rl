@@ -1,12 +1,12 @@
 import torch
 
 from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.modules import ProbabilisticOperator
+from torchrl.modules import ProbabilisticTDModule
 from torchrl.objectives.returns.vtrace import vtrace
 
 
 class QValEstimator:
-    def __init__(self, value_model: ProbabilisticOperator):
+    def __init__(self, value_model: ProbabilisticTDModule):
         self.value_model = value_model
 
     @property

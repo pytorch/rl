@@ -8,4 +8,4 @@ frame_skip=2
 prb
 multi_step
 exp_name=humanoid_stats
-tanh_normal_tanh
+tanh_loc

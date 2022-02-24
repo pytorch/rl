@@ -11,7 +11,7 @@ from torchrl.modules import (
     QValueActor,
     DistributionalQValueActor,
     reset_noise,
-    ProbabilisticOperator,
+    ProbabilisticTDModule,
 )
 from .utils import distance_loss
 
@@ -33,7 +33,7 @@ class DQNLoss(_LossModule):
     """
     The DQN Loss class.
     Args:
-        value_network (ProbabilisticOperator): a Q value operator.
+        value_network (ProbabilisticTDModule): a Q value operator.
         gamma (scalar): a discount factor for return computation.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
     """
@@ -119,13 +119,13 @@ class DQNLoss(_LossModule):
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
         return TensorDict({"loss": loss.mean()}, [])
 
-    def _get_networks(self) -> Tuple[ProbabilisticOperator, ProbabilisticOperator]:
+    def _get_networks(self) -> Tuple[ProbabilisticTDModule, ProbabilisticTDModule]:
         value_network = self.value_network
         target_value_network = self.value_network
         return value_network, target_value_network
 
     @property
-    def target_value_network(self) -> ProbabilisticOperator:
+    def target_value_network(self) -> ProbabilisticTDModule:
         return self.value_network
 
 
@@ -150,13 +150,13 @@ class DoubleDQNLoss(DQNLoss):
         self._target_value_network = deepcopy(self.value_network)
         self._target_value_network.requires_grad_(False)
 
-    def _get_networks(self) -> Tuple[ProbabilisticOperator, ProbabilisticOperator]:
+    def _get_networks(self) -> Tuple[ProbabilisticTDModule, ProbabilisticTDModule]:
         value_network = self.value_network
         target_value_network = self.target_value_network
         return value_network, target_value_network
 
     @property
-    def target_value_network(self) -> ProbabilisticOperator:
+    def target_value_network(self) -> ProbabilisticTDModule:
         self._target_value_network.apply(reset_noise)
         return self._target_value_network
 
@@ -313,7 +313,7 @@ class DistributionalDQNLoss(_LossModule):
         loss_td = TensorDict({"loss": loss.mean()}, [])
         return loss_td
 
-    def _get_networks(self) -> Tuple[ProbabilisticOperator, ProbabilisticOperator]:
+    def _get_networks(self) -> Tuple[ProbabilisticTDModule, ProbabilisticTDModule]:
         value_network = self.value_network
         return value_network, value_network
 
@@ -344,7 +344,7 @@ class DistributionalDoubleDQNLoss(DistributionalDQNLoss):
         else:
             self.counter += 1
 
-    def _get_networks(self) -> Tuple[ProbabilisticOperator, ProbabilisticOperator]:
+    def _get_networks(self) -> Tuple[ProbabilisticTDModule, ProbabilisticTDModule]:
         value_network = self.value_network
         target_value_network = self.target_value_network
         return value_network, target_value_network

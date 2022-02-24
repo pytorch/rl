@@ -17,7 +17,7 @@ from torchrl.agents.helpers.envs import (
     correct_for_frame_skip,
     get_stats_random_rollout,
 )
-from torchrl.agents.helpers.losses import parser_loss_args_offline, make_ddpg_loss
+from torchrl.agents.helpers.losses import parser_loss_args, make_ddpg_loss
 from torchrl.agents.helpers.models import parser_model_args_continuous, make_ddpg_actor
 from torchrl.agents.helpers.recorder import parser_recorder_args
 from torchrl.agents.helpers.replay_buffer import parser_replay_args, make_replay_buffer
@@ -33,7 +33,7 @@ def make_args():
     parser_agent_args(parser)
     parser_collector_args_offline(parser)
     parser_env_args(parser)
-    parser_loss_args_offline(parser)
+    parser_loss_args(parser)
     parser_model_args_continuous(parser, "DDPG")
     parser_recorder_args(parser)
     parser_replay_args(parser)

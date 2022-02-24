@@ -1,3 +1,5 @@
+import argparse
+
 import pytest
 import torch
 from scipy.stats import ttest_1samp
@@ -5,9 +7,10 @@ from torch import nn
 
 from torchrl.data import NdBoundedTensorSpec
 from torchrl.data.tensordict.tensordict import TensorDict
+from torchrl.modules import ProbabilisticActor
 from torchrl.modules.distributions import TanhNormal
-from torchrl.modules.probabilistic_operators import Actor
-from torchrl.modules.probabilistic_operators.exploration import (
+from torchrl.modules.td_module import Actor
+from torchrl.modules.td_module.exploration import (
     _OrnsteinUhlenbeckProcess,
     OrnsteinUhlenbeckProcessWrapper,
 )
@@ -41,13 +44,13 @@ def test_ou(seed=0):
 
 def test_ou_wrapper(device="cpu", d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     torch.manual_seed(seed)
-    mapping_operator = nn.Linear(d_obs, d_act).to(device)
+    module = nn.Linear(d_obs, 2*d_act).to(device)
     action_spec = NdBoundedTensorSpec(
-        -torch.ones(d_act // 2), torch.ones(d_act // 2), (d_act // 2,)
+        -torch.ones(d_act ), torch.ones(d_act ), (d_act ,)
     )
-    policy = Actor(
-        action_spec=action_spec,
-        mapping_operator=mapping_operator,
+    policy = ProbabilisticActor(
+        spec=action_spec,
+        module=module,
         distribution_class=TanhNormal,
         default_interaction_mode="random",
     ).to(device)
@@ -74,4 +77,5 @@ def test_ou_wrapper(device="cpu", d_obs=4, d_act=6, batch=32, n_steps=100, seed=
 
 
 if __name__ == "__main__":
-    pytest.main([__file__])
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

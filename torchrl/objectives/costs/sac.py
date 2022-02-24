@@ -9,8 +9,8 @@ from torch import Tensor
 from torch.nn import Parameter
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.modules import ProbabilisticOperator, Actor, reset_noise
-from torchrl.modules.probabilistic_operators.actors import ActorCriticWrapper
+from torchrl.modules import ProbabilisticTDModule, Actor, reset_noise
+from torchrl.modules.td_module.actors import ActorCriticWrapper
 from torchrl.objectives.costs.utils import hold_out_net, next_state_value, distance_loss
 from .common import _LossModule
 
@@ -24,9 +24,9 @@ class SACLoss(_LossModule):
 
     Args:
         actor_network (Actor): stochastic actor
-        qvalue_network (ProbabilisticOperator): Q(s, a) parametric model
-        value_network (ProbabilisticOperator): V(s) parametric model\
-        qvalue_network_bis (ProbabilisticOperator, optional): if required, the Q-value can be computed twice
+        qvalue_network (ProbabilisticTDModule): Q(s, a) parametric model
+        value_network (ProbabilisticTDModule): V(s) parametric model\
+        qvalue_network_bis (ProbabilisticTDModule, optional): if required, the Q-value can be computed twice
             independently using two separate networks. The minimum predicted value will then be used for inference.
         gamma (number, optional): discount for return computation
             default: 0.99
@@ -46,9 +46,9 @@ class SACLoss(_LossModule):
     def __init__(
         self,
         actor_network: Actor,
-        qvalue_network: ProbabilisticOperator,
-        value_network: ProbabilisticOperator,
-        qvalue_network_bis: Optional[ProbabilisticOperator] = None,
+        qvalue_network: ProbabilisticTDModule,
+        value_network: ProbabilisticTDModule,
+        qvalue_network_bis: Optional[ProbabilisticTDModule] = None,
         gamma: Number = 0.99,
         priotity_key: str = "td_error",
         loss_function: str = "smooth_l1",

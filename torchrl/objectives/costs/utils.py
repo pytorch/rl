@@ -10,7 +10,7 @@ from torch.nn import functional as F
 
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import step_tensor_dict
-from torchrl.modules import ProbabilisticOperator
+from torchrl.modules import ProbabilisticTDModule
 
 
 class _context_manager:
@@ -209,7 +209,7 @@ class hold_out_net(_context_manager):
 @torch.no_grad()
 def next_state_value(
     tensor_dict: _TensorDict,
-    operator: ProbabilisticOperator,
+    operator: ProbabilisticTDModule,
     next_val_key: str = "state_action_value",
     gamma: Number = 0.99,
 ) -> torch.Tensor:
@@ -224,7 +224,7 @@ def next_state_value(
     Args:
         tensor_dict (_TensorDict): Tensordict containing a reward and done key (and a n_steps_to_next key for n-steps
             rewards).
-        operator (ProbabilisticOperator): the value function operator. Should write a 'next_val_key' key-value in the
+        operator (ProbabilisticTDModule): the value function operator. Should write a 'next_val_key' key-value in the
             input tensordict when called.
         next_val_key (str): key where the next value will be written.
             Default: 'state_action_value'

@@ -17,7 +17,7 @@ from torchrl.agents.helpers.envs import (
     correct_for_frame_skip,
     get_stats_random_rollout,
 )
-from torchrl.agents.helpers.losses import parser_loss_args_offline, make_sac_loss
+from torchrl.agents.helpers.losses import parser_loss_args, make_sac_loss
 from torchrl.agents.helpers.models import parser_model_args_continuous, make_sac_model
 from torchrl.agents.helpers.recorder import parser_recorder_args
 from torchrl.agents.helpers.replay_buffer import parser_replay_args, make_replay_buffer
@@ -33,7 +33,7 @@ def make_args():
     parser_agent_args(parser)
     parser_collector_args_offline(parser)
     parser_env_args(parser)
-    parser_loss_args_offline(parser)
+    parser_loss_args(parser)
     parser_model_args_continuous(parser, "SAC")
     parser_recorder_args(parser)
     parser_replay_args(parser)
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         proof_env,
         double_qvalue=args.double_qvalue,
         device=device,
-        tanh_normal_tanh=args.tanh_normal_tanh,
+        tanh_loc=args.tanh_loc,
         default_policy_scale=args.default_policy_scale,
     )
     loss_module, target_net_updater = make_sac_loss(model, args)
