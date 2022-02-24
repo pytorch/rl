@@ -2,7 +2,7 @@ from argparse import ArgumentParser, Namespace
 
 __all__ = [
     "make_sac_loss",
-    "parser_loss_args_offline",
+    "parser_loss_args",
     "make_dqn_loss",
     "make_ddpg_loss",
     "make_target_updater",
@@ -150,7 +150,7 @@ def make_ppo_loss(model, args) -> PPOLoss:
     return loss_module
 
 
-def parser_loss_args_offline(parser: ArgumentParser) -> ArgumentParser:
+def parser_loss_args(parser: ArgumentParser) -> ArgumentParser:
     """
     To be used for DQN, DDPG, SAC
     """
@@ -186,17 +186,6 @@ def parser_loss_args_offline(parser: ArgumentParser) -> ArgumentParser:
         type=float,
         default=0.99,
         help="Decay factor for return computation. Default=0.99.",
-    )
-    parser.add_argument(
-        "--distributional",
-        action="store_true",
-        help="whether a distributional loss should be used (TODO: not implemented yet).",
-    )
-    parser.add_argument(
-        "--atoms",
-        type=int,
-        default=51,
-        help="number of atoms used for the distributional loss (TODO)",
     )
 
     return parser

@@ -12,7 +12,7 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.modules import DistributionalQValueActor, QValueActor
 from torchrl.modules.distributions.continuous import Delta, TanhNormal
 from torchrl.modules.models.models import MLP
-from torchrl.modules.probabilistic_operators.actors import ValueOperator, Actor
+from torchrl.modules.td_module.actors import ValueOperator, Actor, ProbabilisticActor
 from torchrl.objectives import (
     DQNLoss,
     DoubleDQNLoss,
@@ -21,7 +21,11 @@ from torchrl.objectives import (
     DDPGLoss,
     DoubleDDPGLoss,
     SACLoss,
-    DoubleSACLoss, PPOLoss, ClipPPOLoss, KLPENPPOLoss, GAE
+    DoubleSACLoss,
+    PPOLoss,
+    ClipPPOLoss,
+    KLPENPPOLoss,
+    GAE,
 )
 from torchrl.objectives.costs.utils import hold_out_net
 
@@ -43,9 +47,8 @@ class TestDQN:
         )
         module = nn.Linear(obs_dim, action_dim)
         actor = QValueActor(
-            action_spec=action_spec,
+            spec=action_spec,
             module=module,
-            distribution_class=Delta,
         )
         return actor
 
@@ -57,10 +60,9 @@ class TestDQN:
         support = torch.linspace(vmin, vmax, atoms, dtype=torch.float)
         module = MLP(obs_dim, (atoms, action_dim))
         actor = DistributionalQValueActor(
-            action_spec=action_spec,
+            spec=action_spec,
             module=module,
             support=support,
-            distribution_class=Delta,
         )
         return actor
 
@@ -119,7 +121,7 @@ class TestDQN:
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
                 "action_value": action_value
-                                * expand_as_right(mask.to(obs.dtype).squeeze(-1), action_value),
+                * expand_as_right(mask.to(obs.dtype).squeeze(-1), action_value),
             },
         )
         return td
@@ -188,9 +190,8 @@ class TestDDPG:
         )
         module = nn.Linear(obs_dim, action_dim)
         actor = Actor(
-            action_spec=action_spec,
+            spec=action_spec,
             module=module,
-            distribution_class=Delta,
         )
         return actor
 
@@ -318,8 +319,8 @@ class TestSAC:
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Linear(obs_dim, 2 * action_dim)
-        actor = Actor(
-            action_spec=action_spec,
+        actor = ProbabilisticActor(
+            spec=action_spec,
             module=module,
             distribution_class=TanhNormal,
         )
@@ -412,7 +413,9 @@ class TestSAC:
         qvalue = self._create_mock_qvalue()
         qvalue2 = self._create_mock_qvalue()
         value = self._create_mock_value()
-        loss_fn = loss_class(actor, qvalue, value, qvalue2, gamma=0.9, loss_function="l2")
+        loss_fn = loss_class(
+            actor, qvalue, value, qvalue2, gamma=0.9, loss_function="l2"
+        )
 
         loss = loss_fn(td)
         sum([item for _, item in loss.items()]).backward()
@@ -430,7 +433,9 @@ class TestSAC:
         qvalue = self._create_mock_qvalue()
         qvalue2 = self._create_mock_qvalue()
         value = self._create_mock_value()
-        loss_fn = loss_class(actor, qvalue, value, qvalue2, gamma=0.9, loss_function="l2")
+        loss_fn = loss_class(
+            actor, qvalue, value, qvalue2, gamma=0.9, loss_function="l2"
+        )
 
         ms = MultiStep(gamma=gamma, n_steps_max=n)
 
@@ -470,8 +475,8 @@ class TestPPO:
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         module = nn.Linear(obs_dim, 2 * action_dim)
-        actor = Actor(
-            action_spec=action_spec,
+        actor = ProbabilisticActor(
+            spec=action_spec,
             module=module,
             distribution_class=TanhNormal,
             save_dist_params=True,
@@ -538,9 +543,10 @@ class TestPPO:
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
-                "action_log_prob": torch.randn_like(action[..., :1]) / 10 * mask.to(obs.dtype),
-                "action_dist_param_0": params *
-                                       mask.to(obs.dtype),
+                "action_log_prob": torch.randn_like(action[..., :1])
+                / 10
+                * mask.to(obs.dtype),
+                "action_dist_param_0": params * mask.to(obs.dtype),
             },
         )
         return td
@@ -553,7 +559,9 @@ class TestPPO:
         actor = self._create_mock_actor()
         value = self._create_mock_value()
         gae = GAE(gamma=0.9, lamda=0.9, critic=value)
-        loss_fn = loss_class(actor, value, advantage_module=gae, gamma=0.9, loss_critic_type="l2")
+        loss_fn = loss_class(
+            actor, value, advantage_module=gae, gamma=0.9, loss_critic_type="l2"
+        )
 
         loss = loss_fn(td)
         sum([item for _, item in loss.items()]).backward()

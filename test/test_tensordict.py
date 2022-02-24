@@ -12,7 +12,7 @@ from torchrl.data.tensordict.utils import _getitem_batch_size
 
 def test_tensor_dict_set():
     torch.manual_seed(1)
-    td = TensorDict(batch_size=(4, 5))
+    td = TensorDict({}, batch_size=(4, 5))
     td.set("key1", torch.randn(4, 5))
     # by default inplace:
     with pytest.raises(RuntimeError):
@@ -37,11 +37,11 @@ def test_tensor_dict_set():
 
 def test_stack():
     torch.manual_seed(1)
-    tds_list = [TensorDict(batch_size=(4, 5)) for _ in range(3)]
+    tds_list = [TensorDict(source={}, batch_size=(4, 5)) for _ in range(3)]
     tds = torch.stack(tds_list, 0)
     assert tds[0] is tds_list[0]
 
-    td = TensorDict(batch_size=(4, 5), source={"a": torch.randn(4, 5, 3)})
+    td = TensorDict(source={"a": torch.randn(4, 5, 3)}, batch_size=(4, 5))
     td_list = list(td)
     td_reconstruct = torch.stack(td_list, 0)
     assert td_reconstruct.batch_size == td.batch_size
@@ -54,7 +54,7 @@ def test_del():
 
 def test_tensor_dict_indexing():
     torch.manual_seed(1)
-    td = TensorDict(batch_size=(4, 5))
+    td = TensorDict({}, batch_size=(4, 5))
     td.set("key1", torch.randn(4, 5, 1))
     td.set("key2", torch.randn(4, 5, 6, dtype=torch.double))
 
@@ -79,7 +79,7 @@ def test_tensor_dict_indexing():
     ).all(), f"td and td_reconstruct differ, got {td == td_reconstruct}"
 
     x = torch.randn(4, 5)
-    td = TensorDict(batch_size=[3, 4], source={"key1": torch.zeros(3, 4, 5)})
+    td = TensorDict(source={"key1": torch.zeros(3, 4, 5)}, batch_size=[3, 4], )
     td[0].set_("key1", x)
     torch.testing.assert_allclose(td.get("key1")[0], x)
     torch.testing.assert_allclose(td.get("key1")[0], td[0].get("key1"))
@@ -92,7 +92,7 @@ def test_tensor_dict_indexing():
 
 def test_subtensor_dict_construction():
     torch.manual_seed(1)
-    td = TensorDict(batch_size=(4, 5))
+    td = TensorDict({}, batch_size=(4, 5))
     td.set("key1", torch.randn(4, 5, 1))
     td.set("key2", torch.randn(4, 5, 6, dtype=torch.double))
     std1 = td.get_sub_tensor_dict(2)
@@ -371,7 +371,7 @@ class TestTensorDicts:
     def test_from_empty(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        new_td = TensorDict(batch_size=td.batch_size)
+        new_td = TensorDict({}, batch_size=td.batch_size)
         for key, item in td.items():
             new_td.set(key, item)
         assert_allclose_td(td, new_td)

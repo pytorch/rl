@@ -446,6 +446,12 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
             "minimum have a non-singleton shape, they must match the provided shape if this one is set "
             "explicitely."
         )
+        if shape is not None and not isinstance(shape, torch.Size):
+            if isinstance(shape, int):
+                shape = torch.Size([shape])
+            else:
+                shape = torch.Size(list(shape))
+
         if maximum.ndimension():
             if shape is not None and shape != maximum.shape:
                 raise RuntimeError(err_msg)
@@ -458,6 +464,9 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
             maximum = maximum.expand(*shape)
         elif shape is None:
             raise RuntimeError(err_msg)
+        else:
+            mimimum = minimum.expand(*shape)
+            maximum = maximum.expand(*shape)
 
         if minimum.numel() > maximum.numel():
             maximum = maximum.expand_as(minimum)
@@ -496,10 +505,13 @@ class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
 
     def __init__(
         self,
-        shape: torch.Size,
+        shape: Union[torch.Size, int],
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = None,
     ):
+        if isinstance(shape, int):
+            shape = torch.Size([shape])
+
         dtype, device = _default_dtype_and_device(dtype, device)
         super(UnboundedContinuousTensorSpec, self).__init__(
             shape=shape, space=None, device=device, dtype=dtype, domain="continuous"
@@ -693,8 +705,8 @@ class CompositeSpec(TensorSpec):
 
     def __repr__(self) -> str:
         sub_str = [f"{k}: {item.__repr__()}" for k, item in self._specs.items()]
-        sub_str = ", ".join(sub_str)
-        return f"CompositeSpec({sub_str})"
+        sub_str = ",\n\t".join(sub_str)
+        return f"CompositeSpec(\n\t{sub_str})"
 
     def type_check(self, value, key):
         for _key in self:

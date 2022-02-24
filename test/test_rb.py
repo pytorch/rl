@@ -24,7 +24,7 @@ def test_prb(priority_key, contiguous):
     td1 = TensorDict(
         source={
             "a": torch.randn(3, 1),
-            priority_key: torch.rand(3, 1)/10,
+            priority_key: torch.rand(3, 1) / 10,
             "_idx": torch.arange(3).view(3, 1),
         },
         batch_size=[3],
@@ -43,7 +43,7 @@ def test_prb(priority_key, contiguous):
     td2 = TensorDict(
         source={
             "a": torch.randn(5, 1),
-            priority_key: torch.rand(5, 1)/10,
+            priority_key: torch.rand(5, 1) / 10,
             "_idx": torch.arange(5).view(5, 1),
         },
         batch_size=[5],
@@ -65,7 +65,7 @@ def test_prb(priority_key, contiguous):
     s.set_at_(
         priority_key,
         torch.ones(
-            idx_match.numel(),
+            idx_match.numel(), 1,
         )
         * 100000000,
         idx_match,

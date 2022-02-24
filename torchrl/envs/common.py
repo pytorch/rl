@@ -59,7 +59,7 @@ class Specs:
     ) -> _TensorDict:
         """returns a TensorDict with empty tensors of the desired shape"""
         # build a tensordict from specs
-        td = TensorDict(batch_size=torch.Size([]))
+        td = TensorDict({}, batch_size=torch.Size([]))
         action_placeholder = torch.zeros(
             self["action_spec"].shape, dtype=self["action_spec"].dtype
         )
@@ -147,6 +147,7 @@ class _EnvClass:
             (+ others if needed).
 
         """
+
         # sanity check
         if tensor_dict.get("action").dtype is not self.action_spec.dtype:
             raise TypeError(
@@ -155,6 +156,7 @@ class _EnvClass:
             )
 
         tensor_dict_out = self._step(tensor_dict)
+
         if tensor_dict_out is tensor_dict:
             raise RuntimeError(
                 "_EnvClass._step should return outplace changes to the input "
@@ -163,6 +165,7 @@ class _EnvClass:
             )
         self.is_done = tensor_dict_out.get("done")
         self._current_tensordict = step_tensor_dict(tensor_dict_out)
+
         for key in self._select_observation_keys(tensor_dict_out):
             obs = tensor_dict_out.get(key)
             self.observation_spec.type_check(obs, key)
@@ -177,8 +180,8 @@ class _EnvClass:
             raise TypeError(
                 f"expected done.dtype to be torch.bool but got {tensor_dict_out.get('done').dtype}"
             )
-
         tensor_dict.update(tensor_dict_out, inplace=True)
+
         del tensor_dict_out
         return tensor_dict
 
@@ -220,7 +223,7 @@ class _EnvClass:
         # if tensor_dict is None:
         #     tensor_dict = self.specs.build_tensor_dict()
         if tensor_dict is None:
-            tensor_dict = TensorDict(device=self.device, batch_size=self.batch_size)
+            tensor_dict = TensorDict({}, device=self.device, batch_size=self.batch_size)
         tensor_dict_reset = self._reset(tensor_dict)
         if tensor_dict_reset is tensor_dict:
             raise RuntimeError(
@@ -306,7 +309,7 @@ class _EnvClass:
         if tensor_dict is None:
             tensor_dict = (
                 self.current_tensordict
-            )  # TensorDict(batch_size=self.batch_size)
+            )
         action = self.action_spec.rand(self.batch_size)
         tensor_dict.set("action", action)
         return self.step(tensor_dict)
@@ -354,10 +357,10 @@ class _EnvClass:
         if auto_reset:
             tensor_dict = self.reset()
         else:
-            tensor_dict = (
-                self.specs.build_tensor_dict().expand(*self.batch_size).contiguous()
-            )
-            tensor_dict.update(self.current_tensordict)
+            # tensor_dict = (
+            #     self.specs.build_tensor_dict().expand(*self.batch_size).contiguous()
+            # )
+            tensor_dict = self.current_tensordict.clone()
 
         if policy is None:
             policy = lambda td: td.set("action", self.action_spec.rand(self.batch_size))
@@ -369,7 +372,8 @@ class _EnvClass:
                 td = policy(td)
                 tensor_dict = td.to("cpu")
 
-                tensor_dict = self.step(tensor_dict)
+                tensor_dict = self.step(tensor_dict.clone())
+
                 tensor_dicts.append(tensor_dict.clone())
                 if tensor_dict.get("done").all() or i == n_steps - 1:
                     break
@@ -379,6 +383,7 @@ class _EnvClass:
                     callback(self, tensor_dict)
         else:
             raise Exception(f"reset env before calling rollout!")
+
         out_td = torch.stack(tensor_dicts, len(self.batch_size))
         return out_td
 
@@ -563,7 +568,7 @@ class GymLikeEnv(_EnvWrapper):
         self._is_done = done
         self._current_tensordict = obs_dict
 
-        tensor_dict_out = TensorDict(batch_size=tensor_dict.batch_size)
+        tensor_dict_out = TensorDict({}, batch_size=tensor_dict.batch_size)
         for key, value in obs_dict.items():
             tensor_dict_out.set(f"next_{key}", value)
         tensor_dict_out.set("reward", reward)

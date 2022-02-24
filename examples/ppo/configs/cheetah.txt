@@ -8,5 +8,5 @@ record_video
 max_frames_per_traj=1000
 record_interval=200
 lr=3e-4
-tanh_normal_tanh
+tanh_loc
 init_with_lag

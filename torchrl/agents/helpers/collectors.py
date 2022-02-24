@@ -21,7 +21,7 @@ __all__ = [
 ]
 
 from torchrl.envs.common import _EnvClass
-from torchrl.modules import ProbabilisticOperator, ProbabilisticOperatorWrapper
+from torchrl.modules import ProbabilisticTDModule, TDModuleWrapper
 
 
 def sync_async_collector(
@@ -204,7 +204,7 @@ def _make_collector(
 
 def make_collector_offline(
     make_env: Callable[[], _EnvClass],
-    actor_model_explore: Union[ProbabilisticOperatorWrapper, ProbabilisticOperator],
+    actor_model_explore: Union[TDModuleWrapper, ProbabilisticTDModule],
     args: Namespace,
     make_env_kwargs=None,
 ) -> _DataCollector:
@@ -255,7 +255,7 @@ def make_collector_offline(
 
 def make_collector_online(
     make_env: Callable[[], _EnvClass],
-    actor_model_explore: Union[ProbabilisticOperatorWrapper, ProbabilisticOperator],
+    actor_model_explore: Union[TDModuleWrapper, ProbabilisticTDModule],
     args: Namespace,
     make_env_kwargs=None,
 ) -> _DataCollector:

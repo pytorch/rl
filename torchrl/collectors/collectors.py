@@ -4,6 +4,7 @@ import time
 from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
+from textwrap import indent
 from typing import Optional, Callable, Union, Tuple, Iterator, Iterable
 
 import numpy as np
@@ -12,7 +13,7 @@ from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
 from torchrl.envs.utils import step_tensor_dict, set_exploration_mode
-from torchrl.modules import ProbabilisticOperator
+from torchrl.modules import ProbabilisticTDModule
 from .utils import split_trajectories
 
 __all__ = [
@@ -48,9 +49,9 @@ class RandomPolicy:
 
         Examples:
             >>> from torchrl.data.tensor_specs import NdBoundedTensorSpec
-            >>> from torchrl.data.tensordict import TensorDict()
+            >>> from torchrl.data.tensordict import TensorDict
             >>> action_spec = NdBoundedTensorSpec(-torch.ones(3), torch.ones(3))
-            >>> actor = RandomPolicy(action_spec=action_spec)
+            >>> actor = RandomPolicy(spec=action_spec)
             >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
         """
         self.action_spec = action_spec
@@ -78,16 +79,16 @@ class _DataCollector(IterableDataset):
         ] = None,
         create_env_kwargs: Optional[dict] = None,
         policy: Optional[
-            Union[ProbabilisticOperator, Callable[[_TensorDict], _TensorDict]]
+            Union[ProbabilisticTDModule, Callable[[_TensorDict], _TensorDict]]
         ] = None,
         device: Optional[DEVICE_TYPING] = None,
-    ) -> Tuple[ProbabilisticOperator, torch.device, Union[None, Callable[[], dict]]]:
+    ) -> Tuple[ProbabilisticTDModule, torch.device, Union[None, Callable[[], dict]]]:
         """
         From a policy and a device, assigns the self.device attribute to the desired device and maps the policy onto it
         or (if the device is ommitted) assigns the self.device attribute to the policy device.
 
         Args:
-            policy (ProbabilisticOperator, optional): a policy to be used
+            policy (ProbabilisticTDModule, optional): a policy to be used
             device (int, str or torch.device, optional): device where to place the policy
             env (_EnvClass, optional): env containing an action_spec attribute, in case the policy is not provided.
 
@@ -157,6 +158,10 @@ class _DataCollector(IterableDataset):
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         raise NotImplementedError
 
+    def __repr__(self) -> str:
+        string = f"{self.__class__.__name__}()"
+        return string
+
 
 class SyncDataCollector(_DataCollector):
     """
@@ -216,7 +221,7 @@ class SyncDataCollector(_DataCollector):
             _EnvClass, "EnvCreator", Iterable[Callable[[], _EnvClass]]
         ],
         policy: Optional[
-            Union[ProbabilisticOperator, Callable[[_TensorDict], _TensorDict]]
+            Union[ProbabilisticTDModule, Callable[[_TensorDict], _TensorDict]]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[dict] = None,
@@ -277,6 +282,7 @@ class SyncDataCollector(_DataCollector):
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
         self._tensor_dict_out = TensorDict(
+            {},
             batch_size=[*self.env.batch_size, self.frames_per_batch],
             device=self.passing_device,
         )
@@ -503,13 +509,20 @@ class SyncDataCollector(_DataCollector):
         if strict or "policy_state_dict" in state_dict:
             self.policy.load_state_dict(state_dict["policy_state_dict"], **kwargs)
 
+    def __repr__(self) -> str:
+        env_str = indent(f"env={self.env}", 4 * " ")
+        policy_str = indent(f"policy={self.policy}", 4 * " ")
+        td_out_str = indent(f"td_out={self._tensor_dict_out}", 4 * " ")
+        string = f"{self.__class__.__name__}(\n{env_str},\n{policy_str},\n{td_out_str})"
+        return string
+
 
 class _MultiDataCollector(_DataCollector):
     """
     Runs a given number of DataCollectors on separate processes.
     Args:
         create_env_fn (list of Callabled): list of Callables, each returning an instance of _EnvClass
-        policy (Callable, optional): Instance of ProbabilisticOperator class. Must accept _TensorDict object as input.
+        policy (Callable, optional): Instance of ProbabilisticTDModule class. Must accept _TensorDict object as input.
         total_frames (int): lower bound of the total number of frames returned by the collector. In parallel settings,
             the actual number of frames may well be greater than this as the closing signals are sent to the
             workers only once the total number of frames has been collected on the server.
@@ -556,7 +569,7 @@ class _MultiDataCollector(_DataCollector):
         self,
         create_env_fn: Iterable[Callable[[], _EnvClass]],
         policy: Optional[
-            Union[ProbabilisticOperator, Callable[[_TensorDict], _TensorDict]]
+            Union[ProbabilisticTDModule, Callable[[_TensorDict], _TensorDict]]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[Iterable[dict]] = None,
@@ -999,7 +1012,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         self,
         create_env_fn: Callable[[], _EnvClass],
         policy: Optional[
-            Union[ProbabilisticOperator, Callable[[_TensorDict], _TensorDict]]
+            Union[ProbabilisticTDModule, Callable[[_TensorDict], _TensorDict]]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[dict] = None,

@@ -137,7 +137,7 @@ EXPLORATION_MODE = None
 
 class set_exploration_mode(_DecoratorContextManager):
     """
-    Sets the exploration mode of all ProbabilisticOperators to the desired mode.
+    Sets the exploration mode of all ProbabilisticTDModules to the desired mode.
 
     Args:
         mode (str): mode to use when the policy is being called.

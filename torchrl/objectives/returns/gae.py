@@ -21,7 +21,7 @@ from .functional import generalized_advantage_estimate
 # entropy_loss = 0
 # next_value = R
 from ...data.tensordict.tensordict import _TensorDict
-from ...modules import ProbabilisticOperator
+from ...modules import ProbabilisticTDModule
 
 #
 # def gae(values: torch.Tensor, log_prob_actions: torch.Tensor, rewards: torch.Tensor, entropies: torch.Tensor,
@@ -62,7 +62,7 @@ class GAE:
     Args:
         gamma (scalar): exponential mean discount.
         lamda (scalar): trajectory discount.
-        critic (ProbabilisticOperator): value operator used to retrieve the value estimates.
+        critic (ProbabilisticTDModule): value operator used to retrieve the value estimates.
         average_rewards (bool): if True, rewards will be standardized before the GAE is computed.
         gradient_mode (bool): if True, gradients are propagated throught the computation of the value function.
             Default is False.
@@ -72,7 +72,7 @@ class GAE:
         self,
         gamma: Union[Number, torch.Tensor],
         lamda: Number,
-        critic: ProbabilisticOperator,
+        critic: ProbabilisticTDModule,
         average_rewards: bool = False,
         gradient_mode: bool = False,
     ):
