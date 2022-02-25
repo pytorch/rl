@@ -542,7 +542,7 @@ def make_sac_model(
         ...    CatTensors(["next_observation"], "next_observation_vector")))
         >>> device = torch.device("cpu")
         >>> args = parser_model_args_continuous(
-        ...         argparse.ArgumentParser(), algorithm="PPO").parse_args(["--shared_mapping"])
+        ...         argparse.ArgumentParser(), algorithm="SAC").parse_args(["--shared_mapping"])
         >>> model = make_sac_model(
         ...     proof_environment,
         ...     device=device,
