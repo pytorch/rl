@@ -37,7 +37,10 @@ def _get_params(dictionary):
         if not isinstance(value, dict):
             out.append((key, value))
         else:
-            _out = [('.'.join([key, _key]), _val) for (_key, _val) in zip(*_get_params(value))]
+            _out = [
+                (".".join([key, _key]), _val)
+                for (_key, _val) in zip(*_get_params(value))
+            ]
             out += _out
     return tuple(zip(*out))
 
@@ -68,9 +71,11 @@ class apply_to_class:
     def __call__(self, func):
         def new_func(cf, p, b, **kwargs):
             split_name_dict = make_split_names_dict(cf.split_names, p, b)
-            d = self.dispatch_to_layers(func, self.layer_type, split_name_dict, cf.stateless_model)
+            d = self.dispatch_to_layers(
+                func, self.layer_type, split_name_dict, cf.stateless_model
+            )
             new_p = populate_params(cf.split_names, d)
-            new_p, new_b = new_p[:len(p)], new_p[len(p):]
+            new_p, new_b = new_p[: len(p)], new_p[len(p) :]
             return new_p, new_b
 
         return new_func
@@ -83,9 +88,9 @@ class apply_to_class:
         for layer_name in split_name_dict:
             layer_or_param = getattr(cf, layer_name)
             if isinstance(layer_or_param, nn.Module):
-                split_name_dict[layer_name] = apply_to_class.dispatch_to_layers(func, layer_type,
-                                                                                split_name_dict[layer_name],
-                                                                                layer_or_param)
+                split_name_dict[layer_name] = apply_to_class.dispatch_to_layers(
+                    func, layer_type, split_name_dict[layer_name], layer_or_param
+                )
         return split_name_dict
 
 
@@ -120,7 +125,9 @@ def get_submodule_functional(module, cf):
     name_p_dict = {_p: _name for _p, _name in zip(values, names)}
     param_names, params = zip(*[(name_p_dict[_p], _p) for _p in p if _p in S_param])
     if len(S_buffer):
-        buffer_names, buffers = zip(*[(name_p_dict[_b], _b) for _b in b if _b in S_buffer])
+        buffer_names, buffers = zip(
+            *[(name_p_dict[_b], _b) for _b in b if _b in S_buffer]
+        )
     else:
         buffer_names, buffers = tuple(), tuple()
 

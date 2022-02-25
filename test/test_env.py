@@ -27,10 +27,9 @@ from torchrl.envs.libs.gym import _get_envs as _get_gym_envs
 from torchrl.envs.utils import step_tensor_dict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 
-with open(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "configs/atari.yaml"),
-    "r") as file:
+with open(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs/atari.yaml"), "r"
+) as file:
     atari_confs = yaml.load(file, Loader=yaml.FullLoader)
 
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
@@ -211,8 +210,7 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
     td_serial = env_serial.rollout(n_steps=100, auto_reset=False).contiguous()
     key = "observation_pixels" if "observation_pixels" in td_serial else "observation"
     torch.testing.assert_allclose(
-        td_serial[:, 0].get("next_" + key),
-        td_serial[:, 1].get(key)
+        td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
     )
 
     out_seed_parallel = env_parallel.set_seed(0)
@@ -222,10 +220,8 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
     assert out_seed_parallel == out_seed_serial
     td_parallel = env_parallel.rollout(n_steps=100, auto_reset=False).contiguous()
     torch.testing.assert_allclose(
-        td_parallel[:, 0].get("next_" + key),
-        td_parallel[:, 1].get(key)
+        td_parallel[:, 0].get("next_" + key), td_parallel[:, 1].get(key)
     )
-
 
     assert_allclose_td(td0_serial, td0_parallel)
     assert_allclose_td(td_serial[:, 0], td_parallel[:, 0])  # first step

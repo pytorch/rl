@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from numbers import Number
+from textwrap import indent
 from typing import Tuple, Union, Optional, Iterable, List
 
 import numpy as np
@@ -67,12 +68,12 @@ class Box:
     pass
 
 
-@dataclass
+@dataclass(repr=False)
 class Values:
     values: Tuple
 
 
-@dataclass
+@dataclass(repr=False)
 class ContinuousBox(Box):
     """
     A continuous box of values, in between a minimum and a maximum.
@@ -87,7 +88,7 @@ class ContinuousBox(Box):
         yield self.maximum
 
 
-@dataclass
+@dataclass(repr=False)
 class DiscreteBox(Box):
     """
     A box of discrete values
@@ -98,7 +99,7 @@ class DiscreteBox(Box):
     register = invertible_dict()
 
 
-@dataclass
+@dataclass(repr=False)
 class BinaryBox(Box):
     """
     A box of n binary values
@@ -108,7 +109,7 @@ class BinaryBox(Box):
     n: int
 
 
-@dataclass
+@dataclass(repr=False)
 class TensorSpec:
     """
     Parent class of the tensor meta-data containers for observation, actions and rewards.
@@ -244,8 +245,18 @@ class TensorSpec:
             self.dtype = dest
         return self
 
+    def __repr__(self):
+        shape_str = "shape=" + str(self.shape)
+        space_str = "space=" + str(self.space)
+        device_str = "device=" + str(self.device)
+        dtype_str = "dtype=" + str(self.dtype)
+        domain_str = "domain=" + str(self.domain)
+        sub_string = ",".join([shape_str, space_str, device_str, dtype_str, domain_str])
+        string = f"{self.__class__.__name__}(\n     {sub_string})"
+        return string
 
-@dataclass
+
+@dataclass(repr=False)
 class BoundedTensorSpec(TensorSpec):
     """
     A bounded, unidimensional, continuous tensor spec.
@@ -306,7 +317,7 @@ class BoundedTensorSpec(TensorSpec):
         ).all()
 
 
-@dataclass
+@dataclass(repr=False)
 class OneHotDiscreteTensorSpec(TensorSpec):
     """
     A unidimensional, one-hot discrete tensor spec.
@@ -383,7 +394,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         return (val.sum(-1) == 1).all()
 
 
-@dataclass
+@dataclass(repr=False)
 class UnboundedContinuousTensorSpec(TensorSpec):
     """
     An unbounded, unidimensional, continuous tensor spec.
@@ -406,7 +417,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         return True
 
 
-@dataclass
+@dataclass(repr=False)
 class NdBoundedTensorSpec(BoundedTensorSpec):
     """
     A bounded, multi-dimensional, continuous tensor spec.
@@ -493,7 +504,7 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
         )
 
 
-@dataclass
+@dataclass(repr=False)
 class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
     """
     An unbounded, multi-dimensional, continuous tensor spec.
@@ -518,7 +529,7 @@ class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
         )
 
 
-@dataclass
+@dataclass(repr=False)
 class BinaryDiscreteTensorSpec(TensorSpec):
     """
     A binary discrete tensor spec.
@@ -555,7 +566,7 @@ class BinaryDiscreteTensorSpec(TensorSpec):
         return ((val == 0) | (val == 1)).all()
 
 
-@dataclass
+@dataclass(repr=False)
 class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     """
     A concatenation of one-hot discrete tensor spec.
@@ -662,8 +673,8 @@ class CompositeSpec(TensorSpec):
         >>> observation_pixels_spec = NdBoundedTensorSpec(torch.zeros(3,32,32), torch.ones(3, 32, 32))
         >>> observation_vector_spec = NdBoundedTensorSpec(torch.zeros(33), torch.ones(33))
         >>> composite_spec = CompositeSpec(
-        >>>     observation_pixels=observation_pixels_spec,
-        >>>     observation_vector=observation_vector_spec)
+        ...     observation_pixels=observation_pixels_spec,
+        ...     observation_vector=observation_vector_spec)
         >>> td = TensorDict({"observation_pixels": torch.rand(10,3,32,32), "observation_vector": torch.rand(10,33)}, batch_size=[10])
         >>> print("td (rand) is within bounds: ", composite_spec.is_in(td))
         >>>
@@ -704,9 +715,11 @@ class CompositeSpec(TensorSpec):
         return out
 
     def __repr__(self) -> str:
-        sub_str = [f"{k}: {item.__repr__()}" for k, item in self._specs.items()]
-        sub_str = ",\n\t".join(sub_str)
-        return f"CompositeSpec(\n\t{sub_str})"
+        sub_str = [
+            indent(f"{k}: {str(item)}", 4 * " ") for k, item in self._specs.items()
+        ]
+        sub_str = ",\n".join(sub_str)
+        return f"CompositeSpec(\n{sub_str})"
 
     def type_check(self, value, key):
         for _key in self:

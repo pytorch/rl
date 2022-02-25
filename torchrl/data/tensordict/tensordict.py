@@ -863,7 +863,7 @@ class _TensorDict(Mapping):
 
         d = {}
         for key, item in self.items():
-            d[key] = item.reshape(*shape, *item.shape[self.ndimension():])
+            d[key] = item.reshape(*shape, *item.shape[self.ndimension() :])
         if len(d):
             batch_size = d[key].shape[: len(shape)]
         else:
@@ -913,7 +913,7 @@ class _TensorDict(Mapping):
 
     def __repr__(self) -> str:
         fields = _td_fields(self)
-        field_str = indent(f"fields={fields}", 4 * " ")
+        field_str = indent(f"fields={{{fields}}}", 4 * " ")
         batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
         device_str = indent(f"device={self.device}", 4 * " ")
         is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
@@ -1016,8 +1016,10 @@ class _TensorDict(Mapping):
             return self.masked_select(idx)
 
         contiguous_input = (int, slice)
-        return_simple_view = isinstance(idx, contiguous_input) or \
-                             (isinstance(idx, tuple) and all(isinstance(_idx, contiguous_input) for _idx in idx))
+        return_simple_view = isinstance(idx, contiguous_input) or (
+            isinstance(idx, tuple)
+            and all(isinstance(_idx, contiguous_input) for _idx in idx)
+        )
         if not self.batch_size:
             raise RuntimeError(
                 "indexing a tensordict with td.batch_dims==0 is not permitted"
@@ -1148,6 +1150,7 @@ class TensorDict(_TensorDict):
     TODO: split, transpose, permute
 
     """
+
     _safe = True
 
     def __init__(
@@ -1160,8 +1163,10 @@ class TensorDict(_TensorDict):
         self._tensor_dict = dict()
         self._tensor_dict_meta = OrderedDict()
         if not isinstance(source, (_TensorDict, dict)):
-            raise ValueError("A TensorDict source is expected to be a _TensorDict sub-type or a dictionary, "
-                             f"found type(source)={type(source)}.")
+            raise ValueError(
+                "A TensorDict source is expected to be a _TensorDict sub-type or a dictionary, "
+                f"found type(source)={type(source)}."
+            )
         if isinstance(
             batch_size,
             (
@@ -1316,7 +1321,9 @@ class TensorDict(_TensorDict):
                 elif tensor.is_shared() and len(self):
                     tensor = tensor.clone()
         except:
-            warn(f"check_shared for tensor {type(tensor)} with shape {tensor.shape} failed")
+            warn(
+                f"check_shared for tensor {type(tensor)} with shape {tensor.shape} failed"
+            )
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
             raise RuntimeError(
                 f"batch dimension mismatch, got self.batch_size={self.batch_size} "
@@ -1567,16 +1574,6 @@ class TensorDict(_TensorDict):
     def keys(self) -> KeysView:
         return self._tensor_dict.keys()
 
-    def __repr__(self) -> str:
-        fields = _td_fields(self)
-        return (
-            f"{type(self).__name__}("
-            f"\n\tfields={{{fields}}}, "
-            f"\n\tshared={self.is_shared()}, "
-            f"\n\tbatch_size={self.batch_size},"
-            f"\n\tdevice={self.device})"
-        )
-
 
 import functools
 
@@ -1616,11 +1613,11 @@ def assert_allclose_td(
         input2 = expected.get(key)
         mse = (
             (input1.to(torch.float) - input2.to(torch.float))
-                .pow(2)
-                .sum()
-                .div(input1.numel())
-                .sqrt()
-                .item()
+            .pow(2)
+            .sum()
+            .div(input1.numel())
+            .sqrt()
+            .item()
         )
 
         default_msg = f"key {key} does not match, got mse = {mse:4.4f}"
@@ -1886,7 +1883,7 @@ class SubTensorDict(_TensorDict):
         parent = self.get_parent_tensor_dict()
         tensor_expand = torch.zeros(
             *parent.batch_size,
-            *tensor.shape[self.batch_dims:],
+            *tensor.shape[self.batch_dims :],
             dtype=tensor.dtype,
             device=self.device,
         )
@@ -2098,6 +2095,7 @@ class LazyStackedTensorDict(_TensorDict):
         >>> print(td_stack[:, 0] is tds[0])
         True
     """
+
     _safe = False
 
     def __init__(
@@ -2957,7 +2955,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dim = torch.Size(
             [
                 *self.custom_op_kwargs.get("size"),
-                *source_meta_tensor.shape[self._source.batch_dims:],
+                *source_meta_tensor.shape[self._source.batch_dims :],
             ]
         )
         new_dict = deepcopy(self.custom_op_kwargs)
@@ -2968,7 +2966,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dim = torch.Size(
             [
                 *self.inv_op_kwargs.get("size"),
-                *source_meta_tensor.shape[self._source.batch_dims:],
+                *source_meta_tensor.shape[self._source.batch_dims :],
             ]
         )
         new_dict = deepcopy(self.inv_op_kwargs)
@@ -2990,11 +2988,15 @@ class ViewedTensorDict(_CustomOpTensorDict):
 
 
 def _td_fields(td: _TensorDict) -> str:
-    return ", \n\t\t".join(
-        [
-            f"{key}: {item.class_name}({item.shape}, dtype={item.dtype})"
-            for key, item in td.items_meta()
-        ]
+    return indent(
+        "\n"
+        + ",\n".join(
+            [
+                f"{key}: {item.class_name}({item.shape}, dtype={item.dtype})"
+                for key, item in td.items_meta()
+            ]
+        ),
+        4 * " ",
     )
 
 

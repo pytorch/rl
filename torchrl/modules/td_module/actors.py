@@ -1,16 +1,15 @@
-from typing import Optional, Iterable, Union, Tuple, Type, Iterator, Callable
+from typing import Optional, Iterable, Tuple
 
 import torch
-from torch import nn, distributions as d
+from torch import nn
 
-from torchrl.modules.distributions import Delta, OneHotCategorical
+from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.td_module.common import (
     ProbabilisticTDModule,
     TDModuleWrapper,
     TDModule,
     TDSequence,
 )
-from torchrl.modules.models.models import DistributionalDQNnet
 
 __all__ = [
     "Actor",
@@ -23,8 +22,7 @@ __all__ = [
     "DistributionalQValueActor",
 ]
 
-from torchrl.data import TensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data import UnboundedContinuousTensorSpec
 
 
 class Actor(TDModule):
@@ -34,17 +32,19 @@ class Actor(TDModule):
     respectively).
 
     Examples:
+        >>> import functorch
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
         >>> from torchrl.modules import Actor
         >>> import torch
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
         >>> action_spec = NdUnboundedContinuousTensorSpec(4)
         >>> module = torch.nn.Linear(4, 4)
+        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         >>> td_module = Actor(
         ...    spec=action_spec,
-        ...    module=module,
+        ...    module=fmodule,
         ...    )
-        >>> td_module(td)
+        >>> td_module(td, params=params, buffers=buffers)
         >>> print(td.get("action"))
 
     """
@@ -78,16 +78,17 @@ class ProbabilisticActor(ProbabilisticTDModule):
     Examples:
         >>> from torchrl.data import TensorDict, NdBoundedTensorSpec
         >>> from torchrl.modules import Actor, TanhNormal
-        >>> import torch
+        >>> import torch, functorch
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
         >>> action_spec = NdBoundedTensorSpec(shape=torch.Size([4]), minimum=-1, maximum=1)
         >>> module = torch.nn.Linear(4, 8)
+        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         >>> td_module = ProbabilisticActor(
         ...    spec=action_spec,
-        ...    module=module,
+        ...    module=fmodule,
         ...    distribution_class=TanhNormal,
         ...    )
-        >>> td_module(td)
+        >>> td_module(td, params=params, buffers=buffers)
         >>> print(td.get("action"))
 
     """
@@ -122,7 +123,7 @@ class ValueOperator(TDModule):
     Examples:
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
         >>> from torchrl.modules import ValueOperator
-        >>> import torch
+        >>> import torch, functorch
         >>> from torch import nn
         >>> td = TensorDict({"observation": torch.randn(3, 4), "action": torch.randn(3, 2)}, [3,])
         >>> class CustomModule(nn.Module):
@@ -132,11 +133,12 @@ class ValueOperator(TDModule):
         ...     def forward(self, obs, action):
         ...         return self.linear(torch.cat([obs, action], -1))
         >>> module = CustomModule()
+        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         >>> td_module = ValueOperator(
         ...    in_keys=["observation", "action"],
-        ...    module=module,
+        ...    module=fmodule,
         ...    )
-        >>> td_module(td)
+        >>> td_module(td, params=params, buffers=buffers)
         >>> print(td)
         TensorDict(
             fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
@@ -173,36 +175,38 @@ class ValueOperator(TDModule):
 
 class QValueHook:
     """
-    Q-Value hook for Q-value policies.
-    Given a the output of a regular nn.Module, representing the values of the different discrete actions available,
-    a QValueHook will transform these values into their argmax component (i.e. the resulting greedy action).
-    Currently, this is returned as a one-hot encoding.
+        Q-Value hook for Q-value policies.
+        Given a the output of a regular nn.Module, representing the values of the different discrete actions available,
+        a QValueHook will transform these values into their argmax component (i.e. the resulting greedy action).
+        Currently, this is returned as a one-hot encoding.
 
-    Args:
-        action_space (str): Action space. Must be one of "one-hot", "mult_one_hot" or "binary".
-        var_nums (int, optional): if action_space == "mult_one_hot", this value represents the cardinality of each
-            action component.
+        Args:
+            action_space (str): Action space. Must be one of "one-hot", "mult_one_hot" or "binary".
+            var_nums (int, optional): if action_space == "mult_one_hot", this value represents the cardinality of each
+                action component.
 
-    Examples:
-        >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
-        >>> from torchrl.modules.td_module.actors import QValueHook, Actor
-        >>> from torch import nn
-        >>> import torch
-        >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
-        >>> module = nn.Linear(4, 4)
-        >>> action_spec = OneHotDiscreteTensorSpec(4)
-        >>> hook = QValueHook("one_hot")
-        >>> _ = module.register_forward_hook(hook)
-        >>> qvalue_actor = Actor(spec=action_spec, module=module, out_keys=["action", "action_value"])
-        >>> _ = qvalue_actor(td)
-        >>> print(td)
-        TensorDict(
-            fields={observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
-                action: Tensor(torch.Size([5, 4]), dtype=torch.int64),
-                action_value: Tensor(torch.Size([5, 4]), dtype=torch.float32)},
-            shared=False,
-            batch_size=torch.Size([5]),
-            device=cpu)
+        Examples:
+    import functorch        >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
+            >>> from torchrl.modules.td_module.actors import QValueHook, Actor
+            >>> from torch import nn
+            >>> from torchrl.data import OneHotDiscreteTensorSpec, TensorDict
+            >>> import torch, functorch
+            >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
+            >>> module = nn.Linear(4, 4)
+            >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
+            >>> hook = QValueHook("one_hot")
+            >>> _ = fmodule.register_forward_hook(hook)
+            >>> action_spec = OneHotDiscreteTensorSpec(4)
+            >>> qvalue_actor = Actor(spec=action_spec, module=fmodule, out_keys=["action", "action_value"])
+            >>> _ = qvalue_actor(td, params=params, buffers=buffers)
+            >>> print(td)
+            TensorDict(
+                fields={observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
+                    action: Tensor(torch.Size([5, 4]), dtype=torch.int64),
+                    action_value: Tensor(torch.Size([5, 4]), dtype=torch.float32)},
+                shared=False,
+                batch_size=torch.Size([5]),
+                device=cpu)
 
     """
 
@@ -269,7 +273,7 @@ class DistributionalQValueHook(QValueHook):
         >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
         >>> from torchrl.modules.td_module.actors import DistributionalQValueHook, Actor
         >>> from torch import nn
-        >>> import torch
+        >>> import torch, functorch
         >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
         >>> nbins = 3
         >>> class CustomDistributionalQval(nn.Module):
@@ -281,11 +285,12 @@ class DistributionalQValueHook(QValueHook):
         ...         return self.linear(x).view(-1, nbins, 4).log_softmax(-2)
         ...
         >>> module = CustomDistributionalQval()
+        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         >>> action_spec = OneHotDiscreteTensorSpec(4)
         >>> hook = DistributionalQValueHook("one_hot", support = torch.arange(nbins))
-        >>> _ = module.register_forward_hook(hook)
-        >>> qvalue_actor = Actor(spec=action_spec, module=module, out_keys=["action", "action_value"])
-        >>> _ = qvalue_actor(td)
+        >>> _ = fmodule.register_forward_hook(hook)
+        >>> qvalue_actor = Actor(spec=action_spec, module=fmodule, out_keys=["action", "action_value"])
+        >>> _ = qvalue_actor(td, params=params, buffers=buffers)
         >>> print(td)
         TensorDict(
             fields={observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
@@ -366,12 +371,13 @@ class QValueActor(Actor):
         >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
         >>> from torchrl.modules.td_module.actors import QValueActor
         >>> from torch import nn
-        >>> import torch
+        >>> import torch, functorch
         >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
         >>> module = nn.Linear(4, 4)
+        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         >>> action_spec = OneHotDiscreteTensorSpec(4)
-        >>> qvalue_actor = QValueActor(spec=action_spec, module=module)
-        >>> _ = qvalue_actor(td)
+        >>> qvalue_actor = QValueActor(spec=action_spec, module=fmodule)
+        >>> _ = qvalue_actor(td, params=params, buffers=buffers)
         >>> print(td)
         TensorDict(
             fields={observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
@@ -402,7 +408,7 @@ class DistributionalQValueActor(QValueActor):
         >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
         >>> from torchrl.modules import DistributionalQValueActor, MLP
         >>> from torch import nn
-        >>> import torch
+        >>> import torch, functorch
         >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
         >>> nbins = 3
         >>> module = MLP(out_features=(nbins, 4), depth=2)
