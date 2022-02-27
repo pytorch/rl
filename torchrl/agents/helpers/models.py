@@ -504,7 +504,6 @@ def make_sac_model(
     actor_net_kwargs=None,
     qvalue_net_kwargs=None,
     value_net_kwargs=None,
-    double_qvalue=True,
     device: DEVICE_TYPING = "cpu",
     tanh_loc: bool = True,
     default_policy_scale: float = 1.0,
@@ -542,12 +541,12 @@ def make_sac_model(
         ...    CatTensors(["next_observation"], "next_observation_vector")))
         >>> device = torch.device("cpu")
         >>> args = parser_model_args_continuous(
-        ...         argparse.ArgumentParser(), algorithm="PPO").parse_args(["--shared_mapping"])
+        ...         argparse.ArgumentParser(), algorithm="SAC").parse_args(["--shared_mapping"])
         >>> model = make_sac_model(
         ...     proof_environment,
         ...     device=device,
         ...     )
-        >>> actor, qvalue, qvalue2, value = model
+        >>> actor, qvalue, value = model
         >>> td = proof_environment.reset()
         >>> print(actor(td))
         TensorDict(
@@ -606,8 +605,6 @@ def make_sac_model(
     qvalue_net = MLP(
         **qvalue_net_kwargs_default,
     )
-    if double_qvalue:
-        qvalue_net_bis = MLP(**qvalue_net_kwargs_default)
 
     value_net_kwargs_default = {
         "num_cells": [256, 256],
@@ -638,19 +635,11 @@ def make_sac_model(
         in_keys=["action"] + in_keys,
         module=qvalue_net,
     )
-    if double_qvalue:
-        qvalue_bis = ValueOperator(
-            in_keys=["action"] + in_keys,
-            module=qvalue_net,
-        )
     value = ValueOperator(
         in_keys=in_keys,
         module=value_net,
     )
-    if double_qvalue:
-        model = nn.ModuleList([actor, qvalue, qvalue_bis, value]).to(device)
-    else:
-        model = nn.ModuleList([actor, qvalue, value]).to(device)
+    model = nn.ModuleList([actor, qvalue, value]).to(device)
 
     # init nets
     td = td.to(device)
@@ -703,15 +692,6 @@ def parser_model_args_continuous(
             help="number of atoms used for the distributional loss (TODO)",
         )
 
-    if algorithm == "SAC":
-        parser.add_argument(
-            "--single_qvalue",
-            action="store_false",
-            dest="double_qvalue",
-            help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
-            "use two different qvalue networks trained independently and choose the lowest value "
-            "predicted to predict the state action value. This can be disabled by using this flag.",
-        )
 
     if algorithm in ("SAC", "PPO"):
         parser.add_argument(

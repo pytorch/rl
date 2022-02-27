@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import copy, deepcopy
 from numbers import Number
 from typing import Tuple, List, Iterable, Type, Optional, Union, Any, Callable, Sequence
 
@@ -287,7 +288,7 @@ class TDModule(nn.Module):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(module={self.module}, device={self.device})"
 
-    def make_functional_with_buffers(self):
+    def make_functional_with_buffers(self, clone: bool=False):
         """
         Transforms a stateful module in a functional module and returns its parameters and buffers.
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
@@ -299,7 +300,7 @@ class TDModule(nn.Module):
             >>> lazy_module = nn.LazyLinear(4)
             >>> spec = NdUnboundedContinuousTensorSpec(18)
             >>> td_module = TDModule(spec, lazy_module, ["some_input"], ["some_output"])
-            >>> params, buffers = td_module.make_functional_with_buffers()
+            >>> _, (params, buffers) = td_module.make_functional_with_buffers()
             >>> print(params[0].shape)  # the lazy module has been initialized
             torch.Size([4, 18])
             >>> print(td_module(
@@ -315,23 +316,29 @@ class TDModule(nn.Module):
                 is_shared=False)
 
         """
+        if clone:
+            self_copy = deepcopy(self)
+        else:
+            self_copy = self
+
         if isinstance(
-            self.module, (TDModule, FunctionalModule, FunctionalModuleWithBuffers)
+            self_copy.module, (TDModule, FunctionalModule, FunctionalModuleWithBuffers)
         ):
             raise RuntimeError(
                 "TDModule.make_functional_with_buffers requires the module to be a regular nn.Module. "
-                f"Found type {type(self.module)}"
+                f"Found type {type(self_copy.module)}"
             )
+
         # check if there is a non-initialized lazy module
-        for m in self.module.modules():
+        for m in self_copy.module.modules():
             if hasattr(m, "has_uninitialized_params") and m.has_uninitialized_params():
-                pseudo_input = self.spec.rand()
-                self.module(pseudo_input)
+                pseudo_input = self_copy.spec.rand()
+                self_copy.module(pseudo_input)
                 break
 
-        fmodule, params, buffers = functorch.make_functional_with_buffers(self.module)
-        self.module = fmodule
-        return params, buffers
+        fmodule, params, buffers = functorch.make_functional_with_buffers(self_copy.module)
+        self_copy.module = fmodule
+        return self_copy, (params, buffers)
 
 
 class ProbabilisticTDModule(TDModule):
@@ -784,7 +791,7 @@ class TDSequence(TDModule):
             kwargs[out_key] = layer.spec
         return CompositeSpec(**kwargs)
 
-    def make_functional_with_buffers(self):
+    def make_functional_with_buffers(self, clone:bool=False):
         """
         Transforms a stateful module in a functional module and returns its parameters and buffers.
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
@@ -800,7 +807,7 @@ class TDSequence(TDModule):
             >>> td_module1 = TDModule(spec1, lazy_module1, ["some_input"], ["hidden"])
             >>> td_module2 = TDModule(spec2, lazy_module2, ["hidden"], ["some_output"])
             >>> td_module = TDSequence(td_module1, td_module2)
-            >>> params, buffers = td_module.make_functional_with_buffers()
+            >>> _, (params, buffers) = td_module.make_functional_with_buffers()
             >>> print(params[0].shape) # the lazy module has been initialized
             torch.Size([4, 18])
             >>> print(td_module(
@@ -817,13 +824,18 @@ class TDSequence(TDModule):
                 is_shared=False)
 
         """
+        if clone:
+            self_copy = copy(self)
+            self_copy.module = copy(self_copy.module)
+        else:
+            self_copy = self
         params = []
         buffers = []
-        for module in self.module:  # type: ignore
-            _params, _buffers = module.make_functional_with_buffers()
+        for i, module in enumerate(self.module):  # type: ignore
+            self_copy.module[i], (_params, _buffers) = module.make_functional_with_buffers()
             params.extend(_params)
             buffers.extend(_buffers)
-        return params, buffers
+        return self_copy, (params, buffers)
 
 
 class TDModuleWrapper(nn.Module):

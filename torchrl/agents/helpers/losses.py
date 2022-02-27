@@ -71,17 +71,13 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
             )
         else:
             loss_class = SACLoss
-    qvalue_model_bis = None
-    if len(model) == 3:
-        actor_model, qvalue_model, value_model = model
-    else:
-        actor_model, qvalue_model, qvalue_model_bis, value_model = model
+    actor_model, qvalue_model, value_model = model
 
     loss_module = loss_class(
         actor_network=actor_model,
         qvalue_network=qvalue_model,
         value_network=value_model,
-        qvalue_network_bis=qvalue_model_bis,
+        num_q_value_nets=args.num_q_values,
         gamma=args.gamma,
         **loss_kwargs
     )
@@ -150,7 +146,7 @@ def make_ppo_loss(model, args) -> PPOLoss:
     return loss_module
 
 
-def parser_loss_args(parser: ArgumentParser) -> ArgumentParser:
+def parser_loss_args(parser: ArgumentParser, algorithm: str=None) -> ArgumentParser:
     """
     To be used for DQN, DDPG, SAC
     """
@@ -187,6 +183,15 @@ def parser_loss_args(parser: ArgumentParser) -> ArgumentParser:
         default=0.99,
         help="Decay factor for return computation. Default=0.99.",
     )
+    if algorithm == "SAC":
+        parser.add_argument(
+            "--num_q_values",
+            default=2,
+            type=int,
+            help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
+            "use two (or more!) different qvalue networks trained independently and choose the lowest value "
+            "predicted to predict the state action value. This can be disabled by using this flag.",
+        )
 
     return parser
 

@@ -10,7 +10,7 @@ from torch.nn import functional as F
 
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import step_tensor_dict
-from torchrl.modules import ProbabilisticTDModule
+from torchrl.modules import ProbabilisticTDModule, TDModule
 
 
 class _context_manager:
@@ -209,9 +209,10 @@ class hold_out_net(_context_manager):
 @torch.no_grad()
 def next_state_value(
     tensor_dict: _TensorDict,
-    operator: ProbabilisticTDModule,
+    operator: TDModule,
     next_val_key: str = "state_action_value",
     gamma: Number = 0.99,
+    **kwargs,
 ) -> torch.Tensor:
     """
     Computes the next state value (without gradient) to compute a target for the MSE loss
@@ -243,7 +244,7 @@ def next_state_value(
     done = tensor_dict.get("done").squeeze(-1)
     next_td = step_tensor_dict(tensor_dict)  # next_observation -> observation
     next_td = next_td.select(*operator.in_keys)
-    operator(next_td)
+    operator(next_td, **kwargs)
     pred_next_val_detach = next_td.get(next_val_key).squeeze(-1)
     done = done.to(torch.float)
     target_value = (1 - done) * pred_next_val_detach

@@ -33,7 +33,7 @@ def make_args():
     parser_agent_args(parser)
     parser_collector_args_offline(parser)
     parser_env_args(parser)
-    parser_loss_args(parser)
+    parser_loss_args(parser, algorithm="SAC")
     parser_model_args_continuous(parser, "SAC")
     parser_recorder_args(parser)
     parser_replay_args(parser)
@@ -80,12 +80,12 @@ if __name__ == "__main__":
     proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
     model = make_sac_model(
         proof_env,
-        double_qvalue=args.double_qvalue,
         device=device,
         tanh_loc=args.tanh_loc,
         default_policy_scale=args.default_policy_scale,
     )
     loss_module, target_net_updater = make_sac_loss(model, args)
+
     actor_model_explore = model[0]
     if args.ou_exploration:
         actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
