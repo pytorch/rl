@@ -288,7 +288,7 @@ class TDModule(nn.Module):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(module={self.module}, device={self.device})"
 
-    def make_functional_with_buffers(self, clone: bool=False):
+    def make_functional_with_buffers(self, clone: bool = False):
         """
         Transforms a stateful module in a functional module and returns its parameters and buffers.
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
@@ -336,7 +336,9 @@ class TDModule(nn.Module):
                 self_copy.module(pseudo_input)
                 break
 
-        fmodule, params, buffers = functorch.make_functional_with_buffers(self_copy.module)
+        fmodule, params, buffers = functorch.make_functional_with_buffers(
+            self_copy.module
+        )
         self_copy.module = fmodule
         return self_copy, (params, buffers)
 
@@ -791,7 +793,7 @@ class TDSequence(TDModule):
             kwargs[out_key] = layer.spec
         return CompositeSpec(**kwargs)
 
-    def make_functional_with_buffers(self, clone:bool=False):
+    def make_functional_with_buffers(self, clone: bool = False):
         """
         Transforms a stateful module in a functional module and returns its parameters and buffers.
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
@@ -832,7 +834,10 @@ class TDSequence(TDModule):
         params = []
         buffers = []
         for i, module in enumerate(self.module):  # type: ignore
-            self_copy.module[i], (_params, _buffers) = module.make_functional_with_buffers()
+            self_copy.module[i], (
+                _params,
+                _buffers,
+            ) = module.make_functional_with_buffers()
             params.extend(_params)
             buffers.extend(_buffers)
         return self_copy, (params, buffers)

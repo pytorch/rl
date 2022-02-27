@@ -692,7 +692,6 @@ def parser_model_args_continuous(
             help="number of atoms used for the distributional loss (TODO)",
         )
 
-
     if algorithm in ("SAC", "PPO"):
         parser.add_argument(
             "--tanh_loc",

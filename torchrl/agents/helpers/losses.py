@@ -146,7 +146,7 @@ def make_ppo_loss(model, args) -> PPOLoss:
     return loss_module
 
 
-def parser_loss_args(parser: ArgumentParser, algorithm: str=None) -> ArgumentParser:
+def parser_loss_args(parser: ArgumentParser, algorithm: str = None) -> ArgumentParser:
     """
     To be used for DQN, DDPG, SAC
     """

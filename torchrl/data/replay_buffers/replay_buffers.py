@@ -600,10 +600,10 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         """
         priority = tensor_dict.get(self.priority_key)
         if (priority < 0).any():
-            raise RuntimeError(f"Priority must be a positive value, got {(priority<0).sum()} negative priority values.")
-        return super().update_priority(
-            tensor_dict.get("index"), priority=priority
-        )
+            raise RuntimeError(
+                f"Priority must be a positive value, got {(priority<0).sum()} negative priority values."
+            )
+        return super().update_priority(tensor_dict.get("index"), priority=priority)
 
     def sample(self, size: int) -> _TensorDict:
         """

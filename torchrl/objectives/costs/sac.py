@@ -58,13 +58,17 @@ class SACLoss(_LossModule):
     ) -> None:
         super().__init__()
         self.actor_network_orig = actor_network
-        self.actor_network, (_, self.actor_network_buffers) = \
-            actor_network.make_functional_with_buffers(clone=True)
+        self.actor_network, (
+            _,
+            self.actor_network_buffers,
+        ) = actor_network.make_functional_with_buffers(clone=True)
         self.actor_network_params = list(self.actor_network_orig.parameters())
 
         self.value_network = value_network
-        _, (self.value_network_params, self.value_network_buffers) = \
-            self.value_network.make_functional_with_buffers()
+        _, (
+            self.value_network_params,
+            self.value_network_buffers,
+        ) = self.value_network.make_functional_with_buffers()
         self.num_q_value_nets = num_q_value_nets
         self._make_q_value_nets(qvalue_network)
 
@@ -89,13 +93,17 @@ class SACLoss(_LossModule):
 
     def _make_q_value_nets(self, qvalue_network: TDModule) -> None:
         self.qvalue_network = qvalue_network
-        _, (q_value_network_params, self.q_value_network_buffers) = \
-            qvalue_network.make_functional_with_buffers()
+        _, (
+            q_value_network_params,
+            self.q_value_network_buffers,
+        ) = qvalue_network.make_functional_with_buffers()
 
         q_value_network_params_list = []
         for p in q_value_network_params:
             p = p.expand(self.num_q_value_nets, *p.shape).contiguous()
-            p = nn.Parameter(p.uniform_(p.min().item(), p.max().item()).clone().requires_grad_())
+            p = nn.Parameter(
+                p.uniform_(p.min().item(), p.max().item()).clone().requires_grad_()
+            )
             q_value_network_params_list.append(p)
         self.q_value_network_params = tuple(q_value_network_params_list)
 
@@ -192,7 +200,8 @@ class SACLoss(_LossModule):
         dist = self.actor_network.get_dist(
             tensordict,
             params=self.actor_network_params,
-            buffers=self.actor_network_buffers)[0]
+            buffers=self.actor_network_buffers,
+        )[0]
         a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
 
@@ -202,7 +211,8 @@ class SACLoss(_LossModule):
             td_q,
             params=self.target_qvalue_network_params,
             buffers=self.q_value_network_buffers,
-            vmap=True)
+            vmap=True,
+        )
         min_q_logprob = td_q.get("state_action_value").min(0)[0].squeeze(-1)
 
         if log_prob.shape != min_q_logprob.shape:
@@ -218,10 +228,19 @@ class SACLoss(_LossModule):
         actor_critic = ActorCriticWrapper(
             self.target_actor_network, self.target_value_network
         )
-        params = list(self.target_actor_network_params) + list(self.target_value_network_params)
-        buffers = list(self.target_actor_network_buffers) + list(self.target_value_network_buffers)
+        params = list(self.target_actor_network_params) + list(
+            self.target_value_network_params
+        )
+        buffers = list(self.target_actor_network_buffers) + list(
+            self.target_value_network_buffers
+        )
         target_value = next_state_value(
-            tensordict, actor_critic, gamma=self.gamma, next_val_key="state_value", params=params, buffers=buffers
+            tensordict,
+            actor_critic,
+            gamma=self.gamma,
+            next_val_key="state_value",
+            params=params,
+            buffers=buffers,
         )
 
         # value loss
@@ -229,17 +248,26 @@ class SACLoss(_LossModule):
 
         # Q-nets must be trained independently: as such, we split the data in 2 if required and train each q-net on
         # one half of the data.
-        tensordict_chunks = torch.stack(tensordict.chunk(self.num_q_value_nets, dim=0), 0)
+        tensordict_chunks = torch.stack(
+            tensordict.chunk(self.num_q_value_nets, dim=0), 0
+        )
         target_chunks = torch.stack(target_value.chunk(self.num_q_value_nets, dim=0), 0)
 
         tensordict_chunks = qvalue_network(
             tensordict_chunks,
             params=self.q_value_network_params,
             buffers=self.q_value_network_buffers,
-            vmap=(0, 0, 0, 0)  # if True, it is assumed that the input tensordict must be cast to the param shape
+            vmap=(
+                0,
+                0,
+                0,
+                0,
+            ),  # if True, it is assumed that the input tensordict must be cast to the param shape
         )
         pred_val = tensordict_chunks.get("state_action_value").squeeze(-1)
-        loss_value = distance_loss(pred_val, target_chunks, loss_function=self.loss_function).view(-1)
+        loss_value = distance_loss(
+            pred_val, target_chunks, loss_function=self.loss_function
+        ).view(-1)
         priority_value = torch.cat(abs(pred_val - target_chunks).unbind(0), 0)
 
         # loss_value = []
@@ -261,21 +289,31 @@ class SACLoss(_LossModule):
     def _loss_value(self, tensordict: _TensorDict) -> Tensor:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys).detach()
-        self.value_network(td_copy, params=self.value_network_params, buffers=self.value_network_buffers)
+        self.value_network(
+            td_copy,
+            params=self.value_network_params,
+            buffers=self.value_network_buffers,
+        )
         pred_val = td_copy.get("state_value").squeeze(-1)
 
         # with hold_out_net(self.target_actor_network):
         action_dist = self.target_actor_network.get_dist(
             td_copy,
             params=self.target_actor_network_params,
-            buffers=self.target_actor_network_buffers)[0]  # resample an action
+            buffers=self.target_actor_network_buffers,
+        )[
+            0
+        ]  # resample an action
         action = action_dist.rsample()
         td_copy.set("action", action, inplace=False)
 
         qval_net = self.target_qvalue_network
-        td_copy = qval_net(td_copy, params=self.target_qvalue_network_params,
-                          buffers=self.target_qvalue_network_buffers,
-                  vmap=True)
+        td_copy = qval_net(
+            td_copy,
+            params=self.target_qvalue_network_params,
+            buffers=self.target_qvalue_network_buffers,
+            vmap=True,
+        )
 
         min_qval = td_copy.get("state_action_value").squeeze(-1).min(0)[0]
 
@@ -291,7 +329,6 @@ class SACLoss(_LossModule):
         )
         return loss_value
 
-
     def _loss_alpha(self, tensordict: _TensorDict) -> Tensor:
         log_pi = tensordict.get("_log_prob")
         if self.target_entropy is not None:
@@ -301,7 +338,6 @@ class SACLoss(_LossModule):
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
         return alpha_loss
-
 
     @property
     def _alpha(self):
