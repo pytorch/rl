@@ -57,7 +57,7 @@ def make_target_updater(
 
 def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
     loss_kwargs = {}
-    if args.distributional:
+    if hasattr(args, "distributional") and args.distributional:
         raise NotImplementedError
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
@@ -77,7 +77,7 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
         actor_network=actor_model,
         qvalue_network=qvalue_model,
         value_network=value_model,
-        num_q_value_nets=args.num_q_values,
+        num_qvalue_nets=args.num_q_values,
         gamma=args.gamma,
         **loss_kwargs
     )
@@ -146,7 +146,7 @@ def make_ppo_loss(model, args) -> PPOLoss:
     return loss_module
 
 
-def parser_loss_args(parser: ArgumentParser, algorithm: str = None) -> ArgumentParser:
+def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
     """
     To be used for DQN, DDPG, SAC
     """

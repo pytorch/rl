@@ -7,9 +7,9 @@ from typing import Tuple
 import torch
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.modules import TDModule, reset_noise, TDModule
+from torchrl.modules import reset_noise, TDModule
 from torchrl.modules.td_module.actors import ActorCriticWrapper
-from torchrl.objectives.costs.utils import distance_loss, next_state_value, hold_out_net
+from torchrl.objectives.costs.utils import distance_loss, next_state_value, hold_out_params
 from .common import _LossModule
 
 
@@ -25,6 +25,9 @@ class DDPGLoss(_LossModule):
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
     """
 
+    delay_actor: bool = False
+    delay_value: bool = False
+
     def __init__(
         self,
         actor_network: TDModule,
@@ -33,21 +36,13 @@ class DDPGLoss(_LossModule):
         loss_function: str = "l2",
     ) -> None:
         super().__init__()
-        self.value_network = value_network
-        self.actor_network = actor_network
+        self.convert_to_functional(actor_network, "actor_network", create_target_params=self.delay_actor)
+        self.convert_to_functional(value_network, "value_network", create_target_params=self.delay_value)
+
         self.actor_in_keys = actor_network.in_keys
 
         self.gamma = gamma
         self.loss_funtion = loss_function
-
-    def _get_networks(
-        self,
-    ) -> Tuple[TDModule, TDModule, TDModule, TDModule,]:
-        actor_network = self.actor_network
-        value_network = self.value_network
-        target_actor_network = self.actor_network
-        target_value_network = self.value_network
-        return actor_network, value_network, target_actor_network, target_value_network
 
     def forward(self, input_tensor_dict: _TensorDict) -> TensorDict:
         """
@@ -62,37 +57,23 @@ class DDPGLoss(_LossModule):
         Returns: a tuple of 2 tensors containing the DDPG loss.
 
         """
-        (
-            actor_network,
-            value_network,
-            target_actor_network,
-            target_value_network,
-        ) = self._get_networks()
-        if not input_tensor_dict.device == actor_network.device:
+        if not input_tensor_dict.device == self.device:
             raise RuntimeError(
-                f"Got device={input_tensor_dict.device} but actor_network.device={actor_network.device} "
-                f"(self.device={self.device})"
-            )
-        if not input_tensor_dict.device == value_network.device:
-            raise RuntimeError(
-                f"Got device={input_tensor_dict.device} but value_network.device={value_network.device} "
+                f"Got device={input_tensor_dict.device} but actor_network.device={self.device} "
                 f"(self.device={self.device})"
             )
 
         loss_value, td_error, pred_val, target_value = self._loss_value(
             input_tensor_dict,
-            value_network,
-            target_actor_network,
-            target_value_network,
         )
         input_tensor_dict.set(
             "td_error",
             td_error.detach()
-            .unsqueeze(input_tensor_dict.ndimension())
-            .to(input_tensor_dict.device),
+                .unsqueeze(input_tensor_dict.ndimension())
+                .to(input_tensor_dict.device),
             inplace=True,
         )
-        loss_actor = self._loss_actor(input_tensor_dict, actor_network, value_network)
+        loss_actor = self._loss_actor(input_tensor_dict)
         return TensorDict(
             source={
                 "loss_actor": loss_actor.mean(),
@@ -105,40 +86,30 @@ class DDPGLoss(_LossModule):
             batch_size=[],
         )
 
-    @property
-    def target_value_network(self) -> TDModule:
-        return self.value_network
-
-    @property
-    def target_actor_network(self) -> TDModule:
-        return self.actor_network
-
     def _loss_actor(
         self,
         tensor_dict: _TensorDict,
-        actor_network: TDModule,
-        value_network: TDModule,
     ) -> torch.Tensor:
         td_copy = tensor_dict.select(*self.actor_in_keys).detach()
-        td_copy = actor_network(td_copy)
-        with hold_out_net(value_network):
-            td_copy = value_network(td_copy)
+        td_copy = self.actor_network(td_copy, params=self.actor_network_params, buffers=self.actor_network_buffers)
+        with hold_out_params(self.value_network_params) as params:
+            td_copy = self.value_network(td_copy, params=params, buffers=self.value_network_buffers)
         return -td_copy.get("state_action_value")
 
     def _loss_value(
         self,
         tensor_dict: _TensorDict,
-        value_network: TDModule,
-        target_actor_network: TDModule,
-        target_value_network: TDModule,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # value loss
-        td_copy = tensor_dict.select(*value_network.in_keys).detach()
-        value_network(td_copy)
+        td_copy = tensor_dict.select(*self.value_network.in_keys).detach()
+        self.value_network(td_copy, params=self.value_network_params, buffers=self.value_network_buffers)
         pred_val = td_copy.get("state_action_value").squeeze(-1)
 
-        actor_critic = ActorCriticWrapper(target_actor_network, target_value_network)
-        target_value = next_state_value(tensor_dict, actor_critic, gamma=self.gamma)
+        actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
+        target_params = list(self.target_actor_network_params) + list(self.target_value_network_params)
+        target_buffers = list(self.target_actor_network_buffers) + list(self.target_value_network_buffers)
+        target_value = next_state_value(tensor_dict, actor_critic, gamma=self.gamma, params=target_params,
+                                        buffers=target_buffers)
 
         # td_error = pred_val - target_value
         loss_value = distance_loss(
@@ -159,29 +130,5 @@ class DoubleDDPGLoss(DDPGLoss):
     state_dict). Please report any such bug if encountered.
 
     """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._target_value_network = deepcopy(self.value_network)
-        self._target_value_network.requires_grad_(False)
-        self._target_actor_network = deepcopy(self.actor_network)
-        self._target_actor_network.requires_grad_(False)
-
-    def _get_networks(
-        self,
-    ) -> Tuple[TDModule, TDModule, TDModule, TDModule,]:
-        actor_network = self.actor_network
-        value_network = self.value_network
-        target_actor_network = self.target_actor_network
-        target_value_network = self.target_value_network
-        return actor_network, value_network, target_actor_network, target_value_network
-
-    @property
-    def target_value_network(self) -> TDModule:
-        self._target_value_network.apply(reset_noise)
-        return self._target_value_network
-
-    @property
-    def target_actor_network(self) -> TDModule:
-        self._target_actor_network.apply(reset_noise)
-        return self._target_actor_network
+    delay_actor: bool = True
+    delay_value: bool = True

@@ -10,7 +10,7 @@ from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.data.postprocs.utils import expand_as_right
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.modules import DistributionalQValueActor, QValueActor
-from torchrl.modules.distributions.continuous import Delta, TanhNormal
+from torchrl.modules.distributions.continuous import TanhNormal
 from torchrl.modules.models.models import MLP
 from torchrl.modules.td_module.actors import ValueOperator, Actor, ProbabilisticActor
 from torchrl.objectives import (
@@ -136,6 +136,23 @@ class TestDQN:
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
+
+        # Check param update effect on targets
+        target_value = [p.clone() for p in loss_fn.target_value_network_params]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
+        if loss_fn.delay_value:
+            assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
+        else:
+            assert not any((p1 == p2).any() for p1, p2 in zip(target_value, target_value2))
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
     @pytest.mark.parametrize("n", range(4))
     @pytest.mark.parametrize("loss_class", (DQNLoss, DoubleDQNLoss))
     def test_dqn_batcher(self, n, loss_class, gamma=0.9):
@@ -163,6 +180,22 @@ class TestDQN:
         sum([item for _, item in loss_ms.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
+        # Check param update effect on targets
+        target_value = [p.clone() for p in loss_fn.target_value_network_params]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
+        if loss_fn.delay_value:
+            assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
+        else:
+            assert not any((p1 == p2).any() for p1, p2 in zip(target_value, target_value2))
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
     @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize(
         "loss_class", (DistributionalDQNLoss, DistributionalDoubleDQNLoss)
@@ -178,6 +211,22 @@ class TestDQN:
         loss = loss_fn(td)
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
+
+        # Check param update effect on targets
+        target_value = [p.clone() for p in loss_fn.target_value_network_params]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
+        if loss_fn.delay_value:
+            assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
+        else:
+            assert not any((p1 == p2).any() for p1, p2 in zip(target_value, target_value2))
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
 
 class TestDDPG:
@@ -217,7 +266,7 @@ class TestDDPG:
     ):
         raise NotImplementedError
 
-    def _create_mock_data_ddpg(self, batch=2, obs_dim=3, action_dim=4, atoms=None):
+    def _create_mock_data_ddpg(self, batch=8, obs_dim=3, action_dim=4, atoms=None):
         # create a tensordict
         obs = torch.randn(batch, obs_dim)
         next_obs = torch.randn(batch, obs_dim)
@@ -240,7 +289,7 @@ class TestDDPG:
         return td
 
     def _create_seq_mock_data_ddpg(
-        self, batch=2, T=4, obs_dim=3, action_dim=4, atoms=None
+        self, batch=8, T=4, obs_dim=3, action_dim=4, atoms=None
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim)
@@ -278,6 +327,29 @@ class TestDDPG:
         parameters = list(actor.parameters()) + list(value.parameters())
         for p in parameters:
             assert p.grad.norm() > 0.0
+
+
+        # Check param update effect on targets
+        target_actor = [p.clone() for p in loss_fn.target_actor_network_params]
+        target_value = [p.clone() for p in loss_fn.target_value_network_params]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_actor2 = [p.clone() for p in loss_fn.target_actor_network_params]
+        target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
+        if loss_fn.delay_actor:
+            assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
+        else:
+            assert not any((p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2))
+        if loss_fn.delay_value:
+            assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
+        else:
+            assert not any((p1 == p2).any() for p1, p2 in zip(target_value, target_value2))
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("loss_class", (DDPGLoss, DoubleDDPGLoss))
@@ -355,7 +427,7 @@ class TestSAC:
     ):
         raise NotImplementedError
 
-    def _create_mock_data_sac(self, batch=2, obs_dim=3, action_dim=4, atoms=None):
+    def _create_mock_data_sac(self, batch=16, obs_dim=3, action_dim=4, atoms=None):
         # create a tensordict
         obs = torch.randn(batch, obs_dim)
         next_obs = torch.randn(batch, obs_dim)
@@ -378,7 +450,7 @@ class TestSAC:
         return td
 
     def _create_seq_mock_data_sac(
-        self, batch=2, T=4, obs_dim=3, action_dim=4, atoms=None
+        self, batch=8, T=4, obs_dim=3, action_dim=4, atoms=None
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim)
@@ -405,36 +477,78 @@ class TestSAC:
         return td
 
     @pytest.mark.parametrize("loss_class", (SACLoss, DoubleSACLoss))
-    def test_sac(self, loss_class):
+    @pytest.mark.parametrize("delay_actor", (True, False))
+    @pytest.mark.parametrize("delay_qvalue", (True, False))
+    @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
+    def test_sac(self, loss_class, delay_actor, delay_qvalue, num_qvalue):
+        if (delay_actor or delay_qvalue) and loss_class is not DoubleSACLoss:
+            pytest.skip("incompatible config")
+
         torch.manual_seed(self.seed)
         td = self._create_mock_data_sac()
 
         actor = self._create_mock_actor()
         qvalue = self._create_mock_qvalue()
-        qvalue2 = self._create_mock_qvalue()
         value = self._create_mock_value()
+
+        kwargs = {}
+        if delay_actor:
+            kwargs["delay_actor"] = True
+        if delay_qvalue:
+            kwargs["delay_qvalue"] = True
+
         loss_fn = loss_class(
-            actor, qvalue, value, qvalue2, gamma=0.9, loss_function="l2"
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            gamma=0.9,
+            loss_function="l2",
+            **kwargs,
         )
 
         loss = loss_fn(td)
         sum([item for _, item in loss.items()]).backward()
-        named_parameters = loss_fn.named_parameters()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len(set(p for n, p in named_parameters)) == len(list(named_parameters))
+        assert len(set(p for n, p in named_buffers)) == len(list(named_buffers))
+
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("loss_class", (SACLoss, DoubleSACLoss))
-    def test_sac_batcher(self, n, loss_class, gamma=0.9):
+    @pytest.mark.parametrize("delay_actor", (True, False))
+    @pytest.mark.parametrize("delay_qvalue", (True, False))
+    @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
+    def test_sac_batcher(
+        self, n, loss_class, delay_actor, delay_qvalue, num_qvalue, gamma=0.9
+    ):
+        if (delay_actor or delay_qvalue) and (loss_class is not DoubleSACLoss):
+            pytest.skip("incompatible config")
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_sac()
 
         actor = self._create_mock_actor()
         qvalue = self._create_mock_qvalue()
-        qvalue2 = self._create_mock_qvalue()
         value = self._create_mock_value()
+
+        kwargs = {}
+        if delay_actor:
+            kwargs["delay_actor"] = True
+        if delay_qvalue:
+            kwargs["delay_qvalue"] = True
+
         loss_fn = loss_class(
-            actor, qvalue, value, qvalue2, gamma=0.9, loss_function="l2"
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            gamma=0.9,
+            loss_function="l2",
+            **kwargs,
         )
 
         ms = MultiStep(gamma=gamma, n_steps_max=n)
@@ -465,6 +579,34 @@ class TestSAC:
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
 
+
+        # Check param update effect on targets
+        target_actor = [p.clone() for p in loss_fn.target_actor_network_params]
+        target_qvalue = [p.clone() for p in loss_fn.target_qvalue_network_params]
+        target_value = [p.clone() for p in loss_fn.target_value_network_params]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_actor2 = [p.clone() for p in loss_fn.target_actor_network_params]
+        target_qvalue2 = [p.clone() for p in loss_fn.target_qvalue_network_params]
+        target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
+        if loss_fn.delay_actor:
+            assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
+        else:
+            assert not any((p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2))
+        if loss_fn.delay_qvalue:
+            assert all((p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2))
+        else:
+            assert not any((p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2))
+        if loss_fn.delay_value:
+            assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
+        else:
+            assert not any((p1 == p2).any() for p1, p2 in zip(target_value, target_value2))
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
 class TestPPO:
     seed = 0

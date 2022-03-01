@@ -229,8 +229,10 @@ class QValueHook:
 
     def __call__(
         self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        return self.fun_dict[self.action_space](values), values
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        action = self.fun_dict[self.action_space](values)
+        chosen_action_value = (action * values).sum(-1, True)
+        return action, values, chosen_action_value
 
     @staticmethod
     def _one_hot(value: torch.Tensor) -> torch.Tensor:
@@ -320,7 +322,8 @@ class DistributionalQValueHook(QValueHook):
     def __call__(
         self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        return self.fun_dict[self.action_space](values, self.support), values
+        action = self.fun_dict[self.action_space](values, self.support)
+        return action, values
 
     def _support_expected(
         self, log_softmax_values: torch.Tensor, support: torch.Tensor
@@ -380,12 +383,14 @@ class QValueActor(Actor):
         >>> _ = qvalue_actor(td, params=params, buffers=buffers)
         >>> print(td)
         TensorDict(
-            fields={observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
+            fields={
+                observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
                 action: Tensor(torch.Size([5, 4]), dtype=torch.int64),
-                action_value: Tensor(torch.Size([5, 4]), dtype=torch.float32)},
-            shared=False,
+                action_value: Tensor(torch.Size([5, 4]), dtype=torch.float32),
+                chosen_action_value: Tensor(torch.Size([5, 1]), dtype=torch.float32)},
             batch_size=torch.Size([5]),
-            device=cpu)
+            device=cpu,
+            is_shared=False)
 
     """
 
@@ -393,6 +398,7 @@ class QValueActor(Actor):
         out_keys = [
             "action",
             "action_value",
+            "chosen_action_value",
         ]
         super().__init__(*args, out_keys=out_keys, **kwargs)
         self.action_space = action_space
@@ -417,12 +423,13 @@ class DistributionalQValueActor(QValueActor):
         >>> _ = qvalue_actor(td)
         >>> print(td)
         TensorDict(
-            fields={observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
+            fields={
+                observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
                 action: Tensor(torch.Size([5, 4]), dtype=torch.int64),
                 action_value: Tensor(torch.Size([5, 3, 4]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([5]),
-            device=cpu)
+            device=cpu,
+            is_shared=False)
 
     """
 

@@ -52,8 +52,8 @@ class PPOLoss(_LossModule):
 
     def __init__(
         self,
-        actor: Actor,
-        critic: ProbabilisticTDModule,
+        actor: ProbabilisticTDModule,
+        critic: TDModule,
         advantage_key: str = "advantage",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
@@ -177,8 +177,8 @@ class ClipPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: Actor,
-        critic: ProbabilisticTDModule,
+        actor: ProbabilisticTDModule,
+        critic: TDModule,
         advantage_key: str = "advantage",
         clip_epsilon: Number = 0.2,
         entropy_bonus: bool = True,
@@ -291,8 +291,8 @@ class KLPENPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: Actor,
-        critic: ProbabilisticTDModule,
+        actor: ProbabilisticTDModule,
+        critic: TDModule,
         advantage_key="advantage",
         dtarg: Number = 0.01,
         beta: Number = 1.0,

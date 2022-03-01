@@ -7,6 +7,7 @@ from typing import Tuple, List, Iterable, Type, Optional, Union, Any, Callable, 
 import functorch
 import torch
 from functorch import FunctionalModule, FunctionalModuleWithBuffers, vmap
+from functorch._src.make_functional import _swap_state
 from torch import nn, distributions as d, Tensor
 
 from torchrl.data import TensorSpec, DEVICE_TYPING, CompositeSpec
@@ -340,6 +341,11 @@ class TDModule(nn.Module):
             self_copy.module
         )
         self_copy.module = fmodule
+
+        # Erase meta params
+        none_state = [None for _ in params + buffers]
+        _swap_state(fmodule.stateless_model, fmodule.split_names, none_state)
+
         return self_copy, (params, buffers)
 
 

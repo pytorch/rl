@@ -1,11 +1,12 @@
-__all__ = ["SoftUpdate", "HardUpdate", "distance_loss"]
+__all__ = ["SoftUpdate", "HardUpdate", "distance_loss", "hold_out_params"]
 
 import functools
+from collections import OrderedDict
 from numbers import Number
-from typing import Union
+from typing import Union, Iterable
 
 import torch
-from torch import nn
+from torch import nn, Tensor
 from torch.nn import functional as F
 
 from torchrl.data.tensordict.tensordict import _TensorDict
@@ -92,33 +93,75 @@ class _TargetNetUpdate:
         self,
         loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
     ):
-        self.net_pairs = {
-            key: "_target_" + key
-            for key in (
-                "actor_network",
-                "value_network",
-                "qvalue_network",
+
+        _target_names = []
+        for name in loss_module.__dict__:
+            if (
+                name.startswith("_target_")
+                and (name.endswith("params") or name.endswith("buffers"))
+                and (getattr(loss_module, name) is not None)
+            ):
+                _target_names.append(name)
+
+        _source_names = ["".join(name.split("_target_")) for name in _target_names]
+
+        if not all(
+            (name in loss_module.__dict__) or (name in loss_module._modules)
+            for name in _source_names
+        ):
+            ex_list = [
+                name
+                for name in _source_names
+                if not (
+                    (name in loss_module.__dict__) or (name in loss_module._modules)
+                )
+            ]
+            raise RuntimeError(
+                f"Incongruent target and source parameter lists: "
+                f"{ex_list} are not in "
+                f"loss_module.__dict__"
             )
-            if hasattr(loss_module, "_target_" + key)
-        }
-        if not len(self.net_pairs):
-            raise RuntimeError("No module found")
-        net = nn.ModuleList([getattr(loss_module, key) for key in self.net_pairs])
-        target_net = nn.ModuleList(
-            [getattr(loss_module, value) for key, value in self.net_pairs.items()]
+
+        self._targets = OrderedDict(
+            {name: getattr(loss_module, name) for name in _target_names}
         )
-
-        self.net = net
-        self.target_net = target_net
-
+        self._sources = OrderedDict(
+            {name: getattr(loss_module, name) for name in _source_names}
+        )
         self.initialized = False
 
     def init_(self) -> None:
-        for (n1, p1), (n2, p2) in zip(
-            self.net.named_parameters(), self.target_net.named_parameters()
-        ):
-            p2.data.copy_(p1.data)
+        for source, target in zip(self._sources.values(), self._targets.values()):
+            print("source: ", source)
+            print("target: ", target)
+            for p_source, p_target in zip(source, target):
+                if p_target.requires_grad:
+                    raise RuntimeError("the target parameter is part of a graph.")
+                p_target.data.copy_(p_source.data)
         self.initialized = True
+
+    def step(self) -> None:
+        if not self.initialized:
+            raise Exception(
+                f"{self.__class__.__name__} must be "
+                f"initialized (`{self.__class__.__name__}.init_()`) before calling step()"
+            )
+
+        for source, target in zip(self._sources.values(), self._targets.values()):
+            for p_source, p_target in zip(source, target):
+                if p_target.requires_grad:
+                    raise RuntimeError("the target parameter is part of a graph.")
+                self._step(p_source, p_target)
+
+    def _step(self, p_source: Tensor, p_target: Tensor) -> None:
+        raise NotImplementedError
+
+    def __repr__(self) -> str:
+        string = (
+            f"{self.__class__.__name__}(sources={[name for name in self._sources]}, targets="
+            f"{[name for name in self._targets]})"
+        )
+        return string
 
 
 class SoftUpdate(_TargetNetUpdate):
@@ -143,15 +186,8 @@ class SoftUpdate(_TargetNetUpdate):
         super(SoftUpdate, self).__init__(loss_module)
         self.eps = eps
 
-    def step(self) -> None:
-        if not self.initialized:
-            raise Exception(
-                f"{self.__class__.__name__} must be initialized (`{self.__class__.__name__}.init_()`) before calling step()"
-            )
-        for (n1, p1), (n2, p2) in zip(
-            self.net.named_parameters(), self.target_net.named_parameters()
-        ):
-            p2.data.copy_(p2.data * self.eps + p1.data * (1 - self.eps))
+    def _step(self, p_source: Tensor, p_target: Tensor) -> None:
+        p_target.data.copy_(p_target.data * self.eps + p_source.data * (1 - self.eps))
 
 
 class HardUpdate(_TargetNetUpdate):
@@ -175,14 +211,14 @@ class HardUpdate(_TargetNetUpdate):
         self.value_network_update_interval = value_network_update_interval
         self.counter = 0
 
+    def _step(self, p_source: Tensor, p_target: Tensor) -> None:
+        if self.counter == self.value_network_update_interval:
+            p_target.data.copy_(p_source.data)
+
     def step(self) -> None:
-        if not self.initialized:
-            raise Exception(
-                f"{self.__class__.__name__} must be initialized (`{self.__class__.__name__}.init_()`) before calling step()"
-            )
+        super().step()
         if self.counter == self.value_network_update_interval:
             self.counter = 0
-            self.target_net.load_state_dict(self.net.state_dict())
         else:
             self.counter += 1
 
@@ -205,6 +241,15 @@ class hold_out_net(_context_manager):
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.network.requires_grad_(self._prev_state.pop())
 
+class hold_out_params(_context_manager):
+    def __init__(self, params: Iterable[Tensor]) -> None:
+        self.params = params
+
+    def __enter__(self) -> None:
+        return (p.detach() for p in self.params)
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        pass
 
 @torch.no_grad()
 def next_state_value(

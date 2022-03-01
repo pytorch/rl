@@ -1,5 +1,4 @@
 import math
-from copy import deepcopy
 from numbers import Number
 from typing import Tuple, Iterator, Union
 
@@ -9,9 +8,9 @@ from torch import Tensor, nn
 from torch.nn import Parameter
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.modules import reset_noise, TDModule
+from torchrl.modules import TDModule
 from torchrl.modules.td_module.actors import ActorCriticWrapper, ProbabilisticActor
-from torchrl.objectives.costs.utils import hold_out_net, next_state_value, distance_loss
+from torchrl.objectives.costs.utils import next_state_value, distance_loss
 from .common import _LossModule
 
 __all__ = ["SACLoss", "DoubleSACLoss"]
@@ -43,12 +42,16 @@ class SACLoss(_LossModule):
             default: "auto", where target entropy is computed as
     """
 
+    delay_actor: bool = False
+    delay_qvalue: bool = False
+    delay_value: bool = False
+
     def __init__(
         self,
         actor_network: ProbabilisticActor,
         qvalue_network: TDModule,
         value_network: TDModule,
-        num_q_value_nets: int = 2,
+        num_qvalue_nets: int = 2,
         gamma: Number = 0.99,
         priotity_key: str = "td_error",
         loss_function: str = "smooth_l1",
@@ -57,20 +60,25 @@ class SACLoss(_LossModule):
         target_entropy: Union[str, Number] = "auto",
     ) -> None:
         super().__init__()
-        self.actor_network_orig = actor_network
-        self.actor_network, (
-            _,
-            self.actor_network_buffers,
-        ) = actor_network.make_functional_with_buffers(clone=True)
-        self.actor_network_params = list(self.actor_network_orig.parameters())
 
-        self.value_network = value_network
-        _, (
-            self.value_network_params,
-            self.value_network_buffers,
-        ) = self.value_network.make_functional_with_buffers()
-        self.num_q_value_nets = num_q_value_nets
-        self._make_q_value_nets(qvalue_network)
+        ## Actor
+        self.convert_to_functional(
+            actor_network, "actor_network", create_target_params=self.delay_actor
+        )
+
+        ## Value
+        self.convert_to_functional(
+            value_network, "value_network", create_target_params=self.delay_value
+        )
+
+        ## Q value
+        self.num_qvalue_nets = num_qvalue_nets
+        self.convert_to_functional(
+            qvalue_network,
+            "qvalue_network",
+            num_qvalue_nets,
+            create_target_params=self.delay_qvalue,
+        )
 
         self.gamma = gamma
         self.priority_key = priotity_key
@@ -91,76 +99,11 @@ class SACLoss(_LossModule):
     def _sync_actor(self):
         raise NotImplementedError
 
-    def _make_q_value_nets(self, qvalue_network: TDModule) -> None:
-        self.qvalue_network = qvalue_network
-        _, (
-            q_value_network_params,
-            self.q_value_network_buffers,
-        ) = qvalue_network.make_functional_with_buffers()
-
-        q_value_network_params_list = []
-        for p in q_value_network_params:
-            p = p.expand(self.num_q_value_nets, *p.shape).contiguous()
-            p = nn.Parameter(
-                p.uniform_(p.min().item(), p.max().item()).clone().requires_grad_()
-            )
-            q_value_network_params_list.append(p)
-        self.q_value_network_params = tuple(q_value_network_params_list)
-
-    def parameters(self, recurse: bool = False) -> Iterator[Parameter]:
-        for p in self.actor_network_params:
-            yield p
-        for p in self.value_network_params:
-            yield p
-        for p in self.q_value_network_params:
-            yield p
-
-    def named_parameters(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, Parameter]]:
-        raise NotImplementedError
-
-    @property
-    def target_value_network(self):
-        return self.value_network
-
-    @property
-    def target_qvalue_network(self):
-        return self.qvalue_network
-
-    @property
-    def target_actor_network(self):
-        return self.actor_network
-
-    @property
-    def target_value_network_params(self):
-        return tuple(p.detach() for p in self.value_network_params)
-
-    @property
-    def target_qvalue_network_params(self):
-        return tuple(p.detach() for p in self.q_value_network_params)
-
-    @property
-    def target_actor_network_params(self):
-        return tuple(p.detach() for p in self.actor_network_params)
-
-    @property
-    def target_value_network_buffers(self):
-        return tuple(p.detach() for p in self.value_network_buffers)
-
-    @property
-    def target_qvalue_network_buffers(self):
-        return tuple(p.detach() for p in self.q_value_network_buffers)
-
-    @property
-    def target_actor_network_buffers(self):
-        return tuple(p.detach() for p in self.actor_network_buffers)
-
     @property
     def device(self) -> torch.device:
         for p in self.actor_network_params:
             return p.device
-        for p in self.q_value_network_params:
+        for p in self.qvalue_network_params:
             return p.device
         for p in self.value_network_params:
             return p.device
@@ -169,6 +112,9 @@ class SACLoss(_LossModule):
         )
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
+        if tensordict.ndimension() > 1:
+            tensordict = tensordict.view(-1).clone()
+
         device = self.device
         td_device = tensordict.to(device)
 
@@ -199,8 +145,8 @@ class SACLoss(_LossModule):
         # KL lossa
         dist = self.actor_network.get_dist(
             tensordict,
-            params=self.actor_network_params,
-            buffers=self.actor_network_buffers,
+            params=list(self.actor_network_params),
+            buffers=list(self.actor_network_buffers),
         )[0]
         a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
@@ -209,8 +155,8 @@ class SACLoss(_LossModule):
         td_q.set("action", a_reparm, inplace=False)
         td_q = self.qvalue_network(
             td_q,
-            params=self.target_qvalue_network_params,
-            buffers=self.q_value_network_buffers,
+            params=list(self.target_qvalue_network_params),
+            buffers=list(self.qvalue_network_buffers),
             vmap=True,
         )
         min_q_logprob = td_q.get("state_action_value").min(0)[0].squeeze(-1)
@@ -225,9 +171,7 @@ class SACLoss(_LossModule):
         return self._alpha * log_prob - min_q_logprob
 
     def _loss_qvalue(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
-        actor_critic = ActorCriticWrapper(
-            self.target_actor_network, self.target_value_network
-        )
+        actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
         params = list(self.target_actor_network_params) + list(
             self.target_value_network_params
         )
@@ -248,26 +192,33 @@ class SACLoss(_LossModule):
 
         # Q-nets must be trained independently: as such, we split the data in 2 if required and train each q-net on
         # one half of the data.
+        shape = tensordict.shape
+        if shape[0] % self.num_qvalue_nets != 0:
+            raise RuntimeError(
+                f"Batch size={tensordict.shape} is incompatible "
+                f"with num_qvqlue_nets={self.num_qvalue_nets}."
+            )
         tensordict_chunks = torch.stack(
-            tensordict.chunk(self.num_q_value_nets, dim=0), 0
+            tensordict.chunk(self.num_qvalue_nets, dim=0), 0
         )
-        target_chunks = torch.stack(target_value.chunk(self.num_q_value_nets, dim=0), 0)
+        target_chunks = torch.stack(target_value.chunk(self.num_qvalue_nets, dim=0), 0)
 
+        # if vmap=True, it is assumed that the input tensordict must be cast to the param shape
         tensordict_chunks = qvalue_network(
             tensordict_chunks,
-            params=self.q_value_network_params,
-            buffers=self.q_value_network_buffers,
+            params=list(self.qvalue_network_params),
+            buffers=list(self.qvalue_network_buffers),
             vmap=(
                 0,
                 0,
                 0,
                 0,
-            ),  # if True, it is assumed that the input tensordict must be cast to the param shape
+            ),
         )
         pred_val = tensordict_chunks.get("state_action_value").squeeze(-1)
         loss_value = distance_loss(
             pred_val, target_chunks, loss_function=self.loss_function
-        ).view(-1)
+        ).view(*shape)
         priority_value = torch.cat(abs(pred_val - target_chunks).unbind(0), 0)
 
         # loss_value = []
@@ -291,27 +242,26 @@ class SACLoss(_LossModule):
         td_copy = tensordict.select(*self.value_network.in_keys).detach()
         self.value_network(
             td_copy,
-            params=self.value_network_params,
-            buffers=self.value_network_buffers,
+            params=list(self.value_network_params),
+            buffers=list(self.value_network_buffers),
         )
         pred_val = td_copy.get("state_value").squeeze(-1)
 
-        # with hold_out_net(self.target_actor_network):
-        action_dist = self.target_actor_network.get_dist(
+        action_dist = self.actor_network.get_dist(
             td_copy,
-            params=self.target_actor_network_params,
-            buffers=self.target_actor_network_buffers,
+            params=list(self.target_actor_network_params),
+            buffers=list(self.target_actor_network_buffers),
         )[
             0
         ]  # resample an action
         action = action_dist.rsample()
         td_copy.set("action", action, inplace=False)
 
-        qval_net = self.target_qvalue_network
+        qval_net = self.qvalue_network
         td_copy = qval_net(
             td_copy,
-            params=self.target_qvalue_network_params,
-            buffers=self.target_qvalue_network_buffers,
+            params=list(self.target_qvalue_network_params),
+            buffers=list(self.target_qvalue_network_buffers),
             vmap=True,
         )
 
@@ -359,37 +309,7 @@ class DoubleSACLoss(SACLoss):
     """
 
     def __init__(self, *args, delay_actor=False, delay_qvalue=False, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.delay_qvalue = delay_qvalue
-        if delay_qvalue:
-            self._target_qvalue_network = deepcopy(self.qvalue_network)
-            self._target_qvalue_network.requires_grad_(False)
-            if self.qvalue_network_bis is not None:
-                raise RuntimeError(
-                    "qvalue_network_bis must be None if a separate qvalue target network has to be used"
-                )
-        self._target_value_network = deepcopy(self.value_network)
-        self._target_value_network.requires_grad_(False)
         self.delay_actor = delay_actor
-        if delay_actor:
-            self._target_actor_network = deepcopy(self.actor_network)
-            self._target_actor_network.requires_grad_(False)
-
-    @property
-    def target_value_network(self):
-        self._target_value_network.apply(reset_noise)
-        return self._target_value_network
-
-    @property
-    def target_qvalue_network(self):
-        if self.delay_qvalue:
-            self._target_qvalue_network.apply(reset_noise)
-            return self._target_qvalue_network
-        return self.qvalue_network
-
-    @property
-    def target_actor_network(self):
-        if self.delay_actor:
-            self._target_actor_network.apply(reset_noise)
-            return self._target_actor_network
-        return self.actor_network
+        self.delay_qvalue = delay_qvalue
+        self.delay_value = True
+        super().__init__(*args, **kwargs)
