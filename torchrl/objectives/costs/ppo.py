@@ -7,7 +7,7 @@ from torch import distributions as d
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import step_tensor_dict
-from torchrl.modules import Actor, ProbabilisticTDModule
+from torchrl.modules import Actor, ProbabilisticTDModule, TDModule
 
 __all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
 

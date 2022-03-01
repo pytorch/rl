@@ -7,6 +7,7 @@ __all__ = [
     "make_ddpg_loss",
     "make_target_updater",
     "make_ppo_loss",
+    "make_redq_loss",
     "parser_loss_args_ppo",
 ]
 
@@ -29,6 +30,7 @@ from torchrl.objectives import (
     GAE,
 )
 from torchrl.objectives.costs.common import _LossModule
+from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 
 
@@ -77,6 +79,28 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
         actor_network=actor_model,
         qvalue_network=qvalue_model,
         value_network=value_model,
+        num_qvalue_nets=args.num_q_values,
+        gamma=args.gamma,
+        **loss_kwargs
+    )
+    target_net_updater = make_target_updater(args, loss_module)
+    return loss_module, target_net_updater
+
+def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
+    loss_kwargs = {}
+    if hasattr(args, "distributional") and args.distributional:
+        raise NotImplementedError
+    else:
+        loss_kwargs.update({"loss_function": args.loss_function})
+        if args.loss == "double":
+            loss_class = DoubleREDQLoss
+        else:
+            loss_class = REDQLoss
+    actor_model, qvalue_model = model
+
+    loss_module = loss_class(
+        actor_network=actor_model,
+        qvalue_network=qvalue_model,
         num_qvalue_nets=args.num_q_values,
         gamma=args.gamma,
         **loss_kwargs
@@ -183,14 +207,15 @@ def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
         default=0.99,
         help="Decay factor for return computation. Default=0.99.",
     )
-    if algorithm == "SAC":
+    if algorithm in ("SAC", "REDQ"):
         parser.add_argument(
             "--num_q_values",
             default=2,
             type=int,
             help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
             "use two (or more!) different qvalue networks trained independently and choose the lowest value "
-            "predicted to predict the state action value. This can be disabled by using this flag.",
+            "predicted to predict the state action value. This can be disabled by using this flag."
+            "REDQ uses an arbitrary number of Q-value functions to speed up learning in MF contexts.",
         )
 
     return parser

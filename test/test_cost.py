@@ -27,6 +27,7 @@ from torchrl.objectives import (
     KLPENPPOLoss,
     GAE,
 )
+from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
 from torchrl.objectives.costs.utils import hold_out_net
 
 
@@ -133,6 +134,8 @@ class TestDQN:
         td = self._create_mock_data_dqn()
         loss_fn = loss_class(actor, gamma=0.9, loss_function="l2")
         loss = loss_fn(td)
+        assert loss_fn.priority_key in td.keys()
+
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
@@ -164,7 +167,10 @@ class TestDQN:
 
         ms = MultiStep(gamma=gamma, n_steps_max=n)
         ms_td = ms(td.clone())
+
         loss_ms = loss_fn(ms_td)
+        assert loss_fn.priority_key in ms_td.keys()
+
         with torch.no_grad():
             loss = loss_fn(td)
         if n == 0:
@@ -209,6 +215,8 @@ class TestDQN:
         loss_fn = loss_class(actor, gamma=gamma)
 
         loss = loss_fn(td)
+        assert loss_fn.priority_key in td.keys()
+
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
@@ -508,6 +516,8 @@ class TestSAC:
         )
 
         loss = loss_fn(td)
+        assert loss_fn.priority_key in td.keys()
+
         sum([item for _, item in loss.items()]).backward()
         named_parameters = list(loss_fn.named_parameters())
         named_buffers = list(loss_fn.named_buffers())
@@ -559,6 +569,7 @@ class TestSAC:
         torch.manual_seed(0)
         np.random.seed(0)
         loss_ms = loss_fn(ms_td)
+        assert loss_fn.priority_key in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -607,6 +618,194 @@ class TestSAC:
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+
+class TestREDQ:
+    seed = 0
+
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4):
+        # Actor
+        action_spec = NdBoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        module = nn.Linear(obs_dim, 2 * action_dim)
+        actor = ProbabilisticActor(
+            spec=action_spec,
+            module=module,
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+        )
+        return actor
+
+    def _create_mock_qvalue(self, batch=2, obs_dim=3, action_dim=4):
+        class ValueClass(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(obs_dim + action_dim, 1)
+
+            def forward(self, obs, act):
+                return self.linear(torch.cat([obs, act], -1))
+
+        module = ValueClass()
+        qvalue = ValueOperator(
+            module=module,
+            in_keys=["observation", "action"],
+        )
+        return qvalue
+
+    def _create_mock_data_redq(self, batch=16, obs_dim=3, action_dim=4, atoms=None):
+        # create a tensordict
+        obs = torch.randn(batch, obs_dim)
+        next_obs = torch.randn(batch, obs_dim)
+        if atoms:
+            raise NotImplementedError
+        else:
+            action = torch.randn(batch, action_dim).clamp(-1, 1)
+        reward = torch.randn(batch, 1)
+        done = torch.zeros(batch, 1, dtype=torch.bool)
+        td = TensorDict(
+            batch_size=(batch,),
+            source={
+                "observation": obs,
+                "next_observation": next_obs,
+                "done": done,
+                "reward": reward,
+                "action": action,
+            },
+        )
+        return td
+
+    def _create_seq_mock_data_redq(
+        self, batch=8, T=4, obs_dim=3, action_dim=4, atoms=None
+    ):
+        # create a tensordict
+        total_obs = torch.randn(batch, T + 1, obs_dim)
+        obs = total_obs[:, :T]
+        next_obs = total_obs[:, 1:]
+        if atoms:
+            action = torch.randn(batch, T, atoms, action_dim).clamp(-1, 1)
+        else:
+            action = torch.randn(batch, T, action_dim).clamp(-1, 1)
+        reward = torch.randn(batch, T, 1)
+        done = torch.zeros(batch, T, 1, dtype=torch.bool)
+        mask = ~torch.zeros(batch, T, 1, dtype=torch.bool)
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                "observation": obs * mask.to(obs.dtype),
+                "next_observation": next_obs * mask.to(obs.dtype),
+                "done": done,
+                "mask": mask,
+                "reward": reward * mask.to(obs.dtype),
+                "action": action * mask.to(obs.dtype),
+            },
+        )
+        return td
+
+    @pytest.mark.parametrize("loss_class", (REDQLoss, DoubleREDQLoss))
+    @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
+    def test_redq(self, loss_class, num_qvalue):
+
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_redq()
+
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+
+
+        loss_fn = loss_class(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_qvalue_nets=num_qvalue,
+            gamma=0.9,
+            loss_function="l2",
+        )
+
+        loss = loss_fn(td)
+        assert loss_fn.priority_key in td.keys()
+
+        sum([item for _, item in loss.items()]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len(set(p for n, p in named_parameters)) == len(list(named_parameters))
+        assert len(set(p for n, p in named_buffers)) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("n", list(range(4)))
+    @pytest.mark.parametrize("loss_class", (REDQLoss, DoubleREDQLoss))
+    @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
+    def test_redq_batcher(
+        self, n, loss_class, num_qvalue, gamma=0.9
+    ):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_redq()
+
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+
+        loss_fn = loss_class(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_qvalue_nets=num_qvalue,
+            gamma=0.9,
+            loss_function="l2",
+        )
+
+        ms = MultiStep(gamma=gamma, n_steps_max=n)
+
+        td_clone = td.clone()
+        ms_td = ms(td_clone)
+
+        torch.manual_seed(0)
+        np.random.seed(0)
+        loss_ms = loss_fn(ms_td)
+        assert loss_fn.priority_key in ms_td.keys()
+
+        with torch.no_grad():
+            torch.manual_seed(0)  # log-prob is computed with a random action
+            np.random.seed(0)
+            loss = loss_fn(td)
+        if n == 0:
+            assert_allclose_td(td, ms_td.select(*list(td.keys())))
+            _loss = sum([item for _, item in loss.items()])
+            _loss_ms = sum([item for _, item in loss_ms.items()])
+            assert (
+                abs(_loss - _loss_ms) < 1e-3
+            ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
+        else:
+            with pytest.raises(AssertionError):
+                assert_allclose_td(loss, loss_ms)
+        sum([item for _, item in loss_ms.items()]).backward()
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+
+
+        # Check param update effect on targets
+        target_actor = [p.clone() for p in loss_fn.target_actor_network_params]
+        target_qvalue = [p.clone() for p in loss_fn.target_qvalue_network_params]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_actor2 = [p.clone() for p in loss_fn.target_actor_network_params]
+        target_qvalue2 = [p.clone() for p in loss_fn.target_qvalue_network_params]
+        if loss_fn.delay_actor:
+            assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
+        else:
+            assert not any((p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2))
+        if loss_fn.delay_qvalue:
+            assert all((p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2))
+        else:
+            assert not any((p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2))
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
 
 class TestPPO:
     seed = 0

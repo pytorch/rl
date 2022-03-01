@@ -3,7 +3,7 @@ __all__ = ["SoftUpdate", "HardUpdate", "distance_loss", "hold_out_params"]
 import functools
 from collections import OrderedDict
 from numbers import Number
-from typing import Union, Iterable
+from typing import Union, Iterable, Optional
 
 import torch
 from torch import nn, Tensor
@@ -241,22 +241,25 @@ class hold_out_net(_context_manager):
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.network.requires_grad_(self._prev_state.pop())
 
+
 class hold_out_params(_context_manager):
     def __init__(self, params: Iterable[Tensor]) -> None:
         self.params = params
 
     def __enter__(self) -> None:
-        return (p.detach() for p in self.params)
+        return tuple(p.detach() for p in self.params)
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         pass
 
+
 @torch.no_grad()
 def next_state_value(
     tensor_dict: _TensorDict,
-    operator: TDModule,
+    operator: Optional[TDModule] = None,
     next_val_key: str = "state_action_value",
     gamma: Number = 0.99,
+    pred_next_val: Optional[Tensor] = None,
     **kwargs,
 ) -> torch.Tensor:
     """
@@ -270,12 +273,13 @@ def next_state_value(
     Args:
         tensor_dict (_TensorDict): Tensordict containing a reward and done key (and a n_steps_to_next key for n-steps
             rewards).
-        operator (ProbabilisticTDModule): the value function operator. Should write a 'next_val_key' key-value in the
-            input tensordict when called.
-        next_val_key (str): key where the next value will be written.
+        operator (ProbabilisticTDModule, optional): the value function operator. Should write a 'next_val_key'
+            key-value in the input tensordict when called. It does not need to be provided if pred_next_val is given.
+        next_val_key (str, optional): key where the next value will be written.
             Default: 'state_action_value'
-        gamma (Number): return discount rate.
+        gamma (Number, optional): return discount rate.
             default: 0.99
+        pred_next_val (Tensor, optional): the next state value can be provided if it is not computed with the operator.
 
     Returns:
         a Tensor of the size of the input tensordict containing the predicted value state.
@@ -287,10 +291,14 @@ def next_state_value(
 
     rewards = tensor_dict.get("reward").squeeze(-1)
     done = tensor_dict.get("done").squeeze(-1)
-    next_td = step_tensor_dict(tensor_dict)  # next_observation -> observation
-    next_td = next_td.select(*operator.in_keys)
-    operator(next_td, **kwargs)
-    pred_next_val_detach = next_td.get(next_val_key).squeeze(-1)
+
+    if pred_next_val is None:
+        next_td = step_tensor_dict(tensor_dict)  # next_observation -> observation
+        next_td = next_td.select(*operator.in_keys)
+        operator(next_td, **kwargs)
+        pred_next_val_detach = next_td.get(next_val_key).squeeze(-1)
+    else:
+        pred_next_val_detach = pred_next_val.squeeze(-1)
     done = done.to(torch.float)
     target_value = (1 - done) * pred_next_val_detach
     rewards = rewards.to(torch.float)
