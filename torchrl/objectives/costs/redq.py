@@ -26,7 +26,7 @@ class REDQLoss(_LossModule):
         self.convert_to_functional(qvalue_network, "qvalue_network", num_qvalue_nets,
                                    create_target_params=self.delay_qvalue)
         self.num_qvalue_nets = num_qvalue_nets
-        self.sub_sample_len = sub_sample_len
+        self.sub_sample_len = min(sub_sample_len, num_qvalue_nets-1)
         self.gamma = gamma
         self.priority_key = priotity_key
         self.loss_function = loss_function
