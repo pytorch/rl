@@ -41,7 +41,8 @@ class DQNLoss(_LossModule):
     def __init__(
         self, value_network: QValueActor,
         gamma: Number,
-        loss_function: str = "l2"
+        loss_function: str = "l2",
+        priority_key: str = "td_error"
     ) -> None:
 
         super().__init__()
@@ -54,6 +55,7 @@ class DQNLoss(_LossModule):
             )
         self.gamma = gamma
         self.loss_function = loss_function
+        self.priority_key = priority_key
 
     def forward(self, input_tensor_dict: _TensorDict) -> TensorDict:
         """
@@ -109,7 +111,7 @@ class DQNLoss(_LossModule):
                 next_val_key="chosen_action_value")
 
         input_tensor_dict.set(
-            "td_error",
+            self.priority_key,
             abs(pred_val_index - target_value)
                 .detach()
                 .unsqueeze(-1)
@@ -159,9 +161,11 @@ class DistributionalDQNLoss(_LossModule):
         self,
         value_network: DistributionalQValueActor,
         gamma: Number,
+        priority_key: str = "td_error"
     ):
         super().__init__()
         self.gamma = gamma
+        self.priority_key = priority_key
         if not isinstance(value_network, DistributionalQValueActor):
             raise TypeError(
                 "Expected value_network to be of type DistributionalQValueActor "
@@ -271,7 +275,7 @@ class DistributionalDQNLoss(_LossModule):
         # Cross-entropy loss (minimises DKL(m||p(s_t, a_t)))
         loss = -torch.sum(m.to(device) * log_ps_a, 1)
         input_tensor_dict.set(
-            "td_error",
+            self.priority_key,
             loss.detach().unsqueeze(1).to(input_tensor_dict.device),
             inplace=True,
         )

@@ -8,7 +8,7 @@ from torch import nn
 from torchrl.data import TensorDict, NdBoundedTensorSpec, MultOneHotDiscreteTensorSpec
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.data.postprocs.utils import expand_as_right
-from torchrl.data.tensordict.tensordict import assert_allclose_td
+from torchrl.data.tensordict.tensordict import assert_allclose_td, _TensorDict
 from torchrl.modules import DistributionalQValueActor, QValueActor
 from torchrl.modules.distributions.continuous import TanhNormal
 from torchrl.modules.models.models import MLP
@@ -29,6 +29,17 @@ from torchrl.objectives import (
 )
 from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
 from torchrl.objectives.costs.utils import hold_out_net
+
+class _check_td_steady:
+    def __init__(self, td):
+        self.td_clone = td.clone()
+        self.td = td
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        assert (self.td.select(*self.td_clone.keys()) == self.td_clone).all()
 
 
 def get_devices():
@@ -133,7 +144,8 @@ class TestDQN:
         actor = self._create_mock_actor()
         td = self._create_mock_data_dqn()
         loss_fn = loss_class(actor, gamma=0.9, loss_function="l2")
-        loss = loss_fn(td)
+        with _check_td_steady(td):
+            loss = loss_fn(td)
         assert loss_fn.priority_key in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
@@ -168,7 +180,8 @@ class TestDQN:
         ms = MultiStep(gamma=gamma, n_steps_max=n)
         ms_td = ms(td.clone())
 
-        loss_ms = loss_fn(ms_td)
+        with _check_td_steady(ms_td):
+            loss_ms = loss_fn(ms_td)
         assert loss_fn.priority_key in ms_td.keys()
 
         with torch.no_grad():
@@ -214,7 +227,8 @@ class TestDQN:
         td = self._create_mock_data_dqn(atoms=atoms).to(device)
         loss_fn = loss_class(actor, gamma=gamma)
 
-        loss = loss_fn(td)
+        with _check_td_steady(td):
+            loss = loss_fn(td)
         assert loss_fn.priority_key in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
@@ -330,7 +344,8 @@ class TestDDPG:
         value = self._create_mock_value()
         td = self._create_mock_data_ddpg()
         loss_fn = loss_class(actor, value, gamma=0.9, loss_function="l2")
-        loss = loss_fn(td)
+        with _check_td_steady(td):
+            loss = loss_fn(td)
         sum([item for _, item in loss.items()]).backward()
         parameters = list(actor.parameters()) + list(value.parameters())
         for p in parameters:
@@ -371,7 +386,8 @@ class TestDDPG:
 
         ms = MultiStep(gamma=gamma, n_steps_max=n)
         ms_td = ms(td.clone())
-        loss_ms = loss_fn(ms_td)
+        with _check_td_steady(ms_td):
+            loss_ms = loss_fn(ms_td)
         with torch.no_grad():
             loss = loss_fn(td)
         if n == 0:
@@ -515,7 +531,8 @@ class TestSAC:
             **kwargs,
         )
 
-        loss = loss_fn(td)
+        with _check_td_steady(td):
+            loss = loss_fn(td)
         assert loss_fn.priority_key in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
@@ -568,7 +585,8 @@ class TestSAC:
 
         torch.manual_seed(0)
         np.random.seed(0)
-        loss_ms = loss_fn(ms_td)
+        with _check_td_steady(ms_td):
+            loss_ms = loss_fn(ms_td)
         assert loss_fn.priority_key in ms_td.keys()
 
         with torch.no_grad():
@@ -721,7 +739,8 @@ class TestREDQ:
             loss_function="l2",
         )
 
-        loss = loss_fn(td)
+        with _check_td_steady(td):
+            loss = loss_fn(td)
         assert loss_fn.priority_key in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
@@ -761,7 +780,9 @@ class TestREDQ:
 
         torch.manual_seed(0)
         np.random.seed(0)
-        loss_ms = loss_fn(ms_td)
+
+        with _check_td_steady(ms_td):
+            loss_ms = loss_fn(ms_td)
         assert loss_fn.priority_key in ms_td.keys()
 
         with torch.no_grad():

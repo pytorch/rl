@@ -2870,7 +2870,7 @@ class _CustomOpTensorDict(_TensorDict):
         if not recursive:
             return copy(self)
         return TensorDict(
-            source=self.to_dict(),
+            source={key: item.clone() for key, item in self.items()},
             batch_size=self.batch_size,
         )
 
