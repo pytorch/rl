@@ -1,7 +1,10 @@
+import argparse
+
 import pytest
 import torch
 
-from torchrl.modules import TanhNormal
+from torch import distributions as D
+from torchrl.modules import TanhNormal, NormalLogScale, MultivariateNormalCholesky
 from torchrl.modules.distributions import TanhDelta, Delta
 
 
@@ -48,6 +51,33 @@ def test_tanhnormal(min, max, vec, upscale, scale_mapping, shape):
         assert (a >= d.min).all()
         assert (a <= d.max).all()
 
+def test_normal():
+    vector = torch.randn(3, 4)
+    normal = D.Normal(vector[..., :2], vector[..., 2:].exp())
+    normal_log_scale = NormalLogScale(vector)
+    x = torch.randn(10, 3, 2)
+    lp1 = normal.log_prob(x)
+    lp2 = normal_log_scale.log_prob(x)
+    torch.testing.assert_allclose(lp1, lp2)
+
+def test_mv_normal_chol():
+    dim = 4
+    vector = torch.randn(11, 14, dtype=torch.double)
+    v = vector[..., 4:]
+    L = torch.zeros(11, 4, 4, dtype=torch.double)
+    idx = torch.ones(4, 4, dtype=torch.bool).tril()
+    L[idx.expand_as(L)] = v.reshape(-1)
+    diag_elts = L[torch.eye(dim, device=L.device, dtype=torch.bool).expand_as(L)]
+    L[torch.eye(dim, device=L.device, dtype=torch.bool).expand_as(L)] = diag_elts.exp()
+
+    cov = L @ L.transpose(-2, -1)
+    dist1 = D.MultivariateNormal(vector[:, :4], cov)
+    dist2 = MultivariateNormalCholesky(vector)
+    x = torch.randn(11, 4, dtype=torch.double)
+    torch.testing.assert_allclose(dist1.log_prob(x), dist2.log_prob(x))
+
 
 if __name__ == "__main__":
-    pytest.main([__file__])
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
+

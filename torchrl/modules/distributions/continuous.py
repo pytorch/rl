@@ -1,3 +1,4 @@
+import math
 from numbers import Number
 from typing import Union, Iterable
 
@@ -10,7 +11,18 @@ from torchrl.modules.utils import mappings
 from .truncated_normal import TruncatedNormal as _TruncatedNormal
 from .utils import UNIFORM
 
-__all__ = ["TanhNormal", "Delta", "TanhDelta", "TruncatedNormal"]
+_DEFAULT_POSITIVE_BIASES = {
+    "softplus": torch.expm1(torch.ones(1)).log().item(),
+    "exp": 0.0,
+}
+
+_POSITIVE_MAPS = {
+    "softplus": torch.nn.functional.softplus,
+    "sigmoid": torch.sigmoid,
+    "exp": torch.exp,
+}
+
+__all__ = ["TanhNormal", "Delta", "TanhDelta", "TruncatedNormal", "MultivariateNormalCholesky", "NormalLogScale"]
 
 
 class SafeTanhTransform(D.TanhTransform):
@@ -437,3 +449,93 @@ def uniform_sample_delta(dist: Delta, size=torch.Size([])) -> torch.Tensor:
 
 
 UNIFORM[Delta] = uniform_sample_delta
+
+
+class NormalLogScale(D.Normal):
+    """
+    Creates a normal distribution from an input vector (likely to be the output of a neural network), using the first
+    half as a location vector and the second as the log-scale.
+    Other positive mappings can be chosen for the scale to avoid exploding gradients if this is an issue (e.g. using
+    the softplus transform).
+    If the exponential transform is used, the likelihood and entropy computations use the input log-scale.
+
+    Args:
+        vector (Tensor): a vector to be split in two halves to make the location and log-scale.
+        positive-map (str, optional): a positive map to map the log-scale to a positive value.
+        positive bias (number, optional): a bias to apply to the scale before the positive map is applied. This can
+            help defining a 'default' scale parameter that has a greater / lower value than one. By default,
+            this parameter will make the scale centered around 1.0 for the `"exp"` and `"softplus"` transforms.
+
+    """
+
+    def __init__(self, vector, positive_map="exp", positive_bias=None):
+        vector_loc, vector_scale = vector.chunk(2, -1)
+        self._positive_map = _POSITIVE_MAPS[positive_map]
+        if positive_bias is None:
+            positive_bias = _DEFAULT_POSITIVE_BIASES[positive_map]
+        self.positive_bias = positive_bias
+        self._exp_map = self._positive_map is torch.exp and self.positive_bias == 0
+        super().__init__(vector_loc, self.positive_map(vector_scale))
+        self._log_scale = vector_scale if self._exp_map else self.scale.clamp_min(1e-7).log()
+
+    def positive_map(self, x: torch.Tensor) -> torch.Tensor:
+        return self._positive_map(x + self.positive_bias)
+
+    def log_prob(self, value):
+        if self._validate_args:
+            self._validate_sample(value)
+        # compute the variance
+        var = (self.scale ** 2)
+        log_scale = self._log_scale
+        return -((value - self.loc) ** 2) / (2 * var) - log_scale - math.log(math.sqrt(2 * math.pi))
+
+    def entropy(self):
+        return 0.5 + 0.5 * math.log(2 * math.pi) + self._log_scale
+
+
+class MultivariateNormalCholesky(D.MultivariateNormal):
+    """
+    Creates a multivariate normal distribution from an input vector (likely to be the output of a neural network),
+    using the first `d` elements as a location vector and the last `d * (d+1) / 2` elements as the lower cholesky
+    decomposition. The diagonal element will be mapped to a positive value using the positive map indicated to the
+    constructor.
+
+    Other positive mappings can be chosen for the scale to avoid exploding gradients if this is an issue (e.g. using
+    the softplus transform).
+
+    Args:
+        vector (Tensor): a vector to be split in location and cholesky decomposition.
+        dim (int, optional): the dimension of the multivariate normal. Inferred from the shape of `vector` if not
+            provided.
+        positive-map (str, optional): a positive map to map the log-scale to a positive value.
+        positive bias (number, optional): a bias to apply to the diagonal elements of the Cholesky decomposition before
+            the positive map is applied.
+
+    """
+
+    def __init__(self, vector, dim=None, positive_map="exp", positive_bias=None):
+        if dim is None:
+            # TODO: assert that the provided dim matches if not None
+            dim = self._get_dim(vector)
+        self._positive_map = _POSITIVE_MAPS[positive_map]
+        if positive_bias is None:
+            positive_bias = _DEFAULT_POSITIVE_BIASES[positive_map]
+        self.positive_bias = positive_bias
+        self._exp_map = self._positive_map is torch.exp and self.positive_bias == 0
+
+        vector_loc, vector_cov = vector[..., :dim], vector[..., dim:]
+        L = torch.zeros(*vector.shape[:-1], dim, dim, dtype=vector.dtype, device=vector.device)
+        idx = torch.ones(dim, dim, dtype=torch.bool).tril()
+        L[idx.expand_as(L)] = vector_cov.reshape(-1)
+        diag_elts = L[torch.eye(dim, device=L.device, dtype=torch.bool).expand_as(L)]
+        L[torch.eye(dim, device=L.device, dtype=torch.bool).expand_as(L)] = self.positive_map(diag_elts)
+        super().__init__(vector_loc, scale_tril=L)
+
+    def positive_map(self, x: torch.Tensor) -> torch.Tensor:
+        return self._positive_map(x + self.positive_bias)
+
+    def _get_dim(self, vector):
+        # solves the equation dim + (dim+1)*dim/2 = vector.shape[-1]
+        s = vector.shape[-1]
+        dim = int(-1.5 + torch.tensor(9 / 4 + 2 * s).sqrt())
+        return dim
