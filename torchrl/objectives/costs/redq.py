@@ -17,7 +17,7 @@ class REDQLoss(_LossModule):
     delay_qvalue: bool = False
 
     def __init__(self, actor_network: TDModule, qvalue_network: TDModule, num_qvalue_nets: int = 50,
-                 sub_sample_len: int = 25, gamma: Number = 0.99,
+                 sub_sample_len: int = 2, gamma: Number = 0.99,
                  priotity_key: str = "td_error",
                  loss_function: str = "smooth_l1",
                  ):
