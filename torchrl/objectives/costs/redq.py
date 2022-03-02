@@ -16,6 +16,28 @@ __all__ = ["REDQLoss", "DoubleREDQLoss"]
 
 
 class REDQLoss(_LossModule):
+    """
+    REDQ Loss module.
+    REDQ (RANDOMIZED ENSEMBLED DOUBLE Q-LEARNING: LEARNING FAST WITHOUT A MODEL
+    https://openreview.net/pdf?id=AY8zfZm0tDd) generalizes the idea of using an ensemble of Q-value functions to
+    train a SAC-like algorithm.
+
+    Args:
+        actor_network (TDModule): the actor to be trained
+        qvalue_network (TDModule): a single Q-value network that will be multiplicated as many times as needed.
+        num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
+        sub_sample_len (int, optional): number of Q-value networks to be subsampled to evaluate the next state value
+            Default is 2.
+        gamma (Number, optional): gamma decay factor. Default is 0.99.
+        priotity_key (str, optional): Key where to write the priority value for prioritized replay buffers. Default is
+            `"td_error"`.
+        loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
+            "l1", Default is "smooth_l1".
+        alpha_init (Number, optional): initial value of the alpha factor. Default is 1.0.
+        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is False.
+        target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
+
+    """
     delay_actor: bool = False
     delay_qvalue: bool = False
 
@@ -136,11 +158,12 @@ class REDQLoss(_LossModule):
 
             next_td = step_tensor_dict(tensordict)  # next_observation -> observation
             # select pseudo-action
-            self.actor_network(
-                next_td,
-                params=list(self.target_actor_network_params),
-                buffers=self.target_actor_network_buffers,
-            )
+            with set_exploration_mode("random"):
+                self.actor_network(
+                    next_td,
+                    params=list(self.target_actor_network_params),
+                    buffers=self.target_actor_network_buffers,
+                )
             # get q-values
             next_td = self.qvalue_network(
                 next_td, params=selected_q_params, buffers=selected_q_buffers, vmap=True
