@@ -4,9 +4,6 @@ import tree
 from torch import Tensor
 
 
-def fields_pin_memory(input):
-    return tree.map_structure(lambda x: pin_memory(x), input)
-
 
 def pin_memory(data: Tensor) -> Tensor:
     if isinstance(data, torch.Tensor):

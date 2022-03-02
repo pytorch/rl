@@ -1,7 +1,12 @@
 import uuid
 from datetime import datetime
 
-import configargparse
+try:
+    import configargparse as argparse
+    _configargparse = True
+except:
+    import argparse
+    _configargparse = False
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
 

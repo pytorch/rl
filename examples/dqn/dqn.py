@@ -1,7 +1,12 @@
 import uuid
 from datetime import datetime
 
-import configargparse
+try:
+    import configargparse as argparse
+    _configargparse = True
+except:
+    import argparse
+    _configargparse = False
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
 
@@ -26,10 +31,11 @@ from torchrl.modules import EGreedyWrapper
 
 
 def make_args():
-    parser = configargparse.ArgumentParser()
-    parser.add_argument(
-        "-c", "--config", required=True, is_config_file=True, help="config file path"
-    )
+    parser = argparse.ArgumentParser()
+    if _configargparse:
+        parser.add_argument(
+            "-c", "--config", required=True, is_config_file=True, help="config file path"
+        )
     parser_agent_args(parser)
     parser_collector_args_offline(parser)
     parser_env_args(parser)

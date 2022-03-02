@@ -54,7 +54,7 @@ class REDQLoss(_LossModule):
                 buffers=self.qvalue_network_buffers,
                 vmap=True)
             state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
-        loss_actor = (state_action_value - self.alpha * tensordict.get("action_log_prob").squeeze(-1)).mean(0)
+        loss_actor = - (state_action_value - self.alpha * tensordict.get("action_log_prob").squeeze(-1)).mean(0)
         return loss_actor
 
     def _qvalue_loss(self, tensordict: _TensorDict) -> Tensor:
