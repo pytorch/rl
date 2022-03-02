@@ -84,7 +84,7 @@ class REDQLoss(_LossModule):
             {
                 "loss_actor": loss_actor.mean(),
                 "loss_qval": loss_qval.mean(),
-                "loss_alpha": loss_alpha,
+                "loss_alpha": loss_alpha.mean(),
                 "alpha": self.alpha,
             },
             [],
