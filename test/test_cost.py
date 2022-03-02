@@ -352,10 +352,29 @@ class TestDDPG:
         loss_fn = loss_class(actor, value, gamma=0.9, loss_function="l2")
         with _check_td_steady(td):
             loss = loss_fn(td)
+
+        # check that loss are independent
+        for k in loss.keys():
+            if not k.startswith('loss'):
+                continue
+            loss[k].sum().backward(retain_graph=True)
+            if k == "loss_actor":
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.value_network_params)
+                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
+            elif k == "loss_value":
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
+                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.value_network_params)
+            else:
+                raise NotImplementedError(k)
+            loss_fn.zero_grad()
+
+        # check overall grad
         sum([item for _, item in loss.items()]).backward()
         parameters = list(actor.parameters()) + list(value.parameters())
         for p in parameters:
             assert p.grad.norm() > 0.0
+
+
 
         # Check param update effect on targets
         target_actor = [p.clone() for p in loss_fn.target_actor_network_params]
@@ -543,6 +562,31 @@ class TestSAC:
         with _check_td_steady(td):
             loss = loss_fn(td)
         assert loss_fn.priority_key in td.keys()
+
+        # check that loss are independent
+        for k in loss.keys():
+            if not k.startswith('loss'):
+                continue
+            loss[k].sum().backward(retain_graph=True)
+            if k == "loss_actor":
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.value_network_params)
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
+                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
+            elif k == "loss_value":
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
+                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.value_network_params)
+            elif k == "loss_qvalue":
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.value_network_params)
+                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
+            elif k == "loss_alpha":
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.value_network_params)
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
+            else:
+                raise NotImplementedError(k)
+            loss_fn.zero_grad()
 
         sum([item for _, item in loss.items()]).backward()
         named_parameters = list(loss_fn.named_parameters())
@@ -756,7 +800,27 @@ class TestREDQ:
 
         with _check_td_steady(td):
             loss = loss_fn(td)
+
+        # check td is left untouched
         assert loss_fn.priority_key in td.keys()
+
+        # check that loss are independent
+        for k in loss.keys():
+            if not k.startswith('loss'):
+                continue
+            loss[k].sum().backward(retain_graph=True)
+            if k == "loss_actor":
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
+                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
+            elif k == "loss_qvalue":
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
+                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
+            elif k == "loss_alpha":
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
+                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
+            else:
+                raise NotImplementedError(k)
+            loss_fn.zero_grad()
 
         sum([item for _, item in loss.items()]).backward()
         named_parameters = list(loss_fn.named_parameters())

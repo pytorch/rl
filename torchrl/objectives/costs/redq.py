@@ -7,7 +7,7 @@ from torch import Tensor
 from typing import Tuple, Union
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.envs.utils import step_tensor_dict
+from torchrl.envs.utils import step_tensor_dict, set_exploration_mode
 from torchrl.modules import TDModule, ActorCriticWrapper
 from torchrl.objectives import next_state_value, hold_out_params, distance_loss
 from torchrl.objectives.costs.common import _LossModule
@@ -43,7 +43,7 @@ class REDQLoss(_LossModule):
             create_target_params=self.delay_qvalue,
         )
         self.num_qvalue_nets = num_qvalue_nets
-        self.sub_sample_len = min(sub_sample_len, num_qvalue_nets - 1)
+        self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
         self.gamma = gamma
         self.priority_key = priotity_key
         self.loss_function = loss_function
@@ -83,9 +83,10 @@ class REDQLoss(_LossModule):
         td_out = TensorDict(
             {
                 "loss_actor": loss_actor.mean(),
-                "loss_qval": loss_qval.mean(),
+                "loss_qvalue": loss_qval.mean(),
                 "loss_alpha": loss_alpha.mean(),
                 "alpha": self.alpha,
+                "entropy": -action_log_prob.mean(),
             },
             [],
         )
@@ -93,12 +94,14 @@ class REDQLoss(_LossModule):
         return td_out
 
     def _actor_loss(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
-        tensordict_clone = tensordict.clone()  # to avoid overwriting keys
-        self.actor_network(
-            tensordict_clone,
-            params=self.actor_network_params,
-            buffers=self.actor_network_buffers,
-        )
+        obs_keys = [key for key in tensordict.keys() if key.startswith("obs")]
+        tensordict_clone = tensordict.select(*obs_keys)  # to avoid overwriting keys
+        with set_exploration_mode("random"):
+            self.actor_network(
+                tensordict_clone,
+                params=self.actor_network_params,
+                buffers=self.actor_network_buffers,
+            )
         with hold_out_params(self.qvalue_network_params) as params:
             tensordict_expand = self.qvalue_network(
                 tensordict_clone,
@@ -115,7 +118,11 @@ class REDQLoss(_LossModule):
 
     def _qvalue_loss(self, tensordict: _TensorDict) -> Tensor:
         tensordict_save = tensordict
-        tensordict = tensordict.clone()
+
+        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs") ]
+        obs_keys = [key for key in tensordict.keys() if key.startswith("obs") ]
+        tensordict = tensordict.select("reward", "done", *next_obs_keys, *obs_keys, "action")
+
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
         ].sort()[0]
@@ -147,8 +154,6 @@ class REDQLoss(_LossModule):
         target_value = next_state_value(
             tensordict,
             gamma=self.gamma,
-            vmap=True,
-            next_val_key="state_action_value",
             pred_next_val=state_value,
         )
         tensordict_expand = self.qvalue_network(
@@ -166,7 +171,7 @@ class REDQLoss(_LossModule):
         return loss_qval
 
     def _loss_alpha(self, log_pi: Tensor) -> Tensor:
-        if not log_pi.requires_grad:
+        if torch.is_grad_enabled() and not log_pi.requires_grad:
             raise RuntimeError(
                 "expected log_pi to require gradient for the alpha loss)"
             )

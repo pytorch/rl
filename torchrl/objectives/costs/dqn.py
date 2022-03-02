@@ -90,10 +90,6 @@ class DQNLoss(_LossModule):
                 )
 
         action = tensor_dict.get("action")
-        done = tensor_dict.get("done").squeeze(-1)
-        rewards = tensor_dict.get("reward").squeeze(-1)
-
-        gamma = self.gamma
 
         action = action.to(torch.float)
         td_copy = tensor_dict.clone()
