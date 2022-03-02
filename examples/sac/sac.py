@@ -3,9 +3,11 @@ from datetime import datetime
 
 try:
     import configargparse as argparse
+
     _configargparse = True
 except:
     import argparse
+
     _configargparse = False
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter

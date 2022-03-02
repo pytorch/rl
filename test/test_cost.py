@@ -30,6 +30,7 @@ from torchrl.objectives import (
 from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
 from torchrl.objectives.costs.utils import hold_out_net
 
+
 class _check_td_steady:
     def __init__(self, td):
         self.td_clone = td.clone()
@@ -151,7 +152,6 @@ class TestDQN:
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
 
-
         # Check param update effect on targets
         target_value = [p.clone() for p in loss_fn.target_value_network_params]
         for p in loss_fn.parameters():
@@ -160,7 +160,9 @@ class TestDQN:
         if loss_fn.delay_value:
             assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
         else:
-            assert not any((p1 == p2).any() for p1, p2 in zip(target_value, target_value2))
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
+            )
 
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
@@ -207,7 +209,9 @@ class TestDQN:
         if loss_fn.delay_value:
             assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
         else:
-            assert not any((p1 == p2).any() for p1, p2 in zip(target_value, target_value2))
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
+            )
 
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
@@ -242,7 +246,9 @@ class TestDQN:
         if loss_fn.delay_value:
             assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
         else:
-            assert not any((p1 == p2).any() for p1, p2 in zip(target_value, target_value2))
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
+            )
 
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
@@ -351,7 +357,6 @@ class TestDDPG:
         for p in parameters:
             assert p.grad.norm() > 0.0
 
-
         # Check param update effect on targets
         target_actor = [p.clone() for p in loss_fn.target_actor_network_params]
         target_value = [p.clone() for p in loss_fn.target_value_network_params]
@@ -362,11 +367,15 @@ class TestDDPG:
         if loss_fn.delay_actor:
             assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
         else:
-            assert not any((p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2))
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
+            )
         if loss_fn.delay_value:
             assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
         else:
-            assert not any((p1 == p2).any() for p1, p2 in zip(target_value, target_value2))
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
+            )
 
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
@@ -608,7 +617,6 @@ class TestSAC:
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
 
-
         # Check param update effect on targets
         target_actor = [p.clone() for p in loss_fn.target_actor_network_params]
         target_qvalue = [p.clone() for p in loss_fn.target_qvalue_network_params]
@@ -621,15 +629,23 @@ class TestSAC:
         if loss_fn.delay_actor:
             assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
         else:
-            assert not any((p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2))
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
+            )
         if loss_fn.delay_qvalue:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2))
+            assert all(
+                (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
+            )
         else:
-            assert not any((p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2))
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
+            )
         if loss_fn.delay_value:
             assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
         else:
-            assert not any((p1 == p2).any() for p1, p2 in zip(target_value, target_value2))
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
+            )
 
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
@@ -730,7 +746,6 @@ class TestREDQ:
         actor = self._create_mock_actor()
         qvalue = self._create_mock_qvalue()
 
-
         loss_fn = loss_class(
             actor_network=actor,
             qvalue_network=qvalue,
@@ -756,9 +771,7 @@ class TestREDQ:
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("loss_class", (REDQLoss, DoubleREDQLoss))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
-    def test_redq_batcher(
-        self, n, loss_class, num_qvalue, gamma=0.9
-    ):
+    def test_redq_batcher(self, n, loss_class, num_qvalue, gamma=0.9):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_redq()
 
@@ -804,7 +817,6 @@ class TestREDQ:
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
 
-
         # Check param update effect on targets
         target_actor = [p.clone() for p in loss_fn.target_actor_network_params]
         target_qvalue = [p.clone() for p in loss_fn.target_qvalue_network_params]
@@ -815,11 +827,17 @@ class TestREDQ:
         if loss_fn.delay_actor:
             assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
         else:
-            assert not any((p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2))
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
+            )
         if loss_fn.delay_qvalue:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2))
+            assert all(
+                (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
+            )
         else:
-            assert not any((p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2))
+            assert not any(
+                (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
+            )
 
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]

@@ -96,9 +96,6 @@ class SACLoss(_LossModule):
             target_entropy = -float(np.prod(actor_network.spec.shape))
         self.register_buffer("target_entropy", torch.tensor(target_entropy))
 
-    def _sync_actor(self):
-        raise NotImplementedError
-
     @property
     def device(self) -> torch.device:
         for p in self.actor_network_params:
@@ -113,7 +110,9 @@ class SACLoss(_LossModule):
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         if tensordict.ndimension() > 1:
-            tensordict = tensordict.view(-1)  # with view, in-place modifications of the view will impact the
+            tensordict = tensordict.view(
+                -1
+            )  # with view, in-place modifications of the view will impact the
             # original tensordict
 
         device = self.device

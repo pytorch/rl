@@ -39,14 +39,17 @@ class DQNLoss(_LossModule):
     delay_value: bool = False
 
     def __init__(
-        self, value_network: QValueActor,
+        self,
+        value_network: QValueActor,
         gamma: Number,
         loss_function: str = "l2",
-        priority_key: str = "td_error"
+        priority_key: str = "td_error",
     ) -> None:
 
         super().__init__()
-        self.convert_to_functional(value_network, "value_network", create_target_params=self.delay_value)
+        self.convert_to_functional(
+            value_network, "value_network", create_target_params=self.delay_value
+        )
 
         self.value_network_in_keys = value_network.in_keys
         if not isinstance(value_network, QValueActor):
@@ -96,7 +99,11 @@ class DQNLoss(_LossModule):
         td_copy = tensor_dict.clone()
         if td_copy.device != tensor_dict.device:
             raise RuntimeError(f"{tensor_dict} and {td_copy} have different devices")
-        self.value_network(td_copy, params=self.value_network_params, buffers=self.value_network_buffers)
+        self.value_network(
+            td_copy,
+            params=self.value_network_params,
+            buffers=self.value_network_buffers,
+        )
 
         pred_val = td_copy.get("action_value")
         pred_val_index = (pred_val * action).sum(-1)
@@ -108,14 +115,15 @@ class DQNLoss(_LossModule):
                 gamma=self.gamma,
                 params=self.target_value_network_params,
                 buffers=self.target_value_network_buffers,
-                next_val_key="chosen_action_value")
+                next_val_key="chosen_action_value",
+            )
 
         input_tensor_dict.set(
             self.priority_key,
             abs(pred_val_index - target_value)
-                .detach()
-                .unsqueeze(-1)
-                .to(input_tensor_dict.device),
+            .detach()
+            .unsqueeze(-1)
+            .to(input_tensor_dict.device),
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
@@ -161,7 +169,7 @@ class DistributionalDQNLoss(_LossModule):
         self,
         value_network: DistributionalQValueActor,
         gamma: Number,
-        priority_key: str = "td_error"
+        priority_key: str = "td_error",
     ):
         super().__init__()
         self.gamma = gamma
@@ -171,7 +179,9 @@ class DistributionalDQNLoss(_LossModule):
                 "Expected value_network to be of type DistributionalQValueActor "
                 f"but got {type(value_network)}"
             )
-        self.convert_to_functional(value_network, 'value_network', create_target_params=self.delay_value)
+        self.convert_to_functional(
+            value_network, "value_network", create_target_params=self.delay_value
+        )
 
     def forward(self, input_tensor_dict: _TensorDict) -> TensorDict:
         # from https://github.com/Kaixhin/Rainbow/blob/9ff5567ad1234ae0ed30d8471e8f13ae07119395/agent.py
@@ -206,7 +216,8 @@ class DistributionalDQNLoss(_LossModule):
         self.value_network(
             td_clone,
             params=self.value_network_params,
-            buffers=self.value_network_buffers)  # Log probabilities log p(s_t, ·; θonline)
+            buffers=self.value_network_buffers,
+        )  # Log probabilities log p(s_t, ·; θonline)
         action_log_softmax = td_clone.get("action_value")
         action_expand = action.unsqueeze(-2).expand_as(action_log_softmax)
         log_ps_a = action_log_softmax.masked_select(action_expand.to(torch.bool))
@@ -215,12 +226,18 @@ class DistributionalDQNLoss(_LossModule):
         with torch.no_grad():
             # Calculate nth next state probabilities
             next_td = step_tensor_dict(tensor_dict)
-            self.value_network(next_td, params=self.value_network_params,
-                               buffers=self.value_network_buffers)  # Probabilities p(s_t+n, ·; θonline)
+            self.value_network(
+                next_td,
+                params=self.value_network_params,
+                buffers=self.value_network_buffers,
+            )  # Probabilities p(s_t+n, ·; θonline)
             argmax_indices_ns = next_td.get("action").argmax(-1)  # one-hot encoding
 
-            self.value_network(next_td, params=self.target_value_network_params,
-                               buffers=self.target_value_network_buffers)  # Probabilities p(s_t+n, ·; θtarget)
+            self.value_network(
+                next_td,
+                params=self.target_value_network_params,
+                buffers=self.target_value_network_buffers,
+            )  # Probabilities p(s_t+n, ·; θtarget)
             pns = next_td.get("action_value").exp()
             # Double-Q probabilities p(s_t+n, argmax_a[(z, p(s_t+n, a; θonline))]; θtarget)
             pns_a = pns[range(batch_size), :, argmax_indices_ns]
@@ -260,8 +277,8 @@ class DistributionalDQNLoss(_LossModule):
                     dtype=torch.int64,
                     # device=device,
                 )
-                    .unsqueeze(1)
-                    .expand(batch_size, atoms)
+                .unsqueeze(1)
+                .expand(batch_size, atoms)
             )
             index = (l + offset).view(-1)
             tensor = (pns_a * (u.float() - b)).view(-1)
@@ -281,6 +298,7 @@ class DistributionalDQNLoss(_LossModule):
         )
         loss_td = TensorDict({"loss": loss.mean()}, [])
         return loss_td
+
 
 class DistributionalDoubleDQNLoss(DistributionalDQNLoss):
     """

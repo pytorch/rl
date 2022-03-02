@@ -9,7 +9,11 @@ import torch
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.modules import reset_noise, TDModule
 from torchrl.modules.td_module.actors import ActorCriticWrapper
-from torchrl.objectives.costs.utils import distance_loss, next_state_value, hold_out_params
+from torchrl.objectives.costs.utils import (
+    distance_loss,
+    next_state_value,
+    hold_out_params,
+)
 from .common import _LossModule
 
 
@@ -36,8 +40,12 @@ class DDPGLoss(_LossModule):
         loss_function: str = "l2",
     ) -> None:
         super().__init__()
-        self.convert_to_functional(actor_network, "actor_network", create_target_params=self.delay_actor)
-        self.convert_to_functional(value_network, "value_network", create_target_params=self.delay_value)
+        self.convert_to_functional(
+            actor_network, "actor_network", create_target_params=self.delay_actor
+        )
+        self.convert_to_functional(
+            value_network, "value_network", create_target_params=self.delay_value
+        )
 
         self.actor_in_keys = actor_network.in_keys
 
@@ -69,8 +77,8 @@ class DDPGLoss(_LossModule):
         input_tensor_dict.set(
             "td_error",
             td_error.detach()
-                .unsqueeze(input_tensor_dict.ndimension())
-                .to(input_tensor_dict.device),
+            .unsqueeze(input_tensor_dict.ndimension())
+            .to(input_tensor_dict.device),
             inplace=True,
         )
         loss_actor = self._loss_actor(input_tensor_dict)
@@ -91,9 +99,15 @@ class DDPGLoss(_LossModule):
         tensor_dict: _TensorDict,
     ) -> torch.Tensor:
         td_copy = tensor_dict.select(*self.actor_in_keys).detach()
-        td_copy = self.actor_network(td_copy, params=self.actor_network_params, buffers=self.actor_network_buffers)
+        td_copy = self.actor_network(
+            td_copy,
+            params=self.actor_network_params,
+            buffers=self.actor_network_buffers,
+        )
         with hold_out_params(self.value_network_params) as params:
-            td_copy = self.value_network(td_copy, params=params, buffers=self.value_network_buffers)
+            td_copy = self.value_network(
+                td_copy, params=params, buffers=self.value_network_buffers
+            )
         return -td_copy.get("state_action_value")
 
     def _loss_value(
@@ -102,14 +116,27 @@ class DDPGLoss(_LossModule):
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # value loss
         td_copy = tensor_dict.select(*self.value_network.in_keys).detach()
-        self.value_network(td_copy, params=self.value_network_params, buffers=self.value_network_buffers)
+        self.value_network(
+            td_copy,
+            params=self.value_network_params,
+            buffers=self.value_network_buffers,
+        )
         pred_val = td_copy.get("state_action_value").squeeze(-1)
 
         actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
-        target_params = list(self.target_actor_network_params) + list(self.target_value_network_params)
-        target_buffers = list(self.target_actor_network_buffers) + list(self.target_value_network_buffers)
-        target_value = next_state_value(tensor_dict, actor_critic, gamma=self.gamma, params=target_params,
-                                        buffers=target_buffers)
+        target_params = list(self.target_actor_network_params) + list(
+            self.target_value_network_params
+        )
+        target_buffers = list(self.target_actor_network_buffers) + list(
+            self.target_value_network_buffers
+        )
+        target_value = next_state_value(
+            tensor_dict,
+            actor_critic,
+            gamma=self.gamma,
+            params=target_params,
+            buffers=target_buffers,
+        )
 
         # td_error = pred_val - target_value
         loss_value = distance_loss(
@@ -130,5 +157,6 @@ class DoubleDDPGLoss(DDPGLoss):
     state_dict). Please report any such bug if encountered.
 
     """
+
     delay_actor: bool = True
     delay_value: bool = True

@@ -132,8 +132,6 @@ class _TargetNetUpdate:
 
     def init_(self) -> None:
         for source, target in zip(self._sources.values(), self._targets.values()):
-            print("source: ", source)
-            print("target: ", target)
             for p_source, p_target in zip(source, target):
                 if p_target.requires_grad:
                     raise RuntimeError("the target parameter is part of a graph.")

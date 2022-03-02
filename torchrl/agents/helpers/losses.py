@@ -86,6 +86,7 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
     target_net_updater = make_target_updater(args, loss_module)
     return loss_module, target_net_updater
 
+
 def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
     loss_kwargs = {}
     if hasattr(args, "distributional") and args.distributional:

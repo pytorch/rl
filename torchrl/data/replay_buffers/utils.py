@@ -4,7 +4,6 @@ import tree
 from torch import Tensor
 
 
-
 def pin_memory(data: Tensor) -> Tensor:
     if isinstance(data, torch.Tensor):
         return data.pin_memory()

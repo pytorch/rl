@@ -3,9 +3,11 @@ from datetime import datetime
 
 try:
     import configargparse as argparse
+
     _configargparse = True
 except:
     import argparse
+
     _configargparse = False
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
@@ -32,7 +34,11 @@ def make_args():
     parser = argparse.ArgumentParser()
     if _configargparse:
         parser.add_argument(
-            "-c", "--config", required=True, is_config_file=True, help="config file path"
+            "-c",
+            "--config",
+            required=True,
+            is_config_file=True,
+            help="config file path",
         )
     parser_agent_args(parser)
     parser_collector_args_online(parser)
