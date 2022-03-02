@@ -33,10 +33,15 @@ from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 
 
 def make_args():
-    parser = configargparse.ArgumentParser()
-    parser.add_argument(
-        "-c", "--config", required=True, is_config_file=True, help="config file path"
-    )
+    parser = argparse.ArgumentParser()
+    if _configargparse:
+        parser.add_argument(
+            "-c",
+            "--config",
+            required=True,
+            is_config_file=True,
+            help="config file path",
+        )
     parser_agent_args(parser)
     parser_collector_args_offline(parser)
     parser_env_args(parser)

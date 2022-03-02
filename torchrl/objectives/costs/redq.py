@@ -48,18 +48,23 @@ class REDQLoss(_LossModule):
         self.priority_key = priotity_key
         self.loss_function = loss_function
 
-        self.register_buffer("alpha_init", torch.tensor(alpha_init))
+        try:
+            device = next(self.parameters()).device
+        except:
+            device = torch.device("cpu")
+
+        self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
-            self.register_buffer("log_alpha", torch.tensor(math.log(alpha_init)))
+            self.register_buffer("log_alpha", torch.tensor(math.log(alpha_init), device=device))
         else:
             self.register_parameter(
-                "log_alpha", torch.nn.Parameter(torch.tensor(math.log(alpha_init)))
+                "log_alpha", torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device))
             )
 
         if target_entropy == "auto":
             target_entropy = -float(np.prod(actor_network.spec.shape))
-        self.register_buffer("target_entropy", torch.tensor(target_entropy))
+        self.register_buffer("target_entropy", torch.tensor(target_entropy, device=device))
 
     @property
     def alpha(self):
