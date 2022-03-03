@@ -163,15 +163,6 @@ def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
              "passed to it can improve the algorithm performance."
              "Default is None, i.e. all keys are kept.",
     )
-    parser.add_argument(
-        "--collector_devices",
-        "--collector-devices",
-        nargs="+",
-        default=["cpu"],
-        help="device on which the data collector should store the trajectories to be passed to this script."
-             "If the collector device differs from the policy device (cuda:0 if available), then the "
-             "weights of the collector policy are synchronized with collector.update_policy_weights_().",
-    )
 
     parser.add_argument(
         "--batch_size",
