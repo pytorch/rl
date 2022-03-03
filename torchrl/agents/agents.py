@@ -322,9 +322,8 @@ class Agent:
 
             if collected_frames > self.total_frames:
                 break
-            if i % 20 == 0:
-                timeit.print()
 
+        timeit.print()
         self.collector.shutdown()
 
     @torch.no_grad()
