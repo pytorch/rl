@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pathlib
+import time
 import warnings
 from collections import OrderedDict
 from numbers import Number
@@ -45,6 +46,9 @@ WRITER_METHODS = {
 }
 
 __all__ = ["Agent"]
+
+
+from torchrl import timeit
 
 
 class Agent:
@@ -118,6 +122,10 @@ class Agent:
         min_sub_traj_len (int, optional): minimum value of `sub_traj_len`, in case some elements of the batch contain
             few steps.
             Default is -1 (i.e. no minimum value)
+        selected_keys (iterable of str, optional): a list of strings that indicate the data that should be kept from
+            the data collector. Since storing and retrieving information from the replay buffer does not come for
+            free, limiting the amount of data passed to it can improve the algorithm performance.
+            Default is None, i.e. all keys are kept.
 
     """
 
@@ -156,6 +164,7 @@ class Agent:
         normalize_rewards_online: bool = False,
         sub_traj_len: int = -1,
         min_sub_traj_len: int = -1,
+        selected_keys: Optional[Iterable[str]] = None,
     ) -> None:
 
         # objects
@@ -196,6 +205,7 @@ class Agent:
         self.normalize_rewards_online = normalize_rewards_online
         self.sub_traj_len = sub_traj_len
         self.min_sub_traj_len = min_sub_traj_len
+        self.selected_keys = selected_keys
 
     def save_agent(self) -> None:
         _save = False
@@ -268,6 +278,9 @@ class Agent:
 
         collected_frames = 0
         for i, batch in enumerate(self.collector):
+            if self.selected_keys:
+                batch = batch.select(*self.selected_keys, "mask")
+
             if "mask" in batch.keys():
                 current_frames = batch.get("mask").sum().item() * self.frame_skip
             else:
@@ -275,37 +288,43 @@ class Agent:
             collected_frames += current_frames
             self._collected_frames = collected_frames
 
-            if self.replay_buffer is not None:
-                if "mask" in batch.keys():
-                    batch = batch[batch.get("mask").squeeze(-1)]
-                else:
-                    batch = batch.reshape(-1)
-                reward_training = batch.get("reward").mean().item()
-                batch = batch.cpu()
-                self.replay_buffer.extend(batch)
-            else:
-                if "mask" in batch.keys():
-                    reward_training = (
-                        batch.get("reward")[batch.get("mask").squeeze(-1)].mean().item()
-                    )
-                else:
+            with timeit("agent / rb extend"):
+                if self.replay_buffer is not None:
+                    if "mask" in batch.keys():
+                        batch = batch[batch.get("mask").squeeze(-1)]
+                    else:
+                        batch = batch.reshape(-1)
                     reward_training = batch.get("reward").mean().item()
+                    batch = batch.cpu()
+                    self.replay_buffer.extend(batch)
+                else:
+                    if "mask" in batch.keys():
+                        reward_training = (
+                            batch.get("reward")[batch.get("mask").squeeze(-1)].mean().item()
+                        )
+                    else:
+                        reward_training = batch.get("reward").mean().item()
 
             if self.normalize_rewards_online:
                 reward = batch.get("reward")
                 self._update_reward_stats(reward)
 
-            if collected_frames > self.collector.init_random_frames:
-                self.steps(batch)
-            self._collector_scheduler_step(i, current_frames)
+            with timeit("agent / steps"):
+                if collected_frames > self.collector.init_random_frames:
+                    self.steps(batch)
+                self._collector_scheduler_step(i, current_frames)
 
-            self._log(reward_training=reward_training)
-            if self.progress_bar:
-                self._pbar.update(current_frames)
-                self._pbar_description()
+            with timeit("agent / log"):
+                self._log(reward_training=reward_training)
+                if self.progress_bar:
+                    self._pbar.update(current_frames)
+                    self._pbar_description()
 
             if collected_frames > self.total_frames:
                 break
+            if i % 20 == 0:
+                timeit.print()
+
         self.collector.shutdown()
 
     @torch.no_grad()
@@ -355,24 +374,29 @@ class Agent:
 
         for j in range(self.optim_steps_per_batch):
             self._optim_count += 1
-            if self.replay_buffer is not None:
-                sub_batch = self.replay_buffer.sample(self.batch_size)
-            else:
-                sub_batch = self._sub_sample_batch(batch)
+            with timeit("agent / step / rb sampling"):
+                if self.replay_buffer is not None:
+                    sub_batch = self.replay_buffer.sample(self.batch_size)
+                else:
+                    sub_batch = self._sub_sample_batch(batch)
 
-            if self.normalize_rewards_online:
-                self._normalize_reward(sub_batch)
+            with timeit("agent / step / norm rewards"):
+                if self.normalize_rewards_online:
+                    self._normalize_reward(sub_batch)
 
-            sub_batch_device = sub_batch.to(self.loss_module.device)
-            losses_td = self.loss_module(sub_batch_device)
-            if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
-                self.replay_buffer.update_priority(sub_batch_device)
+            with timeit("agent / step / loss"):
+                sub_batch_device = sub_batch.to(self.loss_module.device)
+                losses_td = self.loss_module(sub_batch_device)
+            with timeit("agent / step / rb update priority"):
+                if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
+                    self.replay_buffer.update_priority(sub_batch_device)
 
             # sum all keys that start with 'loss_'
             loss = sum(
                 [item for key, item in losses_td.items() if key.startswith("loss")]
             )
-            loss.backward()
+            with timeit("agent / step / backward"):
+                loss.backward()
             if average_losses is None:
                 average_losses: _TensorDict = losses_td.detach()
             else:
@@ -390,12 +414,13 @@ class Agent:
             if self._optim_count % self.record_interval == 0:
                 self.record()
 
-        if self.optim_steps_per_batch > 0:
-            self._log(
-                grad_norm=average_grad_norm,
-                optim_steps=self._optim_count,
-                **average_losses,
-            )
+        with timeit("agent / step / log"):
+            if self.optim_steps_per_batch > 0:
+                self._log(
+                    grad_norm=average_grad_norm,
+                    optim_steps=self._optim_count,
+                    **average_losses,
+                )
 
     def _optim_schedule_step(self) -> None:
         """

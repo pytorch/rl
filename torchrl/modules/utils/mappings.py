@@ -25,7 +25,7 @@ class biased_softplus(nn.Module):
             default: 0.1
     """
 
-    def __init__(self, bias: Number, min_val: Number = 0.1):
+    def __init__(self, bias: Number, min_val: Number = 0.01):
         super().__init__()
         self.bias = inv_softplus(bias - min_val)
         self.min_val = min_val

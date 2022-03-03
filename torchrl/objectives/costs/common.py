@@ -1,6 +1,6 @@
 __all__ = ["_LossModule"]
 
-from typing import Iterator, Tuple, Optional
+from typing import Iterator, Tuple, Optional, Iterable
 
 import torch
 from torch import nn

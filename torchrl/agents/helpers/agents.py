@@ -10,7 +10,6 @@ from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 
 from torchrl.agents.agents import Agent
-from torchrl.agents.helpers.collectors import parser_collector_args_offline
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import _EnvClass
@@ -149,12 +148,31 @@ def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=500,
         help="Number of optimization steps in between two collection of data. See frames_per_batch "
-        "below. "
-        "Default=500",
+             "below. "
+             "Default=500",
     )
     parser.add_argument(
         "--optimizer", type=str, default="adam", help="Optimizer to be used."
     )
+    parser.add_argument(
+        "--selected_keys",
+        nargs="+",
+        default=None,
+        help="a list of strings that indicate the data that should be kept from the data collector. Since storing and "
+             "retrieving information from the replay buffer does not come for free, limiting the amount of data "
+             "passed to it can improve the algorithm performance."
+             "Default is None, i.e. all keys are kept.",
+    )
+    parser.add_argument(
+        "--collector_devices",
+        "--collector-devices",
+        nargs="+",
+        default=["cpu"],
+        help="device on which the data collector should store the trajectories to be passed to this script."
+             "If the collector device differs from the policy device (cuda:0 if available), then the "
+             "weights of the collector policy are synchronized with collector.update_policy_weights_().",
+    )
+
     parser.add_argument(
         "--batch_size",
         type=int,
@@ -189,14 +207,14 @@ def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
         "--clip_grad_norm",
         action="store_true",
         help="if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient "
-        "values will be clipped to the desired threshold.",
+             "values will be clipped to the desired threshold.",
     )
     parser.add_argument(
         "--normalize_rewards_online",
         "--normalize-rewards-online",
         action="store_true",
         help="Computes the running statistics of the rewards and normalizes them before they are "
-        "passed to the loss module.",
+             "passed to the loss module.",
     )
     parser.add_argument(
         "--sub_traj_len",

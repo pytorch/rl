@@ -12,6 +12,8 @@ from .utils import UNIFORM
 
 __all__ = ["TanhNormal", "Delta", "TanhDelta", "TruncatedNormal"]
 
+from ... import timeit
+
 
 class SafeTanhTransform(D.TanhTransform):
     """
@@ -23,11 +25,11 @@ class SafeTanhTransform(D.TanhTransform):
 
     def _call(self, x: torch.Tensor) -> torch.Tensor:
         y = super()._call(x)
-        y = y.clamp(-1 + self.delta, 1 - self.delta)
+        y.data.clamp_(-1 + self.delta, 1 - self.delta)
         return y
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
-        y = y.clamp(-1 + self.delta, 1 - self.delta)
+        y.data.clamp_(-1 + self.delta, 1 - self.delta)
         x = super()._inverse(y)
         return x
 
@@ -207,58 +209,68 @@ class TanhNormal(D.TransformedDistribution):
             if not all(max > min):
                 raise RuntimeError(err_msg)
 
-        loc, scale = net_output.chunk(chunks=2, dim=-1)
-        self.tanh_loc = tanh_loc
-        if tanh_loc:
-            if (isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()) or (
-                not isinstance(upscale, torch.Tensor) and upscale != 1.0
-            ):
-                upscale = (
-                    upscale
-                    if not isinstance(upscale, torch.Tensor)
-                    else upscale.to(loc.device)
-                )
-            loc = loc / upscale
-            loc = loc.tanh() * upscale
-        if tanh_scale:
-            if (isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()) or (
-                not isinstance(upscale, torch.Tensor) and upscale != 1.0
-            ):
-                upscale = (
-                    upscale
-                    if not isinstance(upscale, torch.Tensor)
-                    else upscale.to(loc.device)
-                )
-            scale = scale / upscale
-            scale = scale.tanh() * upscale
-
         if isinstance(max, torch.Tensor):
-            max = max.to(loc.device)
+            self.non_trivial_max = (max != 1.0).any()
+        else:
+            self.non_trivial_max = (max != 1.0)
+
         if isinstance(min, torch.Tensor):
-            min = min.to(loc.device)
-        self.min = min
-        self.max = max
+            self.non_trivial_min = (min != -1.0).any()
+        else:
+            self.non_trivial_min = (min != -1.0)
+        self.tanh_loc = tanh_loc
+        self.tanh_scale = tanh_scale
+        self._event_dims = event_dims
 
-        loc = loc + (max - min) / 2 + min
+        with timeit(f"{self.__class__.__name__} / prep"):
+            self.device = net_output.device
+            self.upscale = (upscale
+                    if not isinstance(upscale, torch.Tensor)
+                    else upscale.to(self.device)
+                )
 
+            if isinstance(max, torch.Tensor):
+                max = max.to(self.device)
+            if isinstance(min, torch.Tensor):
+                min = min.to(self.device)
+            self.min = min
+            self.max = max
+            self._map = mappings(scale_mapping)
+
+        with timeit(f"{self.__class__.__name__} / safe tanh trsf"):
+            t = SafeTanhTransform()
+            if self.non_trivial_max or self.non_trivial_min:
+                t = D.ComposeTransform(
+                    [t, D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)]
+                )
+            self._t = t
+
+        self.update(net_output)
+
+    @timeit("TanhNormal / update")
+    def update(self, net_output: torch.Tensor) -> None:
+        loc, scale = net_output.chunk(chunks=2, dim=-1)
+        if self.tanh_loc:
+            loc = (loc / self.upscale).tanh() * self.upscale
+        if self.tanh_scale:
+            scale = (scale / self.upscale).tanh() * self.upscale
+        if self.non_trivial_max or self.non_trivial_min:
+            loc = loc + (self.max - self.min) / 2 + self.min
         self.loc = loc
-        self.scale = mappings(scale_mapping)(scale)
-        self.upscale = upscale
+        self.scale = self._map(scale)
 
-        t = SafeTanhTransform()
-        non_trivial_min = (isinstance(min, torch.Tensor) and (min != 1.0).any()) or (
-            not isinstance(min, torch.Tensor) and min != 1.0
-        )
-        non_trivial_max = (isinstance(max, torch.Tensor) and (max != 1.0).any()) or (
-            not isinstance(max, torch.Tensor) and max != 1.0
-        )
-        if non_trivial_max or non_trivial_min:
-            t = D.ComposeTransform(
-                [t, D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)]
-            )
-        base = D.Independent(D.Normal(self.loc, self.scale), event_dims)
+        if hasattr(self, 'base_dist') and \
+            (self.base_dist.base_dist.loc.shape == self.loc.shape) and \
+            (self.base_dist.base_dist.scale.shape == self.scale.shape):
+            self.base_dist.base_dist.loc = self.loc
+            self.base_dist.base_dist.scale = self.scale
 
-        super().__init__(base, t)
+        else:
+            with timeit(f"{self.__class__.__name__} / normal"):
+                base = D.Independent(D.Normal(self.loc, self.scale), self._event_dims)
+
+            with timeit(f"{self.__class__.__name__} / super.init"):
+                super().__init__(base, self._t)
 
     @property
     def mode(self):
