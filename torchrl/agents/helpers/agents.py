@@ -139,6 +139,7 @@ def make_agent(
         record_frames=args.record_frames,
         normalize_rewards_online=args.normalize_rewards_online,
         sub_traj_len=args.sub_traj_len,
+        selected_keys=args.selected_keys,
     )
 
 
