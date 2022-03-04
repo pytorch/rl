@@ -212,21 +212,22 @@ class TanhNormal(D.TransformedDistribution):
         if isinstance(max, torch.Tensor):
             self.non_trivial_max = (max != 1.0).any()
         else:
-            self.non_trivial_max = (max != 1.0)
+            self.non_trivial_max = max != 1.0
 
         if isinstance(min, torch.Tensor):
             self.non_trivial_min = (min != -1.0).any()
         else:
-            self.non_trivial_min = (min != -1.0)
+            self.non_trivial_min = min != -1.0
         self.tanh_loc = tanh_loc
         self.tanh_scale = tanh_scale
         self._event_dims = event_dims
 
         self.device = net_output.device
-        self.upscale = (upscale
-                        if not isinstance(upscale, torch.Tensor)
-                        else upscale.to(self.device)
-                        )
+        self.upscale = (
+            upscale
+            if not isinstance(upscale, torch.Tensor)
+            else upscale.to(self.device)
+        )
 
         if isinstance(max, torch.Tensor):
             max = max.to(self.device)
@@ -256,9 +257,11 @@ class TanhNormal(D.TransformedDistribution):
         self.loc = loc
         self.scale = self._map(scale)
 
-        if hasattr(self, 'base_dist') and \
-            (self.base_dist.base_dist.loc.shape == self.loc.shape) and \
-            (self.base_dist.base_dist.scale.shape == self.scale.shape):
+        if (
+            hasattr(self, "base_dist")
+            and (self.base_dist.base_dist.loc.shape == self.loc.shape)
+            and (self.base_dist.base_dist.scale.shape == self.scale.shape)
+        ):
             self.base_dist.base_dist.loc = self.loc
             self.base_dist.base_dist.scale = self.scale
 

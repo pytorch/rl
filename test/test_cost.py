@@ -29,7 +29,12 @@ from torchrl.objectives import (
     KLPENPPOLoss,
     GAE,
 )
-from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss, BatchedDoubleREDQLoss, BatchedREDQLoss
+from torchrl.objectives.costs.redq import (
+    REDQLoss,
+    DoubleREDQLoss,
+    BatchedDoubleREDQLoss,
+    BatchedREDQLoss,
+)
 from torchrl.objectives.costs.utils import hold_out_net
 
 
@@ -357,15 +362,27 @@ class TestDDPG:
 
         # check that loss are independent
         for k in loss.keys():
-            if not k.startswith('loss'):
+            if not k.startswith("loss"):
                 continue
             loss[k].sum().backward(retain_graph=True)
             if k == "loss_actor":
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.value_network_params)
-                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.value_network_params
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params
+                )
             elif k == "loss_value":
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
-                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.value_network_params)
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.value_network_params
+                )
             else:
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
@@ -375,8 +392,6 @@ class TestDDPG:
         parameters = list(actor.parameters()) + list(value.parameters())
         for p in parameters:
             assert p.grad.norm() > 0.0
-
-
 
         # Check param update effect on targets
         target_actor = [p.clone() for p in loss_fn.target_actor_network_params]
@@ -567,25 +582,61 @@ class TestSAC:
 
         # check that loss are independent
         for k in loss.keys():
-            if not k.startswith('loss'):
+            if not k.startswith("loss"):
                 continue
             loss[k].sum().backward(retain_graph=True)
             if k == "loss_actor":
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.value_network_params)
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
-                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.value_network_params
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params
+                )
             elif k == "loss_value":
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
-                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.value_network_params)
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.value_network_params
+                )
             elif k == "loss_qvalue":
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.value_network_params)
-                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.value_network_params
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params
+                )
             elif k == "loss_alpha":
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.value_network_params)
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.value_network_params
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params
+                )
             else:
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
@@ -808,18 +859,36 @@ class TestREDQ:
 
         # check that loss are independent
         for k in loss.keys():
-            if not k.startswith('loss'):
+            if not k.startswith("loss"):
                 continue
             loss[k].sum().backward(retain_graph=True)
             if k == "loss_actor":
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
-                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params
+                )
             elif k == "loss_qvalue":
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
-                assert not any((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params
+                )
             elif k == "loss_alpha":
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.actor_network_params)
-                assert all((p.grad is None) or (p.grad == 0).all() for p in loss_fn.qvalue_network_params)
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params
+                )
             else:
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
@@ -852,7 +921,9 @@ class TestREDQ:
             loss_function="l2",
         )
 
-        loss_class_batched = BatchedREDQLoss if loss_class is REDQLoss else BatchedDoubleREDQLoss
+        loss_class_batched = (
+            BatchedREDQLoss if loss_class is REDQLoss else BatchedDoubleREDQLoss
+        )
         loss_fn_batched = loss_class_batched(
             actor_network=deepcopy(actor),
             qvalue_network=deepcopy(qvalue),

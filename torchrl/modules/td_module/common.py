@@ -180,16 +180,18 @@ class TDModule(nn.Module):
 
         if out_keys is None:
             out_keys = self.out_keys
-        if (tensor_dict_out is None) and \
-            vmap and \
-            (isinstance(vmap, bool) or vmap[-1] is None):
+        if (
+            (tensor_dict_out is None)
+            and vmap
+            and (isinstance(vmap, bool) or vmap[-1] is None)
+        ):
             dim = tensors[0].shape[0]
             shape = [dim, *tensor_dict.shape]
             tensor_dict_out = TensorDict(
                 {key: val.expand(dim, *val.shape) for key, val in tensor_dict.items()},
-                shape
+                shape,
             )
-        elif (tensor_dict_out is None):
+        elif tensor_dict_out is None:
             tensor_dict_out = tensor_dict
         for _out_key, _tensor in zip(out_keys, tensors):
             tensor_dict_out.set(_out_key, _tensor)
@@ -547,7 +549,9 @@ class ProbabilisticTDModule(TDModule):
             self._dist.update(*params[:num_params])
             dist = self._dist
         else:
-            dist = self.distribution_class(*params[:num_params], **self.distribution_kwargs)
+            dist = self.distribution_class(
+                *params[:num_params], **self.distribution_kwargs
+            )
             if self.cache_dist:
                 self._dist = dist
         return dist, num_params
@@ -562,7 +566,10 @@ class ProbabilisticTDModule(TDModule):
         dist, *tensors = self.get_dist(tensor_dict, **kwargs)
         out_tensor = self._dist_sample(dist, interaction_mode=exploration_mode())
         tensor_dict_out = self._write_to_tensor_dict(
-            tensor_dict, [out_tensor] + list(tensors), tensor_dict_out, vmap=kwargs.get("vmap", 0)
+            tensor_dict,
+            [out_tensor] + list(tensors),
+            tensor_dict_out,
+            vmap=kwargs.get("vmap", 0),
         )
         if self.return_log_prob:
             log_prob = dist.log_prob(out_tensor)
@@ -743,7 +750,7 @@ class TDSequence(TDModule):
         out_keys = [
             out_key
             for i, out_key in enumerate(out_keys)
-            if out_key not in out_keys[i + 1:]
+            if out_key not in out_keys[i + 1 :]
         ]
 
         super().__init__(

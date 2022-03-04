@@ -1562,7 +1562,12 @@ class TensorDict(_TensorDict):
                 key: value for (key, value) in self.items_meta() if key in keys
             }
             return self
-        return TensorDict(device=self.device, batch_size=self.batch_size, source=d, _meta_source=d_meta)
+        return TensorDict(
+            device=self.device,
+            batch_size=self.batch_size,
+            source=d,
+            _meta_source=d_meta,
+        )
 
     def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:
         for k in self._tensor_dict:

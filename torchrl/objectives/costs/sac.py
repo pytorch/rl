@@ -90,15 +90,20 @@ class SACLoss(_LossModule):
         except:
             device = torch.device("cpu")
         if fixed_alpha:
-            self.register_buffer("log_alpha", torch.tensor(math.log(alpha_init), device=device))
+            self.register_buffer(
+                "log_alpha", torch.tensor(math.log(alpha_init), device=device)
+            )
         else:
             self.register_parameter(
-                "log_alpha", torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device))
+                "log_alpha",
+                torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
             )
 
         if target_entropy == "auto":
             target_entropy = -float(np.prod(actor_network.spec.shape))
-        self.register_buffer("target_entropy", torch.tensor(target_entropy, device=device))
+        self.register_buffer(
+            "target_entropy", torch.tensor(target_entropy, device=device)
+        )
 
     @property
     def device(self) -> torch.device:

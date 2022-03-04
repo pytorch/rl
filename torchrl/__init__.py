@@ -22,6 +22,10 @@ except RuntimeError as err:
 
 
 class timeit:
+    """
+    A dirty but easy to use decorator for profiling code
+    """
+
     _REG = {}
 
     def __init__(self, name):

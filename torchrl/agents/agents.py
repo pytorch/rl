@@ -48,9 +48,6 @@ WRITER_METHODS = {
 __all__ = ["Agent"]
 
 
-from torchrl import timeit
-
-
 class Agent:
     """
     A generic Agent class.
@@ -320,8 +317,6 @@ class Agent:
             if collected_frames > self.total_frames:
                 break
 
-            if i % 20 == 0:
-                timeit.print()
         self.collector.shutdown()
 
     @torch.no_grad()
@@ -371,18 +366,16 @@ class Agent:
 
         for j in range(self.optim_steps_per_batch):
             self._optim_count += 1
-            with timeit("agent / step / rb sampling"):
-                if self.replay_buffer is not None:
-                    sub_batch = self.replay_buffer.sample(self.batch_size)
-                else:
-                    sub_batch = self._sub_sample_batch(batch)
+            if self.replay_buffer is not None:
+                sub_batch = self.replay_buffer.sample(self.batch_size)
+            else:
+                sub_batch = self._sub_sample_batch(batch)
 
             if self.normalize_rewards_online:
                 self._normalize_reward(sub_batch)
 
-            with timeit("agent / step / loss"):
-                sub_batch_device = sub_batch.to(self.loss_module.device)
-                losses_td = self.loss_module(sub_batch_device)
+            sub_batch_device = sub_batch.to(self.loss_module.device)
+            losses_td = self.loss_module(sub_batch_device)
             if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
                 self.replay_buffer.update_priority(sub_batch_device)
 
@@ -390,8 +383,7 @@ class Agent:
             loss = sum(
                 [item for key, item in losses_td.items() if key.startswith("loss")]
             )
-            with timeit("agent / step / backward"):
-                loss.backward()
+            loss.backward()
             if average_losses is None:
                 average_losses: _TensorDict = losses_td.detach()
             else:

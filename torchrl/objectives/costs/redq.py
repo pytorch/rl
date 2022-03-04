@@ -1,23 +1,25 @@
 import math
-import time
 from numbers import Number
+from typing import Tuple, Union
 
 import numpy as np
 import torch
 from torch import Tensor
-from typing import Tuple, Union
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import step_tensor_dict, set_exploration_mode
-from torchrl.modules import TDModule, ActorCriticWrapper
-from torchrl.objectives import next_state_value as get_next_state_value, hold_out_params, distance_loss
+from torchrl.modules import TDModule
+from torchrl.objectives import (
+    next_state_value as get_next_state_value,
+    hold_out_params,
+    distance_loss,
+)
 from torchrl.objectives.costs.common import _LossModule
 
-__all__ = ["REDQLoss", "DoubleREDQLoss", "BatchedREDQLoss", "BatchedDoubleREDQLoss"]
+__all__ = ["REDQLoss", "DoubleREDQLoss"]
 
-from torchrl import timeit
 
-class REDQLoss(_LossModule):
+class REDQLoss_deprecated(_LossModule):
     """
     REDQ Loss module.
     REDQ (RANDOMIZED ENSEMBLED DOUBLE Q-LEARNING: LEARNING FAST WITHOUT A MODEL
@@ -40,6 +42,7 @@ class REDQLoss(_LossModule):
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
 
     """
+
     delay_actor: bool = False
     delay_qvalue: bool = False
 
@@ -80,15 +83,20 @@ class REDQLoss(_LossModule):
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
-            self.register_buffer("log_alpha", torch.tensor(math.log(alpha_init), device=device))
+            self.register_buffer(
+                "log_alpha", torch.tensor(math.log(alpha_init), device=device)
+            )
         else:
             self.register_parameter(
-                "log_alpha", torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device))
+                "log_alpha",
+                torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
             )
 
         if target_entropy == "auto":
             target_entropy = -float(np.prod(actor_network.spec.shape))
-        self.register_buffer("target_entropy", torch.tensor(target_entropy, device=device))
+        self.register_buffer(
+            "target_entropy", torch.tensor(target_entropy, device=device)
+        )
 
     @property
     def alpha(self):
@@ -96,7 +104,6 @@ class REDQLoss(_LossModule):
             alpha = self.log_alpha.detach().exp()
         return alpha
 
-    @timeit("loss")
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         loss_actor, action_log_prob = self._actor_loss(tensordict)
 
@@ -132,7 +139,9 @@ class REDQLoss(_LossModule):
         with hold_out_params(self.qvalue_network_params) as params:
             tensordict_expand = self.qvalue_network(
                 tensordict_clone.select(*self.qvalue_network.in_keys),
-                tensor_dict_out=TensorDict({}, [self.num_qvalue_nets, *tensordict_clone.shape]),
+                tensor_dict_out=TensorDict(
+                    {}, [self.num_qvalue_nets, *tensordict_clone.shape]
+                ),
                 params=params,
                 buffers=self.qvalue_network_buffers,
                 vmap=True,
@@ -147,9 +156,11 @@ class REDQLoss(_LossModule):
     def _qvalue_loss(self, tensordict: _TensorDict) -> Tensor:
         tensordict_save = tensordict
 
-        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs") ]
-        obs_keys = [key for key in tensordict.keys() if key.startswith("obs") ]
-        tensordict = tensordict.select("reward", "done", *next_obs_keys, *obs_keys, "action")
+        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs")]
+        obs_keys = [key for key in tensordict.keys() if key.startswith("obs")]
+        tensordict = tensordict.select(
+            "reward", "done", *next_obs_keys, *obs_keys, "action"
+        )
 
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
@@ -162,7 +173,9 @@ class REDQLoss(_LossModule):
                 b[selected_models_idx] for b in self.target_qvalue_network_buffers
             ]
 
-            next_td = step_tensor_dict(tensordict).select(*self.actor_network.in_keys)  # next_observation ->
+            next_td = step_tensor_dict(tensordict).select(
+                *self.actor_network.in_keys
+            )  # next_observation ->
             # observation
             # select pseudo-action
             with set_exploration_mode("random"):
@@ -178,10 +191,11 @@ class REDQLoss(_LossModule):
                 tensor_dict_out=TensorDict({}, [self.sub_sample_len, *next_td.shape]),
                 params=selected_q_params,
                 buffers=selected_q_buffers,
-                vmap=True
+                vmap=True,
             )
-            state_value = next_td.get("state_action_value") - \
-                          self.alpha * action_log_prob
+            state_value = (
+                next_td.get("state_action_value") - self.alpha * action_log_prob
+            )
             state_value = state_value.min(0)[0]
 
         tensordict.set("next_state_value", state_value)
@@ -219,12 +233,11 @@ class REDQLoss(_LossModule):
         return alpha_loss
 
 
-class DoubleREDQLoss(REDQLoss):
+class DoubleREDQLoss_deprecated(REDQLoss_deprecated):
     delay_qvalue: bool = True
 
 
-
-class BatchedREDQLoss(_LossModule):
+class REDQLoss(_LossModule):
     """
     REDQ Loss module.
     REDQ (RANDOMIZED ENSEMBLED DOUBLE Q-LEARNING: LEARNING FAST WITHOUT A MODEL
@@ -247,6 +260,7 @@ class BatchedREDQLoss(_LossModule):
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
 
     """
+
     delay_actor: bool = False
     delay_qvalue: bool = False
 
@@ -287,15 +301,20 @@ class BatchedREDQLoss(_LossModule):
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
-            self.register_buffer("log_alpha", torch.tensor(math.log(alpha_init), device=device))
+            self.register_buffer(
+                "log_alpha", torch.tensor(math.log(alpha_init), device=device)
+            )
         else:
             self.register_parameter(
-                "log_alpha", torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device))
+                "log_alpha",
+                torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
             )
 
         if target_entropy == "auto":
             target_entropy = -float(np.prod(actor_network.spec.shape))
-        self.register_buffer("target_entropy", torch.tensor(target_entropy, device=device))
+        self.register_buffer(
+            "target_entropy", torch.tensor(target_entropy, device=device)
+        )
 
     @property
     def alpha(self):
@@ -303,11 +322,12 @@ class BatchedREDQLoss(_LossModule):
             alpha = self.log_alpha.detach().exp()
         return alpha
 
-    @timeit("loss")
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         obs_keys = self.actor_network.in_keys
-        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs") ]
-        tensordict_select = tensordict.select("reward", "done", *next_obs_keys, *obs_keys, "action")
+        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs")]
+        tensordict_select = tensordict.select(
+            "reward", "done", *next_obs_keys, *obs_keys, "action"
+        )
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
         ].sort()[0]
@@ -318,14 +338,26 @@ class BatchedREDQLoss(_LossModule):
             b[selected_models_idx] for b in self.target_qvalue_network_buffers
         ]
 
-        actor_params = [torch.stack([p1, p2], 0) for p1, p2 in zip(self.actor_network_params, self.target_actor_network_params)]
-        actor_buffers = [torch.stack([p1, p2], 0) for p1, p2 in zip(self.actor_network_buffers, self.target_actor_network_buffers)]
+        actor_params = [
+            torch.stack([p1, p2], 0)
+            for p1, p2 in zip(
+                self.actor_network_params, self.target_actor_network_params
+            )
+        ]
+        actor_buffers = [
+            torch.stack([p1, p2], 0)
+            for p1, p2 in zip(
+                self.actor_network_buffers, self.target_actor_network_buffers
+            )
+        ]
 
-        tensordict_actor_grad = tensordict_select.select(*obs_keys)  # to avoid overwriting keys
-        next_td_actor = step_tensor_dict(tensordict_select).select(*self.actor_network.in_keys)  # next_observation ->
+        tensordict_actor_grad = tensordict_select.select(
+            *obs_keys
+        )  # to avoid overwriting keys
+        next_td_actor = step_tensor_dict(tensordict_select).select(
+            *self.actor_network.in_keys
+        )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
-
-
 
         with set_exploration_mode("random"):
             tensordict_actor = self.actor_network(
@@ -336,20 +368,37 @@ class BatchedREDQLoss(_LossModule):
             )
 
         # repeat tensordict_actor to match the qvalue size
-        tensordict_qval = torch.cat([
-            tensordict_actor[0].select(*self.qvalue_network.in_keys).expand(self.num_qvalue_nets), # for actor loss
-            tensordict_actor[1].select(*self.qvalue_network.in_keys).expand(self.sub_sample_len), # for next value estimation
-            tensordict_select.select(*self.qvalue_network.in_keys).expand(self.num_qvalue_nets), # for qvalue loss
-        ], 0)
+        tensordict_qval = torch.cat(
+            [
+                tensordict_actor[0]
+                .select(*self.qvalue_network.in_keys)
+                .expand(self.num_qvalue_nets),  # for actor loss
+                tensordict_actor[1]
+                .select(*self.qvalue_network.in_keys)
+                .expand(self.sub_sample_len),  # for next value estimation
+                tensordict_select.select(*self.qvalue_network.in_keys).expand(
+                    self.num_qvalue_nets
+                ),  # for qvalue loss
+            ],
+            0,
+        )
 
         # cat params
         q_params_detach = hold_out_params(self.qvalue_network_params).params
-        qvalue_params = [torch.cat([
-            p1, p2, p3
-        ], 0) for p1, p2, p3 in zip(q_params_detach, selected_q_params, self.qvalue_network_params)]
-        qvalue_buffers = [torch.cat([
-            p1, p2, p3
-        ], 0) for p1, p2, p3 in zip(self.qvalue_network_buffers, selected_q_buffers, self.qvalue_network_buffers)]
+        qvalue_params = [
+            torch.cat([p1, p2, p3], 0)
+            for p1, p2, p3 in zip(
+                q_params_detach, selected_q_params, self.qvalue_network_params
+            )
+        ]
+        qvalue_buffers = [
+            torch.cat([p1, p2, p3], 0)
+            for p1, p2, p3 in zip(
+                self.qvalue_network_buffers,
+                selected_q_buffers,
+                self.qvalue_network_buffers,
+            )
+        ]
 
         tensordict_qval = self.qvalue_network(
             tensordict_qval,
@@ -360,18 +409,23 @@ class BatchedREDQLoss(_LossModule):
         )
 
         state_action_value = tensordict_qval.get("state_action_value").squeeze(-1)
-        state_action_value_actor, next_state_action_value_qvalue, state_action_value_qvalue = \
-            state_action_value.split([self.num_qvalue_nets, self.sub_sample_len, self.num_qvalue_nets], dim=0)
+        (
+            state_action_value_actor,
+            next_state_action_value_qvalue,
+            state_action_value_qvalue,
+        ) = state_action_value.split(
+            [self.num_qvalue_nets, self.sub_sample_len, self.num_qvalue_nets], dim=0
+        )
         action_log_prob = tensordict_actor.get("action_log_prob").squeeze(-1)
         action_log_prob_actor, next_action_log_prob_qvalue = action_log_prob.unbind(0)
 
         loss_actor = -(
-            state_action_value_actor
-            - self.alpha * action_log_prob_actor
+            state_action_value_actor - self.alpha * action_log_prob_actor
         ).mean(0)
 
-        next_state_value = next_state_action_value_qvalue - \
-                      self.alpha * next_action_log_prob_qvalue
+        next_state_value = (
+            next_state_action_value_qvalue - self.alpha * next_action_log_prob_qvalue
+        )
         next_state_value = next_state_value.min(0)[0]
 
         target_value = get_next_state_value(
@@ -419,5 +473,5 @@ class BatchedREDQLoss(_LossModule):
         return alpha_loss
 
 
-class BatchedDoubleREDQLoss(BatchedREDQLoss):
+class DoubleREDQLoss(REDQLoss):
     delay_qvalue: bool = True
