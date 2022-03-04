@@ -40,7 +40,7 @@ class timeit:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         t = time.time() - self.t0
-        self._REG.setdefault(self.name, (0.0, 0))
+        self._REG.setdefault(self.name, [0.0, 0])
 
         count = self._REG[self.name][1]
         self._REG[self.name][0] = (self._REG[self.name][0] * count + t) / (count + 1)
