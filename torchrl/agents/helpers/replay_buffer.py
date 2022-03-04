@@ -15,6 +15,7 @@ def make_replay_buffer(device: DEVICE_TYPING, args: Namespace) -> ReplayBuffer:
             args.buffer_size,
             collate_fn=InPlaceSampler(device),
             pin_memory=device != torch.device("cpu"),
+            prefetch=3,
         )
     else:
         buffer = TensorDictPrioritizedReplayBuffer(
@@ -23,6 +24,7 @@ def make_replay_buffer(device: DEVICE_TYPING, args: Namespace) -> ReplayBuffer:
             beta=0.5,
             collate_fn=InPlaceSampler(device),
             pin_memory=device != torch.device("cpu"),
+            prefetch=3,
         )
     return buffer
 
