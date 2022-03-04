@@ -288,42 +288,40 @@ class Agent:
             collected_frames += current_frames
             self._collected_frames = collected_frames
 
-            with timeit("agent / rb extend"):
-                if self.replay_buffer is not None:
-                    if "mask" in batch.keys():
-                        batch = batch[batch.get("mask").squeeze(-1)]
-                    else:
-                        batch = batch.reshape(-1)
-                    reward_training = batch.get("reward").mean().item()
-                    batch = batch.cpu()
-                    self.replay_buffer.extend(batch)
+            if self.replay_buffer is not None:
+                if "mask" in batch.keys():
+                    batch = batch[batch.get("mask").squeeze(-1)]
                 else:
-                    if "mask" in batch.keys():
-                        reward_training = (
-                            batch.get("reward")[batch.get("mask").squeeze(-1)].mean().item()
-                        )
-                    else:
-                        reward_training = batch.get("reward").mean().item()
+                    batch = batch.reshape(-1)
+                reward_training = batch.get("reward").mean().item()
+                batch = batch.cpu()
+                self.replay_buffer.extend(batch)
+            else:
+                if "mask" in batch.keys():
+                    reward_training = (
+                        batch.get("reward")[batch.get("mask").squeeze(-1)].mean().item()
+                    )
+                else:
+                    reward_training = batch.get("reward").mean().item()
 
             if self.normalize_rewards_online:
                 reward = batch.get("reward")
                 self._update_reward_stats(reward)
 
-            with timeit("agent / steps"):
-                if collected_frames > self.collector.init_random_frames:
-                    self.steps(batch)
-                self._collector_scheduler_step(i, current_frames)
+            if collected_frames > self.collector.init_random_frames:
+                self.steps(batch)
+            self._collector_scheduler_step(i, current_frames)
 
-            with timeit("agent / log"):
-                self._log(reward_training=reward_training)
-                if self.progress_bar:
-                    self._pbar.update(current_frames)
-                    self._pbar_description()
+            self._log(reward_training=reward_training)
+            if self.progress_bar:
+                self._pbar.update(current_frames)
+                self._pbar_description()
 
             if collected_frames > self.total_frames:
                 break
 
-        timeit.print()
+            if i % 20 == 0:
+                timeit.print()
         self.collector.shutdown()
 
     @torch.no_grad()
@@ -379,16 +377,14 @@ class Agent:
                 else:
                     sub_batch = self._sub_sample_batch(batch)
 
-            with timeit("agent / step / norm rewards"):
-                if self.normalize_rewards_online:
-                    self._normalize_reward(sub_batch)
+            if self.normalize_rewards_online:
+                self._normalize_reward(sub_batch)
 
             with timeit("agent / step / loss"):
                 sub_batch_device = sub_batch.to(self.loss_module.device)
                 losses_td = self.loss_module(sub_batch_device)
-            with timeit("agent / step / rb update priority"):
-                if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
-                    self.replay_buffer.update_priority(sub_batch_device)
+            if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
+                self.replay_buffer.update_priority(sub_batch_device)
 
             # sum all keys that start with 'loss_'
             loss = sum(
@@ -413,13 +409,12 @@ class Agent:
             if self._optim_count % self.record_interval == 0:
                 self.record()
 
-        with timeit("agent / step / log"):
-            if self.optim_steps_per_batch > 0:
-                self._log(
-                    grad_norm=average_grad_norm,
-                    optim_steps=self._optim_count,
-                    **average_losses,
-                )
+        if self.optim_steps_per_batch > 0:
+            self._log(
+                grad_norm=average_grad_norm,
+                optim_steps=self._optim_count,
+                **average_losses,
+            )
 
     def _optim_schedule_step(self) -> None:
         """

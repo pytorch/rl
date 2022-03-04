@@ -31,6 +31,7 @@ from torchrl.objectives import (
 )
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.redq import BatchedREDQLoss as REDQLoss, BatchedDoubleREDQLoss as DoubleREDQLoss
+# from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 
 

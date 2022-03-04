@@ -21,7 +21,6 @@ __all__ = [
 
 from ..tensordict.tensordict import _TensorDict, stack as stack_td
 from ..utils import DEVICE_TYPING
-from ... import timeit
 
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
@@ -390,25 +389,23 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> Tuple[Any, torch.Tensor, torch.Tensor]:
-        with timeit(f"{self.__class__.__name__} / sample / collect"):
-            with self._replay_lock:
-                p_sum = self._sum_tree.query(0, self._capacity)
-                p_min = self._min_tree.query(0, self._capacity)
-                if p_sum <= 0:
-                    raise RuntimeError("negative p_sum")
-                if p_min <= 0:
-                    raise RuntimeError("negative p_min")
-                mass = np.random.uniform(0.0, p_sum, size=batch_size)
-                index = self._sum_tree.scan_lower_bound(mass)
-                if isinstance(index, torch.Tensor):
-                    index.clamp_max_(len(self._storage) - 1)
-                else:
-                    index = np.clip(index, None, len(self._storage) - 1)
-                data = [self._storage[i] for i in index]
-                weight = self._sum_tree[index]
+        with self._replay_lock:
+            p_sum = self._sum_tree.query(0, self._capacity)
+            p_min = self._min_tree.query(0, self._capacity)
+            if p_sum <= 0:
+                raise RuntimeError("negative p_sum")
+            if p_min <= 0:
+                raise RuntimeError("negative p_min")
+            mass = np.random.uniform(0.0, p_sum, size=batch_size)
+            index = self._sum_tree.scan_lower_bound(mass)
+            if isinstance(index, torch.Tensor):
+                index.clamp_max_(len(self._storage) - 1)
+            else:
+                index = np.clip(index, None, len(self._storage) - 1)
+            data = [self._storage[i] for i in index]
+            weight = self._sum_tree[index]
 
-        with timeit(f"{self.__class__.__name__} / sample / collate"):
-            data = self._collate_fn(data)
+        data = self._collate_fn(data)
 
         # Importance sampling weight formula:
         #   w_i = (p_i / sum(p) * N) ^ (-beta)
@@ -604,7 +601,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         priority = tensor_dict.get(self.priority_key)
         if (priority < 0).any():
             raise RuntimeError(
-                f"Priority must be a positive value, got {(priority<0).sum()} negative priority values."
+                f"Priority must be a positive value, got {(priority < 0).sum()} negative priority values."
             )
         return super().update_priority(tensor_dict.get("index"), priority=priority)
 

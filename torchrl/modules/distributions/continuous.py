@@ -12,9 +12,8 @@ from .utils import UNIFORM
 
 __all__ = ["TanhNormal", "Delta", "TanhDelta", "TruncatedNormal"]
 
-from ... import timeit
-
 D.Distribution.set_default_validate_args(False)
+
 
 class SafeTanhTransform(D.TanhTransform):
     """
@@ -223,32 +222,29 @@ class TanhNormal(D.TransformedDistribution):
         self.tanh_scale = tanh_scale
         self._event_dims = event_dims
 
-        with timeit(f"{self.__class__.__name__} / prep"):
-            self.device = net_output.device
-            self.upscale = (upscale
-                    if not isinstance(upscale, torch.Tensor)
-                    else upscale.to(self.device)
-                )
+        self.device = net_output.device
+        self.upscale = (upscale
+                        if not isinstance(upscale, torch.Tensor)
+                        else upscale.to(self.device)
+                        )
 
-            if isinstance(max, torch.Tensor):
-                max = max.to(self.device)
-            if isinstance(min, torch.Tensor):
-                min = min.to(self.device)
-            self.min = min
-            self.max = max
-            self._map = mappings(scale_mapping)
+        if isinstance(max, torch.Tensor):
+            max = max.to(self.device)
+        if isinstance(min, torch.Tensor):
+            min = min.to(self.device)
+        self.min = min
+        self.max = max
+        self._map = mappings(scale_mapping)
 
-        with timeit(f"{self.__class__.__name__} / safe tanh trsf"):
-            t = SafeTanhTransform()
-            if self.non_trivial_max or self.non_trivial_min:
-                t = D.ComposeTransform(
-                    [t, D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)]
-                )
-            self._t = t
+        t = SafeTanhTransform()
+        if self.non_trivial_max or self.non_trivial_min:
+            t = D.ComposeTransform(
+                [t, D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)]
+            )
+        self._t = t
 
         self.update(net_output)
 
-    @timeit("TanhNormal / update")
     def update(self, net_output: torch.Tensor) -> None:
         loc, scale = net_output.chunk(chunks=2, dim=-1)
         if self.tanh_loc:
@@ -267,11 +263,8 @@ class TanhNormal(D.TransformedDistribution):
             self.base_dist.base_dist.scale = self.scale
 
         else:
-            with timeit(f"{self.__class__.__name__} / normal"):
-                base = D.Independent(D.Normal(self.loc, self.scale), self._event_dims)
-
-            with timeit(f"{self.__class__.__name__} / super.init"):
-                super().__init__(base, self._t)
+            base = D.Independent(D.Normal(self.loc, self.scale), self._event_dims)
+            super().__init__(base, self._t)
 
     @property
     def mode(self):

@@ -32,6 +32,7 @@ class timeit:
             with self:
                 out = fn(*args, **kwargs)
                 return out
+
         return decorated_fn
 
     def __enter__(self):
@@ -39,12 +40,15 @@ class timeit:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         t = time.time() - self.t0
-        self._REG.setdefault(self.name, 0.0)
-        self._REG[self.name] += t
+        self._REG.setdefault(self.name, (0.0, 0))
+
+        count = self._REG[self.name][1]
+        self._REG[self.name][0] = (self._REG[self.name][0] * count + t) / (count + 1)
+        self._REG[self.name][1] = count + 1
 
     @staticmethod
     def print():
         keys = list(timeit._REG)
         keys.sort()
         for name in keys:
-            print(f"{name} took {timeit._REG[name]} sec")
+            print(f"{name} took {timeit._REG[name] / 1000:4.4} msec")

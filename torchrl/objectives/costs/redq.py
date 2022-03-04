@@ -96,12 +96,11 @@ class REDQLoss(_LossModule):
             alpha = self.log_alpha.detach().exp()
         return alpha
 
+    @timeit("loss")
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
-        with timeit("loss / actor_loss"):
-            loss_actor, action_log_prob = self._actor_loss(tensordict)
+        loss_actor, action_log_prob = self._actor_loss(tensordict)
 
-        with timeit("loss / qvalue_loss"):
-            loss_qval = self._qvalue_loss(tensordict)
+        loss_qval = self._qvalue_loss(tensordict)
         loss_alpha = self._loss_alpha(action_log_prob)
         if not loss_qval.shape == loss_actor.shape:
             raise RuntimeError(
@@ -121,27 +120,24 @@ class REDQLoss(_LossModule):
         return td_out
 
     def _actor_loss(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
-        with timeit("loss / actor_loss / select"):
-            obs_keys = self.actor_network.in_keys
-            tensordict_clone = tensordict.select(*obs_keys)  # to avoid overwriting keys
-        with timeit("loss / actor_loss / run"):
-            with set_exploration_mode("random"):
-                self.actor_network(
-                    tensordict_clone,
-                    params=self.actor_network_params,
-                    buffers=self.actor_network_buffers,
-                )
+        obs_keys = self.actor_network.in_keys
+        tensordict_clone = tensordict.select(*obs_keys)  # to avoid overwriting keys
+        with set_exploration_mode("random"):
+            self.actor_network(
+                tensordict_clone,
+                params=self.actor_network_params,
+                buffers=self.actor_network_buffers,
+            )
 
-        with timeit("loss / actor_loss / qval"):
-            with hold_out_params(self.qvalue_network_params) as params:
-                tensordict_expand = self.qvalue_network(
-                    tensordict_clone.select(*self.qvalue_network.in_keys),
-                    tensor_dict_out=TensorDict({}, [self.num_qvalue_nets, *tensordict_clone.shape]),
-                    params=params,
-                    buffers=self.qvalue_network_buffers,
-                    vmap=True,
-                )
-                state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
+        with hold_out_params(self.qvalue_network_params) as params:
+            tensordict_expand = self.qvalue_network(
+                tensordict_clone.select(*self.qvalue_network.in_keys),
+                tensor_dict_out=TensorDict({}, [self.num_qvalue_nets, *tensordict_clone.shape]),
+                params=params,
+                buffers=self.qvalue_network_buffers,
+                vmap=True,
+            )
+            state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
         loss_actor = -(
             state_action_value
             - self.alpha * tensordict_clone.get("action_log_prob").squeeze(-1)
@@ -151,69 +147,62 @@ class REDQLoss(_LossModule):
     def _qvalue_loss(self, tensordict: _TensorDict) -> Tensor:
         tensordict_save = tensordict
 
-        with timeit("loss / qval_loss / select"):
-            next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs") ]
-            obs_keys = [key for key in tensordict.keys() if key.startswith("obs") ]
-            tensordict = tensordict.select("reward", "done", *next_obs_keys, *obs_keys, "action")
+        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs") ]
+        obs_keys = [key for key in tensordict.keys() if key.startswith("obs") ]
+        tensordict = tensordict.select("reward", "done", *next_obs_keys, *obs_keys, "action")
 
-        with timeit("loss / qval_loss / perm_next"):
-            selected_models_idx = torch.randperm(self.num_qvalue_nets)[
-                : self.sub_sample_len
-            ].sort()[0]
-            with torch.no_grad():
-                selected_q_params = [
-                    p[selected_models_idx] for p in self.target_qvalue_network_params
-                ]
-                selected_q_buffers = [
-                    b[selected_models_idx] for b in self.target_qvalue_network_buffers
-                ]
+        selected_models_idx = torch.randperm(self.num_qvalue_nets)[
+            : self.sub_sample_len
+        ].sort()[0]
+        with torch.no_grad():
+            selected_q_params = [
+                p[selected_models_idx] for p in self.target_qvalue_network_params
+            ]
+            selected_q_buffers = [
+                b[selected_models_idx] for b in self.target_qvalue_network_buffers
+            ]
 
-                next_td = step_tensor_dict(tensordict).select(*self.actor_network.in_keys)  # next_observation ->
-                # observation
-                # select pseudo-action
-                with timeit("loss / qval_loss / perm_next / actor"):
-                    with set_exploration_mode("random"):
-                        self.actor_network(
-                            next_td,
-                            params=list(self.target_actor_network_params),
-                            buffers=self.target_actor_network_buffers,
-                        )
-                action_log_prob = next_td.get("action_log_prob")
-                # get q-values
-                with timeit("loss / qval_loss / perm_next / qval"):
-                    next_td = self.qvalue_network(
-                        next_td,
-                        tensor_dict_out=TensorDict({}, [self.sub_sample_len, *next_td.shape]),
-                        params=selected_q_params,
-                        buffers=selected_q_buffers,
-                        vmap=True
-                    )
-                state_value = next_td.get("state_action_value") - \
-                              self.alpha * action_log_prob
-                state_value = state_value.min(0)[0]
-
-        with timeit("loss / qval_loss / qval"):
-            tensordict.set("next_state_value", state_value)
-            target_value = get_next_state_value(
-                tensordict,
-                gamma=self.gamma,
-                pred_next_val=state_value,
+            next_td = step_tensor_dict(tensordict).select(*self.actor_network.in_keys)  # next_observation ->
+            # observation
+            # select pseudo-action
+            with set_exploration_mode("random"):
+                self.actor_network(
+                    next_td,
+                    params=list(self.target_actor_network_params),
+                    buffers=self.target_actor_network_buffers,
+                )
+            action_log_prob = next_td.get("action_log_prob")
+            # get q-values
+            next_td = self.qvalue_network(
+                next_td,
+                tensor_dict_out=TensorDict({}, [self.sub_sample_len, *next_td.shape]),
+                params=selected_q_params,
+                buffers=selected_q_buffers,
+                vmap=True
             )
-            tensordict_expand = self.qvalue_network(
-                tensordict.select(*self.qvalue_network.in_keys),
-                tensor_dict_out=TensorDict({}, [self.num_qvalue_nets, *tensordict.shape]),
-                params=list(self.qvalue_network_params),
-                buffers=self.qvalue_network_buffers,
-                vmap=True,
-            )
-        with timeit("loss / qval_loss / loss comp"):
-            pred_val = tensordict_expand.get("state_action_value").squeeze(-1)
-            td_error = abs(pred_val - target_value)
-            loss_qval = distance_loss(
-                pred_val, target_value.expand_as(pred_val), loss_function=self.loss_function
-            ).mean(0)
-        with timeit("loss / qval_loss / priority"):
-            tensordict_save.set("td_error", td_error.detach().max(0)[0])
+            state_value = next_td.get("state_action_value") - \
+                          self.alpha * action_log_prob
+            state_value = state_value.min(0)[0]
+
+        tensordict.set("next_state_value", state_value)
+        target_value = get_next_state_value(
+            tensordict,
+            gamma=self.gamma,
+            pred_next_val=state_value,
+        )
+        tensordict_expand = self.qvalue_network(
+            tensordict.select(*self.qvalue_network.in_keys),
+            tensor_dict_out=TensorDict({}, [self.num_qvalue_nets, *tensordict.shape]),
+            params=list(self.qvalue_network_params),
+            buffers=self.qvalue_network_buffers,
+            vmap=True,
+        )
+        pred_val = tensordict_expand.get("state_action_value").squeeze(-1)
+        td_error = abs(pred_val - target_value)
+        loss_qval = distance_loss(
+            pred_val, target_value.expand_as(pred_val), loss_function=self.loss_function
+        ).mean(0)
+        tensordict_save.set("td_error", td_error.detach().max(0)[0])
         return loss_qval
 
     def _loss_alpha(self, log_pi: Tensor) -> Tensor:
@@ -314,6 +303,7 @@ class BatchedREDQLoss(_LossModule):
             alpha = self.log_alpha.detach().exp()
         return alpha
 
+    @timeit("loss")
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         obs_keys = self.actor_network.in_keys
         next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs") ]

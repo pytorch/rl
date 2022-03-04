@@ -22,8 +22,6 @@ __all__ = [
     "TDModuleWrapper",
 ]
 
-from torchrl import timeit
-
 
 def _forward_hook_safe_action(module, tensor_dict_in, tensor_dict_out):
     if not module.spec.is_in(tensor_dict_out.get(module.out_keys[0])):
@@ -182,21 +180,19 @@ class TDModule(nn.Module):
 
         if out_keys is None:
             out_keys = self.out_keys
-        with timeit(f"{self.__class__.__name__} / write / vmap"):
-            if (tensor_dict_out is None) and \
-                vmap and \
-                (isinstance(vmap, bool) or vmap[-1] is None):
-                dim = tensors[0].shape[0]
-                shape = [dim, *tensor_dict.shape]
-                tensor_dict_out = TensorDict(
-                    {key: val.expand(dim, *val.shape) for key, val in tensor_dict.items()},
-                    shape
-                )
-            elif (tensor_dict_out is None):
-                tensor_dict_out = tensor_dict
-        with timeit(f"{self.__class__.__name__} / write / set"):
-            for _out_key, _tensor in zip(out_keys, tensors):
-                tensor_dict_out.set(_out_key, _tensor)
+        if (tensor_dict_out is None) and \
+            vmap and \
+            (isinstance(vmap, bool) or vmap[-1] is None):
+            dim = tensors[0].shape[0]
+            shape = [dim, *tensor_dict.shape]
+            tensor_dict_out = TensorDict(
+                {key: val.expand(dim, *val.shape) for key, val in tensor_dict.items()},
+                shape
+            )
+        elif (tensor_dict_out is None):
+            tensor_dict_out = tensor_dict
+        for _out_key, _tensor in zip(out_keys, tensors):
+            tensor_dict_out.set(_out_key, _tensor)
         return tensor_dict_out
 
     def _make_vmap(self, kwargs, n_input):
@@ -219,41 +215,39 @@ class TDModule(nn.Module):
         self, tensors: Sequence[Tensor], **kwargs
     ) -> Union[Tensor, Sequence[Tensor]]:
         err_msg = "Did not find the {0} keyword argument to be used with the functional module."
-        with timeit(f"{self.__class__.__name__} / call / vmap"):
-            if isinstance(self.module, (FunctionalModule, FunctionalModuleWithBuffers)):
-                _vmap = self._make_vmap(kwargs, len(tensors))
-                if _vmap:
-                    module = vmap(self.module, _vmap)
-                else:
-                    module = self.module
-
-        with timeit(f"{self.__class__.__name__} / call / call"):
-            if isinstance(self.module, FunctionalModule):
-                if "params" not in kwargs:
-                    raise KeyError(err_msg.format("params"))
-                kwargs_pruned = {
-                    key: item
-                    for key, item in kwargs.items()
-                    if key not in ("params", "vmap")
-                }
-                return module(kwargs["params"], *tensors, **kwargs_pruned)
-
-            elif isinstance(self.module, FunctionalModuleWithBuffers):
-                if "params" not in kwargs:
-                    raise KeyError(err_msg.format("params"))
-                if "buffers" not in kwargs:
-                    raise KeyError(err_msg.format("buffers"))
-
-                kwargs_pruned = {
-                    key: item
-                    for key, item in kwargs.items()
-                    if key not in ("params", "buffers", "vmap")
-                }
-                return module(
-                    kwargs["params"], kwargs["buffers"], *tensors, **kwargs_pruned
-                )
+        if isinstance(self.module, (FunctionalModule, FunctionalModuleWithBuffers)):
+            _vmap = self._make_vmap(kwargs, len(tensors))
+            if _vmap:
+                module = vmap(self.module, _vmap)
             else:
-                out = self.module(*tensors, **kwargs)
+                module = self.module
+
+        if isinstance(self.module, FunctionalModule):
+            if "params" not in kwargs:
+                raise KeyError(err_msg.format("params"))
+            kwargs_pruned = {
+                key: item
+                for key, item in kwargs.items()
+                if key not in ("params", "vmap")
+            }
+            return module(kwargs["params"], *tensors, **kwargs_pruned)
+
+        elif isinstance(self.module, FunctionalModuleWithBuffers):
+            if "params" not in kwargs:
+                raise KeyError(err_msg.format("params"))
+            if "buffers" not in kwargs:
+                raise KeyError(err_msg.format("buffers"))
+
+            kwargs_pruned = {
+                key: item
+                for key, item in kwargs.items()
+                if key not in ("params", "buffers", "vmap")
+            }
+            return module(
+                kwargs["params"], kwargs["buffers"], *tensors, **kwargs_pruned
+            )
+        else:
+            out = self.module(*tensors, **kwargs)
         return out
 
     def forward(
@@ -262,15 +256,12 @@ class TDModule(nn.Module):
         tensor_dict_out: Optional[_TensorDict] = None,
         **kwargs,
     ) -> _TensorDict:
-        with timeit(f"{self.__class__.__name__} / call"):
-            tensors = tuple(tensor_dict.get(in_key) for in_key in self.in_keys)
-            tensors = self._call_module(tensors, **kwargs)
-        if isinstance(tensors, Tensor):
-            tensors = (tensors,)
-        with timeit(f"{self.__class__.__name__} / write"):
-            tensor_dict_out = self._write_to_tensor_dict(
-                tensor_dict, tensors, tensor_dict_out, vmap=kwargs.get("vmap", False)
-            )
+        tensors = tuple(tensor_dict.get(in_key) for in_key in self.in_keys)
+        tensors = self._call_module(tensors, **kwargs)
+        tensors = (tensors,)
+        tensor_dict_out = self._write_to_tensor_dict(
+            tensor_dict, tensors, tensor_dict_out, vmap=kwargs.get("vmap", False)
+        )
         return tensor_dict_out
 
     def random(self, tensor_dict: _TensorDict) -> _TensorDict:
@@ -523,18 +514,15 @@ class ProbabilisticTDModule(TDModule):
         Returns: a distribution along with other tensors returned by the module.
 
         """
-        with timeit(f"{self.__class__.__name__} / get_dist / get"):
-            tensors = [tensor_dict.get(key, None) for key in self.in_keys]
-        with timeit(f"{self.__class__.__name__} / get_dist / call"):
-            out_tensors = self._call_module(tensors, **kwargs)
+        tensors = [tensor_dict.get(key, None) for key in self.in_keys]
+        out_tensors = self._call_module(tensors, **kwargs)
         if isinstance(out_tensors, Tensor):
             out_tensors = (out_tensors,)
         if self.save_dist_params:
             for i, _tensor in enumerate(out_tensors):
                 tensor_dict.set(f"{self.out_keys[0]}_dist_param_{i}", _tensor)
-        with timeit(f"{self.__class__.__name__} / get_dist / build dist"):
-            dist, num_params = self.build_dist_from_params(out_tensors)
-            tensors = out_tensors[num_params:]
+        dist, num_params = self.build_dist_from_params(out_tensors)
+        tensors = out_tensors[num_params:]
 
         return (dist, *tensors)
 
@@ -571,18 +559,14 @@ class ProbabilisticTDModule(TDModule):
         **kwargs,
     ) -> _TensorDict:
 
-        with timeit(f"{self.__class__.__name__} / get_dist"):
-            dist, *tensors = self.get_dist(tensor_dict, **kwargs)
-        with timeit(f"{self.__class__.__name__} / sample"):
-            out_tensor = self._dist_sample(dist, interaction_mode=exploration_mode())
-        with timeit(f"{self.__class__.__name__} / write"):
-            tensor_dict_out = self._write_to_tensor_dict(
-                tensor_dict, [out_tensor] + list(tensors), tensor_dict_out, vmap=kwargs.get("vmap", 0)
-            )
-        with timeit(f"{self.__class__.__name__} / log_prob"):
-            if self.return_log_prob:
-                log_prob = dist.log_prob(out_tensor)
-                tensor_dict_out.set("_".join([self.out_keys[0], "log_prob"]), log_prob)
+        dist, *tensors = self.get_dist(tensor_dict, **kwargs)
+        out_tensor = self._dist_sample(dist, interaction_mode=exploration_mode())
+        tensor_dict_out = self._write_to_tensor_dict(
+            tensor_dict, [out_tensor] + list(tensors), tensor_dict_out, vmap=kwargs.get("vmap", 0)
+        )
+        if self.return_log_prob:
+            log_prob = dist.log_prob(out_tensor)
+            tensor_dict_out.set("_".join([self.out_keys[0], "log_prob"]), log_prob)
         return tensor_dict_out
 
     def log_prob(self, tensor_dict: _TensorDict, **kwargs) -> _TensorDict:
