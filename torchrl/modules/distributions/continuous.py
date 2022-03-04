@@ -14,6 +14,7 @@ __all__ = ["TanhNormal", "Delta", "TanhDelta", "TruncatedNormal"]
 
 from ... import timeit
 
+D.Distribution.set_default_validate_args(False)
 
 class SafeTanhTransform(D.TanhTransform):
     """

@@ -242,10 +242,10 @@ class hold_out_net(_context_manager):
 
 class hold_out_params(_context_manager):
     def __init__(self, params: Iterable[Tensor]) -> None:
-        self.params = params
+        self.params = tuple(p.detach() for p in params)
 
     def __enter__(self) -> None:
-        return tuple(p.detach() for p in self.params)
+        return self.params
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         pass

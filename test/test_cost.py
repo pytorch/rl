@@ -1,4 +1,6 @@
 import argparse
+import time
+from copy import deepcopy
 
 import numpy as np
 import pytest
@@ -27,7 +29,7 @@ from torchrl.objectives import (
     KLPENPPOLoss,
     GAE,
 )
-from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
+from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss, BatchedDoubleREDQLoss, BatchedREDQLoss
 from torchrl.objectives.costs.utils import hold_out_net
 
 
@@ -832,6 +834,46 @@ class TestREDQ:
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
+    @pytest.mark.parametrize("loss_class", (REDQLoss, DoubleREDQLoss))
+    @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
+    def test_redq_batched(self, loss_class, num_qvalue):
+
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_redq()
+
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+
+        loss_fn = loss_class(
+            actor_network=deepcopy(actor),
+            qvalue_network=deepcopy(qvalue),
+            num_qvalue_nets=num_qvalue,
+            gamma=0.9,
+            loss_function="l2",
+        )
+
+        loss_class_batched = BatchedREDQLoss if loss_class is REDQLoss else BatchedDoubleREDQLoss
+        loss_fn_batched = loss_class_batched(
+            actor_network=deepcopy(actor),
+            qvalue_network=deepcopy(qvalue),
+            num_qvalue_nets=num_qvalue,
+            gamma=0.9,
+            loss_function="l2",
+        )
+
+        td_clone1 = td.clone()
+        td_clone2 = td.clone()
+        torch.manual_seed(0)
+        with _check_td_steady(td_clone1):
+            loss1 = loss_fn(td_clone1)
+
+        torch.manual_seed(0)
+        with _check_td_steady(td_clone2):
+            loss2 = loss_fn_batched(td_clone2)
+
+        # TODO: find a way to compare the losses: problem is that we sample actions either sequentially or in batch,
+        #  so setting seed has little impact
+
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("loss_class", (REDQLoss, DoubleREDQLoss))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
@@ -843,7 +885,7 @@ class TestREDQ:
         qvalue = self._create_mock_qvalue()
 
         loss_fn = loss_class(
-            actor_network=actor,
+            actor_network=deepcopy(actor),
             qvalue_network=qvalue,
             num_qvalue_nets=num_qvalue,
             gamma=0.9,
