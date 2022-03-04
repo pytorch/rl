@@ -51,4 +51,4 @@ class timeit:
         keys = list(timeit._REG)
         keys.sort()
         for name in keys:
-            print(f"{name} took {timeit._REG[name] / 1000:4.4} msec")
+            print(f"{name} took {timeit._REG[name][0] / 1000:4.4} msec")
