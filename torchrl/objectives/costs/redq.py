@@ -100,6 +100,9 @@ class REDQLoss_deprecated(_LossModule):
 
     @property
     def alpha(self):
+        # keep alpha is a reasonable range
+        self.log_alpha.data.clamp_(-20, 1.0)
+
         with torch.no_grad():
             alpha = self.log_alpha.detach().exp()
         return alpha
