@@ -69,12 +69,13 @@ def pin_memory_output(fun) -> Callable:
 class ReplayBuffer:
     """
     Circular replay buffer.
+
     Args:
         size (int): integer indicating the maximum size of the replay buffer.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched loading from a
             map-style dataset.
-        pin_memory (bool): whether pin_memory() should be called on the rb samples.
+        pin_memory (bool, optional): whether pin_memory() should be called on the rb samples. Default if `False`.
         prefetch (int, optional): number of next batches to be prefetched using multithreading.
     """
 
@@ -242,19 +243,18 @@ class ReplayBuffer:
 
 class PrioritizedReplayBuffer(ReplayBuffer):
     """
-    Prioritized replay buffer as presented in
-        'Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015. Prioritized experience replay.'
-        (https://arxiv.org/abs/1511.05952)
+    Prioritized replay buffer as presented in "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015. Prioritized
+    experience replay." (https://arxiv.org/abs/1511.05952)
 
     Args:
         size (int): integer indicating the maximum size of the replay buffer.
         alpha (float): exponent α determines how much prioritization is used, with α = 0 corresponding to the uniform case.
         beta (float): importance sampling negative exponent.
-        eps (float): delta added to the priorities to ensure that the buffer does not contain null priorities.
-        collate_fn (callable, optional): merges a list of samples to form a
-            mini-batch of Tensor(s)/outputs.  Used when using batched loading from a
-            map-style dataset.
-        pin_memory (bool): whether pin_memory() should be called on the rb samples.
+        eps (float, optional): delta added to the priorities to ensure that the buffer does not contain null
+            priorities. Default is `1e-8`.
+        collate_fn (callable, optional): merges a list of samples to form a mini-batch of Tensor(s)/outputs.  Used
+            when using batched loading from a map-style dataset.
+        pin_memory (bool, optional): whether pin_memory() should be called on the rb samples. Default is `False`.
         prefetch (int, optional): number of next batches to be prefetched using multithreading.
     """
 
@@ -517,14 +517,16 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
 
     Args:
         size (int): integer indicating the maximum size of the replay buffer.
-        alpha (flaot): exponent α determines how much prioritization is used, with α = 0 corresponding to the uniform case.
+        alpha (flaot): exponent α determines how much prioritization is used, with α = 0 corresponding to the uniform
+            case.
         beta (float): importance sampling negative exponent.
-        priority_key (str): key where the priority value can be found in the stored tensordicts.
-        eps (float): delta added to the priorities to ensure that the buffer does not contain null priorities.
+        priority_key (str, optional): key where the priority value can be found in the stored tensordicts. Default is
+            `"td_error"`
+        eps (float, optional): delta added to the priorities to ensure that the buffer does not contain null priorities.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched loading from a
             map-style dataset.
-        pin_memory (bool): whether pin_memory() should be called on the rb samples.
+        pin_memory (bool, optional): whether pin_memory() should be called on the rb samples. Default is `False`.
         prefetch (int, optional): number of next batches to be prefetched using multithreading.
     """
 

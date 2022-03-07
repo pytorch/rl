@@ -1,5 +1,5 @@
 .. torchrl documentation master file, created by
-   sphinx-quickstart on Wed Jan  5 15:57:24 2022.
+   sphinx-quickstart on Mon Mar  7 13:23:20 2022.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
@@ -10,7 +10,7 @@ Welcome to torchrl's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-
+   reference/index
 
 Indices and tables
 ==================

@@ -1090,35 +1090,39 @@ class TensorDict(_TensorDict):
     A batched dictionary of tensors.
     TensorDict is a tensor container where all tensors are stored in a key-value pair fashion and where each element
     shares at least the following features:
-        - device;
-        - memory location (shared, memory-mapped array, ...);
-        - batch size (i.e. n^th first dimensions).
+    - device;
+    - memory location (shared, memory-mapped array, ...);
+    - batch size (i.e. n^th first dimensions).
+
     TensorDict instances support many regular tensor operations as long as they are dtype-independent (as a
     TensorDict instance can contain tensors of many different dtypes). Those operations include (but are not limited
     to):
-         - operations on shape: when a shape operation is called (indexing, reshape, view, expand, transpose, permute,
-            unsqueeze, squeeze, masking etc), the operations is done as if it was done on a tensor of the same shape as
-            the batch size then expended to the right, e.g.:
 
-            >>> td = TensorDict({'a': torch.zeros(3,4,5)}, batch_size=[3, 4])
-            >>> td_unsqueeze = td.unsqueeze(-1)  # returns a TensorDict of batch size [3, 4, 1]
-            >>> td_view = td.view(-1)  # returns a TensorDict of batch size [12]
-            >>> a_view = td.view(-1).get("a")  # returns a tensor of batch size [12, 4]
+    - operations on shape: when a shape operation is called (indexing, reshape, view, expand, transpose, permute,
+      unsqueeze, squeeze, masking etc), the operations is done as if it was done on a tensor of the same shape as the
+      batch size then expended to the right, e.g.:
 
-        - casting operations: a TensorDict can be cast on a different device or another TensorDict type using
+        >>> td = TensorDict({'a': torch.zeros(3,4,5)}, batch_size=[3, 4])
+        >>> td_unsqueeze = td.unsqueeze(-1)  # returns a TensorDict of batch size [3, 4, 1]
+        >>> td_view = td.view(-1)  # returns a TensorDict of batch size [12]
+        >>> a_view = td.view(-1).get("a")  # returns a tensor of batch size [12, 4]
 
-            >>> td_cpu = td.to("cpu")
-            >>> td_savec = td.to(SavedTensorDict)  # TensorDict saved on disk
-            >>> dictionary = td.to_dict()
+    - casting operations: a TensorDict can be cast on a different device or another TensorDict type using
 
-            A call of the `.to()` method with a dtype will return an error.
+        >>> td_cpu = td.to("cpu")
+        >>> td_savec = td.to(SavedTensorDict)  # TensorDict saved on disk
+        >>> dictionary = td.to_dict()
+      A call of the `.to()` method with a dtype will return an error.
 
-        - Cloning, contiguous
-        - Reading: `td.get(key)`, `td.get_at(key, index)`
-        - Content modification: `td.set(key, value)`, `td.set_(key, value)`, `td.update(td_or_dict)`,
-        `td.update_(td_or_dict)`, `td.fill_(key, value)`, `td.rename_key(old_name, new_name)`, etc.
-        - Operations on multiple tensordicts: `torch.cat(tensordict_list, dim)`, `torch.stack(tensordict_list, dim)`,
-        `td1 == td2` etc.
+    - Cloning, contiguous
+
+    - Reading: `td.get(key)`, `td.get_at(key, index)`
+
+    - Content modification: `td.set(key, value)`, `td.set_(key, value)`, `td.update(td_or_dict)`,
+      `td.update_(td_or_dict)`, `td.fill_(key, value)`, `td.rename_key(old_name, new_name)`, etc.
+
+    - Operations on multiple tensordicts: `torch.cat(tensordict_list, dim)`, `torch.stack(tensordict_list, dim)`,
+      `td1 == td2` etc.
 
     Args:
         source (TensorDict or dictionary): a data source. If empty, the tensordict can be populated subsequently.
@@ -1147,10 +1151,10 @@ class TensorDict(_TensorDict):
         >>> print((td.clone()==td).all())
         True
 
-    TODO: split, transpose, permute
 
     """
 
+    #     TODO: split, transpose, permute
     _safe = True
 
     def __init__(
