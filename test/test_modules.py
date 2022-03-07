@@ -6,20 +6,41 @@ from torch import nn
 
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
-from torchrl.modules import QValueActor, ActorCriticOperator
+from torchrl.modules import (
+    QValueActor,
+    ActorValueOperator,
+    TDModule,
+    Actor,
+    ValueOperator,
+    ProbabilisticActor,
+)
 from torchrl.modules.models import *
 
 
-@pytest.mark.parametrize('in_features', [3, 10, None])
-@pytest.mark.parametrize('out_features', [3, (3, 10)])
-@pytest.mark.parametrize('depth, num_cells', [(3, 32), (None, (32, 32, 32))])
-@pytest.mark.parametrize('activation_kwargs', [{'inplace': True}, {}])
-@pytest.mark.parametrize('norm_class, norm_kwargs', [(nn.LazyBatchNorm1d, {}), (nn.BatchNorm1d, {'num_features': 32})])
-@pytest.mark.parametrize('bias_last_layer', [True, False])
-@pytest.mark.parametrize('single_bias_last_layer', [True, False])
-@pytest.mark.parametrize('layer_class', [nn.Linear, NoisyLinear])
-def test_mlp(in_features, out_features, depth, num_cells, activation_kwargs, bias_last_layer, norm_class, norm_kwargs,
-             single_bias_last_layer, layer_class, seed=0):
+@pytest.mark.parametrize("in_features", [3, 10, None])
+@pytest.mark.parametrize("out_features", [3, (3, 10)])
+@pytest.mark.parametrize("depth, num_cells", [(3, 32), (None, (32, 32, 32))])
+@pytest.mark.parametrize("activation_kwargs", [{"inplace": True}, {}])
+@pytest.mark.parametrize(
+    "norm_class, norm_kwargs",
+    [(nn.LazyBatchNorm1d, {}), (nn.BatchNorm1d, {"num_features": 32})],
+)
+@pytest.mark.parametrize("bias_last_layer", [True, False])
+@pytest.mark.parametrize("single_bias_last_layer", [True, False])
+@pytest.mark.parametrize("layer_class", [nn.Linear, NoisyLinear])
+def test_mlp(
+    in_features,
+    out_features,
+    depth,
+    num_cells,
+    activation_kwargs,
+    bias_last_layer,
+    norm_class,
+    norm_kwargs,
+    single_bias_last_layer,
+    layer_class,
+    seed=0,
+):
     torch.manual_seed(seed)
     batch = 2
     mlp = MLP(
@@ -33,7 +54,8 @@ def test_mlp(in_features, out_features, depth, num_cells, activation_kwargs, bia
         norm_kwargs=norm_kwargs,
         bias_last_layer=bias_last_layer,
         single_bias_last_layer=False,
-        layer_class=layer_class)
+        layer_class=layer_class,
+    )
     if in_features is None:
         in_features = 5
     x = torch.randn(batch, in_features)
@@ -42,7 +64,13 @@ def test_mlp(in_features, out_features, depth, num_cells, activation_kwargs, bia
     assert y.shape == torch.Size([batch, *out_features])
 
 
-@pytest.mark.parametrize('layer_class', [NoisyLinear, NoisyLazyLinear, ])
+@pytest.mark.parametrize(
+    "layer_class",
+    [
+        NoisyLinear,
+        NoisyLazyLinear,
+    ],
+)
 def test_noisy(layer_class, seed=0):
     torch.manual_seed(seed)
     l = layer_class(3, 4)
@@ -65,23 +93,23 @@ def test_value_based_policy():
     def make_net():
         net = MLP(in_features=obs_dim, out_features=action_dim, depth=2)
         for l in net.modules():
-            if hasattr(l, 'bias') and l.bias is not None:
+            if hasattr(l, "bias") and l.bias is not None:
                 l.bias.data.zero_()
         return net
 
-    actor = QValueActor(action_spec, mapping_operator=make_net(), safe=True)
+    actor = QValueActor(action_spec, module=make_net(), safe=True)
     obs = torch.zeros(2, obs_dim)
     td = TensorDict(batch_size=[2], source={"observation": obs})
     action = actor(td).get("action")
     assert (action.sum(-1) == 1).all()
 
-    actor = QValueActor(action_spec, mapping_operator=make_net(), safe=False)
+    actor = QValueActor(action_spec, module=make_net(), safe=False)
     obs = torch.randn(2, obs_dim)
     td = TensorDict(batch_size=[2], source={"observation": obs})
     action = actor(td).get("action")
     assert (action.sum(-1) == 1).all()
 
-    actor = QValueActor(action_spec, mapping_operator=make_net(), safe=False)
+    actor = QValueActor(action_spec, module=make_net(), safe=False)
     obs = torch.zeros(2, obs_dim)
     td = TensorDict(batch_size=[2], source={"observation": obs})
     action = actor(td).get("action")
@@ -92,30 +120,52 @@ def test_value_based_policy():
 def test_actorcritic():
     spec = None
     in_keys = ["obs"]
-    common_mapping_operator = nn.Linear(3, 4)
-    policy_operator = nn.Linear(4, 5)
-    value_operator = nn.Linear(4, 1)
-    op = ActorCriticOperator(spec=spec, in_keys=in_keys, common_mapping_operator=common_mapping_operator,
-                             policy_operator=policy_operator, value_operator=value_operator)
-    td = TensorDict(source={"obs": torch.randn(4, 3)}, batch_size=[4, ])
+    common_module = TDModule(
+        None, nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"]
+    )
+    policy_operator = ProbabilisticActor(
+        None, nn.Linear(4, 5), in_keys=["hidden"], return_log_prob=True
+    )
+    value_operator = ValueOperator(nn.Linear(4, 1), in_keys=["hidden"])
+    op = ActorValueOperator(
+        common_operator=common_module,
+        policy_operator=policy_operator,
+        value_operator=value_operator,
+    )
+    td = TensorDict(
+        source={"obs": torch.randn(4, 3)},
+        batch_size=[
+            4,
+        ],
+    )
     td_total = op(td.clone())
     policy_op = op.get_policy_operator()
     td_policy = policy_op(td.clone())
     value_op = op.get_value_operator()
     td_value = value_op(td)
     torch.testing.assert_allclose(td_total.get("action"), td_policy.get("action"))
-    torch.testing.assert_allclose(td_total.get("action_log_prob"), td_policy.get("action_log_prob"))
-    torch.testing.assert_allclose(td_total.get("state_value"), td_value.get("state_value"))
+    torch.testing.assert_allclose(
+        td_total.get("action_log_prob"), td_policy.get("action_log_prob")
+    )
+    torch.testing.assert_allclose(
+        td_total.get("state_value"), td_value.get("state_value")
+    )
 
-    value_params = set(list(op.value_po.parameters()) + list(op.mapping_operator.parameters()))
+    value_params = set(
+        list(op.get_value_operator().parameters()) + list(op.module[0].parameters())
+    )
     value_params2 = set(value_op.parameters())
-    assert len(value_params.difference(value_params2)) == 0 and len(value_params.intersection(value_params2)) == len(
-        value_params)
+    assert len(value_params.difference(value_params2)) == 0 and len(
+        value_params.intersection(value_params2)
+    ) == len(value_params)
 
-    policy_params = set(list(op.policy_po.parameters()) + list(op.mapping_operator.parameters()))
+    policy_params = set(
+        list(op.get_policy_operator().parameters()) + list(op.module[0].parameters())
+    )
     policy_params2 = set(policy_op.parameters())
     assert len(policy_params.difference(policy_params2)) == 0 and len(
-        policy_params.intersection(policy_params2)) == len(policy_params)
+        policy_params.intersection(policy_params2)
+    ) == len(policy_params)
 
 
 if __name__ == "__main__":

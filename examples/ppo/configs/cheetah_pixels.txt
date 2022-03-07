@@ -1,0 +1,11 @@
+env_name=cheetah
+env_task=run
+env_library=dm_control
+optim_steps_per_collection=10
+lamda=0.95
+normalize_rewards_online
+record_video
+max_frames_per_traj=1000
+record_interval=200
+tanh_loc
+init_with_lag

@@ -1,4 +1,3 @@
-
 ## WORKING EXAMPLE USING FFMPEG
 # import subprocess as sp
 # import numpy as np

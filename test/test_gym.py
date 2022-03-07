@@ -12,18 +12,19 @@ with open("configs/atari.yaml", "r") as file:
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
-@pytest.mark.parametrize("env_name", atari_confs['atari_envs'])
-@pytest.mark.parametrize("env_suffix", atari_confs['version'])
-@pytest.mark.parametrize("frame_skip", [1,2,3,4])
+@pytest.mark.parametrize("env_name", atari_confs["atari_envs"])
+@pytest.mark.parametrize("env_suffix", atari_confs["version"])
+@pytest.mark.parametrize("frame_skip", [1, 2, 3, 4])
 def test_atari(env_name, env_suffix, frame_skip):
     env = GymEnv("-".join([env_name, env_suffix]), frame_skip=frame_skip)
     env.rollout(n_steps=50)
+
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
 @pytest.mark.parametrize("env_name", _get_envs_gym())
 @pytest.mark.parametrize("from_pixels", [False, True])
 def test_gym(env_name, from_pixels):
-    print(f'testing {env_name} with from_pixels={from_pixels}')
+    print(f"testing {env_name} with from_pixels={from_pixels}")
     torch.manual_seed(0)
     env = GymEnv(env_name, frame_skip=4, from_pixels=from_pixels)
     env.set_seed(0)
@@ -39,4 +40,4 @@ def test_gym(env_name, from_pixels):
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, '--capture', 'no'])
+    pytest.main([__file__, "--capture", "no"])

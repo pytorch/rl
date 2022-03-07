@@ -9,4 +9,3 @@ distributions_maps = {
     distribution_class.lower(): eval(distribution_class)
     for distribution_class in _all_continuous + _all_discrete
 }
-

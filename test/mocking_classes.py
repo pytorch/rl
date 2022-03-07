@@ -20,10 +20,14 @@ default_spec_kwargs = {
     OneHotDiscreteTensorSpec: {"n": 7},
     UnboundedContinuousTensorSpec: {},
     NdBoundedTensorSpec: {"minimum": -torch.ones(4), "maxmimum": torch.ones(4)},
-    NdUnboundedContinuousTensorSpec: {"shape": [7, ]},
+    NdUnboundedContinuousTensorSpec: {
+        "shape": [
+            7,
+        ]
+    },
     BinaryDiscreteTensorSpec: {"n": 7},
     MultOneHotDiscreteTensorSpec: {"nvec": [7, 3, 5]},
-    CompositeSpec: {}
+    CompositeSpec: {},
 }
 
 
@@ -33,8 +37,11 @@ def make_spec(spec_str):
 
 
 class _MockEnv(_EnvClass):
-    def __init__(self, seed: int = 0, ):
-        super().__init__(device="cpu", dtype=torch.float, )
+    def __init__(self, seed: int = 100):
+        super().__init__(
+            device="cpu",
+            dtype=torch.float,
+        )
         self.set_seed(seed)
 
     @property
@@ -45,6 +52,7 @@ class _MockEnv(_EnvClass):
         self.seed = seed
         self.counter = seed - 1
         return seed
+
 
 class DiscreteActionVecMockEnv(_MockEnv):
     size = 7
@@ -66,11 +74,19 @@ class DiscreteActionVecMockEnv(_MockEnv):
         tensor_dict = tensor_dict.select().set(self.out_key, self._get_out_obs(state))
         return tensor_dict
 
-    def _step(self, tensor_dict: _TensorDict, ) -> _TensorDict:
+    def _step(
+        self,
+        tensor_dict: _TensorDict,
+    ) -> _TensorDict:
+        tensor_dict = tensor_dict.to(self.device)
         a = tensor_dict.get("action")
         assert (a.sum(-1) == 1).all()
         assert not self.is_done, "trying to execute step in done env"
-        obs = self._get_in_obs(self.current_tensordict.get(self.out_key)) + a / self.maxstep
+
+        obs = (
+            self._get_in_obs(self.current_tensordict.get(self.out_key))
+            + a / self.maxstep
+        )
         tensor_dict = tensor_dict.select()  # empty tensordict
         tensor_dict.set("next_" + self.out_key, self._get_out_obs(obs))
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
@@ -111,7 +127,7 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
         return obs
 
     def _get_in_obs(self, obs):
-        return obs.diagonal(0,-1,-2).squeeze()
+        return obs.diagonal(0, -1, -2).squeeze()
 
 
 class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
@@ -119,5 +135,5 @@ class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
     out_keys = ["action"]
 
     def _get_in_obs(self, tensor_dict):
-        obs = tensor_dict.get(*self.in_keys).diagonal(0,-1,-2).squeeze()
+        obs = tensor_dict.get(*self.in_keys).diagonal(0, -1, -2).squeeze()
         return obs

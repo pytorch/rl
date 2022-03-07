@@ -26,14 +26,21 @@ INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
 class CloudpickleWrapper(object):
     def __init__(self, fn: Callable):
+        if fn.__class__.__name__ == "EnvCreator":
+            raise RuntimeError(
+                "CloudpickleWrapper usage with EnvCreator class is prohibited as it breaks the "
+                "transmission of shared tensors."
+            )
         self.fn = fn
 
     def __getstate__(self):
         import cloudpickle
+
         return cloudpickle.dumps(self.fn)
 
     def __setstate__(self, ob: bytes):
         import pickle
+
         self.fn = pickle.loads(ob)
 
     def __call__(self, **kwargs) -> Any:

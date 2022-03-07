@@ -1,30 +1,46 @@
 from numbers import Number
+from typing import Tuple
 
 import torch
 
 
 def generalized_advantage_estimate(
-        gamma: Number, lamda: Number, value_old_state: torch.Tensor, value_new_state: torch.Tensor,
-        reward: torch.Tensor, done: torch.Tensor
-):
+    gamma: Number,
+    lamda: Number,
+    state_value: torch.Tensor,
+    next_state_value: torch.Tensor,
+    reward: torch.Tensor,
+    done: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Get generalized advantage estimate of a trajectory
-    gamma: exponential mean discount (scalar)
-    lamda: trajectory discount (scalar)
-    value_old_state: value function result with old_state input
-    value_new_state: value function result with new_state input
-    reward: agent reward of taking actions in the environment
-    done: flag for end of episode
+    Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
+    https://arxiv.org/pdf/1506.02438.pdf for more context.
+
+    Args:
+        gamma (scalar): exponential mean discount.
+        lamda (scalar): trajectory discount.
+        state_value (Tensor): value function result with old_state input.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        next_state_value (Tensor): value function result with new_state input.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        reward (Tensor): agent reward of taking actions in the environment.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        done (Tensor): boolean flag for end of episode.
     """
-    not_done = 1 - done.to(value_new_state.dtype)
+    not_done = 1 - done.to(next_state_value.dtype)
     batch_size, time_steps = not_done.shape[:2]
-    device = value_old_state.device
+    device = state_value.device
     advantage = torch.zeros(batch_size, time_steps + 1, 1, device=device)
 
     for t in reversed(range(time_steps)):
-        delta = reward[:, t] + (gamma * value_new_state[:, t] * not_done[:, t]) - value_old_state[:, t]
+        delta = (
+            reward[:, t]
+            + (gamma * next_state_value[:, t] * not_done[:, t])
+            - state_value[:, t]
+        )
         advantage[:, t] = delta + (gamma * lamda * advantage[:, t + 1] * not_done[:, t])
 
-    value_target = advantage[:, :time_steps] + value_old_state
+    value_target = advantage[:, :time_steps] + state_value
 
     return advantage[:, :time_steps], value_target

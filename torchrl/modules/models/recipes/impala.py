@@ -6,8 +6,12 @@ from torchrl.data.tensordict.tensordict import _TensorDict
 
 # TODO: code small architecture ref in Impala paper
 
+
 class _ResNetBlock(nn.Module):
-    def __init__(self, num_ch, ):
+    def __init__(
+        self,
+        num_ch,
+    ):
         super(_ResNetBlock, self).__init__()
         resnet_block = []
         resnet_block.append(nn.ReLU(inplace=True))
@@ -59,8 +63,16 @@ class _ConvNetBlock(nn.Module):
 
 
 class ImpalaNet(nn.Module):
-    def __init__(self, num_actions, channels=(16, 32, 32), out_features=256, use_lstm=False, batch_first=True,
-                 clamp_reward=True, one_hot=False):
+    def __init__(
+        self,
+        num_actions,
+        channels=(16, 32, 32),
+        out_features=256,
+        use_lstm=False,
+        batch_first=True,
+        clamp_reward=True,
+        one_hot=False,
+    ):
         super().__init__()
         self.batch_first = batch_first
         self.use_lstm = use_lstm
@@ -77,7 +89,9 @@ class ImpalaNet(nn.Module):
         core_output_size = out_features + 1
 
         if use_lstm:
-            self.core = nn.LSTM(core_output_size, out_features, num_layers=1, batch_first=batch_first)
+            self.core = nn.LSTM(
+                core_output_size, out_features, num_layers=1, batch_first=batch_first
+            )
             core_output_size = out_features
 
         self.policy = nn.Linear(core_output_size, self.num_actions)
@@ -95,7 +109,9 @@ class ImpalaNet(nn.Module):
         else:
             x = x[mask]
             if x.ndimension() != 4:
-                raise RuntimeError(f"masked input should have 4 dimensions but got {x.ndimension()} instead")
+                raise RuntimeError(
+                    f"masked input should have 4 dimensions but got {x.ndimension()} instead"
+                )
         x = self.convs(x)
         x = x.view(B * T, -1)
         x = self.fc(x)
@@ -123,8 +139,9 @@ class ImpalaNet(nn.Module):
         baseline = self.baseline(core_output)
 
         softmax_vals = F.softmax(policy_logits, dim=-1)
-        action = torch.multinomial(softmax_vals.view(-1, softmax_vals.shape[-1]), num_samples=1).view(
-            softmax_vals.shape[:-1])
+        action = torch.multinomial(
+            softmax_vals.view(-1, softmax_vals.shape[-1]), num_samples=1
+        ).view(softmax_vals.shape[:-1])
         if self.one_hot:
             action = F.one_hot(action, policy_logits.shape[-1])
 
@@ -138,7 +155,9 @@ class ImpalaNet(nn.Module):
         return (action, policy_logits, baseline), core_state
 
     def _allocate_masked_x(self, x, mask):
-        x_empty = torch.zeros(*mask.shape[:2], x.shape[-1], device=x.device, dtype=x.dtype)
+        x_empty = torch.zeros(
+            *mask.shape[:2], x.shape[-1], device=x.device, dtype=x.dtype
+        )
         x_empty[mask] = x
         return x_empty
 
@@ -151,5 +170,9 @@ class ImpalaNetTensorDict(ImpalaNet):
         done = tensor_dict.get("done").squeeze(-1)
         reward = tensor_dict.get("reward").squeeze(-1)
         mask = tensor_dict.get("mask").squeeze(-1)
-        core_state = tensor_dict.get("core_state") if "core_state" in tensor_dict.keys() else None
+        core_state = (
+            tensor_dict.get("core_state")
+            if "core_state" in tensor_dict.keys()
+            else None
+        )
         return super().forward(x, reward, done, core_state=core_state, mask=mask)

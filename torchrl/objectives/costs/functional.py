@@ -1,7 +1,9 @@
 import torch
 
 
-def cross_entropy_loss(log_policy: torch.Tensor, action: torch.Tensor, inplace: bool = False) -> torch.Tensor:
+def cross_entropy_loss(
+    log_policy: torch.Tensor, action: torch.Tensor, inplace: bool = False
+) -> torch.Tensor:
     """
     Returns the cross entropy loss defined as the log-softmax value indexed  by the action index.
     Supports discrete (integer) actions or one-hot encodings.
@@ -19,10 +21,14 @@ def cross_entropy_loss(log_policy: torch.Tensor, action: torch.Tensor, inplace: 
     """
     if action.shape == log_policy.shape:
         if action.dtype not in (torch.bool, torch.long, torch.uint8):
-            raise TypeError(f"Cross-entropy loss with {action.dtype} dtype is not permitted")
+            raise TypeError(
+                f"Cross-entropy loss with {action.dtype} dtype is not permitted"
+            )
         if not ((action == 1).sum(-1) == 1).all():
-            raise RuntimeError("Expected the action tensor to be a one hot encoding of the actions taken, " \
-                               "but got more/less than one non-null boolean index on the last dimension")
+            raise RuntimeError(
+                "Expected the action tensor to be a one hot encoding of the actions taken, "
+                "but got more/less than one non-null boolean index on the last dimension"
+            )
         if inplace:
             cross_entropy = log_policy.masked_fill_(action, 0.0).sum(-1)
         else:
@@ -31,6 +37,8 @@ def cross_entropy_loss(log_policy: torch.Tensor, action: torch.Tensor, inplace: 
         cross_entropy = torch.gather(log_policy, dim=-1, index=action[..., None])
         cross_entropy.squeeze_(-1)
     else:
-        raise RuntimeError(f"unexpected action shape in cross_entropy_loss with log_policy.shape={log_policy.shape} and"
-                           f"action.shape={action.shape}")
+        raise RuntimeError(
+            f"unexpected action shape in cross_entropy_loss with log_policy.shape={log_policy.shape} and"
+            f"action.shape={action.shape}"
+        )
     return cross_entropy
