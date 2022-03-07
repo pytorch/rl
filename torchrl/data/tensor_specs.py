@@ -114,11 +114,12 @@ class TensorSpec:
     """
     Parent class of the tensor meta-data containers for observation, actions and rewards.
 
-    Properties:
+    Args:
         shape (torch.Size): size of the tensor
         space (Box): Box instance describing what kind of values can be expected
         device (torch.device): device of the tensor
         dtype (torch.dtype): dtype of the tensor
+
     """
 
     shape: torch.Size
@@ -321,6 +322,14 @@ class BoundedTensorSpec(TensorSpec):
 class OneHotDiscreteTensorSpec(TensorSpec):
     """
     A unidimensional, one-hot discrete tensor spec.
+    By default, TorchRL assumes that categorical variables are encoded as one-hot encodings of the variable. This
+    allows for simple indexing of tensors, e.g.
+        >>> batch, size = 3, 4
+        >>> action_value = torch.arange(batch*size).view(batch, size).to(torch.float)
+        >>> action = (action_value == action_value.max(-1, keepdim=True)[0]).to(torch.long)
+        >>> chosen_action_value = (action * action_value).sum(-1)
+        >>> print(chosen_action_value)
+        tensor([ 3.,  7., 11.])
 
     Args:
         n (int): number of possible outcomes.
@@ -427,6 +436,7 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
         maximum (np.ndarray, torch.Tensor or number): upper bound of the box.
         device (str, int or torch.device, optional): device of the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
+
     """
 
     def __init__(
@@ -579,11 +589,13 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     Examples:
         >>> ts = MultOneHotDiscreteTensorSpec((3,2,3))
         >>> ts.is_in(torch.tensor([0,0,1,
-        >>>                        0,1,
-        >>>                        1,0,0])) # True
+        ...                        0,1,
+        ...                        1,0,0]))
+        True
         >>> ts.is_in(torch.tensor([1,0,1,
-        >>>                        0,1,
-        >>>                        1,0,0])) # False
+        ...                        0,1,
+        ...                        1,0,0])) # False
+        False
 
     """
 
@@ -670,20 +682,33 @@ class CompositeSpec(TensorSpec):
         **kwargs (key (str): value (TensorSpec)): dictionary of tensorspecs to be stored
 
     Examples:
-        >>> observation_pixels_spec = NdBoundedTensorSpec(torch.zeros(3,32,32), torch.ones(3, 32, 32))
+        >>> observation_pixels_spec = NdBoundedTensorSpec(
+        ...    torch.zeros(3,32,32),
+        ...    torch.ones(3, 32, 32))
         >>> observation_vector_spec = NdBoundedTensorSpec(torch.zeros(33), torch.ones(33))
         >>> composite_spec = CompositeSpec(
         ...     observation_pixels=observation_pixels_spec,
         ...     observation_vector=observation_vector_spec)
         >>> td = TensorDict({"observation_pixels": torch.rand(10,3,32,32), "observation_vector": torch.rand(10,33)}, batch_size=[10])
         >>> print("td (rand) is within bounds: ", composite_spec.is_in(td))
-        >>>
+        td (rand) is within bounds:  True
         >>> td = TensorDict({"observation_pixels": torch.randn(10,3,32,32), "observation_vector": torch.randn(10,33)}, batch_size=[10])
         >>> print("td (randn) is within bounds: ", composite_spec.is_in(td))
+        td (randn) is within bounds:  False
         >>> td_project = composite_spec.project(td)
         >>> print("td modification done in place: ", td_project is td)
+        td modification done in place:  True
         >>> print("check td is within bounds after projection: ", composite_spec.is_in(td_project))
+        check td is within bounds after projection:  True
         >>> print("random td: ", composite_spec.rand([3,]))
+        random td:  TensorDict(
+            fields={
+                observation_pixels: Tensor(torch.Size([3, 3, 32, 32]), dtype=torch.float32),
+                observation_vector: Tensor(torch.Size([3, 33]), dtype=torch.float32)},
+            batch_size=torch.Size([3]),
+            device=cpu,
+            is_shared=False)
+
     """
 
     domain: str = "composite"

@@ -20,10 +20,12 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.tensordict.tensordict import TensorDict, _TensorDict
 from torchrl.envs.common import _EnvClass, make_tensor_dict
-from . import functional as F
-from .utils import FiniteTensor
+from torchrl.data.transforms import functional as F
+from torchrl.data.transforms.utils import FiniteTensor
+from torchrl.envs.utils import step_tensor_dict
 
 __all__ = [
+    "Transform",
     "TransformedEnv",
     "RewardClipping",
     "Resize",
@@ -33,7 +35,6 @@ __all__ = [
     "ObservationNorm",
     "RewardScaling",
     "ObservationTransform",
-    "Transform",
     "CatFrames",
     "FiniteTensorDictCheck",
     "DoubleToFloat",
@@ -44,7 +45,6 @@ __all__ = [
     "VecNorm",
 ]
 
-from ...envs.utils import step_tensor_dict
 
 IMAGE_KEYS = ["next_observation", "next_observation_pixels"]
 _MAX_NOOPS_TRIALS = 10
@@ -52,16 +52,21 @@ _MAX_NOOPS_TRIALS = 10
 
 class Transform(nn.Module):
     """
-    Environment transform.
+    Environment transform parent class.
+
     In principle, a transform receives a tensordict as input and returns (the same or another) tensordict as output,
-    where a series of keys have been modified or created.
-    When instantiating a new transform, it should always be possible to indicate what keys are to be read for the
-    transform by passing the `keys` argument to the constructor.
-    Transforms can be combined with environments with the TransformedEnv class, which takes as arguments am _EnvClass
-    instance and a transform.
-    Transforms can be concatenated using the `Compose` class.
-    They can be stateless or stateful (e.g. CatTransform). Because of this, Transforms support the `reset` operation,
-    which should reset the transform to its initial state (such that successive trajectories are kept independent).
+    where a series of values have been modified or created with a new key.
+    When instantiating a new transform, the keys that are to be read from are passed to the constructor via the
+    `keys` argument.
+    Transforms are to be combined with their target environments with the TransformedEnv class, which takes as
+    arguments an `_EnvClass` instance and a transform. If multiple transforms are to be used, they can be
+    concatenated using the `Compose` class.
+    A transform can be stateless or stateful (e.g. CatTransform). Because of this, Transforms support the `reset`
+    operation, which should reset the transform to its initial state (such that successive trajectories are kept
+    independent).
+
+    Notably, `Transform` subclasses take care of transforming the affected specs from an environment: when querying
+    `transformed_env.observation_spec`, the resulting objects will describe the specs of the transformed tensors.
 
     """
 
@@ -179,9 +184,9 @@ class TransformedEnv(_EnvClass):
     Args:
         env (_EnvClass): original environment to be transformed.
         transform (Transform): transform to apply to the tensordict resulting from env.step(td)
-        cache_specs (bool): if True, the specs will be cached once and for all after the first call (i.e. the
+        cache_specs (bool, optional): if True, the specs will be cached once and for all after the first call (i.e. the
             specs will be transformed only once). If the transform changes during training, the original spec transform
-            may not be valid anymore, in which case this value should be set to False.
+            may not be valid anymore, in which case this value should be set to `False`. Default is `True`.
 
     Examples:
         >>> env = GymEnv("Pendulum-v0")
@@ -411,7 +416,17 @@ class ToTensorImage(ObservationTransform):
 
     Args:
         unsqueeze (bool): if True, the observation tensor is unsqueezed along the first dimension. default=False.
-        dtype (optional): dtype to use for the resulting observations.
+        dtype (torch.dtype, optional): dtype to use for the resulting observations.
+
+    Examples:
+        >>> transform = ToTensorImage(keys=["next_observation_pixels"])
+        >>> td = TensorDict(
+        ...     {"next_observation_pixels": torch.randint(0, 255, (1,1,10,11,3), dtype=torch.uint8)},
+        ...     [1, 1])
+        >>> _ = transform(td)
+        >>> obs = td.get("next_observation_pixels")
+        >>> print(obs.shape, obs.dtype)
+        torch.Size([1, 1, 3, 10, 11]) torch.float32
     """
 
     inplace = False
@@ -460,11 +475,12 @@ class ToTensorImage(ObservationTransform):
 
 class RewardClipping(Transform):
     """
-    Clips the reward between clamp_min and clamp_max.
+    Clips the reward between `clamp_min` and `clamp_max`.
 
     Args:
-        clip_min (scalar): minimum value of the resulting reward
-        clip_max (scalar): maximum value of the resulting reward
+        clip_min (scalar): minimum value of the resulting reward.
+        clip_max (scalar): maximum value of the resulting reward.
+
     """
 
     inplace = True
@@ -626,14 +642,32 @@ class GrayScale(ObservationTransform):
 class ObservationNorm(ObservationTransform):
     """
     Normalizes an observation according to
+
+    .. math::
         obs = obs * scale + loc
 
     Args:
         loc (number or tensor): location of the affine transform
         scale (number or tensor): scale of the affine transform
-        standard_normal (bool): if True, the transform will be
-            obs = (obs-loc)/scale,
-            as it is done for standardization. default=False
+        standard_normal (bool, optional): if True, the transform will be
+            .. math::
+                obs = (obs-loc)/scale
+            as it is done for standardization. Default is `False`.
+
+    Examples:
+        >>> torch.set_default_tensor_type(torch.DoubleTensor)
+        >>> td = TensorDict({'next_obs': torch.randn(100, 3)*torch.randn(3) + torch.randn(3)}, [100])
+        >>> transform = ObservationNorm(
+        ...     loc = td.get('next_obs').mean(0),
+        ...     scale = td.get('next_obs').std(0),
+        ...     keys=["next_obs"],
+        ...     standard_normal=True)
+        >>> _ = transform(td)
+        >>> print(torch.isclose(td.get('next_obs').mean(0), torch.zeros(3)).all())
+        Tensor(True)
+        >>> print(torch.isclose(td.get('next_obs').std(0), torch.ones(3)).all())
+        Tensor(True)
+
     """
 
     inplace = True
@@ -668,7 +702,7 @@ class ObservationNorm(ObservationTransform):
         if self.standard_normal:
             # converts the transform (x-m)/sqrt(v) to x * s + loc
             scale = self.scale.reciprocal()
-            loc = -self.loc * self.scale
+            loc = -self.loc * scale
         else:
             scale = self.scale
             loc = self.loc
@@ -702,11 +736,15 @@ class ObservationNorm(ObservationTransform):
 class CatFrames(ObservationTransform):
     """
     Concatenates successive observation frames into a single tensor.
-    This can, for instance, account for movement/velocity of the observed feature.
+    This can, for instance, account for movement/velocity of the observed feature. Proposed in "Playing Atari with Deep
+    Reinforcement Learning" (https://arxiv.org/pdf/1312.5602.pdf).
+
+    CatFrames is a stateful class and it can be reset to its native state by calling the `reset()` method.
 
     Args:
-        N (int): number of observation to concatenate
-        cat_dim (int): dimension along which concatenate the observations.
+        N (int, optional): number of observation to concatenate. Default is `4`.
+        cat_dim (int, optional): dimension along which concatenate the observations. Default is `cat_dim=-3`.
+        keys (list of int, optional): keys pointing to the franes that have to be concatenated.
 
     """
 
@@ -756,7 +794,8 @@ class CatFrames(ObservationTransform):
 class RewardScaling(Transform):
     """
     Affine transform of the reward according to
-        reward = reward * scale + loc
+        .. math:
+            reward = reward * scale + loc
 
     Args:
         loc (number or torch.Tensor): location of the affine transform
@@ -901,6 +940,13 @@ class CatTensors(Transform):
     Args:
         keys (Iterable of str): keys to be concatenated
         out_key: key of the resulting tensor.
+
+    Examples:
+        >>> transform = CatTensors(keys=["key1", "key2"])
+        >>> td = TensorDict({"key1": torch.zeros(1, 1), "key2": torch.ones(1, 1)}, [1])
+        >>> _ = transform(td)
+        >>> print(td.get("observation_vector"))
+        tensor([[0., 1.]])
 
     """
 
