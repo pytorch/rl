@@ -512,6 +512,7 @@ def make_sac_model(
 ) -> nn.ModuleList:
     """
     Actor, Q-value and value model constructor helper function for SAC.
+
     Follows default parameters proposed in SAC original paper: https://arxiv.org/pdf/1801.01290.pdf.
     Other configurations can easily be implemented by modifying this function at will.
 
@@ -525,11 +526,12 @@ def make_sac_model(
         value_net_kwargs (dict, optional): kwargs of the value MLP.
         device (torch.device, optional): device on which the model must be cast. Default is "cpu".
         tanh_loc (bool, optional): whether to use a tanh scaling for the distribution location parameter.
-            Default is True.
+            Default is `True`.
         default_policy_scale (positive scalar, optional): Default scale of the policy distribution (i.e. standard
             deviation of the normal distribution when the network output is 0). Caution: a higher standard
             deviation may not lead to a more entropic distribution, as a Tanh transform is applied to the
             generated variables. The maximum entropy configuration is with a standard deviation of 0.87. Default is 1.0.
+
     Returns: A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
 
     Examples:
@@ -678,11 +680,12 @@ def make_redq_model(
         qvalue_net_kwargs (dict, optional): kwargs of the qvalue MLP.
         device (torch.device, optional): device on which the model must be cast. Default is "cpu".
         tanh_loc (bool, optional): whether to use a tanh scaling for the distribution location parameter.
-            Default is True.
+            Default is `True`.
         default_policy_scale (positive scalar, optional): Default scale of the policy distribution (i.e. standard
             deviation of the normal distribution when the network output is 0). Caution: a higher standard
             deviation may not lead to a more entropic distribution, as a Tanh transform is applied to the
             generated variables. The maximum entropy configuration is with a standard deviation of 0.87. Default is 1.0.
+
     Returns: A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
 
     Examples:
@@ -785,7 +788,12 @@ def parser_model_args_continuous(
     parser: ArgumentParser, algorithm: str
 ) -> ArgumentParser:
     """
-    To be used for DDPG, SAC
+    Populates the argument parser to build a model for continuous actions.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+        algorithm (str): one of `"DDPG"`, `"SAC"`, `"REDQ"`, `"PPO"`
+
     """
 
     if algorithm not in ("SAC", "DDPG", "PPO", "REDQ"):
@@ -857,7 +865,11 @@ def parser_model_args_continuous(
 
 def parser_model_args_discrete(parser: ArgumentParser) -> ArgumentParser:
     """
-    To be used for DQN, Rainbow
+    Populates the argument parser to build a model for discrete actions.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+
     """
     parser.add_argument(
         "--annealing_frames",

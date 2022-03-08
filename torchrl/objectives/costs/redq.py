@@ -9,7 +9,7 @@ from torch import Tensor
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import step_tensor_dict, set_exploration_mode
 from torchrl.modules import TDModule
-from torchrl.objectives import (
+from torchrl.objectives.costs.utils import (
     next_state_value as get_next_state_value,
     hold_out_params,
     distance_loss,
@@ -17,7 +17,6 @@ from torchrl.objectives import (
 from torchrl.objectives.costs.common import _LossModule
 
 __all__ = ["REDQLoss", "DoubleREDQLoss"]
-
 
 class REDQLoss_deprecated(_LossModule):
     """
@@ -38,7 +37,7 @@ class REDQLoss_deprecated(_LossModule):
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
             "l1", Default is "smooth_l1".
         alpha_init (Number, optional): initial value of the alpha factor. Default is 1.0.
-        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is False.
+        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is `False`.
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
 
     """
@@ -243,6 +242,7 @@ class DoubleREDQLoss_deprecated(REDQLoss_deprecated):
 class REDQLoss(_LossModule):
     """
     REDQ Loss module.
+
     REDQ (RANDOMIZED ENSEMBLED DOUBLE Q-LEARNING: LEARNING FAST WITHOUT A MODEL
     https://openreview.net/pdf?id=AY8zfZm0tDd) generalizes the idea of using an ensemble of Q-value functions to
     train a SAC-like algorithm.
@@ -259,7 +259,7 @@ class REDQLoss(_LossModule):
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
             "l1", Default is "smooth_l1".
         alpha_init (Number, optional): initial value of the alpha factor. Default is 1.0.
-        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is False.
+        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is `False`.
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
 
     """

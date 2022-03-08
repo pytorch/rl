@@ -1,14 +1,20 @@
 from argparse import ArgumentParser, Namespace
 
-__all__ = ["parser_replay_args", "make_replay_buffer"]
 
 import torch
 
 from torchrl.data import ReplayBuffer, TensorDictPrioritizedReplayBuffer, DEVICE_TYPING
 from torchrl.data.replay_buffers.replay_buffers import InPlaceSampler
 
+__all__ = [
+    "make_replay_buffer",
+    "parser_replay_args"
+]
+
 
 def make_replay_buffer(device: DEVICE_TYPING, args: Namespace) -> ReplayBuffer:
+    """Builds a replay buffer using the arguments build from the parser returned by parser_replay_args.
+    """
     device = torch.device(device)
     if not args.prb:
         buffer = ReplayBuffer(
@@ -30,6 +36,14 @@ def make_replay_buffer(device: DEVICE_TYPING, args: Namespace) -> ReplayBuffer:
 
 
 def parser_replay_args(parser: ArgumentParser) -> ArgumentParser:
+    """
+    Populates the argument parser to build a replay buffer.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+
+    """
+
     parser.add_argument(
         "--buffer_size",
         type=int,

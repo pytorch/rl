@@ -19,9 +19,9 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
 )
 from torchrl.data.tensordict.tensordict import TensorDict, _TensorDict
-from torchrl.envs.common import _EnvClass, make_tensor_dict
 from torchrl.data.transforms import functional as F
 from torchrl.data.transforms.utils import FiniteTensor
+from torchrl.envs.common import _EnvClass, make_tensor_dict
 from torchrl.envs.utils import step_tensor_dict
 
 __all__ = [
@@ -44,7 +44,6 @@ __all__ = [
     "PinMemoryTransform",
     "VecNorm",
 ]
-
 
 IMAGE_KEYS = ["next_observation", "next_observation_pixels"]
 _MAX_NOOPS_TRIALS = 10
@@ -641,6 +640,7 @@ class GrayScale(ObservationTransform):
 
 class ObservationNorm(ObservationTransform):
     """
+
     Normalizes an observation according to
 
     .. math::
@@ -778,7 +778,7 @@ class CatFrames(ObservationTransform):
 
     def _apply(self, obs: torch.Tensor) -> torch.Tensor:
         self.buffer.append(obs)
-        self.buffer = self.buffer[-self.N :]
+        self.buffer = self.buffer[-self.N:]
         buffer = list(reversed(self.buffer))
         buffer = [buffer[0]] * (self.N - len(buffer)) + buffer
         if len(buffer) != self.N:
@@ -793,9 +793,11 @@ class CatFrames(ObservationTransform):
 
 class RewardScaling(Transform):
     """
+
     Affine transform of the reward according to
-        .. math:
-            reward = reward * scale + loc
+
+    .. math::
+        reward = reward * scale + loc
 
     Args:
         loc (number or torch.Tensor): location of the affine transform
@@ -871,6 +873,13 @@ class FiniteTensorDictCheck(Transform):
 class DoubleToFloat(Transform):
     """
     Maps actions float to double before they are called on the environment.
+
+    Examples:
+        >>> td = TensorDict({'next_obs': torch.ones(1, dtype=torch.double)}, [])
+        >>> transform = DoubleToFloat(keys=["next_obs"])
+        >>> _ = transform(td)
+        >>> print(td.get("next_obs").dtype)
+        torch.float32
 
     """
 
@@ -1024,8 +1033,20 @@ class DiscreteActionProjection(Transform):
     space.
 
     Args:
-        max_N (int): max number of action considered
-        M (int): resulting number of actions
+        max_N (int): max number of action considered.
+        M (int): resulting number of actions.
+
+    Examples:
+        >>> torch.manual_seed(0)
+        >>> N = 2
+        >>> M = 1
+        >>> action = torch.zeros(N, dtype=torch.long)
+        >>> action[-1] = 1
+        >>> td = TensorDict({"action": action}, [])
+        >>> transform = DiscreteActionProjection(N, M)
+        >>> _ = transform.inv(td)
+        >>> print(td.get("action"))
+        tensor([1])
     """
 
     inplace = False
@@ -1066,9 +1087,9 @@ class NoopResetEnv(Transform):
     Args:
         env (_EnvClass): env on which the random actions have to be performed. Can be the same env as the one provided
             to the TransformedEnv class
-        noops (int): number of actions performed after reset
+        noops (int, optional): number of actions performed after reset. Default is `30`.
         random (bool): if False, the number of random ops will always be equal to the noops value. If True, the number
-            of random actions will be randomly selected between 0 and noops. Default=True.
+            of random actions will be randomly selected between 0 and noops. Default is `True`.
 
     """
 
@@ -1154,17 +1175,21 @@ class VecNorm(Transform):
             default: 1e-4
 
     Examples:
-        >>> t = VecNorm()
-        >>> env = make_env()
+        >>> from torchrl.envs import GymEnv
+        >>> t = VecNorm(decay=0.9)
+        >>> env = GymEnv("Pendulum-v0")
         >>> env = TransformedEnv(env, t)
         >>> tds = []
         >>> for _ in range(1000):
-        >>>     td = env.rand_step()
-        >>>     if td.get("done"):
-        >>>         env.reset()
-        >>>     tds.append(td)
+        ...     td = env.rand_step()
+        ...     if td.get("done"):
+        ...         _ = env.reset()
+        ...     tds += [td]
         >>> tds = torch.stack(tds, 0)
-        >>> print(tds.get("next_observation").mean(0), tds.get("next_observation").std(0)) # should print values around 0 and 1, respectively
+        >>> print((abs(tds.get("next_observation").mean(0))<0.2).all())
+        tensor(True)
+        >>> print((abs(tds.get("next_observation").std(0)-1)<0.2).all())
+        tensor(True)
     """
 
     inplace = True
@@ -1274,7 +1299,7 @@ class VecNorm(Transform):
         Returns: A memory in shared memory to be sent to each process.
 
         Examples:
-            >>> # on main process
+            >>> from torch import multiprocessing as mp
             >>> queue = mp.Queue()
             >>> env = make_env()
             >>> td_shared = VecNorm.build_td_for_shared_vecnorm(env, ["next_observation", "reward"])

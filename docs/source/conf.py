@@ -17,6 +17,7 @@
 
 # -- Project information -----------------------------------------------------
 import pytorch_sphinx_theme
+
 import torchrl
 
 project = 'torchrl'
@@ -57,13 +58,14 @@ extensions = [
     "sphinx.ext.duration",
     "sphinx_gallery.gen_gallery",
     "sphinx_autodoc_typehints",
+    'sphinxcontrib.aafig'
 ]
 
 sphinx_gallery_conf = {
     "examples_dirs": "../../gallery/",  # path to your example scripts
     "gallery_dirs": "auto_examples",  # path to where to save gallery generated output
     "backreferences_dir": "gen_modules/backreferences",
-    "doc_module": ("torchvision",),
+    "doc_module": ("torchrl",),
 }
 
 napoleon_use_ivar = True
@@ -73,11 +75,20 @@ napoleon_google_docstring = True
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
+# The suffix(es) of source filenames.
+# You can specify multiple suffix as a list of string:
+#
+source_suffix = {
+    ".rst": "restructuredtext",
+}
+
+# The master toctree document.
+master_doc = "index"
+
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = []
-
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -98,7 +109,6 @@ html_theme_options = {
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = "PyTorchdoc"
-
 
 autosummary_generate = True
 
@@ -122,3 +132,96 @@ latex_elements = {
     #
     # 'figure_align': 'htbp',
 }
+
+
+# Grouping the document tree into LaTeX files. List of tuples
+# (source start file, target name, title,
+#  author, documentclass [howto, manual, or own class]).
+# latex_documents = [
+#     (master_doc, "pytorch.tex", "torchrl Documentation", "Torch Contributors", "manual"),
+# ]
+
+
+# -- Options for manual page output ---------------------------------------
+
+# One entry per manual page. List of tuples
+# (source start file, name, description, authors, manual section).
+man_pages = [(master_doc, "torchvision", "torchrl Documentation", [author], 1)]
+
+
+# -- Options for Texinfo output -------------------------------------------
+
+# Grouping the document tree into Texinfo files. List of tuples
+# (source start file, target name, title, author,
+#  dir menu entry, description, category)
+texinfo_documents = [
+    (
+        master_doc,
+        "torchrl",
+        "torchrl Documentation",
+        author,
+        "torchrl",
+        "TorchRL doc.",
+        "Miscellaneous",
+    ),
+]
+
+
+# Example configuration for intersphinx: refer to the Python standard library.
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3/", None),
+    "torch": ("https://pytorch.org/docs/stable/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+}
+
+
+from docutils import nodes
+from sphinx import addnodes
+from sphinx.util.docfields import TypedField
+
+
+def patched_make_field(self, types, domain, items, **kw):
+    # `kw` catches `env=None` needed for newer sphinx while maintaining
+    #  backwards compatibility when passed along further down!
+
+    # type: (list, unicode, tuple) -> nodes.field  # noqa: F821
+    def handle_item(fieldarg, content):
+        par = nodes.paragraph()
+        par += addnodes.literal_strong("", fieldarg)  # Patch: this line added
+        # par.extend(self.make_xrefs(self.rolename, domain, fieldarg,
+        #                           addnodes.literal_strong))
+        if fieldarg in types:
+            par += nodes.Text(" (")
+            # NOTE: using .pop() here to prevent a single type node to be
+            # inserted twice into the doctree, which leads to
+            # inconsistencies later when references are resolved
+            fieldtype = types.pop(fieldarg)
+            if len(fieldtype) == 1 and isinstance(fieldtype[0], nodes.Text):
+                typename = "".join(n.astext() for n in fieldtype)
+                typename = typename.replace("int", "python:int")
+                typename = typename.replace("long", "python:long")
+                typename = typename.replace("float", "python:float")
+                typename = typename.replace("type", "python:type")
+                par.extend(self.make_xrefs(self.typerolename, domain, typename, addnodes.literal_emphasis, **kw))
+            else:
+                par += fieldtype
+            par += nodes.Text(")")
+        par += nodes.Text(" -- ")
+        par += content
+        return par
+
+    fieldname = nodes.field_name("", self.label)
+    if len(items) == 1 and self.can_collapse:
+        fieldarg, content = items[0]
+        bodynode = handle_item(fieldarg, content)
+    else:
+        bodynode = self.list_type()
+        for fieldarg, content in items:
+            bodynode += nodes.list_item("", handle_item(fieldarg, content))
+    fieldbody = nodes.field_body("", bodynode)
+    return nodes.field("", fieldname, fieldbody)
+
+
+TypedField.make_field = patched_make_field
+
+aafig_default_options = dict(scale=1.5, aspect=1.0, proportional=True)

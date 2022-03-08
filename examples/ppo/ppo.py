@@ -14,8 +14,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 from torchrl.agents.helpers.agents import parser_agent_args, make_agent
 from torchrl.agents.helpers.collectors import (
-    parser_collector_args_online,
-    make_collector_online,
+    parser_collector_args_onpolicy,
+    make_collector_onpolicy,
 )
 from torchrl.agents.helpers.envs import (
     transformed_env_constructor,
@@ -41,7 +41,7 @@ def make_args():
             help="config file path",
         )
     parser_agent_args(parser)
-    parser_collector_args_online(parser)
+    parser_collector_args_onpolicy(parser)
     parser_env_args(parser)
     parser_loss_args_ppo(parser)
     parser_model_args_continuous(parser, "PPO")
@@ -89,7 +89,7 @@ if __name__ == "__main__":
 
     create_env_fn = parallel_env_constructor(args=args, stats=stats)
 
-    collector = make_collector_online(
+    collector = make_collector_onpolicy(
         make_env=create_env_fn,
         actor_model_explore=actor_model,
         args=args,

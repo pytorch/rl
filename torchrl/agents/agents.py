@@ -6,7 +6,7 @@ import warnings
 from collections import OrderedDict
 from numbers import Number
 from textwrap import indent
-from typing import Dict, Callable, Optional, Union
+from typing import Dict, Callable, Optional, Union, Iterable
 
 import numpy as np
 import torch.nn
@@ -99,12 +99,12 @@ class Agent:
             Default is 256
         clip_grad_norm (bool, optional): If True, the gradients will be clipped based on the total norm of the model
             parameters. If False, all the partial derivatives will be clamped to (-clip_norm, clip_norm).
-            Default is True.
+            Default is `True`.
         clip_norm (Number, optional): value to be used for clipping gradients.
             Default is 100.0.
         progress_bar (bool, optional): If True, a progress bar will be displayed using tqdm. If tqdm is not installed,
             this option won't have any effect.
-            Default is True
+            Default is `True`
         seed (int, optional): Seed to be used for the collector, pytorch and numpy.
             Default is 42.
         save_agent_interval (int, optional): How often the agent should be saved to disk.
@@ -113,7 +113,7 @@ class Agent:
             Default is None (no saving)
         normalize_rewards_online (bool, optional): if True, the running statistics of the rewards are computed and
             the rewards used for training will be normalized based on these.
-            Default is False
+            Default is `False`
         sub_traj_len (int, optional): length of the trajectories that sub-samples must have in online settings.
             Default is -1 (i.e. takes the full length of the trajectory)
         min_sub_traj_len (int, optional): minimum value of `sub_traj_len`, in case some elements of the batch contain

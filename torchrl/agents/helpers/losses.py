@@ -2,12 +2,12 @@ from argparse import ArgumentParser, Namespace
 
 __all__ = [
     "make_sac_loss",
-    "parser_loss_args",
     "make_dqn_loss",
     "make_ddpg_loss",
     "make_target_updater",
     "make_ppo_loss",
     "make_redq_loss",
+    "parser_loss_args",
     "parser_loss_args_ppo",
 ]
 
@@ -30,10 +30,7 @@ from torchrl.objectives import (
     GAE,
 )
 from torchrl.objectives.costs.common import _LossModule
-from torchrl.objectives.costs.redq import (
-    BatchedREDQLoss as REDQLoss,
-    BatchedDoubleREDQLoss as DoubleREDQLoss,
-)
+from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
 
 # from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
 from torchrl.objectives.costs.utils import _TargetNetUpdate
@@ -42,6 +39,8 @@ from torchrl.objectives.costs.utils import _TargetNetUpdate
 def make_target_updater(
     args: Namespace, loss_module: _LossModule
 ) -> Optional[_TargetNetUpdate]:
+    """Builds a target network weight update object.
+    """
     if args.loss == "double":
         if not args.hard_update:
             target_net_updater = SoftUpdate(
@@ -63,6 +62,8 @@ def make_target_updater(
 
 
 def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
+    """Builds the SAC loss module.
+    """
     loss_kwargs = {}
     if hasattr(args, "distributional") and args.distributional:
         raise NotImplementedError
@@ -93,6 +94,8 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
 
 
 def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
+    """Builds the REDQ loss module.
+    """
     loss_kwargs = {}
     if hasattr(args, "distributional") and args.distributional:
         raise NotImplementedError
@@ -116,6 +119,8 @@ def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
 
 
 def make_ddpg_loss(model, args) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
+    """Builds the DDPG loss module.
+    """
     actor, value_net = model
     loss_kwargs = {}
     if args.distributional:
@@ -134,6 +139,8 @@ def make_ddpg_loss(model, args) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
 
 
 def make_dqn_loss(model, args) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
+    """Builds the DQN loss module.
+    """
     loss_kwargs = {}
     if args.distributional:
         if args.loss == "single":
@@ -156,6 +163,8 @@ def make_dqn_loss(model, args) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
 
 
 def make_ppo_loss(model, args) -> PPOLoss:
+    """Builds the PPO loss module.
+    """
     loss_dict = {
         "clip": ClipPPOLoss,
         "kl": KLPENPPOLoss,
@@ -178,7 +187,12 @@ def make_ppo_loss(model, args) -> PPOLoss:
 
 def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
     """
-    To be used for DQN, DDPG, SAC
+    Populates the argument parser to build the off-policy loss function (REDQ, SAC, DDPG, DQN).
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+        algorithm (str): one of `"DDPG"`, `"SAC"`, `"REDQ"`, `"DQN"`
+
     """
     parser.add_argument(
         "--loss",
@@ -229,7 +243,11 @@ def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
 
 def parser_loss_args_ppo(parser: ArgumentParser) -> ArgumentParser:
     """
-    To be used for PPO
+    Populates the argument parser to build the PPO loss function.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+
     """
     parser.add_argument(
         "--loss",

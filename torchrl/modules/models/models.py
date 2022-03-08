@@ -28,10 +28,13 @@ __all__ = [
 
 class MLP(nn.Sequential):
     """
+
     A multi-layer perceptron.
     If MLP receives more than one input, it concatenates them all along the last dimension before passing the
     resulting tensor through the network. This is aimed at allowing for a seamless interface with calls of the type of
+
         >>> model(state, action)  # compute state-action value
+
     In the future, this feature may be moved to the ProbabilisticTDModule, though it would require it to handle
     different cases (vectors, images, ...)
 
@@ -64,19 +67,78 @@ class MLP(nn.Sequential):
             default: False.
 
     Examples:
-        All of the following examples provide valid, working MLPs
+        >>> # All of the following examples provide valid, working MLPs
         >>> mlp = MLP(in_features=3, out_features=6, depth=0) # MLP consisting of a single 3 x 6 linear layer
         >>> print(mlp)
+        MLP(
+          (0): Linear(in_features=3, out_features=6, bias=True)
+        )
         >>> mlp = MLP(in_features=3, out_features=6, depth=4, num_cells=32)
         >>> print(mlp)
+        MLP(
+          (0): Linear(in_features=3, out_features=32, bias=True)
+          (1): Tanh()
+          (2): Linear(in_features=32, out_features=32, bias=True)
+          (3): Tanh()
+          (4): Linear(in_features=32, out_features=32, bias=True)
+          (5): Tanh()
+          (6): Linear(in_features=32, out_features=32, bias=True)
+          (7): Tanh()
+          (8): Linear(in_features=32, out_features=6, bias=True)
+        )
         >>> mlp = MLP(out_features=6, depth=4, num_cells=32)  # LazyLinear for the first layer
         >>> print(mlp)
+        MLP(
+          (0): LazyLinear(in_features=0, out_features=32, bias=True)
+          (1): Tanh()
+          (2): Linear(in_features=32, out_features=32, bias=True)
+          (3): Tanh()
+          (4): Linear(in_features=32, out_features=32, bias=True)
+          (5): Tanh()
+          (6): Linear(in_features=32, out_features=32, bias=True)
+          (7): Tanh()
+          (8): Linear(in_features=32, out_features=6, bias=True)
+        )
         >>> mlp = MLP(out_features=6, num_cells=[32, 33, 34, 35])  # defines the depth by the num_cells arg
         >>> print(mlp)
+        MLP(
+          (0): LazyLinear(in_features=0, out_features=32, bias=True)
+          (1): Tanh()
+          (2): Linear(in_features=32, out_features=33, bias=True)
+          (3): Tanh()
+          (4): Linear(in_features=33, out_features=34, bias=True)
+          (5): Tanh()
+          (6): Linear(in_features=34, out_features=35, bias=True)
+          (7): Tanh()
+          (8): Linear(in_features=35, out_features=6, bias=True)
+        )
         >>> mlp = MLP(out_features=(6, 7), num_cells=[32, 33, 34, 35])  # returns a view of the output tensor with shape [*, 6, 7]
         >>> print(mlp)
+        MLP(
+          (0): LazyLinear(in_features=0, out_features=32, bias=True)
+          (1): Tanh()
+          (2): Linear(in_features=32, out_features=33, bias=True)
+          (3): Tanh()
+          (4): Linear(in_features=33, out_features=34, bias=True)
+          (5): Tanh()
+          (6): Linear(in_features=34, out_features=35, bias=True)
+          (7): Tanh()
+          (8): Linear(in_features=35, out_features=42, bias=True)
+        )
+        >>> from torchrl.modules import NoisyLinear
         >>> mlp = MLP(out_features=(6, 7), num_cells=[32, 33, 34, 35], layer_class=NoisyLinear)  # uses NoisyLinear layers
         >>> print(mlp)
+        MLP(
+          (0): NoisyLazyLinear(in_features=0, out_features=32, bias=False)
+          (1): Tanh()
+          (2): NoisyLinear(in_features=32, out_features=33, bias=True)
+          (3): Tanh()
+          (4): NoisyLinear(in_features=33, out_features=34, bias=True)
+          (5): Tanh()
+          (6): NoisyLinear(in_features=34, out_features=35, bias=True)
+          (7): Tanh()
+          (8): NoisyLinear(in_features=35, out_features=42, bias=True)
+        )
 
     """
 
@@ -185,7 +247,7 @@ class ConvNet(nn.Sequential):
     """
     A convolutional neural network.
 
-        Args:
+    Args:
         in_features (int, optional): number of input features;
         depth (int, optional): depth of the network. A depth of 1 will produce a single linear layer network with the
             desired input size, and with an output size equal to the last element of the num_cells argument.
@@ -214,15 +276,53 @@ class ConvNet(nn.Sequential):
             default: True.
 
     Examples:
-        All of the following examples provide valid, working MLPs
+        >>> # All of the following examples provide valid, working MLPs
         >>> cnet = ConvNet(in_features=3, depth=1, num_cells=[32,]) # MLP consisting of a single 3 x 6 linear layer
         >>> print(cnet)
+        ConvNet(
+          (0): Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1))
+          (1): ELU(alpha=1.0)
+          (2): SquashDims()
+        )
         >>> cnet = ConvNet(in_features=3, depth=4, num_cells=32)
         >>> print(cnet)
+        ConvNet(
+          (0): Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1))
+          (1): ELU(alpha=1.0)
+          (2): Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1))
+          (3): ELU(alpha=1.0)
+          (4): Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1))
+          (5): ELU(alpha=1.0)
+          (6): Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1))
+          (7): ELU(alpha=1.0)
+          (8): SquashDims()
+        )
         >>> cnet = ConvNet(in_features=3, num_cells=[32, 33, 34, 35])  # defines the depth by the num_cells arg
         >>> print(cnet)
+        ConvNet(
+          (0): Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1))
+          (1): ELU(alpha=1.0)
+          (2): Conv2d(32, 33, kernel_size=(3, 3), stride=(1, 1))
+          (3): ELU(alpha=1.0)
+          (4): Conv2d(33, 34, kernel_size=(3, 3), stride=(1, 1))
+          (5): ELU(alpha=1.0)
+          (6): Conv2d(34, 35, kernel_size=(3, 3), stride=(1, 1))
+          (7): ELU(alpha=1.0)
+          (8): SquashDims()
+        )
         >>> cnet = ConvNet(in_features=3, num_cells=[32, 33, 34, 35], kernel_sizes=[3, 4, 5, (2, 3)])  # defines kernels, possibly rectangular
         >>> print(cnet)
+        ConvNet(
+          (0): Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1))
+          (1): ELU(alpha=1.0)
+          (2): Conv2d(32, 33, kernel_size=(4, 4), stride=(1, 1))
+          (3): ELU(alpha=1.0)
+          (4): Conv2d(33, 34, kernel_size=(5, 5), stride=(1, 1))
+          (5): ELU(alpha=1.0)
+          (6): Conv2d(34, 35, kernel_size=(2, 3), stride=(1, 1))
+          (7): ELU(alpha=1.0)
+          (8): SquashDims()
+        )
 
     """
 
@@ -330,18 +430,23 @@ class DuelingCnnDQNet(nn.Module):
         out_features (int): number of features for the advantage network
         out_features_value (int): number of features for the value network
         cnn_kwargs (dict, optional): kwargs for the feature network.
-            default: {
-                'num_cells': [32, 64, 64],
-                'strides': [4, 2, 1],
-                'kernels': [8, 4, 3],
-            }
+            Default is
+
+            >>> cnn_kwargs = {
+            ...     'num_cells': [32, 64, 64],
+            ...     'strides': [4, 2, 1],
+            ...     'kernels': [8, 4, 3],
+            ... }
+
         mlp_kwargs (dict, optional): kwargs for the advantage and value network.
-            default: {
-                "depth": 1,
-                "activation_class": nn.ELU,
-                "num_cells": 512,
-                "bias_last_layer": True,
-            }
+            Default is
+
+            >>> mlp_kwargs = {
+            ...     "depth": 1,
+            ...     "activation_class": nn.ELU,
+            ...     "num_cells": 512,
+            ...     "bias_last_layer": True,
+            ... }
 
     """
 
@@ -394,7 +499,7 @@ class DistributionalDQNnet(nn.Module):
 
     Args:
         DQNet (nn.Module): Q-Network with output length equal to the number of atoms:
-            output.shape = [*batch, #atoms, #actions].
+            output.shape = [batch, atoms, actions].
 
     """
 

@@ -324,6 +324,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     A unidimensional, one-hot discrete tensor spec.
     By default, TorchRL assumes that categorical variables are encoded as one-hot encodings of the variable. This
     allows for simple indexing of tensors, e.g.
+
         >>> batch, size = 3, 4
         >>> action_value = torch.arange(batch*size).view(batch, size).to(torch.float)
         >>> action = (action_value == action_value.max(-1, keepdim=True)[0]).to(torch.long)
@@ -339,6 +340,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             in the order in which they appear. This feature is designed for environment with no a-priori definition of
             the number of possible outcomes (e.g. discrete outcomes are sampled from an arbitrary set, whose elements
             will be mapped in a register to a series of unique one-hot binary vectors).
+
     """
 
     def __init__(

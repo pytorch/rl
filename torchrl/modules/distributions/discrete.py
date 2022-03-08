@@ -28,7 +28,7 @@ class OneHotCategorical(D.Categorical):
     """
     One-hot categorical distribution.
     This class behaves excacly as torch.distributions.Categorical except that it reads and produces one-hot encodings
-     of the discrete tensors.
+    of the discrete tensors.
 
     """
 

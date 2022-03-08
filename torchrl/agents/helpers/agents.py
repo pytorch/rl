@@ -1,8 +1,6 @@
 import argparse
 from argparse import ArgumentParser, Namespace
 
-__all__ = ["make_agent", "parser_agent_args"]
-
 from typing import Optional, Union
 from warnings import warn
 
@@ -23,6 +21,10 @@ OPTIMIZERS = {
     "adamax": optim.Adamax,
 }
 
+__all__ = [
+    "make_agent",
+    "parser_agent_args",
+]
 
 def make_agent(
     collector: _DataCollector,
@@ -144,6 +146,13 @@ def make_agent(
 
 
 def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
+    """
+    Populates the argument parser to build the agent.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+
+    """
     parser.add_argument(
         "--optim_steps_per_collection",
         type=int,

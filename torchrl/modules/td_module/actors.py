@@ -186,7 +186,8 @@ class QValueHook:
                 action component.
 
         Examples:
-    import functorch        >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
+            >>> import functorch
+            >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
             >>> from torchrl.modules.td_module.actors import QValueHook, Actor
             >>> from torch import nn
             >>> from torchrl.data import OneHotDiscreteTensorSpec, TensorDict
@@ -258,6 +259,7 @@ class QValueHook:
 
 class DistributionalQValueHook(QValueHook):
     """
+
     Distributional Q-Value hook for Q-value policies.
     Given a the output of a mapping operator, representing the values of the different discrete actions available,
     a DistributionalQValueHook will transform these values into their argmax component using the provided support.
@@ -454,16 +456,33 @@ class DistributionalQValueActor(QValueActor):
 
 class ActorValueOperator(TDSequence):
     """
+
     Actor-value operator.
 
     This class wraps together an actor and a value model that share a common observation embedding network:
-               Obs
-                v
-        observation_embedding
-            v    |     v
-          actor  |   critic
-            v    |     v
-          action |   value
+
+    .. aafig::
+        :aspect: 60
+        :scale: 120
+        :proportional:
+        :textual:
+
+            +-------------+
+            |"Observation"|
+            +-------------+
+                   |
+                   v
+            +--------------+
+            |"hidden state"|
+            +--------------+
+            |      |       |
+            v      |       v
+            actor  |       critic
+            |      |       |
+            v      |       v
+         +--------+|+-------+
+         |"action"|||"value"|
+         +--------+|+-------+
 
     To facilitate the workflow, this  class comes with a get_policy_operator() and get_value_operator() methods, which
     will both return a stand-alone TDModule with the dedicated functionality.
@@ -569,15 +588,28 @@ class ActorCriticOperator(ActorValueOperator):
     Actor-critic operator.
 
     This class wraps together an actor and a value model that share a common observation embedding network:
-               Obs
-                v
-        observation_embedding
+
+    .. aafig::
+        :aspect: 60
+        :scale: 120
+        :proportional:
+        :textual:
+
+          +-----------+
+          |Observation|
+          +-----------+
+            |
             v
-          actor
+            actor
+            |
             v
-          action   >   critic
-                         v
-                       value
+        +------+
+        |action| --> critic
+        +------+      |
+                      v
+                   +-----+
+                   |value|
+                   +-----+
 
     To facilitate the workflow, this  class comes with a get_policy_operator() method, which
     will both return a stand-alone TDModule with the dedicated functionality. The get_critic_operator will return the
@@ -649,6 +681,7 @@ class ActorCriticOperator(ActorValueOperator):
             shared=False,
             batch_size=torch.Size([3]),
             device=cpu)
+
     """
 
     def get_critic_operator(self) -> TDModuleWrapper:
@@ -672,11 +705,24 @@ class ActorCriticWrapper(TDSequence):
     Actor-value operator without common module.
 
     This class wraps together an actor and a value model that do not share a common observation embedding network:
-                Obs
-            v    |     v
-          actor  |   critic
-            v    |     v
-          action |   value
+
+    .. aafig::
+        :aspect: 60
+        :scale: 120
+        :proportional:
+        :textual:
+
+          +-----------+
+          |Observation|
+          +-----------+
+          |     |   |
+          v     |   v
+          actor |   critic
+          |     |   |
+          v     |   v
+        +------+|+-------+
+        |action||| value |
+        +------+|+-------+
 
     To facilitate the workflow, this  class comes with a get_policy_operator() and get_value_operator() methods, which
     will both return a stand-alone TDModule with the dedicated functionality.

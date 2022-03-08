@@ -164,4 +164,6 @@ class set_exploration_mode(_DecoratorContextManager):
 
 
 def exploration_mode() -> Union[str, None]:
+    """Returns the exploration mode currently set.
+    """
     return EXPLORATION_MODE

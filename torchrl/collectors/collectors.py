@@ -53,6 +53,7 @@ class RandomPolicy:
             >>> action_spec = NdBoundedTensorSpec(-torch.ones(3), torch.ones(3))
             >>> actor = RandomPolicy(spec=action_spec)
             >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
+
         """
         self.action_spec = action_spec
 
@@ -91,8 +92,6 @@ class _DataCollector(IterableDataset):
             policy (ProbabilisticTDModule, optional): a policy to be used
             device (int, str or torch.device, optional): device where to place the policy
             env (_EnvClass, optional): env containing an action_spec attribute, in case the policy is not provided.
-
-        Returns:
 
         """
         if create_env_fn is not None:
@@ -166,6 +165,7 @@ class _DataCollector(IterableDataset):
 class SyncDataCollector(_DataCollector):
     """
     Generic data collector for RL problems. Requires and environment constructor and a policy.
+
     Args:
         create_env_fn (Callable), returns an instance of _EnvClass class.
         policy (Callable, optional): Policy to be executed in the environment.
@@ -213,6 +213,7 @@ class SyncDataCollector(_DataCollector):
         init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
             This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
             default = True
+
     """
 
     def __init__(
@@ -303,6 +304,7 @@ class SyncDataCollector(_DataCollector):
     def set_seed(self, seed: int) -> int:
         """
         Sets the seeds of the environments stored in the DataCollector.
+
         Args:
             seed (int): integer representing the seed to be used for the environment.
 
@@ -520,6 +522,7 @@ class SyncDataCollector(_DataCollector):
 class _MultiDataCollector(_DataCollector):
     """
     Runs a given number of DataCollectors on separate processes.
+
     Args:
         create_env_fn (list of Callabled): list of Callables, each returning an instance of _EnvClass
         policy (Callable, optional): Instance of ProbabilisticTDModule class. Must accept _TensorDict object as input.
@@ -760,6 +763,7 @@ class _MultiDataCollector(_DataCollector):
     def set_seed(self, seed: int) -> int:
         """
         Sets the seeds of the environments stored in the DataCollector.
+
         Args:
             seed: integer representing the seed to be used for the environment.
 
@@ -792,6 +796,7 @@ class _MultiDataCollector(_DataCollector):
         Args:
             reset_idx: Optional. Iterable indicating which environments have to be reset. If None, all environments
             are reset.
+
         Returns: None
 
         """

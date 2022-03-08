@@ -1087,6 +1087,7 @@ class _TensorDict(Mapping):
 
 class TensorDict(_TensorDict):
     """
+
     A batched dictionary of tensors.
     TensorDict is a tensor container where all tensors are stored in a key-value pair fashion and where each element
     shares at least the following features:
@@ -1112,6 +1113,7 @@ class TensorDict(_TensorDict):
         >>> td_cpu = td.to("cpu")
         >>> td_savec = td.to(SavedTensorDict)  # TensorDict saved on disk
         >>> dictionary = td.to_dict()
+
       A call of the `.to()` method with a dtype will return an error.
 
     - Cloning, contiguous

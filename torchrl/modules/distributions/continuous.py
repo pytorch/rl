@@ -40,7 +40,10 @@ class TruncatedNormal(D.Independent):
     Location scaling prevents the location to be "too far" from 0, which ultimately
     leads to numerically unstable samples and poor gradient computation (e.g. gradient explosion).
     In practice, the location is computed according to
-        loc = (loc / upscale).tanh() * upscale.
+
+        .. math::
+            loc = tanh(loc / upscale) * upscale.
+
     This behaviour can be disabled by switching off the tanh_loc parameter (see below).
 
 
@@ -49,20 +52,27 @@ class TruncatedNormal(D.Independent):
             the first half of net_output over the last dimension, and the std to be some (positive mapping of) the
             second half of that tensor.
             The mapping function for the std can be controlled via the scale_mapping argument;
-        upscale (torch.Tensor or number): 'a' scaling factor in the formula:
-             loc = (loc / upscale).tanh() * upscale;
-        min (torch.Tensor or number): minimum value of the distribution. Default = -1.0;
-        max (torch.Tensor or number): maximum value of the distribution. Default = 1.0;
-        scale_mapping (str): positive mapping function to be used with the std.
-            default = "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
+        upscale (torch.Tensor or number, optional): 'a' scaling factor in the formula:
+
+            .. math::
+                loc = tanh(loc / upscale) * upscale.
+
+            Default is 5.0
+
+        min (torch.Tensor or number, optional): minimum value of the distribution. Default = -1.0;
+        max (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
+        scale_mapping (str, optional): positive mapping function to be used with the std.
+            Default is "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
             choices: "softplus", "exp", "relu", "biased_softplus_1";
-        event_dims (int): number of dimensions describing the action.
-            default = 1;
-        tanh_loc (bool): if True, the above formula is used for the location scaling, otherwise the raw value is kept.
-            default: True;
-        tanh_scale (bool): if True, the above formula is used for the standard deviation scaling before positive
+        event_dims (int, optional): number of dimensions describing the action.
+            Default is 1;
+        tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw value
+            is kept.
+            Default is `True`;
+        tanh_scale (bool, optional): if True, the above formula is used for the standard deviation scaling before positive
             mapping, otherwise the raw value is kept.
-            default: False.
+            Default is `False`.
+
     """
 
     arg_constraints = {
@@ -157,7 +167,10 @@ class TanhNormal(D.TransformedDistribution):
     Location scaling prevents the location to be "too far" from 0 when a TanhTransform is applied, which ultimately
     leads to numerically unstable samples and poor gradient computation (e.g. gradient explosion).
     In practice, the location is computed according to
-        loc = (loc / upscale).tanh() * upscale.
+
+        .. math::
+            loc = tanh(loc / upscale) * upscale.
+
     This behaviour can be disabled by switching off the tanh_loc parameter (see below).
 
 
@@ -167,19 +180,24 @@ class TanhNormal(D.TransformedDistribution):
             second half of that tensor.
             The mapping function for the std can be controlled via the scale_mapping argument;
         upscale (torch.Tensor or number): 'a' scaling factor in the formula:
-             loc = (loc / upscale).tanh() * upscale;
-        min (torch.Tensor or number): minimum value of the distribution. Default = -1.0;
-        max (torch.Tensor or number): maximum value of the distribution. Default = 1.0;
-        scale_mapping (str): positive mapping function to be used with the std.
-            default = "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
+
+            .. math::
+                loc = tanh(loc / upscale) * upscale.
+
+        min (torch.Tensor or number, optional): minimum value of the distribution. Default is -1.0;
+        max (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
+        scale_mapping (str, optional): positive mapping function to be used with the std.
+            Default is "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
             choices: "softplus", "exp", "relu", "biased_softplus_1";
-        event_dims (int): number of dimensions describing the action.
-            default = 1;
-        tanh_loc (bool): if True, the above formula is used for the location scaling, otherwise the raw value is kept.
-            default: True;
-        tanh_scale (bool): if True, the above formula is used for the standard deviation scaling before positive
-            mapping, otherwise the raw value is kept.
-            default: False.
+        event_dims (int, optional): number of dimensions describing the action.
+            Default is 1;
+        tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw
+        value is kept.
+            Default is `True`;
+        tanh_scale (bool, optional): if True, the above formula is used for the standard deviation scaling before
+            positive mapping, otherwise the raw value is kept.
+            Default is `False`.
+
     """
 
     arg_constraints = {
@@ -300,12 +318,13 @@ class Delta(D.Distribution):
 
     Args:
         param (torch.Tensor): parameter of the delta distribution;
-        atol (numbe): absolute tolerance to consider that a tensor matches the distribution parameter;
-            default: 1e-6
-        rtol (numbe): relative tolerance to consider that a tensor matches the distribution parameter;
-            default: 1e-6
-        batch_shape (torch.Size): batch shape;
-        event_shape (torch.Size): shape of the outcome;
+        atol (number, optional): absolute tolerance to consider that a tensor matches the distribution parameter;
+            Default is 1e-6
+        rtol (number, optional): relative tolerance to consider that a tensor matches the distribution parameter;
+            Default is 1e-6
+        batch_shape (torch.Size, optional): batch shape;
+        event_shape (torch.Size, optional): shape of the outcome.
+
     """
 
     arg_constraints = {}
@@ -362,16 +381,17 @@ class TanhDelta(D.TransformedDistribution):
 
     Args:
         net_output (torch.Tensor): parameter of the delta distribution;
-                min (torch.Tensor or number): minimum value of the distribution. Default = -1.0;
-        max (torch.Tensor or number): maximum value of the distribution. Default = 1.0;
-        event_dims (int): number of dimensions describing the action.
-            default = 1;
-        atol (numbe): absolute tolerance to consider that a tensor matches the distribution parameter;
-            default: 1e-6
-        rtol (numbe): relative tolerance to consider that a tensor matches the distribution parameter;
-            default: 1e-6
-        batch_shape (torch.Size): batch shape;
-        event_shape (torch.Size): shape of the outcome;
+                min (torch.Tensor or number): minimum value of the distribution. Default is -1.0;
+        min (torch.Tensor or number, optional): minimum value of the distribution. Default is 1.0;
+        max (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
+        event_dims (int, optional): number of dimensions describing the action.
+            Default is 1;
+        atol (number, optional): absolute tolerance to consider that a tensor matches the distribution parameter;
+            Default is 1e-6
+        rtol (number, optional): relative tolerance to consider that a tensor matches the distribution parameter;
+            Default is 1e-6
+        batch_shape (torch.Size, optional): batch shape;
+        event_shape (torch.Size, optional): shape of the outcome;
 
     """
 

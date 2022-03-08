@@ -38,8 +38,7 @@ def _forward_hook_safe_action(module, tensor_dict_in, tensor_dict_out):
 
 
 class TDModule(nn.Module):
-    """
-    A TDModule, for TensorDict module, is a python wrapper around a `nn.Module` that reads and writes to a
+    """A TDModule, for TensorDict module, is a python wrapper around a `nn.Module` that reads and writes to a
     TensorDict, instead of reading and returning tensors.
 
     Args:
@@ -60,7 +59,8 @@ class TDModule(nn.Module):
     Embedding a neural network in a TDModule only requires to specify the input and output keys. The domain spec can
         be passed along if needed. TDModule support functional and regular `nn.Module` objects. In the functional
         case, the 'params' (and 'buffers') keyword argument must be specified:
-    Example:
+
+    Examples:
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
         >>> from torchrl.modules import TDModule
         >>> import torch, functorch
@@ -115,7 +115,6 @@ class TDModule(nn.Module):
             shared=False,
             batch_size=torch.Size([4, 3]),
             device=cpu)
-
 
     """
 
@@ -408,19 +407,19 @@ class ProbabilisticTDModule(TDModule):
             module. If the sample is out of bounds, it is projected back onto the desired space using the
             `TensorSpec.project`
             method.
-            Default is False.
+            Default is `False`.
         save_dist_params (bool, optional): if True, the parameters of the distribution (i.e. the output of the module)
             will be written to the tensordict along with the sample. Those parameters can be used to
             re-compute the original distribution later on (e.g. to compute the divergence between the distribution
             used to sample the action and the updated distribution in PPO).
-            Default is False.
+            Default is `False`.
         cache_dist (bool, optional): if True, the parameters of the distribution (i.e. the output of the module)
             will be written to the tensordict along with the sample. Those parameters can be used to
             re-compute the original distribution later on (e.g. to compute the divergence between the distribution
             used to sample the action and the updated distribution in PPO).
-            Default is False.
+            Default is `False`.
 
-    Example:
+    Examples:
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
         >>> from torchrl.modules import ProbabilisticTDModule, TanhNormal
         >>> import functorch, torch
@@ -448,7 +447,7 @@ class ProbabilisticTDModule(TDModule):
             device=cpu,
             is_shared=False)
 
-    In the vmap case, the tensordict is again expended to match the batch:
+        >>> # In the vmap case, the tensordict is again expended to match the batch:
         >>> params = tuple(p.expand(4, *p.shape).contiguous().normal_() for p in params)
         >>> buffers = tuple(b.expand(4, *b.shape).contiguous().normal_() for p in buffers)
         >>> td_vmap = td_module(td, params=params, buffers=buffers, vmap=True)
@@ -712,7 +711,7 @@ class TDSequence(TDModule):
             batch_size=torch.Size([3]),
             device=cpu)
 
-    The module spec aggregates all the input specs:
+        >>> # The module spec aggregates all the input specs:
         >>> print(td_module.spec)
         CompositeSpec(
             hidden: NdUnboundedContinuousTensorSpec(
