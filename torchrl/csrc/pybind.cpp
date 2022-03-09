@@ -41,8 +41,8 @@ PYBIND11_MODULE(_torchrl, m) {
                                             const py::array_t<float> &>(
                               &torchrl::SumSegmentTree<float>::Update))
       .def("__setitem__",
-            py::overload_cast<const torch::Tensor &, const float &>(
-                &torchrl::SumSegmentTree<float>::Update))
+           py::overload_cast<const torch::Tensor &, const float &>(
+               &torchrl::SumSegmentTree<float>::Update))
       .def("__setitem__",
            py::overload_cast<const torch::Tensor &, const torch::Tensor &>(
                &torchrl::SumSegmentTree<float>::Update))
@@ -107,8 +107,8 @@ PYBIND11_MODULE(_torchrl, m) {
                                             const py::array_t<float> &>(
                               &torchrl::MinSegmentTree<float>::Update))
       .def("__setitem__",
-            py::overload_cast<const torch::Tensor &, const float &>(
-                &torchrl::MinSegmentTree<float>::Update))
+           py::overload_cast<const torch::Tensor &, const float &>(
+               &torchrl::MinSegmentTree<float>::Update))
       .def("__setitem__",
            py::overload_cast<const torch::Tensor &, const torch::Tensor &>(
                &torchrl::MinSegmentTree<float>::Update))
