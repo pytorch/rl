@@ -186,9 +186,13 @@ jobs:
 
   unittest_linux_cpu:
     <<: *binary_common
-    machine:
-      image: "ubuntu-1604:202007-01"
-    resource_class: xlarge
+#    machine:
+#      image: "ubuntu-1604:202007-01"
+#    resource_class: xlarge
+    docker:
+      - image: "pytorch/manylinux-cuda102"
+    resource_class: 2xlarge+
+
     steps:
       - checkout
 #      - designate_upload_channel
