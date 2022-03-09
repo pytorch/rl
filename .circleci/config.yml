@@ -357,9 +357,9 @@ jobs:
 
   unittest_linux_cpu:
     <<: *binary_common
-    docker:
-      - image: "pytorch/manylinux-cuda102"
-    resource_class: 2xlarge+
+    machine:
+      image: "ubuntu-1604:202007-01"
+    resource_class: xlarge
     steps:
       - checkout
       - designate_upload_channel
@@ -442,10 +442,6 @@ workflows:
 
   unittest:
     jobs:
-      - smoke_test_linux_pip:
-          cu_version: cpu
-          name: smoke_test_linux_pip_py3.7
-          python_version: '3.7'
 
       - unittest_linux_cpu:
           cu_version: cpu
