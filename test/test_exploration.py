@@ -44,10 +44,8 @@ def test_ou(seed=0):
 
 def test_ou_wrapper(device="cpu", d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     torch.manual_seed(seed)
-    module = nn.Linear(d_obs, 2*d_act).to(device)
-    action_spec = NdBoundedTensorSpec(
-        -torch.ones(d_act ), torch.ones(d_act ), (d_act ,)
-    )
+    module = nn.Linear(d_obs, 2 * d_act).to(device)
+    action_spec = NdBoundedTensorSpec(-torch.ones(d_act), torch.ones(d_act), (d_act,))
     policy = ProbabilisticActor(
         spec=action_spec,
         module=module,

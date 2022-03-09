@@ -65,7 +65,8 @@ def test_prb(priority_key, contiguous):
     s.set_at_(
         priority_key,
         torch.ones(
-            idx_match.numel(), 1,
+            idx_match.numel(),
+            1,
         )
         * 100000000,
         idx_match,

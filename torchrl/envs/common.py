@@ -307,9 +307,7 @@ class _EnvClass:
 
         """
         if tensor_dict is None:
-            tensor_dict = (
-                self.current_tensordict
-            )
+            tensor_dict = self.current_tensordict
         action = self.action_spec.rand(self.batch_size)
         tensor_dict.set("action", action)
         return self.step(tensor_dict)

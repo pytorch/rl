@@ -171,6 +171,20 @@ class Transform(nn.Module):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(keys={self.keys})"
 
+    def set_parent(self, parent: Union[Transform, _EnvClass]) -> None:
+        self.__dict__['_parent'] = parent
+
+    @property
+    def parent(self) -> _EnvClass:
+        if not hasattr(self, '_parent'):
+            raise AttributeError("transform parent uninitialized")
+        parent = self._parent
+        while not isinstance(parent, _EnvClass):
+            if not isinstance(parent, Transform):
+                raise ValueError("A transform parent must be either another transform or an environment object.")
+            parent = parent.parent
+        return parent
+
 
 class TransformedEnv(_EnvClass):
     """
@@ -195,6 +209,8 @@ class TransformedEnv(_EnvClass):
     ):
         self.env = env
         self.transform = transform
+        transform.set_parent(self)  # allows to find env specs from the transform
+
         self._last_obs = None
         self.cache_specs = cache_specs
 
@@ -358,6 +374,8 @@ class Compose(Transform):
     def __init__(self, *transforms: Transform):
         super().__init__(keys=[])
         self.transforms = nn.ModuleList(transforms)
+        for t in self.transforms:
+            t.set_parent(self)
 
     def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
         for t in self.transforms:
@@ -740,7 +758,7 @@ class CatFrames(ObservationTransform):
 
     def _apply(self, obs: torch.Tensor) -> torch.Tensor:
         self.buffer.append(obs)
-        self.buffer = self.buffer[-self.N :]
+        self.buffer = self.buffer[-self.N:]
         buffer = list(reversed(self.buffer))
         buffer = [buffer[0]] * (self.N - len(buffer)) + buffer
         if len(buffer) != self.N:
@@ -1086,6 +1104,36 @@ def _sum_left(val, dest):
     while val.ndimension() > dest.ndimension():
         val = val.sum(0)
     return val
+
+
+class gSDE(Transform):
+    inplace = False
+
+    def __init__(self, action_dim: int, state_dim: Optional[int] = None) -> None:
+        super().__init__(keys=[])
+        self.action_dim = action_dim
+        self.state_dim = state_dim
+
+    def reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+        tensor_dict = super().reset(tensor_dict=tensor_dict)
+        if self.state_dim is None:
+            obs_spec = self.parent.observation_spec
+            if isinstance(obs_spec, CompositeSpec):
+                obs_spec = obs_spec["vector"]
+            state_dim = obs_spec.shape[-1]
+        else:
+            state_dim = self.state_dim
+
+        tensor_dict.set(
+            "_eps_gSDE",
+            torch.randn(
+                *tensor_dict.batch_size,
+                self.action_dim,
+                state_dim,
+                device=tensor_dict.device,
+            ),
+        )
+        return tensor_dict
 
 
 class VecNorm(Transform):

@@ -5,9 +5,9 @@ from typing import Optional, Iterable
 import torch
 from torch import nn
 
-from torchrl.data import UnboundedContinuousTensorSpec, DEVICE_TYPING
+from torchrl.data import UnboundedContinuousTensorSpec, DEVICE_TYPING, CompositeSpec
 from torchrl.envs.common import _EnvClass
-from torchrl.modules import ActorValueOperator, NoisyLinear, TDModule
+from torchrl.modules import ActorValueOperator, NoisyLinear, TDModule, NormalParamWrapper
 from torchrl.modules.distributions import (
     Delta,
     TanhNormal,
@@ -23,13 +23,12 @@ from torchrl.modules.models.models import (
     DdpgMlpActor,
     MLP,
     ConvNet,
-    LSTMNet,
+    LSTMNet, gSDEWrapper,
 )
 from torchrl.modules.td_module import (
     QValueActor,
     DistributionalQValueActor,
     Actor,
-    ProbabilisticTDModule,
 )
 from torchrl.modules.td_module.actors import (
     ValueOperator,
@@ -367,6 +366,7 @@ def make_ppo_model(
     # proof_environment.set_seed(args.seed)
     specs = proof_environment.specs  # TODO: use env.sepcs
     action_spec = specs["action_spec"]
+    obs_spec = specs["observation_spec"]
 
     if in_keys_actor is None and proof_environment.from_pixels:
         in_keys_actor = ["observation_pixels"]
@@ -377,13 +377,12 @@ def make_ppo_model(
     out_keys = ["action"]
 
     if action_spec.domain == "continuous":
-        out_features = 2 * action_spec.shape[-1]
+        out_features = (2 - args.gSDE) * action_spec.shape[-1]
         if args.distribution == "tanh_normal":
             policy_distribution_kwargs = {
                 "min": action_spec.space.minimum,
                 "max": action_spec.space.maximum,
                 "tanh_loc": args.tanh_loc,
-                "scale_mapping": f"biased_softplus_{args.default_policy_scale}",
             }
             policy_distribution_class = TanhNormal
         elif args.distribution == "truncated_normal":
@@ -391,7 +390,6 @@ def make_ppo_model(
                 "min": action_spec.space.minimum,
                 "max": action_spec.space.maximum,
                 "tanh_loc": args.tanh_loc,
-                "scale_mapping": f"biased_softplus_{args.default_policy_scale}",
             }
             policy_distribution_class = TruncatedNormal
     elif action_spec.domain == "discrete":
@@ -404,6 +402,7 @@ def make_ppo_model(
         )
 
     if args.shared_mapping:
+        hidden_features = 300
         if proof_environment.from_pixels:
             if in_keys_actor is None:
                 in_keys_actor = ["observation_pixels"]
@@ -414,6 +413,8 @@ def make_ppo_model(
                 kernel_sizes=[8, 4, 3],
                 strides=[4, 2, 1],
             )
+            if args.gSDE:
+                raise NotImplementedError("must define the hidden_features accordingly")
         else:
             if args.lstm:
                 raise NotImplementedError(
@@ -423,7 +424,7 @@ def make_ppo_model(
                 num_cells=[
                     400,
                 ],
-                out_features=300,
+                out_features=hidden_features,
                 activate_last_layer=True,
             )
         common_operator = TDModule(
@@ -434,10 +435,19 @@ def make_ppo_model(
             num_cells=[200],
             out_features=out_features,
         )
+        if not args.gSDE:
+            actor_net = NormalParamWrapper(policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}")
+            in_keys = ["hidden"]
+        else:
+            actor_net = gSDEWrapper(policy_net, action_dim=action_spec.shape[0], state_dim=hidden_features)
+            in_keys = ["hidden", "gSDE_noise"]
+            out_keys += ["_action_duplicate"]
+
         policy_operator = ProbabilisticActor(
             spec=action_spec,
-            module=policy_net,
-            in_keys=["hidden"],
+            module=actor_net,
+            in_keys=in_keys,
+            out_keys=out_keys,
             default_interaction_mode="random",
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
@@ -469,9 +479,16 @@ def make_ppo_model(
                 out_features=out_features,
             )
 
+        if not args.gSDE:
+            actor_net = NormalParamWrapper(policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}")
+        else:
+            actor_net = gSDEWrapper(policy_net, action_dim=action_spec.shape[0], state_dim=obs_spec.shape[0])
+            in_keys_actor += ["_eps_gSDE"]
+            out_keys += ["_action_duplicate"]
+
         policy_po = ProbabilisticActor(
             action_spec,
-            policy_net,
+            actor_net,
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             in_keys=in_keys_actor,
@@ -508,6 +525,7 @@ def make_sac_model(
     device: DEVICE_TYPING = "cpu",
     tanh_loc: bool = True,
     default_policy_scale: float = 1.0,
+    gSDE: bool = False,
     **kwargs,
 ) -> nn.ModuleList:
     """
@@ -531,6 +549,7 @@ def make_sac_model(
             deviation of the normal distribution when the network output is 0). Caution: a higher standard
             deviation may not lead to a more entropic distribution, as a Tanh transform is applied to the
             generated variables. The maximum entropy configuration is with a standard deviation of 0.87. Default is 1.0.
+        gSDE (bool, optional): if True, the policy distribution is built according to gSDE. Default is False.
     Returns: A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
 
     Examples:
@@ -579,6 +598,7 @@ def make_sac_model(
     """
     td = proof_environment.reset()
     action_spec = proof_environment.action_spec
+    obs_spec = proof_environment.observation_spec
     if actor_net_kwargs is None:
         actor_net_kwargs = {}
     if value_net_kwargs is None:
@@ -591,7 +611,7 @@ def make_sac_model(
 
     actor_net_kwargs_default = {
         "num_cells": [256, 256],
-        "out_features": 2 * action_spec.shape[-1],
+        "out_features": (2 - gSDE) * action_spec.shape[-1],
         "activation_class": nn.ELU,
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
@@ -621,16 +641,25 @@ def make_sac_model(
 
     value_spec = UnboundedContinuousTensorSpec()
 
+    if not gSDE:
+        actor_net = NormalParamWrapper(actor_net, scale_mapping=f"biased_softplus_{default_policy_scale}")
+        in_keys_actor = in_keys
+    else:
+        if isinstance(obs_spec, CompositeSpec):
+            obs_spec = obs_spec["vector"]
+        obs_spec_len = obs_spec.shape[0]
+        actor_net = gSDEWrapper(actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len)
+        in_keys_actor = in_keys + ["_eps_gSDE"]
+
     actor = ProbabilisticActor(
         spec=action_spec,
-        in_keys=in_keys,
+        in_keys=in_keys_actor,
         module=actor_net,
         distribution_class=TanhNormal,
         distribution_kwargs={
             "min": action_spec.space.minimum,
             "max": action_spec.space.maximum,
             "tanh_loc": tanh_loc,
-            "scale_mapping": f"biased_softplus_{default_policy_scale}",
         },
         default_interaction_mode="random",
     )
@@ -689,7 +718,7 @@ def parser_model_args_continuous(
             "--ou_exploration",
             action="store_true",
             help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
-            "efficient entropy-based exploration, this should be left for experimentation only.",
+                 "efficient entropy-based exploration, this should be left for experimentation only.",
         )
         parser.add_argument(
             "--distributional",
@@ -709,8 +738,8 @@ def parser_model_args_continuous(
             action="store_false",
             dest="double_qvalue",
             help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
-            "use two different qvalue networks trained independently and choose the lowest value "
-            "predicted to predict the state action value. This can be disabled by using this flag.",
+                 "use two different qvalue networks trained independently and choose the lowest value "
+                 "predicted to predict the state action value. This can be disabled by using this flag.",
         )
 
     if algorithm in ("SAC", "PPO"):
@@ -719,6 +748,11 @@ def parser_model_args_continuous(
             "--tanh-loc",
             action="store_true",
             help="if True, uses a Tanh-Normal transform for the policy location",
+        )
+        parser.add_argument(
+            "--gSDE",
+            action="store_true",
+            help="if True, exploration is achieved using the gSDE technique.",
         )
         parser.add_argument(
             "--default_policy_scale",

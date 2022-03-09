@@ -84,6 +84,7 @@ if __name__ == "__main__":
         device=device,
         tanh_loc=args.tanh_loc,
         default_policy_scale=args.default_policy_scale,
+        gSDE=args.gSDE,
     )
     loss_module, target_net_updater = make_sac_loss(model, args)
     actor_model_explore = model[0]

@@ -3,14 +3,14 @@ from typing import Union, Iterable
 
 import numpy as np
 import torch
-from torch import distributions as D
+from torch import distributions as D, nn
 from torch.distributions import constraints
 
 from torchrl.modules.utils import mappings
 from .truncated_normal import TruncatedNormal as _TruncatedNormal
 from .utils import UNIFORM
 
-__all__ = ["TanhNormal", "Delta", "TanhDelta", "TruncatedNormal"]
+__all__ = ["NormalParamWrapper", "TanhNormal", "Delta", "TanhDelta", "TruncatedNormal"]
 
 
 class SafeTanhTransform(D.TanhTransform):
@@ -32,6 +32,36 @@ class SafeTanhTransform(D.TanhTransform):
         return x
 
 
+class NormalParamWrapper(nn.Module):
+    """
+    A wrapper for normal distirbution parameters.
+
+    Args:
+        operator (nn.Module): operator whose output will be transformed in location and scale parameters
+        scale_mapping (str, optional): positive mapping function to be used with the std.
+            default = "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
+            choices: "softplus", "exp", "relu", "biased_softplus_1";
+        scale_lb (Number, optional): The minimum value that the variance can take. Default is 1e-4.
+    """
+
+    def __init__(
+        self,
+        operator: nn.Module,
+        scale_mapping: str = "biased_softplus_1.0",
+        scale_lb: Number = 1e-4,
+    ) -> None:
+        super().__init__()
+        self.operator = operator
+        self.scale_mapping = scale_mapping
+        self.scale_lb = scale_lb
+
+    def forward(self, *tensors):
+        net_output = self.operator(*tensors)
+        loc, scale = net_output.chunk(2, -1)
+        scale = mappings(self.scale_mapping)(scale).clamp_min(self.scale_lb)
+        return loc, scale
+
+
 class TruncatedNormal(D.Independent):
     """
     Implements a Truncated Normal distribution with location scaling.
@@ -43,25 +73,19 @@ class TruncatedNormal(D.Independent):
 
 
     Args:
-        net_output (torch.Tensor): tensor containing the mean and std data. The distribution mean will be taken to be
-            the first half of net_output over the last dimension, and the std to be some (positive mapping of) the
-            second half of that tensor.
-            The mapping function for the std can be controlled via the scale_mapping argument;
+        loc (torch.Tensor): normal distribution location parameter
+        scale (torch.Tensor): normal distribution sigma parameter (squared root of variance)
         upscale (torch.Tensor or number): 'a' scaling factor in the formula:
              loc = (loc / upscale).tanh() * upscale;
         min (torch.Tensor or number): minimum value of the distribution. Default = -1.0;
         max (torch.Tensor or number): maximum value of the distribution. Default = 1.0;
-        scale_mapping (str): positive mapping function to be used with the std.
-            default = "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
-            choices: "softplus", "exp", "relu", "biased_softplus_1";
         event_dims (int): number of dimensions describing the action.
             default = 1;
         tanh_loc (bool): if True, the above formula is used for the location scaling, otherwise the raw value is kept.
             default: True;
-        tanh_scale (bool): if True, the above formula is used for the standard deviation scaling before positive
-            mapping, otherwise the raw value is kept.
-            default: False.
     """
+
+    num_params = 2
 
     arg_constraints = {
         "loc": constraints.real,
@@ -70,13 +94,12 @@ class TruncatedNormal(D.Independent):
 
     def __init__(
         self,
-        net_output: torch.Tensor,
+        loc: torch.Tensor,
+        scale: torch.Tensor,
         upscale: Union[torch.Tensor, Number] = 5.0,
         min: Union[torch.Tensor, Number] = -1.0,
         max: Union[torch.Tensor, Number] = 1.0,
-        scale_mapping: str = "biased_softplus_1.0",
         tanh_loc: bool = True,
-        tanh_scale: bool = False,
     ):
         err_msg = "TruncatedNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
@@ -89,7 +112,6 @@ class TruncatedNormal(D.Independent):
             if not all(max > min):
                 raise RuntimeError(err_msg)
 
-        loc, scale = net_output.chunk(chunks=2, dim=-1)
         self.tanh_loc = tanh_loc
         if tanh_loc:
             if (isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()) or (
@@ -102,17 +124,6 @@ class TruncatedNormal(D.Independent):
                 )
             loc = loc / upscale
             loc = loc.tanh() * upscale
-        if tanh_scale:
-            if (isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()) or (
-                not isinstance(upscale, torch.Tensor) and upscale != 1.0
-            ):
-                upscale = (
-                    upscale
-                    if not isinstance(upscale, torch.Tensor)
-                    else upscale.to(loc.device)
-                )
-            scale = scale / upscale
-            scale = scale.tanh() * upscale
 
         if not isinstance(max, torch.Tensor):
             max = torch.tensor(max)
@@ -123,7 +134,6 @@ class TruncatedNormal(D.Independent):
 
         loc = loc + (max - min) / 2 + min
 
-        scale = mappings(scale_mapping)(scale).clamp_min(1e-4)
         self.upscale = upscale
 
         base_dist = _TruncatedNormal(
@@ -160,10 +170,8 @@ class TanhNormal(D.TransformedDistribution):
 
 
     Args:
-        net_output (torch.Tensor): tensor containing the mean and std data. The distribution mean will be taken to be
-            the first half of net_output over the last dimension, and the std to be some (positive mapping of) the
-            second half of that tensor.
-            The mapping function for the std can be controlled via the scale_mapping argument;
+        loc (torch.Tensor): normal distribution location parameter
+        scale (torch.Tensor): normal distribution sigma parameter (squared root of variance)
         upscale (torch.Tensor or number): 'a' scaling factor in the formula:
              loc = (loc / upscale).tanh() * upscale;
         min (torch.Tensor or number): minimum value of the distribution. Default = -1.0;
@@ -175,9 +183,6 @@ class TanhNormal(D.TransformedDistribution):
             default = 1;
         tanh_loc (bool): if True, the above formula is used for the location scaling, otherwise the raw value is kept.
             default: True;
-        tanh_scale (bool): if True, the above formula is used for the standard deviation scaling before positive
-            mapping, otherwise the raw value is kept.
-            default: False.
     """
 
     arg_constraints = {
@@ -185,16 +190,17 @@ class TanhNormal(D.TransformedDistribution):
         "scale": constraints.greater_than(1e-6),
     }
 
+    num_params = 2
+
     def __init__(
         self,
-        net_output: torch.Tensor,
+        loc: torch.Tensor,
+        scale: torch.Tensor,
         upscale: Union[torch.Tensor, Number] = 5.0,
         min: Union[torch.Tensor, Number] = -1.0,
         max: Union[torch.Tensor, Number] = 1.0,
-        scale_mapping: str = "biased_softplus_1.0",
         event_dims: int = 1,
         tanh_loc: bool = True,
-        tanh_scale: bool = False,
     ):
         err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
@@ -207,7 +213,6 @@ class TanhNormal(D.TransformedDistribution):
             if not all(max > min):
                 raise RuntimeError(err_msg)
 
-        loc, scale = net_output.chunk(chunks=2, dim=-1)
         self.tanh_loc = tanh_loc
         if tanh_loc:
             if (isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()) or (
@@ -220,17 +225,6 @@ class TanhNormal(D.TransformedDistribution):
                 )
             loc = loc / upscale
             loc = loc.tanh() * upscale
-        if tanh_scale:
-            if (isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()) or (
-                not isinstance(upscale, torch.Tensor) and upscale != 1.0
-            ):
-                upscale = (
-                    upscale
-                    if not isinstance(upscale, torch.Tensor)
-                    else upscale.to(loc.device)
-                )
-            scale = scale / upscale
-            scale = scale.tanh() * upscale
 
         if isinstance(max, torch.Tensor):
             max = max.to(loc.device)
@@ -242,7 +236,7 @@ class TanhNormal(D.TransformedDistribution):
         loc = loc + (max - min) / 2 + min
 
         self.loc = loc
-        self.scale = mappings(scale_mapping)(scale)
+        self.scale = scale
         self.upscale = upscale
 
         t = SafeTanhTransform()

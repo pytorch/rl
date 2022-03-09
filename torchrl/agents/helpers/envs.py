@@ -20,6 +20,7 @@ from torchrl.data.transforms import (
     Compose,
     NoopResetEnv,
 )
+from torchrl.data.transforms.transforms import gSDE
 from torchrl.envs import GymEnv, RetroEnv, DMControlEnv, ParallelEnv
 from torchrl.envs.common import _EnvClass
 from torchrl.record.recorder import VideoRecorder, TensorDictRecorder
@@ -80,6 +81,11 @@ def transformed_env_constructor(
     norm_obs_only: bool = False,
     use_env_creator: bool = True,
 ) -> Union[Callable, EnvCreator]:
+
+    # fill gaps
+    if not hasattr(args, 'gSDE'):
+        args.gSDE = False
+
     def make_transformed_env() -> TransformedEnv:
         env_name = args.env_name
         env_task = args.env_task
@@ -103,6 +109,7 @@ def transformed_env_constructor(
         env = env_library(**env_kwargs)
         keys = env.reset().keys()
         transforms = []
+
 
         if args.noops:
             transforms += [NoopResetEnv(env, args.noops)]
@@ -156,8 +163,14 @@ def transformed_env_constructor(
 
             double_to_float_list.append(out_key)
             transforms.append(DoubleToFloat(keys=double_to_float_list))
+
+            if args.gSDE:
+                transforms.append(gSDE(action_dim=env.action_spec.shape[-1], ))
+
         else:
             transforms.append(DoubleToFloat(keys=double_to_float_list))
+            if args.gSDE:
+                raise RuntimeError("gSDE not compatible with from_pixels=True")
 
         if len(video_tag):
             transforms = [
@@ -168,6 +181,8 @@ def transformed_env_constructor(
                 *transforms,
             ]
         transforms.append(FiniteTensorDictCheck())
+
+
         env = TransformedEnv(
             env,
             Compose(*transforms),

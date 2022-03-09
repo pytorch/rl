@@ -132,7 +132,7 @@ class TDModule(nn.Module):
         if not len(tensor_dict.batch_size):
             unsqueeze = True
             tensor_dict_unsqueezed = tensor_dict.unsqueeze(-1)
-        tensors = tuple(tensor_dict_unsqueezed.get(in_key) for in_key in self.in_keys)
+        tensors = tuple(tensor_dict_unsqueezed.get(in_key, None) for in_key in self.in_keys)
         tensors = self.module(*tensors)
         if isinstance(tensors, Tensor):
             tensors = (tensors,)
@@ -293,7 +293,7 @@ class ProbabilisticTDModule(TDModule):
         Returns: a distribution along with other tensors returned by the module.
 
         """
-        tensors = [tensor_dict.get(key, None) for key in self.in_keys]
+        tensors = [tensor_dict.get(key, None) for key in self.in_keys]  # keys that are not present return None
         out_tensors = self.module(*tensors)
         if isinstance(out_tensors, Tensor):
             out_tensors = (out_tensors,)
@@ -330,7 +330,9 @@ class ProbabilisticTDModule(TDModule):
         if not len(tensor_dict.batch_size):
             tensor_dict_unsqueezed = tensor_dict.unsqueeze(0)
         dist, *tensors = self.get_dist(tensor_dict_unsqueezed)
-        out_tensor = self._dist_sample(dist, interaction_mode=exploration_mode())
+        out_tensor = self._dist_sample(
+            dist, *tensors, interaction_mode=exploration_mode()
+        )
         self._write_to_tensor_dict(tensor_dict_unsqueezed, [out_tensor] + list(tensors))
         if self.return_log_prob:
             log_prob = dist.log_prob(out_tensor)
@@ -358,7 +360,11 @@ class ProbabilisticTDModule(TDModule):
         return tensor_dict
 
     def _dist_sample(
-        self, dist: d.Distribution, interaction_mode: bool = None, eps: Number = None
+        self,
+        dist: d.Distribution,
+        *tensors: Tensor,
+        interaction_mode: bool = None,
+        eps: Number = None,
     ) -> Tensor:
         if interaction_mode is None:
             interaction_mode = self.default_interaction_mode
@@ -396,6 +402,13 @@ class ProbabilisticTDModule(TDModule):
                 return dist.rsample()
             else:
                 return dist.sample()
+        elif interaction_mode == "net_output":
+            if len(tensors) > 1:
+                raise RuntimeError(
+                    "Multiple values passed to _dist_sample when trying to return a single action "
+                    "tensor."
+                )
+            return tensors[0]
         else:
             raise NotImplementedError(f"unknown interaction_mode {interaction_mode}")
 

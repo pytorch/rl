@@ -1,3 +1,4 @@
+import math
 from numbers import Number
 from typing import Iterable, Type, Union, Optional, Tuple, Callable, Dict
 
@@ -24,6 +25,8 @@ __all__ = [
     "DdpgMlpQNet",
     "LSTMNet",
 ]
+
+from torchrl.modules.utils import inv_softplus
 
 
 class MLP(nn.Sequential):
@@ -783,3 +786,36 @@ class LSTMNet(nn.Module):
 
         input = self.mlp(input)
         return self._lstm(input, hidden0_in, hidden1_in)
+
+
+class gSDEWrapper(nn.Module):
+    def __init__(
+        self, policy_model: nn.Module, action_dim: int, state_dim: int, sigma_init: Number = None,
+    ) -> None:
+        super().__init__()
+        self.policy_model = policy_model
+        self.action_dim = action_dim
+        self.state_dim = state_dim
+        if sigma_init is None:
+            sigma_init = inv_softplus(math.sqrt(1 / state_dim))
+        self.register_parameter(
+            "log_sigma",
+            nn.Parameter(torch.zeros((action_dim, state_dim), requires_grad=True))
+        )
+        self.register_buffer('sigma_init', torch.tensor(sigma_init))
+
+
+    def forward(self, *tensors):
+        state = tensors[0]  # state is assumed to be the first input
+        *tensors, gSDE_noise = tensors
+        sigma = torch.nn.functional.softplus(self.log_sigma+self.sigma_init)
+        if gSDE_noise is None:
+            gSDE_noise = torch.randn_like(sigma)
+        gSDE_noise = sigma * gSDE_noise
+        eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
+        mu = self.policy_model(*tensors)
+        action = mu + eps
+        sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).sqrt().clamp_min(1e-5)
+        if not torch.isfinite(sigma).all():
+            sigma
+        return mu, sigma, action
