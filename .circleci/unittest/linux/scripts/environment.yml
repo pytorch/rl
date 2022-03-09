@@ -15,6 +15,7 @@ dependencies:
     - pillow >=5.3.0, !=8.3.*
     - scipy
     - av
+    - tools
     - caffe2
     - cloudpickle==1.6.0
     - ConfigArgParse==1.5.3
@@ -26,3 +27,4 @@ dependencies:
     - setuptools==57.4.0
     - tqdm==4.62.1
     - hypothesis
+    - torchvision
