@@ -10,13 +10,13 @@ dependencies:
   - h5py
   - protobuf
   - cmake >= 3.18
+  - caffe2
   - pip:
     - future
     - pillow >=5.3.0, !=8.3.*
     - scipy
     - av
     - tools
-    - caffe2
     - cloudpickle==1.6.0
     - ConfigArgParse==1.5.3
     - dm_env==1.5
