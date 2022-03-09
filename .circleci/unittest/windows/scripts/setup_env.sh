@@ -3,7 +3,7 @@
 # This script is for setting up environment in which unit test is ran.
 # To speed up the CI time, the resulting environment is cached.
 #
-# Do not install PyTorch and torchvision here, otherwise they also get cached.
+# Do not install PyTorch and torchrl here, otherwise they also get cached.
 
 set -e
 
@@ -14,18 +14,18 @@ env_dir="${root_dir}/env"
 
 cd "${root_dir}"
 
-case "$(uname -s)" in
-    Darwin*) os=MacOSX;;
-    *) os=Linux
-esac
-
 # 1. Install conda at ./conda
 if [ ! -d "${conda_dir}" ]; then
     printf "* Installing conda\n"
-    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
-    bash ./miniconda.sh -b -f -p "${conda_dir}"
+    export tmp_conda="$(echo $conda_dir | tr '/' '\\')"
+    export miniconda_exe="$(echo $root_dir | tr '/' '\\')\\miniconda.exe"
+    curl --output miniconda.exe https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe -O
+    "$this_dir/install_conda.bat"
+    unset tmp_conda
+    unset miniconda_exe
 fi
-eval "$(${conda_dir}/bin/conda shell.bash hook)"
+
+eval "$(${conda_dir}/Scripts/conda.exe 'shell.bash' 'hook')"
 
 # 2. Create test environment at ./env
 if [ ! -d "${env_dir}" ]; then
@@ -36,10 +36,4 @@ conda activate "${env_dir}"
 
 # 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
-FFMPEG_PIN="=4.2"
-if [[ "${PYTHON_VERSION}" = "3.9" ]]; then
-    FFMPEG_PIN=">=4.2"
-fi
-
-conda install -y -c pytorch
 conda env update --file "${this_dir}/environment.yml" --prune
