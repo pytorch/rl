@@ -24,13 +24,13 @@ PYBIND11_MODULE(_torchrl, m) {
                               &torchrl::SumSegmentTree<float>::At, py::const_))
       .def("__getitem__", py::overload_cast<const py::array_t<int64_t> &>(
                               &torchrl::SumSegmentTree<float>::At, py::const_))
-      .def("__getitem__", py::overload_cast<const torch::Tensor&>(
+      .def("__getitem__", py::overload_cast<const torch::Tensor &>(
                               &torchrl::SumSegmentTree<float>::At, py::const_))
       .def("at", py::overload_cast<int64_t>(&torchrl::SumSegmentTree<float>::At,
                                             py::const_))
       .def("at", py::overload_cast<const py::array_t<int64_t> &>(
                      &torchrl::SumSegmentTree<float>::At, py::const_))
-      .def("at", py::overload_cast<const torch::Tensor&>(
+      .def("at", py::overload_cast<const torch::Tensor &>(
                      &torchrl::SumSegmentTree<float>::At, py::const_))
       .def("__setitem__", py::overload_cast<int64_t, const float &>(
                               &torchrl::SumSegmentTree<float>::Update))
@@ -40,8 +40,9 @@ PYBIND11_MODULE(_torchrl, m) {
       .def("__setitem__", py::overload_cast<const py::array_t<int64_t> &,
                                             const py::array_t<float> &>(
                               &torchrl::SumSegmentTree<float>::Update))
-      .def("__setitem__", py::overload_cast<const torch::Tensor &, const float &>(
-                              &torchrl::SumSegmentTree<float>::Update))
+      .def("__setitem__",
+            py::overload_cast<const torch::Tensor &, const float &>(
+                &torchrl::SumSegmentTree<float>::Update))
       .def("__setitem__",
            py::overload_cast<const torch::Tensor &, const torch::Tensor &>(
                &torchrl::SumSegmentTree<float>::Update))
@@ -73,7 +74,7 @@ PYBIND11_MODULE(_torchrl, m) {
            py::overload_cast<const py::array_t<float> &>(
                &torchrl::SumSegmentTree<float>::ScanLowerBound, py::const_))
       .def("scan_lower_bound",
-           py::overload_cast<const torch::Tensor&>(
+           py::overload_cast<const torch::Tensor &>(
                &torchrl::SumSegmentTree<float>::ScanLowerBound, py::const_));
 
   py::class_<torchrl::MinSegmentTree<float>,
@@ -89,13 +90,13 @@ PYBIND11_MODULE(_torchrl, m) {
                               &torchrl::MinSegmentTree<float>::At, py::const_))
       .def("__getitem__", py::overload_cast<const py::array_t<int64_t> &>(
                               &torchrl::MinSegmentTree<float>::At, py::const_))
-      .def("__getitem__", py::overload_cast<const torch::Tensor&>(
+      .def("__getitem__", py::overload_cast<const torch::Tensor &>(
                               &torchrl::MinSegmentTree<float>::At, py::const_))
       .def("at", py::overload_cast<int64_t>(&torchrl::MinSegmentTree<float>::At,
                                             py::const_))
       .def("at", py::overload_cast<const py::array_t<int64_t> &>(
                      &torchrl::MinSegmentTree<float>::At, py::const_))
-      .def("at", py::overload_cast<const torch::Tensor&>(
+      .def("at", py::overload_cast<const torch::Tensor &>(
                      &torchrl::MinSegmentTree<float>::At, py::const_))
       .def("__setitem__", py::overload_cast<int64_t, const float &>(
                               &torchrl::MinSegmentTree<float>::Update))
@@ -105,8 +106,9 @@ PYBIND11_MODULE(_torchrl, m) {
       .def("__setitem__", py::overload_cast<const py::array_t<int64_t> &,
                                             const py::array_t<float> &>(
                               &torchrl::MinSegmentTree<float>::Update))
-      .def("__setitem__", py::overload_cast<const torch::Tensor &, const float &>(
-                              &torchrl::MinSegmentTree<float>::Update))
+      .def("__setitem__",
+            py::overload_cast<const torch::Tensor &, const float &>(
+                &torchrl::MinSegmentTree<float>::Update))
       .def("__setitem__",
            py::overload_cast<const torch::Tensor &, const torch::Tensor &>(
                &torchrl::MinSegmentTree<float>::Update))

@@ -7,8 +7,7 @@
 namespace torchrl {
 namespace utils {
 
-template <typename T>
-struct TorchDataType;
+template <typename T> struct TorchDataType;
 
 template <> struct TorchDataType<int64_t> {
   static constexpr torch::ScalarType value = torch::kInt64;
@@ -23,4 +22,4 @@ template <> struct TorchDataType<double> {
 };
 
 } // namespace utils
-} // namespace rloptim
+} // namespace torchrl

@@ -193,7 +193,7 @@ public:
     return ret;
   }
 
- protected:
+protected:
   void BatchAtImpl(int64_t n, const int64_t *index, T *value) const {
     for (int64_t i = 0; i < n; ++i) {
       value[i] = values_[index[i] | capacity_];
@@ -206,7 +206,7 @@ public:
     }
   }
 
-  void BatchUpdateImpl(int64_t n, const int64_t *index, const T* value) {
+  void BatchUpdateImpl(int64_t n, const int64_t *index, const T *value) {
     for (int64_t i = 0; i < n; ++i) {
       Update(index[i], value[i]);
     }
