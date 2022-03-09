@@ -189,13 +189,14 @@ jobs:
 #    machine:
 #      image: "ubuntu-1604:202007-01"
 #    resource_class: xlarge
+
     docker:
       - image: "pytorch/manylinux-cuda102"
     resource_class: 2xlarge+
 
     steps:
       - checkout
-#      - designate_upload_channel
+      - designate_upload_channel
 #      - run:
 #          name: Generate cache key
 #          # This will refresh cache on Sundays, nightly build should generate new cache.
