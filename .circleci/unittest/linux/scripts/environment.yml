@@ -16,7 +16,6 @@ dependencies:
     - pillow >=5.3.0, !=8.3.*
     - scipy
     - av
-    - tools
     - cloudpickle==1.6.0
     - ConfigArgParse==1.5.3
     - dm_env==1.5
