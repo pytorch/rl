@@ -6,24 +6,13 @@ dependencies:
   - pytest-cov
   - pytest-mock
   - pip
-  - ca-certificates
-  - h5py
   - protobuf
   - cmake >= 3.18
-  - caffe2
   - pip:
     - future
-    - pillow >=5.3.0, !=8.3.*
-    - scipy
-    - av
-    - cloudpickle==1.6.0
-    - ConfigArgParse==1.5.3
-    - dm_env==1.5
-    - dm_tree==0.1.6
-    - gym_retro==0.8.0
-    - moviepy==1.0.3
-    - retro==2.9.0
+    - cloudpickle
+    - dm_env
+    - gym_retro
+    - moviepy
     - setuptools==57.4.0
-    - tqdm==4.62.1
-    - hypothesis
-    - torchvision
+    - tqdm

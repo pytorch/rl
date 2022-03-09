@@ -29,6 +29,9 @@ case "$(uname -s)" in
     *) os=Linux
 esac
 
+# submodules
+git submodule sync && git submodule update --init --recursive
+
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 if [ "${os}" == "MacOSX" ]; then
     conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch "${cudatoolkit}" pytest
