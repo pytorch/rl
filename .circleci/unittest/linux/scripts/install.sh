@@ -41,3 +41,13 @@ fi
 
 printf "* Installing torchrl\n"
 python setup.py develop
+
+printf "Installing TorchVision\n"
+cd third_party/vision
+python setup.py develop
+
+printf "Installing functorch\n"
+cd ../functorch
+python setup.py develop
+
+cd ../..
