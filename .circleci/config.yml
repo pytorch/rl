@@ -193,6 +193,11 @@ binary_common: &binary_common
     UNICODE_ABI: << parameters.unicode_abi >>
     CU_VERSION: << parameters.cu_version >>
 
+smoke_test_common: &smoke_test_common
+  <<: *binary_common
+  docker:
+    - image: torchrl/smoke_test:latest
+
 jobs:
   circleci_consistency:
     docker:
