@@ -196,7 +196,7 @@ jobs:
 
     steps:
       - checkout
-      - designate_upload_channel
+#      - designate_upload_channel
 #      - run:
 #          name: Generate cache key
 #          # This will refresh cache on Sundays, nightly build should generate new cache.
