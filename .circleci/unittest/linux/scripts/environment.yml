@@ -25,3 +25,4 @@ dependencies:
     - setuptools==57.4.0
     - torchvision==0.11.3
     - tqdm==4.62.1
+    - hypothesis
