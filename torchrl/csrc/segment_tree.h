@@ -86,7 +86,7 @@ public:
     BatchUpdateImpl(index.size(), index.data(), value);
   }
 
-  void Update(const std::vector<int64_t>& index, const std::vector<T>& value) {
+  void Update(const std::vector<int64_t> &index, const std::vector<T> &value) {
     assert(value.size() == 1 || index.size() == value.size());
     const int64_t n = index.size();
     if (value.size() == 1) {
@@ -96,7 +96,7 @@ public:
     }
   }
 
-  void Update(const py::array_t<int64_t>& index, const T& value) {
+  void Update(const py::array_t<int64_t> &index, const T &value) {
     assert(index.ndim() == 1);
     BatchUpdateImpl(index.size(), index.data(), value);
   }
@@ -200,7 +200,7 @@ public:
     }
   }
 
-  void BatchUpdateImpl(int64_t n, const int64_t *index, const T& value) {
+  void BatchUpdateImpl(int64_t n, const int64_t *index, const T &value) {
     for (int64_t i = 0; i < n; ++i) {
       Update(index[i], value);
     }
@@ -284,7 +284,7 @@ protected:
 };
 
 template <typename T> struct MinOp {
-  T operator()(const T& lhs, const T& rhs) const { return std::min(lhs, rhs); }
+  T operator()(const T &lhs, const T &rhs) const { return std::min(lhs, rhs); }
 };
 
 template <typename T>
