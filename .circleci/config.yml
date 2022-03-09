@@ -262,7 +262,6 @@ jobs:
       - checkout
       - install_torchrl:
           editable: true
-      - install_prototype_dependencies
       - pip_install:
           args: mypy
           descr: Install Python type check utilities
