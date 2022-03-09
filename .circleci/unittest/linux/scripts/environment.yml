@@ -15,3 +15,13 @@ dependencies:
     - pillow >=5.3.0, !=8.3.*
     - scipy
     - av
+    - cloudpickle==1.6.0
+    - ConfigArgParse==1.5.3
+    - dm_env==1.5
+    - dm_tree==0.1.6
+    - gym_retro==0.8.0
+    - moviepy==1.0.3
+    - retro==2.9.0
+    - setuptools==57.4.0
+    - torchvision==0.11.3
+    - tqdm==4.62.1
