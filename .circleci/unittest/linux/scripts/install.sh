@@ -47,12 +47,12 @@ else
     conda install -y pytorch torchvision cudatoolkit=10.2 -c pytorch-nightly
 fi
 
-printf "Installing functorch\n"
-cd third_party/functorch
-WHEELS_FOLDER=${HOME}/project/wheels
-mkdir -p $WHEELS_FOLDER
-PYTORCH_VERSION="$(python -c "import torch; print(torch.__version__)")" python setup.py develop bdist_wheel -d $WHEELS_FOLDER
-cd ../..
+#printf "Installing functorch\n"
+#cd third_party/functorch
+#WHEELS_FOLDER=${HOME}/project/wheels
+#mkdir -p $WHEELS_FOLDER
+#PYTORCH_VERSION="$(python -c "import torch; print(torch.__version__)")" python setup.py develop bdist_wheel -d $WHEELS_FOLDER
+#cd ../..
 
 printf "* Installing torchrl\n"
 python setup.py develop
