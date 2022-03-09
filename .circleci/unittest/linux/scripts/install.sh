@@ -33,21 +33,26 @@ esac
 git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
-if [ "${os}" == "MacOSX" ]; then
-    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch "${cudatoolkit}" pytest
+#if [ "${os}" == "MacOSX" ]; then
+#    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch "${cudatoolkit}" pytest
+#else
+#    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}" pytest
+#fi
+
+if [ "${CU_VERSION:-}" == cpu ] ; then
+    # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
+    # use pip to install pytorch as conda can frequently pick older release
+    pip install torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
 else
-    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}" pytest
+    conda install -y pytorch torchvision cudatoolkit=10.2 -c pytorch-nightly
 fi
+
+printf "Installing functorch\n"
+cd third_party/functorch
+WHEELS_FOLDER=${HOME}/project/wheels
+mkdir -p $WHEELS_FOLDER
+PYTORCH_VERSION="$(python -c "import torch; print(torch.__version__)")" python setup.py develop bdist_wheel -d $WHEELS_FOLDER
+cd ../..
 
 printf "* Installing torchrl\n"
 python setup.py develop
-
-printf "Installing TorchVision\n"
-cd third_party/vision
-python setup.py develop
-
-printf "Installing functorch\n"
-cd ../functorch
-python setup.py develop
-
-cd ../..
