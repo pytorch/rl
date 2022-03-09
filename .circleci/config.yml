@@ -19,15 +19,6 @@ commands:
     description: "checkout merge branch"
     steps:
       - checkout
-  #     - run:
-  #         name: Checkout merge branch
-  #         command: |
-  #           set -ex
-  #           BRANCH=$(git rev-parse --abbrev-ref HEAD)
-  #           if [[ "$BRANCH" != "main" ]]; then
-  #             git fetch --force origin ${CIRCLE_BRANCH}/merge:merged/${CIRCLE_BRANCH}
-  #             git checkout "merged/$CIRCLE_BRANCH"
-  #           fi
   designate_upload_channel:
     description: "inserts the correct upload channel into ${BASH_ENV}"
     steps:
@@ -140,21 +131,6 @@ commands:
           args: --no-build-isolation <<# parameters.editable >> --editable <</ parameters.editable >> .
           descr: Install torchrl <<# parameters.editable >> in editable mode <</ parameters.editable >>
 
-  # Most of the test suite is handled by the `unittest` jobs, with completely different workflow and setup.
-  # This command can be used if only a selection of tests need to be run, for ad-hoc files.
-  run_tests_selective:
-    parameters:
-      file_or_dir:
-        type: string
-    steps:
-      - run:
-          name: Install test utilities
-          command: pip install --progress-bar=off pytest pytest-mock
-      - run:
-          name: Run tests
-          command: pytest --junitxml=test-results/junit.xml -v --durations 20 <<parameters.file_or_dir>>
-      - store_test_results:
-          path: test-results
 
 binary_common: &binary_common
   parameters:
@@ -267,93 +243,6 @@ jobs:
           name: Check Python types statically
           command: mypy --install-types --non-interactive --config-file mypy.ini
 
-  smoke_test_linux_conda:
-    <<: *smoke_test_common
-    steps:
-      - attach_workspace:
-          at: ~/workspace
-      - designate_upload_channel
-      - run:
-          name: install binaries
-          command: |
-            set -x
-            source /usr/local/etc/profile.d/conda.sh && conda activate python${PYTHON_VERSION}
-            conda install -v -y -c pytorch-nightly pytorch
-            conda install -v -y $(ls ~/workspace/torchrl*.tar.bz2)
-      - run:
-          name: smoke test
-          command: |
-            source /usr/local/etc/profile.d/conda.sh && conda activate python${PYTHON_VERSION}
-            python -c "import torchrl"
-
-  smoke_test_linux_pip:
-    <<: *smoke_test_common
-    steps:
-      - attach_workspace:
-          at: ~/workspace
-      - designate_upload_channel
-      - run:
-          name: install binaries
-          command: |
-            set -x
-            source /usr/local/etc/profile.d/conda.sh && conda activate python${PYTHON_VERSION}
-      - pip_install:
-          args: $(ls ~/workspace/torchrl*.whl) --pre -f https://download.pytorch.org/whl/nightly/torch_nightly.html
-      - run:
-          name: smoke test
-          command: |
-            source /usr/local/etc/profile.d/conda.sh && conda activate python${PYTHON_VERSION}
-            python -c "import torchrl"
-
-  smoke_test_win_conda:
-    <<: *binary_common
-    executor:
-      name: windows-cpu
-    steps:
-      - attach_workspace:
-          at: ~/workspace
-      - designate_upload_channel
-      - run:
-          name: install binaries
-          command: |
-            set -x
-            eval "$('/C/tools/miniconda3/Scripts/conda.exe' 'shell.bash' 'hook')"
-            conda env remove -n python${PYTHON_VERSION} || true
-            conda create -yn python${PYTHON_VERSION} python=${PYTHON_VERSION}
-            conda activate python${PYTHON_VERSION}
-            conda install "Pillow>=5.3.0,!=8.3.*"
-            conda install -v -y -c pytorch-nightly pytorch
-            conda install -v -y $(ls ~/workspace/torchrl*.tar.bz2)
-      - run:
-          name: smoke test
-          command: |
-            eval "$('/C/tools/miniconda3/Scripts/conda.exe' 'shell.bash' 'hook')"
-            conda activate python${PYTHON_VERSION}
-            python -c "import torchrl"
-
-  smoke_test_win_pip:
-    <<: *binary_common
-    executor:
-      name: windows-cpu
-    steps:
-      - attach_workspace:
-          at: ~/workspace
-      - designate_upload_channel
-      - run:
-          name: install binaries
-          command: |
-            set -x
-            eval "$('/C/tools/miniconda3/Scripts/conda.exe' 'shell.bash' 'hook')"
-            conda create -yn python${PYTHON_VERSION} python=${PYTHON_VERSION}
-            conda activate python${PYTHON_VERSION}
-      - pip_install:
-          args: $(ls ~/workspace/torchrl*.whl) --pre -f https://download.pytorch.org/whl/nightly/torch_nightly.html
-      - run:
-          name: smoke test
-          command: |
-            eval "$('/C/tools/miniconda3/Scripts/conda.exe' 'shell.bash' 'hook')"
-            conda activate python${PYTHON_VERSION}
-            python -c "import torchrl"
 
   unittest_linux_cpu:
     <<: *binary_common
@@ -374,7 +263,12 @@ jobs:
 
       - run:
           name: Setup
-          command: .circleci/unittest/linux/scripts/setup_env.sh
+          command: |
+            touch ${BASH_ENV}
+            echo "export PARAMETERS_PYTHON_VERSION=<< parameters.python_version >>" >> ${BASH_ENV}
+            cat ${BASH_ENV}
+            # For some reason circleci isn't automatically sourcing this within the builds
+            source ${BASH_ENV} && .circleci/unittest/linux/scripts/setup_env.sh
 #      - save_cache:
 #
 #          key: env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
@@ -384,51 +278,18 @@ jobs:
 #            - env
       - run:
           name: Install torchrl
-          command: .circleci/unittest/linux/scripts/install.sh
+          command: |
+            touch ${BASH_ENV}
+            echo "export PARAMETERS_PYTHON_VERSION=<< parameters.python_version >>" >> ${BASH_ENV}
+            cat ${BASH_ENV}
+            # For some reason circleci isn't automatically sourcing this within the builds
+            source ${BASH_ENV} && .circleci/unittest/linux/scripts/install.sh
       - run:
           name: Run tests
           command: .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Post process
           command: .circleci/unittest/linux/scripts/post_process.sh
-      - store_test_results:
-          path: test-results
-
-  unittest_windows_cpu:
-    <<: *binary_common
-    executor:
-      name: windows-cpu
-    steps:
-      - checkout
-      - designate_upload_channel
-      - run:
-          name: Generate cache key
-          # This will refresh cache on Sundays, nightly build should generate new cache.
-          command: echo "$(date +"%Y-%U")" > .circleci-weekly
-      - restore_cache:
-
-          keys:
-            - env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-
-      - run:
-          name: Setup
-          command: .circleci/unittest/windows/scripts/setup_env.sh
-      - save_cache:
-
-          key: env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-
-          paths:
-            - conda
-            - env
-      - run:
-          name: Install torchrl
-          command: .circleci/unittest/windows/scripts/install.sh
-      - run:
-          name: Run tests
-          command: .circleci/unittest/windows/scripts/run_test.sh
-      - run:
-          name: Post process
-          command: .circleci/unittest/windows/scripts/post_process.sh
       - store_test_results:
           path: test-results
 
@@ -445,34 +306,5 @@ workflows:
 
       - unittest_linux_cpu:
           cu_version: cpu
-          name: unittest_linux_cpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_cpu:
-          cu_version: cpu
           name: unittest_linux_cpu_py3.8
           python_version: '3.8'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.9
-          python_version: '3.9'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.10
-          python_version: '3.10'
-
-      - unittest_windows_cpu:
-          cu_version: cpu
-          name: unittest_windows_cpu_py3.7
-          python_version: '3.7'
-      - unittest_windows_cpu:
-          cu_version: cpu
-          name: unittest_windows_cpu_py3.8
-          python_version: '3.8'
-      - unittest_windows_cpu:
-          cu_version: cpu
-          name: unittest_windows_cpu_py3.9
-          python_version: '3.9'
-      - unittest_windows_cpu:
-          cu_version: cpu
-          name: unittest_windows_cpu_py3.10
-          python_version: '3.10'
