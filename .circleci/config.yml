@@ -257,9 +257,6 @@ jobs:
     docker:
       - image: circleci/python:3.7
     steps:
-      - apt_install:
-          args: libturbojpeg-dev
-          descr: Install additional system libraries
       - checkout
       - install_torchrl:
           editable: true
@@ -439,7 +436,7 @@ workflows:
   lint:
     jobs:
 #      - circleci_consistency
-      - lint_python_and_config
+#      - lint_python_and_config
       - lint_c
       - type_check_python
 
