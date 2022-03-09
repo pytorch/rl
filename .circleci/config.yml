@@ -444,7 +444,7 @@ workflows:
     jobs:
       - smoke_test_linux_pip:
           cu_version: cpu
-          name: unittest_linux_cpu_py3.7
+          name: smoke_test_linux_pip_py3.7
           python_version: '3.7'
 
       - unittest_linux_cpu:
