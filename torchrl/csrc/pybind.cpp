@@ -9,7 +9,6 @@
 
 namespace py = pybind11;
 
-
 PYBIND11_MODULE(_torchrl, m) {
   py::class_<torchrl::SumSegmentTree<float>,
              std::shared_ptr<torchrl::SumSegmentTree<float>>>(m,
@@ -134,4 +133,3 @@ PYBIND11_MODULE(_torchrl, m) {
            py::overload_cast<const torch::Tensor &, const torch::Tensor &>(
                &torchrl::MinSegmentTree<float>::Query, py::const_));
 }
-
