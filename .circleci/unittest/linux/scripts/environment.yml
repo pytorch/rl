@@ -19,5 +19,3 @@ dependencies:
     - pyyaml
     - scipy
     - dm_control
-    - patchelf
-    - pyrender
