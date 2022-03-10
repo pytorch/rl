@@ -8,6 +8,7 @@ dependencies:
   - pip
   - protobuf
   - cmake >= 3.18
+  - hypothesis
   - pip:
     - future
     - cloudpickle
