@@ -209,6 +209,9 @@ jobs:
       - image: "pytorch/manylinux-cuda102"
     resource_class: 2xlarge+
 
+    environment:
+      TAR_OPTIONS: --no-same-owner
+
     steps:
       - checkout
       - designate_upload_channel
