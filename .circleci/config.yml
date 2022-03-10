@@ -249,7 +249,9 @@ jobs:
             source ${BASH_ENV} && .circleci/unittest/linux/scripts/install.sh
       - run:
           name: Run tests
-          command: .circleci/unittest/linux/scripts/run_test.sh
+          command: |
+            MUJOCO_GL=osmesa
+            .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Post process
           command: .circleci/unittest/linux/scripts/post_process.sh
