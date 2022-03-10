@@ -182,8 +182,11 @@ jobs:
           command: git --no-pager diff
 
   type_check_python:
+#    docker:
+#      - image: circleci/python:3.7
     docker:
-      - image: circleci/python:3.7
+      - image: "pytorch/manylinux-cuda102"
+    resource_class: 2xlarge+
     steps:
       - checkout
       - install_torchrl:
@@ -202,7 +205,7 @@ jobs:
 #      image: "ubuntu-1604:202007-01"
 #    resource_class: xlarge
 
-    docker:  # error with caffe2
+    docker:
       - image: "pytorch/manylinux-cuda102"
     resource_class: 2xlarge+
 
