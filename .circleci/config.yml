@@ -187,7 +187,7 @@ jobs:
     steps:
       - checkout
       - pip_install:
-          args: cmake, ninja
+          args: cmake ninja
           descr: Install CMake and Ninja
       - install_torchrl:
           editable: true
@@ -233,7 +233,7 @@ jobs:
             # For some reason circleci isn't automatically sourcing this within the builds
             source ${BASH_ENV} && .circleci/unittest/linux/scripts/setup_env.sh
       - apt_install:
-          args: libosmesa6, libgl1-mesa-glx
+          args: libosmesa6 libgl1-mesa-glx
           descr: Install additional system libraries
 #      - save_cache:
 #
