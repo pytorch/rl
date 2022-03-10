@@ -3,8 +3,8 @@ from __future__ import annotations
 import math
 import tempfile
 import textwrap
-from collections import OrderedDict, Mapping
-from collections.abc import Iterable
+from collections import OrderedDict
+from collections.abc import Iterable, Mapping
 from copy import deepcopy, copy
 from numbers import Number
 from textwrap import indent

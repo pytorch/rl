@@ -2,7 +2,6 @@ from argparse import Namespace, ArgumentParser
 from typing import Optional, Callable, Union
 
 import torch
-from torch.utils.tensorboard import SummaryWriter
 
 from torchrl.agents.env_creator import env_creator, EnvCreator
 from torchrl.data.transforms import (
@@ -75,7 +74,7 @@ def correct_for_frame_skip(args: Namespace) -> Namespace:
 def transformed_env_constructor(
     args: Namespace,
     video_tag: str = "",
-    writer: Optional[SummaryWriter] = None,
+    writer: Optional["SummaryWriter"] = None,
     stats: Optional[dict] = None,
     norm_obs_only: bool = False,
     use_env_creator: bool = True,

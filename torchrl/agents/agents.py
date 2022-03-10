@@ -10,7 +10,6 @@ from typing import Dict, Callable, Optional, Union
 import numpy as np
 import torch.nn
 from torch import nn, optim
-from torch.utils.tensorboard import SummaryWriter
 
 try:
     from tqdm import tqdm
@@ -140,7 +139,7 @@ class Agent:
         target_net_updater: Optional[_TargetNetUpdate] = None,
         policy_exploration: Optional[TDModuleWrapper] = None,
         replay_buffer: Optional[ReplayBuffer] = None,
-        writer: Optional[SummaryWriter] = None,
+        writer: Optional["SummaryWriter"] = None,
         update_weights_interval: int = -1,
         record_interval: int = 10000,
         record_frames: int = 1000,

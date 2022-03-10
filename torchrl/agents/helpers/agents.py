@@ -7,7 +7,6 @@ from typing import Optional, Union
 from warnings import warn
 
 from torch import optim
-from torch.utils.tensorboard import SummaryWriter
 
 from torchrl.agents.agents import Agent
 from torchrl.agents.helpers.collectors import parser_collector_args_offline
@@ -32,7 +31,7 @@ def make_agent(
     target_net_updater: Optional[_TargetNetUpdate] = None,
     policy_exploration: Optional[Union[TDModuleWrapper, TDModule]] = None,
     replay_buffer: Optional[ReplayBuffer] = None,
-    writer: Optional[SummaryWriter] = None,
+    writer: Optional["SummaryWriter"] = None,
     args: Optional[Namespace] = None,
 ) -> Agent:
     """

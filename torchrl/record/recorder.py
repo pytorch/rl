@@ -1,7 +1,6 @@
 from typing import Optional, Iterable
 
 import torch
-from torch.utils.tensorboard import SummaryWriter
 
 from torchrl.data import TensorDict
 from torchrl.data.transforms import Transform, ObservationTransform
@@ -25,7 +24,7 @@ class VideoRecorder(ObservationTransform):
 
     def __init__(
         self,
-        writer: SummaryWriter,
+        writer: "SummaryWriter",
         tag: str,
         keys: Optional[Iterable[str]] = None,
         skip: int = 2,
