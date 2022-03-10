@@ -671,7 +671,7 @@ class DdpgMlpQNet(nn.Module):
             "bias_last_layer": True,
             "activate_last_layer": True,
         }
-        mlp_net_kwargs_net1 = (
+        mlp_net_kwargs_net1: Dict = (
             mlp_net_kwargs_net1 if mlp_net_kwargs_net1 is not None else dict()
         )
         mlp1_net_default_kwargs.update(mlp_net_kwargs_net1)

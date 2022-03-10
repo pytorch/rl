@@ -20,7 +20,7 @@ from typing import (
     KeysView,
     ItemsView,
     Iterator,
-    Sequence, Dict, overload, TypeVar
+    Sequence, Dict
 )
 from warnings import warn
 
@@ -42,7 +42,7 @@ __all__ = [
 ]
 
 TD_HANDLED_FUNCTIONS: Dict = dict()
-COMPATIBLE_TYPES = Union[torch.Tensor, ]  # None? # leaves space for _TensorDict
+COMPATIBLE_TYPES = Union[torch.Tensor,]  # None? # leaves space for _TensorDict
 _accepted_classes = (torch.Tensor, MemmapTensor)
 
 
@@ -146,7 +146,7 @@ class _TensorDict(Mapping):
                         f"expected {self.batch_size}"
                     )
 
-    def _check_is_shared(self) -> None:
+    def _check_is_shared(self) -> bool:
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def _check_device(self) -> None:
@@ -1151,7 +1151,7 @@ class TensorDict(_TensorDict):
         device: Optional[DEVICE_TYPING] = None,
         _meta_source: Optional[dict] = None,
     ):
-        self._tensor_dict = dict()
+        self._tensor_dict: Dict = dict()
         self._tensor_dict_meta: OrderedDict = OrderedDict()
         if not isinstance(source, (_TensorDict, dict)):
             raise ValueError(
@@ -1166,7 +1166,7 @@ class TensorDict(_TensorDict):
             ),
         ):
             if not isinstance(batch_size, torch.Size):
-                if isinstance(batch_size, Number):
+                if isinstance(batch_size, int):
                     batch_size = torch.Size([batch_size])
                 else:
                     batch_size = torch.Size(batch_size)
@@ -1223,32 +1223,32 @@ class TensorDict(_TensorDict):
     def is_memmap(self) -> bool:
         return self._check_is_memmap()
 
-    def _device_get(self) -> DEVICE_TYPING:
+    @property
+    def device(self) -> torch.device:
         device = self._device
         if device is None and len(self):
             device = next(self.items_meta())[1].device
         if not isinstance(device, torch.device) and device is not None:
             device = torch.device(device)
         self._device = device
-        return device
+        return device  # type: ignore
 
+    @device.setter
     def _device_set(self, value: DEVICE_TYPING) -> None:
         raise RuntimeError(
             f"Setting device on {self.__class__.__name__} instances is not allowed. "
             f"Please call {self.__class__.__name__}.to(device) instead."
         )
 
-    device = property(_device_get, _device_set)
-
-    def _batch_size_get(self) -> torch.Size:
+    @property
+    def batch_size(self) -> torch.Size:
         return self._batch_size
 
+    @batch_size.setter
     def _batch_size_set(self, value: COMPATIBLE_TYPES) -> None:
         raise RuntimeError(
             f"Setting batch size on {self.__class__.__name__} instances is not allowed."
         )
-
-    batch_size = property(_batch_size_get, _batch_size_set)
 
     # Checks
     def _check_is_shared(self) -> bool:
@@ -1307,7 +1307,7 @@ class TensorDict(_TensorDict):
             if self.is_shared():
                 tensor = tensor.share_memory_()
             elif self.is_memmap():
-                tensor = MemmapTensor(tensor)
+                tensor = MemmapTensor(tensor)  # type: ignore
             elif tensor.is_shared() and len(self):
                 tensor = tensor.clone()
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
@@ -1328,20 +1328,23 @@ class TensorDict(_TensorDict):
                     self.set(key, value.pin_memory(), inplace=False)
         return self
 
-    def expand(self, *shape: int, inplace: bool = False) -> TensorDict:
-        """expand every tensor with (*shape, *tensor.shape) and returns the same tensordict with new tensors with expanded shapes."""
+    def expand(self, *shape: int) -> _TensorDict:
+        """
+        Expands every tensor with (*shape, *tensor.shape) and returns the same tensordict with new tensors with
+        expanded shapes.
+        """
         _batch_size = torch.Size([*shape, *self.batch_size])
         _batch_dims = len(_batch_size)
         d = {key: value.expand(*shape, *value.shape) for key, value in self.items()}
-        if inplace:
-            d_meta = {
-                key: value.expand(*shape, *value.shape)
-                for key, value in self.items_meta()
-            }
-            self._tensor_dict = d
-            self._tensor_dict_meta = d_meta
-            self._batch_size = _batch_size
-            self._batch_dims = _batch_dims
+        # if inplace:
+        #     d_meta = OrderedDict({
+        #         key: value.expand(*shape, *value.shape)
+        #         for key, value in self.items_meta()
+        #     })
+        #     self._tensor_dict = d
+        #     self._tensor_dict_meta = d_meta
+        #     self._batch_size = _batch_size
+        #     self._batch_dims = _batch_dims
         return TensorDict(source=d, batch_size=_batch_size)
 
     def set(
@@ -1857,7 +1860,7 @@ class SubTensorDict(_TensorDict):
         return self._batch_size
 
     @property
-    def device(self) -> DEVICE_TYPING:
+    def device(self) -> torch.device:
         return self._source.device
 
     def _preallocate(self, key: str, value: COMPATIBLE_TYPES) -> _TensorDict:

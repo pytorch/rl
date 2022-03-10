@@ -50,7 +50,7 @@ class MetaTensor:
 
     def __init__(
         self,
-        *shape: int,
+        *shape: Union[int, torch.Tensor],
         device: Optional[DEVICE_TYPING] = "cpu",
         dtype: torch.dtype = torch.get_default_dtype(),
         _is_shared: bool = False,
@@ -160,7 +160,7 @@ class MetaTensor:
             return NotImplemented
         return META_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
-    def expand(self, *shape: Iterable) -> MetaTensor:
+    def expand(self, *shape: int) -> MetaTensor:
         shape = torch.Size([*shape, *self.shape])
         return MetaTensor(*shape, device=self.device, dtype=self.dtype)
 
