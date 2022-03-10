@@ -207,6 +207,7 @@ jobs:
 
     docker:
       - image: "pytorch/manylinux-cuda102"
+        command: apt install libosmesa6-dev libgl1-mesa-glx libglfw3
     resource_class: 2xlarge+
 
     environment:

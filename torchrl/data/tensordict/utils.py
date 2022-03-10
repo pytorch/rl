@@ -20,7 +20,7 @@ def _sub_index(tensor: torch.Tensor, idx: INDEX_TYPING) -> torch.Tensor:
 
 
 def _getitem_batch_size(
-    shape: torch.Size, items: Union[Tuple, torch.Tensor, List, float, slice]
+    shape: torch.Size, items: INDEX_TYPING,
 ):
     """
     Given an input shape and an index, returns the size of the resulting indexed tensor.

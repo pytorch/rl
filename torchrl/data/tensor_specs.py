@@ -27,7 +27,10 @@ DEVICE_TYPING = Union[torch.device, str, int]
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
 
-def _default_dtype_and_device(dtype, device):
+def _default_dtype_and_device(
+    dtype: Union[None, torch.dtype],
+    device: Union[None, torch.device]
+) -> Tuple[torch.dtype, torch.device]:
     if dtype is None:
         dtype = torch.get_default_dtype()
     if device is None:
@@ -64,7 +67,8 @@ class Box:
     A box of values
     """
 
-    pass
+    def __iter__(self):
+        raise NotImplementedError
 
 
 @dataclass
@@ -270,7 +274,7 @@ class BoundedTensorSpec(TensorSpec):
         if not isinstance(maximum, torch.Tensor) or maximum.dtype is not dtype:
             maximum = torch.tensor(maximum, dtype=dtype, device=device)
         super().__init__(
-            (1,), ContinuousBox(minimum, maximum), device, dtype, "continuous"
+            torch.Size([1, ]), ContinuousBox(minimum, maximum), device, dtype, "continuous"
         )
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
@@ -289,8 +293,8 @@ class BoundedTensorSpec(TensorSpec):
         return out
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        minimum = self.space.minimum.to(val.device)
-        maximum = self.space.maximum.to(val.device)
+        minimum = self.space.minimum.to(val.device)  # type: ignore
+        maximum = self.space.maximum.to(val.device)  # type: ignore
         try:
             val = val.clamp_(minimum.item(), maximum.item())
         except:
