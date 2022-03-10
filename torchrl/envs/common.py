@@ -392,7 +392,7 @@ class _EnvClass:
 
     def _to_tensor(
         self,
-        value: Union[dict, bool, Number, torch.Tensor, np.ndarray],
+        value: Union[dict, bool, float, torch.Tensor, np.ndarray],
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[torch.dtype] = None,
     ) -> Union[torch.Tensor, dict]:

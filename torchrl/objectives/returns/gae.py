@@ -70,7 +70,7 @@ class GAE:
 
     def __init__(
         self,
-        gamma: Union[Number, torch.Tensor],
+        gamma: Union[float, torch.Tensor],
         lamda: float,
         critic: ProbabilisticTDModule,
         average_rewards: bool = False,

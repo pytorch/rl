@@ -705,7 +705,7 @@ class _TensorDict(Mapping):
         return self.to(f"cuda:{device}")
 
     def masked_fill_(
-        self, mask: torch.Tensor, value: Union[Number, bool]
+        self, mask: torch.Tensor, value: Union[float, bool]
     ) -> _TensorDict:
         """
         Fills the values corresponding to the mask with the desired value.
@@ -1049,7 +1049,7 @@ class _TensorDict(Mapping):
         """
         raise NotImplementedError
 
-    def fill_(self, key: str, value: Union[Number, bool]) -> _TensorDict:
+    def fill_(self, key: str, value: Union[float, bool]) -> _TensorDict:
         """
         Fills a tensor pointed by the key with the a given value.
 

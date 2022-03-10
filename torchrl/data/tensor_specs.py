@@ -259,8 +259,8 @@ class BoundedTensorSpec(TensorSpec):
 
     def __init__(
         self,
-        minimum: Union[np.ndarray, torch.Tensor, Number],
-        maximum: Union[np.ndarray, torch.Tensor, Number],
+        minimum: Union[np.ndarray, torch.Tensor, float],
+        maximum: Union[np.ndarray, torch.Tensor, float],
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = None,
     ):
@@ -420,8 +420,8 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
 
     def __init__(
         self,
-        minimum: Union[Number, torch.Tensor, np.ndarray],
-        maximum: Union[Number, torch.Tensor, np.ndarray],
+        minimum: Union[float, torch.Tensor, np.ndarray],
+        maximum: Union[float, torch.Tensor, np.ndarray],
         shape: Optional[torch.Size] = None,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[torch.dtype, str]] = None,

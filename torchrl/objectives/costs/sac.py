@@ -54,7 +54,7 @@ class SACLoss(_LossModule):
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, Number] = "auto",
+        target_entropy: Union[str, float] = "auto",
     ) -> None:
         super().__init__()
         self.actor_network = actor_network

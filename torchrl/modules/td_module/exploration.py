@@ -174,7 +174,7 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
         sigma: float = 0.2,
         dt: float = 1e-2,
         x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
-        sigma_min: Optional[Number] = None,
+        sigma_min: Optional[float] = None,
         n_steps_annealing: int = 1000,
         key: str = "action",
         safe: bool = True,
@@ -244,7 +244,7 @@ class _OrnsteinUhlenbeckProcess:
         sigma: float = 0.2,
         dt: float = 1e-2,
         x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
-        sigma_min: Optional[Number] = None,
+        sigma_min: Optional[float] = None,
         n_steps_annealing: int = 1000,
         key: str = "action",
     ):

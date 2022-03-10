@@ -6,7 +6,7 @@ from typing import Union, Tuple, List
 import torch
 
 
-def _sub_index(tensor: torch.Tensor, idx: Union[Tuple, slice, Number]) -> torch.Tensor:
+def _sub_index(tensor: torch.Tensor, idx: Union[Tuple, slice, float]) -> torch.Tensor:
     """
     Allows indexing of tensors with nested tuples, i.e. tensor[tuple1][tuple2] can be indexed via _sub_index(tensor, (tuple1, tuple2))
     """
@@ -18,7 +18,7 @@ def _sub_index(tensor: torch.Tensor, idx: Union[Tuple, slice, Number]) -> torch.
 
 
 def _getitem_batch_size(
-    shape: torch.Size, items: Union[Tuple, torch.Tensor, List, Number, slice]
+    shape: torch.Size, items: Union[Tuple, torch.Tensor, List, float, slice]
 ):
     """
     Given an input shape and an index, returns the size of the resulting indexed tensor.

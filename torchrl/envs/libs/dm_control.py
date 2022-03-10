@@ -65,7 +65,7 @@ def _get_envs(to_dict: bool = True) -> dict:
     return d
 
 
-def _robust_to_tensor(array: Union[Number, np.ndarray]) -> torch.Tensor:
+def _robust_to_tensor(array: Union[float, np.ndarray]) -> torch.Tensor:
     if isinstance(array, np.ndarray):
         return torch.tensor(array.copy())
     else:
@@ -138,7 +138,7 @@ class DMControlEnv(GymLikeEnv):
 
     def _output_transform(
         self, timestep_tuple: Tuple[dm_env._environment.TimeStep]
-    ) -> Tuple[np.ndarray, Number, bool]:
+    ) -> Tuple[np.ndarray, float, bool]:
         if type(timestep_tuple) is not tuple:
             timestep_tuple = (timestep_tuple,)
         reward = timestep_tuple[0].reward

@@ -28,7 +28,7 @@ def vtrace(
     vals: torch.Tensor,
     log_pi: torch.Tensor,
     log_mu: torch.Tensor,
-    gamma: Union[torch.Tensor, Number],
+    gamma: Union[torch.Tensor, float],
     rho_bar: float = 1.0,
     c_bar: float = 1.0,
 ) -> Tuple[torch.Tensor, torch.Tensor]:

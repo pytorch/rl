@@ -640,8 +640,8 @@ class ObservationNorm(ObservationTransform):
 
     def __init__(
         self,
-        loc: Union[Number, torch.Tensor],
-        scale: Union[Number, torch.Tensor],
+        loc: Union[float, torch.Tensor],
+        scale: Union[float, torch.Tensor],
         keys: Optional[Iterable[str]] = None,
         # observation_spec_key: =None,
         standard_normal: bool = False,
@@ -767,8 +767,8 @@ class RewardScaling(Transform):
 
     def __init__(
         self,
-        loc: Union[Number, torch.Tensor],
-        scale: Union[Number, torch.Tensor],
+        loc: Union[float, torch.Tensor],
+        scale: Union[float, torch.Tensor],
         keys: Optional[Iterable[str]] = None,
     ):
         if keys is None:
