@@ -182,7 +182,7 @@ jobs:
           command: git --no-pager diff
 
   type_check_python:
-#    docker:
+#    docker:  # no cmake
 #      - image: circleci/python:3.7
     docker:
       - image: "pytorch/manylinux-cuda102"

@@ -1,5 +1,5 @@
 import contextlib
-from collections import Callable
+from typing import Callable
 from typing import Tuple, Optional
 
 import torch

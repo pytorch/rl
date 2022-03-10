@@ -4,11 +4,12 @@ import math
 import tempfile
 import textwrap
 from collections import OrderedDict
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from copy import deepcopy, copy
 from numbers import Number
 from textwrap import indent
 from typing import (
+    Iterable,
     Optional,
     Union,
     Tuple,
