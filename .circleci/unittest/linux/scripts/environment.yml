@@ -2,18 +2,17 @@ channels:
   - pytorch
   - defaults
 dependencies:
-  - pytest
-  - pytest-cov
-  - pytest-mock
   - pip
-  - protobuf
   - cmake >= 3.18
-  - hypothesis
   - pip:
+    - hypothesis
+    - protobuf
     - future
     - cloudpickle
     - dm_env
     - gym_retro
     - moviepy
-    - setuptools==57.4.0
     - tqdm
+    - pytest
+    - pytest-cov
+    - pytest-mock

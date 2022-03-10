@@ -3,7 +3,7 @@ import argparse
 import pytest
 
 
-def test_agent():
+def test_recipes():
     raise NotImplementedError
 
 
