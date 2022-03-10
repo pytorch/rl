@@ -56,8 +56,8 @@ class EGreedyWrapper(TDModuleWrapper):
     def __init__(
         self,
         policy: TDModule,
-        eps_init: Number = 1.0,
-        eps_end: Number = 0.1,
+        eps_init: float = 1.0,
+        eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
     ):
         super().__init__(policy)
@@ -166,13 +166,13 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
     def __init__(
         self,
         policy: TDModule,
-        eps_init: Number = 1.0,
-        eps_end: Number = 0.1,
+        eps_init: float = 1.0,
+        eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
-        theta: Number = 0.15,
-        mu: Number = 0.0,
-        sigma: Number = 0.2,
-        dt: Number = 1e-2,
+        theta: float = 0.15,
+        mu: float = 0.0,
+        sigma: float = 0.2,
+        dt: float = 1e-2,
         x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
         sigma_min: Optional[Number] = None,
         n_steps_annealing: int = 1000,
@@ -239,10 +239,10 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
 class _OrnsteinUhlenbeckProcess:
     def __init__(
         self,
-        theta: Number,
-        mu: Number = 0.0,
-        sigma: Number = 0.2,
-        dt: Number = 1e-2,
+        theta: float,
+        mu: float = 0.0,
+        sigma: float = 0.2,
+        dt: float = 1e-2,
         x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
         sigma_min: Optional[Number] = None,
         n_steps_annealing: int = 1000,
@@ -291,7 +291,7 @@ class _OrnsteinUhlenbeckProcess:
             ),
         )
 
-    def add_sample(self, tensor_dict: _TensorDict, eps: Number = 1.0) -> _TensorDict:
+    def add_sample(self, tensor_dict: _TensorDict, eps: float = 1.0) -> _TensorDict:
 
         if not self.noise_key in set(tensor_dict.keys()):
             self._make_noise_pair(tensor_dict)

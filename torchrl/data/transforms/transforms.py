@@ -471,8 +471,8 @@ class RewardClipping(Transform):
 
     def __init__(
         self,
-        clamp_min: Number = None,
-        clamp_max: Number = None,
+        clamp_min: float = None,
+        clamp_max: float = None,
         keys: Optional[Iterable[str]] = None,
     ):
         if keys is None:
@@ -1127,8 +1127,8 @@ class VecNorm(Transform):
         self,
         keys: Optional[Iterable[str]] = None,
         shared_td: Optional[_TensorDict] = None,
-        decay: Number = 0.9999,
-        eps: Number = 1e-4,
+        decay: float = 0.9999,
+        eps: float = 1e-4,
     ) -> None:
         if keys is None:
             keys = ["next_observation", "reward"]

@@ -358,7 +358,7 @@ class ProbabilisticTDModule(TDModule):
         return tensor_dict
 
     def _dist_sample(
-        self, dist: d.Distribution, interaction_mode: bool = None, eps: Number = None
+        self, dist: d.Distribution, interaction_mode: bool = None, eps: float = None
     ) -> Tensor:
         if interaction_mode is None:
             interaction_mode = self.default_interaction_mode

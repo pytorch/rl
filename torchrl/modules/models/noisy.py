@@ -42,7 +42,7 @@ class NoisyLinear(nn.Linear):
         bias: bool = True,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[torch.dtype] = None,
-        std_init: Number = 0.1,
+        std_init: float = 0.1,
     ):
         nn.Module.__init__(self)
         self.in_features = in_features
@@ -154,7 +154,7 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         bias: bool = True,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[torch.dtype] = None,
-        std_init: Number = 0.1,
+        std_init: float = 0.1,
     ):
         super().__init__(0, 0, False)
         self.out_features = out_features

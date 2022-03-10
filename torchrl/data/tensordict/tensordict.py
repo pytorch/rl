@@ -855,7 +855,7 @@ class _TensorDict(Mapping):
 
         d = {}
         for key, item in self.items():
-            d[key] = item.reshape(*shape, *item.shape[self.ndimension():])
+            d[key] = item.reshape(*shape, *item.shape[self.ndimension() :])
         if len(d):
             batch_size = d[key].shape[: len(shape)]
         else:
@@ -1008,8 +1008,10 @@ class _TensorDict(Mapping):
             return self.masked_select(idx)
 
         contiguous_input = (int, slice)
-        return_simple_view = isinstance(idx, contiguous_input) or \
-                             (isinstance(idx, tuple) and all(isinstance(_idx, contiguous_input) for _idx in idx))
+        return_simple_view = isinstance(idx, contiguous_input) or (
+            isinstance(idx, tuple)
+            and all(isinstance(_idx, contiguous_input) for _idx in idx)
+        )
         if not self.batch_size:
             raise RuntimeError(
                 "indexing a tensordict with td.batch_dims==0 is not permitted"
@@ -1140,6 +1142,7 @@ class TensorDict(_TensorDict):
     TODO: split, transpose, permute
 
     """
+
     _safe = True
 
     def __init__(
@@ -1152,8 +1155,10 @@ class TensorDict(_TensorDict):
         self._tensor_dict = dict()
         self._tensor_dict_meta = OrderedDict()
         if not isinstance(source, (_TensorDict, dict)):
-            raise ValueError("A TensorDict source is expected to be a _TensorDict sub-type or a dictionary, "
-                             f"found type(source)={type(source)}.")
+            raise ValueError(
+                "A TensorDict source is expected to be a _TensorDict sub-type or a dictionary, "
+                f"found type(source)={type(source)}."
+            )
         if isinstance(
             batch_size,
             (
@@ -1585,8 +1590,8 @@ def implements_for_td(torch_function: Callable) -> Callable:
 def assert_allclose_td(
     actual: _TensorDict,
     expected: _TensorDict,
-    rtol: Number = None,
-    atol: Number = None,
+    rtol: float = None,
+    atol: float = None,
     equal_nan: bool = True,
     msg: str = "",
 ) -> bool:
@@ -1605,11 +1610,11 @@ def assert_allclose_td(
         input2 = expected.get(key)
         mse = (
             (input1.to(torch.float) - input2.to(torch.float))
-                .pow(2)
-                .sum()
-                .div(input1.numel())
-                .sqrt()
-                .item()
+            .pow(2)
+            .sum()
+            .div(input1.numel())
+            .sqrt()
+            .item()
         )
 
         default_msg = f"key {key} does not match, got mse = {mse:4.4f}"
@@ -1753,7 +1758,7 @@ def stack(
 def pad_sequence_td(
     list_of_tensor_dicts: Iterable[_TensorDict],
     batch_first: bool = True,
-    padding_value: Number = 0.0,
+    padding_value: float = 0.0,
     out: _TensorDict = None,
     device: Optional[DEVICE_TYPING] = None,
 ):
@@ -1875,7 +1880,7 @@ class SubTensorDict(_TensorDict):
         parent = self.get_parent_tensor_dict()
         tensor_expand = torch.zeros(
             *parent.batch_size,
-            *tensor.shape[self.batch_dims:],
+            *tensor.shape[self.batch_dims :],
             dtype=tensor.dtype,
             device=self.device,
         )
@@ -2087,6 +2092,7 @@ class LazyStackedTensorDict(_TensorDict):
         >>> print(td_stack[:, 0] is tds[0])
         True
     """
+
     _safe = False
 
     def __init__(
@@ -2946,7 +2952,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dim = torch.Size(
             [
                 *self.custom_op_kwargs.get("size"),
-                *source_meta_tensor.shape[self._source.batch_dims:],
+                *source_meta_tensor.shape[self._source.batch_dims :],
             ]
         )
         new_dict = deepcopy(self.custom_op_kwargs)
@@ -2957,7 +2963,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dim = torch.Size(
             [
                 *self.inv_op_kwargs.get("size"),
-                *source_meta_tensor.shape[self._source.batch_dims:],
+                *source_meta_tensor.shape[self._source.batch_dims :],
             ]
         )
         new_dict = deepcopy(self.inv_op_kwargs)

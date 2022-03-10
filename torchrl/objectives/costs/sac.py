@@ -49,10 +49,10 @@ class SACLoss(_LossModule):
         qvalue_network: ProbabilisticTDModule,
         value_network: ProbabilisticTDModule,
         qvalue_network_bis: Optional[ProbabilisticTDModule] = None,
-        gamma: Number = 0.99,
+        gamma: float = 0.99,
         priotity_key: str = "td_error",
         loss_function: str = "smooth_l1",
-        alpha_init: Number = 1.0,
+        alpha_init: float = 1.0,
         fixed_alpha: bool = False,
         target_entropy: Union[str, Number] = "auto",
     ) -> None:

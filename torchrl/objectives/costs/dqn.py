@@ -39,7 +39,7 @@ class DQNLoss(_LossModule):
     """
 
     def __init__(
-        self, value_network: QValueActor, gamma: Number, loss_function: str = "l2"
+        self, value_network: QValueActor, gamma: float, loss_function: str = "l2"
     ) -> None:
         super().__init__()
         self.value_network = value_network
@@ -178,7 +178,7 @@ class DistributionalDQNLoss(_LossModule):
     def __init__(
         self,
         value_network: DistributionalQValueActor,
-        gamma: Number,
+        gamma: float,
     ):
         super().__init__()
         self.gamma = gamma

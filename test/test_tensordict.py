@@ -79,7 +79,10 @@ def test_tensor_dict_indexing():
     ).all(), f"td and td_reconstruct differ, got {td == td_reconstruct}"
 
     x = torch.randn(4, 5)
-    td = TensorDict(source={"key1": torch.zeros(3, 4, 5)}, batch_size=[3, 4], )
+    td = TensorDict(
+        source={"key1": torch.zeros(3, 4, 5)},
+        batch_size=[3, 4],
+    )
     td[0].set_("key1", x)
     torch.testing.assert_allclose(td.get("key1")[0], x)
     torch.testing.assert_allclose(td.get("key1")[0], td[0].get("key1"))

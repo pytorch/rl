@@ -150,8 +150,8 @@ def make_ddpg_actor(
     actor_net_kwargs: Optional[dict] = None,
     value_net_kwargs: Optional[dict] = None,
     atoms: int = 0,  # for distributional dqn
-    vmin: Number = -3,
-    vmax: Number = 3,
+    vmin: float = -3,
+    vmax: float = 3,
     device: DEVICE_TYPING = "cpu",
 ) -> torch.nn.ModuleList:
     """

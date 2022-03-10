@@ -420,7 +420,7 @@ class DistributionalDQNnet(nn.Module):
         return F.log_softmax(q_values, dim=-2)
 
 
-def ddpg_init_last_layer(last_layer: nn.Module, scale: Number = 6e-4) -> None:
+def ddpg_init_last_layer(last_layer: nn.Module, scale: float = 6e-4) -> None:
     last_layer.weight.data.copy_(
         torch.rand_like(last_layer.weight.data) * scale - scale / 2
     )

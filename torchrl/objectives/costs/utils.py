@@ -134,7 +134,7 @@ class SoftUpdate(_TargetNetUpdate):
     """
 
     def __init__(
-        self, loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"], eps: Number = 0.999
+        self, loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"], eps: float = 0.999
     ):
         if not (eps < 1.0 and eps > 0.0):
             raise ValueError(
@@ -169,7 +169,7 @@ class HardUpdate(_TargetNetUpdate):
     def __init__(
         self,
         loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
-        value_network_update_interval: Number = 1000,
+        value_network_update_interval: float = 1000,
     ):
         super(HardUpdate, self).__init__(loss_module)
         self.value_network_update_interval = value_network_update_interval
@@ -211,7 +211,7 @@ def next_state_value(
     tensor_dict: _TensorDict,
     operator: ProbabilisticTDModule,
     next_val_key: str = "state_action_value",
-    gamma: Number = 0.99,
+    gamma: float = 0.99,
 ) -> torch.Tensor:
     """
     Computes the next state value (without gradient) to compute a target for the MSE loss

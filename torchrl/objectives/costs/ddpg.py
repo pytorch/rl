@@ -29,7 +29,7 @@ class DDPGLoss(_LossModule):
         self,
         actor_network: TDModule,
         value_network: TDModule,
-        gamma: Number,
+        gamma: float,
         loss_function: str = "l2",
     ) -> None:
         super().__init__()

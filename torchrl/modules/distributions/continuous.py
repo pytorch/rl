@@ -8,7 +8,6 @@ from torch.distributions import constraints
 
 from torchrl.modules.utils import mappings
 from .truncated_normal import TruncatedNormal as _TruncatedNormal
-from .utils import UNIFORM
 
 __all__ = ["TanhNormal", "Delta", "TanhDelta", "TruncatedNormal"]
 
@@ -282,9 +281,6 @@ def uniform_sample_tanhnormal(dist: TanhNormal, size=torch.Size([])) -> torch.Te
     return torch.rand_like(dist.sample(size)) * (dist.max - dist.min) + dist.min
 
 
-UNIFORM[TanhNormal] = uniform_sample_tanhnormal
-
-
 class Delta(D.Distribution):
     """
     Delta distribution.
@@ -304,8 +300,8 @@ class Delta(D.Distribution):
     def __init__(
         self,
         param: torch.Tensor,
-        atol: Number = 1e-6,
-        rtol: Number = 1e-6,
+        atol: float = 1e-6,
+        rtol: float = 1e-6,
         batch_shape: Union[torch.Size, Iterable] = torch.Size([]),
         event_shape: Union[torch.Size, Iterable] = torch.Size([]),
     ):
@@ -376,8 +372,8 @@ class TanhDelta(D.TransformedDistribution):
         min: Union[torch.Tensor, Number] = -1.0,
         max: Union[torch.Tensor, Number] = 1.0,
         event_dims: int = 1,
-        atol: Number = 1e-4,
-        rtol: Number = 1e-4,
+        atol: float = 1e-4,
+        rtol: float = 1e-4,
         **kwargs,
     ):
         minmax_msg = "max value has been found to be equal or less than min value"
@@ -434,6 +430,3 @@ class TanhDelta(D.TransformedDistribution):
 
 def uniform_sample_delta(dist: Delta, size=torch.Size([])) -> torch.Tensor:
     return torch.randn_like(dist.sample(size))
-
-
-UNIFORM[Delta] = uniform_sample_delta

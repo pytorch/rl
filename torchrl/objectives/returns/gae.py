@@ -25,7 +25,7 @@ from ...modules import ProbabilisticTDModule
 
 #
 # def gae(values: torch.Tensor, log_prob_actions: torch.Tensor, rewards: torch.Tensor, entropies: torch.Tensor,
-#         gamma: Union[Number, torch.Tensor], tau: Number) -> torch.Tensor:
+#         gamma: Union[Number, torch.Tensor], tau: float) -> torch.Tensor:
 #     """
 #
 #     Args:
@@ -71,7 +71,7 @@ class GAE:
     def __init__(
         self,
         gamma: Union[Number, torch.Tensor],
-        lamda: Number,
+        lamda: float,
         critic: ProbabilisticTDModule,
         average_rewards: bool = False,
         gradient_mode: bool = False,

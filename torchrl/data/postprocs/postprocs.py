@@ -52,7 +52,7 @@ def _get_terminal(
 
 
 def _get_gamma(
-    gamma: Number, reward: torch.Tensor, mask: torch.Tensor, n_steps_max: int
+    gamma: float, reward: torch.Tensor, mask: torch.Tensor, n_steps_max: int
 ) -> torch.Tensor:
     # Compute gamma for n-step value function
     gamma_masked = gamma * torch.ones_like(reward)
@@ -115,7 +115,7 @@ class MultiStep(nn.Module):
 
     def __init__(
         self,
-        gamma: Number,
+        gamma: float,
         n_steps_max: int,
     ):
         super().__init__()

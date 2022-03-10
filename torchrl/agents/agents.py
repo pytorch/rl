@@ -147,7 +147,7 @@ class Agent:
         optim_steps_per_batch: int = 500,
         batch_size: int = 256,
         clip_grad_norm: bool = True,
-        clip_norm: Number = 100.0,
+        clip_norm: float = 100.0,
         progress_bar: bool = True,
         seed: int = 42,
         save_agent_interval: int = 10000,
