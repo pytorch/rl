@@ -187,8 +187,8 @@ jobs:
     steps:
       - checkout
       - pip_install:
-          args: cmake
-          descr: Install CMake
+          args: cmake, ninja
+          descr: Install CMake and Ninja
       - install_torchrl:
           editable: true
       - pip_install:
