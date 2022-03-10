@@ -7,4 +7,4 @@ conda activate ./env
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
-MUJOCO_GL=GLFW pytest  --cov=torchrl --junitxml=test-results/junit.xml -v --durations 20 --ignore third_party test
+MUJOCO_GL=glfw pytest  --cov=torchrl --junitxml=test-results/junit.xml -v --durations 20 --ignore third_party test

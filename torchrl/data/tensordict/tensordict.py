@@ -2160,8 +2160,18 @@ class LazyStackedTensorDict(_TensorDict):
     def is_shared(self, no_check: bool = True) -> bool:
         return all(td.is_shared(no_check=no_check) for td in self.tensor_dicts)
 
-    def is_memmap(self) -> bool:
-        return all(td.is_memmap() for td in self.tensor_dicts)
+    def is_memmap(self, no_check: bool = False) -> bool:
+        are_memmap = [td.is_memmap() for td in self.tensor_dicts]
+        if any(are_memmap) and not all(are_memmap):
+            raise RuntimeError(
+                f"tensor_dicts memmap status mismatch, got {sum(are_memmap)} "
+                f"memmap tensor_dicts and {len(are_memmap) - sum(are_memmap)} non "
+                f"memmap tensordict "
+            )
+        return all(are_memmap)
+
+    # def is_memmap(self) -> bool:
+    #     return all(td.is_memmap() for td in self.tensor_dicts)
 
     def get_valid_keys(self) -> Iterable[str]:
         self._update_valid_keys()
@@ -2411,16 +2421,6 @@ class LazyStackedTensorDict(_TensorDict):
                 f"shared tensordict "
             )
         return all(are_shared)
-
-    def is_memmap(self, no_check: bool = False) -> bool:
-        are_memmap = [td.is_memmap() for td in self.tensor_dicts]
-        if any(are_memmap) and not all(are_memmap):
-            raise RuntimeError(
-                f"tensor_dicts memmap status mismatch, got {sum(are_memmap)} "
-                f"memmap tensor_dicts and {len(are_memmap) - sum(are_memmap)} non "
-                f"memmap tensordict "
-            )
-        return all(are_memmap)
 
     def expand(self, *shape: int, inplace: bool = False) -> LazyStackedTensorDict:
         stack_dim = self.stack_dim + len(shape)
