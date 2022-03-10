@@ -182,13 +182,8 @@ jobs:
           command: git --no-pager diff
 
   type_check_python:
-    docker:  # no cmake
+    docker:
       - image: circleci/python:3.7
-#    docker:
-#      - image: "pytorch/manylinux-cuda102"
-#    resource_class: 2xlarge+
-    environment:
-      TAR_OPTIONS: --no-same-owner
     steps:
       - checkout
       - run:
@@ -240,6 +235,9 @@ jobs:
             cat ${BASH_ENV}
             # For some reason circleci isn't automatically sourcing this within the builds
             source ${BASH_ENV} && .circleci/unittest/linux/scripts/setup_env.sh
+      - apt_install:
+          args: libosmesa6, libgl1-mesa-glx
+          descr: Install additional system libraries
 #      - save_cache:
 #
 #          key: env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
