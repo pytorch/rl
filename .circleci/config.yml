@@ -182,10 +182,10 @@ jobs:
           command: git --no-pager diff
 
   type_check_python:
-#    docker:  # no cmake
-#      - image: circleci/python:3.7
-    docker:
-      - image: "pytorch/manylinux-cuda102"
+    docker:  # no cmake
+      - image: circleci/python:3.7
+#    docker:
+#      - image: "pytorch/manylinux-cuda102"
     resource_class: 2xlarge+
     environment:
       TAR_OPTIONS: --no-same-owner
@@ -194,6 +194,9 @@ jobs:
       - run:
           name: Setup
           command: .circleci/unittest/linux/scripts/setup_env.sh
+      - pip_install:
+          args: cmake
+          descr: Install CMake
       - install_torchrl:
           editable: true
       - pip_install:
