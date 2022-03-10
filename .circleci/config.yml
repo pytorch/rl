@@ -186,9 +186,6 @@ jobs:
       - image: circleci/python:3.7
     steps:
       - checkout
-      - run:
-          name: Setup
-          command: .circleci/unittest/linux/scripts/setup_env.sh
       - pip_install:
           args: cmake
           descr: Install CMake
