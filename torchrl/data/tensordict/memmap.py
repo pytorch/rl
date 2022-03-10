@@ -129,7 +129,9 @@ class MemmapTensor(object):
     memmap_array = property(_get_memmap_array, _set_memmap_array)
 
     def _save_item(
-        self, value: Union[torch.Tensor, MemmapTensor, np.ndarray], idx: Optional[int] = None
+        self,
+        value: Union[torch.Tensor, MemmapTensor, np.ndarray],
+        idx: Optional[int] = None,
     ):
         if isinstance(value, (torch.Tensor,)):
             np_array = value.cpu().numpy()
@@ -273,7 +275,9 @@ class MemmapTensor(object):
     def __add__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.add(self, other)  # type: ignore
 
-    def __truediv__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __truediv__(
+        self, other: Union[float, MemmapTensor, torch.Tensor]
+    ) -> torch.Tensor:
         return torch.div(self, other)  # type: ignore
 
     def __neg__(self: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
@@ -282,7 +286,9 @@ class MemmapTensor(object):
     def __sub__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.sub(self, other)  # type: ignore
 
-    def __matmul__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __matmul__(
+        self, other: Union[float, MemmapTensor, torch.Tensor]
+    ) -> torch.Tensor:
         return torch.matmul(self, other)  # type: ignore
 
     def __mul__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
@@ -325,7 +331,9 @@ class MemmapTensor(object):
             self.file._closer.delete = False
         return super(MemmapTensor, self).__reduce__(*args, **kwargs)
 
-    def to(self, dest: Union[DEVICE_TYPING, torch.dtype]) -> Union[torch.Tensor, MemmapTensor]:
+    def to(
+        self, dest: Union[DEVICE_TYPING, torch.dtype]
+    ) -> Union[torch.Tensor, MemmapTensor]:
         """
         Maps a MemmapTensor to a given dtype or device.
 

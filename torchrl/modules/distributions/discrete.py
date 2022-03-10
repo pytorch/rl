@@ -8,7 +8,9 @@ __all__ = [
 ]
 
 
-def _treat_categorical_params(params: Optional[torch.Tensor] = None) -> Optional[torch.Tensor]:
+def _treat_categorical_params(
+    params: Optional[torch.Tensor] = None,
+) -> Optional[torch.Tensor]:
     if params is None:
         return None
     if params.shape[-1] == 1:
