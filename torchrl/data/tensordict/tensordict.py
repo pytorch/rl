@@ -854,7 +854,7 @@ class _TensorDict(Mapping):
 
         d = {}
         for key, item in self.items():
-            d[key] = item.reshape(*shape, *item.shape[self.ndimension() :])
+            d[key] = item.reshape(*shape, *item.shape[self.ndimension():])
         if len(d):
             batch_size = d[key].shape[: len(shape)]
         else:
@@ -1152,7 +1152,7 @@ class TensorDict(_TensorDict):
         _meta_source: Optional[dict] = None,
     ):
         self._tensor_dict = dict()
-        self._tensor_dict_meta = OrderedDict()
+        self._tensor_dict_meta: OrderedDict = OrderedDict()
         if not isinstance(source, (_TensorDict, dict)):
             raise ValueError(
                 "A TensorDict source is expected to be a _TensorDict sub-type or a dictionary, "
@@ -1195,7 +1195,7 @@ class TensorDict(_TensorDict):
                         f"Expected value to be one of types {_accepted_classes} but got {type(value)}"
                     )
                 if map_item_to_device:
-                    value = value.to(device)
+                    value = value.to(device)  # type: ignore
                 _meta_val = None if _meta_source is None else _meta_source[key]
                 self.set(key, value, _meta_val=_meta_val)
         self._check_batch_size()
@@ -1609,11 +1609,11 @@ def assert_allclose_td(
         input2 = expected.get(key)
         mse = (
             (input1.to(torch.float) - input2.to(torch.float))
-            .pow(2)
-            .sum()
-            .div(input1.numel())
-            .sqrt()
-            .item()
+                .pow(2)
+                .sum()
+                .div(input1.numel())
+                .sqrt()
+                .item()
         )
 
         default_msg = f"key {key} does not match, got mse = {mse:4.4f}"
@@ -1879,7 +1879,7 @@ class SubTensorDict(_TensorDict):
         parent = self.get_parent_tensor_dict()
         tensor_expand = torch.zeros(
             *parent.batch_size,
-            *tensor.shape[self.batch_dims :],
+            *tensor.shape[self.batch_dims:],
             dtype=tensor.dtype,
             device=self.device,
         )
@@ -2157,8 +2157,15 @@ class LazyStackedTensorDict(_TensorDict):
     def batch_size(self) -> torch.Size:
         return self._batch_size
 
-    def is_shared(self, no_check: bool = True) -> bool:
-        return all(td.is_shared(no_check=no_check) for td in self.tensor_dicts)
+    def is_shared(self, no_check: bool = False) -> bool:
+        are_shared = [td.is_shared(no_check=no_check) for td in self.tensor_dicts]
+        if any(are_shared) and not all(are_shared):
+            raise RuntimeError(
+                f"tensor_dicts shared status mismatch, got {sum(are_shared)} "
+                f"shared tensor_dicts and {len(are_shared) - sum(are_shared)} non "
+                f"shared tensordict "
+            )
+        return all(are_shared)
 
     def is_memmap(self, no_check: bool = False) -> bool:
         are_memmap = [td.is_memmap() for td in self.tensor_dicts]
@@ -2411,16 +2418,6 @@ class LazyStackedTensorDict(_TensorDict):
         for td in self.tensor_dicts:
             td.memmap_()
         return self
-
-    def is_shared(self, no_check: bool = False) -> bool:
-        are_shared = [td.is_shared(no_check=no_check) for td in self.tensor_dicts]
-        if any(are_shared) and not all(are_shared):
-            raise RuntimeError(
-                f"tensor_dicts shared status mismatch, got {sum(are_shared)} "
-                f"shared tensor_dicts and {len(are_shared) - sum(are_shared)} non "
-                f"shared tensordict "
-            )
-        return all(are_shared)
 
     def expand(self, *shape: int, inplace: bool = False) -> LazyStackedTensorDict:
         stack_dim = self.stack_dim + len(shape)
@@ -2951,7 +2948,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dim = torch.Size(
             [
                 *self.custom_op_kwargs.get("size"),
-                *source_meta_tensor.shape[self._source.batch_dims :],
+                *source_meta_tensor.shape[self._source.batch_dims:],
             ]
         )
         new_dict = deepcopy(self.custom_op_kwargs)
@@ -2962,7 +2959,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dim = torch.Size(
             [
                 *self.inv_op_kwargs.get("size"),
-                *source_meta_tensor.shape[self._source.batch_dims :],
+                *source_meta_tensor.shape[self._source.batch_dims:],
             ]
         )
         new_dict = deepcopy(self.inv_op_kwargs)

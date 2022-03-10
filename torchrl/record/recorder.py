@@ -2,7 +2,6 @@ from typing import Optional, Iterable
 
 import torch
 
-from torchrl.data import TensorDict
 from torchrl.data.transforms import Transform, ObservationTransform
 
 __all__ = ["VideoRecorder", "TensorDictRecorder"]
@@ -29,7 +28,7 @@ class VideoRecorder(ObservationTransform):
         keys: Optional[Iterable[str]] = None,
         skip: int = 2,
         **kwargs,
-    ):
+    ) -> None:
         if keys is None:
             keys = ["next_observation_pixels"]
 
@@ -111,7 +110,7 @@ class TensorDictRecorder(Transform):
         skip_reset: bool = True,
         skip: int = 4,
         keys: Optional[Iterable[str]] = None,
-    ):
+    ) -> None:
         if keys is None:
             keys = []
 
@@ -123,7 +122,7 @@ class TensorDictRecorder(Transform):
         self.skip = skip
         self.count = 0
 
-    def _call(self, td: TensorDict):
+    def _call(self, td: _TensorDict) -> _TensorDict:
         self.count += 1
         if self.count % self.skip == 0:
             _td = td
@@ -132,7 +131,7 @@ class TensorDictRecorder(Transform):
             self.td.append(_td)
         return td
 
-    def dump(self):
+    def dump(self) -> None:
         td = self.td
         if self.skip_reset:
             td = td[1:]

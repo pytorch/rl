@@ -675,7 +675,7 @@ class DdpgMlpQNet(nn.Module):
             mlp_net_kwargs_net1 if mlp_net_kwargs_net1 is not None else dict()
         )
         mlp1_net_default_kwargs.update(mlp_net_kwargs_net1)
-        self.mlp1 = MLP(**mlp1_net_default_kwargs)
+        self.mlp1 = MLP(**mlp1_net_default_kwargs)  # type: ignore
 
         mlp2_net_default_kwargs = {
             "in_features": None,
@@ -692,7 +692,7 @@ class DdpgMlpQNet(nn.Module):
             mlp_net_kwargs_net2 if mlp_net_kwargs_net2 is not None else dict()
         )
         mlp2_net_default_kwargs.update(mlp_net_kwargs_net2)
-        self.mlp2 = MLP(**mlp2_net_default_kwargs)
+        self.mlp2 = MLP(**mlp2_net_default_kwargs)  # type: ignore
         ddpg_init_last_layer(self.mlp2[-1], 6e-3)
 
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
@@ -711,7 +711,7 @@ class LSTMNet(nn.Module):
     def __init__(self, out_features, lstm_kwargs: Dict, mlp_kwargs: Dict) -> None:
         super().__init__()
         lstm_kwargs.update({"batch_first": True})
-        self.mlp = MLP(**mlp_kwargs)
+        self.mlp = MLP(**mlp_kwargs)  # type: ignore
         self.lstm = nn.LSTM(**lstm_kwargs)
         self.linear = nn.LazyLinear(out_features)
 
@@ -772,7 +772,7 @@ class LSTMNet(nn.Module):
                     + [out[i]],
                     1,
                 )
-        return tuple(out)
+        return tuple(out)  # type: ignore
 
     def forward(
         self,
