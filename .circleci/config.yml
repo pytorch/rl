@@ -207,7 +207,6 @@ jobs:
 
     docker:
       - image: "pytorch/manylinux-cuda102"
-        command: apt install libosmesa6-dev libgl1-mesa-glx libglfw3
     resource_class: 2xlarge+
 
     environment:
@@ -233,6 +232,7 @@ jobs:
             cat ${BASH_ENV}
             # For some reason circleci isn't automatically sourcing this within the builds
             source ${BASH_ENV} && .circleci/unittest/linux/scripts/setup_env.sh
+            apt install libosmesa6-dev libgl1-mesa-glx libglfw3
 
 #      - apt_install:
 #          args: libosmesa6 libgl1-mesa-glx

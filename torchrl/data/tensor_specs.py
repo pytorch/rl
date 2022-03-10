@@ -28,8 +28,8 @@ INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
 
 def _default_dtype_and_device(
-    dtype: Union[None, torch.dtype],
-    device: Union[None, torch.device]
+    dtype: Union[None, str, torch.dtype],
+    device: Union[None, str, int, torch.device]
 ) -> Tuple[torch.dtype, torch.device]:
     if dtype is None:
         dtype = torch.get_default_dtype()
@@ -126,7 +126,7 @@ class TensorSpec:
 
     shape: torch.Size
     space: Box
-    device: str = "cpu"
+    device: torch.device = torch.device("cpu")
     dtype: torch.dtype = torch.float
     domain: str = ""
 
@@ -274,7 +274,11 @@ class BoundedTensorSpec(TensorSpec):
         if not isinstance(maximum, torch.Tensor) or maximum.dtype is not dtype:
             maximum = torch.tensor(maximum, dtype=dtype, device=device)
         super().__init__(
-            torch.Size([1, ]), ContinuousBox(minimum, maximum), device, dtype, "continuous"
+            torch.Size([1, ]),
+            ContinuousBox(minimum, maximum),
+            device,
+            dtype,
+            "continuous"
         )
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
@@ -307,7 +311,7 @@ class BoundedTensorSpec(TensorSpec):
     def is_in(self, val: torch.Tensor) -> bool:
         return (val >= self.space.minimum.to(val.device)).all() and (
             val <= self.space.maximum.to(val.device)
-        ).all()
+        ).all()  # type: ignore
 
 
 @dataclass
