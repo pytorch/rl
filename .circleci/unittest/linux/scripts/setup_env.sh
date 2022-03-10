@@ -42,6 +42,7 @@ tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
 export MUJOCO_GL=egl
 export MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/bin/libmujoco210.so
 cd $this_dir
+sudo apt install -y libosmesa6-dev libgl1-mesa-glx
 
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"

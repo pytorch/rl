@@ -1,7 +1,6 @@
 import math
-from collections import Iterable
 from numbers import Number
-from typing import Union, Optional
+from typing import Union, Optional, Iterable
 
 import torch
 from torch import nn
