@@ -261,6 +261,12 @@ class BoundedTensorSpec(TensorSpec):
         dtype (str or torch.dtype, optional): dtype of the tensors.
     """
 
+    shape: torch.Size
+    space: ContinuousBox
+    device: torch.device = torch.device("cpu")
+    dtype: torch.dtype = torch.float
+    domain: str = ""
+
     def __init__(
         self,
         minimum: Union[np.ndarray, torch.Tensor, float],
@@ -329,6 +335,12 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             will be mapped in a register to a series of unique one-hot binary vectors).
     """
 
+    shape: torch.Size
+    space: DiscreteBox
+    device: torch.device = torch.device("cpu")
+    dtype: torch.dtype = torch.float
+    domain: str = ""
+
     def __init__(
         self,
         n: int,
@@ -350,7 +362,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             torch.rand(*shape, self.space.n, device=self.device), hard=True, dim=-1
         ).to(torch.long)
 
-    def encode(self, val: torch.Tensor, space: Optional[Box] = None) -> torch.Tensor:
+    def encode(self, val: torch.Tensor, space: Optional[DiscreteBox] = None) -> torch.Tensor:
         val = torch.tensor(val, dtype=torch.long)
         if space is None:
             space = self.space
@@ -401,6 +413,12 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         dtype (str or torch.dtype, optional): dtype of the tensors.
 
     """
+
+    shape: torch.Size
+    space: ContinuousBox
+    device: torch.device = torch.device("cpu")
+    dtype: torch.dtype = torch.float
+    domain: str = ""
 
     def __init__(self, device=None, dtype=None):
         dtype, device = _default_dtype_and_device(dtype, device)
@@ -537,6 +555,12 @@ class BinaryDiscreteTensorSpec(TensorSpec):
         dtype (str or torch.dtype, optional): dtype of the tensors.
 
     """
+
+    shape: torch.Size
+    space: BinaryBox
+    device: torch.device = torch.device("cpu")
+    dtype: torch.dtype = torch.float
+    domain: str = ""
 
     def __init__(
         self,
