@@ -2254,7 +2254,7 @@ class LazyStackedTensorDict(_TensorDict):
         key: str,
         default: Union[None, str, torch.Tensor] = "_no_default_",
         **kwargs,
-    ) -> COMPATIBLE_TYPES:
+    ) -> COMPATIBLE_TYPES:  # type: ignore
         if not (key in self.valid_keys):
             return self._default_get(key, default)
         tensors = [td.get(key, default=default, **kwargs) for td in self.tensor_dicts]
@@ -2351,7 +2351,7 @@ class LazyStackedTensorDict(_TensorDict):
         )
 
     def __getitem__(
-        self, item: Union[torch.Tensor, slice, Number, Tuple]
+        self, item: INDEX_TYPING
     ) -> _TensorDict:
 
         if isinstance(item, torch.Tensor) and item.dtype == torch.bool:
@@ -2676,7 +2676,7 @@ class SavedTensorDict(_TensorDict):
         return super().__reduce__(*args, **kwargs)
 
     def __getitem__(
-        self, idx: Union[torch.Tensor, slice, Number, Tuple]
+        self, idx: INDEX_TYPING
     ) -> SavedTensorDict:
         if isinstance(idx, Number):
             idx = (idx,)
