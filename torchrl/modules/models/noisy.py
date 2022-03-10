@@ -212,4 +212,4 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
 
 def reset_noise(layer: nn.Module) -> None:
     if hasattr(layer, "reset_noise"):
-        layer.reset_noise()
+        layer.reset_noise()  # type: ignore

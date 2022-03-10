@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Union, Iterable
+from typing import Union, Iterable, Dict, Sequence
 
 import numpy as np
 import torch
@@ -79,13 +79,13 @@ class TruncatedNormal(D.Independent):
     ):
         err_msg = "TruncatedNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
-            if not (max > min).all():
+            if not (max > min).all():  # type: ignore
                 raise RuntimeError(err_msg)
         elif isinstance(max, Number) and isinstance(min, Number):
             if not max > min:
                 raise RuntimeError(err_msg)
         else:
-            if not all(max > min):
+            if not all(max > min):  # type: ignore
                 raise RuntimeError(err_msg)
 
         loc, scale = net_output.chunk(chunks=2, dim=-1)
@@ -197,13 +197,13 @@ class TanhNormal(D.TransformedDistribution):
     ):
         err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
-            if not (max > min).all():
+            if not (max > min).all():  # type: ignore
                 raise RuntimeError(err_msg)
         elif isinstance(max, Number) and isinstance(min, Number):
             if not max > min:
                 raise RuntimeError(err_msg)
         else:
-            if not all(max > min):
+            if not all(max > min):  # type: ignore
                 raise RuntimeError(err_msg)
 
         loc, scale = net_output.chunk(chunks=2, dim=-1)
@@ -295,15 +295,15 @@ class Delta(D.Distribution):
         event_shape (torch.Size): shape of the outcome;
     """
 
-    arg_constraints = {}
+    arg_constraints: Dict = {}
 
     def __init__(
         self,
         param: torch.Tensor,
         atol: float = 1e-6,
         rtol: float = 1e-6,
-        batch_shape: Union[torch.Size, Iterable] = torch.Size([]),
-        event_shape: Union[torch.Size, Iterable] = torch.Size([]),
+        batch_shape: Union[torch.Size, Sequence[int]] = torch.Size([]),
+        event_shape: Union[torch.Size, Sequence[int]] = torch.Size([]),
     ):
         self.param = param
         self.atol = atol
@@ -378,13 +378,13 @@ class TanhDelta(D.TransformedDistribution):
     ):
         minmax_msg = "max value has been found to be equal or less than min value"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
-            if not (max > min).all():
+            if not (max > min).all():  # type: ignore
                 raise ValueError(minmax_msg)
         elif isinstance(max, Number) and isinstance(min, Number):
-            if max <= min:
+            if max <= min:  # type: ignore
                 raise ValueError(minmax_msg)
         else:
-            if not all(max > min):
+            if not all(max > min):  # type: ignore
                 raise ValueError(minmax_msg)
 
         loc = net_output
@@ -400,7 +400,7 @@ class TanhDelta(D.TransformedDistribution):
             not isinstance(max, torch.Tensor) and max != 1.0
         )
         if non_trivial_max or non_trivial_min:
-            t = D.ComposeTransform(
+            t = D.ComposeTransform(  # type: ignore
                 [t, D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)]
             )
         event_shape = net_output.shape[-event_dims:]

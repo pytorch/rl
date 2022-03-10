@@ -9,7 +9,7 @@ import torch
 
 from .memmap import MemmapTensor
 from .utils import _getitem_batch_size
-from ..utils import DEVICE_TYPING, INDEX_TYPING
+from torchrl.data.utils import DEVICE_TYPING, INDEX_TYPING
 
 META_HANDLED_FUNCTIONS = dict()
 

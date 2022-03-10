@@ -129,7 +129,7 @@ class MemmapTensor(object):
     memmap_array = property(_get_memmap_array, _set_memmap_array)
 
     def _save_item(
-        self, value: Union[torch.Tensor, np.ndarray], idx: Optional[int] = None
+        self, value: Union[torch.Tensor, MemmapTensor, np.ndarray], idx: Optional[int] = None
     ):
         if isinstance(value, (torch.Tensor,)):
             np_array = value.cpu().numpy()
@@ -156,9 +156,9 @@ class MemmapTensor(object):
             memmap_array = self.memmap_array
         if idx is not None:
             memmap_array = memmap_array[idx]
-        return self._np_to_tensor(memmap_array)
+        return self._np_to_tensor(memmap_array)  # type: ignore
 
-    def _np_to_tensor(self, memmap_array: np.memmap) -> torch.Tensor:
+    def _np_to_tensor(self, memmap_array: np.ndarray) -> torch.Tensor:
         return torch.as_tensor(memmap_array, device=self.device)
 
     @classmethod
@@ -325,7 +325,7 @@ class MemmapTensor(object):
             self.file._closer.delete = False
         return super(MemmapTensor, self).__reduce__(*args, **kwargs)
 
-    def to(self, dest: Union[DEVICE_TYPING, torch.dtype]) -> MemmapTensor:
+    def to(self, dest: Union[DEVICE_TYPING, torch.dtype]) -> Union[torch.Tensor, MemmapTensor]:
         """
         Maps a MemmapTensor to a given dtype or device.
 
@@ -369,7 +369,7 @@ class MemmapTensor(object):
 def stack(
     list_of_memmap: List[MemmapTensor],
     dim: int,
-    out: Optional[Union[torch.Tensor, MemmapTensor]] = None,
+    out: Optional[Union[torch.Tensor]] = None,
 ) -> torch.Tensor:
     list_of_tensors = [
         a._tensor if isinstance(a, MemmapTensor) else a for a in list_of_memmap

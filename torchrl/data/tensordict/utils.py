@@ -5,7 +5,7 @@ from typing import Union, Tuple, List
 
 import torch
 
-from torchrl.data import INDEX_TYPING
+from torchrl.data.utils import INDEX_TYPING
 
 
 def _sub_index(tensor: torch.Tensor, idx: INDEX_TYPING) -> torch.Tensor:

@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Callable
+from typing import Callable, Any
 
 import torch
 from torch import nn
@@ -34,7 +34,7 @@ class biased_softplus(nn.Module):
         return torch.nn.functional.softplus(x + self.bias) + self.min_val
 
 
-def mappings(key: str) -> Callable[[torch.Tensor], torch.Tensor]:
+def mappings(key: str) -> Any:
     """
     Given an input string, return a surjective function f(x): R -> R^+
 

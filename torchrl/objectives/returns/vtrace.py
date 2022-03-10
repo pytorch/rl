@@ -5,7 +5,7 @@ from typing import Union, Tuple
 import torch
 
 
-def c_val(log_pi: torch.Tensor, log_mu: torch.Tensor, c: float = 1) -> torch.Tensor:
+def c_val(log_pi: torch.Tensor, log_mu: torch.Tensor, c: Union[float, torch.Tensor] = 1) -> torch.Tensor:
     return (log_pi - log_mu).clamp_max(math.log(c)).exp()
 
 
