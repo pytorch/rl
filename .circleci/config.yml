@@ -255,7 +255,6 @@ jobs:
       - run:
           name: Run tests
           command: |
-            MUJOCO_GL=GLFW
             .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Post process

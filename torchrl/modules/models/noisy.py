@@ -86,7 +86,7 @@ class NoisyLinear(nn.Linear):
                 "bias_epsilon", torch.empty(out_features, device=device, dtype=dtype)
             )
         else:
-            self.bias_mu = None
+            self.bias_mu = None  # type: ignore
         self.reset_parameters()
         self.reset_noise()
 
@@ -106,7 +106,9 @@ class NoisyLinear(nn.Linear):
             self.bias_epsilon.copy_(epsilon_out)  # type: ignore
 
     def _scale_noise(self, size: Union[int, torch.Size, Iterable]) -> torch.Tensor:
-        x = torch.randn(size, device=self.weight_mu.device)
+        if isinstance(size, int):
+            size = (size,)
+        x = torch.randn(*size, device=self.weight_mu.device)
         return x.sign().mul_(x.abs().sqrt_())
 
     @property
@@ -205,7 +207,7 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
     @property
     def bias(self) -> torch.Tensor:  # type: ignore
         if not self.has_uninitialized_params() and self.in_features != 0:
-            return super().bias
+            return super().bias  # type: ignore
 
 
 def reset_noise(layer: nn.Module) -> None:

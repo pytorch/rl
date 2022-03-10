@@ -1,7 +1,8 @@
-from typing import Union, List, Callable, Any
+from typing import Union, List, Callable, Any, Tuple
 
 import numpy as np
 import torch
+from torch import Tensor
 
 numpy_to_torch_dtype_dict = {
     np.dtype("bool"): torch.bool,
@@ -21,7 +22,7 @@ torch_to_numpy_dtype_dict = {
 }
 DEVICE_TYPING = Union[torch.device, str]#, int]
 
-INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
+INDEX_TYPING = Union[None, int, slice, Tensor, List[Any], Tuple[Any, ...]]
 
 
 class CloudpickleWrapper(object):

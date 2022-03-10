@@ -8,7 +8,7 @@ __all__ = [
 ]
 
 
-def _treat_categorical_params(params: Optional[torch.Tensor] = None) -> torch.Tensor:
+def _treat_categorical_params(params: Optional[torch.Tensor] = None) -> Optional[torch.Tensor]:
     if params is None:
         return None
     if params.shape[-1] == 1:
@@ -36,12 +36,11 @@ class OneHotCategorical(D.Categorical):
         self,
         logits: Optional[torch.Tensor] = None,
         probs: Optional[torch.Tensor] = None,
-        *args,
         **kwargs
     ) -> None:
         logits = _treat_categorical_params(logits)
         probs = _treat_categorical_params(probs)
-        super().__init__(probs=probs, logits=logits, *args, **kwargs)
+        super().__init__(probs=probs, logits=logits, **kwargs)
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         return super().log_prob(value.argmax(dim=-1))

@@ -5,8 +5,10 @@ from typing import Union, Tuple, List
 
 import torch
 
+from torchrl.data import INDEX_TYPING
 
-def _sub_index(tensor: torch.Tensor, idx: Union[Tuple, slice, float]) -> torch.Tensor:
+
+def _sub_index(tensor: torch.Tensor, idx: INDEX_TYPING) -> torch.Tensor:
     """
     Allows indexing of tensors with nested tuples, i.e. tensor[tuple1][tuple2] can be indexed via _sub_index(tensor, (tuple1, tuple2))
     """

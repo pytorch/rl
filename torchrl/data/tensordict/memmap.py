@@ -168,7 +168,7 @@ class MemmapTensor(object):
         if kwargs is None:
             kwargs = {}
         if func not in MEMMAP_HANDLED_FN:
-            args = [a._tensor if hasattr(a, "_tensor") else a for a in args]
+            args = tuple(a._tensor if hasattr(a, "_tensor") else a for a in args)
             ret = func(*args, **kwargs)
             return ret
 
@@ -193,7 +193,7 @@ class MemmapTensor(object):
         """
         return MemmapTensor(self)
 
-    def contiguous(self) -> MemmapTensor:
+    def contiguous(self) -> torch.Tensor:
         """
         Copies the MemmapTensor onto a torch.Tensor object.
 
@@ -214,7 +214,7 @@ class MemmapTensor(object):
     def shape(self) -> torch.Size:
         return self._shape
 
-    def cpu(self) -> MemmapTensor:
+    def cpu(self) -> torch.Tensor:
         return self._tensor.cpu()
 
     def numpy(self) -> np.ndarray:
@@ -247,7 +247,7 @@ class MemmapTensor(object):
         if hasattr(self, "file"):
             self.file.close()
 
-    def __eq__(self, other: object) -> torch.Tensor:
+    def __eq__(self, other: Any) -> torch.Tensor:  # type: ignore
         if not isinstance(other, (MemmapTensor, torch.Tensor)):
             raise NotImplementedError
         return self._tensor == other
@@ -258,7 +258,7 @@ class MemmapTensor(object):
             return self.__getattribute__(
                 attr
             )  # make sure that appropriate exceptions are raised
-        if not attr in self.__getattribute__("_tensor_dir"):
+        if attr not in self.__getattribute__("_tensor_dir"):
             raise AttributeError(f"{attr} not found")
         _tensor = self.__getattribute__("_tensor")
         return getattr(_tensor, attr)
@@ -271,25 +271,25 @@ class MemmapTensor(object):
         return False
 
     def __add__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.add(self, other)
+        return torch.add(self, other)  # type: ignore
 
     def __truediv__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.div(self, other)
+        return torch.div(self, other)  # type: ignore
 
     def __neg__(self: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.neg(self)
+        return torch.neg(self)  # type: ignore
 
     def __sub__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.sub(self, other)
+        return torch.sub(self, other)  # type: ignore
 
     def __matmul__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.matmul(self, other)
+        return torch.matmul(self, other)  # type: ignore
 
     def __mul__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.mul(self, other)
+        return torch.mul(self, other)  # type: ignore
 
     def __pow__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.pow(self, other)
+        return torch.pow(self, other)  # type: ignore
 
     def __repr__(self) -> str:
         return f"MemmapTensor(shape={self.shape}, device={self.device}, dtype={self.dtype})"
