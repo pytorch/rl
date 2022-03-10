@@ -19,6 +19,18 @@ commands:
     description: "checkout merge branch"
     steps:
       - checkout
+  designate_upload_channel:
+    description: "inserts the correct upload channel into ${BASH_ENV}"
+    steps:
+      - run:
+          name: adding UPLOAD_CHANNEL to BASH_ENV
+          command: |
+            our_upload_channel=nightly
+            # On tags upload to test instead
+            if [[ -n "${CIRCLE_TAG}" ]] || [[ ${CIRCLE_BRANCH} =~ release/* ]]; then
+              our_upload_channel=test
+            fi
+            echo "export UPLOAD_CHANNEL=${our_upload_channel}" >> ${BASH_ENV}
   apt_install:
     parameters:
       args:
@@ -186,17 +198,17 @@ jobs:
 
   unittest_linux_cpu:
     <<: *binary_common
-#    machine:
+#    machine:  # fails to install torchrl, error with ninja
 #      image: "ubuntu-1604:202007-01"
 #    resource_class: xlarge
 
-    docker:
+    docker:  # error with caffe2
       - image: "pytorch/manylinux-cuda102"
     resource_class: 2xlarge+
 
     steps:
       - checkout
-#      - designate_upload_channel
+      - designate_upload_channel
 #      - run:
 #          name: Generate cache key
 #          # This will refresh cache on Sundays, nightly build should generate new cache.
