@@ -2230,7 +2230,7 @@ class LazyStackedTensorDict(_TensorDict):
             td.set(key, _item, **kwargs)
         return self
 
-    def set_(self, key: str, tensor: COMPATIBLE_TYPES, **kwargs) -> _TensorDict:
+    def set_(self, key: str, tensor: COMPATIBLE_TYPES) -> _TensorDict:
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes mismatch:"
@@ -2246,7 +2246,7 @@ class LazyStackedTensorDict(_TensorDict):
         )
         tensor = tensor.unbind(self.stack_dim)
         for td, _item in zip(self.tensor_dicts, tensor):
-            td.set_(key, _item, **kwargs)
+            td.set_(key, _item)
         return self
 
     def set_at_(
@@ -2813,7 +2813,7 @@ class _CustomOpTensorDict(_TensorDict):
         self._source.set(key, value, **kwargs)
         return self
 
-    def set_(self, key: str, value: COMPATIBLE_TYPES, **kwargs) -> _CustomOpTensorDict:
+    def set_(self, key: str, value: COMPATIBLE_TYPES) -> _CustomOpTensorDict:
         if self.inv_op is None:
             raise Exception(
                 f"{self.__class__.__name__} does not support setting values. "
@@ -2821,7 +2821,7 @@ class _CustomOpTensorDict(_TensorDict):
             )
         meta_tensor = self._source._get_meta(key)
         value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(meta_tensor))
-        self._source.set_(key, value, **kwargs)
+        self._source.set_(key, value)
         return self
 
     def set_at_(
@@ -2962,13 +2962,12 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dict.update({"size": new_dim})
         return new_dict
 
-    def _update_inv_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:
-        new_dim = torch.Size(
-            [
-                *self.inv_op_kwargs.get("size"),
-                *source_meta_tensor.shape[self._source.batch_dims:],
-            ]
-        )
+    def _update_inv_op_kwargs(self, source_meta_tensor: MetaTensor) -> Dict:
+        size: List[int] = [
+            *self.inv_op_kwargs.get("size"),
+            *source_meta_tensor.shape[self._source.batch_dims:],
+        ]
+        new_dim = torch.Size(size)
         new_dict = deepcopy(self.inv_op_kwargs)
         new_dict.update({"size": new_dim})
         return new_dict
@@ -2997,7 +2996,7 @@ def _td_fields(td: _TensorDict) -> str:
 
 
 def _check_keys(list_of_tensor_dicts: _TensorDict, strict: bool = False) -> Set[str]:
-    keys = set()
+    keys: Set[str] = set()
     for td in list_of_tensor_dicts:
         if not len(keys):
             keys = set(td.keys())

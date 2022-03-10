@@ -421,12 +421,12 @@ class DistributionalDQNnet(nn.Module):
 
 
 def ddpg_init_last_layer(last_layer: nn.Module, scale: float = 6e-4) -> None:
-    last_layer.weight.data.copy_(
-        torch.rand_like(last_layer.weight.data) * scale - scale / 2
+    last_layer.weight.data.copy_(  # type: ignore
+        torch.rand_like(last_layer.weight.data) * scale - scale / 2  # type: ignore
     )
     if last_layer.bias is not None:
-        last_layer.bias.data.copy_(
-            torch.rand_like(last_layer.bias.data) * scale - scale / 2
+        last_layer.bias.data.copy_(  # type: ignore
+            torch.rand_like(last_layer.bias.data) * scale - scale / 2  # type: ignore
         )
 
 

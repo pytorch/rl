@@ -126,7 +126,7 @@ class TensorSpec:
     """
 
     shape: torch.Size
-    space: Box
+    space: Union[None, Box]
     device: torch.device = torch.device("cpu")
     dtype: torch.dtype = torch.float
     domain: str = ""
