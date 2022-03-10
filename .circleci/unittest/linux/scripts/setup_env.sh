@@ -47,5 +47,3 @@ cd $this_dir
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
 conda env update --file "${this_dir}/environment.yml" --prune
-conda install -y -c conda-forge glfw
-conda install -y -c conda-forge mesalib
