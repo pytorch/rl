@@ -5,7 +5,7 @@ import pytest
 import torch
 from torch import nn
 
-from mocking_classes import (
+from .mocking_classes import (
     DiscreteActionConvMockEnv,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
