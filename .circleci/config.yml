@@ -232,9 +232,11 @@ jobs:
             cat ${BASH_ENV}
             # For some reason circleci isn't automatically sourcing this within the builds
             source ${BASH_ENV} && .circleci/unittest/linux/scripts/setup_env.sh
-      - apt_install:
-          args: libosmesa6 libgl1-mesa-glx
-          descr: Install additional system libraries
+
+#      - apt_install:
+#          args: libosmesa6 libgl1-mesa-glx
+#          descr: Install additional system libraries
+
 #      - save_cache:
 #
 #          key: env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
