@@ -20,7 +20,7 @@ from typing import (
     KeysView,
     ItemsView,
     Iterator,
-    Sequence,
+    Sequence, Dict, overload, TypeVar
 )
 from warnings import warn
 
@@ -41,8 +41,8 @@ __all__ = [
     "SavedTensorDict",
 ]
 
-TD_HANDLED_FUNCTIONS = dict()
-COMPATIBLE_TYPES = Union[torch.Tensor, None]  # leaves space for _TensorDict
+TD_HANDLED_FUNCTIONS: Dict = dict()
+COMPATIBLE_TYPES = Union[torch.Tensor, ]  # None? # leaves space for _TensorDict
 _accepted_classes = (torch.Tensor, MemmapTensor)
 
 
@@ -382,14 +382,14 @@ class _TensorDict(Mapping):
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
-    def items(self) -> Generator:
+    def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:
         """
         Returns a generator of key-value pairs for the tensordict.
 
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
-    def items_meta(self) -> Generator:
+    def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
         """
         Returns a generator of key-value pairs for the tensordict, where the values are MetaTensor instances
         corresponding to the stored tensors.
