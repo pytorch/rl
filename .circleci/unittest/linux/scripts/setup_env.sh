@@ -27,9 +27,7 @@ if [ ! -d "${conda_dir}" ]; then
 fi
 eval "$(${conda_dir}/bin/conda shell.bash hook)"
 
-wget http://us.archive.ubuntu.com/ubuntu/pool/main/a/apt/apt_2.4.1_amd64.deb
-dpkg -i apt_2.4.1_amd64.deb
-apt install libosmesa6-dev libgl1-mesa-glx libglfw3
+# apt install libosmesa6-dev libgl1-mesa-glx libglfw3
 
 # 2. Create test environment at ./env
 if [ ! -d "${env_dir}" ]; then
@@ -50,3 +48,4 @@ cd $this_dir
 printf "* Installing dependencies (except PyTorch)\n"
 conda env update --file "${this_dir}/environment.yml" --prune
 conda install -c conda-forge glfw
+conda install -c conda-forge mesalib

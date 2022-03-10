@@ -28,13 +28,14 @@ INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
 
 def _default_dtype_and_device(
-    dtype: Union[None, str, torch.dtype],
+    dtype: Union[None, torch.dtype],
     device: Union[None, str, int, torch.device]
 ) -> Tuple[torch.dtype, torch.device]:
     if dtype is None:
         dtype = torch.get_default_dtype()
     if device is None:
         device = torch.device("cpu")
+    device = torch.device(device)
     return dtype, device
 
 
@@ -272,7 +273,7 @@ class BoundedTensorSpec(TensorSpec):
         minimum: Union[np.ndarray, torch.Tensor, float],
         maximum: Union[np.ndarray, torch.Tensor, float],
         device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = None,
+        dtype: Optional[torch.dtype] = None,
     ):
         dtype, device = _default_dtype_and_device(dtype, device)
         if not isinstance(minimum, torch.Tensor) or minimum.dtype is not dtype:
@@ -362,7 +363,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             torch.rand(*shape, self.space.n, device=self.device), hard=True, dim=-1
         ).to(torch.long)
 
-    def encode(self, val: torch.Tensor, space: Optional[DiscreteBox] = None) -> torch.Tensor:
+    def encode(self, val: torch.Tensor, space: Optional[DiscreteBox] = None) -> torch.Tensor:  # type: ignore
         val = torch.tensor(val, dtype=torch.long)
         if space is None:
             space = self.space
