@@ -4,6 +4,7 @@ channels:
 dependencies:
   - pip
   - cmake >= 3.18
+  - mesa-libegl-cos6-x86_64
   - pip:
     - hypothesis
     - protobuf
