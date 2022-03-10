@@ -449,7 +449,7 @@ class _TensorDict(Mapping):
             d[key] = item1 != other.get(key)
         return TensorDict(batch_size=self.batch_size, source=d)
 
-    def __eq__(self, other: _TensorDict) -> _TensorDict:
+    def __eq__(self, other: object) -> _TensorDict:
         """
         Compares two tensordicts against each other, for evey key. The two tensordicts must have the same key set.
 
@@ -457,7 +457,6 @@ class _TensorDict(Mapping):
         tensors.
 
         """
-
         if not isinstance(other, _TensorDict):
             raise TypeError(
                 f"TensorDict comparision requires both objects to be _TensorDict subclass, got {type(other)}"

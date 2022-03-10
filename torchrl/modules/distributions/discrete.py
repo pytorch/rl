@@ -38,10 +38,10 @@ class OneHotCategorical(D.Categorical):
         probs: Optional[torch.Tensor] = None,
         *args,
         **kwargs
-    ):
+    ) -> None:
         logits = _treat_categorical_params(logits)
         probs = _treat_categorical_params(probs)
-        return super().__init__(probs=probs, logits=logits, *args, **kwargs)
+        super().__init__(probs=probs, logits=logits, *args, **kwargs)
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         return super().log_prob(value.argmax(dim=-1))

@@ -101,23 +101,23 @@ class NoisyLinear(nn.Linear):
     def reset_noise(self) -> None:
         epsilon_in = self._scale_noise(self.in_features)
         epsilon_out = self._scale_noise(self.out_features)
-        self.weight_epsilon.copy_(epsilon_out.outer(epsilon_in))
+        self.weight_epsilon.copy_(epsilon_out.outer(epsilon_in))  # type: ignore
         if self.bias_mu is not None:
-            self.bias_epsilon.copy_(epsilon_out)
+            self.bias_epsilon.copy_(epsilon_out)  # type: ignore
 
-    def _scale_noise(self, size: Union[torch.Size, Iterable]) -> torch.Tensor:
+    def _scale_noise(self, size: Union[int, torch.Size, Iterable]) -> torch.Tensor:
         x = torch.randn(size, device=self.weight_mu.device)
         return x.sign().mul_(x.abs().sqrt_())
 
     @property
-    def weight(self) -> torch.Tensor:
+    def weight(self) -> torch.Tensor:  # type: ignore
         if self.training:
             return self.weight_mu + self.weight_sigma * self.weight_epsilon
         else:
             return self.weight_mu
 
     @property
-    def bias(self) -> Optional[torch.Tensor]:
+    def bias(self) -> Optional[torch.Tensor]:  # type: ignore
         if self.bias_mu is not None:
             if self.training:
                 return self.bias_mu + self.bias_sigma * self.bias_epsilon
@@ -131,8 +131,8 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
     """
     Noisy Lazy Linear Layer.
 
-    This class makes the Noisy Linear layer lazy, in that the in_feature argument does not need to be passed at initialization
-    (but is inferred after the first call to the layer).
+    This class makes the Noisy Linear layer lazy, in that the in_feature argument does not need to be passed at
+    initialization (but is inferred after the first call to the layer).
 
     For more context on noisy layers, see the NoisyLinear class.
 
@@ -160,19 +160,19 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         self.out_features = out_features
         self.std_init = std_init
 
-        self.weight_mu = UninitializedParameter(device=device, dtype=dtype)
-        self.weight_sigma = UninitializedParameter(device=device, dtype=dtype)
+        self.weight_mu = UninitializedParameter(device=device, dtype=dtype)  # type: ignore
+        self.weight_sigma = UninitializedParameter(device=device, dtype=dtype)  # type: ignore
         self.register_buffer(
-            "weight_epsilon", UninitializedBuffer(device=device, dtype=dtype)
+            "weight_epsilon", UninitializedBuffer(device=device, dtype=dtype)  # type: ignore
         )
         if bias:
-            self.bias_mu = UninitializedParameter(device=device, dtype=dtype)
-            self.bias_sigma = UninitializedParameter(device=device, dtype=dtype)
+            self.bias_mu = UninitializedParameter(device=device, dtype=dtype)  # type: ignore
+            self.bias_sigma = UninitializedParameter(device=device, dtype=dtype)  # type: ignore
             self.register_buffer(
-                "bias_epsilon", UninitializedBuffer(device=device, dtype=dtype)
+                "bias_epsilon", UninitializedBuffer(device=device, dtype=dtype)  # type: ignore
             )
         else:
-            self.bias_mu = None
+            self.bias_mu = None  # type: ignore
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
@@ -183,31 +183,31 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         if not self.has_uninitialized_params() and self.in_features != 0:
             super().reset_noise()
 
-    def initialize_parameters(self, input) -> None:  # type: ignore[override]
+    def initialize_parameters(self, input: torch.Tensor) -> None:  # type: ignore[override]
         if self.has_uninitialized_params():
             with torch.no_grad():
                 self.in_features = input.shape[-1]
-                self.weight_mu.materialize((self.out_features, self.in_features))
-                self.weight_sigma.materialize((self.out_features, self.in_features))
-                self.weight_epsilon.materialize((self.out_features, self.in_features))
+                self.weight_mu.materialize((self.out_features, self.in_features))  # type: ignore
+                self.weight_sigma.materialize((self.out_features, self.in_features))  # type: ignore
+                self.weight_epsilon.materialize((self.out_features, self.in_features))  # type: ignore
                 if self.bias_mu is not None:
-                    self.bias_mu.materialize((self.out_features,))
-                    self.bias_sigma.materialize((self.out_features,))
-                    self.bias_epsilon.materialize((self.out_features,))
+                    self.bias_mu.materialize((self.out_features,))  # type: ignore
+                    self.bias_sigma.materialize((self.out_features,))  # type: ignore
+                    self.bias_epsilon.materialize((self.out_features,))  # type: ignore
                 self.reset_parameters()
                 self.reset_noise()
 
     @property
-    def weight(self) -> torch.Tensor:
+    def weight(self) -> torch.Tensor:  # type: ignore
         if not self.has_uninitialized_params() and self.in_features != 0:
             return super().weight
 
     @property
-    def bias(self) -> torch.Tensor:
+    def bias(self) -> torch.Tensor:  # type: ignore
         if not self.has_uninitialized_params() and self.in_features != 0:
             return super().bias
 
 
-def reset_noise(layer) -> None:
+def reset_noise(layer: nn.Module) -> None:
     if hasattr(layer, "reset_noise"):
         layer.reset_noise()

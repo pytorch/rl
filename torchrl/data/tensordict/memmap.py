@@ -247,7 +247,9 @@ class MemmapTensor(object):
         if hasattr(self, "file"):
             self.file.close()
 
-    def __eq__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __eq__(self, other: object) -> torch.Tensor:
+        if not isinstance(other, (MemmapTensor, torch.Tensor)):
+            raise NotImplementedError
         return self._tensor == other
 
     def __getattr__(self, attr: str) -> Any:
@@ -268,25 +270,25 @@ class MemmapTensor(object):
     def is_shared(self) -> bool:
         return False
 
-    def __add__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __add__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.add(self, other)
 
-    def __truediv__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __truediv__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.div(self, other)
 
-    def __neg__(self: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __neg__(self: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.neg(self)
 
-    def __sub__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __sub__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.sub(self, other)
 
-    def __matmul__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __matmul__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.matmul(self, other)
 
-    def __mul__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __mul__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.mul(self, other)
 
-    def __pow__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __pow__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
         return torch.pow(self, other)
 
     def __repr__(self) -> str:

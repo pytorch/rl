@@ -12,8 +12,8 @@ def c_val(log_pi: torch.Tensor, log_mu: torch.Tensor, c: float = 1) -> torch.Ten
 def dv_val(
     rewards: torch.Tensor,
     vals: torch.Tensor,
-    gamma: float,
-    rho_bar: float,
+    gamma: Union[float, torch.Tensor],
+    rho_bar: Union[float, torch.Tensor],
     log_pi: torch.Tensor,
     log_mu: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -29,8 +29,8 @@ def vtrace(
     log_pi: torch.Tensor,
     log_mu: torch.Tensor,
     gamma: Union[torch.Tensor, float],
-    rho_bar: float = 1.0,
-    c_bar: float = 1.0,
+    rho_bar: Union[float, torch.Tensor] = 1.0,
+    c_bar: Union[float, torch.Tensor] = 1.0,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     T = vals.shape[1]
     if not isinstance(gamma, torch.Tensor):

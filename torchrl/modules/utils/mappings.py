@@ -34,7 +34,7 @@ class biased_softplus(nn.Module):
         return torch.nn.functional.softplus(x + self.bias) + self.min_val
 
 
-def mappings(key: str) -> Callable:
+def mappings(key: str) -> Callable[[torch.Tensor], torch.Tensor]:
     """
     Given an input string, return a surjective function f(x): R -> R^+
 
