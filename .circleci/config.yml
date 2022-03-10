@@ -186,7 +186,7 @@ jobs:
       - image: circleci/python:3.7
 #    docker:
 #      - image: "pytorch/manylinux-cuda102"
-    resource_class: 2xlarge+
+#    resource_class: 2xlarge+
     environment:
       TAR_OPTIONS: --no-same-owner
     steps:
