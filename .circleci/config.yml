@@ -189,6 +189,14 @@ jobs:
     resource_class: 2xlarge+
     steps:
       - checkout
+      - run:
+          name: Setup
+          command: |
+            touch ${BASH_ENV}
+            echo "export PARAMETERS_PYTHON_VERSION=<< parameters.python_version >>" >> ${BASH_ENV}
+            cat ${BASH_ENV}
+            # For some reason circleci isn't automatically sourcing this within the builds
+            source ${BASH_ENV} && .circleci/unittest/linux/scripts/setup_env.sh
       - install_torchrl:
           editable: true
       - pip_install:
