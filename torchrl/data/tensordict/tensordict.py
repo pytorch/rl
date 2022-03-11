@@ -20,7 +20,7 @@ from typing import (
     ItemsView,
     Iterator,
     Sequence,
-    Dict, Set,
+    Dict, Set, TypeVar,
 )
 from warnings import warn
 
@@ -47,6 +47,7 @@ COMPATIBLE_TYPES = Union[
 ]  # None? # leaves space for _TensorDict
 _accepted_classes = (torch.Tensor, MemmapTensor)
 
+T = TypeVar('T')
 
 class _TensorDict(Mapping):
     """
@@ -1677,14 +1678,13 @@ def cat(
     # check that all tensordict match
     keys = _check_keys(list_of_tensor_dicts, strict=True)
     if out is None:
-        out_td = TensorDict({}, device=device, batch_size=batch_size)
+        out = TensorDict({}, device=device, batch_size=batch_size)
         for key in keys:
-            out_td.set(
+            out.set(
                 key, torch.cat([td.get(key) for td in list_of_tensor_dicts], dim)
             )
-        return out_td
+        return out
     else:
-        out_td = out
         if out.batch_size != batch_size:
             raise RuntimeError(
                 "out.batch_size and cat batch size must match, "
@@ -1692,10 +1692,10 @@ def cat(
             )
 
         for key in keys:
-            out_td.set_(
+            out.set_(
                 key, torch.cat([td.get(key) for td in list_of_tensor_dicts], dim)
             )
-        return out_td
+        return out
 
 
 @implements_for_td(torch.stack)
@@ -1726,22 +1726,21 @@ def stack(
     batch_size = torch.Size(batch_size)
 
     if out is None:
-        out_td = LazyStackedTensorDict(
+        out = LazyStackedTensorDict(
             *list_of_tensor_dicts,
             stack_dim=dim,
         )
         if contiguous:
-            out_td = out_td.contiguous()
-        return out_td
+            out = out.contiguous()
+        return out
     else:
-        out_td = out
         if out.batch_size != batch_size:
             raise RuntimeError(
                 "out.batch_size and stacked batch size must match, "
                 f"got out.batch_size={out.batch_size} and batch_size={batch_size}"
             )
         if strict:
-            out_keys = set(out_td.keys())
+            out_keys = set(out.keys())
             in_keys = set(keys)
             if len(out_keys - in_keys) > 0:
                 raise RuntimeError(
@@ -1757,12 +1756,12 @@ def stack(
                 )
 
         for key in keys:
-            out_td.set(
+            out.set(
                 key,
                 torch.stack([td.get(key) for td in list_of_tensor_dicts], dim),
                 inplace=True,
             )
-    return out_td
+    return out
 
 
 # @implements_for_td(torch.nn.utils.rnn.pad_sequence)
@@ -1778,9 +1777,9 @@ def pad_sequence_td(
     # check that all tensordict match
     keys = _check_keys(list_of_tensor_dicts)
     if out is None:
-        out_td = TensorDict({}, [], device=device)
+        out = TensorDict({}, [], device=device)
         for key in keys:
-            out_td.set(
+            out.set(
                 key,
                 torch.nn.utils.rnn.pad_sequence(
                     [td.get(key) for td in list_of_tensor_dicts],
@@ -1788,11 +1787,10 @@ def pad_sequence_td(
                     padding_value=padding_value,
                 ),
             )
-        return out_td
+        return out
     else:
-        out_td = out
         for key in keys:
-            out_td.set_(
+            out.set_(
                 key,
                 torch.nn.utils.rnn.pad_sequence(
                     [td.get(key) for td in list_of_tensor_dicts],
@@ -1800,7 +1798,7 @@ def pad_sequence_td(
                     padding_value=padding_value,
                 ),
             )
-        return out_td
+        return out
 
 
 class SubTensorDict(_TensorDict):
@@ -2992,7 +2990,7 @@ def _td_fields(td: _TensorDict) -> str:
     )
 
 
-def _check_keys(list_of_tensor_dicts: _TensorDict, strict: bool = False) -> Set[str]:
+def _check_keys(list_of_tensor_dicts: Sequence[_TensorDict], strict: bool = False) -> Set[str]:
     keys: Set[str] = set()
     for td in list_of_tensor_dicts:
         if not len(keys):

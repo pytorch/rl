@@ -60,6 +60,7 @@ conda install -y -c conda-forge glfw
 
 yum makecache
 yum -y install mesa-libOSMesa-devel
+yum -y install mesa-libEGL-devel
 
 printf "* Installing torchrl\n"
 python setup.py develop
