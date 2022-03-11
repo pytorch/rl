@@ -215,35 +215,26 @@ jobs:
     steps:
       - checkout
       - designate_upload_channel
-#      - run:
-#          name: Generate cache key
-#          # This will refresh cache on Sundays, nightly build should generate new cache.
-#          command: echo "$(date +"%Y-%U")" > .circleci-weekly
-#      - restore_cache:
-#
-#          keys:
-#            - env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+      - run:
+          name: Generate cache key
+          # This will refresh cache on Sundays, nightly build should generate new cache.
+          command: echo "$(date +"%Y-%U")" > .circleci-weekly
+      - restore_cache:
+
+          keys:
+            - env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
       - run:
           name: Setup
-          command: |
-            touch ${BASH_ENV}
-            echo "export PARAMETERS_PYTHON_VERSION=<< parameters.python_version >>" >> ${BASH_ENV}
-            cat ${BASH_ENV}
-            # For some reason circleci isn't automatically sourcing this within the builds
-            source ${BASH_ENV} && .circleci/unittest/linux/scripts/setup_env.sh
+          command: .circleci/unittest/linux/scripts/setup_env.sh
 
-#      - apt_install:
-#          args: libosmesa6 libgl1-mesa-glx
-#          descr: Install additional system libraries
+      - save_cache:
 
-#      - save_cache:
-#
-#          key: env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-#
-#          paths:
-#            - conda
-#            - env
+          key: env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+
+          paths:
+            - conda
+            - env
       - run:
           name: Install torchrl
           command: |
