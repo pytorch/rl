@@ -1,11 +1,13 @@
-from typing import Sequence, Sequence
+from typing import Sequence, Sequence, Union
 
 import torch
 
 __all__ = ["expand_right", "expand_as_right"]
 
+from torchrl.data import MemmapTensor
 
-def expand_as_right(tensor: torch.Tensor, dest: torch.Tensor):
+
+def expand_as_right(tensor: Union[torch.Tensor, MemmapTensor], dest: Union[torch.Tensor, MemmapTensor]):
     """Expand a tensor on the right to match another tensor shape.
     Args:
         tensor: tensor to be expanded
@@ -33,7 +35,7 @@ def expand_as_right(tensor: torch.Tensor, dest: torch.Tensor):
     return tensor.expand_as(dest)
 
 
-def expand_right(tensor: torch.Tensor, shape: Sequence[int]) -> torch.Tensor:
+def expand_right(tensor: Union[torch.Tensor, MemmapTensor], shape: Sequence[int]) -> torch.Tensor:
     """Expand a tensor on the right to match a desired shape.
     Args:
         tensor: tensor to be expanded

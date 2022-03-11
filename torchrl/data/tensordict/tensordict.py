@@ -191,8 +191,8 @@ class _TensorDict(Mapping):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def _default_get(
-        self, key: str, default: Union[None, str, torch.Tensor] = "_no_default_"
-    ) -> COMPATIBLE_TYPES:
+        self, key: str, default: Union[None, str, COMPATIBLE_TYPES] = "_no_default_"
+    ) -> Union[COMPATIBLE_TYPES, None]:
         if not isinstance(default, str):
             return default
         if default == "_no_default_":
@@ -206,7 +206,7 @@ class _TensorDict(Mapping):
 
     def get(  # type: ignore
         self, key: str, default: Union[None, str, torch.Tensor] = "_no_default_"
-    ) -> COMPATIBLE_TYPES:
+    ) -> Union[None, Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:  # type: ignore
         """
         Gets the value stored with the input key.
 
@@ -356,24 +356,44 @@ class _TensorDict(Mapping):
             )
         return self
 
+    def _convert_to_tensor(self, array: np.ndarray) -> Union[torch.Tensor, MemmapTensor]:
+        return torch.tensor(array, device=self.device)
+
     def _process_tensor(
         self,
-        tensor: torch.Tensor,
+        input: Union[COMPATIBLE_TYPES, np.ndarray],
         check_device: bool = True,
         check_tensor_shape: bool = True,
-    ) -> torch.Tensor:
+        check_shared: bool = True,
+    ) -> Union[torch.Tensor, MemmapTensor]:
+
         # TODO: move to _TensorDict?
-        if not isinstance(tensor, _accepted_classes):
-            tensor = torch.tensor(tensor, device=self.device)
+        if not isinstance(input, _accepted_classes):
+            tensor = self._convert_to_tensor(input)
+        else:
+            tensor = input
+
         if check_device and self.device and tensor.device is not self.device:
             tensor = tensor.to(self.device)
+
+        if check_shared:
+            if self.is_shared():
+                tensor = tensor.share_memory_()
+            elif self.is_memmap():
+                tensor = MemmapTensor(tensor)  # type: ignore
+            elif tensor.is_shared() and len(self):
+                tensor = tensor.clone()
+
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
             raise RuntimeError(
                 f"batch dimension mismatch, got self.batch_size={self.batch_size} "
                 f"and tensor.shape[:self.batch_dims]={tensor.shape[: self.batch_dims]}"
             )
-        if tensor.ndimension() == 0:
-            tensor = tensor.view(1)
+
+        # minimum ndimension is 1
+        if tensor.ndimension() - self.ndimension() == 0:
+            tensor = tensor.unsqueeze(-1)
+
         return tensor
 
     def pin_memory(self) -> _TensorDict:
@@ -433,7 +453,7 @@ class _TensorDict(Mapping):
             batch_size=[*shape, *self.batch_size],
         )
 
-    def __ne__(self, other: _TensorDict) -> _TensorDict:
+    def __ne__(self, other: object) -> _TensorDict:  # type: ignore
         """
         XOR operation over two tensordicts, for evey key. The two tensordicts must have the same key set.
 
@@ -457,7 +477,7 @@ class _TensorDict(Mapping):
             d[key] = item1 != other.get(key)
         return TensorDict(batch_size=self.batch_size, source=d)
 
-    def __eq__(self, other: object) -> _TensorDict:
+    def __eq__(self, other: object) -> _TensorDict:  # type: ignore
         """
         Compares two tensordicts against each other, for evey key. The two tensordicts must have the same key set.
 
@@ -760,8 +780,9 @@ class _TensorDict(Mapping):
             mask_expand = mask.squeeze(-1)
             value_select = value[mask_expand]
             d[key] = value_select
+        dim = int(mask.sum().item())
         return TensorDict(
-            device=self.device, source=d, batch_size=torch.Size([mask.sum()])
+            device=self.device, source=d, batch_size=torch.Size([dim])
         )
 
     def is_contiguous(self) -> bool:
@@ -1212,18 +1233,18 @@ class TensorDict(_TensorDict):
         self._check_batch_size()
         self._check_device()
 
-    def _batch_dims_get(self) -> int:
+    @property
+    def batch_dims(self) -> int:
         if self._safe and hasattr(self, "_batch_dims"):
             if len(self.batch_size) != self._batch_dims:
                 raise RuntimeError("len(self.batch_size) and self._batch_dims mismatch")
         return len(self.batch_size)
 
-    def _batch_dims_set(self, value: COMPATIBLE_TYPES) -> None:
+    @batch_dims.setter
+    def batch_dims(self, value: COMPATIBLE_TYPES) -> None:
         raise RuntimeError(
             f"Setting batch dims on {self.__class__.__name__} instances is not allowed."
         )
-
-    batch_dims = property(_batch_dims_get, _batch_dims_set)
 
     def is_shared(self, no_check: bool = False) -> bool:
         if no_check:
@@ -1245,7 +1266,7 @@ class TensorDict(_TensorDict):
         return device  # type: ignore
 
     @device.setter
-    def _device_set(self, value: DEVICE_TYPING) -> None:
+    def device(self, value: DEVICE_TYPING) -> None:
         raise RuntimeError(
             f"Setting device on {self.__class__.__name__} instances is not allowed. "
             f"Please call {self.__class__.__name__}.to(device) instead."
@@ -1256,7 +1277,7 @@ class TensorDict(_TensorDict):
         return self._batch_size
 
     @batch_size.setter
-    def _batch_size_set(self, value: COMPATIBLE_TYPES) -> None:
+    def batch_size(self, value: COMPATIBLE_TYPES) -> None:
         raise RuntimeError(
             f"Setting batch size on {self.__class__.__name__} instances is not allowed."
         )
@@ -1302,43 +1323,6 @@ class TensorDict(_TensorDict):
                     f"device, found {self.__class__.__name__}.device={self.device} and {device}"
                 )
 
-    def _convert_to_tensor(self, array: np.ndarray) -> torch.Tensor:
-        return torch.tensor(array, device=self.device)
-
-    def _process_tensor(
-        self,
-        tensor: Union[COMPATIBLE_TYPES, np.ndarray],
-        check_device: bool = True,
-        check_tensor_shape: bool = True,
-        check_shared: bool = True,
-    ) -> Union[torch.Tensor, MemmapTensor]:
-
-        # TODO: move to _TensorDict?
-        if not isinstance(tensor, _accepted_classes):
-            tensor = self._convert_to_tensor(tensor)
-
-        if check_device and self.device and tensor.device is not self.device:
-            tensor = tensor.to(self.device)
-
-        if check_shared:
-            if self.is_shared():
-                tensor = tensor.share_memory_()
-            elif self.is_memmap():
-                tensor = MemmapTensor(tensor)  # type: ignore
-            elif tensor.is_shared() and len(self):
-                tensor = tensor.clone()
-
-        if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
-            raise RuntimeError(
-                f"batch dimension mismatch, got self.batch_size={self.batch_size} "
-                f"and tensor.shape[:self.batch_dims]={tensor.shape[: self.batch_dims]}"
-            )
-
-        # minimum ndimension is 1
-        if tensor.ndimension() - self.ndimension() == 0:
-            tensor = tensor.unsqueeze(-1)
-
-        return tensor
 
     def pin_memory(self) -> _TensorDict:
         if self.device == torch.device("cpu"):
@@ -1464,7 +1448,7 @@ class TensorDict(_TensorDict):
 
     def get(  # type: ignore
         self, key: str, default: Union[None, str, torch.Tensor] = "_no_default_"
-    ) -> COMPATIBLE_TYPES:
+    ) -> Union[None, Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:  # type: ignore
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
@@ -1690,7 +1674,7 @@ def cat(
         out = TensorDict({}, device=device, batch_size=batch_size)
         for key in keys:
             out.set(
-                key, torch.cat([td.get(key) for td in list_of_tensor_dicts], dim)
+                key, torch.cat([td.get(key) for td in list_of_tensor_dicts], dim)  # type: ignore
             )
         return out
     else:
@@ -1702,7 +1686,7 @@ def cat(
 
         for key in keys:
             out.set_(
-                key, torch.cat([td.get(key) for td in list_of_tensor_dicts], dim)
+                key, torch.cat([td.get(key) for td in list_of_tensor_dicts], dim)  # type: ignore
             )
         return out
 
@@ -1767,7 +1751,7 @@ def stack(
         for key in keys:
             out.set(
                 key,
-                torch.stack([td.get(key) for td in list_of_tensor_dicts], dim),
+                torch.stack([td.get(key) for td in list_of_tensor_dicts], dim),  # type: ignore
                 inplace=True,
             )
     return out
@@ -1791,7 +1775,7 @@ def pad_sequence_td(
             out.set(
                 key,
                 torch.nn.utils.rnn.pad_sequence(
-                    [td.get(key) for td in list_of_tensor_dicts],
+                    [td.get(key) for td in list_of_tensor_dicts],  # type: ignore
                     batch_first=batch_first,
                     padding_value=padding_value,
                 ),
@@ -1802,7 +1786,7 @@ def pad_sequence_td(
             out.set_(
                 key,
                 torch.nn.utils.rnn.pad_sequence(
-                    [td.get(key) for td in list_of_tensor_dicts],
+                    [td.get(key) for td in list_of_tensor_dicts],  # type: ignore
                     batch_first=batch_first,
                     padding_value=padding_value,
                 ),
@@ -1948,7 +1932,7 @@ class SubTensorDict(_TensorDict):
         self,
         key: str,
         default: Optional[Union[torch.Tensor, None, str]] = None
-    ) -> COMPATIBLE_TYPES:
+    ) -> Union[None, Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:  # type: ignore
         return self._source.get_at(key, self.idx)
 
     def _get_meta(self, key: str) -> MetaTensor:
@@ -1967,7 +1951,7 @@ class SubTensorDict(_TensorDict):
             self._source.set_at_(key, value, idx)
         else:
             tensor = self._source.get_at(key, self.idx)
-            tensor[idx] = value
+            tensor[idx] = value  # type: ignore
             self._source.set_at_(key, tensor, self.idx)
             # self._source.set_at_(key, value, (self.idx, idx))
         return self
@@ -2231,11 +2215,11 @@ class LazyStackedTensorDict(_TensorDict):
                 "Setting tensor to tensordict failed because the shapes mismatch:"
                 f"got tensor.shape = {tensor.shape} and tensordict.batch_size={self.batch_size}"
             )
-        tensor = self._process_tensor(
+        proc_tensor = self._process_tensor(
             tensor, check_device=False, check_tensor_shape=False
         )
-        tensor = tensor.unbind(self.stack_dim)
-        for td, _item in zip(self.tensor_dicts, tensor):
+        proc_tensor = proc_tensor.unbind(self.stack_dim)
+        for td, _item in zip(self.tensor_dicts, proc_tensor):
             td.set(key, _item, **kwargs)
         return self
 
@@ -2270,7 +2254,7 @@ class LazyStackedTensorDict(_TensorDict):
         key: str,
         default: Union[None, str, torch.Tensor] = "_no_default_",
         **kwargs,
-    ) -> COMPATIBLE_TYPES:
+    ) -> Union[None, Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:  # type: ignore
         if not (key in self.valid_keys):
             return self._default_get(key, default)
         tensors = [td.get(key, default=default, **kwargs) for td in self.tensor_dicts]
@@ -2281,7 +2265,7 @@ class LazyStackedTensorDict(_TensorDict):
                 "a modification of one of the stacked TensorDicts, where a key has been updated/created with "
                 "an uncompatible shape."
             )
-        return torch.stack(tensors, self.stack_dim)
+        return torch.stack(tensors, self.stack_dim)  # type: ignore
 
     def _get_meta(self, key: str) -> MetaTensor:
         if key in self._meta_dict:
@@ -2543,7 +2527,7 @@ class SavedTensorDict(_TensorDict):
 
     def get(  # type: ignore
         self, key: str, default: Union[None, str, torch.Tensor] = "_no_default_"
-    ) -> COMPATIBLE_TYPES:
+    ) -> Union[None, Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:  # type: ignore
         td = self._load()
         return td.get(key, default=default)
 
@@ -2788,7 +2772,7 @@ class _CustomOpTensorDict(_TensorDict):
         key: str,
         default: Union[None, str, torch.Tensor] = "_no_default_",
         _return_original_tensor: bool = False,
-    ) -> Union[Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:  # type: ignore
+    ) -> Union[None, Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:  # type: ignore
         try:
             source_meta_tensor = self._source._get_meta(key)
             item = self._source.get(key, default)
@@ -2807,19 +2791,19 @@ class _CustomOpTensorDict(_TensorDict):
                 f"{self.__class__.__name__} does not support setting values. "
                 f"Consider calling .contiguous() before calling this method."
             )
-        value = self._process_tensor(
+        proc_value = self._process_tensor(
             value, check_device=False, check_tensor_shape=False
         )
         if key in self.keys():
             source_meta_tensor = self._source._get_meta(key)
         else:
             source_meta_tensor = MetaTensor(
-                *value.shape, device=value.device, dtype=value.dtype
+                *proc_value.shape, device=proc_value.device, dtype=proc_value.dtype
             )
-        value = getattr(value, self.inv_op)(
+        proc_value = getattr(proc_value, self.inv_op)(
             **self._update_inv_op_kwargs(source_meta_tensor)
         )
-        self._source.set(key, value, **kwargs)
+        self._source.set(key, proc_value, **kwargs)
         return self
 
     def set_(self, key: str, value: COMPATIBLE_TYPES) -> _CustomOpTensorDict:
@@ -2845,7 +2829,7 @@ class _CustomOpTensorDict(_TensorDict):
                 f"Setting values in place is not currently supported in this setting, consider calling "
                 f"`td.clone()` before `td.set_at_(...)`"
             )
-        transformed_tensor[idx] = value
+        transformed_tensor[idx] = value  # type: ignore
         return self
 
     def __repr__(self) -> str:
