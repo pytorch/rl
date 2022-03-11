@@ -201,9 +201,6 @@ jobs:
 
   unittest_linux_cpu:
     <<: *binary_common
-#    machine:  # fails to install torchrl, error with ninja
-#      image: "ubuntu-1604:202007-01"
-#    resource_class: xlarge
 
     docker:
       - image: "pytorch/manylinux-cuda102"
