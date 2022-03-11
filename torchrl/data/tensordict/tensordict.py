@@ -191,8 +191,8 @@ class _TensorDict(Mapping):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def _default_get(
-        self, key: str, default: Union[None, str, COMPATIBLE_TYPES] = "_no_default_"
-    ) -> Union[COMPATIBLE_TYPES, None]:
+        self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
+    ) -> COMPATIBLE_TYPES:
         if not isinstance(default, str):
             return default
         if default == "_no_default_":
@@ -205,8 +205,8 @@ class _TensorDict(Mapping):
             )
 
     def get(  # type: ignore
-        self, key: str, default: Union[None, str, torch.Tensor] = "_no_default_"
-    ) -> Union[None, Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:  # type: ignore
+        self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
+    ) -> COMPATIBLE_TYPES:  # type: ignore
         """
         Gets the value stored with the input key.
 
@@ -1447,8 +1447,8 @@ class TensorDict(_TensorDict):
         return self
 
     def get(  # type: ignore
-        self, key: str, default: Union[None, str, torch.Tensor] = "_no_default_"
-    ) -> Union[None, Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:  # type: ignore
+        self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
+    ) -> COMPATIBLE_TYPES:  # type: ignore
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
@@ -1931,8 +1931,8 @@ class SubTensorDict(_TensorDict):
     def get(  # type: ignore
         self,
         key: str,
-        default: Optional[Union[torch.Tensor, None, str]] = None
-    ) -> Union[None, Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:  # type: ignore
+        default: Optional[Union[torch.Tensor, str]] = None
+    ) -> COMPATIBLE_TYPES:  # type: ignore
         return self._source.get_at(key, self.idx)
 
     def _get_meta(self, key: str) -> MetaTensor:
@@ -2252,13 +2252,12 @@ class LazyStackedTensorDict(_TensorDict):
     def get(  # type: ignore
         self,
         key: str,
-        default: Union[None, str, torch.Tensor] = "_no_default_",
-        **kwargs,
-    ) -> Union[None, Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:  # type: ignore
+        default: Union[str, COMPATIBLE_TYPES] = "_no_default_",
+    ) -> COMPATIBLE_TYPES:  # type: ignore
         if not (key in self.valid_keys):
             return self._default_get(key, default)
-        tensors = [td.get(key, default=default, **kwargs) for td in self.tensor_dicts]
-        shapes = set(tensor.shape for tensor in tensors)
+        tensors = [td.get(key, default=default) for td in self.tensor_dicts]
+        shapes = set(tensor.shape for tensor in tensors)  # type: ignore
         if len(shapes) != 1:
             raise RuntimeError(
                 f"found more than one unique shape in the tensors to be stacked ({shapes}). This is likely due to "
@@ -2526,8 +2525,8 @@ class SavedTensorDict(_TensorDict):
             yield k
 
     def get(  # type: ignore
-        self, key: str, default: Union[None, str, torch.Tensor] = "_no_default_"
-    ) -> Union[None, Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:  # type: ignore
+        self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
+    ) -> COMPATIBLE_TYPES:  # type: ignore
         td = self._load()
         return td.get(key, default=default)
 
@@ -2757,7 +2756,7 @@ class _CustomOpTensorDict(_TensorDict):
         for key, value in self._source.items_meta():
             yield key, self._get_meta(key)
 
-    def items(self) -> Iterator[Tuple[Any, Union[Tuple[COMPATIBLE_TYPES, Tensor], COMPATIBLE_TYPES]]]:  # type: ignore
+    def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:  # type: ignore
         for key in self._source.keys():
             yield key, self.get(key)
 
@@ -2770,19 +2769,21 @@ class _CustomOpTensorDict(_TensorDict):
     def get(  # type: ignore
         self,
         key: str,
-        default: Union[None, str, torch.Tensor] = "_no_default_",
+        default: Union[str, COMPATIBLE_TYPES] = "_no_default_",
         _return_original_tensor: bool = False,
-    ) -> Union[None, Tuple[torch.Tensor, COMPATIBLE_TYPES], COMPATIBLE_TYPES]:  # type: ignore
+    ) -> COMPATIBLE_TYPES:  # type: ignore
         try:
             source_meta_tensor = self._source._get_meta(key)
-            item = self._source.get(key, default)
+            item = self._source.get(key)
             transformed_tensor = getattr(item, self.custom_op)(
                 **self._update_custom_op_kwargs(source_meta_tensor)
             )
             if not _return_original_tensor:
                 return transformed_tensor
-            return transformed_tensor, item
+            return transformed_tensor, item  # type: ignore
         except KeyError:
+            if _return_original_tensor:
+                raise RuntimeError("_return_original_tensor not compatible with get(..., default=smth)")
             return self._default_get(key, default)
 
     def set(self, key: str, value: COMPATIBLE_TYPES, **kwargs) -> _TensorDict:  # type: ignore
@@ -2820,7 +2821,7 @@ class _CustomOpTensorDict(_TensorDict):
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> _CustomOpTensorDict:
-        transformed_tensor, original_tensor = self.get(
+        transformed_tensor, original_tensor = self.get(  # type: ignore
             key, _return_original_tensor=True
         )
         if transformed_tensor.data_ptr() != original_tensor.data_ptr():

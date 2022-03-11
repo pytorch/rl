@@ -4,7 +4,7 @@ import torch
 
 __all__ = ["expand_right", "expand_as_right"]
 
-from torchrl.data import MemmapTensor
+from torchrl.data.tensordict.memmap import MemmapTensor
 
 
 def expand_as_right(tensor: Union[torch.Tensor, MemmapTensor], dest: Union[torch.Tensor, MemmapTensor]):
