@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import functools
 from numbers import Number
-from typing import Optional, Union, List, Tuple, Callable, Sequence, Sequence
+from typing import Optional, Union, List, Tuple, Callable, Sequence
 
 import numpy as np
 import torch
 
+from torchrl.data.utils import DEVICE_TYPING, INDEX_TYPING
 from .memmap import MemmapTensor
 from .utils import _getitem_batch_size
-from torchrl.data.utils import DEVICE_TYPING, INDEX_TYPING
 
 META_HANDLED_FUNCTIONS = dict()
 
@@ -50,7 +50,7 @@ class MetaTensor:
 
     def __init__(
         self,
-        *shape: Union[int, torch.Tensor],
+        *shape: Union[int, torch.Tensor, "MemmapTensor"],
         device: Optional[DEVICE_TYPING] = "cpu",
         dtype: torch.dtype = torch.get_default_dtype(),
         _is_shared: bool = False,

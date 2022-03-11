@@ -54,13 +54,14 @@ fi
 #PYTORCH_VERSION="$(python -c "import torch; print(torch.__version__)")" python setup.py develop bdist_wheel -d $WHEELS_FOLDER
 #cd ../..
 
-conda install -y -c conda-forge glfw
+#conda install -y -c conda-forge glfw
 #conda install -y -c conda-forge mesalib
 #conda install -y -c menpo osmesa
 
 yum makecache
-yum -y install mesa-libOSMesa-devel
-yum -y install mesa-libEGL-devel
+#yum -y install mesa-libOSMesa-devel
+#yum -y install mesa-libEGL-devel
+yum -y install glfw-devel
 
 printf "* Installing torchrl\n"
 python setup.py develop
