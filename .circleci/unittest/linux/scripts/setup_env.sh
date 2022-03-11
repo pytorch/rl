@@ -28,9 +28,9 @@ fi
 eval "$(${conda_dir}/bin/conda shell.bash hook)"
 
 # 2. Create test environment at ./env
+printf "python: ${PYTHON_VERSION}\n"
 if [ ! -d "${env_dir}" ]; then
     printf "* Creating a test environment\n"
-    printf "python: ${PYTHON_VERSION}\n"
     conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 fi
 conda activate "${env_dir}"
