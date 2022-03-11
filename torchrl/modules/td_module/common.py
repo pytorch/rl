@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from numbers import Number
-from typing import Tuple, List, Iterable, Type, Optional, Union, Any, Callable
+from typing import Tuple, List, Sequence, Type, Optional, Union, Any, Callable
 
 import torch
 from torch import nn, distributions as d, Tensor
@@ -73,8 +73,8 @@ class TDModule(nn.Module):
         self,
         spec: Optional[TensorSpec],
         module: Union[Callable[[Tensor], Tensor], nn.Module],
-        in_keys: Iterable[str],
-        out_keys: Iterable[str],
+        in_keys: Sequence[str],
+        out_keys: Sequence[str],
         safe: bool = False,
     ):
 
@@ -118,7 +118,7 @@ class TDModule(nn.Module):
         return super().__setattr__(key, value)
 
     def _write_to_tensor_dict(
-        self, tensor_dict: _TensorDict, tensors: List, out_keys: Iterable[str] = None
+        self, tensor_dict: _TensorDict, tensors: List, out_keys: Sequence[str] = None
     ) -> _TensorDict:
         if out_keys is None:
             out_keys = self.out_keys
@@ -251,8 +251,8 @@ class ProbabilisticTDModule(TDModule):
         self,
         spec: TensorSpec,
         module: Union[Callable[[Tensor], Tensor], nn.Module],
-        in_keys: Iterable[str],
-        out_keys: Iterable[str],
+        in_keys: Sequence[str],
+        out_keys: Sequence[str],
         distribution_class: Type = Delta,
         distribution_kwargs: Optional[dict] = None,
         default_interaction_mode: str = "mode",

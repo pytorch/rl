@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from numbers import Number
-from typing import Tuple, Union, Optional, Iterable, List
+from typing import Tuple, Union, Optional, Sequence, List, Any, Dict
 
 import numpy as np
 import torch
@@ -610,7 +610,7 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     """
 
     def __init__(
-        self, nvec: Iterable[int], device=None, dtype=torch.long, use_register=False
+        self, nvec: Sequence[int], device=None, dtype=torch.long, use_register=False
     ):
         dtype, device = _default_dtype_and_device(dtype, device)
         shape = torch.Size((sum(nvec),))
@@ -730,7 +730,7 @@ class CompositeSpec(TensorSpec):
     def del_(self, key: str) -> None:
         del self._specs[key]
 
-    def encode(self, vals: dict) -> dict:
+    def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:  # type: ignore
         out = {}
         for key, item in vals.items():
             out[key] = self[key].encode(item)
@@ -746,7 +746,7 @@ class CompositeSpec(TensorSpec):
             if _key in key:
                 self._specs[_key].type_check(value, _key)
 
-    def is_in(self, val: Union[dict, _TensorDict]) -> bool:
+    def is_in(self, val: Union[dict, _TensorDict]) -> bool:  # type: ignore
         return all([self[key].is_in(val.get(key)) for key in self._specs])
 
     def project(self, val: _TensorDict) -> _TensorDict:

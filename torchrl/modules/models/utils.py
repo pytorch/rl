@@ -1,4 +1,4 @@
-from typing import Iterable, Optional
+from typing import Sequence, Optional
 
 import torch
 from torch import nn
@@ -27,7 +27,7 @@ class SqueezeLayer(nn.Module):
 
     """
 
-    def __init__(self, dims: Iterable[int] = (-1,)):
+    def __init__(self, dims: Sequence[int] = (-1,)):
         super().__init__()
         self.dims = dims
 
@@ -67,7 +67,7 @@ class SquashDims(nn.Module):
         return value
 
 
-def _find_depth(depth: Optional[int], *list_or_ints: Iterable):
+def _find_depth(depth: Optional[int], *list_or_ints: Sequence):
     if depth is None:
         for item in list_or_ints:
             if isinstance(item, (list, tuple)):

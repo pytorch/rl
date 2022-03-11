@@ -1,5 +1,5 @@
 from types import ModuleType
-from typing import List, Iterable, Optional
+from typing import List, Sequence, Optional
 
 import torch
 
@@ -157,7 +157,7 @@ class GymEnv(GymLikeEnv):
         return seed
 
 
-def _get_retro_envs() -> Iterable:
+def _get_retro_envs() -> Sequence:
     if not _has_retro:
         return tuple()
     else:

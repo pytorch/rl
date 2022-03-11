@@ -1,6 +1,6 @@
 import math
 from numbers import Number
-from typing import Union, Optional, Iterable
+from typing import Union, Optional, Sequence
 
 import torch
 from torch import nn
@@ -105,7 +105,7 @@ class NoisyLinear(nn.Linear):
         if self.bias_mu is not None:
             self.bias_epsilon.copy_(epsilon_out)  # type: ignore
 
-    def _scale_noise(self, size: Union[int, torch.Size, Iterable]) -> torch.Tensor:
+    def _scale_noise(self, size: Union[int, torch.Size, Sequence]) -> torch.Tensor:
         if isinstance(size, int):
             size = (size,)
         x = torch.randn(*size, device=self.weight_mu.device)

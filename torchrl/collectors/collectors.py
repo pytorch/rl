@@ -5,7 +5,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from textwrap import indent
-from typing import Optional, Callable, Union, Tuple, Iterator, Iterable
+from typing import Optional, Callable, Union, Tuple, Iterator, Sequence
 
 import numpy as np
 import torch
@@ -75,7 +75,7 @@ class _DataCollector(IterableDataset):
     def _get_policy_and_device(
         self,
         create_env_fn: Optional[
-            Union[_EnvClass, "EnvCreator", Iterable[Callable[[], _EnvClass]]]
+            Union[_EnvClass, "EnvCreator", Sequence[Callable[[], _EnvClass]]]
         ] = None,
         create_env_kwargs: Optional[dict] = None,
         policy: Optional[
@@ -218,7 +218,7 @@ class SyncDataCollector(_DataCollector):
     def __init__(
         self,
         create_env_fn: Union[
-            _EnvClass, "EnvCreator", Iterable[Callable[[], _EnvClass]]
+            _EnvClass, "EnvCreator", Sequence[Callable[[], _EnvClass]]
         ],
         policy: Optional[
             Union[ProbabilisticTDModule, Callable[[_TensorDict], _TensorDict]]
@@ -567,12 +567,12 @@ class _MultiDataCollector(_DataCollector):
 
     def __init__(
         self,
-        create_env_fn: Iterable[Callable[[], _EnvClass]],
+        create_env_fn: Sequence[Callable[[], _EnvClass]],
         policy: Optional[
             Union[ProbabilisticTDModule, Callable[[_TensorDict], _TensorDict]]
         ] = None,
         total_frames: Optional[int] = -1,
-        create_env_kwargs: Optional[Iterable[dict]] = None,
+        create_env_kwargs: Optional[Sequence[dict]] = None,
         max_frames_per_traj: int = -1,
         frames_per_batch: int = 200,
         init_random_frames: int = -1,
@@ -582,7 +582,7 @@ class _MultiDataCollector(_DataCollector):
         devices: DEVICE_TYPING = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
-        passing_devices: Union[DEVICE_TYPING, Iterable[DEVICE_TYPING]] = "cpu",
+        passing_devices: Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]] = "cpu",
         update_at_each_batch: bool = False,
         init_with_lag: bool = False,
     ):
@@ -612,7 +612,7 @@ class _MultiDataCollector(_DataCollector):
             devices = [torch.device(devices) for _ in range(self.num_workers)]
         elif devices is None:
             devices = [None for _ in range(self.num_workers)]
-        elif isinstance(devices, Iterable):
+        elif isinstance(devices, Sequence):
             if len(devices) != self.num_workers:
                 raise RuntimeError(device_err_msg("devices", devices))
             devices = [torch.device(_device) for _device in devices]
@@ -638,7 +638,7 @@ class _MultiDataCollector(_DataCollector):
             self.passing_devices = [
                 torch.device(passing_devices) for _ in range(self.num_workers)
             ]
-        elif isinstance(passing_devices, Iterable):
+        elif isinstance(passing_devices, Sequence):
             if len(passing_devices) != self.num_workers:
                 raise RuntimeError(device_err_msg("passing_devices", passing_devices))
             self.passing_devices = [
@@ -785,12 +785,12 @@ class _MultiDataCollector(_DataCollector):
         self.reset()
         return seed
 
-    def reset(self, reset_idx: Optional[Iterable[bool]] = None) -> None:
+    def reset(self, reset_idx: Optional[Sequence[bool]] = None) -> None:
         """
         Resets the environments to a new initial state.
 
         Args:
-            reset_idx: Optional. Iterable indicating which environments have to be reset. If None, all environments
+            reset_idx: Optional. Sequence indicating which environments have to be reset. If None, all environments
             are reset.
         Returns: None
 
@@ -980,12 +980,12 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             del self.out_tensordicts
         return super()._shutdown_main()
 
-    # def set_seed(self, seed: Iterable):
+    # def set_seed(self, seed: Sequence):
     #     super().set_seed(seed)
     #     for idx in range(self.num_workers):
     #         self.pipes[idx].send((idx, "continue"))
 
-    def reset(self, reset_idx: Optional[Iterable[bool]] = None) -> None:
+    def reset(self, reset_idx: Optional[Sequence[bool]] = None) -> None:
         super().reset(reset_idx)
         if self.queue_out.full():
             print("waiting")
@@ -1056,7 +1056,7 @@ def _main_async_collector(
     reset_at_each_iter: bool,
     device: Optional[Union[torch.device, str, int]],
     passing_device: Optional[Union[torch.device, str, int]],
-    seed: Union[int, Iterable],
+    seed: Union[int, Sequence],
     pin_memory: bool,
     idx: int = 0,
     init_with_lag: bool = False,

@@ -1,6 +1,6 @@
 from argparse import Namespace, ArgumentParser
 from numbers import Number
-from typing import Optional, Iterable
+from typing import Optional, Sequence
 
 import torch
 from torch import nn
@@ -305,7 +305,7 @@ def make_ppo_model(
     proof_environment: _EnvClass,
     args: Namespace,
     device: DEVICE_TYPING,
-    in_keys_actor: Optional[Iterable[str]] = None,
+    in_keys_actor: Optional[Sequence[str]] = None,
     **kwargs,
 ) -> ActorValueOperator:
     """
@@ -500,7 +500,7 @@ def make_ppo_model(
 
 def make_sac_model(
     proof_environment: _EnvClass,
-    in_keys: Optional[Iterable[str]] = None,
+    in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
     qvalue_net_kwargs=None,
     value_net_kwargs=None,

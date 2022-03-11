@@ -9,7 +9,6 @@ from copy import deepcopy, copy
 from numbers import Number
 from textwrap import indent
 from typing import (
-    Iterable,
     Optional,
     Union,
     Tuple,
@@ -237,7 +236,7 @@ class _TensorDict(Mapping):
         return self
 
     def apply(
-        self, fn: Callable, batch_size: Optional[Iterable[int]] = None
+        self, fn: Callable, batch_size: Optional[Sequence[int]] = None
     ) -> _TensorDict:
         """
         Applies a callable to all values stored in the tensordict and sets them in a new tensordict.
@@ -1157,7 +1156,7 @@ class TensorDict(_TensorDict):
     def __init__(
         self,
         source: Union[_TensorDict, dict],
-        batch_size: Optional[Union[Iterable[int], torch.Size, int]] = None,
+        batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
         device: Optional[DEVICE_TYPING] = None,
         _meta_source: Optional[dict] = None,
     ):
@@ -1172,7 +1171,7 @@ class TensorDict(_TensorDict):
             batch_size,
             (
                 Number,
-                Iterable,
+                Sequence,
             ),
         ):
             if not isinstance(batch_size, torch.Size):
@@ -1652,7 +1651,7 @@ def clone(td: _TensorDict, *args, **kwargs) -> _TensorDict:
 
 @implements_for_td(torch.cat)
 def cat(
-    list_of_tensor_dicts: Iterable[_TensorDict],
+    list_of_tensor_dicts: Sequence[_TensorDict],
     dim: int = 0,
     device: DEVICE_TYPING = None,
     out: _TensorDict = None,
@@ -1768,7 +1767,7 @@ def stack(
 
 # @implements_for_td(torch.nn.utils.rnn.pad_sequence)
 def pad_sequence_td(
-    list_of_tensor_dicts: Iterable[_TensorDict],
+    list_of_tensor_dicts: Sequence[_TensorDict],
     batch_first: bool = True,
     padding_value: float = 0.0,
     out: _TensorDict = None,
@@ -1849,7 +1848,7 @@ class SubTensorDict(_TensorDict):
         self,
         source: _TensorDict,
         idx: INDEX_TYPING,
-        batch_size: Optional[Iterable[int]] = None,
+        batch_size: Optional[Sequence[int]] = None,
     ):
         if not isinstance(source, _TensorDict):
             raise TypeError(
@@ -2112,7 +2111,7 @@ class LazyStackedTensorDict(_TensorDict):
         self,
         *tensor_dicts: _TensorDict,
         stack_dim: int = 0,
-        batch_size: Optional[Iterable[int]] = None,  # TODO: remove
+        batch_size: Optional[Sequence[int]] = None,  # TODO: remove
     ):
         # sanity check
         N = len(tensor_dicts)
@@ -2194,11 +2193,11 @@ class LazyStackedTensorDict(_TensorDict):
     # def is_memmap(self) -> bool:
     #     return all(td.is_memmap() for td in self.tensor_dicts)
 
-    def get_valid_keys(self) -> Iterable[str]:
+    def get_valid_keys(self) -> Sequence[str]:
         self._update_valid_keys()
         return self._valid_keys
 
-    def set_valid_keys(self, keys: Iterable[str]) -> None:
+    def set_valid_keys(self, keys: Sequence[str]) -> None:
         raise RuntimeError(
             "setting valid keys is not permitted. valid keys are defined as the intersection of all the "
             "key sets from the TensorDicts in a stack and cannot be defined explicitely."
@@ -2280,7 +2279,7 @@ class LazyStackedTensorDict(_TensorDict):
         if key not in self.valid_keys:
             raise KeyError(f"key {key} not found in {list(self._valid_keys)}")
         return torch.stack(
-            [td._get_meta(key, **kwargs) for td in self.tensor_dicts], self.stack_dim
+            [td._get_meta(key) for td in self.tensor_dicts], self.stack_dim
         )  # type: ignore
 
     def is_contiguous(self) -> bool:
@@ -2481,7 +2480,7 @@ class SavedTensorDict(_TensorDict):
         self,
         source: _TensorDict,
         device=None,
-        batch_size: Optional[Iterable[int]] = None,
+        batch_size: Optional[Sequence[int]] = None,
     ):
         if not isinstance(source, _TensorDict):
             raise TypeError(
@@ -2528,7 +2527,7 @@ class SavedTensorDict(_TensorDict):
     def device(self) -> torch.device:
         return self._device
 
-    def keys(self) -> Iterable[str]:  # type: ignore
+    def keys(self) -> Sequence[str]:  # type: ignore
         for k in self._keys:
             yield k
 
@@ -2701,7 +2700,7 @@ class _CustomOpTensorDict(_TensorDict):
         inv_op: Optional[str] = None,
         custom_op_kwargs: Optional[dict] = None,
         inv_op_kwargs: Optional[dict] = None,
-        batch_size: Optional[Iterable[int]] = None,
+        batch_size: Optional[Sequence[int]] = None,
     ):
         """
         Encodes lazy operations on tensors contained in a TensorDict.

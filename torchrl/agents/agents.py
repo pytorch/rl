@@ -58,7 +58,7 @@ class Agent:
     evaluating the training progress.
 
     Args:
-        collector (Iterable[_TensorDict]): An iterable returning batches of data in a TensorDict form of shape
+        collector (Sequence[_TensorDict]): An iterable returning batches of data in a TensorDict form of shape
             [batch x time steps].
         total_frames (int): Total number of frames to be collected during training.
         loss_module (_LossModule): A module that reads TensorDict batches (possibly sampled from a replay buffer) and

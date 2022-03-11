@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Union, Iterable, Dict, Sequence
+from typing import Union, Sequence, Dict, Sequence
 
 import numpy as np
 import torch

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from numbers import Number
-from typing import Optional, Any, Iterable, Union, List, OrderedDict
+from typing import Optional, Any, Sequence, Union, List, OrderedDict
 
 import torch
 from torch import nn
@@ -67,7 +67,7 @@ class Transform(nn.Module):
 
     invertible = False
 
-    def __init__(self, keys: Iterable):
+    def __init__(self, keys: Sequence[str]):
         super().__init__()
         self.keys = keys
 
@@ -331,7 +331,7 @@ class ObservationTransform(Transform):
 
     inplace = False
 
-    def __init__(self, keys: Optional[Iterable[str]] = None):
+    def __init__(self, keys: Optional[Sequence[str]] = None):
         if keys is None:
             keys = [
                 "next_observation",
@@ -420,7 +420,7 @@ class ToTensorImage(ObservationTransform):
         self,
         unsqueeze: bool = False,
         dtype: Optional[torch.device] = None,
-        keys: Optional[Iterable[str]] = None,
+        keys: Optional[Sequence[str]] = None,
     ):
         if keys is None:
             keys = IMAGE_KEYS  # default
@@ -473,7 +473,7 @@ class RewardClipping(Transform):
         self,
         clamp_min: float = None,
         clamp_max: float = None,
-        keys: Optional[Iterable[str]] = None,
+        keys: Optional[Sequence[str]] = None,
     ):
         if keys is None:
             keys = ["reward"]
@@ -518,7 +518,7 @@ class BinerizeReward(Transform):
 
     inplace = True
 
-    def __init__(self, keys: Optional[Iterable[str]] = None):
+    def __init__(self, keys: Optional[Sequence[str]] = None):
         if keys is None:
             keys = ["reward"]
         super().__init__(keys=keys)
@@ -554,7 +554,7 @@ class Resize(ObservationTransform):
         w: int,
         h: int,
         interpolation: str = "bilinear",
-        keys: Optional[Iterable[str]] = None,
+        keys: Optional[Sequence[str]] = None,
     ):
         if keys is None:
             keys = IMAGE_KEYS  # default
@@ -599,7 +599,7 @@ class GrayScale(ObservationTransform):
 
     inplace = False
 
-    def __init__(self, keys: Optional[Iterable[str]] = None):
+    def __init__(self, keys: Optional[Sequence[str]] = None):
         if keys is None:
             keys = IMAGE_KEYS
         super(GrayScale, self).__init__(keys=keys)
@@ -642,7 +642,7 @@ class ObservationNorm(ObservationTransform):
         self,
         loc: Union[float, torch.Tensor],
         scale: Union[float, torch.Tensor],
-        keys: Optional[Iterable[str]] = None,
+        keys: Optional[Sequence[str]] = None,
         # observation_spec_key: =None,
         standard_normal: bool = False,
     ):
@@ -713,7 +713,7 @@ class CatFrames(ObservationTransform):
     inplace = False
 
     def __init__(
-        self, N: int = 4, cat_dim: int = -3, keys: Optional[Iterable[str]] = None
+        self, N: int = 4, cat_dim: int = -3, keys: Optional[Sequence[str]] = None
     ):
         if keys is None:
             keys = IMAGE_KEYS
@@ -769,7 +769,7 @@ class RewardScaling(Transform):
         self,
         loc: Union[float, torch.Tensor],
         scale: Union[float, torch.Tensor],
-        keys: Optional[Iterable[str]] = None,
+        keys: Optional[Sequence[str]] = None,
     ):
         if keys is None:
             keys = ["reward"]
@@ -838,7 +838,7 @@ class DoubleToFloat(Transform):
     invertible = True
     inplace = False
 
-    def __init__(self, keys: Optional[Iterable[str]] = None):
+    def __init__(self, keys: Optional[Sequence[str]] = None):
         if keys is None:
             keys = ["action"]
         super().__init__(keys=keys)
@@ -899,7 +899,7 @@ class CatTensors(Transform):
     "observation_velocity")
 
     Args:
-        keys (Iterable of str): keys to be concatenated
+        keys (Sequence of str): keys to be concatenated
         out_key: key of the resulting tensor.
 
     """
@@ -908,7 +908,7 @@ class CatTensors(Transform):
     inplace = False
 
     def __init__(
-        self, keys: Optional[Iterable[str]] = None, out_key: str = "observation_vector"
+        self, keys: Optional[Sequence[str]] = None, out_key: str = "observation_vector"
     ):
         if keys is None:
             raise Exception("CatTensors requires keys to be non-empty")
@@ -1125,7 +1125,7 @@ class VecNorm(Transform):
 
     def __init__(
         self,
-        keys: Optional[Iterable[str]] = None,
+        keys: Optional[Sequence[str]] = None,
         shared_td: Optional[_TensorDict] = None,
         decay: float = 0.9999,
         eps: float = 1e-4,
@@ -1212,7 +1212,7 @@ class VecNorm(Transform):
     @staticmethod
     def build_td_for_shared_vecnorm(
         env: _EnvClass,
-        keys_prefix: Optional[Iterable[str]] = None,
+        keys_prefix: Optional[Sequence[str]] = None,
         memmap: bool = False,
     ) -> _TensorDict:
         """

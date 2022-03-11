@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import functools
 from numbers import Number
-from typing import Optional, Union, List, Tuple, Callable, Iterable
+from typing import Optional, Union, List, Tuple, Callable, Sequence, Sequence
 
 import numpy as np
 import torch
@@ -199,7 +199,7 @@ class MetaTensor:
         return clone
 
     def view(
-        self, *shape: Iterable, size: Optional[Union[List, Tuple, torch.Size]] = None
+        self, *shape: Sequence, size: Optional[Union[List, Tuple, torch.Size]] = None
     ) -> MetaTensor:
         if len(shape) == 0 and size is not None:
             return self.view(*size)
@@ -212,7 +212,7 @@ class MetaTensor:
 
 
 def _stack_meta(
-    list_of_meta_tensors: Iterable[MetaTensor],
+    list_of_meta_tensors: Sequence[MetaTensor],
     dim: int = 0,
     dtype: torch.dtype = torch.float,
     device: DEVICE_TYPING = "cpu",
@@ -240,7 +240,7 @@ def _stack_meta(
 
 @implements_for_meta(torch.stack)
 def stack_meta(
-    list_of_meta_tensors: Iterable[MetaTensor], dim: int = 0, safe: bool = False
+    list_of_meta_tensors: Sequence[MetaTensor], dim: int = 0, safe: bool = False
 ) -> MetaTensor:
     dtype = (
         list_of_meta_tensors[0].dtype

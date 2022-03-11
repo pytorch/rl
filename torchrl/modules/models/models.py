@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Iterable, Type, Union, Optional, Tuple, Callable, Dict, List
+from typing import Sequence, Type, Union, Optional, Tuple, Callable, Dict, List
 
 import numpy as np
 import torch
@@ -43,7 +43,7 @@ class MLP(nn.Sequential):
             desired input and output size. A length of 1 will create 2 linear layers etc. If no depth is indicated,
             the depth information should be contained in the num_cells argument (see below). If num_cells is an
             iterable and depth is indicated, both should match: len(num_cells) must be equal to depth.
-        num_cells (int or Iterable[int], optional): number of cells of every layer in between the input and output. If
+        num_cells (int or Sequence[int], optional): number of cells of every layer in between the input and output. If
             an integer is provided, every layer will have the same number of cells. If an iterable is provided,
             the linear layers out_features will match the content of num_cells.
             default: 32;
@@ -83,9 +83,9 @@ class MLP(nn.Sequential):
     def __init__(
         self,
         in_features: Optional[int] = None,
-        out_features: Union[int, Iterable[int]] = None,
+        out_features: Union[int, Sequence[int]] = None,
         depth: Optional[int] = None,
-        num_cells: Optional[Union[Iterable, int]] = None,
+        num_cells: Optional[Union[Sequence, int]] = None,
         activation_class: Type = nn.Tanh,
         activation_kwargs: Optional[dict] = None,
         norm_class: Optional[Type] = None,
@@ -128,13 +128,13 @@ class MLP(nn.Sequential):
         if single_bias_last_layer:
             raise NotImplementedError
 
-        if not (isinstance(num_cells, Iterable) or depth is not None):
+        if not (isinstance(num_cells, Sequence) or depth is not None):
             raise RuntimeError(
                 "If num_cells is provided as an integer, \
             depth must be provided too."
             )
         self.num_cells = (
-            list(num_cells) if isinstance(num_cells, Iterable) else [num_cells] * depth
+            list(num_cells) if isinstance(num_cells, Sequence) else [num_cells] * depth
         )
         self.depth = depth if depth is not None else len(self.num_cells)
         if not (len(self.num_cells) == depth or depth is None):
@@ -194,13 +194,13 @@ class ConvNet(nn.Sequential):
             If no depth is indicated, the depth information should be contained in the num_cells argument (see below).
             If num_cells is an iterable and depth is indicated, both should match: len(num_cells) must be equal to
             the depth.
-        num_cells (int or Iterable[int], optional): number of cells of every layer in between the input and output. If
+        num_cells (int or Sequence[int], optional): number of cells of every layer in between the input and output. If
             an integer is provided, every layer will have the same number of cells. If an iterable is provided,
             the linear layers out_features will match the content of num_cells.
             default: [32, 32, 32];
-        kernel_sizes (int, Iterable[Union[int, Iterable[int]]]): Kernel size(s) of the conv network. If iterable, the length must match the
+        kernel_sizes (int, Sequence[Union[int, Sequence[int]]]): Kernel size(s) of the conv network. If iterable, the length must match the
             depth, defined by the num_cells or depth arguments.
-        strides (int or Iterable[int]): Stride(s) of the conv network. If iterable, the length must match the
+        strides (int or Sequence[int]): Stride(s) of the conv network. If iterable, the length must match the
             depth, defined by the num_cells or depth arguments.
         activation_class (Type): activation class to be used.
             default: nn.Tanh
@@ -232,9 +232,9 @@ class ConvNet(nn.Sequential):
         self,
         in_features: Optional[int] = None,
         depth: Optional[int] = None,
-        num_cells: Union[Iterable, int] = [32, 32, 32],
-        kernel_sizes: Union[Iterable[Union[int, Iterable[int]]], int] = 3,
-        strides: Union[Iterable, int] = 1,
+        num_cells: Union[Sequence, int] = [32, 32, 32],
+        kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 3,
+        strides: Union[Sequence, int] = 1,
         actionvation_class: Type = nn.ELU,
         activation_kwargs: Optional[dict] = None,
         norm_class: Type = None,
@@ -272,9 +272,9 @@ class ConvNet(nn.Sequential):
             setattr(
                 self,
                 _field,
-                (_value if isinstance(_value, Iterable) else [_value] * _depth),
+                (_value if isinstance(_value, Sequence) else [_value] * _depth),
             )
-            if not (isinstance(_value, Iterable) or _depth is not None):
+            if not (isinstance(_value, Sequence) or _depth is not None):
                 raise RuntimeError(
                     f"If {_field} is provided as an integer, "
                     "depth must be provided too."

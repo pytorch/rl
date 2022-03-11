@@ -3,7 +3,7 @@ import concurrent.futures
 import functools
 import threading
 from numbers import Number
-from typing import Optional, Tuple, Union, List, Any, Callable, Iterable
+from typing import Optional, Tuple, Union, List, Any, Callable, Sequence
 
 import torch
 from torchrl._torchrl import SumSegmentTree, MinSegmentTree
@@ -27,7 +27,7 @@ def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
     """Zips a list of iterables containing tensor-like objects and stacks the resulting lists of tensors together.
 
     Args:
-        list_of_tensor_iterators (list): Iterable containing similar iterators, where each element of the nested iterator
+        list_of_tensor_iterators (list): Sequence containing similar iterators, where each element of the nested iterator
             is a tensor whose shape match the tensor of other iterators that have the same index.
 
     Returns: Tuple of stacked tensors.
@@ -150,7 +150,7 @@ class ReplayBuffer:
             self._cursor = (self._cursor + 1) % self._capacity
             return ret
 
-    def extend(self, data: Iterable[Any]):
+    def extend(self, data: Sequence[Any]):
         """
         Extends the replay buffer with one or more elements contained in an iterable.
 
@@ -383,7 +383,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         return self._add_or_extend(data, priority, True)
 
     def extend(
-        self, data: Iterable, priority: Optional[torch.Tensor] = None
+        self, data: Sequence, priority: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         return self._add_or_extend(data, priority, False)
 

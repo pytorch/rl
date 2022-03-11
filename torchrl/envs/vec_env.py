@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from collections import OrderedDict
 from multiprocessing import connection
-from typing import Callable, Iterable, Union, Optional
+from typing import Callable, Sequence, Union, Optional
 
 import torch
 from torch import multiprocessing as mp
@@ -64,14 +64,14 @@ class _BatchedEnv(_EnvClass):
         self,
         num_workers: int,
         create_env_fn: Union[
-            Callable[[], _EnvClass], Iterable[Callable[[], _EnvClass]]
+            Callable[[], _EnvClass], Sequence[Callable[[], _EnvClass]]
         ],
-        create_env_kwargs: Union[dict, Iterable[dict]] = None,
+        create_env_kwargs: Union[dict, Sequence[dict]] = None,
         device: DEVICE_TYPING = "cpu",
-        action_keys: Optional[Iterable[str]] = None,
+        action_keys: Optional[Sequence[str]] = None,
         pin_memory: bool = False,
-        selected_keys: Optional[Iterable[str]] = None,
-        excluded_keys: Optional[Iterable[str]] = None,
+        selected_keys: Optional[Sequence[str]] = None,
+        excluded_keys: Optional[Sequence[str]] = None,
         share_individual_td: bool = False,
         shared_memory: bool = True,
         memmap: bool = False,

@@ -1,4 +1,4 @@
-from typing import Optional, Iterable, Union, Tuple, Type, Iterator, Callable
+from typing import Optional, Sequence, Union, Tuple, Type, Iterator, Callable
 
 import torch
 from torch import nn, distributions as d
@@ -52,8 +52,8 @@ class Actor(TDModule):
     def __init__(
         self,
         *args,
-        in_keys: Optional[Iterable[str]] = None,
-        out_keys: Optional[Iterable[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
         **kwargs,
     ):
         if in_keys is None:
@@ -95,8 +95,8 @@ class ProbabilisticActor(ProbabilisticTDModule):
     def __init__(
         self,
         *args,
-        in_keys: Optional[Iterable[str]] = None,
-        out_keys: Optional[Iterable[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
         **kwargs,
     ):
         if in_keys is None:
@@ -152,8 +152,8 @@ class ValueOperator(TDModule):
     def __init__(
         self,
         module: nn.Module,
-        in_keys: Optional[Iterable[str]] = None,
-        out_keys: Optional[Iterable[str]] = None,
+        in_keys: Optional[Sequence[str]] = None,
+        out_keys: Optional[Sequence[str]] = None,
     ) -> None:
 
         if in_keys is None:

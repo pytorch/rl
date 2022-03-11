@@ -1,4 +1,4 @@
-from typing import Optional, Iterable
+from typing import Optional, Sequence
 
 import torch
 
@@ -15,7 +15,7 @@ class VideoRecorder(ObservationTransform):
     Args:
         writer (SummaryWriter): a tb.SummaryWriter instance where the video should be written.
         tag (str): the video tag in the writer.
-        keys (Iterable[str], optional): keys to be read to produce the video.
+        keys (Sequence[str], optional): keys to be read to produce the video.
             default: next_observation_pixels.
         skip (int): frame interval in the output video.
             default: 2
@@ -25,7 +25,7 @@ class VideoRecorder(ObservationTransform):
         self,
         writer: "SummaryWriter",
         tag: str,
-        keys: Optional[Iterable[str]] = None,
+        keys: Optional[Sequence[str]] = None,
         skip: int = 2,
         **kwargs,
     ) -> None:
@@ -109,7 +109,7 @@ class TensorDictRecorder(Transform):
         out_file_base: str,
         skip_reset: bool = True,
         skip: int = 4,
-        keys: Optional[Iterable[str]] = None,
+        keys: Optional[Sequence[str]] = None,
     ) -> None:
         if keys is None:
             keys = []
