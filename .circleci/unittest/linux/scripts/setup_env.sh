@@ -45,4 +45,4 @@ cd $this_dir
 
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
-conda env update --file "${this_dir}/environment.yml" --prune
+conda env update --file "${this_dir}/environment.yml" --prune --freeze-installed
