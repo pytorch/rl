@@ -3,7 +3,7 @@ channels:
   - defaults
 dependencies:
   - pip
-  - cmake == 3.18
+  - cmake
   - pip:
     - hypothesis
     - protobuf
