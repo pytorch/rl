@@ -55,8 +55,11 @@ fi
 #cd ../..
 
 conda install -y -c conda-forge glfw
-conda install -y -c conda-forge mesalib
-conda install -y -c menpo osmesa
+#conda install -y -c conda-forge mesalib
+#conda install -y -c menpo osmesa
+
+yum makecache
+yum -y install mesa-libOSMesa-devel
 
 printf "* Installing torchrl\n"
 python setup.py develop
