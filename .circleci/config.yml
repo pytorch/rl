@@ -208,6 +208,7 @@ jobs:
 
     environment:
       TAR_OPTIONS: --no-same-owner
+      PYTHON_VERSION: << parameters.python_version >>
 
     steps:
       - checkout
