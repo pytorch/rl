@@ -19,4 +19,4 @@ def _init_extension():
     if not is_module_available("torchrl._torchrl"):
         warnings.warn("torchrl C++ extension is not available.")
         return
-    from torchrl import _torchrl
+    # from torchrl import _torchrl
