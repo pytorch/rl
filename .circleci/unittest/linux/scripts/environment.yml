@@ -19,3 +19,4 @@ dependencies:
     - pyyaml
     - scipy
     - dm_control
+    - mujoco_py

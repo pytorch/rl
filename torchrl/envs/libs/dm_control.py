@@ -137,7 +137,7 @@ class DMControlEnv(GymLikeEnv):
         return _seed
 
     def _output_transform(
-        self, timestep_tuple: Tuple[dm_env._environment.TimeStep]
+        self, timestep_tuple: Tuple["TimeStep"]
     ) -> Tuple[np.ndarray, float, bool]:
         if type(timestep_tuple) is not tuple:
             timestep_tuple = (timestep_tuple,)
