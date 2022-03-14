@@ -27,10 +27,13 @@ from torchrl.envs.libs.gym import _get_envs as _get_gym_envs
 from torchrl.envs.utils import step_tensor_dict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 
-with open(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs/atari.yaml"), "r"
-) as file:
-    atari_confs = yaml.load(file, Loader=yaml.FullLoader)
+try:
+    this_dir = os.path.dirname(os.path.realpath(__file__))
+    with open(os.path.join(this_dir, "configs", "atari.yaml"), "r") as file:
+        atari_confs = yaml.load(file, Loader=yaml.FullLoader)
+    _atari_found = True
+except:
+    _atari_found = False
 
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
 ## the serial and parallel batched envs

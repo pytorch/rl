@@ -28,7 +28,6 @@ def test_atari(env_name, env_suffix, frame_skip):
     env.rollout(n_steps=50)
 
 
-@pytest.mark.skipif(not _atari_found, reason="no _atari_found found")
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
 @pytest.mark.parametrize("env_name", _get_envs_gym())
 @pytest.mark.parametrize("from_pixels", [False, True])
