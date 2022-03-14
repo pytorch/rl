@@ -250,8 +250,8 @@ class MemmapTensor(object):
             self.file.close()
 
     def __eq__(self, other: Any) -> torch.Tensor:  # type: ignore
-        if not isinstance(other, (MemmapTensor, torch.Tensor)):
-            raise NotImplementedError
+        if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
+            raise NotImplementedError(f"Unknown type {type(other)}")
         return self._tensor == other
 
     def __getattr__(self, attr: str) -> Any:

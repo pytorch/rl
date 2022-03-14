@@ -48,10 +48,6 @@ def test_stack():
     assert (td_reconstruct == td).all()
 
 
-def test_del():
-    raise NotImplementedError
-
-
 def test_tensor_dict_indexing():
     torch.manual_seed(1)
     td = TensorDict({}, batch_size=(4, 5))
@@ -252,10 +248,6 @@ def test_savedtensordict():
     torch.testing.assert_allclose(ss_list[1].get("a"), vals[1])
     torch.testing.assert_allclose(ss_list[1].get("a"), ss[1].get("a"))
     torch.testing.assert_allclose(ss[1].get("a"), ss.get("a")[1])
-
-
-def test_merge():
-    raise NotImplementedError
 
 
 class TestTensorDicts:
