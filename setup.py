@@ -70,12 +70,10 @@ setup(
     author="torchrl contributors",
     author_email="vmoens@fb.com",
     packages=_get_packages(branch, tag),
-    # ext_modules=[CMakeExtension("torchrl", "./torchrl")],
-    # cmdclass=dict(build_ext=CMakeBuild, test=GoogleTestCommand),
-    ext_modules=setup_helpers.get_ext_modules(),
-    cmdclass={
-        'build_ext': setup_helpers.CMakeBuild,
-        'clean': clean,
-    },
+    # ext_modules=setup_helpers.get_ext_modules(),
+    # cmdclass={
+    #     'build_ext': setup_helpers.CMakeBuild,
+    #     'clean': clean,
+    # },
     install_requires=[pytorch_package_dep],
 )
