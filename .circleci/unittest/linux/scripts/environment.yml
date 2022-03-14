@@ -11,6 +11,8 @@ dependencies:
     - cloudpickle
     - gym_retro
     - gym
+    - pygame
+    - gym[accept-rom-license]
     - gym[atari]
     - moviepy
     - tqdm
