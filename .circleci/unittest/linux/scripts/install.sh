@@ -54,8 +54,6 @@ fi
 #PYTORCH_VERSION="$(python -c "import torch; print(torch.__version__)")" python setup.py develop bdist_wheel -d $WHEELS_FOLDER
 #cd ../..
 
-yum makecache
-yum -y install glfw-devel
 
 printf "* Installing torchrl\n"
 python setup.py develop
