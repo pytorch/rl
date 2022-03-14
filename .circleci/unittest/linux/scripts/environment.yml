@@ -10,6 +10,8 @@ dependencies:
     - future
     - cloudpickle
     - gym_retro
+    - gym
+    - gym["atari"]
     - moviepy
     - tqdm
     - pytest

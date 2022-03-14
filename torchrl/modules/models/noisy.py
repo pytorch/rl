@@ -45,8 +45,8 @@ class NoisyLinear(nn.Linear):
         std_init: float = 0.1,
     ):
         nn.Module.__init__(self)
-        self.in_features = in_features
-        self.out_features = out_features
+        self.in_features = int(in_features)
+        self.out_features = int(out_features)
         self.std_init = std_init
 
         self.weight_mu = nn.Parameter(
