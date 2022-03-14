@@ -579,7 +579,7 @@ class BinaryDiscreteTensorSpec(TensorSpec):
             *shape, *self.shape, device=self.device, dtype=self.dtype
         ).bernoulli_()
 
-    def index(self, index: torch.Tensor, tensor_to_index: torch.Tensor) -> torch.Tensor:
+    def index(self, index: torch.Tensor, tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
         index = index.nonzero().squeeze()
         index = index.expand(*tensor_to_index.shape[:-1], index.shape[-1])
         return tensor_to_index.gather(-1, index)
@@ -662,7 +662,7 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         out = torch.stack([val.argmax(-1) for val in vals], -1).numpy()
         return out
 
-    def index(self, index: torch.Tensor, tensor_to_index: torch.Tensor) -> torch.Tensor:
+    def index(self, index: torch.Tensor, tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
         indices = self._split(index)
         tensor_to_index = self._split(tensor_to_index)
 
@@ -749,7 +749,7 @@ class CompositeSpec(TensorSpec):
     def is_in(self, val: Union[dict, _TensorDict]) -> bool:  # type: ignore
         return all([self[key].is_in(val.get(key)) for key in self._specs])
 
-    def project(self, val: _TensorDict) -> _TensorDict:
+    def project(self, val: _TensorDict) -> _TensorDict:  # type: ignore
         for key in self._specs:
             _val = val.get(key)
             if not self._specs[key].is_in(_val):
