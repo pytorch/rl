@@ -15,17 +15,17 @@ from ...data.utils import numpy_to_torch_dtype_dict
 
 try:
     import dm_control
-except ImportError:
-    _has_dmc = False
-else:
     from dm_control.suite.wrappers import pixels
     from dm_control import suite
     import dm_env
     import collections
-
     _has_dmc = True
+    __all__ = ["DMControlEnv"]
 
-__all__ = ["DMControlEnv"]
+except:
+    _has_dmc = False
+    __all__ = []
+
 
 
 def _dmcontrol_to_torchrl_spec_transform(
