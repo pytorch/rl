@@ -44,7 +44,7 @@ if [ "${CU_VERSION:-}" == cpu ] ; then
     # use pip to install pytorch as conda can frequently pick older release
     pip install torch torchvision # -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
 else
-    conda install -y pytorch torchvision cudatoolkit=10.2 # -c pytorch-nightly
+    conda install -y pytorch torchvision cudatoolkit=10.2 -c pytorch #-nightly
 fi
 
 #printf "Installing functorch\n"
