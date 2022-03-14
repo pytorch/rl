@@ -2,7 +2,6 @@ channels:
   - pytorch
   - defaults
 dependencies:
-  - python=3.8
   - pip
   - cmake >= 3.18
   - pip:
