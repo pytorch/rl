@@ -6,7 +6,7 @@ from typing import Union, Tuple
 import torch
 from torch import nn
 
-from torchrl.data.postprocs.utils import expand_as_right
+from torchrl.data.utils import expand_as_right
 from torchrl.data.tensordict.tensordict import _TensorDict
 
 __all__ = ["MultiStep"]

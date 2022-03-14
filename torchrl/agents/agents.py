@@ -24,7 +24,7 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     ReplayBuffer,
 )
-from torchrl.data.postprocs.utils import expand_right
+from torchrl.data.utils import expand_right
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.transforms import TransformedEnv
 from torchrl.envs.common import _EnvClass

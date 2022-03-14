@@ -1,3 +1,5 @@
+import os
+
 import pytest
 import torch
 
@@ -7,10 +9,16 @@ from torchrl.envs.libs.gym import _has_gym, _get_envs as _get_envs_gym
 
 import yaml
 
-with open("configs/atari.yaml", "r") as file:
-    atari_confs = yaml.load(file, Loader=yaml.FullLoader)
+try:
+    this_dir = os.path.dirname(os.path.realpath(__file__))
+    with open(os.path.join(this_dir, "configs", "atari.yaml"), "r") as file:
+        atari_confs = yaml.load(file, Loader=yaml.FullLoader)
+    _atari_found = True
+except:
+    _atari_found = False
 
 
+@pytest.mark.skipif(not _atari_found, reason="no _atari_found found")
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
 @pytest.mark.parametrize("env_name", atari_confs["atari_envs"])
 @pytest.mark.parametrize("env_suffix", atari_confs["version"])
@@ -20,6 +28,7 @@ def test_atari(env_name, env_suffix, frame_skip):
     env.rollout(n_steps=50)
 
 
+@pytest.mark.skipif(not _atari_found, reason="no _atari_found found")
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
 @pytest.mark.parametrize("env_name", _get_envs_gym())
 @pytest.mark.parametrize("from_pixels", [False, True])

@@ -527,8 +527,8 @@ class TDModuleWrapper(nn.Module):
 
     Examples:
         This class can be used for exploration wrappers
-        >>> from torchrl.modules import TDModuleWrapper, TDModule
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, expand_as_right
+        >>> from torchrl.data.utils import expand_as_right        >>> from torchrl.modules import TDModuleWrapper, TDModule
+        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
         >>> import torch
         >>>
         >>> class EpsilonGreedyExploration(TDModuleWrapper):

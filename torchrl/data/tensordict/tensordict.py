@@ -27,11 +27,10 @@ from warnings import warn
 import numpy as np
 import torch
 
-from torchrl.data.postprocs.utils import expand_as_right
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.metatensor import MetaTensor
 from torchrl.data.tensordict.utils import _sub_index, _getitem_batch_size
-from torchrl.data.utils import INDEX_TYPING, DEVICE_TYPING
+from torchrl.data.utils import INDEX_TYPING, DEVICE_TYPING, expand_as_right
 
 __all__ = [
     "TensorDict",
