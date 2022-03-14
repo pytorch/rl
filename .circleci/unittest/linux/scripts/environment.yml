@@ -11,7 +11,7 @@ dependencies:
     - cloudpickle
     - gym_retro
     - gym
-    - gym-atari
+    - gym[atari]
     - moviepy
     - tqdm
     - pytest
