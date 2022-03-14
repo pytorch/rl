@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 
 import pytest
 import torch
@@ -16,6 +17,7 @@ try:
     _atari_found = True
 except:
     _atari_found = False
+    atari_confs = defaultdict(lambda: "")
 
 
 @pytest.mark.skipif(not _atari_found, reason="no _atari_found found")

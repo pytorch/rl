@@ -1,5 +1,6 @@
 import argparse
 import os.path
+from collections import defaultdict
 
 import numpy as np
 import pytest
@@ -34,6 +35,7 @@ try:
     _atari_found = True
 except:
     _atari_found = False
+    atari_confs = defaultdict(lambda: "")
 
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
 ## the serial and parallel batched envs
