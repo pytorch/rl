@@ -57,6 +57,5 @@ fi
 yum makecache
 yum -y install glfw-devel
 
-# printf "* Installing torchrl\n"
-# python setup.py developp
-printf "PYTHONPATH=${PYTHONPATH}"
+printf "* Installing torchrl\n"
+python setup.py developp
