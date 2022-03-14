@@ -30,23 +30,24 @@ def test_atari(env_name, env_suffix, frame_skip):
     env.rollout(n_steps=50)
 
 
-@pytest.mark.skipif(not _has_gym, reason="no gym library found")
-@pytest.mark.parametrize("env_name", _get_envs_gym())
-@pytest.mark.parametrize("from_pixels", [False, True])
-def test_gym(env_name, from_pixels):
-    print(f"testing {env_name} with from_pixels={from_pixels}")
-    torch.manual_seed(0)
-    env = GymEnv(env_name, frame_skip=4, from_pixels=from_pixels)
-    env.set_seed(0)
-    td1 = env.rollout(n_steps=10, auto_reset=True)
-    tdb = env.rollout(n_steps=10, auto_reset=True)
-    if not tdb.get("done").sum():
-        tdc = env.rollout(n_steps=10, auto_reset=False)
-    torch.manual_seed(0)
-    env = GymEnv(env_name, frame_skip=4, from_pixels=from_pixels)
-    env.set_seed(0)
-    td2 = env.rollout(n_steps=10, auto_reset=True)
-    assert_allclose_td(td1, td2)
+# TODO: check gym envs in a smart, efficient way
+# @pytest.mark.skipif(not _has_gym, reason="no gym library found")
+# @pytest.mark.parametrize("env_name", _get_envs_gym())
+# @pytest.mark.parametrize("from_pixels", [False, True])
+# def test_gym(env_name, from_pixels):
+#     print(f"testing {env_name} with from_pixels={from_pixels}")
+#     torch.manual_seed(0)
+#     env = GymEnv(env_name, frame_skip=4, from_pixels=from_pixels)
+#     env.set_seed(0)
+#     td1 = env.rollout(n_steps=10, auto_reset=True)
+#     tdb = env.rollout(n_steps=10, auto_reset=True)
+#     if not tdb.get("done").sum():
+#         tdc = env.rollout(n_steps=10, auto_reset=False)
+#     torch.manual_seed(0)
+#     env = GymEnv(env_name, frame_skip=4, from_pixels=from_pixels)
+#     env.set_seed(0)
+#     td2 = env.rollout(n_steps=10, auto_reset=True)
+#     assert_allclose_td(td1, td2)
 
 
 if __name__ == "__main__":
