@@ -65,3 +65,4 @@ yum -y install glfw-devel
 
 printf "* Installing torchrl\n"
 python setup.py develop
+printf "PYTHONPATH=${PYTHONPATH}"
