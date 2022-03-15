@@ -1,8 +1,11 @@
+import time
+
 import pytest
 import torch
 from torch import multiprocessing as mp
 
 from torchrl.agents.env_creator import EnvCreator
+from torchrl.data import TensorDict
 from torchrl.data.transforms import VecNorm, TransformedEnv
 from torchrl.envs import GymEnv, ParallelEnv
 
@@ -27,8 +30,17 @@ def _test_vecnorm_subproc(idx, queue_out: mp.Queue, queue_in: mp.Queue):
     reward_ssq = t._td.get("reward_ssq").clone()
     reward_count = t._td.get("reward_ssq").clone()
 
-    queue_out.put((obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count))
-
+    td_out = TensorDict({
+        'obs_sum': obs_sum,
+        'obs_ssq': obs_ssq,
+        'obs_count': obs_count,
+        'reward_sum': reward_sum,
+        'reward_ssq': reward_ssq,
+        'reward_count': reward_count
+    }, []).share_memory_()
+    queue_out.put(td_out)
+    msg = queue_in.get(timeout=TIMEOUT)
+    assert msg == "all_done"
 
 @pytest.mark.parametrize("nprc", [2, 5])
 def test_vecnorm_parallel(nprc):
@@ -65,8 +77,13 @@ def test_vecnorm_parallel(nprc):
     reward_count = td.get("reward_ssq").clone()
 
     for idx in range(nprc):
-        tup = queues[idx][0].get()
-        _obs_sum, _obs_ssq, _obs_count, _reward_sum, _reward_ssq, _reward_count = tup
+        td_out = queues[idx][0].get(timeout=TIMEOUT)
+        _obs_sum = td_out.get('obs_sum')
+        _obs_ssq = td_out.get('obs_ssq')
+        _obs_count = td_out.get('obs_count')
+        _reward_sum = td_out.get('reward_sum')
+        _reward_ssq = td_out.get('reward_ssq')
+        _reward_count = td_out.get('reward_count')
         assert (obs_sum == _obs_sum).all()
         assert (obs_ssq == _obs_ssq).all()
         assert (obs_count == _obs_count).all()
@@ -83,6 +100,10 @@ def test_vecnorm_parallel(nprc):
             _reward_count,
         )
 
+    msg = "all_done"
+    for idx in range(nprc):
+        queues[idx][1].put(msg)
+
 
 def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.Queue):
     env = make_env()
@@ -90,7 +111,7 @@ def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.
     for _ in range(10):
         env.rand_step()
     queue_out.put(True)
-    msg = queue_in.get()
+    msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "all_done"
     t = env.transform
     obs_sum = t._td.get("next_observation_sum").clone()
@@ -101,6 +122,8 @@ def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.
     reward_count = t._td.get("reward_ssq").clone()
 
     queue_out.put((obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count))
+    msg = queue_in.get(timeout=TIMEOUT)
+    assert msg == "all_done"
 
 
 @pytest.mark.parametrize("nprc", [2, 5])
@@ -156,6 +179,9 @@ def test_vecnorm_parallel_auto(nprc):
             _reward_ssq,
             _reward_count,
         )
+    msg = "all_done"
+    for idx in range(nprc):
+        queues[idx][1].put(msg)
 
 
 def _run_parallelenv(parallel_env, queue_in, queue_out):

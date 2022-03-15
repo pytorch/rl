@@ -363,7 +363,10 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             torch.rand(*shape, self.space.n, device=self.device), hard=True, dim=-1
         ).to(torch.long)
 
-    def encode(self, val: torch.Tensor, space: Optional[DiscreteBox] = None) -> torch.Tensor:  # type: ignore
+    def encode(self, val: Union[np.ndarray, torch.Tensor], space: Optional[DiscreteBox] = None) -> torch.Tensor:  # type: ignore
+        if not isinstance(val, torch.Tensor):
+            val = torch.tensor(val)
+
         val = torch.tensor(val, dtype=torch.long)
         if space is None:
             space = self.space
@@ -389,7 +392,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             return np.array(vals).reshape(tuple(val.shape))
         return val
 
-    def index(self, index: torch.Tensor, tensor_to_index: torch.Tensor) -> torch.Tensor:
+    def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
+        if not isinstance(index, torch.Tensor):
+            raise ValueError(f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)")
         index = index.nonzero().squeeze()
         index = index.expand(*tensor_to_index.shape[:-1], index.shape[-1])
         return tensor_to_index.gather(-1, index)
@@ -579,7 +584,9 @@ class BinaryDiscreteTensorSpec(TensorSpec):
             *shape, *self.shape, device=self.device, dtype=self.dtype
         ).bernoulli_()
 
-    def index(self, index: torch.Tensor, tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
+    def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
+        if not isinstance(index, torch.Tensor):
+            raise ValueError(f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)")
         index = index.nonzero().squeeze()
         index = index.expand(*tensor_to_index.shape[:-1], index.shape[-1])
         return tensor_to_index.gather(-1, index)
@@ -640,7 +647,7 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         ).squeeze(-2)
         return x
 
-    def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
+    def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:  # type: ignore
         if not isinstance(val, torch.Tensor):
             val = torch.tensor(val)
 
@@ -662,7 +669,9 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         out = torch.stack([val.argmax(-1) for val in vals], -1).numpy()
         return out
 
-    def index(self, index: torch.Tensor, tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
+    def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
+        if not isinstance(index, torch.Tensor):
+            raise ValueError(f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)")
         indices = self._split(index)
         tensor_to_index = self._split(tensor_to_index)
 
