@@ -1,28 +1,27 @@
-from argparse import Namespace, ArgumentParser
-from typing import Optional, Callable, Union
+from argparse import ArgumentParser, Namespace
+from typing import Callable, Optional, Union
 
 import torch
-from torch.utils.tensorboard import SummaryWriter
 
 from torchrl.agents.env_creator import env_creator, EnvCreator
 from torchrl.data.transforms import (
+    CatFrames,
+    CatTensors,
+    Compose,
     DoubleToFloat,
-    TransformedEnv,
     FiniteTensorDictCheck,
+    GrayScale,
+    NoopResetEnv,
+    ObservationNorm,
+    Resize,
     RewardScaling,
     ToTensorImage,
-    Resize,
-    GrayScale,
-    CatFrames,
-    ObservationNorm,
-    CatTensors,
+    TransformedEnv,
     VecNorm,
-    Compose,
-    NoopResetEnv,
 )
-from torchrl.envs import GymEnv, RetroEnv, DMControlEnv, ParallelEnv
+from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
 from torchrl.envs.common import _EnvClass
-from torchrl.record.recorder import VideoRecorder, TensorDictRecorder
+from torchrl.record.recorder import VideoRecorder
 
 __all__ = [
     "correct_for_frame_skip",
@@ -75,7 +74,7 @@ def correct_for_frame_skip(args: Namespace) -> Namespace:
 def transformed_env_constructor(
     args: Namespace,
     video_tag: str = "",
-    writer: Optional[SummaryWriter] = None,
+    writer: Optional["SummaryWriter"] = None,
     stats: Optional[dict] = None,
     norm_obs_only: bool = False,
     use_env_creator: bool = True,
@@ -112,7 +111,9 @@ def transformed_env_constructor(
                 Resize(84, 84),
                 GrayScale(),
                 CatFrames(keys=["next_observation_pixels"]),
-                ObservationNorm(loc=-1.0, scale=2.0, keys=["next_observation_pixels"]),
+                ObservationNorm(
+                    loc=-1.0, scale=2.0, keys=["next_observation_pixels"]
+                ),
             ]
         if norm_rewards:
             reward_scaling = 1.0
@@ -144,12 +145,16 @@ def transformed_env_constructor(
                 else:
                     _stats = stats
                 transforms.append(
-                    ObservationNorm(**_stats, keys=[out_key], standard_normal=True)
+                    ObservationNorm(
+                        **_stats, keys=[out_key], standard_normal=True
+                    )
                 )
             else:
                 transforms.append(
                     VecNorm(
-                        keys=[out_key, "reward"] if not _norm_obs_only else [out_key],
+                        keys=[out_key, "reward"]
+                        if not _norm_obs_only
+                        else [out_key],
                         decay=0.9999,
                     )
                 )
@@ -244,11 +249,13 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=1,
         help="frame_skip for the environment. Note that this value does NOT impact the buffer size,"
-        "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
-        "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
-        "the actual number of frames retrieved will be 200e6. Default=1.",
+             "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
+             "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
+             "the actual number of frames retrieved will be 200e6. Default=1.",
     )
-    parser.add_argument("--reward_scaling", type=float, help="scale of the reward.")
+    parser.add_argument(
+        "--reward_scaling", type=float, help="scale of the reward."
+    )
     parser.add_argument(
         "--init_env_steps",
         type=int,
@@ -259,13 +266,13 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "--vecnorm",
         action="store_true",
         help="Normalizes the environment observation and reward outputs with the running statistics "
-        "obtained across processes.",
+             "obtained across processes.",
     )
     parser.add_argument(
         "--norm_rewards",
         action="store_true",
         help="If True, rewards will be normalized on the fly. This may interfere with SAC update rule and "
-        "should be used cautiously.",
+             "should be used cautiously.",
     )
     parser.add_argument(
         "--noops",
@@ -278,7 +285,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=1000,
         help="Number of steps before a reset of the environment is called (if it has not been flagged as "
-        "done before). ",
+             "done before). ",
     )
 
     return parser

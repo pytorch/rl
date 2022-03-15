@@ -19,8 +19,7 @@ class _LossModule(nn.Module):
     """
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
-        """
-        It is designed to read an input TensorDict and return another tensordict
+        """It is designed to read an input TensorDict and return another tensordict
         with loss keys named "loss*".
         Splitting the loss in its component can then be used by the agent to log the various loss values throughout
         training. Other scalars present in the output tensordict will be logged too.
@@ -53,7 +52,9 @@ class _LossModule(nn.Module):
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, Parameter]]:
-        for name, param in super().named_parameters(prefix=prefix, recurse=recurse):
+        for name, param in super().named_parameters(
+            prefix=prefix, recurse=recurse
+        ):
             if not name.startswith("_target"):
                 yield name, param
 

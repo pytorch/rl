@@ -1,6 +1,5 @@
 import contextlib
-from collections import Callable
-from typing import Tuple, Optional
+from typing import Callable, Optional, Tuple
 
 import torch
 from torch.utils._pytree import tree_map
@@ -27,7 +26,11 @@ class FiniteTensor(torch.Tensor):
 
     @classmethod
     def __torch_dispatch__(
-        cls, func: Callable, types, args: Tuple = (), kwargs: Optional[dict] = None
+        cls,
+        func: Callable,
+        types,
+        args: Tuple = (),
+        kwargs: Optional[dict] = None,
     ):
         # TODO: also explicitly recheck invariants on inplace/out mutation
         if kwargs:

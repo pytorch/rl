@@ -145,21 +145,22 @@ class TestStack:
             [
                 3,
                 5,
-                10,
-                100,
+                7,
+                8,
             ]
         ),
         slice(200),
     ],
 )
 @pytest.mark.parametrize("dtype", [torch.float, torch.bool])
-def test_memmap(idx, dtype):
-    N = 5000
+def test_memmap(idx, dtype, large_scale=False):
+    N = 5000 if large_scale else 10
+    H = 128 if large_scale else 8
     td = TensorDict(
         source={
-            "a": torch.zeros(N, 3, 128, 128, dtype=dtype),
-            "b": torch.zeros(N, 3, 128, 128, dtype=dtype),
-            "c": torch.zeros(N, 3, 128, 128, dtype=dtype),
+            "a": torch.zeros(N, 3, H, H, dtype=dtype),
+            "b": torch.zeros(N, 3, H, H, dtype=dtype),
+            "c": torch.zeros(N, 3, H, H, dtype=dtype),
         },
         batch_size=[
             N,

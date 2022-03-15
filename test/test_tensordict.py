@@ -48,10 +48,6 @@ def test_stack():
     assert (td_reconstruct == td).all()
 
 
-def test_del():
-    raise NotImplementedError
-
-
 def test_tensor_dict_indexing():
     torch.manual_seed(1)
     td = TensorDict({}, batch_size=(4, 5))
@@ -79,7 +75,10 @@ def test_tensor_dict_indexing():
     ).all(), f"td and td_reconstruct differ, got {td == td_reconstruct}"
 
     x = torch.randn(4, 5)
-    td = TensorDict(source={"key1": torch.zeros(3, 4, 5)}, batch_size=[3, 4], )
+    td = TensorDict(
+        source={"key1": torch.zeros(3, 4, 5)},
+        batch_size=[3, 4],
+    )
     td[0].set_("key1", x)
     torch.testing.assert_allclose(td.get("key1")[0], x)
     torch.testing.assert_allclose(td.get("key1")[0], td[0].get("key1"))
@@ -249,10 +248,6 @@ def test_savedtensordict():
     torch.testing.assert_allclose(ss_list[1].get("a"), vals[1])
     torch.testing.assert_allclose(ss_list[1].get("a"), ss[1].get("a"))
     torch.testing.assert_allclose(ss[1].get("a"), ss.get("a")[1])
-
-
-def test_merge():
-    raise NotImplementedError
 
 
 class TestTensorDicts:
@@ -451,7 +446,7 @@ class TestTensorDicts:
     @pytest.mark.parametrize(
         "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
     )
-    def test_cpu_cuda(self, td_name, device):
+    def test_cpu_cuda(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
         td_device = td.cuda()

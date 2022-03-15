@@ -6,7 +6,14 @@ from torch import nn
 
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
-from torchrl.modules import QValueActor, ActorValueOperator, TDModule, Actor, ValueOperator, ProbabilisticActor
+from torchrl.modules import (
+    QValueActor,
+    ActorValueOperator,
+    TDModule,
+    Actor,
+    ValueOperator,
+    ProbabilisticActor,
+)
 from torchrl.modules.models import *
 
 
@@ -113,8 +120,12 @@ def test_value_based_policy():
 def test_actorcritic():
     spec = None
     in_keys = ["obs"]
-    common_module = TDModule(None, nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"])
-    policy_operator = ProbabilisticActor(None, nn.Linear(4, 5), in_keys=["hidden"], return_log_prob=True)
+    common_module = TDModule(
+        None, nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"]
+    )
+    policy_operator = ProbabilisticActor(
+        None, nn.Linear(4, 5), in_keys=["hidden"], return_log_prob=True
+    )
     value_operator = ValueOperator(nn.Linear(4, 1), in_keys=["hidden"])
     op = ActorValueOperator(
         common_operator=common_module,
@@ -140,13 +151,17 @@ def test_actorcritic():
         td_total.get("state_value"), td_value.get("state_value")
     )
 
-    value_params = set(list(op.get_value_operator().parameters()) + list(op.module[0].parameters()))
+    value_params = set(
+        list(op.get_value_operator().parameters()) + list(op.module[0].parameters())
+    )
     value_params2 = set(value_op.parameters())
     assert len(value_params.difference(value_params2)) == 0 and len(
         value_params.intersection(value_params2)
     ) == len(value_params)
 
-    policy_params = set(list(op.get_policy_operator().parameters()) + list(op.module[0].parameters()))
+    policy_params = set(
+        list(op.get_policy_operator().parameters()) + list(op.module[0].parameters())
+    )
     policy_params2 = set(policy_op.parameters())
     assert len(policy_params.difference(policy_params2)) == 0 and len(
         policy_params.intersection(policy_params2)

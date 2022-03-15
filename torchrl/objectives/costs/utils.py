@@ -28,7 +28,10 @@ class _context_manager:
 
 
 def distance_loss(
-    v1: torch.Tensor, v2: torch.Tensor, loss_function: str, strict_shape: bool = True
+    v1: torch.Tensor,
+    v2: torch.Tensor,
+    loss_function: str,
+    strict_shape: bool = True,
 ) -> torch.Tensor:
     """
     Computes a distance loss between two tensors.
@@ -103,9 +106,14 @@ class _TargetNetUpdate:
         }
         if not len(self.net_pairs):
             raise RuntimeError("No module found")
-        net = nn.ModuleList([getattr(loss_module, key) for key in self.net_pairs])
+        net = nn.ModuleList(
+            [getattr(loss_module, key) for key in self.net_pairs]
+        )
         target_net = nn.ModuleList(
-            [getattr(loss_module, value) for key, value in self.net_pairs.items()]
+            [
+                getattr(loss_module, value)
+                for key, value in self.net_pairs.items()
+            ]
         )
 
         self.net = net
@@ -134,7 +142,9 @@ class SoftUpdate(_TargetNetUpdate):
     """
 
     def __init__(
-        self, loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"], eps: Number = 0.999
+        self,
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
+        eps: float = 0.999,
     ):
         if not (eps < 1.0 and eps > 0.0):
             raise ValueError(
@@ -169,7 +179,7 @@ class HardUpdate(_TargetNetUpdate):
     def __init__(
         self,
         loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
-        value_network_update_interval: Number = 1000,
+        value_network_update_interval: float = 1000,
     ):
         super(HardUpdate, self).__init__(loss_module)
         self.value_network_update_interval = value_network_update_interval
@@ -211,7 +221,7 @@ def next_state_value(
     tensor_dict: _TensorDict,
     operator: ProbabilisticTDModule,
     next_val_key: str = "state_action_value",
-    gamma: Number = 0.99,
+    gamma: float = 0.99,
 ) -> torch.Tensor:
     """
     Computes the next state value (without gradient) to compute a target for the MSE loss

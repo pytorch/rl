@@ -1,16 +1,16 @@
 from types import ModuleType
-from typing import List, Iterable, Optional
+from typing import List, Optional, Sequence
 
 import torch
 
 from torchrl.data import (
-    TensorSpec,
-    OneHotDiscreteTensorSpec,
     BinaryDiscreteTensorSpec,
+    CompositeSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
+    OneHotDiscreteTensorSpec,
+    TensorSpec,
     UnboundedContinuousTensorSpec,
-    CompositeSpec,
 )
 from ..common import GymLikeEnv
 from ...data.utils import numpy_to_torch_dtype_dict
@@ -32,9 +32,13 @@ else:
 __all__ = ["GymEnv", "RetroEnv"]
 
 
-def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec:
+def _gym_to_torchrl_spec_transform(
+    spec, dtype=None, device="cpu"
+) -> TensorSpec:
     if isinstance(spec, gym.spaces.tuple.Tuple):
-        raise NotImplementedError(f"gym.spaces.tuple.Tuple mapping not yet implemented")
+        raise NotImplementedError(
+            f"gym.spaces.tuple.Tuple mapping not yet implemented"
+        )
     if isinstance(spec, gym.spaces.discrete.Discrete):
         return OneHotDiscreteTensorSpec(spec.n)
     elif isinstance(spec, gym.spaces.multi_binary.MultiBinary):
@@ -106,7 +110,7 @@ class GymEnv(GymLikeEnv):
         return gym
 
     def _set_seed(self, seed: int) -> int:
-        self._env.seed(seed)
+        self._env.reset(seed=seed)
         return seed
 
     def _build_env(
@@ -136,13 +140,17 @@ class GymEnv(GymLikeEnv):
             self.wrapper_frame_skip = self.frame_skip
         self._env = env
 
-        from_pixels = from_pixels or _is_from_pixels(self._env.observation_space)
+        from_pixels = from_pixels or _is_from_pixels(
+            self._env.observation_space
+        )
         self.from_pixels = from_pixels
         if from_pixels:
             self._env.reset()
             self._env = PixelObservationWrapper(self._env, pixels_only)
 
-        self.action_spec = _gym_to_torchrl_spec_transform(self._env.action_space)
+        self.action_spec = _gym_to_torchrl_spec_transform(
+            self._env.action_space
+        )
         self.observation_spec = _gym_to_torchrl_spec_transform(
             self._env.observation_space
         )
@@ -157,7 +165,7 @@ class GymEnv(GymLikeEnv):
         return seed
 
 
-def _get_retro_envs() -> Iterable:
+def _get_retro_envs() -> Sequence:
     if not _has_retro:
         return tuple()
     else:

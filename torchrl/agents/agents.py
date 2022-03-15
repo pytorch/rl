@@ -3,14 +3,12 @@ from __future__ import annotations
 import pathlib
 import warnings
 from collections import OrderedDict
-from numbers import Number
 from textwrap import indent
-from typing import Dict, Callable, Optional, Union
+from typing import Callable, Dict, Optional, Union
 
 import numpy as np
 import torch.nn
 from torch import nn, optim
-from torch.utils.tensorboard import SummaryWriter
 
 try:
     from tqdm import tqdm
@@ -21,16 +19,16 @@ except:
 
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import (
-    TensorDictReplayBuffer,
-    TensorDictPrioritizedReplayBuffer,
     ReplayBuffer,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
 )
-from torchrl.data.postprocs.utils import expand_right
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.transforms import TransformedEnv
+from torchrl.data.utils import expand_right
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import TDModuleWrapper, reset_noise
+from torchrl.modules import reset_noise, TDModuleWrapper
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 
@@ -48,8 +46,7 @@ __all__ = ["Agent"]
 
 
 class Agent:
-    """
-    A generic Agent class.
+    """A generic Agent class.
 
     An agent is responsible of collecting data and training the model.
     To keep the class as versatile as possible, Agent does not construct any of its components: they all must be
@@ -59,7 +56,7 @@ class Agent:
     evaluating the training progress.
 
     Args:
-        collector (Iterable[_TensorDict]): An iterable returning batches of data in a TensorDict form of shape
+        collector (Sequence[_TensorDict]): An iterable returning batches of data in a TensorDict form of shape
             [batch x time steps].
         total_frames (int): Total number of frames to be collected during training.
         loss_module (_LossModule): A module that reads TensorDict batches (possibly sampled from a replay buffer) and
@@ -140,7 +137,7 @@ class Agent:
         target_net_updater: Optional[_TargetNetUpdate] = None,
         policy_exploration: Optional[TDModuleWrapper] = None,
         replay_buffer: Optional[ReplayBuffer] = None,
-        writer: Optional[SummaryWriter] = None,
+        writer: Optional["SummaryWriter"] = None,
         update_weights_interval: int = -1,
         record_interval: int = 10000,
         record_frames: int = 1000,
@@ -148,7 +145,7 @@ class Agent:
         optim_steps_per_batch: int = 500,
         batch_size: int = 256,
         clip_grad_norm: bool = True,
-        clip_norm: Number = 100.0,
+        clip_norm: float = 100.0,
         progress_bar: bool = True,
         seed: int = 42,
         save_agent_interval: int = 10000,
@@ -200,7 +197,9 @@ class Agent:
     def save_agent(self) -> None:
         _save = False
         if self.save_agent_file is not None:
-            if (self._collected_frames - self._last_save) > self.save_agent_interval:
+            if (
+                self._collected_frames - self._last_save
+            ) > self.save_agent_interval:
                 self._last_save = self._collected_frames
                 _save = True
         if _save:
@@ -227,7 +226,12 @@ class Agent:
             )
         self.collector.load_state_dict(loaded_dict["env"])
         self.model.load_state_dict(loaded_dict["model"])
-        for key in ["_collected_frames", "_last_log", "_last_save", "_optim_count"]:
+        for key in [
+            "_collected_frames",
+            "_last_log",
+            "_last_save",
+            "_optim_count",
+        ]:
             setattr(self, key, loaded_dict[key])
         return self
 
@@ -269,7 +273,9 @@ class Agent:
         collected_frames = 0
         for i, batch in enumerate(self.collector):
             if "mask" in batch.keys():
-                current_frames = batch.get("mask").sum().item() * self.frame_skip
+                current_frames = (
+                    batch.get("mask").sum().item() * self.frame_skip
+                )
             else:
                 current_frames = batch.numel() * self.frame_skip
             collected_frames += current_frames
@@ -286,7 +292,9 @@ class Agent:
             else:
                 if "mask" in batch.keys():
                     reward_training = (
-                        batch.get("reward")[batch.get("mask").squeeze(-1)].mean().item()
+                        batch.get("reward")[batch.get("mask").squeeze(-1)]
+                            .mean()
+                            .item()
                     )
                 else:
                     reward_training = batch.get("reward").mean().item()
@@ -332,8 +340,7 @@ class Agent:
         tensordict.set_("reward", reward)
 
     def _collector_scheduler_step(self, step: int, current_frames: int):
-        """
-        Runs entropy annealing steps for exploration, policy weights update across workers etc.
+        """Runs entropy annealing steps for exploration, policy weights update across workers etc.
         Returns:
 
         """
@@ -350,7 +357,9 @@ class Agent:
         average_grad_norm = 0.0
         average_losses = None
 
-        self.loss_module.apply(reset_noise)  # TODO: group in loss_module.reset?
+        self.loss_module.apply(
+            reset_noise
+        )  # TODO: group in loss_module.reset?
         self.loss_module.reset()
 
         for j in range(self.optim_steps_per_batch):
@@ -365,12 +374,18 @@ class Agent:
 
             sub_batch_device = sub_batch.to(self.loss_module.device)
             losses_td = self.loss_module(sub_batch_device)
-            if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
+            if isinstance(
+                self.replay_buffer, TensorDictPrioritizedReplayBuffer
+            ):
                 self.replay_buffer.update_priority(sub_batch_device)
 
             # sum all keys that start with 'loss_'
             loss = sum(
-                [item for key, item in losses_td.items() if key.startswith("loss")]
+                [
+                    item
+                    for key, item in losses_td.items()
+                    if key.startswith("loss")
+                ]
             )
             loss.backward()
             if average_losses is None:
@@ -381,7 +396,9 @@ class Agent:
                     average_losses.set(key, val * j / (j + 1) + item / (j + 1))
 
             grad_norm = self._grad_clip()
-            average_grad_norm = average_grad_norm * j / (j + 1) + grad_norm / (j + 1)
+            average_grad_norm = average_grad_norm * j / (j + 1) + grad_norm / (
+                j + 1
+            )
             self.optimizer.step()
             self.optimizer.zero_grad()
 
@@ -398,8 +415,7 @@ class Agent:
             )
 
     def _optim_schedule_step(self) -> None:
-        """
-        Runs scheduler steps, target network update steps etc.
+        """Runs scheduler steps, target network update steps etc.
         Returns:
         """
         if self.optim_scheduler is not None:
@@ -408,8 +424,7 @@ class Agent:
             self.target_net_updater.step()
 
     def _sub_sample_batch(self, batch: _TensorDict) -> _TensorDict:
-        """
-        Sub-sampled part of a batch randomly.
+        """Sub-sampled part of a batch randomly.
         If the batch has one dimension, a random subsample of length self.bach_size will be returned.
         If the batch has two or more dimensions, it is assumed that the first dimension represents the batch,
         and the second the time. If so, the resulting subsample will contain consecutive samples across time.
@@ -418,19 +433,26 @@ class Agent:
         if batch.ndimension() == 1:
             return batch[torch.randperm(batch.shape[0])[: self.batch_size]]
 
-        sub_traj_len = self.sub_traj_len if self.sub_traj_len > 0 else batch.shape[1]
+        sub_traj_len = (
+            self.sub_traj_len if self.sub_traj_len > 0 else batch.shape[1]
+        )
         if "mask" in batch.keys():
             # if a valid mask is present, it's important to sample only valid steps
             traj_len = batch.get("mask").sum(1).squeeze()
             sub_traj_len = max(
-                self.min_sub_traj_len, min(sub_traj_len, traj_len.min().int().item())
+                self.min_sub_traj_len,
+                min(sub_traj_len, traj_len.min().int().item()),
             )
         else:
             traj_len = (
-                torch.ones(batch.shape[0], device=batch.device, dtype=torch.bool)
+                torch.ones(
+                    batch.shape[0], device=batch.device, dtype=torch.bool
+                )
                 * batch.shape[1]
             )
-        valid_trajectories = torch.arange(batch.shape[0])[traj_len >= sub_traj_len]
+        valid_trajectories = torch.arange(batch.shape[0])[
+            traj_len >= sub_traj_len
+            ]
 
         batch_size = self.batch_size // sub_traj_len
         traj_idx = valid_trajectories[
@@ -461,7 +483,9 @@ class Agent:
         td = td.apply(
             lambda t: t.gather(
                 dim=1,
-                index=expand_right(seq_idx, (batch_size, sub_traj_len, *t.shape[2:])),
+                index=expand_right(
+                    seq_idx, (batch_size, sub_traj_len, *t.shape[2:])
+                ),
             ),
             batch_size=(batch_size, sub_traj_len),
         )
@@ -480,14 +504,18 @@ class Agent:
     def _log(self, **kwargs) -> None:
         collected_frames = self._collected_frames
         for key, item in kwargs.items():
-            if (collected_frames - self._last_log.get(key, 0)) > self._log_interval:
+            if (
+                collected_frames - self._last_log.get(key, 0)
+            ) > self._log_interval:
                 self._last_log[key] = collected_frames
                 _log = True
             else:
                 _log = False
             method = WRITER_METHODS.get(key, "add_scalar")
             if _log and self.writer is not None:
-                getattr(self.writer, method)(key, item, global_step=collected_frames)
+                getattr(self.writer, method)(
+                    key, item, global_step=collected_frames
+                )
             if method == "add_scalar" and self.progress_bar:
                 self._pbar_str[key] = float(item)
 
@@ -522,7 +550,9 @@ class Agent:
 
     def __repr__(self) -> str:
         loss_str = indent(f"loss={self.loss_module}", 4 * " ")
-        policy_str = indent(f"policy_exploration={self.policy_exploration}", 4 * " ")
+        policy_str = indent(
+            f"policy_exploration={self.policy_exploration}", 4 * " "
+        )
         collector_str = indent(f"collector={self.collector}", 4 * " ")
         buffer_str = indent(f"buffer={self.replay_buffer}", 4 * " ")
         optimizer_str = indent(f"optimizer={self.optimizer}", 4 * " ")

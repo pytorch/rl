@@ -1,40 +1,38 @@
-from argparse import Namespace, ArgumentParser
-from numbers import Number
-from typing import Optional, Iterable
+from argparse import ArgumentParser, Namespace
+from typing import Optional, Sequence
 
 import torch
 from torch import nn
 
-from torchrl.data import UnboundedContinuousTensorSpec, DEVICE_TYPING
+from torchrl.data import DEVICE_TYPING, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvClass
 from torchrl.modules import ActorValueOperator, NoisyLinear, TDModule
 from torchrl.modules.distributions import (
     Delta,
-    TanhNormal,
-    TanhDelta,
     OneHotCategorical,
+    TanhDelta,
+    TanhNormal,
     TruncatedNormal,
 )
 from torchrl.modules.models.models import (
-    DuelingCnnDQNet,
+    ConvNet,
     DdpgCnnActor,
     DdpgCnnQNet,
-    DdpgMlpQNet,
     DdpgMlpActor,
-    MLP,
-    ConvNet,
+    DdpgMlpQNet,
+    DuelingCnnDQNet,
     LSTMNet,
+    MLP,
 )
 from torchrl.modules.td_module import (
-    QValueActor,
-    DistributionalQValueActor,
     Actor,
-    ProbabilisticTDModule,
+    DistributionalQValueActor,
+    QValueActor,
 )
 from torchrl.modules.td_module.actors import (
-    ValueOperator,
     ActorCriticWrapper,
     ProbabilisticActor,
+    ValueOperator,
 )
 
 DISTRIBUTIONS = {
@@ -150,8 +148,8 @@ def make_ddpg_actor(
     actor_net_kwargs: Optional[dict] = None,
     value_net_kwargs: Optional[dict] = None,
     atoms: int = 0,  # for distributional dqn
-    vmin: Number = -3,
-    vmax: Number = 3,
+    vmin: float = -3,
+    vmax: float = 3,
     device: DEVICE_TYPING = "cpu",
 ) -> torch.nn.ModuleList:
     """
@@ -209,8 +207,12 @@ def make_ddpg_actor(
             device=cpu)
     """
 
-    actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else dict()
-    value_net_kwargs = value_net_kwargs if value_net_kwargs is not None else dict()
+    actor_net_kwargs = (
+        actor_net_kwargs if actor_net_kwargs is not None else dict()
+    )
+    value_net_kwargs = (
+        value_net_kwargs if value_net_kwargs is not None else dict()
+    )
 
     linear_layer_class = torch.nn.Linear if not noisy else NoisyLinear
 
@@ -305,7 +307,7 @@ def make_ppo_model(
     proof_environment: _EnvClass,
     args: Namespace,
     device: DEVICE_TYPING,
-    in_keys_actor: Optional[Iterable[str]] = None,
+    in_keys_actor: Optional[Sequence[str]] = None,
     **kwargs,
 ) -> ActorValueOperator:
     """
@@ -427,7 +429,10 @@ def make_ppo_model(
                 activate_last_layer=True,
             )
         common_operator = TDModule(
-            spec=None, module=common_module, in_keys=in_keys_actor, out_keys=["hidden"]
+            spec=None,
+            module=common_module,
+            in_keys=in_keys_actor,
+            out_keys=["hidden"],
         )
 
         policy_net = MLP(
@@ -500,7 +505,7 @@ def make_ppo_model(
 
 def make_sac_model(
     proof_environment: _EnvClass,
-    in_keys: Optional[Iterable[str]] = None,
+    in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
     qvalue_net_kwargs=None,
     value_net_kwargs=None,
@@ -689,7 +694,7 @@ def parser_model_args_continuous(
             "--ou_exploration",
             action="store_true",
             help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
-            "efficient entropy-based exploration, this should be left for experimentation only.",
+                 "efficient entropy-based exploration, this should be left for experimentation only.",
         )
         parser.add_argument(
             "--distributional",
@@ -709,8 +714,8 @@ def parser_model_args_continuous(
             action="store_false",
             dest="double_qvalue",
             help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
-            "use two different qvalue networks trained independently and choose the lowest value "
-            "predicted to predict the state action value. This can be disabled by using this flag.",
+                 "use two different qvalue networks trained independently and choose the lowest value "
+                 "predicted to predict the state action value. This can be disabled by using this flag.",
         )
 
     if algorithm in ("SAC", "PPO"):

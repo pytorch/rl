@@ -1,31 +1,31 @@
-from numbers import Number
-from typing import Tuple, Optional, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
 
 from torchrl.data import (
-    TensorSpec,
     CompositeSpec,
-    NdUnboundedContinuousTensorSpec,
     NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
+    TensorSpec,
 )
 from ..common import GymLikeEnv
 from ...data.utils import numpy_to_torch_dtype_dict
 
 try:
-    import dm_control
-except ImportError:
-    _has_dmc = False
-else:
-    from dm_control.suite.wrappers import pixels
-    from dm_control import suite
-    import dm_env
     import collections
 
-    _has_dmc = True
+    import dm_control
+    import dm_env
+    from dm_control import suite
+    from dm_control.suite.wrappers import pixels
 
-__all__ = ["DMControlEnv"]
+    _has_dmc = True
+    __all__ = ["DMControlEnv"]
+
+except:
+    _has_dmc = False
+    __all__ = []
 
 
 def _dmcontrol_to_torchrl_spec_transform(
@@ -33,14 +33,18 @@ def _dmcontrol_to_torchrl_spec_transform(
 ) -> TensorSpec:
     if isinstance(spec, collections.OrderedDict):
         spec = {
-            k: _dmcontrol_to_torchrl_spec_transform(item) for k, item in spec.items()
+            k: _dmcontrol_to_torchrl_spec_transform(item)
+            for k, item in spec.items()
         }
         return CompositeSpec(**spec)
     elif isinstance(spec, dm_env.specs.BoundedArray):
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return NdBoundedTensorSpec(
-            shape=spec.shape, minimum=spec.minimum, maximum=spec.maximum, dtype=dtype
+            shape=spec.shape,
+            minimum=spec.minimum,
+            maximum=spec.maximum,
+            dtype=dtype,
         )
     elif isinstance(spec, dm_env.specs.Array):
         if dtype is None:
@@ -65,7 +69,7 @@ def _get_envs(to_dict: bool = True) -> dict:
     return d
 
 
-def _robust_to_tensor(array: Union[Number, np.ndarray]) -> torch.Tensor:
+def _robust_to_tensor(array: Union[float, np.ndarray]) -> torch.Tensor:
     if isinstance(array, np.ndarray):
         return torch.tensor(array.copy())
     else:
@@ -120,7 +124,9 @@ class DMControlEnv(GymLikeEnv):
             if render_kwargs is not None:
                 self.render_kwargs.update(render_kwargs)
             env = pixels.Wrapper(
-                env, pixels_only=self.pixels_only, render_kwargs=self.render_kwargs
+                env,
+                pixels_only=self.pixels_only,
+                render_kwargs=self.render_kwargs,
             )
         self._env = env
         return env
@@ -137,8 +143,8 @@ class DMControlEnv(GymLikeEnv):
         return _seed
 
     def _output_transform(
-        self, timestep_tuple: Tuple[dm_env._environment.TimeStep]
-    ) -> Tuple[np.ndarray, Number, bool]:
+        self, timestep_tuple: Tuple["TimeStep"]
+    ) -> Tuple[np.ndarray, float, bool]:
         if type(timestep_tuple) is not tuple:
             timestep_tuple = (timestep_tuple,)
         reward = timestep_tuple[0].reward
@@ -153,7 +159,9 @@ class DMControlEnv(GymLikeEnv):
 
     @property
     def observation_spec(self) -> TensorSpec:
-        return _dmcontrol_to_torchrl_spec_transform(self._env.observation_spec())
+        return _dmcontrol_to_torchrl_spec_transform(
+            self._env.observation_spec()
+        )
 
     @property
     def reward_spec(self) -> TensorSpec:

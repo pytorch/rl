@@ -1,12 +1,11 @@
-from numbers import Number
 from typing import Tuple
 
 import torch
 
 
 def generalized_advantage_estimate(
-    gamma: Number,
-    lamda: Number,
+    gamma: float,
+    lamda: float,
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
@@ -39,7 +38,9 @@ def generalized_advantage_estimate(
             + (gamma * next_state_value[:, t] * not_done[:, t])
             - state_value[:, t]
         )
-        advantage[:, t] = delta + (gamma * lamda * advantage[:, t + 1] * not_done[:, t])
+        advantage[:, t] = delta + (
+            gamma * lamda * advantage[:, t + 1] * not_done[:, t]
+        )
 
     value_target = advantage[:, :time_steps] + state_value
 

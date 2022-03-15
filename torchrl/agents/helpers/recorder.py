@@ -14,14 +14,14 @@ def parser_recorder_args(parser: ArgumentParser) -> ArgumentParser:
         type=str,
         default="",
         help="experiment name. Used for logging directory. "
-        "A date and uuid will be joined to account for multiple experiments with the same name.",
+             "A date and uuid will be joined to account for multiple experiments with the same name.",
     )
     parser.add_argument(
         "--record_interval",
         type=int,
         default=10000,
         help="number of optimization steps in between two collections of validation rollouts. "
-        "Default=10000.",
+             "Default=10000.",
     )
     parser.add_argument(
         "--record_frames",

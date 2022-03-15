@@ -27,14 +27,6 @@ def _get_packages(branch_name, tag):
         "third_party*",
         "tools*",
     ]
-    exclude_prototype = False
-    if branch_name is not None and branch_name.startswith('release/'):
-        exclude_prototype = True
-    if tag is not None and re.match(r'v[\d.]+(-rc\d+)?', tag):
-        exclude_prototype = True
-    if exclude_prototype:
-        print('Excluding torchaudio.prototype from the package.')
-        exclude.append("torchaudio.prototype")
     return find_packages(exclude=exclude)
 
 
@@ -75,11 +67,9 @@ tag = _run_cmd(['git', 'describe', '--tags', '--exact-match', '@'])
 setup(
     name="torchrl",
     version="0.1",
-    author="Vincent Moens",
+    author="torchrl contributors",
     author_email="vmoens@fb.com",
     packages=_get_packages(branch, tag),
-    # ext_modules=[CMakeExtension("torchrl", "./torchrl")],
-    # cmdclass=dict(build_ext=CMakeBuild, test=GoogleTestCommand),
     ext_modules=setup_helpers.get_ext_modules(),
     cmdclass={
         'build_ext': setup_helpers.CMakeBuild,

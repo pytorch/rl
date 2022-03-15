@@ -1,3 +1,3 @@
-from .tensordict import *
 from .memmap import *
 from .metatensor import *
+from .tensordict import *

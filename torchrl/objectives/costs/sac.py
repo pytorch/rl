@@ -1,7 +1,6 @@
 import math
 from copy import deepcopy
-from numbers import Number
-from typing import Tuple, Optional, Iterator, Union
+from typing import Iterator, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -9,9 +8,13 @@ from torch import Tensor
 from torch.nn import Parameter
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.modules import ProbabilisticTDModule, Actor, reset_noise
+from torchrl.modules import Actor, ProbabilisticTDModule, reset_noise
 from torchrl.modules.td_module.actors import ActorCriticWrapper
-from torchrl.objectives.costs.utils import hold_out_net, next_state_value, distance_loss
+from torchrl.objectives.costs.utils import (
+    distance_loss,
+    hold_out_net,
+    next_state_value,
+)
 from .common import _LossModule
 
 __all__ = ["SACLoss", "DoubleSACLoss"]
@@ -49,12 +52,12 @@ class SACLoss(_LossModule):
         qvalue_network: ProbabilisticTDModule,
         value_network: ProbabilisticTDModule,
         qvalue_network_bis: Optional[ProbabilisticTDModule] = None,
-        gamma: Number = 0.99,
+        gamma: float = 0.99,
         priotity_key: str = "td_error",
         loss_function: str = "smooth_l1",
-        alpha_init: Number = 1.0,
+        alpha_init: float = 1.0,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, Number] = "auto",
+        target_entropy: Union[str, float] = "auto",
     ) -> None:
         super().__init__()
         self.actor_network = actor_network
@@ -67,10 +70,13 @@ class SACLoss(_LossModule):
         self.register_buffer("alpha_init", torch.tensor(alpha_init))
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
-            self.register_buffer("log_alpha", torch.tensor(math.log(alpha_init)))
+            self.register_buffer(
+                "log_alpha", torch.tensor(math.log(alpha_init))
+            )
         else:
             self.register_parameter(
-                "log_alpha", torch.nn.Parameter(torch.tensor(math.log(alpha_init)))
+                "log_alpha",
+                torch.nn.Parameter(torch.tensor(math.log(alpha_init))),
             )
 
         if target_entropy == "auto":
@@ -162,7 +168,10 @@ class SACLoss(_LossModule):
         ## TODO: assess if copmuting the q value using no_grad and writing a custom autograd.Function operator
         # works faster
         if self.target_qvalue_network_bis is not None:
-            qval_nets = (self.target_qvalue_network_bis, self.target_qvalue_network)
+            qval_nets = (
+                self.target_qvalue_network_bis,
+                self.target_qvalue_network,
+            )
         else:
             qval_nets = (self.target_qvalue_network,)
 
@@ -190,7 +199,10 @@ class SACLoss(_LossModule):
             self.target_actor_network, self.target_value_network
         )
         target_value = next_state_value(
-            tensordict, actor_critic, gamma=self.gamma, next_val_key="state_value"
+            tensordict,
+            actor_critic,
+            gamma=self.gamma,
+            next_val_key="state_value",
         )
 
         # value loss
@@ -210,7 +222,9 @@ class SACLoss(_LossModule):
             _net(td_copy)
             pred_val = td_copy.get("state_action_value").squeeze(-1)
             loss_value.append(
-                distance_loss(pred_val, _target, loss_function=self.loss_function)
+                distance_loss(
+                    pred_val, _target, loss_function=self.loss_function
+                )
             )
             priority_value.append(abs(pred_val - _target))
 
@@ -233,7 +247,10 @@ class SACLoss(_LossModule):
             td_copy.set("action", action, inplace=False)
 
             if self.target_qvalue_network_bis is not None:
-                qval_nets = (self.target_qvalue_network_bis, self.target_qvalue_network)
+                qval_nets = (
+                    self.target_qvalue_network_bis,
+                    self.target_qvalue_network,
+                )
             else:
                 qval_nets = (self.target_qvalue_network,)
 
@@ -261,7 +278,9 @@ class SACLoss(_LossModule):
         log_pi = tensordict.get("_log_prob")
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha.exp() * (log_pi.detach() + self.target_entropy)
+            alpha_loss = -self.log_alpha.exp() * (
+                log_pi.detach() + self.target_entropy
+            )
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
