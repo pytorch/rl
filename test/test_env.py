@@ -212,7 +212,7 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
     td0_serial = env_serial.current_tensordict
     torch.manual_seed(0)
 
-    td_serial = env_serial.rollout(n_steps=100, auto_reset=False).contiguous()
+    td_serial = env_serial.rollout(n_steps=10, auto_reset=False).contiguous()
     key = "observation_pixels" if "observation_pixels" in td_serial else "observation"
     torch.testing.assert_allclose(
         td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
@@ -221,9 +221,10 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
     out_seed_parallel = env_parallel.set_seed(0)
     env_parallel.reset()
     td0_parallel = env_parallel.current_tensordict
+
     torch.manual_seed(0)
     assert out_seed_parallel == out_seed_serial
-    td_parallel = env_parallel.rollout(n_steps=100, auto_reset=False).contiguous()
+    td_parallel = env_parallel.rollout(n_steps=10, auto_reset=False).contiguous()
     torch.testing.assert_allclose(
         td_parallel[:, 0].get("next_" + key), td_parallel[:, 1].get(key)
     )

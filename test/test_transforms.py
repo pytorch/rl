@@ -225,7 +225,7 @@ def test_parallelenv_vecnorm():
 
 
 @pytest.mark.parametrize("parallel", [False, True])
-def test_vecnorm(parallel, thr=0.2):
+def test_vecnorm(parallel, thr=0.2, N=200): #10000):
     torch.manual_seed(0)
 
     if parallel:
@@ -237,7 +237,7 @@ def test_vecnorm(parallel, thr=0.2):
     env = TransformedEnv(env, t)
     env.reset()
     tds = []
-    for _ in range(10000):
+    for _ in range(N):
         td = env.rand_step()
         if td.get("done").any():
             env.reset()
