@@ -2474,9 +2474,9 @@ class SavedTensorDict(_TensorDict):
         device=None,
         batch_size: Optional[Sequence[int]] = None,
     ):
-        if not isinstance(source, _TensorDict):
+        if not isinstance(source, _TensorDict) or isinstance(source, SavedTensorDict):
             raise TypeError(
-                f"Expected source to be a _TensorDict instance, "
+                f"Expected source to be a _TensorDict instance (excluded SavedTensorDict), "
                 f"but got {type(source)} instead."
             )
         self.file = tempfile.NamedTemporaryFile()
@@ -2603,7 +2603,7 @@ class SavedTensorDict(_TensorDict):
         raise RuntimeError("SavedTensorDict cannot be put detached.")
 
     def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:  # type: ignore
-        return self.contiguous().items()
+        return self._load().items()
 
     def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
         return self._tensor_dict_meta.items()  # type: ignore
@@ -2615,7 +2615,7 @@ class SavedTensorDict(_TensorDict):
         return self._load().contiguous()
 
     def clone(self, recursive: bool = True) -> _TensorDict:
-        return self._load().to(SavedTensorDict).to(self.device)
+        return SavedTensorDict(self._load(), device=self.device)
 
     def select(self, *keys: str, inplace: bool = False) -> _TensorDict:
         _source = self.contiguous().select(*keys)
