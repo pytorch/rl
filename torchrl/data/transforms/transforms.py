@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from numbers import Number
-from typing import Optional, Any, Sequence, Union, List, OrderedDict
+from typing import Any, List, Optional, OrderedDict, Sequence, Union
 
 import torch
 from torch import nn
@@ -11,14 +10,14 @@ from torchvision.transforms.functional_tensor import (
 )  # as of now resize is imported from torchvision
 
 from torchrl.data.tensor_specs import (
-    UnboundedContinuousTensorSpec,
-    CompositeSpec,
     BoundedTensorSpec,
+    CompositeSpec,
     ContinuousBox,
     NdUnboundedContinuousTensorSpec,
     TensorSpec,
+    UnboundedContinuousTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import TensorDict, _TensorDict
+from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.common import _EnvClass, make_tensor_dict
 from . import functional as F
 from .utils import FiniteTensor
@@ -72,8 +71,7 @@ class Transform(nn.Module):
         self.keys = keys
 
     def reset(self, tensor_dict: _TensorDict) -> _TensorDict:
-        """
-        Resets a tranform if it is stateful.
+        """Resets a tranform if it is stateful.
 
         """
         return tensor_dict
@@ -89,8 +87,7 @@ class Transform(nn.Module):
         pass
 
     def _apply(self, obs: torch.Tensor) -> None:
-        """
-        Applies the transform to a tensor.
+        """Applies the transform to a tensor.
         This operation can be called multiple times (if multiples keys of the tensordict match the keys of the
         transform).
 
@@ -98,8 +95,7 @@ class Transform(nn.Module):
         raise NotImplementedError
 
     def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
-        """
-        Reads the input tensordict, and for the selected keys, applies the transform.
+        """Reads the input tensordict, and for the selected keys, applies the transform.
 
         """
         self._check_inplace()
@@ -132,8 +128,7 @@ class Transform(nn.Module):
         return tensor_dict
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
-        """
-        Transforms the action spec such that the resulting spec matches transform mapping.
+        """Transforms the action spec such that the resulting spec matches transform mapping.
         Args:
             action_spec (TensorSpec): spec before the transform
 
@@ -145,8 +140,7 @@ class Transform(nn.Module):
     def transform_observation_spec(
         self, observation_spec: TensorSpec
     ) -> TensorSpec:
-        """
-        Transforms the observation spec such that the resulting spec matches transform mapping.
+        """Transforms the observation spec such that the resulting spec matches transform mapping.
         Args:
             observation_spec (TensorSpec): spec before the transform
 
@@ -156,8 +150,7 @@ class Transform(nn.Module):
         return observation_spec
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        """
-        Transforms the reward spec such that the resulting spec matches transform mapping.
+        """Transforms the reward spec such that the resulting spec matches transform mapping.
         Args:
             reward_spec (TensorSpec): spec before the transform
 
@@ -213,8 +206,7 @@ class TransformedEnv(_EnvClass):
 
     @property
     def observation_spec(self) -> TensorSpec:
-        """
-        Observation spec of the transformed environment
+        """Observation spec of the transformed environment
 
         """
         if self._observation_spec is None or not self.cache_specs:
@@ -229,8 +221,7 @@ class TransformedEnv(_EnvClass):
 
     @property
     def action_spec(self) -> TensorSpec:
-        """
-        Action spec of the transformed environment
+        """Action spec of the transformed environment
 
         """
 
@@ -246,8 +237,7 @@ class TransformedEnv(_EnvClass):
 
     @property
     def reward_spec(self) -> TensorSpec:
-        """
-        Reward spec of the transformed environment
+        """Reward spec of the transformed environment
 
         """
 
@@ -272,8 +262,7 @@ class TransformedEnv(_EnvClass):
         return tensor_dict_out
 
     def set_seed(self, seed: int) -> int:
-        """
-        Set the seeds of the environment
+        """Set the seeds of the environment
 
         """
         return self.env.set_seed(seed)
@@ -767,7 +756,7 @@ class CatFrames(ObservationTransform):
 
     def _apply(self, obs: torch.Tensor) -> torch.Tensor:
         self.buffer.append(obs)
-        self.buffer = self.buffer[-self.N :]
+        self.buffer = self.buffer[-self.N:]
         buffer = list(reversed(self.buffer))
         buffer = [buffer[0]] * (self.N - len(buffer)) + buffer
         if len(buffer) != self.N:
@@ -1255,14 +1244,15 @@ class VecNorm(Transform):
         keys_prefix: Optional[Sequence[str]] = None,
         memmap: bool = False,
     ) -> _TensorDict:
-        """
-        Creates a shared tensordict that can be sent to different processes for normalization across processes.
+        """Creates a shared tensordict that can be sent to different processes
+        for normalization across processes.
 
         Args:
             env (_EnvClass): example environment to be used to create the tensordict
-            keys_prefix (iterable of str, optional): prefix of the keys that have to be normalized.
-                default: ["next_", "reward"]
-            memmap (bool): if True, the resulting tensordict will be cast into memmory map (using `memmap_()`).
+            keys_prefix (iterable of str, optional): prefix of the keys that
+                have to be normalized. Default: ["next_", "reward"]
+            memmap (bool): if True, the resulting tensordict will be cast into
+                emmory map (using `memmap_()`).
                 Otherwise, the tensordict will be placed in shared memory.
 
         Returns: A memory in shared memory to be sent to each process.
@@ -1290,7 +1280,8 @@ class VecNorm(Transform):
         td_select = td.select(*keys)
         if td.batch_dims:
             raise RuntimeError(
-                f"VecNorm should be used with non-batched environments. Got batch_size={td.batch_size}"
+                f"VecNorm should be used with non-batched environments. "
+                f"Got batch_size={td.batch_size}"
             )
         for key in keys:
             td_select.set(key + "_ssq", td_select.get(key).clone())
@@ -1320,4 +1311,5 @@ class VecNorm(Transform):
         self._td = td
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(decay={self.decay:4.4f}, eps={self.eps:4.4f}, keys={self.keys})"
+        return f"{self.__class__.__name__}(decay={self.decay:4.4f}," \
+               f"eps={self.eps:4.4f}, keys={self.keys})"

@@ -1,25 +1,25 @@
-from argparse import Namespace, ArgumentParser
-from typing import Optional, Callable, Union
+from argparse import ArgumentParser, Namespace
+from typing import Callable, Optional, Union
 
 import torch
 
 from torchrl.agents.env_creator import env_creator, EnvCreator
 from torchrl.data.transforms import (
+    CatFrames,
+    CatTensors,
+    Compose,
     DoubleToFloat,
-    TransformedEnv,
     FiniteTensorDictCheck,
+    GrayScale,
+    NoopResetEnv,
+    ObservationNorm,
+    Resize,
     RewardScaling,
     ToTensorImage,
-    Resize,
-    GrayScale,
-    CatFrames,
-    ObservationNorm,
-    CatTensors,
+    TransformedEnv,
     VecNorm,
-    Compose,
-    NoopResetEnv,
 )
-from torchrl.envs import GymEnv, RetroEnv, DMControlEnv, ParallelEnv
+from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
 from torchrl.envs.common import _EnvClass
 from torchrl.record.recorder import VideoRecorder
 
@@ -249,9 +249,9 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=1,
         help="frame_skip for the environment. Note that this value does NOT impact the buffer size,"
-        "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
-        "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
-        "the actual number of frames retrieved will be 200e6. Default=1.",
+             "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
+             "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
+             "the actual number of frames retrieved will be 200e6. Default=1.",
     )
     parser.add_argument(
         "--reward_scaling", type=float, help="scale of the reward."
@@ -266,13 +266,13 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "--vecnorm",
         action="store_true",
         help="Normalizes the environment observation and reward outputs with the running statistics "
-        "obtained across processes.",
+             "obtained across processes.",
     )
     parser.add_argument(
         "--norm_rewards",
         action="store_true",
         help="If True, rewards will be normalized on the fly. This may interfere with SAC update rule and "
-        "should be used cautiously.",
+             "should be used cautiously.",
     )
     parser.add_argument(
         "--noops",
@@ -285,7 +285,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=1000,
         help="Number of steps before a reset of the environment is called (if it has not been flagged as "
-        "done before). ",
+             "done before). ",
     )
 
     return parser

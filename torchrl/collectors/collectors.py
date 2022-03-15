@@ -5,14 +5,14 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from textwrap import indent
-from typing import Optional, Callable, Union, Tuple, Iterator, Sequence
+from typing import Callable, Iterator, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
-from torchrl.envs.utils import step_tensor_dict, set_exploration_mode
+from torchrl.envs.utils import set_exploration_mode, step_tensor_dict
 from torchrl.modules import ProbabilisticTDModule
 from .utils import split_trajectories
 
@@ -27,7 +27,7 @@ from ..data import TensorSpec
 
 from ..data.tensordict.tensordict import _TensorDict, TensorDict
 from ..data.transforms import TransformedEnv
-from ..data.utils import DEVICE_TYPING, CloudpickleWrapper
+from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
 from ..envs.common import _EnvClass
 from ..envs.vec_env import _BatchedEnv
 
@@ -37,8 +37,7 @@ _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time s
 
 class RandomPolicy:
     def __init__(self, action_spec: TensorSpec):
-        """
-        Random policy for a given action_spec.
+        """Random policy for a given action_spec.
         This is a wrapper around the action_spec.rand method.
 
 
@@ -85,8 +84,7 @@ class _DataCollector(IterableDataset):
     ) -> Tuple[
         ProbabilisticTDModule, torch.device, Union[None, Callable[[], dict]]
     ]:
-        """
-        From a policy and a device, assigns the self.device attribute to the desired device and maps the policy onto it
+        """From a policy and a device, assigns the self.device attribute to the desired device and maps the policy onto it
         or (if the device is ommitted) assigns the self.device attribute to the policy device.
 
         Args:
@@ -137,8 +135,7 @@ class _DataCollector(IterableDataset):
         return policy, device, get_weights_fn
 
     def update_policy_weights_(self) -> None:
-        """
-        Update the policy weights if the policy of the data collector and the trained policy live on different devices.
+        """Update the policy weights if the policy of the data collector and the trained policy live on different devices.
 
         Returns: None
 
@@ -311,8 +308,7 @@ class SyncDataCollector(_DataCollector):
         self.closed = False
 
     def set_seed(self, seed: int) -> int:
-        """
-        Sets the seeds of the environments stored in the DataCollector.
+        """Sets the seeds of the environments stored in the DataCollector.
         Args:
             seed (int): integer representing the seed to be used for the environment.
 
@@ -329,8 +325,7 @@ class SyncDataCollector(_DataCollector):
         return self.env.set_seed(seed)
 
     def iterator(self) -> Iterator[_TensorDict]:
-        """
-        Iterates through the DataCollector.
+        """Iterates through the DataCollector.
 
         Yields: _TensorDict objects containing (chunks of) trajectories
 
@@ -423,8 +418,7 @@ class SyncDataCollector(_DataCollector):
 
     @torch.no_grad()
     def rollout(self) -> _TensorDict:
-        """
-        Computes a rollout in the environment using the provided policy.
+        """Computes a rollout in the environment using the provided policy.
 
         Returns: _TensorDict containing the computed rollout.
 
@@ -468,8 +462,7 @@ class SyncDataCollector(_DataCollector):
         )  # dim 0 for single env, dim 1 for batch
 
     def reset(self, index=None, **kwargs) -> None:
-        """
-        Resets the environments to a new initial state.
+        """Resets the environments to a new initial state.
 
         Returns: None
 
@@ -767,8 +760,7 @@ class _MultiDataCollector(_DataCollector):
         self.shutdown()
 
     def shutdown(self) -> None:
-        """
-        Shuts down all processes. This operation is irreversible.
+        """Shuts down all processes. This operation is irreversible.
 
         Returns: None
 
@@ -795,8 +787,7 @@ class _MultiDataCollector(_DataCollector):
             pipe.close()
 
     def set_seed(self, seed: int) -> int:
-        """
-        Sets the seeds of the environments stored in the DataCollector.
+        """Sets the seeds of the environments stored in the DataCollector.
         Args:
             seed: integer representing the seed to be used for the environment.
 
@@ -823,8 +814,7 @@ class _MultiDataCollector(_DataCollector):
         return seed
 
     def reset(self, reset_idx: Optional[Sequence[bool]] = None) -> None:
-        """
-        Resets the environments to a new initial state.
+        """Resets the environments to a new initial state.
 
         Args:
             reset_idx: Optional. Sequence indicating which environments have to be reset. If None, all environments

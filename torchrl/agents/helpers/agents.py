@@ -9,11 +9,10 @@ from warnings import warn
 from torch import optim
 
 from torchrl.agents.agents import Agent
-from torchrl.agents.helpers.collectors import parser_collector_args_offline
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import _EnvClass
-from torchrl.modules import TDModuleWrapper, TDModule
+from torchrl.modules import TDModule, TDModuleWrapper
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 
@@ -34,8 +33,7 @@ def make_agent(
     writer: Optional["SummaryWriter"] = None,
     args: Optional[Namespace] = None,
 ) -> Agent:
-    """
-    Creates an Agent instance given its constituents.
+    """Creates an Agent instance given its constituents.
 
     Args:
         collector (_DataCollector): A data collector to be used to collect data.
@@ -150,8 +148,8 @@ def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=500,
         help="Number of optimization steps in between two collection of data. See frames_per_batch "
-        "below. "
-        "Default=500",
+             "below. "
+             "Default=500",
     )
     parser.add_argument(
         "--optimizer", type=str, default="adam", help="Optimizer to be used."
@@ -190,14 +188,14 @@ def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
         "--clip_grad_norm",
         action="store_true",
         help="if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient "
-        "values will be clipped to the desired threshold.",
+             "values will be clipped to the desired threshold.",
     )
     parser.add_argument(
         "--normalize_rewards_online",
         "--normalize-rewards-online",
         action="store_true",
         help="Computes the running statistics of the rewards and normalizes them before they are "
-        "passed to the loss module.",
+             "passed to the loss module.",
     )
     parser.add_argument(
         "--sub_traj_len",

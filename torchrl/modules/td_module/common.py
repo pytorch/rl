@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from numbers import Number
-from typing import Tuple, List, Sequence, Type, Optional, Union, Any, Callable
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Type, Union
 
 import torch
-from torch import nn, distributions as d, Tensor
+from torch import distributions as d, nn, Tensor
 
-from torchrl.data import TensorSpec, DEVICE_TYPING, CompositeSpec
+from torchrl.data import CompositeSpec, DEVICE_TYPING, TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.distributions import Delta, distributions_maps
@@ -151,8 +150,7 @@ class TDModule(nn.Module):
         return tensor_dict
 
     def random(self, tensor_dict: _TensorDict) -> _TensorDict:
-        """
-        Samples a random element in the target space, irrespective of any input. If multiple output keys are present,
+        """Samples a random element in the target space, irrespective of any input. If multiple output keys are present,
         only the first will be written in the input `tensordict`.
 
         Args:
@@ -166,8 +164,7 @@ class TDModule(nn.Module):
         return tensor_dict
 
     def random_sample(self, tensordict: _TensorDict) -> _TensorDict:
-        """
-        see TDModule.random(...)
+        """see TDModule.random(...)
 
         """
         return self.random(tensordict)
@@ -298,8 +295,7 @@ class ProbabilisticTDModule(TDModule):
     def get_dist(
         self, tensor_dict: _TensorDict
     ) -> Tuple[torch.distributions.Distribution, ...]:
-        """
-        Calls the module using the tensors retrieved from the 'in_keys' attribute and returns a distribution
+        """Calls the module using the tensors retrieved from the 'in_keys' attribute and returns a distribution
         using its output.
 
         Args:
@@ -323,8 +319,7 @@ class ProbabilisticTDModule(TDModule):
     def build_dist_from_params(
         self, params: Tuple[Tensor, ...]
     ) -> Tuple[d.Distribution, int]:
-        """
-        Given a tuple of temsors, returns a distribution object and the number of parameters used for it.
+        """Given a tuple of temsors, returns a distribution object and the number of parameters used for it.
 
         Args:
             params (Tuple[Tensor, ...]): tensors to be used for the distribution construction.
@@ -361,8 +356,7 @@ class ProbabilisticTDModule(TDModule):
         return tensor_dict
 
     def log_prob(self, tensor_dict: _TensorDict) -> _TensorDict:
-        """
-        Samples/computes an action using the module and writes this value onto the input tensordict along
+        """Samples/computes an action using the module and writes this value onto the input tensordict along
         with its log-probability.
 
         Args:
@@ -519,7 +513,7 @@ class TDSequence(TDModule):
         out_keys = [
             out_key
             for i, out_key in enumerate(out_keys)
-            if out_key not in out_keys[i + 1 :]
+            if out_key not in out_keys[i + 1:]
         ]
 
         super().__init__(

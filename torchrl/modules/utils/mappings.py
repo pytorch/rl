@@ -1,5 +1,4 @@
-from numbers import Number
-from typing import Callable, Any
+from typing import Any
 
 import torch
 from torch import nn

@@ -3,13 +3,12 @@ from __future__ import annotations
 import math
 from collections import OrderedDict
 from numbers import Number
-from typing import Optional, Tuple, Callable, Union, Any, Iterator
+from typing import Any, Callable, Iterator, Optional, Tuple, Union
 
 import numpy as np
 import torch
 
-from torchrl.data import CompositeSpec
-from torchrl.data import TensorDict
+from torchrl.data import CompositeSpec, TensorDict
 from .utils import get_available_libraries, step_tensor_dict
 from ..data.tensordict.tensordict import _TensorDict
 from ..data.utils import DEVICE_TYPING
@@ -143,8 +142,7 @@ class _EnvClass:
         self._cache = dict()
 
     def step(self, tensor_dict: _TensorDict) -> _TensorDict:
-        """
-        Makes a step in the environment.
+        """Makes a step in the environment.
         Step accepts a single argument, tensor_dict, which usually carries an 'action' key which indicates the action
         to be taken.
         Step will call an out-place private method, _step, which is the method to be re-written by _EnvClass subclasses.
@@ -220,8 +218,7 @@ class _EnvClass:
         raise NotImplementedError
 
     def reset(self, tensor_dict: Optional[_TensorDict] = None) -> _TensorDict:
-        """
-        Resets the environment.
+        """Resets the environment.
         As for step and _step, only the private method `_reset` should be overwritten by _EnvClass subclasses.
 
         Args:
@@ -263,8 +260,7 @@ class _EnvClass:
 
     @property
     def current_tensordict(self) -> _TensorDict:
-        """
-        Returns the last tensordict encountered after calling `reset` or `step`.
+        """Returns the last tensordict encountered after calling `reset` or `step`.
 
         """
         try:
@@ -278,8 +274,7 @@ class _EnvClass:
         return math.prod(self.batch_size)
 
     def set_seed(self, seed: int) -> int:
-        """
-        Set the seed of the environment and returns the last seed used (which is the input seed if a single environment
+        """Set the seed of the environment and returns the last seed used (which is the input seed if a single environment
         is present)
 
         Args:
@@ -312,8 +307,7 @@ class _EnvClass:
     def rand_step(
         self, tensor_dict: Optional[_TensorDict] = None
     ) -> _TensorDict:
-        """
-        Performs a random step in the environment given the action_spec attribute.
+        """Performs a random step in the environment given the action_spec attribute.
 
         Args:
             tensor_dict (_TensorDict, optional): tensordict where the resulting info should be written.
@@ -507,8 +501,7 @@ class _EnvWrapper(_EnvClass):
         )  # runs all the steps to have a ready-to-use env
 
     def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
-        """
-        Runs all the necessary steps such that the environment is ready to use.
+        """Runs all the necessary steps such that the environment is ready to use.
         This step is intended to ensure that a seed is provided to the environment (if needed) and that the environment
         is reset (if needed). For instance, DMControl envs require the env to be reset before being used, but Gym envs
         don't.
@@ -525,8 +518,7 @@ class _EnvWrapper(_EnvClass):
     def _build_env(
         self, envname: str, taskname: Optional[str] = None, **kwargs
     ) -> None:
-        """
-        Creates an environment from the target library and stores it with the `_env` attribute.
+        """Creates an environment from the target library and stores it with the `_env` attribute.
         When overwritten, this function should pass all the required kwargs to the env instantiation method.
 
         Args:
@@ -539,8 +531,7 @@ class _EnvWrapper(_EnvClass):
         raise NotImplementedError
 
     def close(self) -> None:
-        """
-        Closes the contained environment if possible.
+        """Closes the contained environment if possible.
 
         Returns: None
 

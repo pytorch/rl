@@ -1,40 +1,38 @@
-from argparse import Namespace, ArgumentParser
-from numbers import Number
+from argparse import ArgumentParser, Namespace
 from typing import Optional, Sequence
 
 import torch
 from torch import nn
 
-from torchrl.data import UnboundedContinuousTensorSpec, DEVICE_TYPING
+from torchrl.data import DEVICE_TYPING, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvClass
 from torchrl.modules import ActorValueOperator, NoisyLinear, TDModule
 from torchrl.modules.distributions import (
     Delta,
-    TanhNormal,
-    TanhDelta,
     OneHotCategorical,
+    TanhDelta,
+    TanhNormal,
     TruncatedNormal,
 )
 from torchrl.modules.models.models import (
-    DuelingCnnDQNet,
+    ConvNet,
     DdpgCnnActor,
     DdpgCnnQNet,
-    DdpgMlpQNet,
     DdpgMlpActor,
-    MLP,
-    ConvNet,
+    DdpgMlpQNet,
+    DuelingCnnDQNet,
     LSTMNet,
+    MLP,
 )
 from torchrl.modules.td_module import (
-    QValueActor,
-    DistributionalQValueActor,
     Actor,
-    ProbabilisticTDModule,
+    DistributionalQValueActor,
+    QValueActor,
 )
 from torchrl.modules.td_module.actors import (
-    ValueOperator,
     ActorCriticWrapper,
     ProbabilisticActor,
+    ValueOperator,
 )
 
 DISTRIBUTIONS = {
@@ -696,7 +694,7 @@ def parser_model_args_continuous(
             "--ou_exploration",
             action="store_true",
             help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
-            "efficient entropy-based exploration, this should be left for experimentation only.",
+                 "efficient entropy-based exploration, this should be left for experimentation only.",
         )
         parser.add_argument(
             "--distributional",
@@ -716,8 +714,8 @@ def parser_model_args_continuous(
             action="store_false",
             dest="double_qvalue",
             help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
-            "use two different qvalue networks trained independently and choose the lowest value "
-            "predicted to predict the state action value. This can be disabled by using this flag.",
+                 "use two different qvalue networks trained independently and choose the lowest value "
+                 "predicted to predict the state action value. This can be disabled by using this flag.",
         )
 
     if algorithm in ("SAC", "PPO"):

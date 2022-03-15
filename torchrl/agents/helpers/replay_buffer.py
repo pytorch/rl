@@ -5,9 +5,9 @@ __all__ = ["parser_replay_args", "make_replay_buffer"]
 import torch
 
 from torchrl.data import (
+    DEVICE_TYPING,
     ReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
-    DEVICE_TYPING,
 )
 from torchrl.data.replay_buffers.replay_buffers import InPlaceSampler
 

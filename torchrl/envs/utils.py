@@ -111,14 +111,17 @@ SUPPORTED_LIBRARIES = {
     "gym": _check_gym(),  # OpenAI
     "gym[atari]": _check_gym_atari(),  #
     "vizdoom": None,  # 1.2k, https://github.com/mwydmuch/ViZDoom
-    "ml-agents": None,  # 11.5k, unity, https://github.com/Unity-Technologies/ml-agents
+    "ml-agents": None,
+    # 11.5k, unity, https://github.com/Unity-Technologies/ml-agents
     "pysc2": None,  # 7.3k, DM, https://github.com/deepmind/pysc2
     "deepmind_lab": _check_dmlab(),
     # 6.5k DM, https://github.com/deepmind/lab, https://github.com/deepmind/lab/tree/master/python/pip_package
     "serpent.ai": None,  # 6k, https://github.com/SerpentAI/SerpentAI
     "gfootball": None,  # 2.8k G, https://github.com/google-research/football
-    "dm_control": _check_dmcontrol(),  # 2.3k DM, https://github.com/deepmind/dm_control
-    "habitat": None,  # 1.2k FB, https://github.com/facebookresearch/habitat-sim
+    "dm_control": _check_dmcontrol(),
+    # 2.3k DM, https://github.com/deepmind/dm_control
+    "habitat": None,
+    # 1.2k FB, https://github.com/facebookresearch/habitat-sim
     "meta-world": None,  # 500, https://github.com/rlworkgroup/metaworld
     "minerl": None,  # 300, https://github.com/minerllabs/minerl
     "multi-agent-emergence-environments": None,
@@ -126,7 +129,8 @@ SUPPORTED_LIBRARIES = {
     "openspiel": None,  # 2.8k, DM, https://github.com/deepmind/open_spiel
     "procgen": None,  # 500, OpenAI, https://github.com/openai/procgen
     "pybullet": None,  # 641, https://github.com/benelot/pybullet-gym
-    "realworld_rl_suite": None,  # 250, G, https://github.com/google-research/realworldrl_suite
+    "realworld_rl_suite": None,
+    # 250, G, https://github.com/google-research/realworldrl_suite
     "rlcard": None,  # 1.4k, https://github.com/datamllab/rlcard
     "screeps": None,  # 2.3k https://github.com/screeps/screeps
     "gym-super-mario-bros": _check_mario(),

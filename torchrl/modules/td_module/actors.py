@@ -1,16 +1,15 @@
-from typing import Optional, Sequence, Union, Tuple, Type, Iterator, Callable
+from typing import Optional, Sequence, Tuple
 
 import torch
-from torch import nn, distributions as d
+from torch import nn
 
-from torchrl.modules.distributions import Delta, OneHotCategorical
+from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.td_module.common import (
     ProbabilisticTDModule,
-    TDModuleWrapper,
     TDModule,
+    TDModuleWrapper,
     TDSequence,
 )
-from torchrl.modules.models.models import DistributionalDQNnet
 
 __all__ = [
     "Actor",
@@ -24,11 +23,8 @@ __all__ = [
 ]
 
 from torchrl.data import (
-    TensorSpec,
-    CompositeSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import _TensorDict
 
 
 class Actor(TDModule):

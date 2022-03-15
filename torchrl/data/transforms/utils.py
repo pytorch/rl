@@ -1,6 +1,5 @@
 import contextlib
-from typing import Callable
-from typing import Tuple, Optional
+from typing import Callable, Optional, Tuple
 
 import torch
 from torch.utils._pytree import tree_map

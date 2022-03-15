@@ -1,4 +1,3 @@
-from numbers import Number
 from typing import Optional, Union
 
 import numpy as np
@@ -8,8 +7,8 @@ from torchrl.data.utils import expand_as_right
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.td_module.common import (
     _forward_hook_safe_action,
-    TDModuleWrapper,
     TDModule,
+    TDModuleWrapper,
 )
 
 __all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
@@ -69,8 +68,7 @@ class EGreedyWrapper(TDModuleWrapper):
         self.register_buffer("eps", torch.tensor([eps_init]))
 
     def step(self, frames: int = 1) -> None:
-        """
-        A step of epsilon decay.
+        """A step of epsilon decay.
         After self.annealing_num_steps, this function is a no-op.
 
         Args:
@@ -207,8 +205,7 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
             self.register_forward_hook(_forward_hook_safe_action)
 
     def step(self, frames: int = 1) -> None:
-        """
-        Updates the eps noise factor.
+        """Updates the eps noise factor.
 
         Args:
             frames (int): number of frames of the current batch (corresponding to the number of updates to be made).

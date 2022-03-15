@@ -3,14 +3,14 @@ from __future__ import annotations
 import os
 from collections import OrderedDict
 from multiprocessing import connection
-from typing import Callable, Sequence, Union, Optional
+from typing import Callable, Optional, Sequence, Union
 
 import torch
 from torch import multiprocessing as mp
 
 from torchrl.data import TensorDict, TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.data.utils import DEVICE_TYPING, CloudpickleWrapper
+from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvClass, make_tensor_dict
 
 __all__ = ["SerialEnv", "ParallelEnv"]
@@ -138,8 +138,7 @@ class _BatchedEnv(_EnvClass):
         self._is_done = value.all()
 
     def _create_td(self) -> None:
-        """
-        Creates self.shared_tensor_dict_parent, a TensorDict used to store the most recent observations.
+        """Creates self.shared_tensor_dict_parent, a TensorDict used to store the most recent observations.
 
         Returns: None
 
@@ -224,8 +223,7 @@ class _BatchedEnv(_EnvClass):
                 )
 
     def _start_workers(self) -> None:
-        """
-        Starts the various envs.
+        """Starts the various envs.
 
         Returns: None
 

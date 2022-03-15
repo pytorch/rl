@@ -1,16 +1,16 @@
 from types import ModuleType
-from typing import List, Sequence, Optional
+from typing import List, Optional, Sequence
 
 import torch
 
 from torchrl.data import (
-    TensorSpec,
-    OneHotDiscreteTensorSpec,
     BinaryDiscreteTensorSpec,
+    CompositeSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
+    OneHotDiscreteTensorSpec,
+    TensorSpec,
     UnboundedContinuousTensorSpec,
-    CompositeSpec,
 )
 from ..common import GymLikeEnv
 from ...data.utils import numpy_to_torch_dtype_dict

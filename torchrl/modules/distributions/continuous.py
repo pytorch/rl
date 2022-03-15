@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Union, Sequence, Dict, Sequence
+from typing import Dict, Sequence, Union
 
 import numpy as np
 import torch
@@ -248,11 +248,15 @@ class TanhNormal(D.TransformedDistribution):
 
         t = SafeTanhTransform()
         non_trivial_min = (
-            isinstance(min, torch.Tensor) and (min != 1.0).any()
-        ) or (not isinstance(min, torch.Tensor) and min != 1.0)
+                              isinstance(min, torch.Tensor) and (
+                                  min != 1.0).any()
+                          ) or (not isinstance(min,
+                                               torch.Tensor) and min != 1.0)
         non_trivial_max = (
-            isinstance(max, torch.Tensor) and (max != 1.0).any()
-        ) or (not isinstance(max, torch.Tensor) and max != 1.0)
+                              isinstance(max, torch.Tensor) and (
+                                  max != 1.0).any()
+                          ) or (not isinstance(max,
+                                               torch.Tensor) and max != 1.0)
         if non_trivial_max or non_trivial_min:
             t = D.ComposeTransform(
                 [
@@ -407,11 +411,15 @@ class TanhDelta(D.TransformedDistribution):
 
         t = D.TanhTransform()
         non_trivial_min = (
-            isinstance(min, torch.Tensor) and (min != 1.0).any()
-        ) or (not isinstance(min, torch.Tensor) and min != 1.0)
+                              isinstance(min, torch.Tensor) and (
+                                  min != 1.0).any()
+                          ) or (not isinstance(min,
+                                               torch.Tensor) and min != 1.0)
         non_trivial_max = (
-            isinstance(max, torch.Tensor) and (max != 1.0).any()
-        ) or (not isinstance(max, torch.Tensor) and max != 1.0)
+                              isinstance(max, torch.Tensor) and (
+                                  max != 1.0).any()
+                          ) or (not isinstance(max,
+                                               torch.Tensor) and max != 1.0)
         if non_trivial_max or non_trivial_min:
             t = D.ComposeTransform(  # type: ignore
                 [

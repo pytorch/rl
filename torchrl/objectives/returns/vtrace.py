@@ -1,6 +1,5 @@
 import math
-from numbers import Number
-from typing import Union, Tuple
+from typing import Tuple, Union
 
 import torch
 

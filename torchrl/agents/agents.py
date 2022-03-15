@@ -3,9 +3,8 @@ from __future__ import annotations
 import pathlib
 import warnings
 from collections import OrderedDict
-from numbers import Number
 from textwrap import indent
-from typing import Dict, Callable, Optional, Union
+from typing import Callable, Dict, Optional, Union
 
 import numpy as np
 import torch.nn
@@ -20,16 +19,16 @@ except:
 
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import (
-    TensorDictReplayBuffer,
-    TensorDictPrioritizedReplayBuffer,
     ReplayBuffer,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
 )
-from torchrl.data.utils import expand_right
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.transforms import TransformedEnv
+from torchrl.data.utils import expand_right
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import TDModuleWrapper, reset_noise
+from torchrl.modules import reset_noise, TDModuleWrapper
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 
@@ -47,8 +46,7 @@ __all__ = ["Agent"]
 
 
 class Agent:
-    """
-    A generic Agent class.
+    """A generic Agent class.
 
     An agent is responsible of collecting data and training the model.
     To keep the class as versatile as possible, Agent does not construct any of its components: they all must be
@@ -295,8 +293,8 @@ class Agent:
                 if "mask" in batch.keys():
                     reward_training = (
                         batch.get("reward")[batch.get("mask").squeeze(-1)]
-                        .mean()
-                        .item()
+                            .mean()
+                            .item()
                     )
                 else:
                     reward_training = batch.get("reward").mean().item()
@@ -342,8 +340,7 @@ class Agent:
         tensordict.set_("reward", reward)
 
     def _collector_scheduler_step(self, step: int, current_frames: int):
-        """
-        Runs entropy annealing steps for exploration, policy weights update across workers etc.
+        """Runs entropy annealing steps for exploration, policy weights update across workers etc.
         Returns:
 
         """
@@ -418,8 +415,7 @@ class Agent:
             )
 
     def _optim_schedule_step(self) -> None:
-        """
-        Runs scheduler steps, target network update steps etc.
+        """Runs scheduler steps, target network update steps etc.
         Returns:
         """
         if self.optim_scheduler is not None:
@@ -428,8 +424,7 @@ class Agent:
             self.target_net_updater.step()
 
     def _sub_sample_batch(self, batch: _TensorDict) -> _TensorDict:
-        """
-        Sub-sampled part of a batch randomly.
+        """Sub-sampled part of a batch randomly.
         If the batch has one dimension, a random subsample of length self.bach_size will be returned.
         If the batch has two or more dimensions, it is assumed that the first dimension represents the batch,
         and the second the time. If so, the resulting subsample will contain consecutive samples across time.
@@ -457,7 +452,7 @@ class Agent:
             )
         valid_trajectories = torch.arange(batch.shape[0])[
             traj_len >= sub_traj_len
-        ]
+            ]
 
         batch_size = self.batch_size // sub_traj_len
         traj_idx = valid_trajectories[

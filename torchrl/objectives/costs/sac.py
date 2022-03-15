@@ -1,7 +1,6 @@
 import math
 from copy import deepcopy
-from numbers import Number
-from typing import Tuple, Optional, Iterator, Union
+from typing import Iterator, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -9,12 +8,12 @@ from torch import Tensor
 from torch.nn import Parameter
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.modules import ProbabilisticTDModule, Actor, reset_noise
+from torchrl.modules import Actor, ProbabilisticTDModule, reset_noise
 from torchrl.modules.td_module.actors import ActorCriticWrapper
 from torchrl.objectives.costs.utils import (
+    distance_loss,
     hold_out_net,
     next_state_value,
-    distance_loss,
 )
 from .common import _LossModule
 

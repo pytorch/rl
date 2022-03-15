@@ -1,24 +1,24 @@
-from numbers import Number
-from typing import Tuple, Optional, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
 
 from torchrl.data import (
-    TensorSpec,
     CompositeSpec,
-    NdUnboundedContinuousTensorSpec,
     NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
+    TensorSpec,
 )
 from ..common import GymLikeEnv
 from ...data.utils import numpy_to_torch_dtype_dict
 
 try:
-    import dm_control
-    from dm_control.suite.wrappers import pixels
-    from dm_control import suite
-    import dm_env
     import collections
+
+    import dm_control
+    import dm_env
+    from dm_control import suite
+    from dm_control.suite.wrappers import pixels
 
     _has_dmc = True
     __all__ = ["DMControlEnv"]

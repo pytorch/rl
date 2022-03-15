@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import functools
 from numbers import Number
-from typing import Optional, Union, List, Tuple, Callable, Sequence
+from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -26,26 +26,33 @@ def implements_for_meta(torch_function) -> Callable:
 
 
 class MetaTensor:
-    """
-    MetaTensor is a custom class that stores the meta-information about a tensor without requiring to access the tensor.
-    This is intended to be used with tensors that have a high access cost. MetaTensor supports more operations than
-    tensors on 'meta' device (`torch.tensor(..., device='meta')`).
-    For instance, MetaTensor supports some operations on its shape and device, such as `mt.to(device)`, `mt.view(*new_shape)`,
-    `mt.expand(*expand_shape)` etc.
+    """MetaTensor is a custom class that stores the meta-information about a
+    tensor without requiring to access the tensor.
+
+    This is intended to be used with tensors that have a high access cost.
+    MetaTensor supports more operations than tensors on 'meta' device (
+    `torch.tensor(..., device='meta')`).
+    For instance, MetaTensor supports some operations on its shape and device,
+    such as `mt.to(device)`, `mt.view(*new_shape)`, `mt.expand(
+    *expand_shape)` etc.
 
     Args:
-        shape (iterable of integers): shape of the tensor. If the first element of "shape" is a torch.Tensor, the
+        shape (iterable of integers): shape of the tensor. If the first
+            element of "shape" is a torch.Tensor, the
             MetaTensor is built with this tensor specs.
-        device (int, str or torch.device): device on which the tensor is stored.
+        device (int, str or torch.device): device on which the tensor is
+            stored.
         dtype (torch.dtype): tensor dtype.
 
     Examples:
         >>> meta1 = MetaTensor(3,4, device=torch.device("cpu"))
-        >>> meta2 = MetaTensor(torch.randn(3,4,device="cuda:0",dtype=torch.double))
+        >>> meta2 = MetaTensor(torch.randn(3,4,device="cuda:0",
+        ...    dtype=torch.double))
         >>> assert meta1.device != meta2.device
         >>> assert meta1.dtype != meta2.dtype
         >>> assert meta1.expand(2, 3, 4).shape == torch.Size([2, 3, 4])
-        >>> assert torch.stack([MetaTensor(3,4) for _ in range(10)], 1).shape == torch.Size([3, 10, 4])
+        >>> assert torch.stack([MetaTensor(3,4) for _ in range(10)],
+        ...    1).shape == torch.Size([3, 10, 4])
     """
 
     def __init__(
@@ -98,8 +105,7 @@ class MetaTensor:
         self.class_name = name
 
     def memmap_(self) -> MetaTensor:
-        """
-        Changes the storage of the MetaTensor to memmap.
+        """Changes the storage of the MetaTensor to memmap.
 
         Returns: self
 
@@ -109,8 +115,7 @@ class MetaTensor:
         return self
 
     def share_memory_(self) -> MetaTensor:
-        """
-        Changes the storage of the MetaTensor to shared memory.
+        """Changes the storage of the MetaTensor to shared memory.
 
         Returns: self
 
@@ -178,7 +183,8 @@ class MetaTensor:
         return MetaTensor(*shape, device=self.device, dtype=self.dtype)
 
     def __repr__(self) -> str:
-        return f"MetaTensor(shape={self.shape}, device={self.device}, dtype={self.dtype})"
+        return f"MetaTensor(shape={self.shape}, device={self.device}, " \
+               f"dtype={self.dtype})"
 
     def unsqueeze(self, dim: int) -> MetaTensor:
         clone = self.clone()
@@ -240,13 +246,13 @@ def _stack_meta(
         for tensor in list_of_meta_tensors:
             if tensor.shape != shape:
                 raise RuntimeError(
-                    f"Stacking meta tensors of different shapes is not allowed, "
-                    f"got shapes {shape} and {tensor.shape}"
+                    f"Stacking meta tensors of different shapes is not "
+                    f"allowed, got shapes {shape} and {tensor.shape}"
                 )
             if tensor.dtype != dtype:
                 raise TypeError(
-                    f"Stacking meta tensors of different dtype is not allowed, "
-                    f"got shapes {dtype} and {tensor.dtype}"
+                    f"Stacking meta tensors of different dtype is not "
+                    f"allowed, got shapes {dtype} and {tensor.dtype}"
                 )
     shape = [s for s in shape]
     shape.insert(dim, len(list_of_meta_tensors))

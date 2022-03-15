@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from numbers import Number
-from typing import Union, Tuple
+from typing import Tuple
 
 import torch
 from torch import nn
 
-from torchrl.data.utils import expand_as_right
 from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.utils import expand_as_right
 
 __all__ = ["MultiStep"]
 
@@ -139,8 +138,7 @@ class MultiStep(nn.Module):
         )
 
     def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
-        """
-        Args:
+        """Args:
             tensor_dict: TennsorDict instance with Batch x Time-steps x ... dimensions
                 Must contain a "reward" and "done" key.
                 All keys that start with the "next_" prefix will be shifted by (at most) self.n_steps_max frames

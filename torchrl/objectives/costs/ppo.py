@@ -1,6 +1,5 @@
 import math
-from numbers import Number
-from typing import Optional, Tuple, Callable
+from typing import Callable, Optional, Tuple
 
 import torch
 from torch import distributions as d
@@ -11,9 +10,8 @@ from torchrl.modules import Actor, ProbabilisticTDModule
 
 __all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
 
-from .common import _LossModule
-
 from torchrl.objectives.costs.utils import distance_loss
+from .common import _LossModule
 
 
 class PPOLoss(_LossModule):

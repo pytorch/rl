@@ -1,6 +1,5 @@
 from copy import deepcopy
-from numbers import Number
-from typing import Tuple, Optional
+from typing import Tuple
 from uuid import uuid1
 
 import torch
@@ -8,10 +7,10 @@ import torch
 from torchrl.data import TensorDict
 from torchrl.envs.utils import step_tensor_dict
 from torchrl.modules import (
-    QValueActor,
     DistributionalQValueActor,
-    reset_noise,
     ProbabilisticTDModule,
+    QValueActor,
+    reset_noise,
 )
 from .utils import distance_loss
 
@@ -22,11 +21,9 @@ __all__ = [
     "DistributionalDoubleDQNLoss",
 ]
 
-from .common import _LossModule
-
 from ...data.tensordict.tensordict import _TensorDict
 
-from ...data.utils import DEVICE_TYPING
+from .common import _LossModule
 
 
 class DQNLoss(_LossModule):
@@ -55,8 +52,7 @@ class DQNLoss(_LossModule):
         self.loss_function = loss_function
 
     def forward(self, input_tensor_dict: _TensorDict) -> TensorDict:
-        """
-        Computes the DQN loss given a tensordict sampled from the replay buffer.
+        """Computes the DQN loss given a tensordict sampled from the replay buffer.
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
 
@@ -126,9 +122,9 @@ class DQNLoss(_LossModule):
         input_tensor_dict.set(
             "td_error",
             abs(pred_val_index - target_value)
-            .detach()
-            .unsqueeze(-1)
-            .to(input_tensor_dict.device),
+                .detach()
+                .unsqueeze(-1)
+                .to(input_tensor_dict.device),
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
@@ -294,8 +290,8 @@ class DistributionalDQNLoss(_LossModule):
                     dtype=torch.int64,
                     # device=device,
                 )
-                .unsqueeze(1)
-                .expand(batch_size, atoms)
+                    .unsqueeze(1)
+                    .expand(batch_size, atoms)
             )
             try:
                 index = (l + offset).view(-1)

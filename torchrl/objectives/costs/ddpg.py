@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from numbers import Number
 from typing import Tuple
 
 import torch
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.modules import TDModule, reset_noise, TDModule
+from torchrl.modules import reset_noise, TDModule
 from torchrl.modules.td_module.actors import ActorCriticWrapper
 from torchrl.objectives.costs.utils import (
     distance_loss,
-    next_state_value,
     hold_out_net,
+    next_state_value,
 )
 from .common import _LossModule
 
@@ -59,8 +58,7 @@ class DDPGLoss(_LossModule):
         )
 
     def forward(self, input_tensor_dict: _TensorDict) -> TensorDict:
-        """
-        Computes the DDPG losses given a tensordict sampled from the replay buffer.
+        """Computes the DDPG losses given a tensordict sampled from the replay buffer.
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
 
@@ -97,8 +95,8 @@ class DDPGLoss(_LossModule):
         input_tensor_dict.set(
             "td_error",
             td_error.detach()
-            .unsqueeze(input_tensor_dict.ndimension())
-            .to(input_tensor_dict.device),
+                .unsqueeze(input_tensor_dict.ndimension())
+                .to(input_tensor_dict.device),
             inplace=True,
         )
         loss_actor = self._loss_actor(

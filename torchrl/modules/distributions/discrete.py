@@ -1,4 +1,4 @@
-from typing import Optional, Union, Sequence
+from typing import Optional, Sequence, Union
 
 import torch
 from torch import distributions as D
@@ -29,8 +29,8 @@ def rand_one_hot(
 
 
 class OneHotCategorical(D.Categorical):
-    """
-    One-hot categorical distribution.
+    """One-hot categorical distribution.
+
     This class behaves excacly as torch.distributions.Categorical except that it reads and produces one-hot encodings
      of the discrete tensors.
 

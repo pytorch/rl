@@ -2,7 +2,7 @@ from typing import Optional, Sequence
 
 import torch
 
-from torchrl.data.transforms import Transform, ObservationTransform
+from torchrl.data.transforms import ObservationTransform, Transform
 
 __all__ = ["VideoRecorder", "TensorDictRecorder"]
 
@@ -75,8 +75,7 @@ class VideoRecorder(ObservationTransform):
         return observation
 
     def dump(self) -> None:
-        """
-        Writes the video to the self.writer attribute.
+        """Writes the video to the self.writer attribute.
 
         Returns: None
 

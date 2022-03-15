@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from numbers import Number
-from typing import Tuple, Union, Optional, Sequence, List, Any, Dict
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -132,8 +132,7 @@ class TensorSpec:
     domain: str = ""
 
     def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
-        """
-        Encodes a value given the specified spec, and return the corresponding tensor.
+        """Encodes a value given the specified spec, and return the corresponding tensor.
         Args:
             val (np.ndarray or torch.Tensor): value to be encoded as tensor.
 
@@ -149,8 +148,7 @@ class TensorSpec:
         return val
 
     def to_numpy(self, val: torch.Tensor) -> np.ndarray:
-        """
-        Returns the np.ndarray correspondent of an input tensor.
+        """Returns the np.ndarray correspondent of an input tensor.
 
         Args:
             val (torch.Tensor): tensor to be transformed to numpy
@@ -164,8 +162,7 @@ class TensorSpec:
     def index(
         self, index: INDEX_TYPING, tensor_to_index: torch.Tensor
     ) -> torch.Tensor:
-        """
-        Indexes the input tensor
+        """Indexes the input tensor
 
         Args:
             index (int, torch.Tensor, slice or list): index of the tensor
@@ -180,8 +177,7 @@ class TensorSpec:
         raise NotImplementedError
 
     def is_in(self, val: torch.Tensor) -> bool:
-        """
-        If the value `val` is in the box defined by the TensorSpec, returns True, otherwise False.
+        """If the value `val` is in the box defined by the TensorSpec, returns True, otherwise False.
 
         Args:
             val (torch.Tensor): value to be checked
@@ -192,8 +188,7 @@ class TensorSpec:
         raise NotImplementedError
 
     def project(self, val: torch.Tensor) -> torch.Tensor:
-        """
-        If the input tensor is not in the TensorSpec box, it maps it back to it given some heuristic.
+        """If the input tensor is not in the TensorSpec box, it maps it back to it given some heuristic.
 
         Args:
             val (torch.Tensor): tensor to be mapped to the box.
@@ -206,8 +201,7 @@ class TensorSpec:
         return val
 
     def assert_is_in(self, value: torch.Tensor) -> None:
-        """
-        Asserts whether a tensor belongs to the box, and raises an exception otherwise.
+        """Asserts whether a tensor belongs to the box, and raises an exception otherwise.
 
         Args:
             value (torch.Tensor): value to be checked.
@@ -220,8 +214,7 @@ class TensorSpec:
             )
 
     def type_check(self, value: torch.Tensor, key=None) -> None:
-        """
-        Checks the input value dtype against the TensorSpec dtype and raises an exception if they don't match.
+        """Checks the input value dtype against the TensorSpec dtype and raises an exception if they don't match.
 
         Args:
             value (torch.Tensor): tensor whose dtype has to be checked
@@ -233,8 +226,7 @@ class TensorSpec:
             )
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
-        """
-        Returns a random tensor in the box. The sampling will be uniform unless the box is unbounded.
+        """Returns a random tensor in the box. The sampling will be uniform unless the box is unbounded.
 
         Args:
             shape (torch.Size): shape of the random tensor
@@ -371,7 +363,8 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             dim=-1,
         ).to(torch.long)
 
-    def encode(self, val: Union[np.ndarray, torch.Tensor], space: Optional[DiscreteBox] = None) -> torch.Tensor:  # type: ignore
+    def encode(self, val: Union[np.ndarray, torch.Tensor], space: Optional[
+        DiscreteBox] = None) -> torch.Tensor:  # type: ignore
         if not isinstance(val, torch.Tensor):
             val = torch.tensor(val)
 
@@ -602,7 +595,8 @@ class BinaryDiscreteTensorSpec(TensorSpec):
             *shape, *self.shape, device=self.device, dtype=self.dtype
         ).bernoulli_()
 
-    def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
+    def index(self, index: INDEX_TYPING,
+              tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
         if not isinstance(index, torch.Tensor):
             raise ValueError(
                 f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)"
@@ -671,7 +665,8 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         ).squeeze(-2)
         return x
 
-    def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:  # type: ignore
+    def encode(self, val: Union[
+        np.ndarray, torch.Tensor]) -> torch.Tensor:  # type: ignore
         if not isinstance(val, torch.Tensor):
             val = torch.tensor(val)
 
@@ -695,7 +690,8 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         out = torch.stack([val.argmax(-1) for val in vals], -1).numpy()
         return out
 
-    def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
+    def index(self, index: INDEX_TYPING,
+              tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
         if not isinstance(index, torch.Tensor):
             raise ValueError(
                 f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)"
@@ -772,7 +768,8 @@ class CompositeSpec(TensorSpec):
     def del_(self, key: str) -> None:
         del self._specs[key]
 
-    def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:  # type: ignore
+    def encode(self, vals: Dict[str, Any]) -> Dict[
+        str, torch.Tensor]:  # type: ignore
         out = {}
         for key, item in vals.items():
             out[key] = self[key].encode(item)

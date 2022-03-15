@@ -1,6 +1,7 @@
-import configargparse
 import os
 import time
+
+import configargparse
 
 import torch
 import torch.distributed.rpc as rpc
