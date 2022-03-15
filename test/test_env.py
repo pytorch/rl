@@ -163,9 +163,7 @@ def _make_envs(env_name, frame_skip, transformed, N):
 @pytest.mark.parametrize("env_name", ["Pong-v4", "Pendulum-v1"])
 @pytest.mark.parametrize("frame_skip", [4, 1])
 @pytest.mark.parametrize("transformed", [True, False])
-def test_parallel_env(env_name, frame_skip, transformed):
-    N = 5
-
+def test_parallel_env(env_name, frame_skip, transformed, T = 10, N = 5):
     env_parallel, env_serial, env0 = _make_envs(env_name, frame_skip, transformed, N)
 
     td = TensorDict(
@@ -194,7 +192,7 @@ def test_parallel_env(env_name, frame_skip, transformed):
     )
     env_parallel.reset(tensor_dict=td_reset)
 
-    T = 100
+
     td = env_parallel.rollout(policy=None, n_steps=T)
     assert (
         td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()

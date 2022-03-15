@@ -446,7 +446,7 @@ class TestTensorDicts:
     @pytest.mark.parametrize(
         "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
     )
-    def test_cpu_cuda(self, td_name, device):
+    def test_cpu_cuda(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
         td_device = td.cuda()

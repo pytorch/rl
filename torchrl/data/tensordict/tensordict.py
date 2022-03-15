@@ -1919,7 +1919,7 @@ class SubTensorDict(_TensorDict):
                 dest = torch.device(dest)
             if dest == self.device:
                 return self
-            td = self.clone()
+            td = self.to(TensorDict)
             # must be device
             return td.to(dest, **kwargs)
         else:
@@ -2615,7 +2615,7 @@ class SavedTensorDict(_TensorDict):
         return self._load().contiguous()
 
     def clone(self, recursive: bool = True) -> _TensorDict:
-        return self._load().to(SavedTensorDict)
+        return self._load().to(SavedTensorDict).to(self.device)
 
     def select(self, *keys: str, inplace: bool = False) -> _TensorDict:
         _source = self.contiguous().select(*keys)
