@@ -115,7 +115,9 @@ def make_agent(
 
     if writer is not None:
         # log hyperparams
-        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(args).items())])
+        txt = "\n\t".join(
+            [f"{k}: {val}" for k, val in sorted(vars(args).items())]
+        )
         writer.add_text("hparams", txt)
 
     return Agent(

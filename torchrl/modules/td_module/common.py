@@ -81,9 +81,13 @@ class TDModule(nn.Module):
         super().__init__()
 
         if not out_keys:
-            raise RuntimeError(f"out_keys were not passed to {self.__class__.__name__}")
+            raise RuntimeError(
+                f"out_keys were not passed to {self.__class__.__name__}"
+            )
         if not in_keys:
-            raise RuntimeError(f"in_keys were not passed to {self.__class__.__name__}")
+            raise RuntimeError(
+                f"in_keys were not passed to {self.__class__.__name__}"
+            )
         self.out_keys = out_keys
         self.in_keys = in_keys
 
@@ -118,7 +122,10 @@ class TDModule(nn.Module):
         return super().__setattr__(key, value)
 
     def _write_to_tensor_dict(
-        self, tensor_dict: _TensorDict, tensors: List, out_keys: Sequence[str] = None
+        self,
+        tensor_dict: _TensorDict,
+        tensors: List,
+        out_keys: Sequence[str] = None,
     ) -> _TensorDict:
         if out_keys is None:
             out_keys = self.out_keys
@@ -132,7 +139,9 @@ class TDModule(nn.Module):
         if not len(tensor_dict.batch_size):
             unsqueeze = True
             tensor_dict_unsqueezed = tensor_dict.unsqueeze(-1)
-        tensors = tuple(tensor_dict_unsqueezed.get(in_key) for in_key in self.in_keys)
+        tensors = tuple(
+            tensor_dict_unsqueezed.get(in_key) for in_key in self.in_keys
+        )
         tensors = self.module(*tensors)
         if isinstance(tensors, Tensor):
             tensors = (tensors,)
@@ -263,14 +272,20 @@ class ProbabilisticTDModule(TDModule):
     ):
 
         super().__init__(
-            spec=spec, module=module, out_keys=out_keys, in_keys=in_keys, safe=safe
+            spec=spec,
+            module=module,
+            out_keys=out_keys,
+            in_keys=in_keys,
+            safe=safe,
         )
 
         self.save_dist_params = save_dist_params
         self._n_empirical_est = _n_empirical_est
 
         if isinstance(distribution_class, str):
-            distribution_class = distributions_maps.get(distribution_class.lower())
+            distribution_class = distributions_maps.get(
+                distribution_class.lower()
+            )
         self.distribution_class = distribution_class
         self.distribution_kwargs = (
             distribution_kwargs if distribution_kwargs is not None else dict()
@@ -322,7 +337,9 @@ class ProbabilisticTDModule(TDModule):
             if hasattr(self.distribution_class, "num_params")
             else 1
         )
-        dist = self.distribution_class(*params[:num_params], **self.distribution_kwargs)
+        dist = self.distribution_class(
+            *params[:num_params], **self.distribution_kwargs
+        )
         return dist, num_params
 
     def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
@@ -330,8 +347,12 @@ class ProbabilisticTDModule(TDModule):
         if not len(tensor_dict.batch_size):
             tensor_dict_unsqueezed = tensor_dict.unsqueeze(0)
         dist, *tensors = self.get_dist(tensor_dict_unsqueezed)
-        out_tensor = self._dist_sample(dist, interaction_mode=exploration_mode())
-        self._write_to_tensor_dict(tensor_dict_unsqueezed, [out_tensor] + list(tensors))
+        out_tensor = self._dist_sample(
+            dist, interaction_mode=exploration_mode()
+        )
+        self._write_to_tensor_dict(
+            tensor_dict_unsqueezed, [out_tensor] + list(tensors)
+        )
         if self.return_log_prob:
             log_prob = dist.log_prob(out_tensor)
             tensor_dict_unsqueezed.set(
@@ -358,13 +379,18 @@ class ProbabilisticTDModule(TDModule):
         return tensor_dict
 
     def _dist_sample(
-        self, dist: d.Distribution, interaction_mode: bool = None, eps: float = None
+        self,
+        dist: d.Distribution,
+        interaction_mode: bool = None,
+        eps: float = None,
     ) -> Tensor:
         if interaction_mode is None:
             interaction_mode = self.default_interaction_mode
 
         if not isinstance(dist, d.Distribution):
-            raise TypeError(f"type {type(dist)} not recognised by _dist_sample")
+            raise TypeError(
+                f"type {type(dist)} not recognised by _dist_sample"
+            )
 
         if interaction_mode == "mode":
             if hasattr(dist, "mode"):
@@ -397,7 +423,9 @@ class ProbabilisticTDModule(TDModule):
             else:
                 return dist.sample()
         else:
-            raise NotImplementedError(f"unknown interaction_mode {interaction_mode}")
+            raise NotImplementedError(
+                f"unknown interaction_mode {interaction_mode}"
+            )
 
     @property
     def device(self):
@@ -405,7 +433,9 @@ class ProbabilisticTDModule(TDModule):
             return p.device
         return torch.device("cpu")
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> ProbabilisticTDModule:
+    def to(
+        self, dest: Union[torch.dtype, DEVICE_TYPING]
+    ) -> ProbabilisticTDModule:
         if self.spec is not None:
             self.spec = self.spec.to(dest)
         out = super().to(dest)
@@ -559,7 +589,9 @@ class TDModuleWrapper(nn.Module):
         self.td_module = probabilistic_operator
         if len(self.td_module._forward_hooks):
             for pre_hook in self.td_module._forward_hooks:
-                self.register_forward_hook(self.td_module._forward_hooks[pre_hook])
+                self.register_forward_hook(
+                    self.td_module._forward_hooks[pre_hook]
+                )
 
     def __getattr__(self, name: str) -> Any:
         try:

@@ -23,7 +23,11 @@ __all__ = [
     "DistributionalQValueActor",
 ]
 
-from torchrl.data import TensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
+from torchrl.data import (
+    TensorSpec,
+    CompositeSpec,
+    UnboundedContinuousTensorSpec,
+)
 from torchrl.data.tensordict.tensordict import _TensorDict
 
 
@@ -160,7 +164,9 @@ class ValueOperator(TDModule):
             in_keys = ["observation"]
         if out_keys is None:
             out_keys = (
-                ["state_value"] if "action" not in in_keys else ["state_action_value"]
+                ["state_value"]
+                if "action" not in in_keys
+                else ["state_action_value"]
             )
         value_spec = UnboundedContinuousTensorSpec()
         super().__init__(
@@ -233,7 +239,9 @@ class QValueHook:
         out = (value == value.max(dim=-1, keepdim=True)[0]).to(torch.long)
         return out
 
-    def _mult_one_hot(self, value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
+    def _mult_one_hot(
+        self, value: torch.Tensor, support: torch.Tensor
+    ) -> torch.Tensor:
         values = value.split(self.var_nums, dim=-1)
         return torch.cat(
             [
@@ -333,16 +341,22 @@ class DistributionalQValueHook(QValueHook):
             )
         return (log_softmax_values.exp() * support.unsqueeze(-1)).sum(-2)
 
-    def _one_hot(self, value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
+    def _one_hot(
+        self, value: torch.Tensor, support: torch.Tensor
+    ) -> torch.Tensor:
         if not isinstance(value, torch.Tensor):
             raise TypeError(f"got value of type {value.__class__.__name__}")
         if not isinstance(support, torch.Tensor):
-            raise TypeError(f"got support of type {support.__class__.__name__}")
+            raise TypeError(
+                f"got support of type {support.__class__.__name__}"
+            )
         value = self._support_expected(value, support)
         out = (value == value.max(dim=-1, keepdim=True)[0]).to(torch.long)
         return out
 
-    def _mult_one_hot(self, value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
+    def _mult_one_hot(
+        self, value: torch.Tensor, support: torch.Tensor
+    ) -> torch.Tensor:
         values = value.split(self.var_nums, dim=-1)
         return torch.cat(
             [
@@ -421,7 +435,11 @@ class DistributionalQValueActor(QValueActor):
     """
 
     def __init__(
-        self, *args, support: torch.Tensor, action_space: str = "one_hot", **kwargs
+        self,
+        *args,
+        support: torch.Tensor,
+        action_space: str = "one_hot",
+        **kwargs,
     ):
         out_keys = [
             "action",

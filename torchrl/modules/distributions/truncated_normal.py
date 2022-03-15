@@ -66,7 +66,9 @@ class TruncatedStandardNormal(Distribution):
             - self._lpbb_m_lpaa_d_Z
             - ((self._little_phi_b - self._little_phi_a) / self._Z) ** 2
         )
-        self._entropy = CONST_LOG_SQRT_2PI_E + self._log_Z - 0.5 * self._lpbb_m_lpaa_d_Z
+        self._entropy = (
+            CONST_LOG_SQRT_2PI_E + self._log_Z - 0.5 * self._lpbb_m_lpaa_d_Z
+        )
 
     @constraints.dependent_property
     def support(self):
@@ -135,7 +137,9 @@ class TruncatedNormal(TruncatedStandardNormal):
         self._non_std_b = b
         a = (a - self.loc) / self.scale
         b = (b - self.loc) / self.scale
-        super(TruncatedNormal, self).__init__(a, b, validate_args=validate_args)
+        super(TruncatedNormal, self).__init__(
+            a, b, validate_args=validate_args
+        )
         self._log_scale = self.scale.log()
         self._mean = self._mean * self.scale + self.loc
         self._variance = self._variance * self.scale ** 2

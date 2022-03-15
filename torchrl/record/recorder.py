@@ -45,11 +45,15 @@ class VideoRecorder(ObservationTransform):
         try:
             import moviepy
         except:
-            raise Exception("moviepy not found, VideoRecorder cannot be created")
+            raise Exception(
+                "moviepy not found, VideoRecorder cannot be created"
+            )
 
     def _apply(self, observation: torch.Tensor) -> torch.Tensor:
         if not (observation.shape[-1] == 3 or observation.ndimension() == 2):
-            raise RuntimeError(f"Invalid observation shape, got: {observation.shape}")
+            raise RuntimeError(
+                f"Invalid observation shape, got: {observation.shape}"
+            )
         observation_trsf = observation
         self.count += 1
         if self.count % self.skip == 0:
@@ -136,7 +140,8 @@ class TensorDictRecorder(Transform):
         if self.skip_reset:
             td = td[1:]
         torch.save(
-            torch.stack(td, 0).contiguous(), f"{self.out_file_base}_tensor_dict.t"
+            torch.stack(td, 0).contiguous(),
+            f"{self.out_file_base}_tensor_dict.t",
         )
         self.iter += 1
         self.count = 0

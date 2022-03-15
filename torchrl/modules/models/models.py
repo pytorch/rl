@@ -123,7 +123,9 @@ class MLP(nn.Sequential):
         self.bias_last_layer = bias_last_layer
         self.single_bias_last_layer = single_bias_last_layer
         self.layer_class = layer_class
-        self.layer_kwargs = layer_kwargs if layer_kwargs is not None else dict()
+        self.layer_kwargs = (
+            layer_kwargs if layer_kwargs is not None else dict()
+        )
         self.activate_last_layer = activate_last_layer
         if single_bias_last_layer:
             raise NotImplementedError
@@ -134,7 +136,9 @@ class MLP(nn.Sequential):
             depth must be provided too."
             )
         self.num_cells = (
-            list(num_cells) if isinstance(num_cells, Sequence) else [num_cells] * depth
+            list(num_cells)
+            if isinstance(num_cells, Sequence)
+            else [num_cells] * depth
         )
         self.depth = depth if depth is not None else len(self.num_cells)
         if not (len(self.num_cells) == depth or depth is None):
@@ -153,7 +157,9 @@ class MLP(nn.Sequential):
             _bias = self.bias_last_layer if i == self.depth else True
             if _in is not None:
                 layers.append(
-                    self.layer_class(_in, _out, bias=_bias, **self.layer_kwargs)
+                    self.layer_class(
+                        _in, _out, bias=_bias, **self.layer_kwargs
+                    )
                 )
             else:
                 try:
@@ -163,7 +169,9 @@ class MLP(nn.Sequential):
                         f"The lazy version of {self.layer_class.__name__} is not implemented yet. "
                         "Consider providing the input feature dimensions explicitely when creating an MLP module"
                     )
-                layers.append(lazy_version(_out, bias=_bias, **self.layer_kwargs))
+                layers.append(
+                    lazy_version(_out, bias=_bias, **self.layer_kwargs)
+                )
 
             if i < self.depth or self.activate_last_layer:
                 layers.append(self.activation_class(**self.activation_kwargs))
@@ -255,7 +263,9 @@ class ConvNet(nn.Sequential):
         self.bias_last_layer = bias_last_layer
         self.aggregator_class = aggregator_class
         self.aggregator_kwargs = (
-            aggregator_kwargs if aggregator_kwargs is not None else {"ndims_in": 3}
+            aggregator_kwargs
+            if aggregator_kwargs is not None
+            else {"ndims_in": 3}
         )
         self.squeeze_output = squeeze_output
         # self.single_bias_last_layer = single_bias_last_layer
@@ -272,7 +282,11 @@ class ConvNet(nn.Sequential):
             setattr(
                 self,
                 _field,
-                (_value if isinstance(_value, Sequence) else [_value] * _depth),
+                (
+                    _value
+                    if isinstance(_value, Sequence)
+                    else [_value] * _depth
+                ),
             )
             if not (isinstance(_value, Sequence) or _depth is not None):
                 raise RuntimeError(
@@ -304,12 +318,18 @@ class ConvNet(nn.Sequential):
             if _in is not None:
                 layers.append(
                     nn.Conv2d(
-                        _in, _out, kernel_size=_kernel, stride=_stride, bias=_bias
+                        _in,
+                        _out,
+                        kernel_size=_kernel,
+                        stride=_stride,
+                        bias=_bias,
                     )
                 )
             else:
                 layers.append(
-                    nn.LazyConv2d(_out, kernel_size=_kernel, stride=_stride, bias=_bias)
+                    nn.LazyConv2d(
+                        _out, kernel_size=_kernel, stride=_stride, bias=_bias
+                    )
                 )
 
             layers.append(self.activation_class(**self.activation_kwargs))
@@ -408,7 +428,8 @@ class DistributionalDQNnet(nn.Module):
     def __init__(self, DQNet: nn.Module):
         super().__init__()
         if not (
-            not isinstance(DQNet.out_features, Number) and len(DQNet.out_features) > 1
+            not isinstance(DQNet.out_features, Number)
+            and len(DQNet.out_features) > 1
         ):
             raise RuntimeError(self._wrong_out_feature_dims_error)
         self.dqn = DQNet
@@ -485,7 +506,9 @@ class DdpgCnnActor(nn.Module):
             "aggregator_kwargs": {"ndims_in": 3},
             "squeeze_output": True,
         }
-        conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else dict()
+        conv_net_kwargs = (
+            conv_net_kwargs if conv_net_kwargs is not None else dict()
+        )
         conv_net_default_kwargs.update(conv_net_kwargs)
         mlp_net_default_kwargs = {
             "in_features": None,
@@ -496,7 +519,9 @@ class DdpgCnnActor(nn.Module):
             "activation_kwargs": {"inplace": True},
             "bias_last_layer": True,
         }
-        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
+        mlp_net_kwargs = (
+            mlp_net_kwargs if mlp_net_kwargs is not None else dict()
+        )
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.convnet = ConvNet(**conv_net_default_kwargs)  # type: ignore
         self.mlp = MLP(**mlp_net_default_kwargs)  # type: ignore
@@ -540,7 +565,9 @@ class DdpgMlpActor(nn.Module):
             "activation_kwargs": {"inplace": True},
             "bias_last_layer": True,
         }
-        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
+        mlp_net_kwargs = (
+            mlp_net_kwargs if mlp_net_kwargs is not None else dict()
+        )
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.mlp = MLP(**mlp_net_default_kwargs)  # type: ignore
         ddpg_init_last_layer(self.mlp[-1], 6e-3)
@@ -601,7 +628,9 @@ class DdpgCnnQNet(nn.Module):
             "aggregator_kwargs": {"ndims_in": 3},
             "squeeze_output": True,
         }
-        conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else dict()
+        conv_net_kwargs = (
+            conv_net_kwargs if conv_net_kwargs is not None else dict()
+        )
         conv_net_default_kwargs.update(conv_net_kwargs)
         mlp_net_default_kwargs = {
             "in_features": None,
@@ -612,13 +641,17 @@ class DdpgCnnQNet(nn.Module):
             "activation_kwargs": {"inplace": True},
             "bias_last_layer": True,
         }
-        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
+        mlp_net_kwargs = (
+            mlp_net_kwargs if mlp_net_kwargs is not None else dict()
+        )
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.convnet = ConvNet(**conv_net_default_kwargs)  # type: ignore
         self.mlp = MLP(**mlp_net_default_kwargs)  # type: ignore
         ddpg_init_last_layer(self.mlp[-1], 6e-4)
 
-    def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, observation: torch.Tensor, action: torch.Tensor
+    ) -> torch.Tensor:
         value = self.mlp(torch.cat([self.convnet(observation), action], -1))
         return value
 
@@ -695,7 +728,9 @@ class DdpgMlpQNet(nn.Module):
         self.mlp2 = MLP(**mlp2_net_default_kwargs)  # type: ignore
         ddpg_init_last_layer(self.mlp2[-1], 6e-3)
 
-    def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, observation: torch.Tensor, action: torch.Tensor
+    ) -> torch.Tensor:
         value = self.mlp2(torch.cat([self.mlp1(observation), action], -1))
         return value
 
@@ -708,7 +743,9 @@ class LSTMNet(nn.Module):
 
     """
 
-    def __init__(self, out_features, lstm_kwargs: Dict, mlp_kwargs: Dict) -> None:
+    def __init__(
+        self, out_features, lstm_kwargs: Dict, mlp_kwargs: Dict
+    ) -> None:
         super().__init__()
         lstm_kwargs.update({"batch_first": True})
         self.mlp = MLP(**mlp_kwargs)  # type: ignore
@@ -720,7 +757,9 @@ class LSTMNet(nn.Module):
         input: torch.Tensor,
         hidden0_in: Optional[torch.Tensor] = None,
         hidden1_in: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[
+        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
+    ]:
         squeeze = False
         if input.ndimension() == 2:
             squeeze = True
@@ -768,7 +807,10 @@ class LSTMNet(nn.Module):
             # we pad the hidden states with zero to make tensordict happy
             for i in range(3, 5):
                 out[i] = torch.stack(
-                    [torch.zeros_like(out[i]) for _ in range(input.shape[1] - 1)]
+                    [
+                        torch.zeros_like(out[i])
+                        for _ in range(input.shape[1] - 1)
+                    ]
                     + [out[i]],
                     1,
                 )
@@ -779,7 +821,9 @@ class LSTMNet(nn.Module):
         input: torch.Tensor,
         hidden0_in: Optional[torch.Tensor] = None,
         hidden1_in: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[
+        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
+    ]:
 
         input = self.mlp(input)
         return self._lstm(input, hidden0_in, hidden1_in)

@@ -19,6 +19,7 @@ try:
     from dm_control import suite
     import dm_env
     import collections
+
     _has_dmc = True
     __all__ = ["DMControlEnv"]
 
@@ -27,20 +28,23 @@ except:
     __all__ = []
 
 
-
 def _dmcontrol_to_torchrl_spec_transform(
     spec, dtype: Optional[torch.dtype] = None
 ) -> TensorSpec:
     if isinstance(spec, collections.OrderedDict):
         spec = {
-            k: _dmcontrol_to_torchrl_spec_transform(item) for k, item in spec.items()
+            k: _dmcontrol_to_torchrl_spec_transform(item)
+            for k, item in spec.items()
         }
         return CompositeSpec(**spec)
     elif isinstance(spec, dm_env.specs.BoundedArray):
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return NdBoundedTensorSpec(
-            shape=spec.shape, minimum=spec.minimum, maximum=spec.maximum, dtype=dtype
+            shape=spec.shape,
+            minimum=spec.minimum,
+            maximum=spec.maximum,
+            dtype=dtype,
         )
     elif isinstance(spec, dm_env.specs.Array):
         if dtype is None:
@@ -120,7 +124,9 @@ class DMControlEnv(GymLikeEnv):
             if render_kwargs is not None:
                 self.render_kwargs.update(render_kwargs)
             env = pixels.Wrapper(
-                env, pixels_only=self.pixels_only, render_kwargs=self.render_kwargs
+                env,
+                pixels_only=self.pixels_only,
+                render_kwargs=self.render_kwargs,
             )
         self._env = env
         return env
@@ -153,7 +159,9 @@ class DMControlEnv(GymLikeEnv):
 
     @property
     def observation_spec(self) -> TensorSpec:
-        return _dmcontrol_to_torchrl_spec_transform(self._env.observation_spec())
+        return _dmcontrol_to_torchrl_spec_transform(
+            self._env.observation_spec()
+        )
 
     @property
     def reward_spec(self) -> TensorSpec:

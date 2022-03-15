@@ -83,14 +83,19 @@ class ImpalaNet(nn.Module):
         layers = [_ConvNetBlock(num_ch) for num_ch in channels]
         layers += [nn.ReLU(inplace=True)]
         self.convs = nn.Sequential(*layers)
-        self.fc = nn.Sequential(nn.LazyLinear(out_features), nn.ReLU(inplace=True))
+        self.fc = nn.Sequential(
+            nn.LazyLinear(out_features), nn.ReLU(inplace=True)
+        )
 
         # FC output size + last reward.
         core_output_size = out_features + 1
 
         if use_lstm:
             self.core = nn.LSTM(
-                core_output_size, out_features, num_layers=1, batch_first=batch_first
+                core_output_size,
+                out_features,
+                num_layers=1,
+                batch_first=batch_first,
             )
             core_output_size = out_features
 
@@ -175,4 +180,6 @@ class ImpalaNetTensorDict(ImpalaNet):
             if "core_state" in tensor_dict.keys()
             else None
         )
-        return super().forward(x, reward, done, core_state=core_state, mask=mask)
+        return super().forward(
+            x, reward, done, core_state=core_state, mask=mask
+        )

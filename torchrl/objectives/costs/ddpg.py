@@ -9,7 +9,11 @@ import torch
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.modules import TDModule, reset_noise, TDModule
 from torchrl.modules.td_module.actors import ActorCriticWrapper
-from torchrl.objectives.costs.utils import distance_loss, next_state_value, hold_out_net
+from torchrl.objectives.costs.utils import (
+    distance_loss,
+    next_state_value,
+    hold_out_net,
+)
 from .common import _LossModule
 
 
@@ -47,7 +51,12 @@ class DDPGLoss(_LossModule):
         value_network = self.value_network
         target_actor_network = self.actor_network
         target_value_network = self.value_network
-        return actor_network, value_network, target_actor_network, target_value_network
+        return (
+            actor_network,
+            value_network,
+            target_actor_network,
+            target_value_network,
+        )
 
     def forward(self, input_tensor_dict: _TensorDict) -> TensorDict:
         """
@@ -92,7 +101,9 @@ class DDPGLoss(_LossModule):
             .to(input_tensor_dict.device),
             inplace=True,
         )
-        loss_actor = self._loss_actor(input_tensor_dict, actor_network, value_network)
+        loss_actor = self._loss_actor(
+            input_tensor_dict, actor_network, value_network
+        )
         return TensorDict(
             source={
                 "loss_actor": loss_actor.mean(),
@@ -137,8 +148,12 @@ class DDPGLoss(_LossModule):
         value_network(td_copy)
         pred_val = td_copy.get("state_action_value").squeeze(-1)
 
-        actor_critic = ActorCriticWrapper(target_actor_network, target_value_network)
-        target_value = next_state_value(tensor_dict, actor_critic, gamma=self.gamma)
+        actor_critic = ActorCriticWrapper(
+            target_actor_network, target_value_network
+        )
+        target_value = next_state_value(
+            tensor_dict, actor_critic, gamma=self.gamma
+        )
 
         # td_error = pred_val - target_value
         loss_value = distance_loss(
@@ -174,7 +189,12 @@ class DoubleDDPGLoss(DDPGLoss):
         value_network = self.value_network
         target_actor_network = self.target_actor_network
         target_value_network = self.target_value_network
-        return actor_network, value_network, target_actor_network, target_value_network
+        return (
+            actor_network,
+            value_network,
+            target_actor_network,
+            target_value_network,
+        )
 
     @property
     def target_value_network(self) -> TDModule:

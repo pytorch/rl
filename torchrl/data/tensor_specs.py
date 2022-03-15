@@ -29,7 +29,7 @@ INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
 def _default_dtype_and_device(
     dtype: Union[None, torch.dtype],
-    device: Union[None, str, int, torch.device]
+    device: Union[None, str, int, torch.device],
 ) -> Tuple[torch.dtype, torch.device]:
     if dtype is None:
         dtype = torch.get_default_dtype()
@@ -161,7 +161,9 @@ class TensorSpec:
         self.assert_is_in(val)
         return val.detach().cpu().numpy()
 
-    def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor
+    ) -> torch.Tensor:
         """
         Indexes the input tensor
 
@@ -281,11 +283,15 @@ class BoundedTensorSpec(TensorSpec):
         if not isinstance(maximum, torch.Tensor) or maximum.dtype is not dtype:
             maximum = torch.tensor(maximum, dtype=dtype, device=device)
         super().__init__(
-            torch.Size([1, ]),
+            torch.Size(
+                [
+                    1,
+                ]
+            ),
             ContinuousBox(minimum, maximum),
             device,
             dtype,
-            "continuous"
+            "continuous",
         )
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
@@ -360,7 +366,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
         return torch.nn.functional.gumbel_softmax(
-            torch.rand(*shape, self.space.n, device=self.device), hard=True, dim=-1
+            torch.rand(*shape, self.space.n, device=self.device),
+            hard=True,
+            dim=-1,
         ).to(torch.long)
 
     def encode(self, val: Union[np.ndarray, torch.Tensor], space: Optional[DiscreteBox] = None) -> torch.Tensor:  # type: ignore
@@ -392,9 +400,13 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             return np.array(vals).reshape(tuple(val.shape))
         return val
 
-    def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor
+    ) -> torch.Tensor:
         if not isinstance(index, torch.Tensor):
-            raise ValueError(f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)")
+            raise ValueError(
+                f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)"
+            )
         index = index.nonzero().squeeze()
         index = index.expand(*tensor_to_index.shape[:-1], index.shape[-1])
         return tensor_to_index.gather(-1, index)
@@ -432,7 +444,9 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         super().__init__(torch.Size((1,)), box, device, dtype, "composite")
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
-        return torch.randn(*shape, *self.shape, device=self.device, dtype=self.dtype)
+        return torch.randn(
+            *shape, *self.shape, device=self.device, dtype=self.dtype
+        )
 
     def is_in(self, val: torch.Tensor) -> bool:
         return True
@@ -546,7 +560,11 @@ class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
 
         dtype, device = _default_dtype_and_device(dtype, device)
         super(UnboundedContinuousTensorSpec, self).__init__(
-            shape=shape, space=None, device=device, dtype=dtype, domain="continuous"
+            shape=shape,
+            space=None,
+            device=device,
+            dtype=dtype,
+            domain="continuous",
         )
 
 
@@ -586,7 +604,9 @@ class BinaryDiscreteTensorSpec(TensorSpec):
 
     def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
         if not isinstance(index, torch.Tensor):
-            raise ValueError(f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)")
+            raise ValueError(
+                f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)"
+            )
         index = index.nonzero().squeeze()
         index = index.expand(*tensor_to_index.shape[:-1], index.shape[-1])
         return tensor_to_index.gather(-1, index)
@@ -617,7 +637,11 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     """
 
     def __init__(
-        self, nvec: Sequence[int], device=None, dtype=torch.long, use_register=False
+        self,
+        nvec: Sequence[int],
+        device=None,
+        dtype=torch.long,
+        use_register=False,
     ):
         dtype, device = _default_dtype_and_device(dtype, device)
         shape = torch.Size((sum(nvec),))
@@ -657,7 +681,9 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
                 raise RuntimeError(
                     f"value {v} is greater than the allowed max {space.n}"
                 )
-            x.append(super(MultOneHotDiscreteTensorSpec, self).encode(v, space))
+            x.append(
+                super(MultOneHotDiscreteTensorSpec, self).encode(v, space)
+            )
         return torch.cat(x, -1)
 
     def _split(self, val: torch.Tensor) -> torch.Tensor:
@@ -671,21 +697,28 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
 
     def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
         if not isinstance(index, torch.Tensor):
-            raise ValueError(f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)")
+            raise ValueError(
+                f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)"
+            )
         indices = self._split(index)
         tensor_to_index = self._split(tensor_to_index)
 
         out = []
         for _index, _tensor_to_index in zip(indices, tensor_to_index):
             _index = _index.nonzero().squeeze()
-            _index = _index.expand(*_tensor_to_index.shape[:-1], _index.shape[-1])
+            _index = _index.expand(
+                *_tensor_to_index.shape[:-1], _index.shape[-1]
+            )
             out.append(_tensor_to_index.gather(-1, _index))
         return torch.cat(out, -1)
 
     def is_in(self, val: torch.Tensor) -> bool:
         vals = self._split(val)
         return all(
-            [super(MultOneHotDiscreteTensorSpec, self).is_in(_val) for _val in vals]
+            [
+                super(MultOneHotDiscreteTensorSpec, self).is_in(_val)
+                for _val in vals
+            ]
         )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
@@ -746,7 +779,9 @@ class CompositeSpec(TensorSpec):
         return out
 
     def __repr__(self) -> str:
-        sub_str = [f"{k}: {item.__repr__()}" for k, item in self._specs.items()]
+        sub_str = [
+            f"{k}: {item.__repr__()}" for k, item in self._specs.items()
+        ]
         sub_str = ",\n\t".join(sub_str)
         return f"CompositeSpec(\n\t{sub_str})"
 

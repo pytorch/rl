@@ -18,9 +18,15 @@ from torchrl.agents.helpers.envs import (
     get_stats_random_rollout,
 )
 from torchrl.agents.helpers.losses import parser_loss_args, make_ddpg_loss
-from torchrl.agents.helpers.models import parser_model_args_continuous, make_ddpg_actor
+from torchrl.agents.helpers.models import (
+    parser_model_args_continuous,
+    make_ddpg_actor,
+)
 from torchrl.agents.helpers.recorder import parser_recorder_args
-from torchrl.agents.helpers.replay_buffer import parser_replay_args, make_replay_buffer
+from torchrl.agents.helpers.replay_buffer import (
+    parser_replay_args,
+    make_replay_buffer,
+)
 from torchrl.data.transforms import TransformedEnv, RewardScaling
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 
@@ -28,7 +34,11 @@ from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 def make_args():
     parser = configargparse.ArgumentParser()
     parser.add_argument(
-        "-c", "--config", required=True, is_config_file=True, help="config file path"
+        "-c",
+        "--config",
+        required=True,
+        is_config_file=True,
+        help="config file path",
     )
     parser_agent_args(parser)
     parser_collector_args_offline(parser)

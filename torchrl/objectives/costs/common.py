@@ -53,7 +53,9 @@ class _LossModule(nn.Module):
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, Parameter]]:
-        for name, param in super().named_parameters(prefix=prefix, recurse=recurse):
+        for name, param in super().named_parameters(
+            prefix=prefix, recurse=recurse
+        ):
             if not name.startswith("_target"):
                 yield name, param
 

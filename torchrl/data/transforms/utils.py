@@ -27,7 +27,11 @@ class FiniteTensor(torch.Tensor):
 
     @classmethod
     def __torch_dispatch__(
-        cls, func: Callable, types, args: Tuple = (), kwargs: Optional[dict] = None
+        cls,
+        func: Callable,
+        types,
+        args: Tuple = (),
+        kwargs: Optional[dict] = None,
     ):
         # TODO: also explicitly recheck invariants on inplace/out mutation
         if kwargs:

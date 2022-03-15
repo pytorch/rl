@@ -18,7 +18,9 @@ def _treat_categorical_params(
     return params
 
 
-def rand_one_hot(values: torch.Tensor, do_softmax: bool = True) -> torch.Tensor:
+def rand_one_hot(
+    values: torch.Tensor, do_softmax: bool = True
+) -> torch.Tensor:
     if do_softmax:
         values = values.softmax(-1)
     out = values.cumsum(-1) > torch.rand_like(values[..., :1])

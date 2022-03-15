@@ -85,9 +85,13 @@ if __name__ == "__main__":
             time.sleep(1)
             t0 = time.time()
             for w in range(1, args.world_size):
-                fut0 = rpc.rpc_async(f"worker{w}", get_tensordict, args=tuple())
+                fut0 = rpc.rpc_async(
+                    f"worker{w}", get_tensordict, args=tuple()
+                )
                 fut0.wait()
-                fut1 = rpc.rpc_async(f"worker{w}", tensordict_add, args=tuple())
+                fut1 = rpc.rpc_async(
+                    f"worker{w}", tensordict_add, args=tuple()
+                )
                 tensordict2 = fut1.wait()
                 tensordict2.clone()
             print("time: ", time.time() - t0)
@@ -98,7 +102,9 @@ if __name__ == "__main__":
                 rpc.remote(f"worker{w}", get_tensordict, args=tuple())
                 for w in range(1, args.world_size)
             ]
-            td = torch.stack([waiter.to_here() for waiter in waiters], 0).contiguous()
+            td = torch.stack(
+                [waiter.to_here() for waiter in waiters], 0
+            ).contiguous()
             print("time: ", time.time() - t0)
 
             t0 = time.time()
@@ -106,7 +112,9 @@ if __name__ == "__main__":
                 rpc.remote(f"worker{w}", tensordict_add, args=tuple())
                 for w in range(1, args.world_size)
             ]
-            td = torch.stack([waiter.to_here() for waiter in waiters], 0).contiguous()
+            td = torch.stack(
+                [waiter.to_here() for waiter in waiters], 0
+            ).contiguous()
             print("time: ", time.time() - t0)
             assert (td[:, 3].get("a") == 1).all()
             assert (td[:, 3].get("b") == 0).all()
@@ -125,7 +133,9 @@ if __name__ == "__main__":
             t0 = time.time()
             if args.memmap:
                 waiters = [
-                    rpc.remote(f"worker{w}", tensordict_add_noreturn, args=tuple())
+                    rpc.remote(
+                        f"worker{w}", tensordict_add_noreturn, args=tuple()
+                    )
                     for w in range(1, args.world_size)
                 ]
                 print("temp t: ", time.time() - t0)

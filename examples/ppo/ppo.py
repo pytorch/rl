@@ -18,7 +18,10 @@ from torchrl.agents.helpers.envs import (
     parser_env_args,
 )
 from torchrl.agents.helpers.losses import make_ppo_loss, parser_loss_args_ppo
-from torchrl.agents.helpers.models import make_ppo_model, parser_model_args_continuous
+from torchrl.agents.helpers.models import (
+    make_ppo_model,
+    parser_model_args_continuous,
+)
 from torchrl.agents.helpers.recorder import parser_recorder_args
 from torchrl.data.transforms import TransformedEnv, RewardScaling
 
@@ -26,7 +29,11 @@ from torchrl.data.transforms import TransformedEnv, RewardScaling
 def make_args():
     parser = configargparse.ArgumentParser()
     parser.add_argument(
-        "-c", "--config", required=True, is_config_file=True, help="config file path"
+        "-c",
+        "--config",
+        required=True,
+        is_config_file=True,
+        help="config file path",
     )
     parser_agent_args(parser)
     parser_collector_args_online(parser)
@@ -84,7 +91,11 @@ if __name__ == "__main__":
     )
 
     recorder = transformed_env_constructor(
-        args, video_tag=video_tag, norm_obs_only=True, stats=stats, writer=writer
+        args,
+        video_tag=video_tag,
+        norm_obs_only=True,
+        stats=stats,
+        writer=writer,
     )()
 
     # remove video recorder from recorder to have matching state_dict keys

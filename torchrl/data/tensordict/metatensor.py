@@ -70,13 +70,19 @@ class MetaTensor:
                 if tensor.device != torch.device("meta")
                 else _is_memmap
             )
-            device = tensor.device if tensor.device != torch.device("meta") else device
+            device = (
+                tensor.device
+                if tensor.device != torch.device("meta")
+                else device
+            )
             dtype = tensor.dtype
         if not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
         self.shape = shape
         self.device = (
-            torch.device(device) if not isinstance(device, torch.device) else device
+            torch.device(device)
+            if not isinstance(device, torch.device)
+            else device
         )
         self.dtype = dtype
         self._ndim = len(shape)
@@ -146,11 +152,18 @@ class MetaTensor:
     def __getitem__(self, item: INDEX_TYPING) -> MetaTensor:
         shape = _getitem_batch_size(self.shape, item)
         return MetaTensor(
-            *shape, dtype=self.dtype, device=self.device, _is_shared=self.is_shared()
+            *shape,
+            dtype=self.dtype,
+            device=self.device,
+            _is_shared=self.is_shared(),
         )
 
     def __torch_function__(
-        self, func: Callable, types, args: Tuple = (), kwargs: Optional[dict] = None
+        self,
+        func: Callable,
+        types,
+        args: Tuple = (),
+        kwargs: Optional[dict] = None,
     ):
         if kwargs is None:
             kwargs = {}
@@ -165,9 +178,7 @@ class MetaTensor:
         return MetaTensor(*shape, device=self.device, dtype=self.dtype)
 
     def __repr__(self) -> str:
-        return (
-            f"MetaTensor(shape={self.shape}, device={self.device}, dtype={self.dtype})"
-        )
+        return f"MetaTensor(shape={self.shape}, device={self.device}, dtype={self.dtype})"
 
     def unsqueeze(self, dim: int) -> MetaTensor:
         clone = self.clone()
@@ -199,11 +210,15 @@ class MetaTensor:
         return clone
 
     def view(
-        self, *shape: Sequence, size: Optional[Union[List, Tuple, torch.Size]] = None
+        self,
+        *shape: Sequence,
+        size: Optional[Union[List, Tuple, torch.Size]] = None,
     ) -> MetaTensor:
         if len(shape) == 0 and size is not None:
             return self.view(*size)
-        elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
+        elif len(shape) == 1 and isinstance(
+            shape[0], (list, tuple, torch.Size)
+        ):
             return self.view(*shape[0])
         elif not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
@@ -240,7 +255,9 @@ def _stack_meta(
 
 @implements_for_meta(torch.stack)
 def stack_meta(
-    list_of_meta_tensors: Sequence[MetaTensor], dim: int = 0, safe: bool = False
+    list_of_meta_tensors: Sequence[MetaTensor],
+    dim: int = 0,
+    safe: bool = False,
 ) -> MetaTensor:
     dtype = (
         list_of_meta_tensors[0].dtype

@@ -209,8 +209,12 @@ def make_ddpg_actor(
             device=cpu)
     """
 
-    actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else dict()
-    value_net_kwargs = value_net_kwargs if value_net_kwargs is not None else dict()
+    actor_net_kwargs = (
+        actor_net_kwargs if actor_net_kwargs is not None else dict()
+    )
+    value_net_kwargs = (
+        value_net_kwargs if value_net_kwargs is not None else dict()
+    )
 
     linear_layer_class = torch.nn.Linear if not noisy else NoisyLinear
 
@@ -427,7 +431,10 @@ def make_ppo_model(
                 activate_last_layer=True,
             )
         common_operator = TDModule(
-            spec=None, module=common_module, in_keys=in_keys_actor, out_keys=["hidden"]
+            spec=None,
+            module=common_module,
+            in_keys=in_keys_actor,
+            out_keys=["hidden"],
         )
 
         policy_net = MLP(

@@ -20,7 +20,8 @@ def _sub_index(tensor: torch.Tensor, idx: INDEX_TYPING) -> torch.Tensor:
 
 
 def _getitem_batch_size(
-    shape: torch.Size, items: INDEX_TYPING,
+    shape: torch.Size,
+    items: INDEX_TYPING,
 ):
     """
     Given an input shape and an index, returns the size of the resulting indexed tensor.
@@ -36,9 +37,9 @@ def _getitem_batch_size(
         items = (items,)
     bs = []
     iter_bs = iter(shape)
-    if all(isinstance(_item, torch.Tensor) for _item in items) and len(items) == len(
-        shape
-    ):
+    if all(isinstance(_item, torch.Tensor) for _item in items) and len(
+        items
+    ) == len(shape):
         shape0 = items[0].shape
         for _item in items[1:]:
             if _item.shape != shape0:

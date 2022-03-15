@@ -199,7 +199,9 @@ class Agent:
     def save_agent(self) -> None:
         _save = False
         if self.save_agent_file is not None:
-            if (self._collected_frames - self._last_save) > self.save_agent_interval:
+            if (
+                self._collected_frames - self._last_save
+            ) > self.save_agent_interval:
                 self._last_save = self._collected_frames
                 _save = True
         if _save:
@@ -226,7 +228,12 @@ class Agent:
             )
         self.collector.load_state_dict(loaded_dict["env"])
         self.model.load_state_dict(loaded_dict["model"])
-        for key in ["_collected_frames", "_last_log", "_last_save", "_optim_count"]:
+        for key in [
+            "_collected_frames",
+            "_last_log",
+            "_last_save",
+            "_optim_count",
+        ]:
             setattr(self, key, loaded_dict[key])
         return self
 
@@ -268,7 +275,9 @@ class Agent:
         collected_frames = 0
         for i, batch in enumerate(self.collector):
             if "mask" in batch.keys():
-                current_frames = batch.get("mask").sum().item() * self.frame_skip
+                current_frames = (
+                    batch.get("mask").sum().item() * self.frame_skip
+                )
             else:
                 current_frames = batch.numel() * self.frame_skip
             collected_frames += current_frames
@@ -285,7 +294,9 @@ class Agent:
             else:
                 if "mask" in batch.keys():
                     reward_training = (
-                        batch.get("reward")[batch.get("mask").squeeze(-1)].mean().item()
+                        batch.get("reward")[batch.get("mask").squeeze(-1)]
+                        .mean()
+                        .item()
                     )
                 else:
                     reward_training = batch.get("reward").mean().item()
@@ -349,7 +360,9 @@ class Agent:
         average_grad_norm = 0.0
         average_losses = None
 
-        self.loss_module.apply(reset_noise)  # TODO: group in loss_module.reset?
+        self.loss_module.apply(
+            reset_noise
+        )  # TODO: group in loss_module.reset?
         self.loss_module.reset()
 
         for j in range(self.optim_steps_per_batch):
@@ -364,12 +377,18 @@ class Agent:
 
             sub_batch_device = sub_batch.to(self.loss_module.device)
             losses_td = self.loss_module(sub_batch_device)
-            if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
+            if isinstance(
+                self.replay_buffer, TensorDictPrioritizedReplayBuffer
+            ):
                 self.replay_buffer.update_priority(sub_batch_device)
 
             # sum all keys that start with 'loss_'
             loss = sum(
-                [item for key, item in losses_td.items() if key.startswith("loss")]
+                [
+                    item
+                    for key, item in losses_td.items()
+                    if key.startswith("loss")
+                ]
             )
             loss.backward()
             if average_losses is None:
@@ -380,7 +399,9 @@ class Agent:
                     average_losses.set(key, val * j / (j + 1) + item / (j + 1))
 
             grad_norm = self._grad_clip()
-            average_grad_norm = average_grad_norm * j / (j + 1) + grad_norm / (j + 1)
+            average_grad_norm = average_grad_norm * j / (j + 1) + grad_norm / (
+                j + 1
+            )
             self.optimizer.step()
             self.optimizer.zero_grad()
 
@@ -417,19 +438,26 @@ class Agent:
         if batch.ndimension() == 1:
             return batch[torch.randperm(batch.shape[0])[: self.batch_size]]
 
-        sub_traj_len = self.sub_traj_len if self.sub_traj_len > 0 else batch.shape[1]
+        sub_traj_len = (
+            self.sub_traj_len if self.sub_traj_len > 0 else batch.shape[1]
+        )
         if "mask" in batch.keys():
             # if a valid mask is present, it's important to sample only valid steps
             traj_len = batch.get("mask").sum(1).squeeze()
             sub_traj_len = max(
-                self.min_sub_traj_len, min(sub_traj_len, traj_len.min().int().item())
+                self.min_sub_traj_len,
+                min(sub_traj_len, traj_len.min().int().item()),
             )
         else:
             traj_len = (
-                torch.ones(batch.shape[0], device=batch.device, dtype=torch.bool)
+                torch.ones(
+                    batch.shape[0], device=batch.device, dtype=torch.bool
+                )
                 * batch.shape[1]
             )
-        valid_trajectories = torch.arange(batch.shape[0])[traj_len >= sub_traj_len]
+        valid_trajectories = torch.arange(batch.shape[0])[
+            traj_len >= sub_traj_len
+        ]
 
         batch_size = self.batch_size // sub_traj_len
         traj_idx = valid_trajectories[
@@ -460,7 +488,9 @@ class Agent:
         td = td.apply(
             lambda t: t.gather(
                 dim=1,
-                index=expand_right(seq_idx, (batch_size, sub_traj_len, *t.shape[2:])),
+                index=expand_right(
+                    seq_idx, (batch_size, sub_traj_len, *t.shape[2:])
+                ),
             ),
             batch_size=(batch_size, sub_traj_len),
         )
@@ -479,14 +509,18 @@ class Agent:
     def _log(self, **kwargs) -> None:
         collected_frames = self._collected_frames
         for key, item in kwargs.items():
-            if (collected_frames - self._last_log.get(key, 0)) > self._log_interval:
+            if (
+                collected_frames - self._last_log.get(key, 0)
+            ) > self._log_interval:
                 self._last_log[key] = collected_frames
                 _log = True
             else:
                 _log = False
             method = WRITER_METHODS.get(key, "add_scalar")
             if _log and self.writer is not None:
-                getattr(self.writer, method)(key, item, global_step=collected_frames)
+                getattr(self.writer, method)(
+                    key, item, global_step=collected_frames
+                )
             if method == "add_scalar" and self.progress_bar:
                 self._pbar_str[key] = float(item)
 
@@ -521,7 +555,9 @@ class Agent:
 
     def __repr__(self) -> str:
         loss_str = indent(f"loss={self.loss_module}", 4 * " ")
-        policy_str = indent(f"policy_exploration={self.policy_exploration}", 4 * " ")
+        policy_str = indent(
+            f"policy_exploration={self.policy_exploration}", 4 * " "
+        )
         collector_str = indent(f"collector={self.collector}", 4 * " ")
         buffer_str = indent(f"buffer={self.replay_buffer}", 4 * " ")
         optimizer_str = indent(f"optimizer={self.optimizer}", 4 * " ")
