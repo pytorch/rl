@@ -1,21 +1,13 @@
-from copy import deepcopy
-from typing import Tuple
-from uuid import uuid1
-
 import torch
 
 from torchrl.data import TensorDict
 from torchrl.envs.utils import step_tensor_dict
 from torchrl.modules import (
-    QValueActor,
     DistributionalQValueActor,
-    reset_noise,
-    ProbabilisticTDModule,
+    QValueActor,
 )
-from .utils import distance_loss, next_state_value
-
 from .common import _LossModule
-
+from .utils import distance_loss, next_state_value
 from ...data.tensordict.tensordict import _TensorDict
 
 __all__ = [
@@ -47,7 +39,9 @@ class DQNLoss(_LossModule):
 
         super().__init__()
         self.convert_to_functional(
-            value_network, "value_network", create_target_params=self.delay_value
+            value_network,
+            "value_network",
+            create_target_params=self.delay_value,
         )
 
         self.value_network_in_keys = value_network.in_keys
@@ -73,7 +67,11 @@ class DQNLoss(_LossModule):
 
         """
 
-        device = self.device if self.device is not None else input_tensor_dict.device
+        device = (
+            self.device
+            if self.device is not None
+            else input_tensor_dict.device
+        )
         tensor_dict = input_tensor_dict.to(device)
         if tensor_dict.device != device:
             raise RuntimeError(
@@ -93,7 +91,9 @@ class DQNLoss(_LossModule):
         action = action.to(torch.float)
         td_copy = tensor_dict.clone()
         if td_copy.device != tensor_dict.device:
-            raise RuntimeError(f"{tensor_dict} and {td_copy} have different devices")
+            raise RuntimeError(
+                f"{tensor_dict} and {td_copy} have different devices"
+            )
         self.value_network(
             td_copy,
             params=self.value_network_params,
@@ -112,13 +112,13 @@ class DQNLoss(_LossModule):
                 buffers=self.target_value_network_buffers,
                 next_val_key="chosen_action_value",
             )
+        priority_tensor = abs(pred_val_index - target_value)
+        priority_tensor = priority_tensor.detach().unsqueeze(-1)
+        priority_tensor = priority_tensor.to(input_tensor_dict.device)
 
         input_tensor_dict.set(
             self.priority_key,
-            abs(pred_val_index - target_value)
-            .detach()
-            .unsqueeze(-1)
-            .to(input_tensor_dict.device),
+            priority_tensor,
             inplace=True,
         )
         loss = distance_loss(pred_val_index, target_value, self.loss_function)
@@ -147,14 +147,18 @@ class DoubleDQNLoss(DQNLoss):
 class DistributionalDQNLoss(_LossModule):
     """
     A distributional DQN loss class.
-    Distributional DQN uses a value network that outputs a distribution of values over a discrete support of discounted
-    returns (unlike regular DQN where the value network outputs a single point prediction of the disctounted return).
+    Distributional DQN uses a value network that outputs a distribution of
+    values over a discrete support of discounted returns (unlike regular DQN
+    where the value network outputs a single point prediction of the
+    disctounted return).
 
-    For more details regarding Distributional DQN, refer to "A Distributional Perspective on Reinforcement Learning",
+    For more details regarding Distributional DQN, refer to "A Distributional
+    Perspective on Reinforcement Learning",
     https://arxiv.org/pdf/1707.06887.pdf
 
     Args:
-        value_network (DistributionalQValueActor): the distributional Q value operator.
+        value_network (DistributionalQValueActor): the distributional Q
+            value operator.
         gamma (scalar): a discount factor for return computation.
     """
 
@@ -171,11 +175,14 @@ class DistributionalDQNLoss(_LossModule):
         self.priority_key = priority_key
         if not isinstance(value_network, DistributionalQValueActor):
             raise TypeError(
-                "Expected value_network to be of type DistributionalQValueActor "
+                "Expected value_network to be of type "
+                "DistributionalQValueActor "
                 f"but got {type(value_network)}"
             )
         self.convert_to_functional(
-            value_network, "value_network", create_target_params=self.delay_value
+            value_network,
+            "value_network",
+            create_target_params=self.delay_value,
         )
 
     def forward(self, input_tensor_dict: _TensorDict) -> TensorDict:
@@ -187,7 +194,8 @@ class DistributionalDQNLoss(_LossModule):
 
         if tensor_dict.batch_dims != 1:
             raise RuntimeError(
-                f"{self.__class__.__name___} expects a 1-dimensional tensor_dict as input"
+                f"{self.__class__.__name___} expects a 1-dimensional "
+                "tensor_dict as input"
             )
         batch_size = tensor_dict.batch_size[0]
         support = self.value_network.support
@@ -200,13 +208,11 @@ class DistributionalDQNLoss(_LossModule):
         reward = tensor_dict.get("reward")
         done = tensor_dict.get("done")
 
-        try:
-            steps_to_next_obs = tensor_dict.get("steps_to_next_obs")
-        except:
-            steps_to_next_obs = 1
+        steps_to_next_obs = tensor_dict.get("steps_to_next_obs", 1)
         discount = self.gamma ** steps_to_next_obs
 
-        # Calculate current state probabilities (online network noise already sampled)
+        # Calculate current state probabilities (online network noise already
+        # sampled)
         td_clone = tensor_dict.clone()
         self.value_network(
             td_clone,
@@ -215,7 +221,9 @@ class DistributionalDQNLoss(_LossModule):
         )  # Log probabilities log p(s_t, ·; θonline)
         action_log_softmax = td_clone.get("action_value")
         action_expand = action.unsqueeze(-2).expand_as(action_log_softmax)
-        log_ps_a = action_log_softmax.masked_select(action_expand.to(torch.bool))
+        log_ps_a = action_log_softmax.masked_select(
+            action_expand.to(torch.bool)
+        )
         log_ps_a = log_ps_a.view(batch_size, atoms)  # log p(s_t, a_t; θonline)
 
         with torch.no_grad():
@@ -226,7 +234,9 @@ class DistributionalDQNLoss(_LossModule):
                 params=self.value_network_params,
                 buffers=self.value_network_buffers,
             )  # Probabilities p(s_t+n, ·; θonline)
-            argmax_indices_ns = next_td.get("action").argmax(-1)  # one-hot encoding
+            argmax_indices_ns = next_td.get("action").argmax(
+                -1
+            )  # one-hot encoding
 
             self.value_network(
                 next_td,
@@ -234,11 +244,12 @@ class DistributionalDQNLoss(_LossModule):
                 buffers=self.target_value_network_buffers,
             )  # Probabilities p(s_t+n, ·; θtarget)
             pns = next_td.get("action_value").exp()
-            # Double-Q probabilities p(s_t+n, argmax_a[(z, p(s_t+n, a; θonline))]; θtarget)
+            # Double-Q probabilities
+            # p(s_t+n, argmax_a[(z, p(s_t+n, a; θonline))]; θtarget)
             pns_a = pns[range(batch_size), :, argmax_indices_ns]
 
             # Compute Tz (Bellman operator T applied to z)
-            ## Tz = R^n + (γ^n)z (accounting for terminal states)
+            # Tz = R^n + (γ^n)z (accounting for terminal states)
             if isinstance(discount, torch.Tensor):
                 discount = discount.to("cpu")
             done = done.to("cpu")
@@ -249,38 +260,36 @@ class DistributionalDQNLoss(_LossModule):
             if Tz.shape != torch.Size([batch_size, atoms]):
                 raise RuntimeError(
                     "Tz shape must be torch.Size([batch_size, atoms]), "
-                    f"got Tz.shape={Tz.shape} and batch_size={batch_size}, atoms={atoms}"
+                    f"got Tz.shape={Tz.shape} and batch_size={batch_size}, "
+                    f"atoms={atoms}"
                 )
-            ## Clamp between supported values
+            # Clamp between supported values
             Tz = Tz.clamp_(min=Vmin, max=Vmax)
             if not torch.isfinite(Tz).all():
                 raise RuntimeError("Tz has some non-finite elements")
-            ## Compute L2 projection of Tz onto fixed support z
+            # Compute L2 projection of Tz onto fixed support z
             b = (Tz - Vmin) / delta_z  # b = (Tz - Vmin) / Δz
-            l, u = b.floor().to(torch.int64), b.ceil().to(torch.int64)
+            low, up = b.floor().to(torch.int64), b.ceil().to(torch.int64)
             # Fix disappearing probability mass when l = b = u (b is int)
-            l[(u > 0) & (l == u)] -= 1
-            u[(l < (atoms - 1)) & (l == u)] += 1
+            low[(up > 0) & (low == up)] -= 1
+            up[(low < (atoms - 1)) & (low == up)] += 1
 
             # Distribute probability of Tz
             m = torch.zeros(batch_size, atoms)
-            offset = (
-                torch.linspace(
-                    0,
-                    ((batch_size - 1) * atoms),
-                    batch_size,
-                    dtype=torch.int64,
-                    # device=device,
-                )
-                .unsqueeze(1)
-                .expand(batch_size, atoms)
+            offset = torch.linspace(
+                0,
+                ((batch_size - 1) * atoms),
+                batch_size,
+                dtype=torch.int64,
+                # device=device,
             )
-            index = (l + offset).view(-1)
-            tensor = (pns_a * (u.float() - b)).view(-1)
+            offset = offset.unsqueeze(1).expand(batch_size, atoms)
+            index = (low + offset).view(-1)
+            tensor = (pns_a * (up.float() - b)).view(-1)
             # m_l = m_l + p(s_t+n, a*)(u - b)
             m.view(-1).index_add_(0, index, tensor)
-            index = (u + offset).view(-1)
-            tensor = (pns_a * (b - l.float())).view(-1)
+            index = (up + offset).view(-1)
+            tensor = (pns_a * (b - low.float())).view(-1)
             # m_u = m_u + p(s_t+n, a*)(b - l)
             m.view(-1).index_add_(0, index, tensor)
 
@@ -300,10 +309,11 @@ class DistributionalDoubleDQNLoss(DistributionalDQNLoss):
     A distributional, double DQN loss class.
     This class mixes distributional and double DQN losses.
 
-    For more details regarding Distributional DQN, refer to "A Distributional Perspective on Reinforcement Learning",
+    For more details regarding Distributional DQN, refer to "A Distributional
+    Perspective on Reinforcement Learning",
     https://arxiv.org/pdf/1707.06887.pdf
-    More information on double DQN can be found in "Deep Reinforcement Learning with Double Q-learning",
-    https://arxiv.org/abs/1509.06461.
+    More information on double DQN can be found in "Deep Reinforcement
+    Learning with Double Q-learning", https://arxiv.org/abs/1509.06461.
 
     """
 

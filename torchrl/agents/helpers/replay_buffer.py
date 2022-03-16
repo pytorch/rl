@@ -1,6 +1,5 @@
 from argparse import ArgumentParser, Namespace
 
-
 import torch
 
 from torchrl.data import (
@@ -10,15 +9,11 @@ from torchrl.data import (
 )
 from torchrl.data.replay_buffers.replay_buffers import InPlaceSampler
 
-__all__ = [
-    "make_replay_buffer",
-    "parser_replay_args"
-]
+__all__ = ["make_replay_buffer", "parser_replay_args"]
 
 
 def make_replay_buffer(device: DEVICE_TYPING, args: Namespace) -> ReplayBuffer:
-    """Builds a replay buffer using the arguments build from the parser returned by parser_replay_args.
-    """
+    """Builds a replay buffer using the arguments build from the parser returned by parser_replay_args."""
     device = torch.device(device)
     if not args.prb:
         buffer = ReplayBuffer(

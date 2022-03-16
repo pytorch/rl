@@ -30,7 +30,7 @@ from torchrl.objectives import (
     SoftUpdate,
 )
 from torchrl.objectives.costs.common import _LossModule
-from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
+from torchrl.objectives.costs.redq import DoubleREDQLoss, REDQLoss
 
 # from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
 from torchrl.objectives.costs.utils import _TargetNetUpdate
@@ -39,8 +39,7 @@ from torchrl.objectives.costs.utils import _TargetNetUpdate
 def make_target_updater(
     args: Namespace, loss_module: _LossModule
 ) -> Optional[_TargetNetUpdate]:
-    """Builds a target network weight update object.
-    """
+    """Builds a target network weight update object."""
     if args.loss == "double":
         if not args.hard_update:
             target_net_updater = SoftUpdate(
@@ -62,8 +61,7 @@ def make_target_updater(
 
 
 def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
-    """Builds the SAC loss module.
-    """
+    """Builds the SAC loss module."""
     loss_kwargs = {}
     if hasattr(args, "distributional") and args.distributional:
         raise NotImplementedError
@@ -94,8 +92,7 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
 
 
 def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
-    """Builds the REDQ loss module.
-    """
+    """Builds the REDQ loss module."""
     loss_kwargs = {}
     if hasattr(args, "distributional") and args.distributional:
         raise NotImplementedError
@@ -119,8 +116,7 @@ def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
 
 
 def make_ddpg_loss(model, args) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
-    """Builds the DDPG loss module.
-    """
+    """Builds the DDPG loss module."""
     actor, value_net = model
     loss_kwargs = {}
     if args.distributional:
@@ -139,8 +135,7 @@ def make_ddpg_loss(model, args) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
 
 
 def make_dqn_loss(model, args) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
-    """Builds the DQN loss module.
-    """
+    """Builds the DQN loss module."""
     loss_kwargs = {}
     if args.distributional:
         if args.loss == "single":
@@ -163,8 +158,7 @@ def make_dqn_loss(model, args) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
 
 
 def make_ppo_loss(model, args) -> PPOLoss:
-    """Builds the PPO loss module.
-    """
+    """Builds the PPO loss module."""
     loss_dict = {
         "clip": ClipPPOLoss,
         "kl": KLPENPPOLoss,
@@ -220,8 +214,8 @@ def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
         type=int,
         default=1000,
         help="how often the target value network weights are updated (in number of updates)."
-             "If soft-updates are used, the value is translated into a moving average decay by using "
-             "the formula decay=1-1/args.value_network_update_interval. Default=1000",
+        "If soft-updates are used, the value is translated into a moving average decay by using "
+        "the formula decay=1-1/args.value_network_update_interval. Default=1000",
     )
     parser.add_argument(
         "--gamma",
@@ -269,7 +263,7 @@ def parser_loss_args_ppo(parser: ArgumentParser) -> ArgumentParser:
         default=0.95,
         type=float,
         help="lambda factor in GAE (using 'lambda' as attribute is prohibited in python, "
-             "hence the misspelling)",
+        "hence the misspelling)",
     )
     parser.add_argument(
         "--entropy_factor",

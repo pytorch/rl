@@ -50,7 +50,9 @@ class timeit:
         self._REG.setdefault(self.name, [0.0, 0])
 
         count = self._REG[self.name][1]
-        self._REG[self.name][0] = (self._REG[self.name][0] * count + t) / (count + 1)
+        self._REG[self.name][0] = (self._REG[self.name][0] * count + t) / (
+            count + 1
+        )
         self._REG[self.name][1] = count + 1
 
     @staticmethod

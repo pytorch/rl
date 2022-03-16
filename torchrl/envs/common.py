@@ -9,9 +9,9 @@ import numpy as np
 import torch
 
 from torchrl.data import CompositeSpec, TensorDict
-from .utils import get_available_libraries, step_tensor_dict
 from ..data.tensordict.tensordict import _TensorDict
 from ..data.utils import DEVICE_TYPING
+from .utils import get_available_libraries, step_tensor_dict
 
 LIBRARIES = get_available_libraries()
 
@@ -30,10 +30,11 @@ __all__ = ["Specs", "GymLikeEnv", "make_tensor_dict"]
 
 
 class Specs:
-    """
-    Container for action, observation and reward specs.
-    This class allows one to create an environment, retrieve all of the specs in a single data container (and access
-    them in one place) before erasing the environment from the workspace.
+    """Container for action, observation and reward specs.
+
+    This class allows one to create an environment, retrieve all of the specs
+    in a single data container (and access them in one place) before erasing
+    the environment from the workspace.
 
     Args:
         env (_EnvClass): environment from which the specs have to be read.
@@ -67,7 +68,7 @@ class Specs:
                 self["observation_spec"].shape,
                 dtype=self["observation_spec"].dtype,
             )
-            td.set(f"observation", observation_placeholder)
+            td.set("observation", observation_placeholder)
         else:
             for i, key in enumerate(self["observation_spec"]):
                 item = self["observation_spec"][key]
@@ -260,9 +261,7 @@ class _EnvClass:
 
     @property
     def current_tensordict(self) -> _TensorDict:
-        """Returns the last tensordict encountered after calling `reset` or `step`.
-
-        """
+        """Returns the last tensordict encountered after calling `reset` or `step`."""
         try:
             return self._current_tensordict
         except AttributeError:
@@ -359,7 +358,7 @@ class _EnvClass:
         """
         try:
             policy_device = next(policy.parameters()).device
-        except:
+        except AttributeError:
             policy_device = "cpu"
 
         if auto_reset:
@@ -371,9 +370,9 @@ class _EnvClass:
             tensor_dict = self.current_tensordict.clone()
 
         if policy is None:
-            policy = lambda td: td.set(
-                "action", self.action_spec.rand(self.batch_size)
-            )
+
+            def policy(td):
+                return td.set("action", self.action_spec.rand(self.batch_size))
 
         tensor_dicts = []
         if not self.is_done:
@@ -392,7 +391,7 @@ class _EnvClass:
                 if callback is not None:
                     callback(self, tensor_dict)
         else:
-            raise Exception(f"reset env before calling rollout!")
+            raise Exception("reset env before calling rollout!")
 
         out_td = torch.stack(tensor_dicts, len(self.batch_size))
         return out_td

@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Dict, Sequence, Union
+from typing import Dict, Sequence, Union, Optional
 
 import numpy as np
 import torch
@@ -259,7 +259,12 @@ class TanhNormal(D.TransformedDistribution):
         t = SafeTanhTransform()
         if self.non_trivial_max or self.non_trivial_min:
             t = D.ComposeTransform(
-                [t, D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)]
+                [
+                    t,
+                    D.AffineTransform(
+                        loc=(max + min) / 2, scale=(max - min) / 2
+                    ),
+                ]
             )
         self._t = t
 
@@ -285,7 +290,9 @@ class TanhNormal(D.TransformedDistribution):
             self.base_dist.base_dist.scale = self.scale
 
         else:
-            base = D.Independent(D.Normal(self.loc, self.scale), self._event_dims)
+            base = D.Independent(
+                D.Normal(self.loc, self.scale), self._event_dims
+            )
             super().__init__(base, self._t)
 
     @property
@@ -339,13 +346,16 @@ class Delta(D.Distribution):
         batch_shape: Union[torch.Size, Sequence[int]] = torch.Size([]),
         event_shape: Union[torch.Size, Sequence[int]] = torch.Size([]),
     ):
-        self.param = param
+        self.update(param)
         self.atol = atol
         self.rtol = rtol
         if not len(batch_shape) and not len(event_shape):
             batch_shape = param.shape[:-1]
             event_shape = param.shape[-1:]
         super().__init__(batch_shape=batch_shape, event_shape=event_shape)
+
+    def update(self, param):
+        self.param = param
 
     def _is_equal(self, value: torch.Tensor) -> torch.Tensor:
         param = self.param.expand_as(value)
@@ -424,22 +434,17 @@ class TanhDelta(D.TransformedDistribution):
             if not all(max > min):  # type: ignore
                 raise ValueError(minmax_msg)
 
-        loc = net_output
-        loc = loc + (max - min) / 2 + min
-
-        self.loc = loc
+        self.min = min
+        self.max = max
+        loc = self.update(net_output)
 
         t = D.TanhTransform()
         non_trivial_min = (
-                              isinstance(min, torch.Tensor) and (
-                                  min != 1.0).any()
-                          ) or (not isinstance(min,
-                                               torch.Tensor) and min != 1.0)
+            isinstance(min, torch.Tensor) and (min != 1.0).any()
+        ) or (not isinstance(min, torch.Tensor) and min != 1.0)
         non_trivial_max = (
-                              isinstance(max, torch.Tensor) and (
-                                  max != 1.0).any()
-                          ) or (not isinstance(max,
-                                               torch.Tensor) and max != 1.0)
+            isinstance(max, torch.Tensor) and (max != 1.0).any()
+        ) or (not isinstance(max, torch.Tensor) and max != 1.0)
         if non_trivial_max or non_trivial_min:
             t = D.ComposeTransform(  # type: ignore
                 [
@@ -461,6 +466,14 @@ class TanhDelta(D.TransformedDistribution):
         )
 
         super().__init__(base, t)
+
+    def update(self, net_output: torch.Tensor) -> Optional[torch.Tensor]:
+        loc = net_output
+        loc = loc + (self.max - self.min) / 2 + self.min
+        if hasattr(self, 'base_dist'):
+            self.base_dist.update(loc)
+        else:
+            return loc
 
     @property
     def mode(self) -> torch.Tensor:

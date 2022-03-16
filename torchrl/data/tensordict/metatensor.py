@@ -73,7 +73,7 @@ class MetaTensor:
                     if tensor.device != torch.device("meta")
                     else _is_shared
                 )
-            except:
+            except:  # noqa
                 _is_shared = False
             _is_memmap = (
                 isinstance(tensor, MemmapTensor)
@@ -186,8 +186,10 @@ class MetaTensor:
         return MetaTensor(*shape, device=self.device, dtype=self.dtype)
 
     def __repr__(self) -> str:
-        return f"MetaTensor(shape={self.shape}, device={self.device}, " \
-               f"dtype={self.dtype})"
+        return (
+            f"MetaTensor(shape={self.shape}, device={self.device}, "
+            f"dtype={self.dtype})"
+        )
 
     def unsqueeze(self, dim: int) -> MetaTensor:
         clone = self.clone()

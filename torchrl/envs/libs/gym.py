@@ -12,8 +12,8 @@ from torchrl.data import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from ..common import GymLikeEnv
 from ...data.utils import numpy_to_torch_dtype_dict
+from ..common import GymLikeEnv
 
 try:
     import gym
@@ -37,7 +37,7 @@ def _gym_to_torchrl_spec_transform(
 ) -> TensorSpec:
     if isinstance(spec, gym.spaces.tuple.Tuple):
         raise NotImplementedError(
-            f"gym.spaces.tuple.Tuple mapping not yet implemented"
+            "gym.spaces.tuple.Tuple mapping not yet implemented"
         )
     if isinstance(spec, gym.spaces.discrete.Discrete):
         return OneHotDiscreteTensorSpec(spec.n)
@@ -124,7 +124,8 @@ class GymEnv(GymLikeEnv):
         if not _has_gym:
             raise RuntimeError(
                 f"gym not found, unable to create {envname}. "
-                f"Consider downloading and installing dm_control from {self.git_url}"
+                f"Consider downloading and installing dm_control from"
+                f" {self.git_url}"
             )
         if not ((taskname == "") or (taskname is None)):
             raise ValueError(
@@ -161,7 +162,8 @@ class GymEnv(GymLikeEnv):
     def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
         if seed is not None:
             seed = self.set_seed(seed)
-        self.reset()  # make sure that _current_observation and _is_done are populated
+        self.reset()  # make sure that _current_observation and
+        # _is_done are populated
         return seed
 
 

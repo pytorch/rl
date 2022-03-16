@@ -111,8 +111,7 @@ class NoisyLinear(nn.Linear):
     def reset_noise(self) -> None:
         epsilon_in = self._scale_noise(self.in_features)
         epsilon_out = self._scale_noise(self.out_features)
-        self.weight_epsilon.copy_(
-            epsilon_out.outer(epsilon_in))  # type: ignore
+        self.weight_epsilon.copy_(epsilon_out.outer(epsilon_in))  # type: ignore
         if self.bias_mu is not None:
             self.bias_epsilon.copy_(epsilon_out)  # type: ignore
 
@@ -175,21 +174,27 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         self.out_features = out_features
         self.std_init = std_init
 
-        self.weight_mu = UninitializedParameter(device=device,
-                                                dtype=dtype)  # type: ignore
-        self.weight_sigma = UninitializedParameter(device=device,
-                                                   dtype=dtype)  # type: ignore
+        self.weight_mu = UninitializedParameter(
+            device=device, dtype=dtype
+        )  # type: ignore
+        self.weight_sigma = UninitializedParameter(
+            device=device, dtype=dtype
+        )  # type: ignore
         self.register_buffer(
-            "weight_epsilon", UninitializedBuffer(device=device, dtype=dtype)
+            "weight_epsilon",
+            UninitializedBuffer(device=device, dtype=dtype)
             # type: ignore
         )
         if bias:
-            self.bias_mu = UninitializedParameter(device=device,
-                                                  dtype=dtype)  # type: ignore
-            self.bias_sigma = UninitializedParameter(device=device,
-                                                     dtype=dtype)  # type: ignore
+            self.bias_mu = UninitializedParameter(
+                device=device, dtype=dtype
+            )  # type: ignore
+            self.bias_sigma = UninitializedParameter(
+                device=device, dtype=dtype
+            )  # type: ignore
             self.register_buffer(
-                "bias_epsilon", UninitializedBuffer(device=device, dtype=dtype)
+                "bias_epsilon",
+                UninitializedBuffer(device=device, dtype=dtype)
                 # type: ignore
             )
         else:
@@ -204,24 +209,25 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         if not self.has_uninitialized_params() and self.in_features != 0:
             super().reset_noise()
 
-    def initialize_parameters(self,
-                              input: torch.Tensor) -> None:  # type: ignore[override]
+    def initialize_parameters(
+        self, input: torch.Tensor
+    ) -> None:  # type: ignore[override]
         if self.has_uninitialized_params():
             with torch.no_grad():
                 self.in_features = input.shape[-1]
                 self.weight_mu.materialize(
-                    (self.out_features, self.in_features))  # type: ignore
+                    (self.out_features, self.in_features)
+                )  # type: ignore
                 self.weight_sigma.materialize(
-                    (self.out_features, self.in_features))  # type: ignore
+                    (self.out_features, self.in_features)
+                )  # type: ignore
                 self.weight_epsilon.materialize(
-                    (self.out_features, self.in_features))  # type: ignore
+                    (self.out_features, self.in_features)
+                )  # type: ignore
                 if self.bias_mu is not None:
-                    self.bias_mu.materialize(
-                        (self.out_features,))  # type: ignore
-                    self.bias_sigma.materialize(
-                        (self.out_features,))  # type: ignore
-                    self.bias_epsilon.materialize(
-                        (self.out_features,))  # type: ignore
+                    self.bias_mu.materialize((self.out_features,))  # type: ignore
+                    self.bias_sigma.materialize((self.out_features,))  # type: ignore
+                    self.bias_epsilon.materialize((self.out_features,))  # type: ignore
                 self.reset_parameters()
                 self.reset_noise()
 

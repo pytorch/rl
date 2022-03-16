@@ -25,6 +25,7 @@ __all__ = [
     "parser_agent_args",
 ]
 
+
 def make_agent(
     collector: _DataCollector,
     loss_module: _LossModule,
@@ -158,8 +159,8 @@ def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=500,
         help="Number of optimization steps in between two collection of data. See frames_per_batch "
-             "below. "
-             "Default=500",
+        "below. "
+        "Default=500",
     )
     parser.add_argument(
         "--optimizer", type=str, default="adam", help="Optimizer to be used."
@@ -208,14 +209,14 @@ def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
         "--clip_grad_norm",
         action="store_true",
         help="if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient "
-             "values will be clipped to the desired threshold.",
+        "values will be clipped to the desired threshold.",
     )
     parser.add_argument(
         "--normalize_rewards_online",
         "--normalize-rewards-online",
         action="store_true",
         help="Computes the running statistics of the rewards and normalizes them before they are "
-             "passed to the loss module.",
+        "passed to the loss module.",
     )
     parser.add_argument(
         "--sub_traj_len",

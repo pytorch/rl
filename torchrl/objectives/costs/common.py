@@ -1,6 +1,6 @@
 __all__ = ["_LossModule"]
 
-from typing import Iterator, Tuple, Optional, Iterable
+from typing import Iterator, Optional, Tuple
 
 import torch
 from torch import nn
@@ -86,14 +86,18 @@ class _LossModule(nn.Module):
         name_params_target = "_target_" + param_name
         name_buffers_target = "_target_" + buffer_name
         if create_target_params:
-            target_params = [p.detach().clone() for p in getattr(self, param_name)]
+            target_params = [
+                p.detach().clone() for p in getattr(self, param_name)
+            ]
             for i, p in enumerate(target_params):
                 name = "_".join([name_params_target, str(i)])
                 self.register_buffer(name, p)
                 target_params[i] = getattr(self, name)
             setattr(self, name_params_target, target_params)
 
-            target_buffers = [p.detach().clone() for p in getattr(self, buffer_name)]
+            target_buffers = [
+                p.detach().clone() for p in getattr(self, buffer_name)
+            ]
             for i, p in enumerate(target_buffers):
                 name = "_".join([name_buffers_target, str(i)])
                 self.register_buffer(name, p)

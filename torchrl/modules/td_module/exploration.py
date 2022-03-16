@@ -265,8 +265,8 @@ class _OrnsteinUhlenbeckProcess:
         self.dt = dt
         self.x0 = x0 if x0 is not None else 0.0
         self.key = key
-        self._noise_key = f"_ou_prev_noise"
-        self._steps_key = f"_ou_steps"
+        self._noise_key = "_ou_prev_noise"
+        self._steps_key = "_ou_steps"
         self.out_keys = [self.key, self.noise_key, self.steps_key]
 
     @property
@@ -297,7 +297,7 @@ class _OrnsteinUhlenbeckProcess:
         self, tensor_dict: _TensorDict, eps: float = 1.0
     ) -> _TensorDict:
 
-        if not self.noise_key in set(tensor_dict.keys()):
+        if self.noise_key not in set(tensor_dict.keys()):
             self._make_noise_pair(tensor_dict)
 
         prev_noise = tensor_dict.get(self.noise_key)

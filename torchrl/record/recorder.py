@@ -10,10 +10,12 @@ __all__ = ["VideoRecorder", "TensorDictRecorder"]
 class VideoRecorder(ObservationTransform):
     """
     Video Recorder transform.
-    Will record a series of observations from an environment and write them to a TensorBoard SummaryWriter object when needed.
+    Will record a series of observations from an environment and write them
+    to a TensorBoard SummaryWriter object when needed.
 
     Args:
-        writer (SummaryWriter): a tb.SummaryWriter instance where the video should be written.
+        writer (SummaryWriter): a tb.SummaryWriter instance where the video
+            should be written.
         tag (str): the video tag in the writer.
         keys (Sequence[str], optional): keys to be read to produce the video.
             default: next_observation_pixels.
@@ -43,8 +45,8 @@ class VideoRecorder(ObservationTransform):
         self.count = 0
         self.obs = []
         try:
-            import moviepy
-        except:
+            import moviepy  # noqa
+        except ImportError:
             raise Exception(
                 "moviepy not found, VideoRecorder cannot be created"
             )

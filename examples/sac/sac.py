@@ -14,8 +14,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 from torchrl.agents.helpers.agents import make_agent, parser_agent_args
 from torchrl.agents.helpers.collectors import (
-    parser_collector_args_offpolicy,
     make_collector_offpolicy,
+    parser_collector_args_offpolicy,
 )
 from torchrl.agents.helpers.envs import (
     correct_for_frame_skip,
@@ -128,7 +128,11 @@ if __name__ == "__main__":
     replay_buffer = make_replay_buffer(device, args)
 
     recorder = transformed_env_constructor(
-        args, video_tag=video_tag, norm_obs_only=True, stats=stats, writer=writer
+        args,
+        video_tag=video_tag,
+        norm_obs_only=True,
+        stats=stats,
+        writer=writer,
     )()
 
     # remove video recorder from recorder to have matching state_dict keys

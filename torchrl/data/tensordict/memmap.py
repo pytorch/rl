@@ -334,8 +334,10 @@ class MemmapTensor(object):
         return torch.pow(self, other)  # type: ignore
 
     def __repr__(self) -> str:
-        return f"MemmapTensor(shape={self.shape}, device={self.device}, " \
-               f"dtype={self.dtype})"
+        return (
+            f"MemmapTensor(shape={self.shape}, device={self.device}, "
+            f"dtype={self.dtype})"
+        )
 
     def __getitem__(self, item: INDEX_TYPING) -> torch.Tensor:
         # return self._load_item(memmap_array=self.memmap_array[item])#[item]

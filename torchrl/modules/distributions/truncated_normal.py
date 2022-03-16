@@ -39,10 +39,10 @@ class TruncatedStandardNormal(Distribution):
             raise ValueError("Truncation bounds types are different")
         if any(
             (self.a >= self.b)
-                .view(
+            .view(
                 -1,
             )
-                .tolist()
+            .tolist()
         ):
             raise ValueError("Incorrect truncation range")
         eps = torch.finfo(self.a.dtype).eps
@@ -57,9 +57,9 @@ class TruncatedStandardNormal(Distribution):
         little_phi_coeff_a = torch.nan_to_num(self.a, nan=math.nan)
         little_phi_coeff_b = torch.nan_to_num(self.b, nan=math.nan)
         self._lpbb_m_lpaa_d_Z = (
-                                    self._little_phi_b * little_phi_coeff_b
-                                    - self._little_phi_a * little_phi_coeff_a
-                                ) / self._Z
+            self._little_phi_b * little_phi_coeff_b
+            - self._little_phi_a * little_phi_coeff_a
+        ) / self._Z
         self._mean = -(self._little_phi_b - self._little_phi_a) / self._Z
         self._variance = (
             1

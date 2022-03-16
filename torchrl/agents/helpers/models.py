@@ -4,7 +4,7 @@ from typing import Optional, Sequence
 import torch
 from torch import nn
 
-from torchrl.data import DEVICE_TYPING, UnboundedContinuousTensorSpec
+from torchrl.data import DEVICE_TYPING
 from torchrl.envs.common import _EnvClass
 from torchrl.modules import ActorValueOperator, NoisyLinear, TDModule
 from torchrl.modules.distributions import (
@@ -15,25 +15,24 @@ from torchrl.modules.distributions import (
     TruncatedNormal,
 )
 from torchrl.modules.models.models import (
-    DuelingCnnDQNet,
+    ConvNet,
     DdpgCnnActor,
     DdpgCnnQNet,
-    DdpgMlpQNet,
     DdpgMlpActor,
-    MLP,
-    ConvNet,
+    DdpgMlpQNet,
+    DuelingCnnDQNet,
     LSTMNet,
+    MLP,
 )
 from torchrl.modules.td_module import (
-    QValueActor,
-    DistributionalQValueActor,
     Actor,
-    ProbabilisticTDModule,
+    DistributionalQValueActor,
+    QValueActor,
 )
 from torchrl.modules.td_module.actors import (
-    ValueOperator,
     ActorCriticWrapper,
     ProbabilisticActor,
+    ValueOperator,
 )
 
 DISTRIBUTIONS = {

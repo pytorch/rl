@@ -1,7 +1,6 @@
-
 import functools
 from collections import OrderedDict
-from typing import Union, Iterable, Optional
+from typing import Iterable, Optional, Union
 
 import torch
 from torch import nn, Tensor
@@ -9,9 +8,10 @@ from torch.nn import functional as F
 
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import step_tensor_dict
-from torchrl.modules import ProbabilisticTDModule, TDModule
+from torchrl.modules import TDModule
 
 __all__ = ["SoftUpdate", "HardUpdate", "distance_loss", "hold_out_params"]
+
 
 class _context_manager:
     def __init__(self, value=True):
@@ -105,7 +105,9 @@ class _TargetNetUpdate:
             ):
                 _target_names.append(name)
 
-        _source_names = ["".join(name.split("_target_")) for name in _target_names]
+        _source_names = [
+            "".join(name.split("_target_")) for name in _target_names
+        ]
 
         if not all(
             (name in loss_module.__dict__) or (name in loss_module._modules)
@@ -115,7 +117,8 @@ class _TargetNetUpdate:
                 name
                 for name in _source_names
                 if not (
-                    (name in loss_module.__dict__) or (name in loss_module._modules)
+                    (name in loss_module.__dict__)
+                    or (name in loss_module._modules)
                 )
             ]
             raise RuntimeError(
@@ -133,10 +136,14 @@ class _TargetNetUpdate:
         self.initialized = False
 
     def init_(self) -> None:
-        for source, target in zip(self._sources.values(), self._targets.values()):
+        for source, target in zip(
+            self._sources.values(), self._targets.values()
+        ):
             for p_source, p_target in zip(source, target):
                 if p_target.requires_grad:
-                    raise RuntimeError("the target parameter is part of a graph.")
+                    raise RuntimeError(
+                        "the target parameter is part of a graph."
+                    )
                 p_target.data.copy_(p_source.data)
         self.initialized = True
 
@@ -147,10 +154,14 @@ class _TargetNetUpdate:
                 f"initialized (`{self.__class__.__name__}.init_()`) before calling step()"
             )
 
-        for source, target in zip(self._sources.values(), self._targets.values()):
+        for source, target in zip(
+            self._sources.values(), self._targets.values()
+        ):
             for p_source, p_target in zip(source, target):
                 if p_target.requires_grad:
-                    raise RuntimeError("the target parameter is part of a graph.")
+                    raise RuntimeError(
+                        "the target parameter is part of a graph."
+                    )
                 self._step(p_source, p_target)
 
     def _step(self, p_source: Tensor, p_target: Tensor) -> None:
@@ -189,7 +200,9 @@ class SoftUpdate(_TargetNetUpdate):
         self.eps = eps
 
     def _step(self, p_source: Tensor, p_target: Tensor) -> None:
-        p_target.data.copy_(p_target.data * self.eps + p_source.data * (1 - self.eps))
+        p_target.data.copy_(
+            p_target.data * self.eps + p_source.data * (1 - self.eps)
+        )
 
 
 class HardUpdate(_TargetNetUpdate):
@@ -226,16 +239,16 @@ class HardUpdate(_TargetNetUpdate):
 
 
 class hold_out_net(_context_manager):
-    """Context manager to hold a network out of a computational graph.
+    """Context manager to hold a network out of a computational graph."""
 
-    """
     def __init__(self, network: nn.Module) -> None:
         self.network = network
         try:
             self.p_example = next(network.parameters())
-        except StopIteration as err:
+        except StopIteration:
             raise RuntimeError(
-                "hold_out_net requires the network parameter set to be non-empty."
+                "hold_out_net requires the network parameter set to be "
+                "non-empty."
             )
         self._prev_state = []
 
@@ -248,8 +261,8 @@ class hold_out_net(_context_manager):
 
 
 class hold_out_params(_context_manager):
-    """Context manager to hold a list of parameters out of a computational graph.
-    """
+    """Context manager to hold a list of parameters out of a computational graph."""
+
     def __init__(self, params: Iterable[Tensor]) -> None:
         self.params = tuple(p.detach() for p in params)
 
@@ -265,7 +278,7 @@ def next_state_value(
     tensor_dict: _TensorDict,
     operator: Optional[TDModule] = None,
     next_val_key: str = "state_action_value",
-    gamma: Number = 0.99,
+    gamma: float = 0.99,
     pred_next_val: Optional[Tensor] = None,
     **kwargs,
 ) -> torch.Tensor:
@@ -284,7 +297,7 @@ def next_state_value(
             key-value in the input tensordict when called. It does not need to be provided if pred_next_val is given.
         next_val_key (str, optional): key where the next value will be written.
             Default: 'state_action_value'
-        gamma (Number, optional): return discount rate.
+        gamma (float, optional): return discount rate.
             default: 0.99
         pred_next_val (Tensor, optional): the next state value can be provided if it is not computed with the operator.
 
@@ -300,7 +313,9 @@ def next_state_value(
     done = tensor_dict.get("done").squeeze(-1)
 
     if pred_next_val is None:
-        next_td = step_tensor_dict(tensor_dict)  # next_observation -> observation
+        next_td = step_tensor_dict(
+            tensor_dict
+        )  # next_observation -> observation
         next_td = next_td.select(*operator.in_keys)
         operator(next_td, **kwargs)
         pred_next_val_detach = next_td.get(next_val_key).squeeze(-1)

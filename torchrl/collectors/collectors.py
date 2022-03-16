@@ -112,7 +112,7 @@ class _DataCollector(IterableDataset):
             policy = RandomPolicy(env.action_spec)
         try:
             policy_device = next(policy.parameters()).device
-        except:
+        except:  # noqa
             policy_device = (
                 torch.device(device)
                 if device is not None
@@ -621,19 +621,25 @@ class _MultiDataCollector(_DataCollector):
             else [dict() for _ in range(self.num_workers)]
         )
         # Preparing devices:
-        # We want the user to be able to choose, for each worker, on which device will the policy live and which
-        # device will be used to store data.
-        # Those devices may or may not match.
-        # One caveat is that, if there is only one device for the policy, and if there are multiple workers, sending
-        # the same device and policy to be copied to each worker will result in multiple copies of the same policy
-        # on the same device.
-        # To go around this, we do the copies of the policy in the server (this object) to each possible device, and
-        # send to all the processes their copy of the policy.
-        #
-        device_err_msg = lambda device_name, devices_list: (
-            f"The length of the {device_name} argument should match the number of workers of the collector. Got "
-            f"len(create_env_fn)={self.num_workers} and len(passing_devices)={len(devices_list)}"
-        )
+        # We want the user to be able to choose, for each worker, on which
+        # device will the policy live and which device will be used to store
+        # data. Those devices may or may not match.
+        # One caveat is that, if there is only one device for the policy, and
+        # if there are multiple workers, sending the same device and policy
+        # to be copied to each worker will result in multiple copies of the
+        # same policy on the same device.
+        # To go around this, we do the copies of the policy in the server
+        # (this object) to each possible device, and send to all the
+        # processes their copy of the policy.
+
+        def device_err_msg(device_name, devices_list):
+            return (
+                f"The length of the {device_name} argument should match the "
+                f"number of workers of the collector. Got len("
+                f"create_env_fn)={self.num_workers} and len("
+                f"passing_devices)={len(devices_list)}"
+            )
+
         if isinstance(devices, (str, int, torch.device)):
             devices = [torch.device(devices) for _ in range(self.num_workers)]
         elif devices is None:
@@ -644,7 +650,8 @@ class _MultiDataCollector(_DataCollector):
             devices = [torch.device(_device) for _device in devices]
         else:
             raise ValueError(
-                "devices should be either None, a torch.device or equivalent or an iterable of devices. "
+                "devices should be either None, a torch.device or equivalent "
+                "or an iterable of devices. "
                 f"Found {type(devices)} instead."
             )
         self._policy_dict = {}

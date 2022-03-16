@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from textwrap import indent
-from typing import Tuple, Union, Optional, Sequence, List
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -117,11 +116,13 @@ class BinaryBox(Box):
 @dataclass(repr=False)
 class TensorSpec:
     """
-    Parent class of the tensor meta-data containers for observation, actions and rewards.
+    Parent class of the tensor meta-data containers for observation, actions
+        and rewards.
 
     Args:
         shape (torch.Size): size of the tensor
-        space (Box): Box instance describing what kind of values can be expected
+        space (Box): Box instance describing what kind of values can be
+            expected
         device (torch.device): device of the tensor
         dtype (torch.dtype): dtype of the tensor
 
@@ -134,7 +135,9 @@ class TensorSpec:
     domain: str = ""
 
     def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
-        """Encodes a value given the specified spec, and return the corresponding tensor.
+        """Encodes a value given the specified spec, and return the
+        corresponding tensor.
+
         Args:
             val (np.ndarray or torch.Tensor): value to be encoded as tensor.
 
@@ -179,7 +182,8 @@ class TensorSpec:
         raise NotImplementedError
 
     def is_in(self, val: torch.Tensor) -> bool:
-        """If the value `val` is in the box defined by the TensorSpec, returns True, otherwise False.
+        """If the value `val` is in the box defined by the TensorSpec,
+        returns True, otherwise False.
 
         Args:
             val (torch.Tensor): value to be checked
@@ -190,7 +194,8 @@ class TensorSpec:
         raise NotImplementedError
 
     def project(self, val: torch.Tensor) -> torch.Tensor:
-        """If the input tensor is not in the TensorSpec box, it maps it back to it given some heuristic.
+        """If the input tensor is not in the TensorSpec box, it maps it back
+        to it given some heuristic.
 
         Args:
             val (torch.Tensor): tensor to be mapped to the box.
@@ -203,7 +208,8 @@ class TensorSpec:
         return val
 
     def assert_is_in(self, value: torch.Tensor) -> None:
-        """Asserts whether a tensor belongs to the box, and raises an exception otherwise.
+        """Asserts whether a tensor belongs to the box, and raises an
+        exception otherwise.
 
         Args:
             value (torch.Tensor): value to be checked.
@@ -216,19 +222,22 @@ class TensorSpec:
             )
 
     def type_check(self, value: torch.Tensor, key=None) -> None:
-        """Checks the input value dtype against the TensorSpec dtype and raises an exception if they don't match.
+        """Checks the input value dtype against the TensorSpec dtype and
+        raises an exception if they don't match.
 
         Args:
             value (torch.Tensor): tensor whose dtype has to be checked
 
         """
-        if not value.dtype is self.dtype:
+        if value.dtype is not self.dtype:
             raise TypeError(
-                f"value.dtype={value.dtype} but {self.__class__.__name__}.dtype={self.dtype}"
+                f"value.dtype={value.dtype} but"
+                f" {self.__class__.__name__}.dtype={self.dtype}"
             )
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
-        """Returns a random tensor in the box. The sampling will be uniform unless the box is unbounded.
+        """Returns a random tensor in the box. The sampling will be uniform
+        unless the box is unbounded.
 
         Args:
             shape (torch.Size): shape of the random tensor
@@ -251,7 +260,9 @@ class TensorSpec:
         device_str = "device=" + str(self.device)
         dtype_str = "dtype=" + str(self.dtype)
         domain_str = "domain=" + str(self.domain)
-        sub_string = ",".join([shape_str, space_str, device_str, dtype_str, domain_str])
+        sub_string = ",".join(
+            [shape_str, space_str, device_str, dtype_str, domain_str]
+        )
         string = f"{self.__class__.__name__}(\n     {sub_string})"
         return string
 
@@ -318,7 +329,7 @@ class BoundedTensorSpec(TensorSpec):
         maximum = self.space.maximum.to(val.device)  # type: ignore
         try:
             val = val.clamp_(minimum.item(), maximum.item())
-        except:
+        except ValueError:
             minimum = minimum.expand_as(val)
             maximum = maximum.expand_as(val)
             val[val < minimum] = minimum[val < minimum]
@@ -335,12 +346,15 @@ class BoundedTensorSpec(TensorSpec):
 class OneHotDiscreteTensorSpec(TensorSpec):
     """
     A unidimensional, one-hot discrete tensor spec.
-    By default, TorchRL assumes that categorical variables are encoded as one-hot encodings of the variable. This
-    allows for simple indexing of tensors, e.g.
+    By default, TorchRL assumes that categorical variables are encoded as
+    one-hot encodings of the variable. This allows for simple indexing of
+    tensors, e.g.
 
         >>> batch, size = 3, 4
-        >>> action_value = torch.arange(batch*size).view(batch, size).to(torch.float)
-        >>> action = (action_value == action_value.max(-1, keepdim=True)[0]).to(torch.long)
+        >>> action_value = torch.arange(batch*size)
+        >>> action_value = action_value.view(batch, size).to(torch.float)
+        >>> action = (action_value == action_value.max(-1,
+        ...    keepdim=True)[0]).to(torch.long)
         >>> chosen_action_value = (action * action_value).sum(-1)
         >>> print(chosen_action_value)
         tensor([ 3.,  7., 11.])
@@ -349,10 +363,13 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         n (int): number of possible outcomes.
         device (str, int or torch.device, optional): device of the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
-        user_register (bool): experimental feature. If True, every integer will be mapped onto a binary vector
-            in the order in which they appear. This feature is designed for environment with no a-priori definition of
-            the number of possible outcomes (e.g. discrete outcomes are sampled from an arbitrary set, whose elements
-            will be mapped in a register to a series of unique one-hot binary vectors).
+        user_register (bool): experimental feature. If True, every integer
+            will be mapped onto a binary vector in the order in which they
+            appear. This feature is designed for environment with no
+            a-priori definition of the number of possible outcomes (e.g.
+            discrete outcomes are sampled from an arbitrary set, whose
+            elements will be mapped in a register to a series of unique
+            one-hot binary vectors).
 
     """
 
@@ -385,8 +402,11 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             dim=-1,
         ).to(torch.long)
 
-    def encode(self, val: Union[np.ndarray, torch.Tensor], space: Optional[
-        DiscreteBox] = None) -> torch.Tensor:  # type: ignore
+    def encode(
+        self,
+        val: Union[np.ndarray, torch.Tensor],
+        space: Optional[DiscreteBox] = None,
+    ) -> torch.Tensor:
         if not isinstance(val, torch.Tensor):
             val = torch.tensor(val)
 
@@ -420,14 +440,15 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     ) -> torch.Tensor:
         if not isinstance(index, torch.Tensor):
             raise ValueError(
-                f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)"
+                f"Only tensors are allowed for indexing using "
+                f"{self.__class__.__name__}.index(...)"
             )
         index = index.nonzero().squeeze()
         index = index.expand(*tensor_to_index.shape[:-1], index.shape[-1])
         return tensor_to_index.gather(-1, index)
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        idx = val.sum(-1) != 1
+        # idx = val.sum(-1) != 1
         out = torch.nn.functional.gumbel_softmax(val.to(torch.float))
         out = (out == out.max(dim=-1, keepdim=True)[0]).to(torch.long)
         return out
@@ -503,10 +524,11 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
         if dtype is not None and maximum.dtype is not dtype:
             maximum = maximum.to(dtype)
         err_msg = (
-            "NdBoundedTensorSpec requires the shape to be explicitely (via the shape argument) or "
-            "implicitely defined (via either the minimum or the maximum or both). If the maximum and/or the "
-            "minimum have a non-singleton shape, they must match the provided shape if this one is set "
-            "explicitely."
+            "NdBoundedTensorSpec requires the shape to be explicitely (via "
+            "the shape argument) or implicitely defined (via either the "
+            "minimum or the maximum or both). If the maximum and/or the "
+            "minimum have a non-singleton shape, they must match the "
+            "provided shape if this one is set explicitely."
         )
         if shape is not None and not isinstance(shape, torch.Size):
             if isinstance(shape, int):
@@ -527,7 +549,7 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
         elif shape is None:
             raise RuntimeError(err_msg)
         else:
-            mimimum = minimum.expand(*shape)
+            minimum = minimum.expand(*shape)
             maximum = maximum.expand(*shape)
 
         if minimum.numel() > maximum.numel():
@@ -618,11 +640,13 @@ class BinaryDiscreteTensorSpec(TensorSpec):
             *shape, *self.shape, device=self.device, dtype=self.dtype
         ).bernoulli_()
 
-    def index(self, index: INDEX_TYPING,
-              tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor
+    ) -> torch.Tensor:  # type: ignore
         if not isinstance(index, torch.Tensor):
             raise ValueError(
-                f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)"
+                f"Only tensors are allowed for indexing using"
+                f" {self.__class__.__name__}.index(...)"
             )
         index = index.nonzero().squeeze()
         index = index.expand(*tensor_to_index.shape[:-1], index.shape[-1])
@@ -638,8 +662,10 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     A concatenation of one-hot discrete tensor spec.
 
     Args:
-        nvec (iterable of integers): cardinality of each of the elements of the tensor.
-        device (str, int or torch.device, optional): device of the tensors.
+        nvec (iterable of integers): cardinality of each of the elements of
+            the tensor.
+        device (str, int or torch.device, optional): device of
+            the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
 
     Examples:
@@ -690,8 +716,7 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         ).squeeze(-2)
         return x
 
-    def encode(self, val: Union[
-        np.ndarray, torch.Tensor]) -> torch.Tensor:  # type: ignore
+    def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
         if not isinstance(val, torch.Tensor):
             val = torch.tensor(val)
 
@@ -715,11 +740,13 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         out = torch.stack([val.argmax(-1) for val in vals], -1).numpy()
         return out
 
-    def index(self, index: INDEX_TYPING,
-              tensor_to_index: torch.Tensor) -> torch.Tensor:  # type: ignore
+    def index(
+        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor
+    ) -> torch.Tensor:  # type: ignore
         if not isinstance(index, torch.Tensor):
             raise ValueError(
-                f"Only tensors are allowed for indexing using {self.__class__.__name__}.index(...)"
+                f"Only tensors are allowed for indexing using"
+                f" {self.__class__.__name__}.index(...)"
             )
         indices = self._split(index)
         tensor_to_index = self._split(tensor_to_index)
@@ -752,32 +779,39 @@ class CompositeSpec(TensorSpec):
     A composition of TensorSpecs.
 
     Args:
-        **kwargs (key (str): value (TensorSpec)): dictionary of tensorspecs to be stored
+        **kwargs (key (str): value (TensorSpec)): dictionary of tensorspecs
+        to be stored
 
     Examples:
         >>> observation_pixels_spec = NdBoundedTensorSpec(
         ...    torch.zeros(3,32,32),
         ...    torch.ones(3, 32, 32))
-        >>> observation_vector_spec = NdBoundedTensorSpec(torch.zeros(33), torch.ones(33))
+        >>> observation_vector_spec = NdBoundedTensorSpec(torch.zeros(33),
+        ...    torch.ones(33))
         >>> composite_spec = CompositeSpec(
         ...     observation_pixels=observation_pixels_spec,
         ...     observation_vector=observation_vector_spec)
-        >>> td = TensorDict({"observation_pixels": torch.rand(10,3,32,32), "observation_vector": torch.rand(10,33)}, batch_size=[10])
+        >>> td = TensorDict({"observation_pixels": torch.rand(10,3,32,32),
+        ...    "observation_vector": torch.rand(10,33)}, batch_size=[10])
         >>> print("td (rand) is within bounds: ", composite_spec.is_in(td))
         td (rand) is within bounds:  True
-        >>> td = TensorDict({"observation_pixels": torch.randn(10,3,32,32), "observation_vector": torch.randn(10,33)}, batch_size=[10])
+        >>> td = TensorDict({"observation_pixels": torch.randn(10,3,32,32),
+        ...    "observation_vector": torch.randn(10,33)}, batch_size=[10])
         >>> print("td (randn) is within bounds: ", composite_spec.is_in(td))
         td (randn) is within bounds:  False
         >>> td_project = composite_spec.project(td)
         >>> print("td modification done in place: ", td_project is td)
         td modification done in place:  True
-        >>> print("check td is within bounds after projection: ", composite_spec.is_in(td_project))
+        >>> print("check td is within bounds after projection: ",
+        ...    composite_spec.is_in(td_project))
         check td is within bounds after projection:  True
         >>> print("random td: ", composite_spec.rand([3,]))
         random td:  TensorDict(
             fields={
-                observation_pixels: Tensor(torch.Size([3, 3, 32, 32]), dtype=torch.float32),
-                observation_vector: Tensor(torch.Size([3, 33]), dtype=torch.float32)},
+                observation_pixels: Tensor(torch.Size([3, 3, 32, 32]), \
+dtype=torch.float32),
+                observation_vector: Tensor(torch.Size([3, 33]), \
+dtype=torch.float32)},
             batch_size=torch.Size([3]),
             device=cpu,
             is_shared=False)
@@ -806,8 +840,7 @@ class CompositeSpec(TensorSpec):
     def del_(self, key: str) -> None:
         del self._specs[key]
 
-    def encode(self, vals: Dict[str, Any]) -> Dict[
-        str, torch.Tensor]:  # type: ignore
+    def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
         out = {}
         for key, item in vals.items():
             out[key] = self[key].encode(item)
@@ -815,7 +848,8 @@ class CompositeSpec(TensorSpec):
 
     def __repr__(self) -> str:
         sub_str = [
-            indent(f"{k}: {str(item)}", 4 * " ") for k, item in self._specs.items()
+            indent(f"{k}: {str(item)}", 4 * " ")
+            for k, item in self._specs.items()
         ]
         sub_str = ",\n".join(sub_str)
         return f"CompositeSpec(\n{sub_str})"

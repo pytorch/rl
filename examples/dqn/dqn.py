@@ -12,23 +12,29 @@ except:
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
 
-from torchrl.agents.helpers.agents import parser_agent_args, make_agent
+from torchrl.agents.helpers.agents import make_agent, parser_agent_args
 from torchrl.agents.helpers.collectors import (
-    parser_collector_args_offpolicy,
     make_collector_offpolicy,
+    parser_collector_args_offpolicy,
 )
 from torchrl.agents.helpers.envs import (
-    transformed_env_constructor,
-    parallel_env_constructor,
     correct_for_frame_skip,
     get_stats_random_rollout,
+    parallel_env_constructor,
     parser_env_args,
+    transformed_env_constructor,
 )
-from torchrl.agents.helpers.losses import parser_loss_args, make_dqn_loss
-from torchrl.agents.helpers.models import make_dqn_actor, parser_model_args_discrete
+from torchrl.agents.helpers.losses import make_dqn_loss, parser_loss_args
+from torchrl.agents.helpers.models import (
+    make_dqn_actor,
+    parser_model_args_discrete,
+)
 from torchrl.agents.helpers.recorder import parser_recorder_args
-from torchrl.agents.helpers.replay_buffer import parser_replay_args, make_replay_buffer
-from torchrl.data.transforms import TransformedEnv, RewardScaling
+from torchrl.agents.helpers.replay_buffer import (
+    make_replay_buffer,
+    parser_replay_args,
+)
+from torchrl.data.transforms import RewardScaling, TransformedEnv
 from torchrl.modules import EGreedyWrapper
 
 
@@ -87,9 +93,9 @@ if __name__ == "__main__":
     )
 
     loss_module, target_net_updater = make_dqn_loss(model, args)
-    model_explore = EGreedyWrapper(model, annealing_num_steps=args.annealing_frames).to(
-        device
-    )
+    model_explore = EGreedyWrapper(
+        model, annealing_num_steps=args.annealing_frames
+    ).to(device)
 
     stats = None
     if not args.vecnorm:
@@ -106,7 +112,11 @@ if __name__ == "__main__":
     replay_buffer = make_replay_buffer(device, args)
 
     recorder = transformed_env_constructor(
-        args, video_tag=video_tag, norm_obs_only=True, stats=stats, writer=writer
+        args,
+        video_tag=video_tag,
+        norm_obs_only=True,
+        stats=stats,
+        writer=writer,
     )()
 
     # remove video recorder from recorder to have matching state_dict keys

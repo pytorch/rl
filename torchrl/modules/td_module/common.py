@@ -1,16 +1,25 @@
 from __future__ import annotations
 
 from copy import copy, deepcopy
-from numbers import Number
-from typing import Tuple, List, Iterable, Type, Optional, Union, Any, Callable, Sequence
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+)
 
 import functorch
 import torch
 from functorch import FunctionalModule, FunctionalModuleWithBuffers, vmap
 from functorch._src.make_functional import _swap_state
-from torch import nn, distributions as d, Tensor
+from torch import distributions as d, nn, Tensor
 
-from torchrl.data import TensorSpec, DEVICE_TYPING, CompositeSpec
+from torchrl.data import CompositeSpec, DEVICE_TYPING, TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.distributions import Delta, distributions_maps
@@ -191,7 +200,10 @@ class TDModule(nn.Module):
             dim = tensors[0].shape[0]
             shape = [dim, *tensor_dict.shape]
             tensor_dict_out = TensorDict(
-                {key: val.expand(dim, *val.shape) for key, val in tensor_dict.items()},
+                {
+                    key: val.expand(dim, *val.shape)
+                    for key, val in tensor_dict.items()
+                },
                 shape,
             )
         elif tensor_dict_out is None:
@@ -220,7 +232,9 @@ class TDModule(nn.Module):
         self, tensors: Sequence[Tensor], **kwargs
     ) -> Union[Tensor, Sequence[Tensor]]:
         err_msg = "Did not find the {0} keyword argument to be used with the functional module."
-        if isinstance(self.module, (FunctionalModule, FunctionalModuleWithBuffers)):
+        if isinstance(
+            self.module, (FunctionalModule, FunctionalModuleWithBuffers)
+        ):
             _vmap = self._make_vmap(kwargs, len(tensors))
             if _vmap:
                 module = vmap(self.module, _vmap)
@@ -263,9 +277,13 @@ class TDModule(nn.Module):
     ) -> _TensorDict:
         tensors = tuple(tensor_dict.get(in_key) for in_key in self.in_keys)
         tensors = self._call_module(tensors, **kwargs)
-        tensors = (tensors,)
+        if not isinstance(tensors, tuple):
+            tensors = (tensors,)
         tensor_dict_out = self._write_to_tensor_dict(
-            tensor_dict, tensors, tensor_dict_out, vmap=kwargs.get("vmap", False)
+            tensor_dict,
+            tensors,
+            tensor_dict_out,
+            vmap=kwargs.get("vmap", False),
         )
         return tensor_dict_out
 
@@ -284,9 +302,7 @@ class TDModule(nn.Module):
         return tensor_dict
 
     def random_sample(self, tensordict: _TensorDict) -> _TensorDict:
-        """see TDModule.random(...)
-
-        """
+        """see TDModule.random(...)"""
         return self.random(tensordict)
 
     @property
@@ -338,7 +354,8 @@ class TDModule(nn.Module):
             self_copy = self
 
         if isinstance(
-            self_copy.module, (TDModule, FunctionalModule, FunctionalModuleWithBuffers)
+            self_copy.module,
+            (TDModule, FunctionalModule, FunctionalModuleWithBuffers),
         ):
             raise RuntimeError(
                 "TDModule.make_functional_with_buffers requires the module to be a regular nn.Module. "
@@ -347,7 +364,10 @@ class TDModule(nn.Module):
 
         # check if there is a non-initialized lazy module
         for m in self_copy.module.modules():
-            if hasattr(m, "has_uninitialized_params") and m.has_uninitialized_params():
+            if (
+                hasattr(m, "has_uninitialized_params")
+                and m.has_uninitialized_params()
+            ):
                 pseudo_input = self_copy.spec.rand()
                 self_copy.module(pseudo_input)
                 break
@@ -569,7 +589,9 @@ class ProbabilisticTDModule(TDModule):
     ) -> _TensorDict:
 
         dist, *tensors = self.get_dist(tensor_dict, **kwargs)
-        out_tensor = self._dist_sample(dist, interaction_mode=exploration_mode())
+        out_tensor = self._dist_sample(
+            dist, interaction_mode=exploration_mode()
+        )
         tensor_dict_out = self._write_to_tensor_dict(
             tensor_dict,
             [out_tensor] + list(tensors),
@@ -578,7 +600,9 @@ class ProbabilisticTDModule(TDModule):
         )
         if self.return_log_prob:
             log_prob = dist.log_prob(out_tensor)
-            tensor_dict_out.set("_".join([self.out_keys[0], "log_prob"]), log_prob)
+            tensor_dict_out.set(
+                "_".join([self.out_keys[0], "log_prob"]), log_prob
+            )
         return tensor_dict_out
 
     def log_prob(self, tensor_dict: _TensorDict, **kwargs) -> _TensorDict:
@@ -632,7 +656,7 @@ class ProbabilisticTDModule(TDModule):
         elif interaction_mode == "mean":
             try:
                 return dist.mean
-            except:
+            except AttributeError:
                 if dist.has_rsample:
                     return dist.rsample((self._n_empirical_est,)).mean(0)
                 else:
@@ -758,13 +782,13 @@ class TDSequence(TDModule):
                 in_keys.append(in_key)
         if not len(in_keys):
             raise RuntimeError(
-                f"in_keys empty. Please ensure that there is at least one input key that is not part "
-                f"of the output key set."
+                "in_keys empty. Please ensure that there is at least one input "
+                "key that is not part of the output key set."
             )
         out_keys = [
             out_key
             for i, out_key in enumerate(out_keys)
-            if out_key not in out_keys[i + 1:]
+            if out_key not in out_keys[i + 1 :]
         ]
 
         super().__init__(
@@ -814,7 +838,9 @@ class TDSequence(TDModule):
                 for key, item in kwargs.items()
                 if key not in ("params", "buffers")
             }
-            for i, (module, param, buffer) in enumerate(zip(self.module, param_splits, buffer_splits)):  # type: ignore
+            for i, (module, param, buffer) in enumerate(
+                zip(self.module, param_splits, buffer_splits)
+            ):  # type: ignore
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, 0, *(0,) * len(module.in_keys))
@@ -825,13 +851,19 @@ class TDSequence(TDModule):
         elif "params" in kwargs:
             param_splits = self._split_param(kwargs["params"], "params")
             kwargs_pruned = {
-                key: item for key, item in kwargs.items() if key not in ("params",)
+                key: item
+                for key, item in kwargs.items()
+                if key not in ("params",)
             }
-            for i, (module, param) in enumerate(zip(self.module, param_splits)):  # type: ignore
+            for i, (module, param) in enumerate(
+                zip(self.module, param_splits)
+            ):  # type: ignore
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
-                tensor_dict = module(tensor_dict, params=param, **kwargs_pruned)
+                tensor_dict = module(
+                    tensor_dict, params=param, **kwargs_pruned
+                )
 
         elif not len(kwargs):
             for module in self.module:  # type: ignore
@@ -961,7 +993,7 @@ class TDModuleWrapper(nn.Module):
     def __getattr__(self, name: str) -> Any:
         try:
             return super().__getattr__(name)
-        except:
+        except AttributeError:
             if name not in self.__dict__:
                 return getattr(self._modules["td_module"], name)
             else:

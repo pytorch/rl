@@ -2,16 +2,19 @@ import collections
 import concurrent.futures
 import functools
 import threading
-from numbers import float
 from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
 from torch import Tensor
+
 from torchrl._torchrl import MinSegmentTree, SumSegmentTree
 
-from torchrl.data.replay_buffers.utils import to_torch, to_numpy, \
-    cat_fields_to_device
+from torchrl.data.replay_buffers.utils import (
+    cat_fields_to_device,
+    to_numpy,
+    to_torch,
+)
 
 __all__ = [
     "ReplayBuffer",
@@ -257,8 +260,10 @@ class ReplayBuffer:
             return ret
 
     def __repr__(self) -> str:
-        string = f"{self.__class__.__name__}(size={len(self)}, " \
-                 f"pin_memory={self._pin_memory})"
+        string = (
+            f"{self.__class__.__name__}(size={len(self)}, "
+            f"pin_memory={self._pin_memory})"
+        )
         return string
 
 
@@ -531,8 +536,10 @@ class TensorDictReplayBuffer(ReplayBuffer):
         prefetch: Optional[int] = None,
     ):
         if collate_fn is None:
+
             def collate_fn(x):
                 return stack_td(x, 0, contiguous=True)
+
         super().__init__(size, collate_fn, pin_memory, prefetch)
 
     def sample(self, size: int) -> Any:
@@ -577,8 +584,10 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         prefetch: Optional[int] = None,
     ) -> None:
         if collate_fn is None:
+
             def collate_fn(x):
                 return stack_td(x, 0, contiguous=True)
+
         super(TensorDictPrioritizedReplayBuffer, self).__init__(
             size=size,
             alpha=alpha,
@@ -646,7 +655,9 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                 f"Priority must be a positive value, got "
                 f"{(priority < 0).sum()} negative priority values."
             )
-        return super().update_priority(tensor_dict.get("index"), priority=priority)
+        return super().update_priority(
+            tensor_dict.get("index"), priority=priority
+        )
 
     def sample(self, size: int) -> _TensorDict:
         """

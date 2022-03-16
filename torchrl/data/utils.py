@@ -29,8 +29,8 @@ class CloudpickleWrapper(object):
     def __init__(self, fn: Callable):
         if fn.__class__.__name__ == "EnvCreator":
             raise RuntimeError(
-                "CloudpickleWrapper usage with EnvCreator class is prohibited as it breaks the "
-                "transmission of shared tensors."
+                "CloudpickleWrapper usage with EnvCreator class is "
+                "prohibited as it breaks the transmission of shared tensors."
             )
         self.fn = fn
 
@@ -62,17 +62,21 @@ def expand_as_right(
     Examples:
         >>> tensor = torch.zeros(3,4)
         >>> dest = torch.zeros(3,4,5)
-        >>> print(expand_as_right(tensor, dest).shape)  # returns torch.SIze([3,4,5])
+        >>> print(expand_as_right(tensor, dest).shape)
+        torch.Size([3,4,5])
     """
 
     if dest.ndimension() < tensor.ndimension():
         raise RuntimeError(
-            "expand_as_right requires the destination tensor to have less dimensions than the input tensor, got"
-            f"got tensor.ndimension()={tensor.ndimension()} and dest.ndimension()={dest.ndimension()}"
+            "expand_as_right requires the destination tensor to have less "
+            f"dimensions than the input tensor, got"
+            f" tensor.ndimension()={tensor.ndimension()} and "
+            f"dest.ndimension()={dest.ndimension()}"
         )
     if not (tensor.shape == dest.shape[: tensor.ndimension()]):
         raise RuntimeError(
-            f"tensor shape is incompatible with dest shape, got: tensor.shape={tensor.shape}, dest={dest.shape}"
+            f"tensor shape is incompatible with dest shape, "
+            f"got: tensor.shape={tensor.shape}, dest={dest.shape}"
         )
     for _ in range(dest.ndimension() - tensor.ndimension()):
         tensor = tensor.unsqueeze(-1)
@@ -92,7 +96,8 @@ def expand_right(
     Examples:
         >>> tensor = torch.zeros(3,4)
         >>> shape = (3,4,5)
-        >>> print(expand_right(tensor, shape).shape)  # returns torch.SIze([3,4,5])
+        >>> print(expand_right(tensor, shape).shape)
+        torch.Size([3,4,5])
     """
 
     tensor_expand = tensor

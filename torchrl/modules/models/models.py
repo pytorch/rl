@@ -498,10 +498,8 @@ class DuelingCnnDQNet(nn.Module):
         _mlp_kwargs.update(mlp_kwargs)
         self.out_features = out_features
         self.out_features_value = out_features_value
-        self.advantage = MLP(out_features=out_features,
-                             **_mlp_kwargs)  # type: ignore
-        self.value = MLP(out_features=out_features_value,
-                         **_mlp_kwargs)  # type: ignore
+        self.advantage = MLP(out_features=out_features, **_mlp_kwargs)  # type: ignore
+        self.value = MLP(out_features=out_features_value, **_mlp_kwargs)  # type: ignore
         for layer in self.modules():
             if isinstance(layer, (nn.Conv2d, nn.Linear)) and isinstance(
                 layer.bias, torch.Tensor
@@ -548,12 +546,14 @@ class DistributionalDQNnet(nn.Module):
 
 def ddpg_init_last_layer(last_layer: nn.Module, scale: float = 6e-4) -> None:
     last_layer.weight.data.copy_(  # type: ignore
-        torch.rand_like(last_layer.weight.data) * scale - scale / 2
+        torch.rand_like(last_layer.weight.data) * scale
+        - scale / 2
         # type: ignore
     )
     if last_layer.bias is not None:
         last_layer.bias.data.copy_(  # type: ignore
-            torch.rand_like(last_layer.bias.data) * scale - scale / 2
+            torch.rand_like(last_layer.bias.data) * scale
+            - scale / 2
             # type: ignore
         )
 

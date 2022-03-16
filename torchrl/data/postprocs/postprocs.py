@@ -106,13 +106,13 @@ def select_and_repeat(
 
 class MultiStep(nn.Module):
     """
-    Multistep reward, as presented in 'Sutton, R. S. 1988. Learning to predict by the methods of temporal
-        differences. Machine learning 3(1):9–44.'
+    Multistep reward, as presented in 'Sutton, R. S. 1988. Learning to
+    predict by the methods of temporal differences. Machine learning 3(
+    1):9–44.'
 
     Args:
-        gamma: Discount factor for return computation
-        n_steps_max: maximum look-ahead steps.
-
+        gamma (float): Discount factor for return computation
+        n_steps_max (integer): maximum look-ahead steps.
 
     """
 
@@ -139,15 +139,24 @@ class MultiStep(nn.Module):
 
     def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
         """Args:
-            tensor_dict: TennsorDict instance with Batch x Time-steps x ... dimensions
-                Must contain a "reward" and "done" key.
-                All keys that start with the "next_" prefix will be shifted by (at most) self.n_steps_max frames
-                The TensorDict will also be updated with new key-value pairs:
-                    - gamma: indicating the discount to be used for the next reward;
-                    - nonterminal: boolean value indicating whether a step is non-terminal (not done or not last of
-                        trajectory);
-                    - original_reward: previous reward collected in the environment (i.e. before multi-step);
-                and the "reward" values will be replaced by the newly computed rewards.
+            tensor_dict: TennsorDict instance with Batch x Time-steps x ...
+                dimensions.
+                The TensorDict must contain a "reward" and "done" key. All
+                keys that start with the "next_" prefix will be shifted by (
+                at most) self.n_steps_max frames. The TensorDict will also
+                be updated with new key-value pairs:
+
+                - gamma: indicating the discount to be used for the next
+                reward;
+
+                - nonterminal: boolean value indicating whether a step is
+                non-terminal (not done or not last of trajectory);
+
+                - original_reward: previous reward collected in the
+                environment (i.e. before multi-step);
+
+                - The "reward" values will be replaced by the newly computed
+                rewards.
 
         Returns: in-place transformation of the input tensordict.
 

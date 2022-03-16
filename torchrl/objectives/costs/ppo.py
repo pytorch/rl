@@ -6,7 +6,7 @@ from torch import distributions as d
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import step_tensor_dict
-from torchrl.modules import Actor, ProbabilisticTDModule, TDModule
+from torchrl.modules import ProbabilisticTDModule, TDModule
 
 __all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
 
@@ -83,7 +83,7 @@ class PPOLoss(_LossModule):
     ) -> torch.Tensor:
         try:
             entropy = dist.entropy()
-        except:
+        except AttributeError:
             x = dist.rsample((self.samples_mc_entropy,))
             entropy = -dist.log_prob(x)
         return entropy.unsqueeze(-1)

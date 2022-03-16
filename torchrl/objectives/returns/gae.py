@@ -11,7 +11,7 @@ import torch
 #     critic_loss = critic_loss + (R - value) ** 2 / 2
 #     entropy_loss = entropy_loss + entropy
 from torchrl.envs.utils import step_tensor_dict
-from .functional import generalized_advantage_estimate
+
 # from https://github.com/H-Huang/rpc-rl-experiments/blob/6621f0aadb347d1c4e24bcf46517ac36907401ff/a3c/process.py#L14
 # TODO: create function / object that vectorises that
 # actor_loss = 0
@@ -20,6 +20,7 @@ from .functional import generalized_advantage_estimate
 # next_value = R
 from ...data.tensordict.tensordict import _TensorDict
 from ...modules import ProbabilisticTDModule
+from .functional import generalized_advantage_estimate
 
 
 #

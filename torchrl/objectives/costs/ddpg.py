@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Tuple
 
 import torch
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.modules import reset_noise, TDModule
+from torchrl.modules import TDModule
 from torchrl.modules.td_module.actors import ActorCriticWrapper
 from torchrl.objectives.costs.utils import (
     distance_loss,
-    next_state_value,
     hold_out_params,
+    next_state_value,
 )
 from .common import _LossModule
 
@@ -40,10 +39,14 @@ class DDPGLoss(_LossModule):
     ) -> None:
         super().__init__()
         self.convert_to_functional(
-            actor_network, "actor_network", create_target_params=self.delay_actor
+            actor_network,
+            "actor_network",
+            create_target_params=self.delay_actor,
         )
         self.convert_to_functional(
-            value_network, "value_network", create_target_params=self.delay_value
+            value_network,
+            "value_network",
+            create_target_params=self.delay_value,
         )
 
         self.actor_in_keys = actor_network.in_keys
@@ -72,11 +75,12 @@ class DDPGLoss(_LossModule):
         loss_value, td_error, pred_val, target_value = self._loss_value(
             input_tensor_dict,
         )
+        td_error = td_error.detach()
+        td_error = td_error.unsqueeze(input_tensor_dict.ndimension())
+        td_error = td_error.to(input_tensor_dict.device)
         input_tensor_dict.set(
             "td_error",
-            td_error.detach()
-            .unsqueeze(input_tensor_dict.ndimension())
-            .to(input_tensor_dict.device),
+            td_error,
             inplace=True,
         )
         loss_actor = self._loss_actor(input_tensor_dict)
@@ -121,7 +125,9 @@ class DDPGLoss(_LossModule):
         )
         pred_val = td_copy.get("state_action_value").squeeze(-1)
 
-        actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
+        actor_critic = ActorCriticWrapper(
+            self.actor_network, self.value_network
+        )
         target_params = list(self.target_actor_network_params) + list(
             self.target_value_network_params
         )

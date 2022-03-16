@@ -1,16 +1,18 @@
 import math
 from numbers import Number
-from typing import Tuple, Iterator, Union
+from typing import Tuple, Union
 
 import numpy as np
 import torch
-from torch import Tensor, nn
-from torch.nn import Parameter
+from torch import Tensor
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.modules import TDModule
-from torchrl.modules.td_module.actors import ActorCriticWrapper, ProbabilisticActor
-from torchrl.objectives.costs.utils import next_state_value, distance_loss
+from torchrl.modules.td_module.actors import (
+    ActorCriticWrapper,
+    ProbabilisticActor,
+)
+from torchrl.objectives.costs.utils import distance_loss, next_state_value
 from .common import _LossModule
 
 __all__ = ["SACLoss", "DoubleSACLoss"]
@@ -61,17 +63,21 @@ class SACLoss(_LossModule):
     ) -> None:
         super().__init__()
 
-        ## Actor
+        # Actor
         self.convert_to_functional(
-            actor_network, "actor_network", create_target_params=self.delay_actor
+            actor_network,
+            "actor_network",
+            create_target_params=self.delay_actor,
         )
 
-        ## Value
+        # Value
         self.convert_to_functional(
-            value_network, "value_network", create_target_params=self.delay_value
+            value_network,
+            "value_network",
+            create_target_params=self.delay_value,
         )
 
-        ## Q value
+        # Q value
         self.num_qvalue_nets = num_qvalue_nets
         self.convert_to_functional(
             qvalue_network,
@@ -87,7 +93,7 @@ class SACLoss(_LossModule):
         self.fixed_alpha = fixed_alpha
         try:
             device = next(self.parameters()).device
-        except:
+        except AttributeError:
             device = torch.device("cpu")
         if fixed_alpha:
             self.register_buffer(
@@ -96,7 +102,9 @@ class SACLoss(_LossModule):
         else:
             self.register_parameter(
                 "log_alpha",
-                torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
+                torch.nn.Parameter(
+                    torch.tensor(math.log(alpha_init), device=device)
+                ),
             )
 
         if target_entropy == "auto":
@@ -180,7 +188,9 @@ class SACLoss(_LossModule):
         return self._alpha * log_prob - min_q_logprob
 
     def _loss_qvalue(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
-        actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
+        actor_critic = ActorCriticWrapper(
+            self.actor_network, self.value_network
+        )
         params = list(self.target_actor_network_params) + list(
             self.target_value_network_params
         )
@@ -210,7 +220,9 @@ class SACLoss(_LossModule):
         tensordict_chunks = torch.stack(
             tensordict.chunk(self.num_qvalue_nets, dim=0), 0
         )
-        target_chunks = torch.stack(target_value.chunk(self.num_qvalue_nets, dim=0), 0)
+        target_chunks = torch.stack(
+            target_value.chunk(self.num_qvalue_nets, dim=0), 0
+        )
 
         # if vmap=True, it is assumed that the input tensordict must be cast to the param shape
         tensordict_chunks = qvalue_network(
@@ -278,7 +290,9 @@ class SACLoss(_LossModule):
         log_pi = tensordict.get("_log_prob")
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha.exp() * (log_pi.detach() + self.target_entropy)
+            alpha_loss = -self.log_alpha.exp() * (
+                log_pi.detach() + self.target_entropy
+            )
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)

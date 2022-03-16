@@ -53,7 +53,7 @@ def correct_for_frame_skip(args: Namespace) -> Namespace:
     Returns: the input Namespace, modified in-place.
 
     """
-    ## Adapt all frame counts wrt frame_skip
+    # Adapt all frame counts wrt frame_skip
     if args.frame_skip != 1:
         fields = [
             "max_frames_per_traj",
@@ -275,9 +275,9 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=1,
         help="frame_skip for the environment. Note that this value does NOT impact the buffer size,"
-             "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
-             "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
-             "the actual number of frames retrieved will be 200e6. Default=1.",
+        "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
+        "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
+        "the actual number of frames retrieved will be 200e6. Default=1.",
     )
     parser.add_argument(
         "--reward_scaling", type=float, help="scale of the reward."
@@ -292,13 +292,13 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "--vecnorm",
         action="store_true",
         help="Normalizes the environment observation and reward outputs with the running statistics "
-             "obtained across processes.",
+        "obtained across processes.",
     )
     parser.add_argument(
         "--norm_rewards",
         action="store_true",
         help="If True, rewards will be normalized on the fly. This may interfere with SAC update rule and "
-             "should be used cautiously.",
+        "should be used cautiously.",
     )
     parser.add_argument(
         "--noops",
@@ -311,7 +311,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=1000,
         help="Number of steps before a reset of the environment is called (if it has not been flagged as "
-             "done before). ",
+        "done before). ",
     )
 
     return parser

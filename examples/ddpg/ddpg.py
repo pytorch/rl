@@ -14,8 +14,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 from torchrl.agents.helpers.agents import make_agent, parser_agent_args
 from torchrl.agents.helpers.collectors import (
-    parser_collector_args_offpolicy,
     make_collector_offpolicy,
+    parser_collector_args_offpolicy,
 )
 from torchrl.agents.helpers.envs import (
     correct_for_frame_skip,

@@ -3,16 +3,24 @@ import functorch
 
 def get_params_of_module(module, cf, p, b):
     split_name_dict = make_split_names_dict(cf.split_names, p, b)
-    names, values = _get_params_of_module(module, cf.stateless_model, split_name_dict)
+    names, values = _get_params_of_module(
+        module, cf.stateless_model, split_name_dict
+    )
     S = set(values)
     S_param = S.intersection(set(p))
     S_buffer = S.intersection(set(b))
 
     name_p_dict = {_p: _name for _p, _name in zip(values, names)}
-    param_names, params = zip(*[(name_p_dict[_p], _p) for _p in p if _p in S_param])
-    buffer_names, buffers = zip(*[(name_p_dict[_b], _b) for _b in b if _b in S_buffer])
+    param_names, params = zip(
+        *[(name_p_dict[_p], _p) for _p in p if _p in S_param]
+    )
+    buffer_names, buffers = zip(
+        *[(name_p_dict[_b], _b) for _b in b if _b in S_buffer]
+    )
 
-    fmodule = functorch.FunctionalModuleWithBuffers(module, param_names, buffer_names)
+    fmodule = functorch.FunctionalModuleWithBuffers(
+        module, param_names, buffer_names
+    )
     return fmodule, params, buffers
 
 
@@ -25,7 +33,9 @@ def _get_params_of_module(module, target, split_name_dict):
             sub_target = getattr(target, name)
             sub_split_name_dict = split_name_dict[name]
             if isinstance(sub_split_name_dict, dict):
-                out = _get_params_of_module(module, sub_target, sub_split_name_dict)
+                out = _get_params_of_module(
+                    module, sub_target, sub_split_name_dict
+                )
                 if out:
                     return out
         return found
@@ -43,9 +53,6 @@ def _get_params(dictionary):
             ]
             out += _out
     return tuple(zip(*out))
-
-
-from copy import copy
 
 
 def get_item(d, name, p):
@@ -88,8 +95,13 @@ class apply_to_class:
         for layer_name in split_name_dict:
             layer_or_param = getattr(cf, layer_name)
             if isinstance(layer_or_param, nn.Module):
-                split_name_dict[layer_name] = apply_to_class.dispatch_to_layers(
-                    func, layer_type, split_name_dict[layer_name], layer_or_param
+                split_name_dict[
+                    layer_name
+                ] = apply_to_class.dispatch_to_layers(
+                    func,
+                    layer_type,
+                    split_name_dict[layer_name],
+                    layer_or_param,
                 )
         return split_name_dict
 
@@ -117,19 +129,25 @@ def get_submodule_functional(module, cf):
     p = [i for i, _ in enumerate(cf.param_names)]
     b = [len(p) + i for i, _ in enumerate(cf.buffer_names)]
     split_name_dict = make_split_names_dict(cf.split_names, p, b)
-    names, values = _get_params_of_module(module, cf.stateless_model, split_name_dict)
+    names, values = _get_params_of_module(
+        module, cf.stateless_model, split_name_dict
+    )
     S = set(values)
     S_param = S.intersection(set(p))
     S_buffer = S.intersection(set(b))
 
     name_p_dict = {_p: _name for _p, _name in zip(values, names)}
-    param_names, params = zip(*[(name_p_dict[_p], _p) for _p in p if _p in S_param])
+    param_names, params = zip(
+        *[(name_p_dict[_p], _p) for _p in p if _p in S_param]
+    )
     if len(S_buffer):
-        buffer_names, buffers = zip(
+        buffer_names, _ = zip(
             *[(name_p_dict[_b], _b) for _b in b if _b in S_buffer]
         )
     else:
-        buffer_names, buffers = tuple(), tuple()
+        buffer_names, _ = tuple(), tuple()
 
-    fmodule = functorch.FunctionalModuleWithBuffers(module, param_names, buffer_names)
+    fmodule = functorch.FunctionalModuleWithBuffers(
+        module, param_names, buffer_names
+    )
     return fmodule
