@@ -303,7 +303,7 @@ workflows:
 #      - circleci_consistency
 #      - lint_python_and_config
       - lint_c
-#      - type_check_python
+      - type_check_python
 
   unittest:
     jobs:
