@@ -1,4 +1,3 @@
-from numbers import Number
 from typing import Union
 
 import torch
@@ -13,7 +12,6 @@ import torch
 #     entropy_loss = entropy_loss + entropy
 from torchrl.envs.utils import step_tensor_dict
 from .functional import generalized_advantage_estimate
-
 # from https://github.com/H-Huang/rpc-rl-experiments/blob/6621f0aadb347d1c4e24bcf46517ac36907401ff/a3c/process.py#L14
 # TODO: create function / object that vectorises that
 # actor_loss = 0
@@ -23,9 +21,10 @@ from .functional import generalized_advantage_estimate
 from ...data.tensordict.tensordict import _TensorDict
 from ...modules import ProbabilisticTDModule
 
+
 #
 # def gae(values: torch.Tensor, log_prob_actions: torch.Tensor, rewards: torch.Tensor, entropies: torch.Tensor,
-#         gamma: Union[Number, torch.Tensor], tau: Number) -> torch.Tensor:
+#         gamma: Union[Number, torch.Tensor], tau: float) -> torch.Tensor:
 #     """
 #
 #     Args:
@@ -70,8 +69,8 @@ class GAE:
 
     def __init__(
         self,
-        gamma: Union[Number, torch.Tensor],
-        lamda: Number,
+        gamma: Union[float, torch.Tensor],
+        lamda: float,
         critic: ProbabilisticTDModule,
         average_rewards: bool = False,
         gradient_mode: bool = False,
@@ -83,8 +82,7 @@ class GAE:
         self.gradient_mode = gradient_mode
 
     def __call__(self, tensor_dict: _TensorDict) -> _TensorDict:
-        """
-        Computes the GAE given the data in tensor_dict.
+        """Computes the GAE given the data in tensor_dict.
 
         Args:
             tensor_dict (_TensorDict): A TensorDict containing the data (observation, action, reward, done state)

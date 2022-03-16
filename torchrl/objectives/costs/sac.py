@@ -33,12 +33,12 @@ class SACLoss(_LossModule):
             default: td_error
         loss_function (str, optional): loss function to be used with the value function loss.
             default: "smooth_l1"
-        alpha_init (Number, optional): initial entropy multiplier.
+        alpha_init (float, optional): initial entropy multiplier.
             default: 1.0
         fixed_alpha (bool, optional): if True, alpha will be fixed to its initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
             default: False
-        target_entropy (Number or str, optional):
+        target_entropy (float or str, optional):
             default: "auto", where target entropy is computed as
     """
 
@@ -55,9 +55,9 @@ class SACLoss(_LossModule):
         gamma: Number = 0.99,
         priotity_key: str = "td_error",
         loss_function: str = "smooth_l1",
-        alpha_init: Number = 1.0,
+        alpha_init: float = 1.0,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, Number] = "auto",
+        target_entropy: Union[str, float] = "auto",
     ) -> None:
         super().__init__()
 
@@ -229,20 +229,6 @@ class SACLoss(_LossModule):
             pred_val, target_chunks, loss_function=self.loss_function
         ).view(*shape)
         priority_value = torch.cat(abs(pred_val - target_chunks).unbind(0), 0)
-
-        # loss_value = []
-        # priority_value = []
-        # for _td, _target, _net in zip(tensordict_chunks, target_chunks, nets):
-        #     td_copy = _td.select(*_net.in_keys).detach()
-        #     _net(td_copy)
-        #     pred_val = td_copy.get("state_action_value").squeeze(-1)
-        #     loss_value.append(
-        #         distance_loss(pred_val, _target, loss_function=self.loss_function)
-        #     )
-        #     priority_value.append(abs(pred_val - _target))
-
-        # loss_value = torch.cat(loss_value, 0)
-        # priority_value = torch.cat(priority_value, 0)
 
         return loss_value, priority_value
 

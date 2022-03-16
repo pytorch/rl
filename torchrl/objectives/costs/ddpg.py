@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from numbers import Number
 from typing import Tuple
 
 import torch
@@ -36,7 +35,7 @@ class DDPGLoss(_LossModule):
         self,
         actor_network: TDModule,
         value_network: TDModule,
-        gamma: Number,
+        gamma: float,
         loss_function: str = "l2",
     ) -> None:
         super().__init__()
@@ -53,8 +52,7 @@ class DDPGLoss(_LossModule):
         self.loss_funtion = loss_function
 
     def forward(self, input_tensor_dict: _TensorDict) -> TensorDict:
-        """
-        Computes the DDPG losses given a tensordict sampled from the replay buffer.
+        """Computes the DDPG losses given a tensordict sampled from the replay buffer.
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
 

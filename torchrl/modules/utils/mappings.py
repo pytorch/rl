@@ -1,4 +1,3 @@
-from numbers import Number
 from typing import Callable
 
 import torch
@@ -7,7 +6,7 @@ from torch import nn
 __all__ = ["mappings", "inv_softplus", "biased_softplus"]
 
 
-def inv_softplus(bias: Number):
+def inv_softplus(bias: float):
     """
     inverse softplus function.
 
@@ -25,7 +24,7 @@ class biased_softplus(nn.Module):
             default: 0.1
     """
 
-    def __init__(self, bias: Number, min_val: Number = 0.01):
+    def __init__(self, bias: float, min_val: float = 0.01):
         super().__init__()
         self.bias = inv_softplus(bias - min_val)
         self.min_val = min_val

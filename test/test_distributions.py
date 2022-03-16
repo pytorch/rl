@@ -19,10 +19,6 @@ def test_delta():
     assert (d.log_prob(d.mode) == float("inf")).all()
 
 
-def test_categorical():
-    raise NotImplementedError
-
-
 @pytest.mark.parametrize(
     "min", [-torch.ones(3), -1, 3 * torch.tensor([-1.0, -2.0, -0.5]), -3]
 )

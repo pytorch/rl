@@ -1,18 +1,17 @@
-from argparse import Namespace, ArgumentParser
-from numbers import Number
-from typing import Optional, Iterable
+from argparse import ArgumentParser, Namespace
+from typing import Optional, Sequence
 
 import torch
 from torch import nn
 
-from torchrl.data import UnboundedContinuousTensorSpec, DEVICE_TYPING
+from torchrl.data import DEVICE_TYPING, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvClass
 from torchrl.modules import ActorValueOperator, NoisyLinear, TDModule
 from torchrl.modules.distributions import (
     Delta,
-    TanhNormal,
-    TanhDelta,
     OneHotCategorical,
+    TanhDelta,
+    TanhNormal,
     TruncatedNormal,
 )
 from torchrl.modules.models.models import (
@@ -151,8 +150,8 @@ def make_ddpg_actor(
     actor_net_kwargs: Optional[dict] = None,
     value_net_kwargs: Optional[dict] = None,
     atoms: int = 0,  # for distributional dqn
-    vmin: Number = -3,
-    vmax: Number = 3,
+    vmin: float = -3,
+    vmax: float = 3,
     device: DEVICE_TYPING = "cpu",
 ) -> torch.nn.ModuleList:
     """
@@ -210,8 +209,12 @@ def make_ddpg_actor(
             device=cpu)
     """
 
-    actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else dict()
-    value_net_kwargs = value_net_kwargs if value_net_kwargs is not None else dict()
+    actor_net_kwargs = (
+        actor_net_kwargs if actor_net_kwargs is not None else dict()
+    )
+    value_net_kwargs = (
+        value_net_kwargs if value_net_kwargs is not None else dict()
+    )
 
     linear_layer_class = torch.nn.Linear if not noisy else NoisyLinear
 
@@ -306,7 +309,7 @@ def make_ppo_model(
     proof_environment: _EnvClass,
     args: Namespace,
     device: DEVICE_TYPING,
-    in_keys_actor: Optional[Iterable[str]] = None,
+    in_keys_actor: Optional[Sequence[str]] = None,
     **kwargs,
 ) -> ActorValueOperator:
     """
@@ -428,7 +431,10 @@ def make_ppo_model(
                 activate_last_layer=True,
             )
         common_operator = TDModule(
-            spec=None, module=common_module, in_keys=in_keys_actor, out_keys=["hidden"]
+            spec=None,
+            module=common_module,
+            in_keys=in_keys_actor,
+            out_keys=["hidden"],
         )
 
         policy_net = MLP(
@@ -501,7 +507,7 @@ def make_ppo_model(
 
 def make_sac_model(
     proof_environment: _EnvClass,
-    in_keys: Optional[Iterable[str]] = None,
+    in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
     qvalue_net_kwargs=None,
     value_net_kwargs=None,
@@ -804,7 +810,7 @@ def parser_model_args_continuous(
             "--annealing_frames",
             type=int,
             default=1000000,
-            help="Number of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.",
+            help="float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.",
         )
         parser.add_argument(
             "--noisy",
@@ -875,7 +881,7 @@ def parser_model_args_discrete(parser: ArgumentParser) -> ArgumentParser:
         "--annealing_frames",
         type=int,
         default=1000000,
-        help="Number of frames used for annealing of the EGreedy exploration. Default=1e6.",
+        help="float of frames used for annealing of the EGreedy exploration. Default=1e6.",
     )
 
     parser.add_argument(

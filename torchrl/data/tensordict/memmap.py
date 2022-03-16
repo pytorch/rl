@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import functools
 import tempfile
-from typing import List, Union, Optional, Callable, Tuple, Any
+from typing import Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 
-from torchrl.data.utils import torch_to_numpy_dtype_dict, INDEX_TYPING, DEVICE_TYPING
+from torchrl.data.utils import (
+    DEVICE_TYPING,
+    INDEX_TYPING,
+    torch_to_numpy_dtype_dict,
+)
 
 MEMMAP_HANDLED_FN = {}
 
@@ -33,22 +37,30 @@ def to_numpy(tensor: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
 
 
 class MemmapTensor(object):
-    """
-    A torch.tensor interface with a np.memmap array.
+    """A torch.tensor interface with a np.memmap array.
+
     A temporary file is created and cleared once the object is out-of-scope.
-    This class is aimed at being used for data transfer in between processes and remote workers that have access to
-    a common storage, and as such it supports serialization and deserialization.
-    It is possible to choose if the ownership is transferred upon serialization / deserialization: If
-    owenership is not transferred (transfer_ownership=False, default), then the process where the MemmapTensor was
-    created will be responsible of clearing it once it gets out of scope (in that process). Otherwise, the process that
-    deserialize the MemmapTensor will be responsible of clearing the files once the object is out of scope.
+    This class is aimed at being used for data transfer in between processes
+    and remote workers that have access to
+    a common storage, and as such it supports serialization and
+    deserialization. It is possible to choose if the ownership is
+    transferred upon serialization / deserialization: If owenership is not
+    transferred (transfer_ownership=False, default), then the process where
+    the MemmapTensor was created will be responsible of clearing it once it
+    gets out of scope (in that process). Otherwise, the process that
+    deserialize the MemmapTensor will be responsible of clearing the files
+    once the object is out of scope.
+
     Supports (almost) all tensor operations.
 
     Args:
-        elem (torch.Tensor or MemmapTensor): Tensor to be stored on physical storage.
-            If MemmapTensor, a new MemmapTensor is created and the same data is stored in it.
-        transfer_ownership: bool: affects the ownership after serialization: if True, the current process looses ownership
-            immediately after serialization. If False, the current process keeps the ownership of the temporary file.
+        elem (torch.Tensor or MemmapTensor): Tensor to be stored on physical
+            storage. If MemmapTensor, a new MemmapTensor is created and the
+            same data is stored in it.
+        transfer_ownership: bool: affects the ownership after serialization:
+            if True, the current process looses ownership immediately after
+            serialization. If False, the current process keeps the ownership
+            of the temporary file.
             Default: False.
 
     Examples:
@@ -78,11 +90,14 @@ class MemmapTensor(object):
     """
 
     def __init__(
-        self, elem: Union[torch.Tensor, MemmapTensor], transfer_ownership: bool = False
+        self,
+        elem: Union[torch.Tensor, MemmapTensor],
+        transfer_ownership: bool = False,
     ):
         if not isinstance(elem, (torch.Tensor, MemmapTensor)):
             raise TypeError(
-                "convert input to torch.Tensor before calling MemmapTensor() on it."
+                "convert input to torch.Tensor before calling MemmapTensor() "
+                "on it."
             )
 
         if elem.requires_grad:
@@ -129,7 +144,9 @@ class MemmapTensor(object):
     memmap_array = property(_get_memmap_array, _set_memmap_array)
 
     def _save_item(
-        self, value: Union[torch.Tensor, np.ndarray], idx: Optional[int] = None
+        self,
+        value: Union[torch.Tensor, MemmapTensor, np.ndarray],
+        idx: Optional[int] = None,
     ):
         if isinstance(value, (torch.Tensor,)):
             np_array = value.cpu().numpy()
@@ -150,25 +167,33 @@ class MemmapTensor(object):
         )
 
     def _load_item(
-        self, idx: Optional[int] = None, memmap_array: Optional[np.ndarray] = None
+        self,
+        idx: Optional[int] = None,
+        memmap_array: Optional[np.ndarray] = None,
     ) -> torch.Tensor:
         if memmap_array is None:
             memmap_array = self.memmap_array
         if idx is not None:
             memmap_array = memmap_array[idx]
-        return self._np_to_tensor(memmap_array)
+        return self._np_to_tensor(memmap_array)  # type: ignore
 
-    def _np_to_tensor(self, memmap_array: np.memmap) -> torch.Tensor:
+    def _np_to_tensor(self, memmap_array: np.ndarray) -> torch.Tensor:
         return torch.as_tensor(memmap_array, device=self.device)
 
     @classmethod
     def __torch_function__(
-        cls, func: Callable, types, args: Tuple = (), kwargs: Optional[dict] = None
+        cls,
+        func: Callable,
+        types,
+        args: Tuple = (),
+        kwargs: Optional[dict] = None,
     ):
         if kwargs is None:
             kwargs = {}
         if func not in MEMMAP_HANDLED_FN:
-            args = [a._tensor if hasattr(a, "_tensor") else a for a in args]
+            args = tuple(
+                a._tensor if hasattr(a, "_tensor") else a for a in args
+            )
             ret = func(*args, **kwargs)
             return ret
 
@@ -185,19 +210,18 @@ class MemmapTensor(object):
         return self._numel
 
     def clone(self) -> MemmapTensor:
-        """
-        Clones the MemmapTensor onto another MemmapTensor
+        """Clones the MemmapTensor onto another MemmapTensor
 
         Returns: a new MemmapTensor with the same data but a new storage.
 
         """
         return MemmapTensor(self)
 
-    def contiguous(self) -> MemmapTensor:
-        """
-        Copies the MemmapTensor onto a torch.Tensor object.
+    def contiguous(self) -> torch.Tensor:
+        """Copies the MemmapTensor onto a torch.Tensor object.
 
-        Returns: a torch.Tensor instance with the data of the MemmapTensor stored on the desired device.
+        Returns: a torch.Tensor instance with the data of the MemmapTensor
+        stored on the desired device.
 
         """
         return self._tensor.clone()
@@ -214,7 +238,7 @@ class MemmapTensor(object):
     def shape(self) -> torch.Size:
         return self._shape
 
-    def cpu(self) -> MemmapTensor:
+    def cpu(self) -> torch.Tensor:
         return self._tensor.cpu()
 
     def numpy(self) -> np.ndarray:
@@ -225,11 +249,12 @@ class MemmapTensor(object):
         return self
 
     def set_transfer_ownership(self, value: bool = True) -> MemmapTensor:
-        """
-        Controls whether the ownership will be transferred to another process upon serialization/deserialization
+        """Controls whether the ownership will be transferred to another
+        process upon serialization/deserialization
 
         Args:
-            value (bool): if True, the ownership will be transferred. Otherwise the process will keep ownership of the
+            value (bool): if True, the ownership will be transferred.
+                Otherwise the process will keep ownership of the
                 MemmapTensor temp file.
                 Default = True
 
@@ -238,7 +263,8 @@ class MemmapTensor(object):
         """
         if not isinstance(value, bool):
             raise TypeError(
-                f"value provided to set_transfer_ownership should be a boolean, got {type(value)}"
+                f"value provided to set_transfer_ownership should be a "
+                f"boolean, got {type(value)}"
             )
         self.transfer_ownership = value
         return self
@@ -247,7 +273,11 @@ class MemmapTensor(object):
         if hasattr(self, "file"):
             self.file.close()
 
-    def __eq__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __eq__(self, other: Any) -> torch.Tensor:  # type: ignore
+        if not isinstance(
+            other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)
+        ):
+            raise NotImplementedError(f"Unknown type {type(other)}")
         return self._tensor == other
 
     def __getattr__(self, attr: str) -> Any:
@@ -256,7 +286,7 @@ class MemmapTensor(object):
             return self.__getattribute__(
                 attr
             )  # make sure that appropriate exceptions are raised
-        if not attr in self.__getattribute__("_tensor_dir"):
+        if attr not in self.__getattribute__("_tensor_dir"):
             raise AttributeError(f"{attr} not found")
         _tensor = self.__getattribute__("_tensor")
         return getattr(_tensor, attr)
@@ -268,29 +298,44 @@ class MemmapTensor(object):
     def is_shared(self) -> bool:
         return False
 
-    def __add__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.add(self, other)
+    def __add__(
+        self, other: Union[float, MemmapTensor, torch.Tensor]
+    ) -> torch.Tensor:
+        return torch.add(self, other)  # type: ignore
 
-    def __truediv__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.div(self, other)
+    def __truediv__(
+        self, other: Union[float, MemmapTensor, torch.Tensor]
+    ) -> torch.Tensor:
+        return torch.div(self, other)  # type: ignore
 
-    def __neg__(self: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.neg(self)
+    def __neg__(
+        self: Union[float, MemmapTensor, torch.Tensor]
+    ) -> torch.Tensor:
+        return torch.neg(self)  # type: ignore
 
-    def __sub__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.sub(self, other)
+    def __sub__(
+        self, other: Union[float, MemmapTensor, torch.Tensor]
+    ) -> torch.Tensor:
+        return torch.sub(self, other)  # type: ignore
 
-    def __matmul__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.matmul(self, other)
+    def __matmul__(
+        self, other: Union[float, MemmapTensor, torch.Tensor]
+    ) -> torch.Tensor:
+        return torch.matmul(self, other)  # type: ignore
 
-    def __mul__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.mul(self, other)
+    def __mul__(
+        self, other: Union[float, MemmapTensor, torch.Tensor]
+    ) -> torch.Tensor:
+        return torch.mul(self, other)  # type: ignore
 
-    def __pow__(self, other: Union[MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.pow(self, other)
+    def __pow__(
+        self, other: Union[float, MemmapTensor, torch.Tensor]
+    ) -> torch.Tensor:
+        return torch.pow(self, other)  # type: ignore
 
     def __repr__(self) -> str:
-        return f"MemmapTensor(shape={self.shape}, device={self.device}, dtype={self.dtype})"
+        return f"MemmapTensor(shape={self.shape}, device={self.device}, " \
+               f"dtype={self.dtype})"
 
     def __getitem__(self, item: INDEX_TYPING) -> torch.Tensor:
         # return self._load_item(memmap_array=self.memmap_array[item])#[item]
@@ -323,13 +368,16 @@ class MemmapTensor(object):
             self.file._closer.delete = False
         return super(MemmapTensor, self).__reduce__(*args, **kwargs)
 
-    def to(self, dest: Union[DEVICE_TYPING, torch.dtype]) -> MemmapTensor:
-        """
-        Maps a MemmapTensor to a given dtype or device.
+    def to(
+        self, dest: Union[DEVICE_TYPING, torch.dtype]
+    ) -> Union[torch.Tensor, MemmapTensor]:
+        """Maps a MemmapTensor to a given dtype or device.
 
         Args:
-            dest (device indicator or torch.dtype): where to cast the MemmapTensor. For devices, this is a lazy operation
-                (as the data is stored on physical memory). For dtypes, the tensor will be retrieved, mapped to the
+            dest (device indicator or torch.dtype): where to cast the
+                MemmapTensor. For devices, this is a lazy operation
+                (as the data is stored on physical memory). For dtypes, the
+                tensor will be retrieved, mapped to the
                 desired dtype and cast to a new MemmapTensor.
 
         Returns:
@@ -342,13 +390,13 @@ class MemmapTensor(object):
             return MemmapTensor(self._tensor.to(dest))
         else:
             raise NotImplementedError(
-                f"argument dest={dest} to MemmapTensor.to(dest) is not handled. "
+                f"argument dest={dest} to MemmapTensor.to(dest) is not "
+                f"handled. "
                 f"Please provide a dtype or a device."
             )
 
     def unbind(self, dim: int) -> Tuple[torch.Tensor, ...]:
-        """
-        Unbinds a MemmapTensor along the desired dimension.
+        """Unbinds a MemmapTensor along the desired dimension.
 
         Args:
             dim (int): dimension along which the MemmapTensor will be split.
@@ -367,7 +415,7 @@ class MemmapTensor(object):
 def stack(
     list_of_memmap: List[MemmapTensor],
     dim: int,
-    out: Optional[Union[torch.Tensor, MemmapTensor]] = None,
+    out: Optional[Union[torch.Tensor]] = None,
 ) -> torch.Tensor:
     list_of_tensors = [
         a._tensor if isinstance(a, MemmapTensor) else a for a in list_of_memmap

@@ -12,22 +12,25 @@ except:
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
 
-from torchrl.agents.helpers.agents import parser_agent_args, make_agent
+from torchrl.agents.helpers.agents import make_agent, parser_agent_args
 from torchrl.agents.helpers.collectors import (
     parser_collector_args_onpolicy,
     make_collector_onpolicy,
 )
 from torchrl.agents.helpers.envs import (
-    transformed_env_constructor,
-    parallel_env_constructor,
     correct_for_frame_skip,
     get_stats_random_rollout,
+    parallel_env_constructor,
     parser_env_args,
+    transformed_env_constructor,
 )
 from torchrl.agents.helpers.losses import make_ppo_loss, parser_loss_args_ppo
-from torchrl.agents.helpers.models import make_ppo_model, parser_model_args_continuous
+from torchrl.agents.helpers.models import (
+    make_ppo_model,
+    parser_model_args_continuous,
+)
 from torchrl.agents.helpers.recorder import parser_recorder_args
-from torchrl.data.transforms import TransformedEnv, RewardScaling
+from torchrl.data.transforms import RewardScaling, TransformedEnv
 
 
 def make_args():

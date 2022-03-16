@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 from torchrl.data.tensordict.tensordict import _TensorDict
 
+
 # TODO: code small architecture ref in Impala paper
 
 
@@ -83,14 +84,19 @@ class ImpalaNet(nn.Module):
         layers = [_ConvNetBlock(num_ch) for num_ch in channels]
         layers += [nn.ReLU(inplace=True)]
         self.convs = nn.Sequential(*layers)
-        self.fc = nn.Sequential(nn.LazyLinear(out_features), nn.ReLU(inplace=True))
+        self.fc = nn.Sequential(
+            nn.LazyLinear(out_features), nn.ReLU(inplace=True)
+        )
 
         # FC output size + last reward.
         core_output_size = out_features + 1
 
         if use_lstm:
             self.core = nn.LSTM(
-                core_output_size, out_features, num_layers=1, batch_first=batch_first
+                core_output_size,
+                out_features,
+                num_layers=1,
+                batch_first=batch_first,
             )
             core_output_size = out_features
 
@@ -165,7 +171,7 @@ class ImpalaNet(nn.Module):
 class ImpalaNetTensorDict(ImpalaNet):
     observation_key = "observation_pixels"
 
-    def forward(self, tensor_dict: _TensorDict):
+    def forward(self, tensor_dict: _TensorDict):  # type: ignore
         x = tensor_dict.get(self.observation_key)
         done = tensor_dict.get("done").squeeze(-1)
         reward = tensor_dict.get("reward").squeeze(-1)
@@ -175,4 +181,6 @@ class ImpalaNetTensorDict(ImpalaNet):
             if "core_state" in tensor_dict.keys()
             else None
         )
-        return super().forward(x, reward, done, core_state=core_state, mask=mask)
+        return super().forward(
+            x, reward, done, core_state=core_state, mask=mask
+        )

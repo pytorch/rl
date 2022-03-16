@@ -1,8 +1,6 @@
-__all__ = ["SoftUpdate", "HardUpdate", "distance_loss", "hold_out_params"]
 
 import functools
 from collections import OrderedDict
-from numbers import Number
 from typing import Union, Iterable, Optional
 
 import torch
@@ -13,6 +11,7 @@ from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import step_tensor_dict
 from torchrl.modules import ProbabilisticTDModule, TDModule
 
+__all__ = ["SoftUpdate", "HardUpdate", "distance_loss", "hold_out_params"]
 
 class _context_manager:
     def __init__(self, value=True):
@@ -29,7 +28,10 @@ class _context_manager:
 
 
 def distance_loss(
-    v1: torch.Tensor, v2: torch.Tensor, loss_function: str, strict_shape: bool = True
+    v1: torch.Tensor,
+    v2: torch.Tensor,
+    loss_function: str,
+    strict_shape: bool = True,
 ) -> torch.Tensor:
     """
     Computes a distance loss between two tensors.
@@ -175,7 +177,9 @@ class SoftUpdate(_TargetNetUpdate):
     """
 
     def __init__(
-        self, loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"], eps: Number = 0.999
+        self,
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
+        eps: float = 0.999,
     ):
         if not (eps < 1.0 and eps > 0.0):
             raise ValueError(
@@ -203,7 +207,7 @@ class HardUpdate(_TargetNetUpdate):
     def __init__(
         self,
         loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
-        value_network_update_interval: Number = 1000,
+        value_network_update_interval: float = 1000,
     ):
         super(HardUpdate, self).__init__(loss_module)
         self.value_network_update_interval = value_network_update_interval

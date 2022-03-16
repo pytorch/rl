@@ -1,5 +1,4 @@
 from copy import deepcopy
-from numbers import Number
 from typing import Tuple
 from uuid import uuid1
 
@@ -15,16 +14,16 @@ from torchrl.modules import (
 )
 from .utils import distance_loss, next_state_value
 
+from .common import _LossModule
+
+from ...data.tensordict.tensordict import _TensorDict
+
 __all__ = [
     "DQNLoss",
     "DoubleDQNLoss",
     "DistributionalDQNLoss",
     "DistributionalDoubleDQNLoss",
 ]
-
-from .common import _LossModule
-
-from ...data.tensordict.tensordict import _TensorDict
 
 
 class DQNLoss(_LossModule):
@@ -41,7 +40,7 @@ class DQNLoss(_LossModule):
     def __init__(
         self,
         value_network: QValueActor,
-        gamma: Number,
+        gamma: float,
         loss_function: str = "l2",
         priority_key: str = "td_error",
     ) -> None:
@@ -164,7 +163,7 @@ class DistributionalDQNLoss(_LossModule):
     def __init__(
         self,
         value_network: DistributionalQValueActor,
-        gamma: Number,
+        gamma: float,
         priority_key: str = "td_error",
     ):
         super().__init__()

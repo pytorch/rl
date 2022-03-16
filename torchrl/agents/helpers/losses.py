@@ -14,20 +14,20 @@ __all__ = [
 from typing import Optional, Tuple
 
 from torchrl.objectives import (
+    ClipPPOLoss,
+    DDPGLoss,
+    DistributionalDoubleDQNLoss,
+    DistributionalDQNLoss,
+    DoubleDDPGLoss,
+    DoubleDQNLoss,
     DoubleSACLoss,
+    DQNLoss,
+    GAE,
+    HardUpdate,
+    KLPENPPOLoss,
+    PPOLoss,
     SACLoss,
     SoftUpdate,
-    HardUpdate,
-    DDPGLoss,
-    DoubleDDPGLoss,
-    DistributionalDQNLoss,
-    DistributionalDoubleDQNLoss,
-    DQNLoss,
-    DoubleDQNLoss,
-    PPOLoss,
-    ClipPPOLoss,
-    KLPENPPOLoss,
-    GAE,
 )
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
@@ -174,7 +174,9 @@ def make_ppo_loss(model, args) -> PPOLoss:
     actor_model = model.get_policy_operator()
     critic_model = model.get_value_operator()
 
-    advantage = GAE(args.gamma, args.lamda, critic=critic_model, average_rewards=True)
+    advantage = GAE(
+        args.gamma, args.lamda, critic=critic_model, average_rewards=True
+    )
     loss_module = loss_dict[args.loss](
         actor=actor_model,
         critic=critic_model,
@@ -218,8 +220,8 @@ def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
         type=int,
         default=1000,
         help="how often the target value network weights are updated (in number of updates)."
-        "If soft-updates are used, the value is translated into a moving average decay by using "
-        "the formula decay=1-1/args.value_network_update_interval. Default=1000",
+             "If soft-updates are used, the value is translated into a moving average decay by using "
+             "the formula decay=1-1/args.value_network_update_interval. Default=1000",
     )
     parser.add_argument(
         "--gamma",
@@ -267,7 +269,7 @@ def parser_loss_args_ppo(parser: ArgumentParser) -> ArgumentParser:
         default=0.95,
         type=float,
         help="lambda factor in GAE (using 'lambda' as attribute is prohibited in python, "
-        "hence the misspelling)",
+             "hence the misspelling)",
     )
     parser.add_argument(
         "--entropy_factor",

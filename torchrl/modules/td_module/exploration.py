@@ -1,15 +1,14 @@
-from numbers import Number
 from typing import Optional, Union
 
 import numpy as np
 import torch
 
-from torchrl.data import expand_as_right
+from torchrl.data.utils import expand_as_right
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.td_module.common import (
     _forward_hook_safe_action,
-    TDModuleWrapper,
     TDModule,
+    TDModuleWrapper,
 )
 
 __all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
@@ -56,8 +55,8 @@ class EGreedyWrapper(TDModuleWrapper):
     def __init__(
         self,
         policy: TDModule,
-        eps_init: Number = 1.0,
-        eps_end: Number = 0.1,
+        eps_init: float = 1.0,
+        eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
     ):
         super().__init__(policy)
@@ -69,8 +68,7 @@ class EGreedyWrapper(TDModuleWrapper):
         self.register_buffer("eps", torch.tensor([eps_init]))
 
     def step(self, frames: int = 1) -> None:
-        """
-        A step of epsilon decay.
+        """A step of epsilon decay.
         After self.annealing_num_steps, this function is a no-op.
 
         Args:
@@ -82,7 +80,8 @@ class EGreedyWrapper(TDModuleWrapper):
             self.eps.data[0] = max(
                 self.eps_end.item(),
                 (
-                    self.eps - (self.eps_init - self.eps_end) / self.annealing_num_steps
+                    self.eps
+                    - (self.eps_init - self.eps_end) / self.annealing_num_steps
                 ).item(),
             )
 
@@ -91,12 +90,13 @@ class EGreedyWrapper(TDModuleWrapper):
         if exploration_mode() == "random" or exploration_mode() is None:
             out = tensordict.get(self.td_module.out_keys[0])
             eps = self.eps.item()
-            cond = (torch.rand(tensordict.shape, device=tensordict.device) < eps).to(
-                out.dtype
-            )
+            cond = (
+                torch.rand(tensordict.shape, device=tensordict.device) < eps
+            ).to(out.dtype)
             cond = expand_as_right(cond, out)
             out = (
-                cond * self.td_module.spec.rand(tensordict.shape).to(out.device)
+                cond
+                * self.td_module.spec.rand(tensordict.shape).to(out.device)
                 + (1 - cond) * out
             )
             tensordict.set(self.td_module.out_keys[0], out)
@@ -166,15 +166,15 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
     def __init__(
         self,
         policy: TDModule,
-        eps_init: Number = 1.0,
-        eps_end: Number = 0.1,
+        eps_init: float = 1.0,
+        eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
-        theta: Number = 0.15,
-        mu: Number = 0.0,
-        sigma: Number = 0.2,
-        dt: Number = 1e-2,
+        theta: float = 0.15,
+        mu: float = 0.0,
+        sigma: float = 0.2,
+        dt: float = 1e-2,
         x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
-        sigma_min: Optional[Number] = None,
+        sigma_min: Optional[float] = None,
         n_steps_annealing: int = 1000,
         key: str = "action",
         safe: bool = True,
@@ -205,8 +205,7 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
             self.register_forward_hook(_forward_hook_safe_action)
 
     def step(self, frames: int = 1) -> None:
-        """
-        Updates the eps noise factor.
+        """Updates the eps noise factor.
 
         Args:
             frames (int): number of frames of the current batch (corresponding to the number of updates to be made).
@@ -218,7 +217,8 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
                     self.eps_end.item(),
                     (
                         self.eps
-                        - (self.eps_init - self.eps_end) / self.annealing_num_steps
+                        - (self.eps_init - self.eps_end)
+                        / self.annealing_num_steps
                     ).item(),
                 )
             else:
@@ -239,12 +239,12 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
 class _OrnsteinUhlenbeckProcess:
     def __init__(
         self,
-        theta: Number,
-        mu: Number = 0.0,
-        sigma: Number = 0.2,
-        dt: Number = 1e-2,
+        theta: float,
+        mu: float = 0.0,
+        sigma: float = 0.2,
+        dt: float = 1e-2,
         x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
-        sigma_min: Optional[Number] = None,
+        sigma_min: Optional[float] = None,
         n_steps_annealing: int = 1000,
         key: str = "action",
     ):
@@ -280,7 +280,9 @@ class _OrnsteinUhlenbeckProcess:
     def _make_noise_pair(self, tensor_dict: _TensorDict) -> None:
         tensor_dict.set(
             self.noise_key,
-            torch.zeros(tensor_dict.get(self.key).shape, device=tensor_dict.device),
+            torch.zeros(
+                tensor_dict.get(self.key).shape, device=tensor_dict.device
+            ),
         )
         tensor_dict.set(
             self.steps_key,
@@ -291,7 +293,9 @@ class _OrnsteinUhlenbeckProcess:
             ),
         )
 
-    def add_sample(self, tensor_dict: _TensorDict, eps: Number = 1.0) -> _TensorDict:
+    def add_sample(
+        self, tensor_dict: _TensorDict, eps: float = 1.0
+    ) -> _TensorDict:
 
         if not self.noise_key in set(tensor_dict.keys()):
             self._make_noise_pair(tensor_dict)

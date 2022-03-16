@@ -3,7 +3,11 @@ from argparse import ArgumentParser, Namespace
 
 import torch
 
-from torchrl.data import ReplayBuffer, TensorDictPrioritizedReplayBuffer, DEVICE_TYPING
+from torchrl.data import (
+    DEVICE_TYPING,
+    ReplayBuffer,
+    TensorDictPrioritizedReplayBuffer,
+)
 from torchrl.data.replay_buffers.replay_buffers import InPlaceSampler
 
 __all__ = [

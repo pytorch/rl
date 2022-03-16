@@ -19,7 +19,8 @@ except RuntimeError as err:
         mp_start_method = mp.get_start_method()
         if mp_start_method != "spawn":
             warn(
-                f"failed to set start method to spawn, and current start method for mp is {mp_start_method}."
+                f"failed to set start method to spawn, "
+                f"and current start method for mp is {mp_start_method}."
             )
 
 
