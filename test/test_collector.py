@@ -3,14 +3,13 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from torch import nn
-
 from mocking_classes import (
     DiscreteActionConvMockEnv,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
     DiscreteActionConvPolicy,
 )
+from torch import nn
 from torchrl.agents.env_creator import EnvCreator
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.collectors.collectors import (

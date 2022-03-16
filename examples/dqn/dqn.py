@@ -5,13 +5,12 @@ try:
     import configargparse as argparse
 
     _configargparse = True
-except:
+except ImportError:
     import argparse
 
     _configargparse = False
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
-
 from torchrl.agents.helpers.agents import make_agent, parser_agent_args
 from torchrl.agents.helpers.collectors import (
     make_collector_offpolicy,
@@ -93,9 +92,9 @@ if __name__ == "__main__":
     )
 
     loss_module, target_net_updater = make_dqn_loss(model, args)
-    model_explore = EGreedyWrapper(
-        model, annealing_num_steps=args.annealing_frames
-    ).to(device)
+    model_explore = EGreedyWrapper(model, annealing_num_steps=args.annealing_frames).to(
+        device
+    )
 
     stats = None
     if not args.vecnorm:

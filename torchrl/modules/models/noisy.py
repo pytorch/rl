@@ -99,14 +99,10 @@ class NoisyLinear(nn.Linear):
     def reset_parameters(self) -> None:
         mu_range = 1 / math.sqrt(self.in_features)
         self.weight_mu.data.uniform_(-mu_range, mu_range)
-        self.weight_sigma.data.fill_(
-            self.std_init / math.sqrt(self.in_features)
-        )
+        self.weight_sigma.data.fill_(self.std_init / math.sqrt(self.in_features))
         if self.bias_mu is not None:
             self.bias_mu.data.uniform_(-mu_range, mu_range)
-            self.bias_sigma.data.fill_(
-                self.std_init / math.sqrt(self.out_features)
-            )
+            self.bias_sigma.data.fill_(self.std_init / math.sqrt(self.out_features))
 
     def reset_noise(self) -> None:
         epsilon_in = self._scale_noise(self.in_features)
@@ -115,9 +111,7 @@ class NoisyLinear(nn.Linear):
         if self.bias_mu is not None:
             self.bias_epsilon.copy_(epsilon_out)  # type: ignore
 
-    def _scale_noise(
-        self, size: Union[int, torch.Size, Sequence]
-    ) -> torch.Tensor:
+    def _scale_noise(self, size: Union[int, torch.Size, Sequence]) -> torch.Tensor:
         if isinstance(size, int):
             size = (size,)
         x = torch.randn(*size, device=self.weight_mu.device)

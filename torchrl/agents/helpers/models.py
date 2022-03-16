@@ -208,12 +208,8 @@ def make_ddpg_actor(
             device=cpu)
     """
 
-    actor_net_kwargs = (
-        actor_net_kwargs if actor_net_kwargs is not None else dict()
-    )
-    value_net_kwargs = (
-        value_net_kwargs if value_net_kwargs is not None else dict()
-    )
+    actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else dict()
+    value_net_kwargs = value_net_kwargs if value_net_kwargs is not None else dict()
 
     linear_layer_class = torch.nn.Linear if not noisy else NoisyLinear
 

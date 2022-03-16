@@ -168,9 +168,7 @@ def make_ppo_loss(model, args) -> PPOLoss:
     actor_model = model.get_policy_operator()
     critic_model = model.get_value_operator()
 
-    advantage = GAE(
-        args.gamma, args.lamda, critic=critic_model, average_rewards=True
-    )
+    advantage = GAE(args.gamma, args.lamda, critic=critic_model, average_rewards=True)
     loss_module = loss_dict[args.loss](
         actor=actor_model,
         critic=critic_model,

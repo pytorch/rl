@@ -80,19 +80,13 @@ class MetaTensor:
                 if tensor.device != torch.device("meta")
                 else _is_memmap
             )
-            device = (
-                tensor.device
-                if tensor.device != torch.device("meta")
-                else device
-            )
+            device = tensor.device if tensor.device != torch.device("meta") else device
             dtype = tensor.dtype
         if not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
         self.shape = shape
         self.device = (
-            torch.device(device)
-            if not isinstance(device, torch.device)
-            else device
+            torch.device(device) if not isinstance(device, torch.device) else device
         )
         self.dtype = dtype
         self._ndim = len(shape)
@@ -227,9 +221,7 @@ class MetaTensor:
     ) -> MetaTensor:
         if len(shape) == 0 and size is not None:
             return self.view(*size)
-        elif len(shape) == 1 and isinstance(
-            shape[0], (list, tuple, torch.Size)
-        ):
+        elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
             return self.view(*shape[0])
         elif not isinstance(shape, torch.Size):
             shape = torch.Size(shape)

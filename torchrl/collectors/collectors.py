@@ -24,7 +24,6 @@ __all__ = [
 ]
 
 from ..data import TensorSpec
-
 from ..data.tensordict.tensordict import _TensorDict, TensorDict
 from ..data.transforms import TransformedEnv
 from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -81,16 +80,18 @@ class _DataCollector(IterableDataset):
             Union[ProbabilisticTDModule, Callable[[_TensorDict], _TensorDict]]
         ] = None,
         device: Optional[DEVICE_TYPING] = None,
-    ) -> Tuple[
-        ProbabilisticTDModule, torch.device, Union[None, Callable[[], dict]]
-    ]:
-        """From a policy and a device, assigns the self.device attribute to the desired device and maps the policy onto it
-        or (if the device is ommitted) assigns the self.device attribute to the policy device.
+    ) -> Tuple[ProbabilisticTDModule, torch.device, Union[None, Callable[[], dict]]]:
+        """From a policy and a device, assigns the self.device attribute to
+        the desired device and maps the policy onto it or (if the device is
+        ommitted) assigns the self.device attribute to the policy device.
 
         Args:
+            create_env_fn (Callable or list of callables): an env creator
+                function (or a list of creators)
+            create_env_kwargs (dictionary): kwargs for the env creator
             policy (ProbabilisticTDModule, optional): a policy to be used
-            device (int, str or torch.device, optional): device where to place the policy
-            env (_EnvClass, optional): env containing an action_spec attribute, in case the policy is not provided.
+            device (int, str or torch.device, optional): device where to place
+                the policy
 
         """
         if create_env_fn is not None:
@@ -114,9 +115,7 @@ class _DataCollector(IterableDataset):
             policy_device = next(policy.parameters()).device
         except:  # noqa
             policy_device = (
-                torch.device(device)
-                if device is not None
-                else torch.device("cpu")
+                torch.device(device) if device is not None else torch.device("cpu")
             )
 
         device = torch.device(device) if device is not None else policy_device
@@ -151,9 +150,7 @@ class _DataCollector(IterableDataset):
     def set_seed(self, seed: int) -> int:
         raise NotImplementedError
 
-    def state_dict(
-        self, destination: Optional[OrderedDict] = None
-    ) -> OrderedDict:
+    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
         raise NotImplementedError
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:
@@ -256,11 +253,7 @@ class SyncDataCollector(_DataCollector):
         self.env: _EnvClass = env
         self.n_env = self.env.numel()
 
-        (
-            self.policy,
-            self.device,
-            self.get_weights_fn,
-        ) = self._get_policy_and_device(
+        (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
             create_env_fn=create_env_fn,
             create_env_kwargs=create_env_kwargs,
             policy=policy,
@@ -395,9 +388,7 @@ class SyncDataCollector(_DataCollector):
             traj_ids = self._tensor_dict.get("traj_ids").clone()
             steps = steps.clone()
             if len(self.env.batch_size):
-                self._tensor_dict.masked_fill_(
-                    done_or_terminated.squeeze(-1), 0
-                )
+                self._tensor_dict.masked_fill_(done_or_terminated.squeeze(-1), 0)
                 self._tensor_dict.set("reset_workers", done_or_terminated)
             else:
                 self._tensor_dict.zero_()
@@ -412,9 +403,7 @@ class SyncDataCollector(_DataCollector):
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
             steps[done_or_terminated] = 0
-            self._tensor_dict.set(
-                "traj_ids", traj_ids
-            )  # no ops if they already match
+            self._tensor_dict.set("traj_ids", traj_ids)  # no ops if they already match
             self._tensor_dict.set("step_count", steps)
 
     @torch.no_grad()
@@ -449,12 +438,8 @@ class SyncDataCollector(_DataCollector):
                 self._reset_if_necessary()
                 self._tensor_dict.update(step_tensor_dict(self._tensor_dict))
             if self.return_in_place and len(self._tensor_dict_out.keys()) > 0:
-                tensor_dict_out = torch.stack(
-                    tensor_dict_out, len(self.env.batch_size)
-                )
-                tensor_dict_out = tensor_dict_out.select(
-                    *self._tensor_dict_out.keys()
-                )
+                tensor_dict_out = torch.stack(tensor_dict_out, len(self.env.batch_size))
+                tensor_dict_out = tensor_dict_out.select(*self._tensor_dict_out.keys())
                 return self._tensor_dict_out.update_(tensor_dict_out)
         return torch.stack(
             tensor_dict_out,
@@ -471,9 +456,7 @@ class SyncDataCollector(_DataCollector):
         if index is not None:
             # check that the env supports partial reset
             if np.prod(self.env.batch_size) == 0:
-                raise RuntimeError(
-                    "resetting unique env with index is not permitted."
-                )
+                raise RuntimeError("resetting unique env with index is not permitted.")
             reset_workers = torch.zeros(
                 *self.env.batch_size,
                 1,
@@ -481,9 +464,7 @@ class SyncDataCollector(_DataCollector):
                 device=self.env.device,
             )
             reset_workers[index] = 1
-            td_in = TensorDict(
-                {"reset_workers": reset_workers}, self.env.batch_size
-            )
+            td_in = TensorDict({"reset_workers": reset_workers}, self.env.batch_size)
             self._tensor_dict[index].zero_()
         else:
             td_in = None
@@ -502,9 +483,7 @@ class SyncDataCollector(_DataCollector):
     def __del__(self):
         self.shutdown()  # make sure env is closed
 
-    def state_dict(
-        self, destination: Optional[OrderedDict] = None
-    ) -> OrderedDict:
+    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
         if isinstance(self.env, TransformedEnv):
             env_state_dict = self.env.transform.state_dict()
         elif isinstance(self.env, _BatchedEnv):
@@ -531,9 +510,7 @@ class SyncDataCollector(_DataCollector):
         if strict or "env_state_dict" in state_dict:
             self.env.load_state_dict(state_dict["env_state_dict"], **kwargs)
         if strict or "policy_state_dict" in state_dict:
-            self.policy.load_state_dict(
-                state_dict["policy_state_dict"], **kwargs
-            )
+            self.policy.load_state_dict(state_dict["policy_state_dict"], **kwargs)
 
     def __repr__(self) -> str:
         env_str = indent(f"env={self.env}", 4 * " ")
@@ -673,12 +650,9 @@ class _MultiDataCollector(_DataCollector):
             ]
         elif isinstance(passing_devices, Sequence):
             if len(passing_devices) != self.num_workers:
-                raise RuntimeError(
-                    device_err_msg("passing_devices", passing_devices)
-                )
+                raise RuntimeError(device_err_msg("passing_devices", passing_devices))
             self.passing_devices = [
-                torch.device(_passing_device)
-                for _passing_device in passing_devices
+                torch.device(_passing_device) for _passing_device in passing_devices
             ]
         else:
             raise ValueError(
@@ -701,9 +675,7 @@ class _MultiDataCollector(_DataCollector):
         self.update_at_each_batch = update_at_each_batch
         self.init_with_lag = init_with_lag
         self.frames_per_worker = (
-            -(self.total_frames // -self.num_workers)
-            if total_frames > 0
-            else np.inf
+            -(self.total_frames // -self.num_workers) if total_frames > 0 else np.inf
         )  # ceil(total_frames/num_workers)
         self._run_processes()
 
@@ -843,9 +815,7 @@ class _MultiDataCollector(_DataCollector):
                 if msg != "reset":
                     raise RuntimeError(f"Expected msg='reset', got {msg}")
 
-    def state_dict(
-        self, destination: Optional[OrderedDict] = None
-    ) -> OrderedDict:
+    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
         for idx in range(self.num_workers):
             self.pipes[idx].send((None, "state_dict"))
         state_dict = OrderedDict()
@@ -862,9 +832,7 @@ class _MultiDataCollector(_DataCollector):
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         for idx in range(self.num_workers):
-            self.pipes[idx].send(
-                (state_dict[f"worker{idx}"], "load_state_dict")
-            )
+            self.pipes[idx].send((state_dict[f"worker{idx}"], "load_state_dict"))
         for idx in range(self.num_workers):
             _, msg = self.pipes[idx].recv()
             if msg != "loaded":
@@ -927,9 +895,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
                 max_traj_idx = traj_ids.max() + 1
                 # out = out_tensordicts_shared[idx]
-            out = torch.cat(
-                [item for key, item in out_tensordicts_shared.items()], 0
-            )
+            out = torch.cat([item for key, item in out_tensordicts_shared.items()], 0)
             if self.split_trajs:
                 out = split_trajectories(out)
                 frames += out.get("mask").sum()
@@ -1145,9 +1111,7 @@ def _main_async_collector(
             # in that case, the main process probably expects the worker to continue collect data
             if has_timed_out:
                 if msg not in ("continue", "continue_random"):
-                    raise RuntimeError(
-                        f"Unexpected message after time out: msg={msg}"
-                    )
+                    raise RuntimeError(f"Unexpected message after time out: msg={msg}")
             else:
                 continue
         if msg in ("continue", "continue_random"):
@@ -1164,10 +1128,7 @@ def _main_async_collector(
                 continue
             if j == 0:
                 tensor_dict = d
-                if (
-                    passing_device is not None
-                    and tensor_dict.device != passing_device
-                ):
+                if passing_device is not None and tensor_dict.device != passing_device:
                     raise RuntimeError(
                         f"expected device to be {passing_device} but got {tensor_dict.device}"
                     )

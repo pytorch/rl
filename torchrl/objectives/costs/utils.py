@@ -105,9 +105,7 @@ class _TargetNetUpdate:
             ):
                 _target_names.append(name)
 
-        _source_names = [
-            "".join(name.split("_target_")) for name in _target_names
-        ]
+        _source_names = ["".join(name.split("_target_")) for name in _target_names]
 
         if not all(
             (name in loss_module.__dict__) or (name in loss_module._modules)
@@ -117,8 +115,7 @@ class _TargetNetUpdate:
                 name
                 for name in _source_names
                 if not (
-                    (name in loss_module.__dict__)
-                    or (name in loss_module._modules)
+                    (name in loss_module.__dict__) or (name in loss_module._modules)
                 )
             ]
             raise RuntimeError(
@@ -136,14 +133,10 @@ class _TargetNetUpdate:
         self.initialized = False
 
     def init_(self) -> None:
-        for source, target in zip(
-            self._sources.values(), self._targets.values()
-        ):
+        for source, target in zip(self._sources.values(), self._targets.values()):
             for p_source, p_target in zip(source, target):
                 if p_target.requires_grad:
-                    raise RuntimeError(
-                        "the target parameter is part of a graph."
-                    )
+                    raise RuntimeError("the target parameter is part of a graph.")
                 p_target.data.copy_(p_source.data)
         self.initialized = True
 
@@ -154,14 +147,10 @@ class _TargetNetUpdate:
                 f"initialized (`{self.__class__.__name__}.init_()`) before calling step()"
             )
 
-        for source, target in zip(
-            self._sources.values(), self._targets.values()
-        ):
+        for source, target in zip(self._sources.values(), self._targets.values()):
             for p_source, p_target in zip(source, target):
                 if p_target.requires_grad:
-                    raise RuntimeError(
-                        "the target parameter is part of a graph."
-                    )
+                    raise RuntimeError("the target parameter is part of a graph.")
                 self._step(p_source, p_target)
 
     def _step(self, p_source: Tensor, p_target: Tensor) -> None:
@@ -200,9 +189,7 @@ class SoftUpdate(_TargetNetUpdate):
         self.eps = eps
 
     def _step(self, p_source: Tensor, p_target: Tensor) -> None:
-        p_target.data.copy_(
-            p_target.data * self.eps + p_source.data * (1 - self.eps)
-        )
+        p_target.data.copy_(p_target.data * self.eps + p_source.data * (1 - self.eps))
 
 
 class HardUpdate(_TargetNetUpdate):
@@ -247,8 +234,7 @@ class hold_out_net(_context_manager):
             self.p_example = next(network.parameters())
         except StopIteration:
             raise RuntimeError(
-                "hold_out_net requires the network parameter set to be "
-                "non-empty."
+                "hold_out_net requires the network parameter set to be " "non-empty."
             )
         self._prev_state = []
 
@@ -313,9 +299,7 @@ def next_state_value(
     done = tensor_dict.get("done").squeeze(-1)
 
     if pred_next_val is None:
-        next_td = step_tensor_dict(
-            tensor_dict
-        )  # next_observation -> observation
+        next_td = step_tensor_dict(tensor_dict)  # next_observation -> observation
         next_td = next_td.select(*operator.in_keys)
         operator(next_td, **kwargs)
         pred_next_val_detach = next_td.get(next_val_key).squeeze(-1)

@@ -82,9 +82,7 @@ class REDQLoss_deprecated(_LossModule):
         except AttributeError:
             device = torch.device("cpu")
 
-        self.register_buffer(
-            "alpha_init", torch.tensor(alpha_init, device=device)
-        )
+        self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
             self.register_buffer(
@@ -93,9 +91,7 @@ class REDQLoss_deprecated(_LossModule):
         else:
             self.register_parameter(
                 "log_alpha",
-                torch.nn.Parameter(
-                    torch.tensor(math.log(alpha_init), device=device)
-                ),
+                torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
             )
 
         if target_entropy == "auto":
@@ -137,9 +133,7 @@ class REDQLoss_deprecated(_LossModule):
 
     def _actor_loss(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
-        tensordict_clone = tensordict.select(
-            *obs_keys
-        )  # to avoid overwriting keys
+        tensordict_clone = tensordict.select(*obs_keys)  # to avoid overwriting keys
         with set_exploration_mode("random"):
             self.actor_network(
                 tensordict_clone,
@@ -157,9 +151,7 @@ class REDQLoss_deprecated(_LossModule):
                 buffers=self.qvalue_network_buffers,
                 vmap=True,
             )
-            state_action_value = tensordict_expand.get(
-                "state_action_value"
-            ).squeeze(-1)
+            state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
         loss_actor = -(
             state_action_value
             - self.alpha * tensordict_clone.get("action_log_prob").squeeze(-1)
@@ -169,9 +161,7 @@ class REDQLoss_deprecated(_LossModule):
     def _qvalue_loss(self, tensordict: _TensorDict) -> Tensor:
         tensordict_save = tensordict
 
-        next_obs_keys = [
-            key for key in tensordict.keys() if key.startswith("next_obs")
-        ]
+        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs")]
         obs_keys = [key for key in tensordict.keys() if key.startswith("obs")]
         tensordict = tensordict.select(
             "reward", "done", *next_obs_keys, *obs_keys, "action"
@@ -182,12 +172,10 @@ class REDQLoss_deprecated(_LossModule):
         ].sort()[0]
         with torch.no_grad():
             selected_q_params = [
-                p[selected_models_idx]
-                for p in self.target_qvalue_network_params
+                p[selected_models_idx] for p in self.target_qvalue_network_params
             ]
             selected_q_buffers = [
-                b[selected_models_idx]
-                for b in self.target_qvalue_network_buffers
+                b[selected_models_idx] for b in self.target_qvalue_network_buffers
             ]
 
             next_td = step_tensor_dict(tensordict).select(
@@ -205,16 +193,13 @@ class REDQLoss_deprecated(_LossModule):
             # get q-values
             next_td = self.qvalue_network(
                 next_td,
-                tensor_dict_out=TensorDict(
-                    {}, [self.sub_sample_len, *next_td.shape]
-                ),
+                tensor_dict_out=TensorDict({}, [self.sub_sample_len, *next_td.shape]),
                 params=selected_q_params,
                 buffers=selected_q_buffers,
                 vmap=True,
             )
             state_value = (
-                next_td.get("state_action_value")
-                - self.alpha * action_log_prob
+                next_td.get("state_action_value") - self.alpha * action_log_prob
             )
             state_value = state_value.min(0)[0]
 
@@ -226,9 +211,7 @@ class REDQLoss_deprecated(_LossModule):
         )
         tensordict_expand = self.qvalue_network(
             tensordict.select(*self.qvalue_network.in_keys),
-            tensor_dict_out=TensorDict(
-                {}, [self.num_qvalue_nets, *tensordict.shape]
-            ),
+            tensor_dict_out=TensorDict({}, [self.num_qvalue_nets, *tensordict.shape]),
             params=list(self.qvalue_network_params),
             buffers=self.qvalue_network_buffers,
             vmap=True,
@@ -250,9 +233,7 @@ class REDQLoss_deprecated(_LossModule):
             )
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha.exp() * (
-                log_pi.detach() + self.target_entropy
-            )
+            alpha_loss = -self.log_alpha.exp() * (log_pi.detach() + self.target_entropy)
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
@@ -327,9 +308,7 @@ class REDQLoss(_LossModule):
         except AttributeError:
             device = torch.device("cpu")
 
-        self.register_buffer(
-            "alpha_init", torch.tensor(alpha_init, device=device)
-        )
+        self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
             self.register_buffer(
@@ -338,9 +317,7 @@ class REDQLoss(_LossModule):
         else:
             self.register_parameter(
                 "log_alpha",
-                torch.nn.Parameter(
-                    torch.tensor(math.log(alpha_init), device=device)
-                ),
+                torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
             )
 
         if target_entropy == "auto":
@@ -357,9 +334,7 @@ class REDQLoss(_LossModule):
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         obs_keys = self.actor_network.in_keys
-        next_obs_keys = [
-            key for key in tensordict.keys() if key.startswith("next_obs")
-        ]
+        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs")]
         tensordict_select = tensordict.select(
             "reward", "done", *next_obs_keys, *obs_keys, "action"
         )
@@ -392,9 +367,7 @@ class REDQLoss(_LossModule):
         next_td_actor = step_tensor_dict(tensordict_select).select(
             *self.actor_network.in_keys
         )  # next_observation ->
-        tensordict_actor = torch.stack(
-            [tensordict_actor_grad, next_td_actor], 0
-        )
+        tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
 
         with set_exploration_mode("random"):
             tensordict_actor = self.actor_network(
@@ -445,9 +418,7 @@ class REDQLoss(_LossModule):
             vmap=(0, 0, 0, 0),
         )
 
-        state_action_value = tensordict_qval.get("state_action_value").squeeze(
-            -1
-        )
+        state_action_value = tensordict_qval.get("state_action_value").squeeze(-1)
         (
             state_action_value_actor,
             next_state_action_value_qvalue,
@@ -467,8 +438,7 @@ class REDQLoss(_LossModule):
         ).mean(0)
 
         next_state_value = (
-            next_state_action_value_qvalue
-            - self.alpha * next_action_log_prob_qvalue
+            next_state_action_value_qvalue - self.alpha * next_action_log_prob_qvalue
         )
         next_state_value = next_state_value.min(0)[0]
 
@@ -512,9 +482,7 @@ class REDQLoss(_LossModule):
             )
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha.exp() * (
-                log_pi.detach() + self.target_entropy
-            )
+            alpha_loss = -self.log_alpha.exp() * (log_pi.detach() + self.target_entropy)
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)

@@ -127,9 +127,7 @@ def transformed_env_constructor(
                 Resize(84, 84),
                 GrayScale(),
                 CatFrames(keys=["next_observation_pixels"]),
-                ObservationNorm(
-                    loc=-1.0, scale=2.0, keys=["next_observation_pixels"]
-                ),
+                ObservationNorm(loc=-1.0, scale=2.0, keys=["next_observation_pixels"]),
             ]
         if norm_rewards:
             reward_scaling = 1.0
@@ -161,16 +159,12 @@ def transformed_env_constructor(
                 else:
                     _stats = stats
                 transforms.append(
-                    ObservationNorm(
-                        **_stats, keys=[out_key], standard_normal=True
-                    )
+                    ObservationNorm(**_stats, keys=[out_key], standard_normal=True)
                 )
             else:
                 transforms.append(
                     VecNorm(
-                        keys=[out_key, "reward"]
-                        if not _norm_obs_only
-                        else [out_key],
+                        keys=[out_key, "reward"] if not _norm_obs_only else [out_key],
                         decay=0.9999,
                     )
                 )
@@ -279,9 +273,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
         "the actual number of frames retrieved will be 200e6. Default=1.",
     )
-    parser.add_argument(
-        "--reward_scaling", type=float, help="scale of the reward."
-    )
+    parser.add_argument("--reward_scaling", type=float, help="scale of the reward.")
     parser.add_argument(
         "--init_env_steps",
         type=int,

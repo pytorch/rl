@@ -1,6 +1,5 @@
 import pytest
 import torch
-
 from torchrl.modules import TanhNormal
 from torchrl.modules.distributions import TanhDelta, Delta
 

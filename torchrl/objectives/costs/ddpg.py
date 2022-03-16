@@ -125,9 +125,7 @@ class DDPGLoss(_LossModule):
         )
         pred_val = td_copy.get("state_action_value").squeeze(-1)
 
-        actor_critic = ActorCriticWrapper(
-            self.actor_network, self.value_network
-        )
+        actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
         target_params = list(self.target_actor_network_params) + list(
             self.target_value_network_params
         )

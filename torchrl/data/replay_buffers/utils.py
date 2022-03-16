@@ -18,9 +18,7 @@ def pin_memory(data: Tensor) -> Tensor:
 
 
 def to_numpy(data: Tensor) -> np.ndarray:
-    return (
-        data.detach().cpu().numpy() if isinstance(data, torch.Tensor) else data
-    )
+    return data.detach().cpu().numpy() if isinstance(data, torch.Tensor) else data
 
 
 def fast_map(func, *inputs):  # type: ignore

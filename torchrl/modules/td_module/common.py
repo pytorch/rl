@@ -141,13 +141,9 @@ class TDModule(nn.Module):
         super().__init__()
 
         if not out_keys:
-            raise RuntimeError(
-                f"out_keys were not passed to {self.__class__.__name__}"
-            )
+            raise RuntimeError(f"out_keys were not passed to {self.__class__.__name__}")
         if not in_keys:
-            raise RuntimeError(
-                f"in_keys were not passed to {self.__class__.__name__}"
-            )
+            raise RuntimeError(f"in_keys were not passed to {self.__class__.__name__}")
         self.out_keys = out_keys
         self.in_keys = in_keys
 
@@ -200,10 +196,7 @@ class TDModule(nn.Module):
             dim = tensors[0].shape[0]
             shape = [dim, *tensor_dict.shape]
             tensor_dict_out = TensorDict(
-                {
-                    key: val.expand(dim, *val.shape)
-                    for key, val in tensor_dict.items()
-                },
+                {key: val.expand(dim, *val.shape) for key, val in tensor_dict.items()},
                 shape,
             )
         elif tensor_dict_out is None:
@@ -232,9 +225,7 @@ class TDModule(nn.Module):
         self, tensors: Sequence[Tensor], **kwargs
     ) -> Union[Tensor, Sequence[Tensor]]:
         err_msg = "Did not find the {0} keyword argument to be used with the functional module."
-        if isinstance(
-            self.module, (FunctionalModule, FunctionalModuleWithBuffers)
-        ):
+        if isinstance(self.module, (FunctionalModule, FunctionalModuleWithBuffers)):
             _vmap = self._make_vmap(kwargs, len(tensors))
             if _vmap:
                 module = vmap(self.module, _vmap)
@@ -364,10 +355,7 @@ class TDModule(nn.Module):
 
         # check if there is a non-initialized lazy module
         for m in self_copy.module.modules():
-            if (
-                hasattr(m, "has_uninitialized_params")
-                and m.has_uninitialized_params()
-            ):
+            if hasattr(m, "has_uninitialized_params") and m.has_uninitialized_params():
                 pseudo_input = self_copy.spec.rand()
                 self_copy.module(pseudo_input)
                 break
@@ -516,9 +504,7 @@ class ProbabilisticTDModule(TDModule):
         self._dist = None
 
         if isinstance(distribution_class, str):
-            distribution_class = distributions_maps.get(
-                distribution_class.lower()
-            )
+            distribution_class = distributions_maps.get(distribution_class.lower())
         self.distribution_class = distribution_class
         self.distribution_kwargs = (
             distribution_kwargs if distribution_kwargs is not None else dict()
@@ -589,9 +575,7 @@ class ProbabilisticTDModule(TDModule):
     ) -> _TensorDict:
 
         dist, *tensors = self.get_dist(tensor_dict, **kwargs)
-        out_tensor = self._dist_sample(
-            dist, interaction_mode=exploration_mode()
-        )
+        out_tensor = self._dist_sample(dist, interaction_mode=exploration_mode())
         tensor_dict_out = self._write_to_tensor_dict(
             tensor_dict,
             [out_tensor] + list(tensors),
@@ -600,9 +584,7 @@ class ProbabilisticTDModule(TDModule):
         )
         if self.return_log_prob:
             log_prob = dist.log_prob(out_tensor)
-            tensor_dict_out.set(
-                "_".join([self.out_keys[0], "log_prob"]), log_prob
-            )
+            tensor_dict_out.set("_".join([self.out_keys[0], "log_prob"]), log_prob)
         return tensor_dict_out
 
     def log_prob(self, tensor_dict: _TensorDict, **kwargs) -> _TensorDict:
@@ -633,9 +615,7 @@ class ProbabilisticTDModule(TDModule):
             interaction_mode = self.default_interaction_mode
 
         if not isinstance(dist, d.Distribution):
-            raise TypeError(
-                f"type {type(dist)} not recognised by _dist_sample"
-            )
+            raise TypeError(f"type {type(dist)} not recognised by _dist_sample")
 
         if interaction_mode == "mode":
             if hasattr(dist, "mode"):
@@ -668,9 +648,7 @@ class ProbabilisticTDModule(TDModule):
             else:
                 return dist.sample()
         else:
-            raise NotImplementedError(
-                f"unknown interaction_mode {interaction_mode}"
-            )
+            raise NotImplementedError(f"unknown interaction_mode {interaction_mode}")
 
     @property
     def device(self):
@@ -678,9 +656,7 @@ class ProbabilisticTDModule(TDModule):
             return p.device
         return torch.device("cpu")
 
-    def to(
-        self, dest: Union[torch.dtype, DEVICE_TYPING]
-    ) -> ProbabilisticTDModule:
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> ProbabilisticTDModule:
         if self.spec is not None:
             self.spec = self.spec.to(dest)
         out = super().to(dest)
@@ -851,9 +827,7 @@ class TDSequence(TDModule):
         elif "params" in kwargs:
             param_splits = self._split_param(kwargs["params"], "params")
             kwargs_pruned = {
-                key: item
-                for key, item in kwargs.items()
-                if key not in ("params",)
+                key: item for key, item in kwargs.items() if key not in ("params",)
             }
             for i, (module, param) in enumerate(
                 zip(self.module, param_splits)
@@ -861,9 +835,7 @@ class TDSequence(TDModule):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
-                tensor_dict = module(
-                    tensor_dict, params=param, **kwargs_pruned
-                )
+                tensor_dict = module(tensor_dict, params=param, **kwargs_pruned)
 
         elif not len(kwargs):
             for module in self.module:  # type: ignore
@@ -986,9 +958,7 @@ class TDModuleWrapper(nn.Module):
         self.td_module = probabilistic_operator
         if len(self.td_module._forward_hooks):
             for pre_hook in self.td_module._forward_hooks:
-                self.register_forward_hook(
-                    self.td_module._forward_hooks[pre_hook]
-                )
+                self.register_forward_hook(self.td_module._forward_hooks[pre_hook])
 
     def __getattr__(self, name: str) -> Any:
         try:

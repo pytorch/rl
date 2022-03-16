@@ -32,8 +32,7 @@ def _dmcontrol_to_torchrl_spec_transform(
 ) -> TensorSpec:
     if isinstance(spec, collections.OrderedDict):
         spec = {
-            k: _dmcontrol_to_torchrl_spec_transform(item)
-            for k, item in spec.items()
+            k: _dmcontrol_to_torchrl_spec_transform(item) for k, item in spec.items()
         }
         return CompositeSpec(**spec)
     elif isinstance(spec, dm_env.specs.BoundedArray):
@@ -160,9 +159,7 @@ class DMControlEnv(GymLikeEnv):
 
     @property
     def observation_spec(self) -> TensorSpec:
-        return _dmcontrol_to_torchrl_spec_transform(
-            self._env.observation_spec()
-        )
+        return _dmcontrol_to_torchrl_spec_transform(self._env.observation_spec())
 
     @property
     def reward_spec(self) -> TensorSpec:

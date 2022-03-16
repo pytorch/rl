@@ -77,9 +77,7 @@ class _BatchedEnv(_EnvClass):
         memmap: bool = False,
     ):
         super().__init__(device=device)
-        create_env_kwargs = (
-            dict() if create_env_kwargs is None else create_env_kwargs
-        )
+        create_env_kwargs = dict() if create_env_kwargs is None else create_env_kwargs
         if callable(create_env_fn):
             create_env_fn = [create_env_fn for _ in range(num_workers)]
         else:
@@ -106,17 +104,13 @@ class _BatchedEnv(_EnvClass):
                 "memmap and shared memory are mutually exclusive features."
             )
 
-        self.batch_size = torch.Size(
-            [self.num_workers, *self._dummy_env.batch_size]
-        )
+        self.batch_size = torch.Size([self.num_workers, *self._dummy_env.batch_size])
         self._action_spec = self._dummy_env.action_spec
         self._observation_spec = self._dummy_env.observation_spec
         self._reward_spec = self._dummy_env.reward_spec
         self._dummy_env.close()
 
-    def state_dict(
-        self, destination: Optional[OrderedDict] = None
-    ) -> OrderedDict:
+    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
         raise NotImplementedError
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:
@@ -156,15 +150,12 @@ class _BatchedEnv(_EnvClass):
         if self.selected_keys is None:
             self.selected_keys = list(shared_tensor_dict_parent.keys())
             if self.excluded_keys is not None:
-                self.selected_keys = set(self.selected_keys) - set(
-                    self.excluded_keys
-                )
+                self.selected_keys = set(self.selected_keys) - set(self.excluded_keys)
             else:
                 raise_no_selected_keys = True
             if self.action_keys is not None:
                 if not all(
-                    action_key in self.selected_keys
-                    for action_key in self.action_keys
+                    action_key in self.selected_keys for action_key in self.action_keys
                 ):
                     raise KeyError(
                         "One of the action keys is not part of the selected keys or is part of the excluded keys. Action "
@@ -172,9 +163,7 @@ class _BatchedEnv(_EnvClass):
                     )
             else:
                 self.action_keys = [
-                    key
-                    for key in self.selected_keys
-                    if key.startswith("action")
+                    key for key in self.selected_keys if key.startswith("action")
                 ]
                 if not len(self.action_keys):
                     raise RuntimeError(
@@ -183,9 +172,7 @@ class _BatchedEnv(_EnvClass):
         shared_tensor_dict_parent = shared_tensor_dict_parent.select(
             *self.selected_keys
         )
-        self.shared_tensor_dict_parent = shared_tensor_dict_parent.to(
-            self.device
-        )
+        self.shared_tensor_dict_parent = shared_tensor_dict_parent.to(self.device)
 
         if self.share_individual_td:
             self.shared_tensor_dicts = [
@@ -197,9 +184,7 @@ class _BatchedEnv(_EnvClass):
             elif self._memmap:
                 for td in self.shared_tensor_dicts:
                     td.memmap_()
-            self.shared_tensor_dict_parent = torch.stack(
-                self.shared_tensor_dicts, 0
-            )
+            self.shared_tensor_dict_parent = torch.stack(self.shared_tensor_dicts, 0)
         else:
             if self._share_memory:
                 self.shared_tensor_dict_parent.share_memory_()
@@ -267,9 +252,7 @@ class SerialEnv(_BatchedEnv):
         self.is_closed = False
 
     @_check_start
-    def state_dict(
-        self, destination: Optional[OrderedDict] = None
-    ) -> OrderedDict:
+    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
         state_dict = OrderedDict()
         for idx, env in enumerate(self._envs):
             state_dict[f"worker{idx}"] = env.state_dict()
@@ -283,10 +266,7 @@ class SerialEnv(_BatchedEnv):
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         if "worker0" not in state_dict:
             state_dict = OrderedDict(
-                **{
-                    f"worker{idx}": state_dict
-                    for idx in range(self.num_workers)
-                }
+                **{f"worker{idx}": state_dict for idx in range(self.num_workers)}
             )
         for idx, env in enumerate(self._envs):
             env.load_state_dict(state_dict[f"worker{idx}"])
@@ -393,9 +373,7 @@ class ParallelEnv(_BatchedEnv):
         self.is_closed = False
 
     @_check_start
-    def state_dict(
-        self, destination: Optional[OrderedDict] = None
-    ) -> OrderedDict:
+    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
         state_dict = OrderedDict()
         for idx, channel in enumerate(self.parent_channels):
             channel.send(("state_dict", None))
@@ -414,10 +392,7 @@ class ParallelEnv(_BatchedEnv):
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         if "worker0" not in state_dict:
             state_dict = OrderedDict(
-                **{
-                    f"worker{idx}": state_dict
-                    for idx in range(self.num_workers)
-                }
+                **{f"worker{idx}": state_dict for idx in range(self.num_workers)}
             )
         for i, channel in enumerate(self.parent_channels):
             channel.send(("load_state_dict", state_dict[f"worker{i}"]))
@@ -430,9 +405,7 @@ class ParallelEnv(_BatchedEnv):
     def _step(self, tensor_dict: _TensorDict) -> _TensorDict:
         self._assert_tensordict_shape(tensor_dict)
 
-        self.shared_tensor_dict_parent.update_(
-            tensor_dict.select(*self.action_keys)
-        )
+        self.shared_tensor_dict_parent.update_(tensor_dict.select(*self.action_keys))
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
@@ -481,9 +454,7 @@ class ParallelEnv(_BatchedEnv):
             print(f"closing {self.__class__.__name__}")
         self.shutdown()
         if not self.is_closed:
-            raise RuntimeError(
-                f"expected {self.__class__.__name__} to be closed"
-            )
+            raise RuntimeError(f"expected {self.__class__.__name__} to be closed")
 
     @_check_start
     def set_seed(self, seed: int) -> int:
@@ -518,13 +489,9 @@ class ParallelEnv(_BatchedEnv):
             cmd_in, new_keys = channel.recv()
             keys = keys.union(new_keys)
             if cmd_in != "reset_obs":
-                raise RuntimeError(
-                    f"received cmd {cmd_in} instead of reset_obs"
-                )
+                raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
         if self.shared_tensor_dict_parent.get("done").any():
-            raise RuntimeError(
-                "Envs have just been reset but some are still done"
-            )
+            raise RuntimeError("Envs have just been reset but some are still done")
         return self.shared_tensor_dict_parent.select(*keys).clone()
 
     def __reduce__(self):

@@ -1,7 +1,6 @@
 from typing import Optional, Sequence
 
 import torch
-
 from torchrl.data.transforms import ObservationTransform, Transform
 
 __all__ = ["VideoRecorder", "TensorDictRecorder"]
@@ -47,15 +46,11 @@ class VideoRecorder(ObservationTransform):
         try:
             import moviepy  # noqa
         except ImportError:
-            raise Exception(
-                "moviepy not found, VideoRecorder cannot be created"
-            )
+            raise Exception("moviepy not found, VideoRecorder cannot be created")
 
     def _apply(self, observation: torch.Tensor) -> torch.Tensor:
         if not (observation.shape[-1] == 3 or observation.ndimension() == 2):
-            raise RuntimeError(
-                f"Invalid observation shape, got: {observation.shape}"
-            )
+            raise RuntimeError(f"Invalid observation shape, got: {observation.shape}")
         observation_trsf = observation
         self.count += 1
         if self.count % self.skip == 0:

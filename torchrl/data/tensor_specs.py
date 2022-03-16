@@ -164,9 +164,7 @@ class TensorSpec:
         self.assert_is_in(val)
         return val.detach().cpu().numpy()
 
-    def index(
-        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor
-    ) -> torch.Tensor:
+    def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
         """Indexes the input tensor
 
         Args:
@@ -221,12 +219,15 @@ class TensorSpec:
                 f"Consider calling project(val) first. value was = {value}"
             )
 
-    def type_check(self, value: torch.Tensor, key=None) -> None:
+    def type_check(self, value: torch.Tensor, key: str = None) -> None:
         """Checks the input value dtype against the TensorSpec dtype and
         raises an exception if they don't match.
 
         Args:
             value (torch.Tensor): tensor whose dtype has to be checked
+            key (str, optional): if the TensorSpec has keys, the value
+                dtype will be checked against the spec pointed by the
+                indicated key.
 
         """
         if value.dtype is not self.dtype:
@@ -260,9 +261,7 @@ class TensorSpec:
         device_str = "device=" + str(self.device)
         dtype_str = "dtype=" + str(self.dtype)
         domain_str = "domain=" + str(self.domain)
-        sub_string = ",".join(
-            [shape_str, space_str, device_str, dtype_str, domain_str]
-        )
+        sub_string = ",".join([shape_str, space_str, device_str, dtype_str, domain_str])
         string = f"{self.__class__.__name__}(\n     {sub_string})"
         return string
 
@@ -435,9 +434,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             return np.array(vals).reshape(tuple(val.shape))
         return val
 
-    def index(
-        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor
-    ) -> torch.Tensor:
+    def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
         if not isinstance(index, torch.Tensor):
             raise ValueError(
                 f"Only tensors are allowed for indexing using "
@@ -480,9 +477,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         super().__init__(torch.Size((1,)), box, device, dtype, "composite")
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
-        return torch.randn(
-            *shape, *self.shape, device=self.device, dtype=self.dtype
-        )
+        return torch.randn(*shape, *self.shape, device=self.device, dtype=self.dtype)
 
     def is_in(self, val: torch.Tensor) -> bool:
         return True
@@ -726,9 +721,7 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
                 raise RuntimeError(
                     f"value {v} is greater than the allowed max {space.n}"
                 )
-            x.append(
-                super(MultOneHotDiscreteTensorSpec, self).encode(v, space)
-            )
+            x.append(super(MultOneHotDiscreteTensorSpec, self).encode(v, space))
         return torch.cat(x, -1)
 
     def _split(self, val: torch.Tensor) -> torch.Tensor:
@@ -754,19 +747,14 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         out = []
         for _index, _tensor_to_index in zip(indices, tensor_to_index):
             _index = _index.nonzero().squeeze()
-            _index = _index.expand(
-                *_tensor_to_index.shape[:-1], _index.shape[-1]
-            )
+            _index = _index.expand(*_tensor_to_index.shape[:-1], _index.shape[-1])
             out.append(_tensor_to_index.gather(-1, _index))
         return torch.cat(out, -1)
 
     def is_in(self, val: torch.Tensor) -> bool:
         vals = self._split(val)
         return all(
-            [
-                super(MultOneHotDiscreteTensorSpec, self).is_in(_val)
-                for _val in vals
-            ]
+            [super(MultOneHotDiscreteTensorSpec, self).is_in(_val) for _val in vals]
         )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
@@ -848,8 +836,7 @@ dtype=torch.float32)},
 
     def __repr__(self) -> str:
         sub_str = [
-            indent(f"{k}: {str(item)}", 4 * " ")
-            for k, item in self._specs.items()
+            indent(f"{k}: {str(item)}", 4 * " ") for k, item in self._specs.items()
         ]
         sub_str = ",\n".join(sub_str)
         return f"CompositeSpec(\n{sub_str})"

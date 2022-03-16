@@ -72,7 +72,11 @@ def list_files(files, recursive=False, extensions=None, exclude=None):
                     # os.walk() supports trimming down the dnames list
                     # by modifying it in-place,
                     # to avoid unnecessary directory listings.
-                    dnames[:] = [x for x in dnames if not fnmatch.fnmatch(os.path.join(dirpath, x), pattern)]
+                    dnames[:] = [
+                        x
+                        for x in dnames
+                        if not fnmatch.fnmatch(os.path.join(dirpath, x), pattern)
+                    ]
                     fpaths = [x for x in fpaths if not fnmatch.fnmatch(x, pattern)]
                 for f in fpaths:
                     ext = os.path.splitext(f)[1][1:]
@@ -86,7 +90,11 @@ def list_files(files, recursive=False, extensions=None, exclude=None):
 def make_diff(file, original, reformatted):
     return list(
         difflib.unified_diff(
-            original, reformatted, fromfile=f"{file}\t(original)", tofile=f"{file}\t(reformatted)", n=3
+            original,
+            reformatted,
+            fromfile=f"{file}\t(original)",
+            tofile=f"{file}\t(reformatted)",
+            n=3,
         )
     )
 
@@ -141,10 +149,16 @@ def run_clang_format_diff(args, file):
 
     try:
         proc = subprocess.Popen(
-            invocation, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, encoding="utf-8"
+            invocation,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+            encoding="utf-8",
         )
     except OSError as exc:
-        raise DiffError(f"Command '{subprocess.list2cmdline(invocation)}' failed to start: {exc}")
+        raise DiffError(
+            f"Command '{subprocess.list2cmdline(invocation)}' failed to start: {exc}"
+        )
     proc_stdout = proc.stdout
     proc_stderr = proc.stderr
 
@@ -218,7 +232,12 @@ def main():
         help=f"comma separated list of file extensions (default: {DEFAULT_EXTENSIONS})",
         default=DEFAULT_EXTENSIONS,
     )
-    parser.add_argument("-r", "--recursive", action="store_true", help="run recursively over directories")
+    parser.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help="run recursively over directories",
+    )
     parser.add_argument("files", metavar="file", nargs="+")
     parser.add_argument("-q", "--quiet", action="store_true")
     parser.add_argument(
@@ -229,7 +248,10 @@ def main():
         help="run N clang-format jobs in parallel (default number of cpus + 1)",
     )
     parser.add_argument(
-        "--color", default="auto", choices=["auto", "always", "never"], help="show colored diff (default: auto)"
+        "--color",
+        default="auto",
+        choices=["auto", "always", "never"],
+        help="show colored diff (default: auto)",
     )
     parser.add_argument(
         "-e",
@@ -278,7 +300,10 @@ def main():
 
     retcode = ExitStatus.SUCCESS
     files = list_files(
-        args.files, recursive=args.recursive, exclude=args.exclude, extensions=args.extensions.split(",")
+        args.files,
+        recursive=args.recursive,
+        exclude=args.exclude,
+        extensions=args.extensions.split(","),
     )
 
     if not files:

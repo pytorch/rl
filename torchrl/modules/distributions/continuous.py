@@ -103,9 +103,9 @@ class TruncatedNormal(D.Independent):
         loc, scale = net_output.chunk(chunks=2, dim=-1)
         self.tanh_loc = tanh_loc
         if tanh_loc:
-            if (
-                isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()
-            ) or (not isinstance(upscale, torch.Tensor) and upscale != 1.0):
+            if (isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()) or (
+                not isinstance(upscale, torch.Tensor) and upscale != 1.0
+            ):
                 upscale = (
                     upscale
                     if not isinstance(upscale, torch.Tensor)
@@ -114,9 +114,9 @@ class TruncatedNormal(D.Independent):
             loc = loc / upscale
             loc = loc.tanh() * upscale
         if tanh_scale:
-            if (
-                isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()
-            ) or (not isinstance(upscale, torch.Tensor) and upscale != 1.0):
+            if (isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()) or (
+                not isinstance(upscale, torch.Tensor) and upscale != 1.0
+            ):
                 upscale = (
                     upscale
                     if not isinstance(upscale, torch.Tensor)
@@ -215,9 +215,7 @@ class TanhNormal(D.TransformedDistribution):
         tanh_loc: bool = True,
         tanh_scale: bool = False,
     ):
-        err_msg = (
-            "TanhNormal max values must be strictly greater than min values"
-        )
+        err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
             if not (max > min).all():  # type: ignore
                 raise RuntimeError(err_msg)
@@ -261,9 +259,7 @@ class TanhNormal(D.TransformedDistribution):
             t = D.ComposeTransform(
                 [
                     t,
-                    D.AffineTransform(
-                        loc=(max + min) / 2, scale=(max - min) / 2
-                    ),
+                    D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
                 ]
             )
         self._t = t
@@ -290,9 +286,7 @@ class TanhNormal(D.TransformedDistribution):
             self.base_dist.base_dist.scale = self.scale
 
         else:
-            base = D.Independent(
-                D.Normal(self.loc, self.scale), self._event_dims
-            )
+            base = D.Independent(D.Normal(self.loc, self.scale), self._event_dims)
             super().__init__(base, self._t)
 
     @property
@@ -303,9 +297,7 @@ class TanhNormal(D.TransformedDistribution):
         return m
 
 
-def uniform_sample_tanhnormal(
-    dist: TanhNormal, size=torch.Size([])
-) -> torch.Tensor:
+def uniform_sample_tanhnormal(dist: TanhNormal, size=torch.Size([])) -> torch.Tensor:
     """
     Defines what uniform sampling looks like for a TanhNormal distribution.
 
@@ -316,9 +308,7 @@ def uniform_sample_tanhnormal(
     Returns: a tensor sampled uniformly in the boundaries defined by the input distribution.
 
     """
-    return (
-        torch.rand_like(dist.sample(size)) * (dist.max - dist.min) + dist.min
-    )
+    return torch.rand_like(dist.sample(size)) * (dist.max - dist.min) + dist.min
 
 
 class Delta(D.Distribution):
@@ -421,9 +411,7 @@ class TanhDelta(D.TransformedDistribution):
         rtol: float = 1e-4,
         **kwargs,
     ):
-        minmax_msg = (
-            "max value has been found to be equal or less than min value"
-        )
+        minmax_msg = "max value has been found to be equal or less than min value"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
             if not (max > min).all():  # type: ignore
                 raise ValueError(minmax_msg)
@@ -439,19 +427,17 @@ class TanhDelta(D.TransformedDistribution):
         loc = self.update(net_output)
 
         t = D.TanhTransform()
-        non_trivial_min = (
-            isinstance(min, torch.Tensor) and (min != 1.0).any()
-        ) or (not isinstance(min, torch.Tensor) and min != 1.0)
-        non_trivial_max = (
-            isinstance(max, torch.Tensor) and (max != 1.0).any()
-        ) or (not isinstance(max, torch.Tensor) and max != 1.0)
+        non_trivial_min = (isinstance(min, torch.Tensor) and (min != 1.0).any()) or (
+            not isinstance(min, torch.Tensor) and min != 1.0
+        )
+        non_trivial_max = (isinstance(max, torch.Tensor) and (max != 1.0).any()) or (
+            not isinstance(max, torch.Tensor) and max != 1.0
+        )
         if non_trivial_max or non_trivial_min:
             t = D.ComposeTransform(  # type: ignore
                 [
                     t,
-                    D.AffineTransform(
-                        loc=(max + min) / 2, scale=(max - min) / 2
-                    ),
+                    D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
                 ]
             )
         event_shape = net_output.shape[-event_dims:]
@@ -470,7 +456,7 @@ class TanhDelta(D.TransformedDistribution):
     def update(self, net_output: torch.Tensor) -> Optional[torch.Tensor]:
         loc = net_output
         loc = loc + (self.max - self.min) / 2 + self.min
-        if hasattr(self, 'base_dist'):
+        if hasattr(self, "base_dist"):
             self.base_dist.update(loc)
         else:
             return loc

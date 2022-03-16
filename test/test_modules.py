@@ -3,18 +3,16 @@ from numbers import Number
 import pytest
 import torch
 from torch import nn
-
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
 from torchrl.modules import (
     QValueActor,
     ActorValueOperator,
     TDModule,
-    Actor,
     ValueOperator,
     ProbabilisticActor,
 )
-from torchrl.modules.models import *
+from torchrl.modules.models import NoisyLinear, MLP, NoisyLazyLinear
 
 
 @pytest.mark.parametrize("in_features", [3, 10, None])
@@ -73,12 +71,12 @@ def test_mlp(
 )
 def test_noisy(layer_class, seed=0):
     torch.manual_seed(seed)
-    l = layer_class(3, 4)
+    layer = layer_class(3, 4)
     x = torch.randn(10, 3)
-    y1 = l(x)
-    l.reset_noise()
-    y2 = l(x)
-    y3 = l(x)
+    y1 = layer(x)
+    layer.reset_noise()
+    y2 = layer(x)
+    y3 = layer(x)
     torch.testing.assert_allclose(y2, y3)
     with pytest.raises(AssertionError):
         torch.testing.assert_allclose(y1, y2)
@@ -92,9 +90,9 @@ def test_value_based_policy():
 
     def make_net():
         net = MLP(in_features=obs_dim, out_features=action_dim, depth=2)
-        for l in net.modules():
-            if hasattr(l, "bias") and l.bias is not None:
-                l.bias.data.zero_()
+        for mod in net.modules():
+            if hasattr(mod, "bias") and mod.bias is not None:
+                mod.bias.data.zero_()
         return net
 
     actor = QValueActor(action_spec, module=make_net(), safe=True)

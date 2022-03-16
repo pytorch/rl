@@ -17,12 +17,11 @@
 
 # -- Project information -----------------------------------------------------
 import pytorch_sphinx_theme
-
 import torchrl
 
-project = 'torchrl'
-copyright = '2022-presennt, Torch Contributors'
-author = 'Torch Contributors'
+project = "torchrl"
+copyright = "2022-presennt, Torch Contributors"
+author = "Torch Contributors"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -58,7 +57,7 @@ extensions = [
     "sphinx.ext.duration",
     "sphinx_gallery.gen_gallery",
     "sphinx_autodoc_typehints",
-    'sphinxcontrib.aafig'
+    "sphinxcontrib.aafig",
 ]
 
 sphinx_gallery_conf = {
@@ -73,7 +72,7 @@ napoleon_numpy_docstring = False
 napoleon_google_docstring = True
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
@@ -115,7 +114,7 @@ autosummary_generate = True
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ["_static"]
 
 # -- Options for LaTeX output ---------------------------------------------
 latex_elements = {
@@ -202,7 +201,15 @@ def patched_make_field(self, types, domain, items, **kw):
                 typename = typename.replace("long", "python:long")
                 typename = typename.replace("float", "python:float")
                 typename = typename.replace("type", "python:type")
-                par.extend(self.make_xrefs(self.typerolename, domain, typename, addnodes.literal_emphasis, **kw))
+                par.extend(
+                    self.make_xrefs(
+                        self.typerolename,
+                        domain,
+                        typename,
+                        addnodes.literal_emphasis,
+                        **kw
+                    )
+                )
             else:
                 par += fieldtype
             par += nodes.Text(")")

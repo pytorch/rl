@@ -6,9 +6,9 @@ from torchrl.modules import (
     DistributionalQValueActor,
     QValueActor,
 )
+from ...data.tensordict.tensordict import _TensorDict
 from .common import _LossModule
 from .utils import distance_loss, next_state_value
-from ...data.tensordict.tensordict import _TensorDict
 
 __all__ = [
     "DQNLoss",
@@ -67,11 +67,7 @@ class DQNLoss(_LossModule):
 
         """
 
-        device = (
-            self.device
-            if self.device is not None
-            else input_tensor_dict.device
-        )
+        device = self.device if self.device is not None else input_tensor_dict.device
         tensor_dict = input_tensor_dict.to(device)
         if tensor_dict.device != device:
             raise RuntimeError(
@@ -91,9 +87,7 @@ class DQNLoss(_LossModule):
         action = action.to(torch.float)
         td_copy = tensor_dict.clone()
         if td_copy.device != tensor_dict.device:
-            raise RuntimeError(
-                f"{tensor_dict} and {td_copy} have different devices"
-            )
+            raise RuntimeError(f"{tensor_dict} and {td_copy} have different devices")
         self.value_network(
             td_copy,
             params=self.value_network_params,
@@ -221,9 +215,7 @@ class DistributionalDQNLoss(_LossModule):
         )  # Log probabilities log p(s_t, ·; θonline)
         action_log_softmax = td_clone.get("action_value")
         action_expand = action.unsqueeze(-2).expand_as(action_log_softmax)
-        log_ps_a = action_log_softmax.masked_select(
-            action_expand.to(torch.bool)
-        )
+        log_ps_a = action_log_softmax.masked_select(action_expand.to(torch.bool))
         log_ps_a = log_ps_a.view(batch_size, atoms)  # log p(s_t, a_t; θonline)
 
         with torch.no_grad():
@@ -234,9 +226,7 @@ class DistributionalDQNLoss(_LossModule):
                 params=self.value_network_params,
                 buffers=self.value_network_buffers,
             )  # Probabilities p(s_t+n, ·; θonline)
-            argmax_indices_ns = next_td.get("action").argmax(
-                -1
-            )  # one-hot encoding
+            argmax_indices_ns = next_td.get("action").argmax(-1)  # one-hot encoding
 
             self.value_network(
                 next_td,

@@ -34,9 +34,7 @@ def cross_entropy_loss(
         else:
             cross_entropy = (log_policy * action).sum(-1)
     elif action.shape == log_policy.shape[:-1]:
-        cross_entropy = torch.gather(
-            log_policy, dim=-1, index=action[..., None]
-        )
+        cross_entropy = torch.gather(log_policy, dim=-1, index=action[..., None])
         cross_entropy.squeeze_(-1)
     else:
         raise RuntimeError(

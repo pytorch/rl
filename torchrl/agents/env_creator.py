@@ -25,9 +25,7 @@ class EnvCreator:
             self.create_env_fn = create_env_fn
 
         self.create_env_kwargs = (
-            create_env_kwargs
-            if isinstance(create_env_kwargs, dict)
-            else dict()
+            create_env_kwargs if isinstance(create_env_kwargs, dict) else dict()
         )
         self.initialized = False
         self._share_memory = share_memory
@@ -62,16 +60,12 @@ class EnvCreator:
 
     def __call__(self) -> _EnvClass:
         if not self.initialized:
-            raise RuntimeError(
-                "EnvCreator must be initialized before being called."
-            )
+            raise RuntimeError("EnvCreator must be initialized before being called.")
         env = self.create_env_fn(**self.create_env_kwargs)
         env.load_state_dict(self._transform_state_dict, strict=False)
         return env
 
-    def state_dict(
-        self, destination: Optional[OrderedDict] = None
-    ) -> OrderedDict:
+    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
         if self._transform_state_dict is None:
             return destination if destination is not None else OrderedDict()
         if destination is not None:

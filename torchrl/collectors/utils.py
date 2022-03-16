@@ -38,12 +38,8 @@ def split_trajectories(rollout_tensor_dict: _TensorDict) -> _TensorDict:
     # select complete rollouts
     dones = out_splits["done"]
     valid_ids = list(range(len(dones)))
-    out_splits = {
-        key: [_out[i] for i in valid_ids] for key, _out in out_splits.items()
-    }
-    mask = [
-        torch.ones_like(_out, dtype=torch.bool) for _out in out_splits["done"]
-    ]
+    out_splits = {key: [_out[i] for i in valid_ids] for key, _out in out_splits.items()}
+    mask = [torch.ones_like(_out, dtype=torch.bool) for _out in out_splits["done"]]
     out_splits["mask"] = mask
     out_dict = {
         key: torch.nn.utils.rnn.pad_sequence(_o, batch_first=True)

@@ -147,9 +147,7 @@ class Transform(nn.Module):
         """
         return action_spec
 
-    def transform_observation_spec(
-        self, observation_spec: TensorSpec
-    ) -> TensorSpec:
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         """Transforms the observation spec such that the resulting spec
         matches transform mapping.
 
@@ -296,9 +294,7 @@ class TransformedEnv(_EnvClass):
                 out_tensor_dict.rename_key(key, key[5:], safe=True)
         return out_tensor_dict
 
-    def state_dict(
-        self, destination: Optional[OrderedDict] = None
-    ) -> OrderedDict:
+    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
         state_dict = self.transform.state_dict(destination)
         return state_dict
 
@@ -377,9 +373,7 @@ class Compose(Transform):
             action_spec = t.transform_action_spec(action_spec)
         return action_spec
 
-    def transform_observation_spec(
-        self, observation_spec: TensorSpec
-    ) -> TensorSpec:
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms:
             observation_spec = t.transform_observation_spec(observation_spec)
         return observation_spec
@@ -463,9 +457,7 @@ class ToTensorImage(ObservationTransform):
             observation = observation.unsqueeze(0)
         return observation
 
-    def transform_observation_spec(
-        self, observation_spec: TensorSpec
-    ) -> TensorSpec:
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         _observation_spec = observation_spec["pixels"]
         self._pixel_observation(_observation_spec)
         _observation_spec.shape = torch.Size(
@@ -605,9 +597,7 @@ class Resize(ObservationTransform):
 
         return observation
 
-    def transform_observation_spec(
-        self, observation_spec: TensorSpec
-    ) -> TensorSpec:
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         _observation_spec = observation_spec["pixels"]
         space = _observation_spec.space
         if isinstance(space, ContinuousBox):
@@ -646,9 +636,7 @@ class GrayScale(ObservationTransform):
         observation = F.rgb_to_grayscale(observation)
         return observation
 
-    def transform_observation_spec(
-        self, observation_spec: TensorSpec
-    ) -> TensorSpec:
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         _observation_spec = observation_spec["pixels"]
         space = _observation_spec.space
         if isinstance(space, ContinuousBox):
@@ -735,15 +723,11 @@ class ObservationNorm(ObservationTransform):
             loc = self.loc
         return obs * scale + loc
 
-    def transform_observation_spec(
-        self, observation_spec: TensorSpec
-    ) -> TensorSpec:
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):
             key = [key.split("observation_")[-1] for key in self.keys]
             if len(set(key)) != 1:
-                raise RuntimeError(
-                    f"Too many compatible observation keys: {key}"
-                )
+                raise RuntimeError(f"Too many compatible observation keys: {key}")
             key = key[0]
             _observation_spec = observation_spec[key]
         else:
@@ -804,9 +788,7 @@ class CatFrames(ObservationTransform):
         self.buffer = []
         return tensor_dict
 
-    def transform_observation_spec(
-        self, observation_spec: TensorSpec
-    ) -> TensorSpec:
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         _observation_spec = observation_spec["pixels"]
         space = _observation_spec.space
         if isinstance(space, ContinuousBox):
@@ -814,9 +796,7 @@ class CatFrames(ObservationTransform):
             space.maximum = torch.cat([space.maximum] * self.N, 0)
             _observation_spec.shape = space.minimum.shape
         else:
-            _observation_spec.shape = torch.Size(
-                [self.N, *_observation_spec.shape]
-            )
+            _observation_spec.shape = torch.Size([self.N, *_observation_spec.shape])
         observation_spec["pixels"] = _observation_spec
         return observation_spec
 
@@ -827,8 +807,7 @@ class CatFrames(ObservationTransform):
         buffer = [buffer[0]] * (self.N - len(buffer)) + buffer
         if len(buffer) != self.N:
             raise RuntimeError(
-                f"actual buffer length ({buffer}) differs from expected ("
-                f"{self.N})"
+                f"actual buffer length ({buffer}) differs from expected (" f"{self.N})"
             )
         return torch.cat(buffer, self.cat_dim)
 
@@ -975,9 +954,7 @@ class DoubleToFloat(Transform):
             self._transform_spec(reward_spec)
         return reward_spec
 
-    def transform_observation_spec(
-        self, observation_spec: TensorSpec
-    ) -> TensorSpec:
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         keys = [key for key in self.keys if "observation" in key]
         if keys:
             keys = [key.split("observation_")[-1] for key in keys]
@@ -1029,9 +1006,7 @@ class CatTensors(Transform):
             raise Exception("CatTensors requires keys to be non-empty")
         super().__init__(keys=keys)
         if "observation_" not in out_key:
-            raise KeyError(
-                "CatTensors is currently restricted to observation_* keys"
-            )
+            raise KeyError("CatTensors is currently restricted to observation_* keys")
         self.out_key = out_key
         self.keys = sorted(list(self.keys))
         if (
@@ -1046,9 +1021,7 @@ class CatTensors(Transform):
 
     def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
         if all([key in tensor_dict.keys() for key in self.keys]):
-            out_tensor = torch.cat(
-                [tensor_dict.get(key) for key in self.keys], -1
-            )
+            out_tensor = torch.cat([tensor_dict.get(key) for key in self.keys], -1)
             tensor_dict.set(self.out_key, out_tensor)
             for key in self.keys:
                 tensor_dict.del_(key)
@@ -1060,9 +1033,7 @@ class CatTensors(Transform):
             )
         return tensor_dict
 
-    def transform_observation_spec(
-        self, observation_spec: TensorSpec
-    ) -> TensorSpec:
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if not isinstance(observation_spec, CompositeSpec):
             # then there is a single tensor to be concatenated
             return observation_spec
@@ -1191,9 +1162,7 @@ class NoopResetEnv(Transform):
         """Do no-op action for a number of steps in [1, noop_max]."""
         keys = tensor_dict.keys()
         noops = (
-            self.noops
-            if not self.random
-            else torch.randint(self.noops, (1,)).item()
+            self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
         i = 0
         trial = 0
@@ -1299,8 +1268,7 @@ class VecNorm(Transform):
             shared_td.is_shared() or shared_td.is_memmap()
         ):
             raise RuntimeError(
-                "shared_td must be either in shared memory or a memmap "
-                "tensordict."
+                "shared_td must be either in shared memory or a memmap " "tensordict."
             )
         if shared_td is not None:
             for key in keys:

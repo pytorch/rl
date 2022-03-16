@@ -102,9 +102,7 @@ class SACLoss(_LossModule):
         else:
             self.register_parameter(
                 "log_alpha",
-                torch.nn.Parameter(
-                    torch.tensor(math.log(alpha_init), device=device)
-                ),
+                torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
             )
 
         if target_entropy == "auto":
@@ -188,9 +186,7 @@ class SACLoss(_LossModule):
         return self._alpha * log_prob - min_q_logprob
 
     def _loss_qvalue(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
-        actor_critic = ActorCriticWrapper(
-            self.actor_network, self.value_network
-        )
+        actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
         params = list(self.target_actor_network_params) + list(
             self.target_value_network_params
         )
@@ -220,9 +216,7 @@ class SACLoss(_LossModule):
         tensordict_chunks = torch.stack(
             tensordict.chunk(self.num_qvalue_nets, dim=0), 0
         )
-        target_chunks = torch.stack(
-            target_value.chunk(self.num_qvalue_nets, dim=0), 0
-        )
+        target_chunks = torch.stack(target_value.chunk(self.num_qvalue_nets, dim=0), 0)
 
         # if vmap=True, it is assumed that the input tensordict must be cast to the param shape
         tensordict_chunks = qvalue_network(
@@ -290,9 +284,7 @@ class SACLoss(_LossModule):
         log_pi = tensordict.get("_log_prob")
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha.exp() * (
-                log_pi.detach() + self.target_entropy
-            )
+            alpha_loss = -self.log_alpha.exp() * (log_pi.detach() + self.target_entropy)
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)

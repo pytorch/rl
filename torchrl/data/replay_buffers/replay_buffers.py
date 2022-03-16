@@ -9,7 +9,6 @@ import torch
 from torch import Tensor
 
 from torchrl._torchrl import MinSegmentTree, SumSegmentTree
-
 from torchrl.data.replay_buffers.utils import (
     cat_fields_to_device,
     to_numpy,
@@ -56,9 +55,7 @@ def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
                  [[0., 0.]]]))
 
     """
-    return tuple(
-        torch.stack(tensors, 0) for tensors in zip(*list_of_tensor_iterators)
-    )
+    return tuple(torch.stack(tensors, 0) for tensors in zip(*list_of_tensor_iterators))
 
 
 def _pin_memory(output: Any) -> Any:
@@ -308,9 +305,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                 f"alpha must be strictly greater than 0, got alpha={alpha}"
             )
         if beta < 0:
-            raise ValueError(
-                f"beta must be greater or equal to 0, got beta={beta}"
-            )
+            raise ValueError(f"beta must be greater or equal to 0, got beta={beta}")
 
         self._alpha = alpha
         self._beta = beta
@@ -326,9 +321,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         with self._replay_lock:
             p_min = self._min_tree.query(0, self._capacity)
             if p_min <= 0:
-                raise ValueError(
-                    f"p_min must be greater than 0, got p_min={p_min}"
-                )
+                raise ValueError(f"p_min must be greater than 0, got p_min={p_min}")
             if isinstance(index, int):
                 data = self._storage[index]
                 weight = np.array(self._sum_tree[index])
@@ -342,9 +335,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         weight = np.power(weight / p_min, -self._beta)
         # x = first_field(data)
         # if isinstance(x, torch.Tensor):
-        device = (
-            data.device if hasattr(data, "device") else torch.device("cpu")
-        )
+        device = data.device if hasattr(data, "device") else torch.device("cpu")
         weight = to_torch(weight, device, self._pin_memory)
         return data, weight
 
@@ -406,9 +397,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
         return index
 
-    def add(
-        self, data: Any, priority: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
+    def add(self, data: Any, priority: Optional[torch.Tensor] = None) -> torch.Tensor:
         return self._add_or_extend(data, priority, True)
 
     def extend(
@@ -417,9 +406,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         return self._add_or_extend(data, priority, False)
 
     @pin_memory_output
-    def _sample(
-        self, batch_size: int
-    ) -> Tuple[Any, torch.Tensor, torch.Tensor]:
+    def _sample(self, batch_size: int) -> Tuple[Any, torch.Tensor, torch.Tensor]:
         with self._replay_lock:
             p_sum = self._sum_tree.query(0, self._capacity)
             p_min = self._min_tree.query(0, self._capacity)
@@ -450,9 +437,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
         # x = first_field(data)  # avoid calling tree.flatten
         # if isinstance(x, torch.Tensor):
-        device = (
-            data.device if hasattr(data, "device") else torch.device("cpu")
-        )
+        device = data.device if hasattr(data, "device") else torch.device("cpu")
         weight = to_torch(weight, device, self._pin_memory)
         return data, weight, index
 
@@ -655,9 +640,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                 f"Priority must be a positive value, got "
                 f"{(priority < 0).sum()} negative priority values."
             )
-        return super().update_priority(
-            tensor_dict.get("index"), priority=priority
-        )
+        return super().update_priority(tensor_dict.get("index"), priority=priority)
 
     def sample(self, size: int) -> _TensorDict:
         """
