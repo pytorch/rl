@@ -11,7 +11,7 @@ try:
     with open(os.path.join(this_dir, "configs", "atari.yaml"), "r") as file:
         atari_confs = yaml.load(file, Loader=yaml.FullLoader)
     _atari_found = True
-except FileExistsError:
+except FileNotFoundError:
     _atari_found = False
     atari_confs = defaultdict(lambda: "")
 
