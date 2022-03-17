@@ -508,7 +508,6 @@ class _EnvWrapper(_EnvClass):
             envname (str): name of the environment
             taskname: (str, optional): task to be performed, if any.
 
-        Returns: None
 
         """
         raise NotImplementedError
@@ -516,7 +515,6 @@ class _EnvWrapper(_EnvClass):
     def close(self) -> None:
         """Closes the contained environment if possible.
 
-        Returns: None
 
         """
         self.is_closed = True

@@ -73,7 +73,6 @@ class EGreedyWrapper(TDModuleWrapper):
 
         Args:
             frames (int): number of frames since last step.
-        Returns: None
 
         """
         for _ in range(frames):

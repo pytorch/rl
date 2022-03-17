@@ -19,7 +19,7 @@ else
     elif [[ ${#CU_VERSION} -eq 5 ]]; then
         CUDA_VERSION="${CU_VERSION:2:2}.${CU_VERSION:4:1}"
     fi
-    echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION"
+    echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
     cudatoolkit="cudatoolkit=${version}"
 fi
@@ -39,7 +39,7 @@ git submodule sync && git submodule update --init --recursive
 #    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}" pytest
 #fi
 
-printf "Installing PyTorch with %s\n" "${CU_VERSION}"
+#printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
     # use pip to install pytorch as conda can frequently pick older release
@@ -50,7 +50,7 @@ fi
 
 printf "Installing functorch\n"
 pip install ninja  # Makes the build go faster
-pip install --user "git+https://github.com/pytorch/functorch.git"
+pip install "git+https://github.com/pytorch/functorch.git"
 
 printf "* Installing torchrl\n"
 python setup.py develop

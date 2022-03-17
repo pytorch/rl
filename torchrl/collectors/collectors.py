@@ -134,7 +134,6 @@ class _DataCollector(IterableDataset):
     def update_policy_weights_(self) -> None:
         """Update the policy weights if the policy of the data collector and the trained policy live on different devices.
 
-        Returns: None
 
         """
         if self.get_weights_fn is not None:
@@ -323,8 +322,7 @@ class SyncDataCollector(_DataCollector):
 
         Yields: _TensorDict objects containing (chunks of) trajectories
 
-        Returns: None
-        """
+                """
         total_frames = self.total_frames
         i = -1
         self._frames = 0
@@ -450,7 +448,6 @@ class SyncDataCollector(_DataCollector):
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state.
 
-        Returns: None
 
         """
         if index is not None:
@@ -742,7 +739,6 @@ class _MultiDataCollector(_DataCollector):
     def shutdown(self) -> None:
         """Shuts down all processes. This operation is irreversible.
 
-        Returns: None
 
         """
         self._shutdown_main()
@@ -798,9 +794,9 @@ class _MultiDataCollector(_DataCollector):
         """Resets the environments to a new initial state.
 
         Args:
-            reset_idx: Optional. Sequence indicating which environments have to be reset. If None, all environments
-            are reset.
-        Returns: None
+            reset_idx: Optional. Sequence indicating which environments have
+                to be reset. If None, all environments are reset.
+
 
         """
 

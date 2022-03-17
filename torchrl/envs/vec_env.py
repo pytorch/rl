@@ -134,7 +134,6 @@ class _BatchedEnv(_EnvClass):
     def _create_td(self) -> None:
         """Creates self.shared_tensor_dict_parent, a TensorDict used to store the most recent observations.
 
-        Returns: None
 
         """
         shared_tensor_dict_parent = make_tensor_dict(
@@ -210,7 +209,6 @@ class _BatchedEnv(_EnvClass):
     def _start_workers(self) -> None:
         """Starts the various envs.
 
-        Returns: None
 
         """
         raise NotImplementedError

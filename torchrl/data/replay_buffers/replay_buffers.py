@@ -478,7 +478,6 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             priority (Number or torch.Tensor): new priorities of the
                 indexed elements
 
-        Returns: None
 
         """
         if isinstance(index, int):
@@ -631,7 +630,6 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
             tensor_dict: tensordict with key-value pairs 'self.priority_key'
                 and 'index'.
 
-        Returns: None
 
         """
         priority = tensor_dict.get(self.priority_key)

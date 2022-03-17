@@ -74,7 +74,6 @@ class VideoRecorder(ObservationTransform):
     def dump(self) -> None:
         """Writes the video to the self.writer attribute.
 
-        Returns: None
 
         """
         self.writer.add_video(
