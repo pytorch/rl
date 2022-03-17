@@ -267,15 +267,16 @@ class _EnvClass:
         return math.prod(self.batch_size)
 
     def set_seed(self, seed: int) -> int:
-        """Set the seed of the environment and returns the last seed used (which is the input seed if a single environment
-        is present)
+        """Sets the seed of the environment and returns the last seed used (
+        which is the input seed if a single environment is present)
 
         Args:
             seed: integer
 
         Returns:
-            integer representing the "final seed" in case the environment has a non-empty batch. This feature
-         makes sure that the same seed won't be used for two different environments.
+            integer representing the "final seed" in case the environment has
+            a non-empty batch. This feature makes sure that the same seed
+            won't be used for two different environments.
 
         """
         raise NotImplementedError
@@ -443,8 +444,8 @@ class _EnvClass:
 
 
 class _EnvWrapper(_EnvClass):
-    """
-    Abstract environment wrapper class.
+    """Abstract environment wrapper class.
+
     Unlike _EnvClass, _EnvWrapper comes with a `_build_env` private method that will be called upon instantiation.
     Interfaces with other libraries should be coded using _EnvWrapper.
     """
@@ -490,6 +491,7 @@ class _EnvWrapper(_EnvClass):
 
     def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
         """Runs all the necessary steps such that the environment is ready to use.
+
         This step is intended to ensure that a seed is provided to the environment (if needed) and that the environment
         is reset (if needed). For instance, DMControl envs require the env to be reset before being used, but Gym envs
         don't.
@@ -508,6 +510,7 @@ class _EnvWrapper(_EnvClass):
         self, envname: str, taskname: Optional[str] = None, **kwargs
     ) -> None:
         """Creates an environment from the target library and stores it with the `_env` attribute.
+
         When overwritten, this function should pass all the required kwargs to the env instantiation method.
 
         Args:
@@ -529,10 +532,15 @@ class _EnvWrapper(_EnvClass):
 
 class GymLikeEnv(_EnvWrapper):
     """
-    A gym-like env is an environment that has a .step() function with the following signature:
-         ` env.step(action: np.ndarray) -> Tuple[Union[np.ndarray, dict], double, bool, *info]`
-         where the outputs are the observation, reward and done state respectively.
-         In this implementation, the info output is discarded.
+    A gym-like env is an environment.
+
+
+    A `GymLikeEnv` has a `.step()` method with the following signature:
+
+        ``env.step(action: np.ndarray) -> Tuple[Union[np.ndarray, dict], double, bool, *info]``
+
+    where the outputs are the observation, reward and done state respectively.
+    In this implementation, the info output is discarded.
 
     By default, the first output is written at the "next_observation" key-value pair in the output tensordict, unless
     the first output is a dictionary. In that case, each observation output will be put at the corresponding

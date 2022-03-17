@@ -484,7 +484,7 @@ dtype=torch.float32)},
 
     def expand(self, *shape: int) -> _TensorDict:
         """Expands each tensors of the tensordict according to
-            tensor.expand(*shape, *tensor.shape)
+        `tensor.expand(*shape, *tensor.shape)`
 
         Examples:
             >>> td = TensorDict(source={'a': torch.zeros(3, 4, 5),
@@ -1432,7 +1432,7 @@ class TensorDict(_TensorDict):
         return self
 
     def expand(self, *shape: int) -> _TensorDict:
-        """Expands every tensor with (*shape, *tensor.shape) and returns the
+        """Expands every tensor with `(*shape, *tensor.shape)` and returns the
         same tensordict with new tensors with expanded shapes.
         """
         _batch_size = torch.Size([*shape, *self.batch_size])

@@ -665,8 +665,10 @@ class ObservationNorm(ObservationTransform):
         loc (number or tensor): location of the affine transform
         scale (number or tensor): scale of the affine transform
         standard_normal (bool, optional): if True, the transform will be
+
             .. math::
                 obs = (obs-loc)/scale
+
             as it is done for standardization. Default is `False`.
 
     Examples:
@@ -1252,6 +1254,7 @@ class VecNorm(Transform):
         tensor(True)
         >>> print((abs(tds.get("next_observation").std(0)-1)<0.2).all())
         tensor(True)
+
     """
 
     inplace = True

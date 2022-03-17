@@ -14,6 +14,7 @@ from torchrl.data import (
 )
 from ...data.utils import numpy_to_torch_dtype_dict
 from ..common import GymLikeEnv
+from ..utils import classproperty
 
 try:
     import gym
@@ -97,8 +98,8 @@ class GymEnv(GymLikeEnv):
     git_url = "https://github.com/openai/gym"
     libname = "gym"
 
-    @property
-    def available_envs(self) -> List:
+    @classproperty
+    def available_envs(cls) -> List[str]:
         return _get_envs()
 
     @property

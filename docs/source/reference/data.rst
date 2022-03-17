@@ -69,7 +69,7 @@ logic of `torch.distributions.Transform` and `torchvision.transforms`.
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template.rst
+    :template: rl_template_noinherit.rst
 
     Transform
     TransformedEnv

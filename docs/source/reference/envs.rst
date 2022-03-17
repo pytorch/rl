@@ -8,6 +8,7 @@ torchrl.envs package
     :toctree: generated/
     :template: rl_template.rst
 
+    GymLikeEnv
     GymEnv
     DMControlEnv
     SerialEnv
@@ -25,3 +26,4 @@ Helpers
     get_available_libraries
     set_exploration_mode
     exploration_mode
+    make_tensor_dict

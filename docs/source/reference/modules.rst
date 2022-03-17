@@ -9,7 +9,7 @@ TensorDict modules
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template.rst
+    :template: rl_template_noinherit.rst
 
     TDModule
     ProbabilisticTDModule
@@ -30,7 +30,7 @@ Hooks
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template.rst
+    :template: rl_template_noinherit.rst
 
     QValueHook
     DistributionalQValueHook
@@ -41,7 +41,7 @@ Models
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template.rst
+    :template: rl_template_noinherit.rst
 
     MLP
     ConvNet
@@ -57,7 +57,7 @@ Distributions
 -------------
 .. autosummary::
     :toctree: generated/
-    :template: rl_template.rst
+    :template: rl_template_noinherit.rst
 
     Delta
     TanhNormal

@@ -8,7 +8,7 @@ DQN
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template.rst
+    :template: rl_template_noinherit.rst
 
     DQNLoss
     DoubleDQNLoss
@@ -20,7 +20,7 @@ DDPG
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template.rst
+    :template: rl_template_noinherit.rst
 
     DDPGLoss
     DoubleDDPGLoss
@@ -30,7 +30,7 @@ SAC
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template.rst
+    :template: rl_template_noinherit.rst
 
     SACLoss
     DoubleSACLoss
@@ -40,7 +40,7 @@ REDQ
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template.rst
+    :template: rl_template_noinherit.rst
 
     REDQLoss
     DoubleREDQLoss
@@ -50,7 +50,7 @@ PPO
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template.rst
+    :template: rl_template_noinherit.rst
 
     PPOLoss
     ClipPPOLoss
@@ -61,7 +61,7 @@ Utils
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template.rst
+    :template: rl_template_noinherit.rst
 
     distance_loss
     hold_out_net

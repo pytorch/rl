@@ -8,6 +8,11 @@ from torchrl.data.tensordict.tensordict import _TensorDict
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
 
+class classproperty(property):
+    def __get__(self, cls, owner):
+        return classmethod(self.fget).__get__(None, owner)()
+
+
 def step_tensor_dict(
     tensor_dict: _TensorDict, next_tensor_dict: _TensorDict = None
 ) -> _TensorDict:
