@@ -63,7 +63,8 @@ class DQNLoss(_LossModule):
             input_tensor_dict (_TensorDict): a tensordict with keys ["done", "reward", "action"] and the in_keys of
                 the value network.
 
-        Returns: a tensor containing the DQN loss.
+        Returns:
+            a tensor containing the DQN loss.
 
         """
 

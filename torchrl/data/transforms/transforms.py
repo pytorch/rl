@@ -142,7 +142,8 @@ class Transform(nn.Module):
         Args:
             action_spec (TensorSpec): spec before the transform
 
-        Returns: expected spec after the transform
+        Returns:
+            expected spec after the transform
 
         """
         return action_spec
@@ -154,7 +155,8 @@ class Transform(nn.Module):
         Args:
             observation_spec (TensorSpec): spec before the transform
 
-        Returns: expected spec after the transform
+        Returns:
+            expected spec after the transform
 
         """
         return observation_spec
@@ -166,7 +168,8 @@ class Transform(nn.Module):
         Args:
             reward_spec (TensorSpec): spec before the transform
 
-        Returns: expected spec after the transform
+        Returns:
+            expected spec after the transform
 
         """
 
@@ -1358,7 +1361,8 @@ class VecNorm(Transform):
                 memmory map (using `memmap_()`). Otherwise, the tensordict
                 will be placed in shared memory.
 
-        Returns: A memory in shared memory to be sent to each process.
+        Returns:
+            A memory in shared memory to be sent to each process.
 
         Examples:
             >>> from torch import multiprocessing as mp

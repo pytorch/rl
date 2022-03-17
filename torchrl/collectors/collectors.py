@@ -1,3 +1,4 @@
+import abc
 import math
 import queue
 import time
@@ -69,7 +70,7 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
     )
 
 
-class _DataCollector(IterableDataset):
+class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
     def _get_policy_and_device(
         self,
         create_env_fn: Optional[
@@ -132,26 +133,26 @@ class _DataCollector(IterableDataset):
         return policy, device, get_weights_fn
 
     def update_policy_weights_(self) -> None:
-        """Update the policy weights if the policy of the data collector and the trained policy live on different devices.
-
-
-        """
+        """Update the policy weights if the policy of the data collector and the trained policy live on different devices."""
         if self.get_weights_fn is not None:
             self.policy.load_state_dict(self.get_weights_fn())
 
     def __iter__(self) -> Iterator[_TensorDict]:
         return self.iterator()
 
+    @abc.abstractmethod
     def iterator(self) -> Iterator[_TensorDict]:
         raise NotImplementedError
 
-    @staticmethod
+    @abc.abstractmethod
     def set_seed(self, seed: int) -> int:
         raise NotImplementedError
 
+    @abc.abstractmethod
     def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
         raise NotImplementedError
 
+    @abc.abstractmethod
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         raise NotImplementedError
 
@@ -305,11 +306,12 @@ class SyncDataCollector(_DataCollector):
         Args:
             seed (int): integer representing the seed to be used for the environment.
 
-        Returns: Output seed. This is useful when more than one environment is contained in the DataCollector, as the
+        Returns:
+            Output seed. This is useful when more than one environment is contained in the DataCollector, as the
             seed will be incremented for each of these. The resulting seed is the seed of the last environment.
 
         Examples:
-            >>> env_fn = lambda: GymEnv("Pendulum-v0")
+            >>> env_fn = lambda: GymEnv("Pendulum-v1")
             >>> env_fn_parallel = lambda: ParallelEnv(6, env_fn)
             >>> collector = SyncDataCollector(env_fn_parallel)
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
@@ -322,7 +324,7 @@ class SyncDataCollector(_DataCollector):
 
         Yields: _TensorDict objects containing (chunks of) trajectories
 
-                """
+        """
         total_frames = self.total_frames
         i = -1
         self._frames = 0
@@ -408,7 +410,8 @@ class SyncDataCollector(_DataCollector):
     def rollout(self) -> _TensorDict:
         """Computes a rollout in the environment using the provided policy.
 
-        Returns: _TensorDict containing the computed rollout.
+        Returns:
+            _TensorDict containing the computed rollout.
 
         """
         if self.reset_at_each_iter:
@@ -446,10 +449,7 @@ class SyncDataCollector(_DataCollector):
         )  # dim 0 for single env, dim 1 for batch
 
     def reset(self, index=None, **kwargs) -> None:
-        """Resets the environments to a new initial state.
-
-
-        """
+        """Resets the environments to a new initial state."""
         if index is not None:
             # check that the env supports partial reset
             if np.prod(self.env.batch_size) == 0:
@@ -470,7 +470,8 @@ class SyncDataCollector(_DataCollector):
         self._tensor_dict.update(self.env.reset(td_in, **kwargs))
         self._tensor_dict.fill_("step_count", 0)
 
-    def shutdown(self):
+    def shutdown(self) -> None:
+        """Shuts down all workers and/or closes the local environment."""
         if not self.closed:
             self.closed = True
             del self._tensor_dict, self._tensor_dict_out
@@ -481,6 +482,18 @@ class SyncDataCollector(_DataCollector):
         self.shutdown()  # make sure env is closed
 
     def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
+        """Returns the local state_dict of the data collector (environment
+        and policy).
+
+        Args:
+            destination (optional): ordered dictionary to be updated.
+
+        Returns:
+            an ordered dictionary with fields `"policy_state_dict"` and
+            `"env_state_dict"`.
+
+        """
+
         if isinstance(self.env, TransformedEnv):
             env_state_dict = self.env.transform.state_dict()
         elif isinstance(self.env, _BatchedEnv):
@@ -503,6 +516,13 @@ class SyncDataCollector(_DataCollector):
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
+        """Loads a state_dict on the environment and policy.
+
+        Args:
+            state_dict (OrderedDict): ordered dictionary containing the fields
+                `"policy_state_dict"` and `"env_state_dict"`.
+
+        """
         strict = kwargs.get("strict", True)
         if strict or "env_state_dict" in state_dict:
             self.env.load_state_dict(state_dict["env_state_dict"], **kwargs)
@@ -737,10 +757,7 @@ class _MultiDataCollector(_DataCollector):
         self.shutdown()
 
     def shutdown(self) -> None:
-        """Shuts down all processes. This operation is irreversible.
-
-
-        """
+        """Shuts down all processes. This operation is irreversible."""
         self._shutdown_main()
 
     def _shutdown_main(self) -> None:
@@ -768,8 +785,11 @@ class _MultiDataCollector(_DataCollector):
         Args:
             seed: integer representing the seed to be used for the environment.
 
-        Returns: Output seed. This is useful when more than one environment is contained in the DataCollector, as the
-            seed will be incremented for each of these. The resulting seed is the seed of the last environment.
+        Returns:
+            Output seed. This is useful when more than one environment is
+            contained in the DataCollector, as the seed will be incremented for
+            each of these. The resulting seed is the seed of the last
+            environment.
 
         Examples:
             >>> env_fn = lambda: GymEnv("Pendulum-v0")
@@ -797,7 +817,6 @@ class _MultiDataCollector(_DataCollector):
             reset_idx: Optional. Sequence indicating which environments have
                 to be reset. If None, all environments are reset.
 
-
         """
 
         if reset_idx is None:
@@ -812,6 +831,15 @@ class _MultiDataCollector(_DataCollector):
                     raise RuntimeError(f"Expected msg='reset', got {msg}")
 
     def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
+        """
+        Returns the state_dict of the data collector.
+        Each field represents a worker containing its own state_dict.
+
+        Args:
+            destination (optional): A destination ordered dictionary where
+                to place the fetched data.
+
+        """
         for idx in range(self.num_workers):
             self.pipes[idx].send((None, "state_dict"))
         state_dict = OrderedDict()
@@ -827,6 +855,15 @@ class _MultiDataCollector(_DataCollector):
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:
+        """
+        Loads the state_dict on the workers.
+
+        Args:
+            state_dict (OrderedDict): state_dict of the form
+                ``{"worker0": state_dict0, "worker1": state_dict1}``.
+
+        """
+
         for idx in range(self.num_workers):
             self.pipes[idx].send((state_dict[f"worker{idx}"], "load_state_dict"))
         for idx in range(self.num_workers):

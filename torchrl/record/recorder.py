@@ -17,9 +17,9 @@ class VideoRecorder(ObservationTransform):
             should be written.
         tag (str): the video tag in the writer.
         keys (Sequence[str], optional): keys to be read to produce the video.
-            default: next_observation_pixels.
+            Default is `"next_observation_pixels"`.
         skip (int): frame interval in the output video.
-            default: 2
+            Default is 2.
     """
 
     def __init__(
@@ -72,10 +72,7 @@ class VideoRecorder(ObservationTransform):
         return observation
 
     def dump(self) -> None:
-        """Writes the video to the self.writer attribute.
-
-
-        """
+        """Writes the video to the self.writer attribute."""
         self.writer.add_video(
             tag=f"{self.tag}",
             vid_tensor=torch.stack(self.obs, 0).unsqueeze(0),

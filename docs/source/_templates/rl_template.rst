@@ -5,3 +5,4 @@
 
 .. autoclass:: {{ name }}
     :members:
+    :inherited-members:

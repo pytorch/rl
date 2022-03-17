@@ -89,7 +89,8 @@ class GAE:
             tensor_dict (_TensorDict): A TensorDict containing the data (observation, action, reward, done state)
                 necessary to compute the value estimates and the GAE.
 
-        Returns: An updated TensorDict with an "advantage" and a "value_target" keys
+        Returns:
+            An updated TensorDict with an "advantage" and a "value_target" keys
 
         """
         with torch.set_grad_enabled(self.gradient_mode):

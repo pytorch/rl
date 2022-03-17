@@ -57,7 +57,8 @@ def expand_as_right(
         tensor: tensor to be expanded
         dest: tensor providing the target shape
 
-    Returns: a tensor with shape matching the dest input tensor shape.
+    Returns:
+         a tensor with shape matching the dest input tensor shape.
 
     Examples:
         >>> tensor = torch.zeros(3,4)
@@ -91,7 +92,8 @@ def expand_right(
         tensor: tensor to be expanded
         shape: target shape
 
-    Returns: a tensor with shape matching the target shape.
+    Returns:
+         a tensor with shape matching the target shape.
 
     Examples:
         >>> tensor = torch.zeros(3,4)

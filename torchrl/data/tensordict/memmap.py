@@ -209,7 +209,8 @@ class MemmapTensor(object):
     def clone(self) -> MemmapTensor:
         """Clones the MemmapTensor onto another MemmapTensor
 
-        Returns: a new MemmapTensor with the same data but a new storage.
+        Returns:
+            a new MemmapTensor with the same data but a new storage.
 
         """
         return MemmapTensor(self)
@@ -217,7 +218,8 @@ class MemmapTensor(object):
     def contiguous(self) -> torch.Tensor:
         """Copies the MemmapTensor onto a torch.Tensor object.
 
-        Returns: a torch.Tensor instance with the data of the MemmapTensor
+        Returns:
+            a torch.Tensor instance with the data of the MemmapTensor
         stored on the desired device.
 
         """
@@ -255,7 +257,8 @@ class MemmapTensor(object):
                 MemmapTensor temp file.
                 Default = True
 
-        Returns: the MemmapTensor
+        Returns:
+            the MemmapTensor
 
         """
         if not isinstance(value, bool):
@@ -388,7 +391,8 @@ class MemmapTensor(object):
         Args:
             dim (int): dimension along which the MemmapTensor will be split.
 
-        Returns: A tuple of indexed MemmapTensors that share the same storage.
+        Returns:
+            A tuple of indexed MemmapTensors that share the same storage.
 
         """
         idx = [

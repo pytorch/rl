@@ -40,7 +40,8 @@ def mappings(key: str) -> Callable:
     Args:
         key (str): one of "softplus", "exp", "relu", or "biased_softplus".
 
-    Returns: a Callable
+    Returns:
+         a Callable
 
     """
     _mappings = {

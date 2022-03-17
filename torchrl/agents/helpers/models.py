@@ -64,7 +64,8 @@ def make_dqn_actor(
         device (torch.device): device on which the model must be cast
         args (argparse.Namespace): arguments of the DQN script
 
-    Returns: A DQN policy operator.
+    Returns:
+         A DQN policy operator.
 
     Examples:
         >>> from torchrl.agents.helpers.models import make_dqn_actor, parser_model_args_discrete
@@ -169,7 +170,8 @@ def make_ddpg_actor(
         vmax (scalar, optional): not implemented.
         device (torch.device, optional): device on which the model must be cast. Default is "cpu".
 
-    Returns: An actor and a value operators for DDPG.
+    Returns:
+         An actor and a value operators for DDPG.
 
     For more details on DDPG, refer to "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
     https://arxiv.org/pdf/1509.02971.pdf.
@@ -321,7 +323,8 @@ def make_ppo_model(
             `'observation_vector'` or `'observation_pixels'`. If none is provided, one of these two keys is chosen based on
             the `args.from_pixels` argument.
 
-    Returns: A joined ActorCriticOperator.
+    Returns:
+         A joined ActorCriticOperator.
 
     Examples:
         >>> from torchrl.agents.helpers.models import make_ppo_model, parser_model_args_continuous
@@ -533,7 +536,8 @@ def make_sac_model(
             deviation may not lead to a more entropic distribution, as a Tanh transform is applied to the
             generated variables. The maximum entropy configuration is with a standard deviation of 0.87. Default is 1.0.
 
-    Returns: A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
+    Returns:
+         A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
 
     Examples:
         >>> from torchrl.agents.helpers.models import make_sac_model, parser_model_args_continuous
@@ -687,7 +691,8 @@ def make_redq_model(
             deviation may not lead to a more entropic distribution, as a Tanh transform is applied to the
             generated variables. The maximum entropy configuration is with a standard deviation of 0.87. Default is 1.0.
 
-    Returns: A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
+    Returns:
+         A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
 
     Examples:
         >>> from torchrl.agents.helpers.models import make_redq_model, parser_model_args_continuous

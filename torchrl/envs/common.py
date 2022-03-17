@@ -147,7 +147,8 @@ class _EnvClass:
         Args:
             tensor_dict (_TensorDict): Tensordict containing the action to be taken.
 
-        Returns: the input tensor_dict, modified in place with the resulting observations, done state and reward
+        Returns:
+            the input tensor_dict, modified in place with the resulting observations, done state and reward
             (+ others if needed).
 
         """
@@ -220,7 +221,8 @@ class _EnvClass:
             tensor_dict (_TensorDict, optional): tensor_dict to be used to contain the resulting new observation.
                 In some cases, this input can also be used to pass argument to the reset function.
 
-        Returns: a tensor_dict (or the input tensor_dict, if any), modified in place with the resulting observations.
+        Returns:
+            a tensor_dict (or the input tensor_dict, if any), modified in place with the resulting observations.
 
         """
         # if tensor_dict is None:
@@ -271,7 +273,8 @@ class _EnvClass:
         Args:
             seed: integer
 
-        Returns: integer representing the "final seed" in case the environment has a non-empty batch. This feature
+        Returns:
+            integer representing the "final seed" in case the environment has a non-empty batch. This feature
          makes sure that the same seed won't be used for two different environments.
 
         """
@@ -301,7 +304,8 @@ class _EnvClass:
         Args:
             tensor_dict (_TensorDict, optional): tensordict where the resulting info should be written.
 
-        Returns: a tensordict object with the new observation after a random step in the environment. The action will
+        Returns:
+            a tensordict object with the new observation after a random step in the environment. The action will
             be stored with the "action" key.
 
         """
@@ -343,7 +347,8 @@ class _EnvClass:
                 is initiated.
                 default = True.
 
-        Returns: TensorDict object containing the resulting trajectory.
+        Returns:
+            TensorDict object containing the resulting trajectory.
 
         """
         try:
@@ -492,7 +497,8 @@ class _EnvWrapper(_EnvClass):
         Args:
             seed (int, optional): seed to be set, if any.
 
-        Returns: the resulting seed
+        Returns:
+            the resulting seed
 
         """
 
@@ -513,10 +519,7 @@ class _EnvWrapper(_EnvClass):
         raise NotImplementedError
 
     def close(self) -> None:
-        """Closes the contained environment if possible.
-
-
-        """
+        """Closes the contained environment if possible."""
         self.is_closed = True
         try:
             self._env.close()

@@ -141,7 +141,8 @@ class TensorSpec:
         Args:
             val (np.ndarray or torch.Tensor): value to be encoded as tensor.
 
-        Returns: torch.Tensor matching the required tensor specs.
+        Returns:
+            torch.Tensor matching the required tensor specs.
 
         """
         if not isinstance(val, torch.Tensor):
@@ -158,7 +159,8 @@ class TensorSpec:
         Args:
             val (torch.Tensor): tensor to be transformed to numpy
 
-        Returns: a np.ndarray
+        Returns:
+            a np.ndarray
 
         """
         self.assert_is_in(val)
@@ -171,7 +173,8 @@ class TensorSpec:
             index (int, torch.Tensor, slice or list): index of the tensor
             tensor_to_index: tensor to be indexed
 
-        Returns: indexed tensor
+        Returns:
+            indexed tensor
 
         """
         raise NotImplementedError
@@ -186,7 +189,8 @@ class TensorSpec:
         Args:
             val (torch.Tensor): value to be checked
 
-        Returns: boolean indicating if values belongs to the TensorSpec box
+        Returns:
+            boolean indicating if values belongs to the TensorSpec box
 
         """
         raise NotImplementedError
@@ -198,7 +202,8 @@ class TensorSpec:
         Args:
             val (torch.Tensor): tensor to be mapped to the box.
 
-        Returns: a torch.Tensor belonging to the TensorSpec box.
+        Returns:
+            a torch.Tensor belonging to the TensorSpec box.
 
         """
         if not self.is_in(val):
@@ -243,7 +248,8 @@ class TensorSpec:
         Args:
             shape (torch.Size): shape of the random tensor
 
-        Returns: a random tensor sampled in the TensorSpec box.
+        Returns:
+            a random tensor sampled in the TensorSpec box.
 
         """
         raise NotImplementedError

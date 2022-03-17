@@ -37,7 +37,8 @@ def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
             where each element of the nested iterator is a tensor whose
             shape match the tensor of other iterators that have the same index.
 
-    Returns: Tuple of stacked tensors.
+    Returns:
+         Tuple of stacked tensors.
 
     Examples:
          >>> list_of_tensor_iterators = [[torch.ones(3), torch.zeros(1,2)]
@@ -160,7 +161,8 @@ class ReplayBuffer:
         Args:
             data (Any): data to be added to the replay buffer
 
-        Returns: index where the data lives in the replay buffer.
+        Returns:
+            index where the data lives in the replay buffer.
         """
         with self._replay_lock:
             ret = self._cursor
@@ -172,14 +174,15 @@ class ReplayBuffer:
             return ret
 
     def extend(self, data: Sequence[Any]):
-        """Extends the replay buffer with one or more elements contained in an
-            iterable.
+        """Extends the replay buffer with one or more elements contained in
+        an iterable.
 
         Args:
             data (iterable): collection of data to be added to the replay
                 buffer.
 
-        Returns: Indices of the data aded to the replay buffer.
+        Returns:
+            Indices of the data aded to the replay buffer.
 
         """
         if not len(data):
@@ -238,7 +241,8 @@ class ReplayBuffer:
         Args:
             batch_size (int): float of data to be collected.
 
-        Returns: A batch of data randomly selected in the replay buffer.
+        Returns:
+            A batch of data randomly selected in the replay buffer.
 
         """
         if not self._prefetch:
@@ -649,7 +653,8 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         Args:
             size (int): size of the batch to be returned
 
-        Returns: Stack of tensordicts
+        Returns:
+            Stack of tensordicts
 
         """
         return super(TensorDictPrioritizedReplayBuffer, self).sample(size)[0]
@@ -677,7 +682,8 @@ def create_replay_buffer(
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
 
-    Returns: a ReplayBuffer instance
+    Returns:
+         a ReplayBuffer instance
 
     """
     if isinstance(device, str):
@@ -721,7 +727,8 @@ def create_prioritized_replay_buffer(
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
 
-    Returns: a ReplayBuffer instance
+    Returns:
+         a ReplayBuffer instance
 
     """
     if isinstance(device, str):

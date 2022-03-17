@@ -63,7 +63,8 @@ class DDPGLoss(_LossModule):
             input_tensor_dict (_TensorDict): a tensordict with keys ["done", "reward"] and the in_keys of the actor
                 and value networks.
 
-        Returns: a tuple of 2 tensors containing the DDPG loss.
+        Returns:
+            a tuple of 2 tensors containing the DDPG loss.
 
         """
         if not input_tensor_dict.device == self.device:

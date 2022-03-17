@@ -285,7 +285,8 @@ class TDModule(nn.Module):
         Args:
             tensor_dict (_TensorDict): tensordict where the output value should be written.
 
-        Returns: the original tensordict with a new/updated value for the output key.
+        Returns:
+            the original tensordict with a new/updated value for the output key.
 
         """
         key0 = self.out_keys[0]
@@ -316,7 +317,8 @@ class TDModule(nn.Module):
         Transforms a stateful module in a functional module and returns its parameters and buffers.
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
 
-        Returns: A tuple of parameter and buffer tuples
+        Returns:
+            A tuple of parameter and buffer tuples
 
         Examples:
             >>> from torchrl.data import NdUnboundedContinuousTensorSpec, TensorDict
@@ -525,7 +527,8 @@ class ProbabilisticTDModule(TDModule):
         Args:
             tensor_dict (_TensorDict): tensordict with the input values for the creation of the distribution.
 
-        Returns: a distribution along with other tensors returned by the module.
+        Returns:
+            a distribution along with other tensors returned by the module.
 
         """
         tensors = [tensor_dict.get(key, None) for key in self.in_keys]
@@ -548,7 +551,8 @@ class ProbabilisticTDModule(TDModule):
         Args:
             params (Tuple[Tensor, ...]): tensors to be used for the distribution construction.
 
-        Returns: a distribution object and the number of parameters used for its construction.
+        Returns:
+            a distribution object and the number of parameters used for its construction.
 
         """
         num_params = (
@@ -868,7 +872,8 @@ class TDSequence(TDModule):
         Transforms a stateful module in a functional module and returns its parameters and buffers.
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
 
-        Returns: A tuple of parameter and buffer tuples
+        Returns:
+            A tuple of parameter and buffer tuples
 
         Examples:
             >>> from torchrl.data import NdUnboundedContinuousTensorSpec, TensorDict

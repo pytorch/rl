@@ -27,21 +27,26 @@ class SACLoss(_LossModule):
         actor_network (ProbabilisticActor): stochastic actor
         qvalue_network (TDModule): Q(s, a) parametric model
         value_network (TDModule): V(s) parametric model\
-        qvalue_network_bis (ProbabilisticTDModule, optional): if required, the Q-value can be computed twice
-            independently using two separate networks. The minimum predicted value will then be used for inference.
+        qvalue_network_bis (ProbabilisticTDModule, optional): if required, the
+            Q-value can be computed twice independently using two separate
+            networks. The minimum predicted value will then be used for
+            inference.
         gamma (number, optional): discount for return computation
-            default: 0.99
-        priority_key (str, optional): tensordict key where to write the priority (for prioritized replay buffer usage).
-            default: td_error
-        loss_function (str, optional): loss function to be used with the value function loss.
-            default: "smooth_l1"
+            Default is 0.99
+        priority_key (str, optional): tensordict key where to write the
+            priority (for prioritized replay buffer usage). Default is
+            `"td_error"`.
+        loss_function (str, optional): loss function to be used with
+            the value function loss. Default is `"smooth_l1"`.
         alpha_init (float, optional): initial entropy multiplier.
-            default: 1.0
-        fixed_alpha (bool, optional): if True, alpha will be fixed to its initial value. Otherwise, alpha will be optimized to
+            Default is 1.0.
+        fixed_alpha (bool, optional): if True, alpha will be fixed to its
+            initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
-            default: False
-        target_entropy (float or str, optional):
-            default: "auto", where target entropy is computed as
+            Default is `False`.
+        target_entropy (float or str, optional): Target entropy for the
+            stochastic policy. Default is "auto", where target entropy is
+            computed as `-prod(n_actions)`.
     """
 
     delay_actor: bool = False
@@ -120,7 +125,7 @@ class SACLoss(_LossModule):
         for p in self.value_network_params:
             return p.device
         raise RuntimeError(
-            "At least one of the networks of SACLoss must have trainable parameters."
+            "At least one of the networks of SACLoss must have trainable " "parameters."
         )
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:

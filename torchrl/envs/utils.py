@@ -20,7 +20,8 @@ def step_tensor_dict(
         tensor_dict (_TensorDict): tensordict with keys to be renamed
         next_tensor_dict (_TensorDict, optional): destination tensordict
 
-    Returns: A new tensordict (or next_tensor_dict) with the "next_*" keys renamed without the "next_" prefix.
+    Returns:
+         A new tensordict (or next_tensor_dict) with the "next_*" keys renamed without the "next_" prefix.
 
     Examples:
     This funtion allows for this kind of loop to be used:
@@ -51,7 +52,8 @@ def step_tensor_dict(
 def get_available_libraries():
     """
 
-    Returns: all the supported libraries
+    Returns:
+         all the supported libraries
 
     """
     return SUPPORTED_LIBRARIES
@@ -60,7 +62,8 @@ def get_available_libraries():
 def _check_gym():
     """
 
-    Returns: True if the gym library is installed
+    Returns:
+         True if the gym library is installed
 
     """
     return "gym" in AVAILABLE_LIBRARIES
@@ -69,7 +72,8 @@ def _check_gym():
 def _check_gym_atari():
     """
 
-    Returns: True if the gym library is installed and atari envs can be found.
+    Returns:
+         True if the gym library is installed and atari envs can be found.
 
     """
     if not _check_gym():
@@ -80,7 +84,8 @@ def _check_gym_atari():
 def _check_mario():
     """
 
-    Returns: True if the "gym-super-mario-bros" library is installed.
+    Returns:
+         True if the "gym-super-mario-bros" library is installed.
 
     """
 
@@ -90,7 +95,8 @@ def _check_mario():
 def _check_dmcontrol():
     """
 
-    Returns: True if the "dm-control" library is installed.
+    Returns:
+         True if the "dm-control" library is installed.
 
     """
 
@@ -100,7 +106,8 @@ def _check_dmcontrol():
 def _check_dmlab():
     """
 
-    Returns: True if the "deepmind-lab" library is installed.
+    Returns:
+         True if the "deepmind-lab" library is installed.
 
     """
 

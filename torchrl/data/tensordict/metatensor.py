@@ -104,7 +104,8 @@ class MetaTensor:
     def memmap_(self) -> MetaTensor:
         """Changes the storage of the MetaTensor to memmap.
 
-        Returns: self
+        Returns:
+            self
 
         """
         self._is_memmap = True
@@ -114,7 +115,8 @@ class MetaTensor:
     def share_memory_(self) -> MetaTensor:
         """Changes the storage of the MetaTensor to shared memory.
 
-        Returns: self
+        Returns:
+            self
 
         """
 
@@ -137,7 +139,8 @@ class MetaTensor:
     def clone(self) -> MetaTensor:
         """
 
-        Returns: a new MetaTensor with the same specs.
+        Returns:
+            a new MetaTensor with the same specs.
 
         """
         return MetaTensor(

@@ -43,7 +43,8 @@ def distance_loss(
         strict_shape (bool): if False, v1 and v2 are allowed to have a different shape.
             Default is `True`.
 
-    Returns: A tensor of the shape v1.view_as(v2) or v2.view_as(v1) with values equal to the distance loss between the
+    Returns:
+         A tensor of the shape v1.view_as(v2) or v2.view_as(v1) with values equal to the distance loss between the
         two.
 
     """

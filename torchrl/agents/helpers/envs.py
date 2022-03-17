@@ -50,7 +50,8 @@ def correct_for_frame_skip(args: Namespace) -> Namespace:
             "max_frames_per_traj", "total_frames", "frames_per_batch", "record_frames", "annealing_frames",
             "init_random_frames", "init_env_steps"
 
-    Returns: the input Namespace, modified in-place.
+    Returns:
+         the input Namespace, modified in-place.
 
     """
     # Adapt all frame counts wrt frame_skip

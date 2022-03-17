@@ -305,7 +305,8 @@ def uniform_sample_tanhnormal(dist: TanhNormal, size=torch.Size([])) -> torch.Te
         dist (TanhNormal): distribution defining the space where the sampling should occur.
         size (torch.Size): batch-size of the output tensor
 
-    Returns: a tensor sampled uniformly in the boundaries defined by the input distribution.
+    Returns:
+         a tensor sampled uniformly in the boundaries defined by the input distribution.
 
     """
     return torch.rand_like(dist.sample(size)) * (dist.max - dist.min) + dist.min
