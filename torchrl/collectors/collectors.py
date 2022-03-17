@@ -24,9 +24,9 @@ __all__ = [
     "MultiSyncDataCollector",
 ]
 
+from torchrl.envs.transforms import TransformedEnv
 from ..data import TensorSpec
 from ..data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.envs.transforms import TransformedEnv
 from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
 from ..envs.common import _EnvClass
 from ..envs.vec_env import _BatchedEnv

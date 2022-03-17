@@ -15,13 +15,13 @@ from torchrl.data.tensor_specs import (
     NdBoundedTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
+from torchrl.envs import gym, GymEnv
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
     ToTensorImage,
     RewardClipping,
 )
-from torchrl.envs import gym, GymEnv
 from torchrl.envs.utils import step_tensor_dict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 

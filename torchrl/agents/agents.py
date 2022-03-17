@@ -24,9 +24,9 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.envs.transforms import TransformedEnv
 from torchrl.data.utils import expand_right
 from torchrl.envs.common import _EnvClass
+from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import reset_noise, TDModuleWrapper
 from torchrl.objectives.costs.common import _LossModule
