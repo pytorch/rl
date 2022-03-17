@@ -13,6 +13,52 @@ __all__ = ["EnvCreator"]
 
 
 class EnvCreator:
+    """Environment creator class.
+
+    EnvCreator is a generic environment creator class that can substitute
+    lambda functions when creating environments in multiprocessing contexts.
+    If the environment created on a subprocess must share information with the
+    main process (e.g. for the VecNorm transform), EnvCreator will pass the
+    pointers to the tensordicts in shared memory to each process such that
+    all of them are synchronised.
+
+    Args:
+        create_env_fn (callable): a callable that returns an _EnvClass
+            instance.
+        create_env_kwargs (dict, optional): the kwargs of the env creator.
+        share_memory (bool, optional): if False, the resulting tensordict
+            from the environment won't be placed in shared memory.
+
+    Examples:
+        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.data import VecNorm, TransformedEnv
+        >>> from torchrl.agents import EnvCreator
+        >>> from torch import multiprocessing as mp
+        >>> env_fn = lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm())
+        >>> env_creator = EnvCreator(env_fn)
+        >>> def test_env1(env_creator):
+        ...    env = env_creator()
+        ...    for _ in range(10):
+        ...        env.rand_step()
+        ...        if env.is_done:
+        ...            env.reset()
+        ...    print("env 1: ", env.current_tensordict.get("next_observation"))
+        >>> def test_env2(env_creator):
+        ...    env = env_creator()
+        ...    time.sleep(5)
+        ...    print("env 2: ", env.current_tensordict.get("next_observation"))
+        >>> ps = []
+        >>> p1 = mp.Process(target=test_env1, args=(env_creator,))
+        >>> p1.start()
+        >>> ps.append(p1)
+        >>> p2 = mp.Process(target=test_env2, args=(env_creator,))
+        >>> p2.start()
+        >>> ps.append(p1)
+        >>> for p in ps:
+        ...     p.join()
+
+    """
+
     def __init__(
         self,
         create_env_fn: Callable[..., _EnvClass],

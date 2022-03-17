@@ -2555,7 +2555,7 @@ class SavedTensorDict(_TensorDict):
     def __init__(
         self,
         source: _TensorDict,
-        device=None,
+        device: Optional[torch.device] = None,
         batch_size: Optional[Sequence[int]] = None,
     ):
         if not isinstance(source, _TensorDict) or isinstance(source, SavedTensorDict):
@@ -2568,13 +2568,13 @@ class SavedTensorDict(_TensorDict):
         if source.is_memmap():
             source = source.clone()
         self._device = (
-            device
-            if device
+            torch.device(device)
+            if device is not None
             else source.device
             if hasattr(source, "device")
             else source[list(source.keys())[0]].device
             if len(source)
-            else "cpu"
+            else torch.device("cpu")
         )
         td = source
         self._save(td)
