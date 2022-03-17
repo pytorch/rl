@@ -47,9 +47,9 @@ else
     conda install -y pytorch torchvision cudatoolkit=10.2 -c pytorch-nightly
 fi
 
-printf "* Installing torchrl\n"
-python setup.py develop
-
 printf "Installing functorch\n"
 pip install ninja  # Makes the build go faster
 pip install --user "git+https://github.com/pytorch/functorch.git"
+
+printf "* Installing torchrl\n"
+python setup.py develop
