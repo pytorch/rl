@@ -18,8 +18,8 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.data.transforms import functional as F
-from torchrl.data.transforms.utils import FiniteTensor
+from torchrl.envs.transforms import functional as F
+from torchrl.envs.transforms.utils import FiniteTensor
 from torchrl.envs.common import _EnvClass, make_tensor_dict
 from torchrl.envs.utils import step_tensor_dict
 

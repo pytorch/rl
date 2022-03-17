@@ -3,7 +3,7 @@ import torch
 from torch import multiprocessing as mp
 from torchrl.agents.env_creator import EnvCreator
 from torchrl.data import TensorDict
-from torchrl.data.transforms import VecNorm, TransformedEnv
+from torchrl.envs.transforms import VecNorm, TransformedEnv
 from torchrl.envs import GymEnv, ParallelEnv
 
 TIMEOUT = 10.0

@@ -18,7 +18,7 @@ from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.data.transforms import TransformedEnv, VecNorm
+from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 
@@ -56,14 +56,12 @@ def make_policy(env):
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_concurrent_collector_consistency(num_env, env_name, seed=100):
     if num_env == 1:
-
         def env_fn(seed):
             env = make_make_env(env_name)()
             env.set_seed(seed)
             return env
 
     else:
-
         def env_fn(seed):
             env = ParallelEnv(
                 num_workers=num_env, create_env_fn=make_make_env(env_name)

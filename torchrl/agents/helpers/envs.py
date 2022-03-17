@@ -4,7 +4,7 @@ from typing import Callable, Optional, Union
 import torch
 
 from torchrl.agents.env_creator import env_creator, EnvCreator
-from torchrl.data.transforms import (
+from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,
     Compose,

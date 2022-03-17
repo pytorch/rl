@@ -34,7 +34,7 @@ from torchrl.agents.helpers.replay_buffer import (
     make_replay_buffer,
     parser_replay_args,
 )
-from torchrl.data.transforms import RewardScaling, TransformedEnv
+from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 
 

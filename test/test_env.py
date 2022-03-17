@@ -15,7 +15,7 @@ from torchrl.data.tensor_specs import (
     NdBoundedTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
-from torchrl.data.transforms import (
+from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
     ToTensorImage,

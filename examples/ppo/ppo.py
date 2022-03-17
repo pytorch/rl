@@ -29,7 +29,7 @@ from torchrl.agents.helpers.models import (
     parser_model_args_continuous,
 )
 from torchrl.agents.helpers.recorder import parser_recorder_args
-from torchrl.data.transforms import RewardScaling, TransformedEnv
+from torchrl.envs.transforms import RewardScaling, TransformedEnv
 
 
 def make_args():

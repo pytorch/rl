@@ -1,7 +1,7 @@
 from typing import Optional, Sequence
 
 import torch
-from torchrl.data.transforms import ObservationTransform, Transform
+from torchrl.envs.transforms import ObservationTransform, Transform
 
 __all__ = ["VideoRecorder", "TensorDictRecorder"]
 
