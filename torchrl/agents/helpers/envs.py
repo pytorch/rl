@@ -4,7 +4,9 @@ from typing import Callable, Optional, Union
 import torch
 
 from torchrl.agents.env_creator import env_creator, EnvCreator
-from torchrl.data.transforms import (
+from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
+from torchrl.envs.common import _EnvClass
+from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,
     Compose,
@@ -19,16 +21,14 @@ from torchrl.data.transforms import (
     TransformedEnv,
     VecNorm,
 )
-from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
-from torchrl.envs.common import _EnvClass
 from torchrl.record.recorder import VideoRecorder
 
 __all__ = [
     "correct_for_frame_skip",
     "transformed_env_constructor",
     "parallel_env_constructor",
-    "parser_env_args",
     "get_stats_random_rollout",
+    "parser_env_args",
 ]
 
 LIBS = {
@@ -48,12 +48,13 @@ def correct_for_frame_skip(args: Namespace) -> Namespace:
     Args:
         args (argparse.Namespace): Namespace containing some frame-counting argument, including:
             "max_frames_per_traj", "total_frames", "frames_per_batch", "record_frames", "annealing_frames",
-                  "init_random_frames", "init_env_steps"
+            "init_random_frames", "init_env_steps"
 
-    Returns: the input Namespace, modified in-place.
+    Returns:
+         the input Namespace, modified in-place.
 
     """
-    ## Adapt all frame counts wrt frame_skip
+    # Adapt all frame counts wrt frame_skip
     if args.frame_skip != 1:
         fields = [
             "max_frames_per_traj",
@@ -79,6 +80,22 @@ def transformed_env_constructor(
     norm_obs_only: bool = False,
     use_env_creator: bool = True,
 ) -> Union[Callable, EnvCreator]:
+    """
+    Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
+
+    Args:
+        args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
+        video_tag (str, optional): video tag to be passed to the SummaryWriter object
+        writer (SummaryWriter, optional): tensorboard writer associated with the script
+        stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
+        norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
+            Default is `False`.
+        use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,
+            one can make sure that running statistics will be put in shared memory and accessible for all workers
+            when using a `VecNorm` transform. Default is `True`.
+
+    """
+
     def make_transformed_env() -> TransformedEnv:
         env_name = args.env_name
         env_task = args.env_task
@@ -111,9 +128,7 @@ def transformed_env_constructor(
                 Resize(84, 84),
                 GrayScale(),
                 CatFrames(keys=["next_observation_pixels"]),
-                ObservationNorm(
-                    loc=-1.0, scale=2.0, keys=["next_observation_pixels"]
-                ),
+                ObservationNorm(loc=-1.0, scale=2.0, keys=["next_observation_pixels"]),
             ]
         if norm_rewards:
             reward_scaling = 1.0
@@ -145,16 +160,12 @@ def transformed_env_constructor(
                 else:
                     _stats = stats
                 transforms.append(
-                    ObservationNorm(
-                        **_stats, keys=[out_key], standard_normal=True
-                    )
+                    ObservationNorm(**_stats, keys=[out_key], standard_normal=True)
                 )
             else:
                 transforms.append(
                     VecNorm(
-                        keys=[out_key, "reward"]
-                        if not _norm_obs_only
-                        else [out_key],
+                        keys=[out_key, "reward"] if not _norm_obs_only else [out_key],
                         decay=0.9999,
                     )
                 )
@@ -185,6 +196,12 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(args: Namespace, **kwargs) -> EnvCreator:
+    """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
+
+    Args:
+        args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
+        kwargs: keyword arguments for the `transformed_env_constructor` method.
+    """
     kwargs.update({"args": args, "use_env_creator": True})
     make_transformed_env = transformed_env_constructor(**kwargs)
     env = ParallelEnv(
@@ -217,7 +234,11 @@ def get_stats_random_rollout(args: Namespace, proof_environment: _EnvClass):
 
 def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
     """
-    To be used for DDPG, SAC
+    Populates the argument parser to build an environment constructor.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+
     """
 
     parser.add_argument(
@@ -249,13 +270,11 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=1,
         help="frame_skip for the environment. Note that this value does NOT impact the buffer size,"
-             "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
-             "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
-             "the actual number of frames retrieved will be 200e6. Default=1.",
+        "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
+        "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
+        "the actual number of frames retrieved will be 200e6. Default=1.",
     )
-    parser.add_argument(
-        "--reward_scaling", type=float, help="scale of the reward."
-    )
+    parser.add_argument("--reward_scaling", type=float, help="scale of the reward.")
     parser.add_argument(
         "--init_env_steps",
         type=int,
@@ -266,13 +285,13 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "--vecnorm",
         action="store_true",
         help="Normalizes the environment observation and reward outputs with the running statistics "
-             "obtained across processes.",
+        "obtained across processes.",
     )
     parser.add_argument(
         "--norm_rewards",
         action="store_true",
         help="If True, rewards will be normalized on the fly. This may interfere with SAC update rule and "
-             "should be used cautiously.",
+        "should be used cautiously.",
     )
     parser.add_argument(
         "--noops",
@@ -285,7 +304,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=1000,
         help="Number of steps before a reset of the environment is called (if it has not been flagged as "
-             "done before). ",
+        "done before). ",
     )
 
     return parser

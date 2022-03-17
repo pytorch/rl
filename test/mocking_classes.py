@@ -1,6 +1,14 @@
 import torch
-
-from torchrl.data.tensor_specs import *
+from torchrl.data.tensor_specs import (
+    NdUnboundedContinuousTensorSpec,
+    NdBoundedTensorSpec,
+    CompositeSpec,
+    MultOneHotDiscreteTensorSpec,
+    BinaryDiscreteTensorSpec,
+    BoundedTensorSpec,
+    UnboundedContinuousTensorSpec,
+    OneHotDiscreteTensorSpec,
+)
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.common import _EnvClass
 

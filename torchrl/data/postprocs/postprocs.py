@@ -18,9 +18,9 @@ def _conv1d(
         raise RuntimeError(
             f"Expected a B x T x 1 reward tensor, got reward.shape = {reward.shape}"
         )
-    reward_pad = torch.nn.functional.pad(
-        reward, [0, 0, 0, n_steps_max]
-    ).transpose(-1, -2)
+    reward_pad = torch.nn.functional.pad(reward, [0, 0, 0, n_steps_max]).transpose(
+        -1, -2
+    )
     reward_pad = torch.conv1d(reward_pad, gammas).transpose(-1, -2)
     return reward_pad
 
@@ -32,9 +32,7 @@ def _get_terminal(
     terminal = done.clone()
     terminal[:, -1] = done[:, -1] | (done.sum(1) != 1)
     if not (terminal.sum(1) == 1).all():
-        raise RuntimeError(
-            "Got more or less than one terminal state per episode."
-        )
+        raise RuntimeError("Got more or less than one terminal state per episode.")
     post_terminal = terminal.cumsum(1).cumsum(1) >= 2
     post_terminal = torch.cat(
         [
@@ -66,9 +64,7 @@ def _get_gamma(
     return gamma_masked[..., -1]
 
 
-def _get_steps_to_next_obs(
-    nonterminal: torch.Tensor, n_steps_max: int
-) -> torch.Tensor:
+def _get_steps_to_next_obs(nonterminal: torch.Tensor, n_steps_max: int) -> torch.Tensor:
     steps_to_next_obs = nonterminal.flip(1).cumsum(1).flip(1)
     steps_to_next_obs.clamp_max_(n_steps_max + 1)
     return steps_to_next_obs
@@ -106,13 +102,13 @@ def select_and_repeat(
 
 class MultiStep(nn.Module):
     """
-    Multistep reward, as presented in 'Sutton, R. S. 1988. Learning to predict by the methods of temporal
-        differences. Machine learning 3(1):9–44.'
+    Multistep reward, as presented in 'Sutton, R. S. 1988. Learning to
+    predict by the methods of temporal differences. Machine learning 3(
+    1):9–44.'
 
     Args:
-        gamma: Discount factor for return computation
-        n_steps_max: maximum look-ahead steps.
-
+        gamma (float): Discount factor for return computation
+        n_steps_max (integer): maximum look-ahead steps.
 
     """
 
@@ -139,23 +135,31 @@ class MultiStep(nn.Module):
 
     def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
         """Args:
-            tensor_dict: TennsorDict instance with Batch x Time-steps x ... dimensions
-                Must contain a "reward" and "done" key.
-                All keys that start with the "next_" prefix will be shifted by (at most) self.n_steps_max frames
-                The TensorDict will also be updated with new key-value pairs:
-                    - gamma: indicating the discount to be used for the next reward;
-                    - nonterminal: boolean value indicating whether a step is non-terminal (not done or not last of
-                        trajectory);
-                    - original_reward: previous reward collected in the environment (i.e. before multi-step);
-                and the "reward" values will be replaced by the newly computed rewards.
+            tensor_dict: TennsorDict instance with Batch x Time-steps x ...
+                dimensions.
+                The TensorDict must contain a "reward" and "done" key. All
+                keys that start with the "next_" prefix will be shifted by (
+                at most) self.n_steps_max frames. The TensorDict will also
+                be updated with new key-value pairs:
 
-        Returns: in-place transformation of the input tensordict.
+                - gamma: indicating the discount to be used for the next
+                reward;
+
+                - nonterminal: boolean value indicating whether a step is
+                non-terminal (not done or not last of trajectory);
+
+                - original_reward: previous reward collected in the
+                environment (i.e. before multi-step);
+
+                - The "reward" values will be replaced by the newly computed
+                rewards.
+
+        Returns:
+            in-place transformation of the input tensordict.
 
         """
         if tensor_dict.batch_dims != 2:
-            raise RuntimeError(
-                "Expected a tensordict with B x T x ... dimensions"
-            )
+            raise RuntimeError("Expected a tensordict with B x T x ... dimensions")
 
         done = tensor_dict.get("done")
         try:
@@ -172,9 +176,7 @@ class MultiStep(nn.Module):
 
         # step_to_next_state
         nonterminal = ~post_terminal[:, :T]
-        steps_to_next_obs = _get_steps_to_next_obs(
-            nonterminal, self.n_steps_max
-        )
+        steps_to_next_obs = _get_steps_to_next_obs(nonterminal, self.n_steps_max)
 
         # Discounted summed reward
         partial_return = _conv1d(reward, self.gammas, self.n_steps_max)

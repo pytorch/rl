@@ -11,7 +11,7 @@ import torch
 #     critic_loss = critic_loss + (R - value) ** 2 / 2
 #     entropy_loss = entropy_loss + entropy
 from torchrl.envs.utils import step_tensor_dict
-from .functional import generalized_advantage_estimate
+
 # from https://github.com/H-Huang/rpc-rl-experiments/blob/6621f0aadb347d1c4e24bcf46517ac36907401ff/a3c/process.py#L14
 # TODO: create function / object that vectorises that
 # actor_loss = 0
@@ -20,6 +20,7 @@ from .functional import generalized_advantage_estimate
 # next_value = R
 from ...data.tensordict.tensordict import _TensorDict
 from ...modules import ProbabilisticTDModule
+from .functional import generalized_advantage_estimate
 
 
 #
@@ -64,7 +65,7 @@ class GAE:
         critic (ProbabilisticTDModule): value operator used to retrieve the value estimates.
         average_rewards (bool): if True, rewards will be standardized before the GAE is computed.
         gradient_mode (bool): if True, gradients are propagated throught the computation of the value function.
-            Default is False.
+            Default is `False`.
     """
 
     def __init__(
@@ -88,7 +89,8 @@ class GAE:
             tensor_dict (_TensorDict): A TensorDict containing the data (observation, action, reward, done state)
                 necessary to compute the value estimates and the GAE.
 
-        Returns: An updated TensorDict with an "advantage" and a "value_target" keys
+        Returns:
+            An updated TensorDict with an "advantage" and a "value_target" keys
 
         """
         with torch.set_grad_enabled(self.gradient_mode):

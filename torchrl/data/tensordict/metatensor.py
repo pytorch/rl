@@ -67,29 +67,26 @@ class MetaTensor:
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
             shape = tensor.shape
-            _is_shared = (
-                tensor.is_shared()
-                if tensor.device != torch.device("meta")
-                else _is_shared
-            )
+            try:
+                _is_shared = (
+                    tensor.is_shared()
+                    if tensor.device != torch.device("meta")
+                    else _is_shared
+                )
+            except:  # noqa
+                _is_shared = False
             _is_memmap = (
                 isinstance(tensor, MemmapTensor)
                 if tensor.device != torch.device("meta")
                 else _is_memmap
             )
-            device = (
-                tensor.device
-                if tensor.device != torch.device("meta")
-                else device
-            )
+            device = tensor.device if tensor.device != torch.device("meta") else device
             dtype = tensor.dtype
         if not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
         self.shape = shape
         self.device = (
-            torch.device(device)
-            if not isinstance(device, torch.device)
-            else device
+            torch.device(device) if not isinstance(device, torch.device) else device
         )
         self.dtype = dtype
         self._ndim = len(shape)
@@ -107,7 +104,8 @@ class MetaTensor:
     def memmap_(self) -> MetaTensor:
         """Changes the storage of the MetaTensor to memmap.
 
-        Returns: self
+        Returns:
+            self
 
         """
         self._is_memmap = True
@@ -117,7 +115,8 @@ class MetaTensor:
     def share_memory_(self) -> MetaTensor:
         """Changes the storage of the MetaTensor to shared memory.
 
-        Returns: self
+        Returns:
+            self
 
         """
 
@@ -140,7 +139,8 @@ class MetaTensor:
     def clone(self) -> MetaTensor:
         """
 
-        Returns: a new MetaTensor with the same specs.
+        Returns:
+            a new MetaTensor with the same specs.
 
         """
         return MetaTensor(
@@ -183,8 +183,10 @@ class MetaTensor:
         return MetaTensor(*shape, device=self.device, dtype=self.dtype)
 
     def __repr__(self) -> str:
-        return f"MetaTensor(shape={self.shape}, device={self.device}, " \
-               f"dtype={self.dtype})"
+        return (
+            f"MetaTensor(shape={self.shape}, device={self.device}, "
+            f"dtype={self.dtype})"
+        )
 
     def unsqueeze(self, dim: int) -> MetaTensor:
         clone = self.clone()
@@ -222,9 +224,7 @@ class MetaTensor:
     ) -> MetaTensor:
         if len(shape) == 0 and size is not None:
             return self.view(*size)
-        elif len(shape) == 1 and isinstance(
-            shape[0], (list, tuple, torch.Size)
-        ):
+        elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
             return self.view(*shape[0])
         elif not isinstance(shape, torch.Size):
             shape = torch.Size(shape)

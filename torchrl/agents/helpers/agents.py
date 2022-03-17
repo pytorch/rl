@@ -1,8 +1,5 @@
 import argparse
 from argparse import ArgumentParser, Namespace
-
-__all__ = ["make_agent", "parser_agent_args"]
-
 from typing import Optional, Union
 from warnings import warn
 
@@ -21,6 +18,11 @@ OPTIMIZERS = {
     "sgd": optim.SGD,
     "adamax": optim.Adamax,
 }
+
+__all__ = [
+    "make_agent",
+    "parser_agent_args",
+]
 
 
 def make_agent(
@@ -113,9 +115,7 @@ def make_agent(
 
     if writer is not None:
         # log hyperparams
-        txt = "\n\t".join(
-            [f"{k}: {val}" for k, val in sorted(vars(args).items())]
-        )
+        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(args).items())])
         writer.add_text("hparams", txt)
 
     return Agent(
@@ -139,21 +139,39 @@ def make_agent(
         record_frames=args.record_frames,
         normalize_rewards_online=args.normalize_rewards_online,
         sub_traj_len=args.sub_traj_len,
+        selected_keys=args.selected_keys,
     )
 
 
 def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
+    """
+    Populates the argument parser to build the agent.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+
+    """
     parser.add_argument(
         "--optim_steps_per_collection",
         type=int,
         default=500,
         help="Number of optimization steps in between two collection of data. See frames_per_batch "
-             "below. "
-             "Default=500",
+        "below. "
+        "Default=500",
     )
     parser.add_argument(
         "--optimizer", type=str, default="adam", help="Optimizer to be used."
     )
+    parser.add_argument(
+        "--selected_keys",
+        nargs="+",
+        default=None,
+        help="a list of strings that indicate the data that should be kept from the data collector. Since storing and "
+        "retrieving information from the replay buffer does not come for free, limiting the amount of data "
+        "passed to it can improve the algorithm performance."
+        "Default is None, i.e. all keys are kept.",
+    )
+
     parser.add_argument(
         "--batch_size",
         type=int,
@@ -188,14 +206,14 @@ def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
         "--clip_grad_norm",
         action="store_true",
         help="if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient "
-             "values will be clipped to the desired threshold.",
+        "values will be clipped to the desired threshold.",
     )
     parser.add_argument(
         "--normalize_rewards_online",
         "--normalize-rewards-online",
         action="store_true",
         help="Computes the running statistics of the rewards and normalizes them before they are "
-             "passed to the loss module.",
+        "passed to the loss module.",
     )
     parser.add_argument(
         "--sub_traj_len",

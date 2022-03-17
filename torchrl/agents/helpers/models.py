@@ -4,7 +4,7 @@ from typing import Optional, Sequence
 import torch
 from torch import nn
 
-from torchrl.data import DEVICE_TYPING, UnboundedContinuousTensorSpec
+from torchrl.data import DEVICE_TYPING
 from torchrl.envs.common import _EnvClass
 from torchrl.modules import ActorValueOperator, NoisyLinear, TDModule
 from torchrl.modules.distributions import (
@@ -47,6 +47,7 @@ __all__ = [
     "make_ddpg_actor",
     "make_ppo_model",
     "make_sac_model",
+    "make_redq_model",
     "parser_model_args_continuous",
     "parser_model_args_discrete",
 ]
@@ -63,7 +64,8 @@ def make_dqn_actor(
         device (torch.device): device on which the model must be cast
         args (argparse.Namespace): arguments of the DQN script
 
-    Returns: A DQN policy operator.
+    Returns:
+         A DQN policy operator.
 
     Examples:
         >>> from torchrl.agents.helpers.models import make_dqn_actor, parser_model_args_discrete
@@ -168,7 +170,8 @@ def make_ddpg_actor(
         vmax (scalar, optional): not implemented.
         device (torch.device, optional): device on which the model must be cast. Default is "cpu".
 
-    Returns: An actor and a value operators for DDPG.
+    Returns:
+         An actor and a value operators for DDPG.
 
     For more details on DDPG, refer to "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
     https://arxiv.org/pdf/1509.02971.pdf.
@@ -207,12 +210,8 @@ def make_ddpg_actor(
             device=cpu)
     """
 
-    actor_net_kwargs = (
-        actor_net_kwargs if actor_net_kwargs is not None else dict()
-    )
-    value_net_kwargs = (
-        value_net_kwargs if value_net_kwargs is not None else dict()
-    )
+    actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else dict()
+    value_net_kwargs = value_net_kwargs if value_net_kwargs is not None else dict()
 
     linear_layer_class = torch.nn.Linear if not noisy else NoisyLinear
 
@@ -324,7 +323,8 @@ def make_ppo_model(
             `'observation_vector'` or `'observation_pixels'`. If none is provided, one of these two keys is chosen based on
             the `args.from_pixels` argument.
 
-    Returns: A joined ActorCriticOperator.
+    Returns:
+         A joined ActorCriticOperator.
 
     Examples:
         >>> from torchrl.agents.helpers.models import make_ppo_model, parser_model_args_continuous
@@ -509,7 +509,6 @@ def make_sac_model(
     actor_net_kwargs=None,
     qvalue_net_kwargs=None,
     value_net_kwargs=None,
-    double_qvalue=True,
     device: DEVICE_TYPING = "cpu",
     tanh_loc: bool = True,
     default_policy_scale: float = 1.0,
@@ -517,6 +516,7 @@ def make_sac_model(
 ) -> nn.ModuleList:
     """
     Actor, Q-value and value model constructor helper function for SAC.
+
     Follows default parameters proposed in SAC original paper: https://arxiv.org/pdf/1801.01290.pdf.
     Other configurations can easily be implemented by modifying this function at will.
 
@@ -528,15 +528,16 @@ def make_sac_model(
         actor_net_kwargs (dict, optional): kwargs of the actor MLP.
         qvalue_net_kwargs (dict, optional): kwargs of the qvalue MLP.
         value_net_kwargs (dict, optional): kwargs of the value MLP.
-        double_qvalue (bool, optional): whether an ensemble of 2 qvalue networks should be used.
         device (torch.device, optional): device on which the model must be cast. Default is "cpu".
         tanh_loc (bool, optional): whether to use a tanh scaling for the distribution location parameter.
-            Default is True.
+            Default is `True`.
         default_policy_scale (positive scalar, optional): Default scale of the policy distribution (i.e. standard
             deviation of the normal distribution when the network output is 0). Caution: a higher standard
             deviation may not lead to a more entropic distribution, as a Tanh transform is applied to the
             generated variables. The maximum entropy configuration is with a standard deviation of 0.87. Default is 1.0.
-    Returns: A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
+
+    Returns:
+         A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
 
     Examples:
         >>> from torchrl.agents.helpers.models import make_sac_model, parser_model_args_continuous
@@ -547,39 +548,42 @@ def make_sac_model(
         ...    CatTensors(["next_observation"], "next_observation_vector")))
         >>> device = torch.device("cpu")
         >>> args = parser_model_args_continuous(
-        ...         argparse.ArgumentParser(), algorithm="SAC").parse_args(["--shared_mapping"])
+        ...         argparse.ArgumentParser(), algorithm="SAC").parse_args([])
         >>> model = make_sac_model(
         ...     proof_environment,
         ...     device=device,
         ...     )
-        >>> actor, qvalue, qvalue2, value = model
+        >>> actor, qvalue, value = model
         >>> td = proof_environment.reset()
         >>> print(actor(td))
         TensorDict(
-            fields={done: Tensor(torch.Size([1]), dtype=torch.bool),
+            fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([]),
-            device=cpu)
+            device=cpu,
+            is_shared=False)
         >>> print(qvalue(td.clone()))
         TensorDict(
-            fields={done: Tensor(torch.Size([1]), dtype=torch.bool),
+            fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([]),
-            device=cpu)
+            device=cpu,
+            is_shared=False)
         >>> print(value(td.clone()))
         TensorDict(
-            fields={done: Tensor(torch.Size([1]), dtype=torch.bool),
+            fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 state_value: Tensor(torch.Size([1]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([]),
-            device=cpu)
+            device=cpu,
+            is_shared=False)
 
     """
     td = proof_environment.reset()
@@ -611,8 +615,6 @@ def make_sac_model(
     qvalue_net = MLP(
         **qvalue_net_kwargs_default,
     )
-    if double_qvalue:
-        qvalue_net_bis = MLP(**qvalue_net_kwargs_default)
 
     value_net_kwargs_default = {
         "num_cells": [256, 256],
@@ -623,8 +625,6 @@ def make_sac_model(
     value_net = MLP(
         **value_net_kwargs_default,
     )
-
-    value_spec = UnboundedContinuousTensorSpec()
 
     actor = ProbabilisticActor(
         spec=action_spec,
@@ -643,19 +643,141 @@ def make_sac_model(
         in_keys=["action"] + in_keys,
         module=qvalue_net,
     )
-    if double_qvalue:
-        qvalue_bis = ValueOperator(
-            in_keys=["action"] + in_keys,
-            module=qvalue_net,
-        )
     value = ValueOperator(
         in_keys=in_keys,
         module=value_net,
     )
-    if double_qvalue:
-        model = nn.ModuleList([actor, qvalue, qvalue_bis, value]).to(device)
-    else:
-        model = nn.ModuleList([actor, qvalue, value]).to(device)
+    model = nn.ModuleList([actor, qvalue, value]).to(device)
+
+    # init nets
+    td = td.to(device)
+    for net in model:
+        net(td)
+    del td
+
+    proof_environment.close()
+
+    return model
+
+
+def make_redq_model(
+    proof_environment: _EnvClass,
+    in_keys: Optional[Iterable[str]] = None,
+    actor_net_kwargs=None,
+    qvalue_net_kwargs=None,
+    device: DEVICE_TYPING = "cpu",
+    tanh_loc: bool = True,
+    default_policy_scale: float = 1.0,
+    **kwargs,
+) -> nn.ModuleList:
+    """
+    Actor and Q-value model constructor helper function for REDQ.
+    Follows default parameters proposed in REDQ original paper: https://openreview.net/pdf?id=AY8zfZm0tDd.
+    Other configurations can easily be implemented by modifying this function at will.
+    A single instance of the Q-value model is returned. It will be multiplicated by the loss function.
+
+    Args:
+        proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec
+        in_keys (iterable of strings, optional): observation key to be read by the actor, usually one of
+            `'observation_vector'` or `'observation_pixels'`. If none is provided, one of these two keys is chosen
+             based on the `args.from_pixels` argument.
+        actor_net_kwargs (dict, optional): kwargs of the actor MLP.
+        qvalue_net_kwargs (dict, optional): kwargs of the qvalue MLP.
+        device (torch.device, optional): device on which the model must be cast. Default is "cpu".
+        tanh_loc (bool, optional): whether to use a tanh scaling for the distribution location parameter.
+            Default is `True`.
+        default_policy_scale (positive scalar, optional): Default scale of the policy distribution (i.e. standard
+            deviation of the normal distribution when the network output is 0). Caution: a higher standard
+            deviation may not lead to a more entropic distribution, as a Tanh transform is applied to the
+            generated variables. The maximum entropy configuration is with a standard deviation of 0.87. Default is 1.0.
+
+    Returns:
+         A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
+
+    Examples:
+        >>> from torchrl.agents.helpers.models import make_redq_model, parser_model_args_continuous
+        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.data.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
+        >>> import argparse
+        >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
+        ...    CatTensors(["next_observation"], "next_observation_vector")))
+        >>> device = torch.device("cpu")
+        >>> args = parser_model_args_continuous(
+        ...         argparse.ArgumentParser(), algorithm="REDQ").parse_args([])
+        >>> model = make_redq_model(
+        ...     proof_environment,
+        ...     device=device,
+        ...     )
+        >>> actor, qvalue = model
+        >>> td = proof_environment.reset()
+        >>> print(actor(td))
+        TensorDict(
+            fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
+                observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                action: Tensor(torch.Size([6]), dtype=torch.float32)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
+        >>> print(qvalue(td.clone()))
+        TensorDict(
+            fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
+                observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                action: Tensor(torch.Size([6]), dtype=torch.float32),
+                state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
+
+    """
+    td = proof_environment.reset()
+    action_spec = proof_environment.action_spec
+    if actor_net_kwargs is None:
+        actor_net_kwargs = {}
+    if qvalue_net_kwargs is None:
+        qvalue_net_kwargs = {}
+
+    if in_keys is None:
+        in_keys = ["observation_vector"]
+
+    actor_net_kwargs_default = {
+        "num_cells": [256, 256],
+        "out_features": 2 * action_spec.shape[-1],
+        "activation_class": nn.ELU,
+    }
+    actor_net_kwargs_default.update(actor_net_kwargs)
+    actor_net = MLP(**actor_net_kwargs_default)
+
+    qvalue_net_kwargs_default = {
+        "num_cells": [256, 256],
+        "out_features": 1,
+        "activation_class": nn.ELU,
+    }
+    qvalue_net_kwargs_default.update(qvalue_net_kwargs)
+    qvalue_net = MLP(
+        **qvalue_net_kwargs_default,
+    )
+
+    actor = ProbabilisticActor(
+        spec=action_spec,
+        in_keys=in_keys,
+        module=actor_net,
+        distribution_class=TanhNormal,
+        distribution_kwargs={
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
+            "tanh_loc": tanh_loc,
+            "scale_mapping": f"biased_softplus_{default_policy_scale}",
+        },
+        default_interaction_mode="random",
+        return_log_prob=True,
+    )
+    qvalue = ValueOperator(
+        in_keys=["action"] + in_keys,
+        module=qvalue_net,
+    )
+    model = nn.ModuleList([actor, qvalue]).to(device)
 
     # init nets
     td = td.to(device)
@@ -672,18 +794,23 @@ def parser_model_args_continuous(
     parser: ArgumentParser, algorithm: str
 ) -> ArgumentParser:
     """
-    To be used for DDPG, SAC
+    Populates the argument parser to build a model for continuous actions.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+        algorithm (str): one of `"DDPG"`, `"SAC"`, `"REDQ"`, `"PPO"`
+
     """
 
-    if algorithm not in ("SAC", "DDPG", "PPO"):
+    if algorithm not in ("SAC", "DDPG", "PPO", "REDQ"):
         raise NotImplementedError(f"Unknown algorithm {algorithm}")
 
-    if algorithm in ("SAC", "DDPG"):
+    if algorithm in ("SAC", "DDPG", "REDQ"):
         parser.add_argument(
             "--annealing_frames",
             type=int,
             default=1000000,
-            help="Number of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.",
+            help="float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.",
         )
         parser.add_argument(
             "--noisy",
@@ -694,7 +821,7 @@ def parser_model_args_continuous(
             "--ou_exploration",
             action="store_true",
             help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
-                 "efficient entropy-based exploration, this should be left for experimentation only.",
+            "efficient entropy-based exploration, this should be left for experimentation only.",
         )
         parser.add_argument(
             "--distributional",
@@ -708,17 +835,7 @@ def parser_model_args_continuous(
             help="number of atoms used for the distributional loss (TODO)",
         )
 
-    if algorithm == "SAC":
-        parser.add_argument(
-            "--single_qvalue",
-            action="store_false",
-            dest="double_qvalue",
-            help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
-                 "use two different qvalue networks trained independently and choose the lowest value "
-                 "predicted to predict the state action value. This can be disabled by using this flag.",
-        )
-
-    if algorithm in ("SAC", "PPO"):
+    if algorithm in ("SAC", "PPO", "REDQ"):
         parser.add_argument(
             "--tanh_loc",
             "--tanh-loc",
@@ -754,13 +871,17 @@ def parser_model_args_continuous(
 
 def parser_model_args_discrete(parser: ArgumentParser) -> ArgumentParser:
     """
-    To be used for DQN, Rainbow
+    Populates the argument parser to build a model for discrete actions.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+
     """
     parser.add_argument(
         "--annealing_frames",
         type=int,
         default=1000000,
-        help="Number of frames used for annealing of the EGreedy exploration. Default=1e6.",
+        help="float of frames used for annealing of the EGreedy exploration. Default=1e6.",
     )
 
     parser.add_argument(

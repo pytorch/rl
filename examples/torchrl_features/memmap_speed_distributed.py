@@ -1,11 +1,9 @@
 import os
 import time
-import timeit
 
 import configargparse
 import torch
 import torch.distributed.rpc as rpc
-from torch import multiprocessing as mp
 from torchrl.data.tensordict import MemmapTensor
 
 parser = configargparse.ArgumentParser()

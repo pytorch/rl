@@ -1,8 +1,16 @@
 import numpy as np
 import pytest
 import torch
-
-from torchrl.data.tensor_specs import *
+from torchrl.data.tensor_specs import (
+    NdUnboundedContinuousTensorSpec,
+    NdBoundedTensorSpec,
+    CompositeSpec,
+    MultOneHotDiscreteTensorSpec,
+    BinaryDiscreteTensorSpec,
+    BoundedTensorSpec,
+    UnboundedContinuousTensorSpec,
+    OneHotDiscreteTensorSpec,
+)
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])

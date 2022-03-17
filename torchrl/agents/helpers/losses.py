@@ -2,11 +2,12 @@ from argparse import ArgumentParser, Namespace
 
 __all__ = [
     "make_sac_loss",
-    "parser_loss_args",
     "make_dqn_loss",
     "make_ddpg_loss",
     "make_target_updater",
     "make_ppo_loss",
+    "make_redq_loss",
+    "parser_loss_args",
     "parser_loss_args_ppo",
 ]
 
@@ -29,12 +30,16 @@ from torchrl.objectives import (
     SoftUpdate,
 )
 from torchrl.objectives.costs.common import _LossModule
+from torchrl.objectives.costs.redq import DoubleREDQLoss, REDQLoss
+
+# from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 
 
 def make_target_updater(
     args: Namespace, loss_module: _LossModule
 ) -> Optional[_TargetNetUpdate]:
+    """Builds a target network weight update object."""
     if args.loss == "double":
         if not args.hard_update:
             target_net_updater = SoftUpdate(
@@ -56,8 +61,9 @@ def make_target_updater(
 
 
 def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
+    """Builds the SAC loss module."""
     loss_kwargs = {}
-    if args.distributional:
+    if hasattr(args, "distributional") and args.distributional:
         raise NotImplementedError
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
@@ -71,17 +77,37 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
             )
         else:
             loss_class = SACLoss
-    qvalue_model_bis = None
-    if len(model) == 3:
-        actor_model, qvalue_model, value_model = model
-    else:
-        actor_model, qvalue_model, qvalue_model_bis, value_model = model
+    actor_model, qvalue_model, value_model = model
 
     loss_module = loss_class(
         actor_network=actor_model,
         qvalue_network=qvalue_model,
         value_network=value_model,
-        qvalue_network_bis=qvalue_model_bis,
+        num_qvalue_nets=args.num_q_values,
+        gamma=args.gamma,
+        **loss_kwargs
+    )
+    target_net_updater = make_target_updater(args, loss_module)
+    return loss_module, target_net_updater
+
+
+def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
+    """Builds the REDQ loss module."""
+    loss_kwargs = {}
+    if hasattr(args, "distributional") and args.distributional:
+        raise NotImplementedError
+    else:
+        loss_kwargs.update({"loss_function": args.loss_function})
+        if args.loss == "double":
+            loss_class = DoubleREDQLoss
+        else:
+            loss_class = REDQLoss
+    actor_model, qvalue_model = model
+
+    loss_module = loss_class(
+        actor_network=actor_model,
+        qvalue_network=qvalue_model,
+        num_qvalue_nets=args.num_q_values,
         gamma=args.gamma,
         **loss_kwargs
     )
@@ -90,6 +116,7 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
 
 
 def make_ddpg_loss(model, args) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
+    """Builds the DDPG loss module."""
     actor, value_net = model
     loss_kwargs = {}
     if args.distributional:
@@ -108,6 +135,7 @@ def make_ddpg_loss(model, args) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
 
 
 def make_dqn_loss(model, args) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
+    """Builds the DQN loss module."""
     loss_kwargs = {}
     if args.distributional:
         if args.loss == "single":
@@ -130,6 +158,7 @@ def make_dqn_loss(model, args) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
 
 
 def make_ppo_loss(model, args) -> PPOLoss:
+    """Builds the PPO loss module."""
     loss_dict = {
         "clip": ClipPPOLoss,
         "kl": KLPENPPOLoss,
@@ -139,9 +168,7 @@ def make_ppo_loss(model, args) -> PPOLoss:
     actor_model = model.get_policy_operator()
     critic_model = model.get_value_operator()
 
-    advantage = GAE(
-        args.gamma, args.lamda, critic=critic_model, average_rewards=True
-    )
+    advantage = GAE(args.gamma, args.lamda, critic=critic_model, average_rewards=True)
     loss_module = loss_dict[args.loss](
         actor=actor_model,
         critic=critic_model,
@@ -152,9 +179,14 @@ def make_ppo_loss(model, args) -> PPOLoss:
     return loss_module
 
 
-def parser_loss_args(parser: ArgumentParser) -> ArgumentParser:
+def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
     """
-    To be used for DQN, DDPG, SAC
+    Populates the argument parser to build the off-policy loss function (REDQ, SAC, DDPG, DQN).
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+        algorithm (str): one of `"DDPG"`, `"SAC"`, `"REDQ"`, `"DQN"`
+
     """
     parser.add_argument(
         "--loss",
@@ -180,8 +212,8 @@ def parser_loss_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=1000,
         help="how often the target value network weights are updated (in number of updates)."
-             "If soft-updates are used, the value is translated into a moving average decay by using "
-             "the formula decay=1-1/args.value_network_update_interval. Default=1000",
+        "If soft-updates are used, the value is translated into a moving average decay by using "
+        "the formula decay=1-1/args.value_network_update_interval. Default=1000",
     )
     parser.add_argument(
         "--gamma",
@@ -189,13 +221,27 @@ def parser_loss_args(parser: ArgumentParser) -> ArgumentParser:
         default=0.99,
         help="Decay factor for return computation. Default=0.99.",
     )
+    if algorithm in ("SAC", "REDQ"):
+        parser.add_argument(
+            "--num_q_values",
+            default=2,
+            type=int,
+            help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
+            "use two (or more!) different qvalue networks trained independently and choose the lowest value "
+            "predicted to predict the state action value. This can be disabled by using this flag."
+            "REDQ uses an arbitrary number of Q-value functions to speed up learning in MF contexts.",
+        )
 
     return parser
 
 
 def parser_loss_args_ppo(parser: ArgumentParser) -> ArgumentParser:
     """
-    To be used for PPO
+    Populates the argument parser to build the PPO loss function.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+
     """
     parser.add_argument(
         "--loss",
@@ -215,7 +261,7 @@ def parser_loss_args_ppo(parser: ArgumentParser) -> ArgumentParser:
         default=0.95,
         type=float,
         help="lambda factor in GAE (using 'lambda' as attribute is prohibited in python, "
-             "hence the misspelling)",
+        "hence the misspelling)",
     )
     parser.add_argument(
         "--entropy_factor",

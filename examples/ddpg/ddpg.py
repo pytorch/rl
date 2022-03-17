@@ -1,14 +1,20 @@
 import uuid
 from datetime import datetime
 
-import configargparse
+try:
+    import configargparse as argparse
+
+    _configargparse = True
+except ImportError:
+    import argparse
+
+    _configargparse = False
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
-
 from torchrl.agents.helpers.agents import make_agent, parser_agent_args
 from torchrl.agents.helpers.collectors import (
-    make_collector_offline,
-    parser_collector_args_offline,
+    make_collector_offpolicy,
+    parser_collector_args_offpolicy,
 )
 from torchrl.agents.helpers.envs import (
     correct_for_frame_skip,
@@ -27,21 +33,22 @@ from torchrl.agents.helpers.replay_buffer import (
     make_replay_buffer,
     parser_replay_args,
 )
-from torchrl.data.transforms import RewardScaling, TransformedEnv
+from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 
 
 def make_args():
-    parser = configargparse.ArgumentParser()
-    parser.add_argument(
-        "-c",
-        "--config",
-        required=True,
-        is_config_file=True,
-        help="config file path",
-    )
+    parser = argparse.ArgumentParser()
+    if _configargparse:
+        parser.add_argument(
+            "-c",
+            "--config",
+            required=True,
+            is_config_file=True,
+            help="config file path",
+        )
     parser_agent_args(parser)
-    parser_collector_args_offline(parser)
+    parser_collector_args_offpolicy(parser)
     parser_env_args(parser)
     parser_loss_args(parser)
     parser_model_args_continuous(parser, "DDPG")
@@ -110,7 +117,7 @@ if __name__ == "__main__":
 
     create_env_fn = parallel_env_constructor(args=args, stats=stats)
 
-    collector = make_collector_offline(
+    collector = make_collector_offpolicy(
         make_env=create_env_fn,
         actor_model_explore=actor_model_explore,
         args=args,

@@ -46,9 +46,7 @@ def vtrace(
     v_out.append(vals[:, -1] + dv[:, -1])
     for t in range(T - 2, -1, -1):
         _v_out = (
-            vals[:, t]
-            + dv[:, t]
-            + gamma[:, t] * c[:, t] * (v_out[-1] - vals[:, t + 1])
+            vals[:, t] + dv[:, t] + gamma[:, t] * c[:, t] * (v_out[-1] - vals[:, t + 1])
         )
         v_out.append(_v_out)
     v_out = torch.stack(list(reversed(v_out)), 1)

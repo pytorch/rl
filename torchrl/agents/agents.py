@@ -14,7 +14,7 @@ try:
     from tqdm import tqdm
 
     _has_tqdm = True
-except:
+except ImportError:
     _has_tqdm = False
 
 from torchrl.collectors.collectors import _DataCollector
@@ -24,9 +24,9 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.data.transforms import TransformedEnv
 from torchrl.data.utils import expand_right
 from torchrl.envs.common import _EnvClass
+from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import reset_noise, TDModuleWrapper
 from torchrl.objectives.costs.common import _LossModule
@@ -49,72 +49,100 @@ class Agent:
     """A generic Agent class.
 
     An agent is responsible of collecting data and training the model.
-    To keep the class as versatile as possible, Agent does not construct any of its components: they all must be
-    provided as argument when initializing the object.
-    To build an Agent, one needs a iterable data source (a `collector`), a loss module, an optimizer.
-    Optionally, a recorder (i.e. an environment instance used for testing purposes) and a policy can be provided for
+    To keep the class as versatile as possible, Agent does not construct any
+    of its components: they all must be provided as argument when
+    initializing the object.
+    To build an Agent, one needs a iterable data source (a `collector`), a
+    loss module, an optimizer. Optionally, a recorder (i.e. an environment
+    instance used for testing purposes) and a policy can be provided for
     evaluating the training progress.
 
     Args:
-        collector (Sequence[_TensorDict]): An iterable returning batches of data in a TensorDict form of shape
-            [batch x time steps].
-        total_frames (int): Total number of frames to be collected during training.
-        loss_module (_LossModule): A module that reads TensorDict batches (possibly sampled from a replay buffer) and
-            return a loss TensorDict where every key points to a different loss component.
-        optimizer (optim.Optimizer): An optimizer that trains the parameters of the model.
-        recorder (_EnvClass, optional): An environment instance to be used for testing.
-        optim_scheduler (optim.lr_scheduler._LRScheduler, optional): learning rate scheduler.
-        target_net_updater (_TargetNetUpdate, optional): a target network updater.
-        policy_exploration (ProbabilisticTDModule, optional): a policy instance used for
-            (1) updating the exploration noise schedule
+        collector (Sequence[_TensorDict]): An iterable returning batches of
+            data in a TensorDict form of shape [batch x time steps].
+        total_frames (int): Total number of frames to be collected during
+            training.
+        loss_module (_LossModule): A module that reads TensorDict batches
+            (possibly sampled from a replay buffer) and return a loss
+            TensorDict where every key points to a different loss component.
+        optimizer (optim.Optimizer): An optimizer that trains the parameters
+            of the model.
+        recorder (_EnvClass, optional): An environment instance to be used
+            for testing.
+        optim_scheduler (optim.lr_scheduler._LRScheduler, optional):
+            learning rate scheduler.
+        target_net_updater (_TargetNetUpdate, optional):
+            a target network updater.
+        policy_exploration (ProbabilisticTDModule, optional): a policy
+            instance used for
+
+            (1) updating the exploration noise schedule;
+
             (2) testing the policy on the recorder.
-            Given that this instance is supposed to both explore and render the performance of the policy, it should
-            be possible to turn off the explorative behaviour by calling the `set_exploration_mode('mode')` context
-            manager.
-        replay_buffer (ReplayBuffer, optional): a replay buffer for offline learning.
-        writer (SummaryWriter, optional): a Tensorboard summary writer for logging purposes.
-        update_weights_interval (int, optional): interval between two updates of the weights of a model living on
-            another device. By default, the weights will be updated after every collection of data.
-        record_interval (int, optional): total number of optimisation steps between two calls to the recorder for
-            testing.
-            Default is 10000.
-        record_frames (int, optional): number of frames to be recorded during testing.
-            Default is 1000.
-        frame_skip (int, optional): frame_skip used in the environment. It is important to let
-            the agent know the number of frames skipped at each iteration, otherwise the frame count can be
-            underestimated. For logging, this parameter is important to normalize the reward. Finally, to compare
-            different runs with different frame_skip, one must normalize the frame count and rewards.
-            Default is 1.
-        optim_steps_per_batch (int, optional): number of optimization steps per collection of data.
-            An agent works as follows: a main loop collects batches of data (epoch loop), and a sub-loop (training loop)
-            performs model updates in between two collections of data.
+
+            Given that this instance is supposed to both explore and render
+            the performance of the policy, it should be possible to turn off
+            the explorative behaviour by calling the
+            `set_exploration_mode('mode')` context manager.
+        replay_buffer (ReplayBuffer, optional): a replay buffer for offline
+            learning.
+        writer (SummaryWriter, optional): a Tensorboard summary writer for
+            logging purposes.
+        update_weights_interval (int, optional): interval between two updates
+            of the weights of a model living on another device. By default,
+            the weights will be updated after every collection of data.
+        record_interval (int, optional): total number of optimisation steps
+            between two calls to the recorder for testing. Default is 10000.
+        record_frames (int, optional): number of frames to be recorded during
+            testing. Default is 1000.
+        frame_skip (int, optional): frame_skip used in the environment. It is
+            important to let the agent know the number of frames skipped at
+            each iteration, otherwise the frame count can be underestimated.
+            For logging, this parameter is important to normalize the reward.
+            Finally, to compare different runs with different frame_skip,
+            one must normalize the frame count and rewards. Default is 1.
+        optim_steps_per_batch (int, optional): number of optimization steps
+            per collection of data. An agent works as follows: a main loop
+            collects batches of data (epoch loop), and a sub-loop (training
+            loop) performs model updates in between two collections of data.
             Default is 500
-        batch_size (int, optional): batch size when sampling data from the latest collection or from the replay buffer,
-            if it is present. If no replay buffer is present, the sub-sampling will be achieved over the latest
-            collection with a resulting batch of size (batch_size x sub_traj_len).
+        batch_size (int, optional): batch size when sampling data from the
+            latest collection or from the replay buffer, if it is present.
+            If no replay buffer is present, the sub-sampling will be
+            achieved over the latest collection with a resulting batch of
+            size (batch_size x sub_traj_len).
             Default is 256
-        clip_grad_norm (bool, optional): If True, the gradients will be clipped based on the total norm of the model
-            parameters. If False, all the partial derivatives will be clamped to (-clip_norm, clip_norm).
-            Default is True.
+        clip_grad_norm (bool, optional): If True, the gradients will be clipped
+            based on the total norm of the model parameters. If False,
+            all the partial derivatives will be clamped to
+            (-clip_norm, clip_norm). Default is `True`.
         clip_norm (Number, optional): value to be used for clipping gradients.
             Default is 100.0.
-        progress_bar (bool, optional): If True, a progress bar will be displayed using tqdm. If tqdm is not installed,
-            this option won't have any effect.
-            Default is True
-        seed (int, optional): Seed to be used for the collector, pytorch and numpy.
-            Default is 42.
-        save_agent_interval (int, optional): How often the agent should be saved to disk.
-            Default is 10000.
+        progress_bar (bool, optional): If True, a progress bar will be
+            displayed using tqdm. If tqdm is not installed, this option
+            won't have any effect. Default is `True`
+        seed (int, optional): Seed to be used for the collector, pytorch and
+            numpy. Default is 42.
+        save_agent_interval (int, optional): How often the agent should be
+            saved to disk. Default is 10000.
         save_agent_file (path, optional): path where to save the agent.
             Default is None (no saving)
-        normalize_rewards_online (bool, optional): if True, the running statistics of the rewards are computed and
-            the rewards used for training will be normalized based on these.
-            Default is False
-        sub_traj_len (int, optional): length of the trajectories that sub-samples must have in online settings.
-            Default is -1 (i.e. takes the full length of the trajectory)
-        min_sub_traj_len (int, optional): minimum value of `sub_traj_len`, in case some elements of the batch contain
-            few steps.
+        normalize_rewards_online (bool, optional): if True, the running
+            statistics of the rewards are computed and the rewards used for
+            training will be normalized based on these.
+            Default is `False`
+        sub_traj_len (int, optional): length of the trajectories that
+            sub-samples must have in online settings. Default is -1 (i.e.
+            takes the full length of the trajectory)
+        min_sub_traj_len (int, optional): minimum value of `sub_traj_len`, in
+            case some elements of the batch contain few steps.
             Default is -1 (i.e. no minimum value)
+        selected_keys (iterable of str, optional): a list of strings that
+            indicate the data that should be kept from the data collector.
+            Since storing and retrieving information from the replay buffer
+            does not come for free, limiting the amount of data passed to
+            it can improve the algorithm performance. Default is None,
+            i.e. all keys are kept.
 
     """
 
@@ -153,6 +181,7 @@ class Agent:
         normalize_rewards_online: bool = False,
         sub_traj_len: int = -1,
         min_sub_traj_len: int = -1,
+        selected_keys: Optional[Sequence[str]] = None,
     ) -> None:
 
         # objects
@@ -193,13 +222,12 @@ class Agent:
         self.normalize_rewards_online = normalize_rewards_online
         self.sub_traj_len = sub_traj_len
         self.min_sub_traj_len = min_sub_traj_len
+        self.selected_keys = selected_keys
 
     def save_agent(self) -> None:
         _save = False
         if self.save_agent_file is not None:
-            if (
-                self._collected_frames - self._last_save
-            ) > self.save_agent_interval:
+            if (self._collected_frames - self._last_save) > self.save_agent_interval:
                 self._last_save = self._collected_frames
                 _save = True
         if _save:
@@ -222,7 +250,8 @@ class Agent:
             expected_keys.difference(actual_keys)
         ):
             raise RuntimeError(
-                f"Expected keys {expected_keys} in the loaded file but got {actual_keys}"
+                f"Expected keys {expected_keys} in the loaded file but got"
+                f" {actual_keys}"
             )
         self.collector.load_state_dict(loaded_dict["env"])
         self.model.load_state_dict(loaded_dict["model"])
@@ -272,10 +301,11 @@ class Agent:
 
         collected_frames = 0
         for i, batch in enumerate(self.collector):
+            if self.selected_keys:
+                batch = batch.select(*self.selected_keys, "mask")
+
             if "mask" in batch.keys():
-                current_frames = (
-                    batch.get("mask").sum().item() * self.frame_skip
-                )
+                current_frames = batch.get("mask").sum().item() * self.frame_skip
             else:
                 current_frames = batch.numel() * self.frame_skip
             collected_frames += current_frames
@@ -291,11 +321,9 @@ class Agent:
                 self.replay_buffer.extend(batch)
             else:
                 if "mask" in batch.keys():
-                    reward_training = (
-                        batch.get("reward")[batch.get("mask").squeeze(-1)]
-                            .mean()
-                            .item()
-                    )
+                    reward_training = batch.get("reward")
+                    mask = batch.get("mask").squeeze(-1)
+                    reward_training = reward_training[mask].mean().item()
                 else:
                     reward_training = batch.get("reward").mean().item()
 
@@ -314,6 +342,7 @@ class Agent:
 
             if collected_frames > self.total_frames:
                 break
+
         self.collector.shutdown()
 
     @torch.no_grad()
@@ -340,8 +369,8 @@ class Agent:
         tensordict.set_("reward", reward)
 
     def _collector_scheduler_step(self, step: int, current_frames: int):
-        """Runs entropy annealing steps for exploration, policy weights update across workers etc.
-        Returns:
+        """Runs entropy annealing steps for exploration, policy weights update
+        across workers etc.
 
         """
 
@@ -357,9 +386,7 @@ class Agent:
         average_grad_norm = 0.0
         average_losses = None
 
-        self.loss_module.apply(
-            reset_noise
-        )  # TODO: group in loss_module.reset?
+        self.loss_module.apply(reset_noise)  # TODO: group in loss_module.reset?
         self.loss_module.reset()
 
         for j in range(self.optim_steps_per_batch):
@@ -374,18 +401,12 @@ class Agent:
 
             sub_batch_device = sub_batch.to(self.loss_module.device)
             losses_td = self.loss_module(sub_batch_device)
-            if isinstance(
-                self.replay_buffer, TensorDictPrioritizedReplayBuffer
-            ):
+            if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
                 self.replay_buffer.update_priority(sub_batch_device)
 
             # sum all keys that start with 'loss_'
             loss = sum(
-                [
-                    item
-                    for key, item in losses_td.items()
-                    if key.startswith("loss")
-                ]
+                [item for key, item in losses_td.items() if key.startswith("loss")]
             )
             loss.backward()
             if average_losses is None:
@@ -396,9 +417,7 @@ class Agent:
                     average_losses.set(key, val * j / (j + 1) + item / (j + 1))
 
             grad_norm = self._grad_clip()
-            average_grad_norm = average_grad_norm * j / (j + 1) + grad_norm / (
-                j + 1
-            )
+            average_grad_norm = average_grad_norm * j / (j + 1) + grad_norm / (j + 1)
             self.optimizer.step()
             self.optimizer.zero_grad()
 
@@ -425,19 +444,21 @@ class Agent:
 
     def _sub_sample_batch(self, batch: _TensorDict) -> _TensorDict:
         """Sub-sampled part of a batch randomly.
-        If the batch has one dimension, a random subsample of length self.bach_size will be returned.
-        If the batch has two or more dimensions, it is assumed that the first dimension represents the batch,
-        and the second the time. If so, the resulting subsample will contain consecutive samples across time.
+
+        If the batch has one dimension, a random subsample of length
+        self.bach_size will be returned. If the batch has two or more
+        dimensions, it is assumed that the first dimension represents the
+        batch, and the second the time. If so, the resulting subsample will
+        contain consecutive samples across time.
         """
 
         if batch.ndimension() == 1:
             return batch[torch.randperm(batch.shape[0])[: self.batch_size]]
 
-        sub_traj_len = (
-            self.sub_traj_len if self.sub_traj_len > 0 else batch.shape[1]
-        )
+        sub_traj_len = self.sub_traj_len if self.sub_traj_len > 0 else batch.shape[1]
         if "mask" in batch.keys():
-            # if a valid mask is present, it's important to sample only valid steps
+            # if a valid mask is present, it's important to sample only
+            # valid steps
             traj_len = batch.get("mask").sum(1).squeeze()
             sub_traj_len = max(
                 self.min_sub_traj_len,
@@ -445,14 +466,11 @@ class Agent:
             )
         else:
             traj_len = (
-                torch.ones(
-                    batch.shape[0], device=batch.device, dtype=torch.bool
-                )
+                torch.ones(batch.shape[0], device=batch.device, dtype=torch.bool)
                 * batch.shape[1]
             )
-        valid_trajectories = torch.arange(batch.shape[0])[
-            traj_len >= sub_traj_len
-            ]
+        len_mask = traj_len >= sub_traj_len
+        valid_trajectories = torch.arange(batch.shape[0])[len_mask]
 
         batch_size = self.batch_size // sub_traj_len
         traj_idx = valid_trajectories[
@@ -474,8 +492,8 @@ class Agent:
             )
         else:
             raise ValueError(
-                f"sub_traj_len={sub_traj_len} is not allowed. Accepted values are in the range "
-                f"[1, {batch.shape[1]}]."
+                f"sub_traj_len={sub_traj_len} is not allowed. Accepted values "
+                f"are in the range [1, {batch.shape[1]}]."
             )
 
         seq_idx = seq_idx + torch.arange(sub_traj_len, device=seq_idx.device)
@@ -483,9 +501,7 @@ class Agent:
         td = td.apply(
             lambda t: t.gather(
                 dim=1,
-                index=expand_right(
-                    seq_idx, (batch_size, sub_traj_len, *t.shape[2:])
-                ),
+                index=expand_right(seq_idx, (batch_size, sub_traj_len, *t.shape[2:])),
             ),
             batch_size=(batch_size, sub_traj_len),
         )
@@ -504,18 +520,14 @@ class Agent:
     def _log(self, **kwargs) -> None:
         collected_frames = self._collected_frames
         for key, item in kwargs.items():
-            if (
-                collected_frames - self._last_log.get(key, 0)
-            ) > self._log_interval:
+            if (collected_frames - self._last_log.get(key, 0)) > self._log_interval:
                 self._last_log[key] = collected_frames
                 _log = True
             else:
                 _log = False
             method = WRITER_METHODS.get(key, "add_scalar")
             if _log and self.writer is not None:
-                getattr(self.writer, method)(
-                    key, item, global_step=collected_frames
-                )
+                getattr(self.writer, method)(key, item, global_step=collected_frames)
             if method == "add_scalar" and self.progress_bar:
                 self._pbar_str[key] = float(item)
 
@@ -550,9 +562,7 @@ class Agent:
 
     def __repr__(self) -> str:
         loss_str = indent(f"loss={self.loss_module}", 4 * " ")
-        policy_str = indent(
-            f"policy_exploration={self.policy_exploration}", 4 * " "
-        )
+        policy_str = indent(f"policy_exploration={self.policy_exploration}", 4 * " ")
         collector_str = indent(f"collector={self.collector}", 4 * " ")
         buffer_str = indent(f"buffer={self.replay_buffer}", 4 * " ")
         optimizer_str = indent(f"optimizer={self.optimizer}", 4 * " ")

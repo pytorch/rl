@@ -1,8 +1,7 @@
 from typing import Optional, Sequence
 
 import torch
-
-from torchrl.data.transforms import ObservationTransform, Transform
+from torchrl.envs.transforms import ObservationTransform, Transform
 
 __all__ = ["VideoRecorder", "TensorDictRecorder"]
 
@@ -10,15 +9,17 @@ __all__ = ["VideoRecorder", "TensorDictRecorder"]
 class VideoRecorder(ObservationTransform):
     """
     Video Recorder transform.
-    Will record a series of observations from an environment and write them to a TensorBoard SummaryWriter object when needed.
+    Will record a series of observations from an environment and write them
+    to a TensorBoard SummaryWriter object when needed.
 
     Args:
-        writer (SummaryWriter): a tb.SummaryWriter instance where the video should be written.
+        writer (SummaryWriter): a tb.SummaryWriter instance where the video
+            should be written.
         tag (str): the video tag in the writer.
         keys (Sequence[str], optional): keys to be read to produce the video.
-            default: next_observation_pixels.
+            Default is `"next_observation_pixels"`.
         skip (int): frame interval in the output video.
-            default: 2
+            Default is 2.
     """
 
     def __init__(
@@ -43,17 +44,13 @@ class VideoRecorder(ObservationTransform):
         self.count = 0
         self.obs = []
         try:
-            import moviepy
-        except:
-            raise Exception(
-                "moviepy not found, VideoRecorder cannot be created"
-            )
+            import moviepy  # noqa
+        except ImportError:
+            raise Exception("moviepy not found, VideoRecorder cannot be created")
 
     def _apply(self, observation: torch.Tensor) -> torch.Tensor:
         if not (observation.shape[-1] == 3 or observation.ndimension() == 2):
-            raise RuntimeError(
-                f"Invalid observation shape, got: {observation.shape}"
-            )
+            raise RuntimeError(f"Invalid observation shape, got: {observation.shape}")
         observation_trsf = observation
         self.count += 1
         if self.count % self.skip == 0:
@@ -75,11 +72,7 @@ class VideoRecorder(ObservationTransform):
         return observation
 
     def dump(self) -> None:
-        """Writes the video to the self.writer attribute.
-
-        Returns: None
-
-        """
+        """Writes the video to the self.writer attribute."""
         self.writer.add_video(
             tag=f"{self.tag}",
             vid_tensor=torch.stack(self.obs, 0).unsqueeze(0),

@@ -73,15 +73,13 @@ class EGreedyWrapper(TDModuleWrapper):
 
         Args:
             frames (int): number of frames since last step.
-        Returns: None
 
         """
         for _ in range(frames):
             self.eps.data[0] = max(
                 self.eps_end.item(),
                 (
-                    self.eps
-                    - (self.eps_init - self.eps_end) / self.annealing_num_steps
+                    self.eps - (self.eps_init - self.eps_end) / self.annealing_num_steps
                 ).item(),
             )
 
@@ -90,13 +88,12 @@ class EGreedyWrapper(TDModuleWrapper):
         if exploration_mode() == "random" or exploration_mode() is None:
             out = tensordict.get(self.td_module.out_keys[0])
             eps = self.eps.item()
-            cond = (
-                torch.rand(tensordict.shape, device=tensordict.device) < eps
-            ).to(out.dtype)
+            cond = (torch.rand(tensordict.shape, device=tensordict.device) < eps).to(
+                out.dtype
+            )
             cond = expand_as_right(cond, out)
             out = (
-                cond
-                * self.td_module.spec.rand(tensordict.shape).to(out.device)
+                cond * self.td_module.spec.rand(tensordict.shape).to(out.device)
                 + (1 - cond) * out
             )
             tensordict.set(self.td_module.out_keys[0], out)
@@ -217,8 +214,7 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
                     self.eps_end.item(),
                     (
                         self.eps
-                        - (self.eps_init - self.eps_end)
-                        / self.annealing_num_steps
+                        - (self.eps_init - self.eps_end) / self.annealing_num_steps
                     ).item(),
                 )
             else:
@@ -265,8 +261,8 @@ class _OrnsteinUhlenbeckProcess:
         self.dt = dt
         self.x0 = x0 if x0 is not None else 0.0
         self.key = key
-        self._noise_key = f"_ou_prev_noise"
-        self._steps_key = f"_ou_steps"
+        self._noise_key = "_ou_prev_noise"
+        self._steps_key = "_ou_steps"
         self.out_keys = [self.key, self.noise_key, self.steps_key]
 
     @property
@@ -280,9 +276,7 @@ class _OrnsteinUhlenbeckProcess:
     def _make_noise_pair(self, tensor_dict: _TensorDict) -> None:
         tensor_dict.set(
             self.noise_key,
-            torch.zeros(
-                tensor_dict.get(self.key).shape, device=tensor_dict.device
-            ),
+            torch.zeros(tensor_dict.get(self.key).shape, device=tensor_dict.device),
         )
         tensor_dict.set(
             self.steps_key,
@@ -293,11 +287,9 @@ class _OrnsteinUhlenbeckProcess:
             ),
         )
 
-    def add_sample(
-        self, tensor_dict: _TensorDict, eps: float = 1.0
-    ) -> _TensorDict:
+    def add_sample(self, tensor_dict: _TensorDict, eps: float = 1.0) -> _TensorDict:
 
-        if not self.noise_key in set(tensor_dict.keys()):
+        if self.noise_key not in set(tensor_dict.keys()):
             self._make_noise_pair(tensor_dict)
 
         prev_noise = tensor_dict.get(self.noise_key)

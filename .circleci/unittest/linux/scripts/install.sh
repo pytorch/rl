@@ -19,7 +19,7 @@ else
     elif [[ ${#CU_VERSION} -eq 5 ]]; then
         CUDA_VERSION="${CU_VERSION:2:2}.${CU_VERSION:4:1}"
     fi
-    echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION"
+    echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
     cudatoolkit="cudatoolkit=${version}"
 fi
@@ -32,28 +32,25 @@ esac
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-printf "Installing PyTorch with %s\n" "${cudatoolkit}"
+#printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 #if [ "${os}" == "MacOSX" ]; then
 #    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch "${cudatoolkit}" pytest
 #else
 #    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}" pytest
 #fi
 
+#printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
     # use pip to install pytorch as conda can frequently pick older release
-    pip install torch torchvision # -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
+    pip install torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
 else
     conda install -y pytorch torchvision cudatoolkit=10.2 -c pytorch-nightly
 fi
 
-#printf "Installing functorch\n"
-#cd third_party/functorch
-#WHEELS_FOLDER=${HOME}/project/wheels
-#mkdir -p $WHEELS_FOLDER
-#PYTORCH_VERSION="$(python -c "import torch; print(torch.__version__)")" python setup.py develop bdist_wheel -d $WHEELS_FOLDER
-#cd ../..
-
+printf "Installing functorch\n"
+pip install ninja  # Makes the build go faster
+pip install "git+https://github.com/pytorch/functorch.git"
 
 printf "* Installing torchrl\n"
 python setup.py develop

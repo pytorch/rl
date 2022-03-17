@@ -6,7 +6,7 @@ from torch import distributions as d
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import step_tensor_dict
-from torchrl.modules import Actor, ProbabilisticTDModule
+from torchrl.modules import ProbabilisticTDModule, TDModule
 
 __all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
 
@@ -50,8 +50,8 @@ class PPOLoss(_LossModule):
 
     def __init__(
         self,
-        actor: Actor,
-        critic: ProbabilisticTDModule,
+        actor: ProbabilisticTDModule,
+        critic: TDModule,
         advantage_key: str = "advantage",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
@@ -59,9 +59,7 @@ class PPOLoss(_LossModule):
         critic_factor: float = 1.0,
         gamma: float = 0.99,
         loss_critic_type: str = "smooth_l1",
-        advantage_module: Optional[
-            Callable[[_TensorDict], _TensorDict]
-        ] = None,
+        advantage_module: Optional[Callable[[_TensorDict], _TensorDict]] = None,
     ):
         super().__init__()
         self.actor = actor
@@ -78,12 +76,10 @@ class PPOLoss(_LossModule):
     def reset(self) -> None:
         pass
 
-    def get_entropy_bonus(
-        self, dist: Optional[d.Distribution] = None
-    ) -> torch.Tensor:
+    def get_entropy_bonus(self, dist: Optional[d.Distribution] = None) -> torch.Tensor:
         try:
             entropy = dist.entropy()
-        except:
+        except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
             entropy = -dist.log_prob(x)
         return entropy.unsqueeze(-1)
@@ -179,8 +175,8 @@ class ClipPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: Actor,
-        critic: ProbabilisticTDModule,
+        actor: ProbabilisticTDModule,
+        critic: TDModule,
         advantage_key: str = "advantage",
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
@@ -238,12 +234,8 @@ class ClipPPOLoss(PPOLoss):
         log_weight_clip = torch.empty_like(log_weight)
         # log_weight_clip.data.clamp_(*self._clip_bounds)
         idx_pos = advantage >= 0
-        log_weight_clip[idx_pos] = log_weight[idx_pos].clamp_max(
-            self._clip_bounds[1]
-        )
-        log_weight_clip[~idx_pos] = log_weight[~idx_pos].clamp_min(
-            self._clip_bounds[0]
-        )
+        log_weight_clip[idx_pos] = log_weight[idx_pos].clamp_max(self._clip_bounds[1])
+        log_weight_clip[~idx_pos] = log_weight[~idx_pos].clamp_min(self._clip_bounds[0])
 
         gain2 = log_weight_clip.exp() * advantage
         gain = torch.stack([gain1, gain2], -1).min(dim=-1)[0]
@@ -297,8 +289,8 @@ class KLPENPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: Actor,
-        critic: ProbabilisticTDModule,
+        actor: ProbabilisticTDModule,
+        critic: TDModule,
         advantage_key="advantage",
         dtarg: float = 0.01,
         beta: float = 1.0,
@@ -369,9 +361,7 @@ class KLPENPPOLoss(PPOLoss):
         previous_dist, *_ = self.actor.build_dist_from_params(params)
         current_dist, *_ = self.actor.get_dist(tensor_dict_clone)
         try:
-            kl = torch.distributions.kl.kl_divergence(
-                previous_dist, current_dist
-            )
+            kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
             x = previous_dist.sample((self.samples_mc_kl,))
             kl = (previous_dist.log_prob(x) - current_dist.log_prob(x)).mean(0)

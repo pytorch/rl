@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 import torch
 from torch import multiprocessing as mp
-
 from torchrl.data import TensorDict, SavedTensorDict
 from torchrl.data.tensordict.tensordict import LazyStackedTensorDict, assert_allclose_td
 from torchrl.data.tensordict.utils import _getitem_batch_size
@@ -789,7 +788,7 @@ def test_stack_keys():
     )
     td = torch.stack([td1, td2], 0)
     assert "a" in td.keys()
-    assert not "b" in td.keys()
+    assert "b" not in td.keys()
     assert "b" in td[1].keys()
     td.set("b", torch.randn(2, 10), inplace=False)  # overwrites
     with pytest.raises(KeyError):

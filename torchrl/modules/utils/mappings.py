@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Callable
 
 import torch
 from torch import nn
@@ -24,7 +24,7 @@ class biased_softplus(nn.Module):
             default: 0.1
     """
 
-    def __init__(self, bias: float, min_val: float = 0.1):
+    def __init__(self, bias: float, min_val: float = 0.01):
         super().__init__()
         self.bias = inv_softplus(bias - min_val)
         self.min_val = min_val
@@ -33,14 +33,15 @@ class biased_softplus(nn.Module):
         return torch.nn.functional.softplus(x + self.bias) + self.min_val
 
 
-def mappings(key: str) -> Any:
+def mappings(key: str) -> Callable:
     """
     Given an input string, return a surjective function f(x): R -> R^+
 
     Args:
         key (str): one of "softplus", "exp", "relu", or "biased_softplus".
 
-    Returns: a Callable
+    Returns:
+         a Callable
 
     """
     _mappings = {

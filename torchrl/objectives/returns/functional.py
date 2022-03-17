@@ -38,9 +38,7 @@ def generalized_advantage_estimate(
             + (gamma * next_state_value[:, t] * not_done[:, t])
             - state_value[:, t]
         )
-        advantage[:, t] = delta + (
-            gamma * lamda * advantage[:, t + 1] * not_done[:, t]
-        )
+        advantage[:, t] = delta + (gamma * lamda * advantage[:, t + 1] * not_done[:, t])
 
     value_target = advantage[:, :time_steps] + state_value
 

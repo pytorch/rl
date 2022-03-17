@@ -2,20 +2,16 @@ import os
 from collections import defaultdict
 
 import pytest
-import torch
-
-from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.envs import GymEnv
-from torchrl.envs.libs.gym import _has_gym, _get_envs as _get_envs_gym
-
 import yaml
+from torchrl.envs import GymEnv
+from torchrl.envs.libs.gym import _has_gym
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
     with open(os.path.join(this_dir, "configs", "atari.yaml"), "r") as file:
         atari_confs = yaml.load(file, Loader=yaml.FullLoader)
     _atari_found = True
-except:
+except FileNotFoundError:
     _atari_found = False
     atari_confs = defaultdict(lambda: "")
 

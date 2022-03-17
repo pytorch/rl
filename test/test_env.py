@@ -7,7 +7,6 @@ import pytest
 import torch
 import yaml
 from scipy.stats import chisquare
-
 from torchrl.agents import EnvCreator
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
@@ -16,15 +15,13 @@ from torchrl.data.tensor_specs import (
     NdBoundedTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
-from torchrl.data.transforms import (
+from torchrl.envs import gym, GymEnv
+from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
     ToTensorImage,
     RewardClipping,
 )
-from torchrl.data.transforms.transforms import DiscreteActionProjection
-from torchrl.envs import gym, GymEnv
-from torchrl.envs.libs.gym import _get_envs as _get_gym_envs
 from torchrl.envs.utils import step_tensor_dict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 
@@ -33,9 +30,10 @@ try:
     with open(os.path.join(this_dir, "configs", "atari.yaml"), "r") as file:
         atari_confs = yaml.load(file, Loader=yaml.FullLoader)
     _atari_found = True
-except:
+except FileNotFoundError:
     _atari_found = False
     atari_confs = defaultdict(lambda: "")
+
 
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
 ## the serial and parallel batched envs
@@ -163,7 +161,7 @@ def _make_envs(env_name, frame_skip, transformed, N):
 @pytest.mark.parametrize("env_name", ["Pong-v4", "Pendulum-v1"])
 @pytest.mark.parametrize("frame_skip", [4, 1])
 @pytest.mark.parametrize("transformed", [True, False])
-def test_parallel_env(env_name, frame_skip, transformed, T = 10, N = 5):
+def test_parallel_env(env_name, frame_skip, transformed, T=10, N=5):
     env_parallel, env_serial, env0 = _make_envs(env_name, frame_skip, transformed, N)
 
     td = TensorDict(
@@ -191,7 +189,6 @@ def test_parallel_env(env_name, frame_skip, transformed, T = 10, N = 5):
         ],
     )
     env_parallel.reset(tensor_dict=td_reset)
-
 
     td = env_parallel.rollout(policy=None, n_steps=T)
     assert (

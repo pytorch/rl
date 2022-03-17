@@ -40,9 +40,9 @@ def _getitem_batch_size(
         items = (items,)
     bs = []
     iter_bs = iter(shape)
-    if all(isinstance(_item, torch.Tensor) for _item in items) and len(
-        items
-    ) == len(shape):
+    if all(isinstance(_item, torch.Tensor) for _item in items) and len(items) == len(
+        shape
+    ):
         shape0 = items[0].shape
         for _item in items[1:]:
             if _item.shape != shape0:

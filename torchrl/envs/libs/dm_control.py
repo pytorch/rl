@@ -9,13 +9,12 @@ from torchrl.data import (
     NdUnboundedContinuousTensorSpec,
     TensorSpec,
 )
-from ..common import GymLikeEnv
 from ...data.utils import numpy_to_torch_dtype_dict
+from ..common import GymLikeEnv
 
 try:
     import collections
 
-    import dm_control
     import dm_env
     from dm_control import suite
     from dm_control.suite.wrappers import pixels
@@ -23,7 +22,7 @@ try:
     _has_dmc = True
     __all__ = ["DMControlEnv"]
 
-except:
+except ImportError:
     _has_dmc = False
     __all__ = []
 
@@ -33,8 +32,7 @@ def _dmcontrol_to_torchrl_spec_transform(
 ) -> TensorSpec:
     if isinstance(spec, collections.OrderedDict):
         spec = {
-            k: _dmcontrol_to_torchrl_spec_transform(item)
-            for k, item in spec.items()
+            k: _dmcontrol_to_torchrl_spec_transform(item) for k, item in spec.items()
         }
         return CompositeSpec(**spec)
     elif isinstance(spec, dm_env.specs.BoundedArray):
@@ -87,7 +85,8 @@ class DMControlEnv(GymLikeEnv):
         from_pixels (bool): if True, the observation
 
     Examples:
-        >>> env = DMControlEnv(envname="cheetah", taskname="run", from_pixels=True, frame_skip=4)
+        >>> env = DMControlEnv(envname="cheetah", taskname="run",
+        ...    from_pixels=True, frame_skip=4)
         >>> td = env.rand_step()
         >>> print(td)
         >>> print(env.available_envs)
@@ -109,8 +108,9 @@ class DMControlEnv(GymLikeEnv):
     ):
         if not _has_dmc:
             raise RuntimeError(
-                f"dm_control not found, unable to create {envname}: {taskname}. \
-            Consider downloading and installing dm_control from {self.git_url}"
+                f"dm_control not found, unable to create {envname}:"
+                f" {taskname}. Consider downloading and installing "
+                f"dm_control from {self.git_url}"
             )
         self.from_pixels = from_pixels
         self.pixels_only = pixels_only
@@ -159,9 +159,7 @@ class DMControlEnv(GymLikeEnv):
 
     @property
     def observation_spec(self) -> TensorSpec:
-        return _dmcontrol_to_torchrl_spec_transform(
-            self._env.observation_spec()
-        )
+        return _dmcontrol_to_torchrl_spec_transform(self._env.observation_spec())
 
     @property
     def reward_spec(self) -> TensorSpec:
