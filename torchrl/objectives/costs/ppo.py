@@ -79,7 +79,7 @@ class PPOLoss(_LossModule):
     def get_entropy_bonus(self, dist: Optional[d.Distribution] = None) -> torch.Tensor:
         try:
             entropy = dist.entropy()
-        except AttributeError:
+        except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
             entropy = -dist.log_prob(x)
         return entropy.unsqueeze(-1)
