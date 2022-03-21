@@ -1,11 +1,10 @@
-import configargparse
 import os
-import torch.distributed.rpc as rpc
-import torch
-from torchrl.data.tensordict import MemmapTensor
 import time
-import timeit
-from torch import multiprocessing as mp
+
+import configargparse
+import torch
+import torch.distributed.rpc as rpc
+from torchrl.data.tensordict import MemmapTensor
 
 parser = configargparse.ArgumentParser()
 parser.add_argument("--rank", default=-1, type=int)

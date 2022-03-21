@@ -1,39 +1,56 @@
 import uuid
 from datetime import datetime
 
-import configargparse
+try:
+    import configargparse as argparse
+
+    _configargparse = True
+except ImportError:
+    import argparse
+
+    _configargparse = False
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
-
-from torchrl.agents.helpers.agents import parser_agent_args, make_agent
+from torchrl.agents.helpers.agents import make_agent, parser_agent_args
 from torchrl.agents.helpers.collectors import (
-    parser_collector_args_offline,
-    make_collector_offline,
+    make_collector_offpolicy,
+    parser_collector_args_offpolicy,
 )
 from torchrl.agents.helpers.envs import (
-    parser_env_args,
-    transformed_env_constructor,
-    parallel_env_constructor,
     correct_for_frame_skip,
     get_stats_random_rollout,
+    parallel_env_constructor,
+    parser_env_args,
+    transformed_env_constructor,
 )
-from torchrl.agents.helpers.losses import parser_loss_args, make_sac_loss
-from torchrl.agents.helpers.models import parser_model_args_continuous, make_sac_model
+from torchrl.agents.helpers.losses import make_sac_loss, parser_loss_args
+from torchrl.agents.helpers.models import (
+    make_sac_model,
+    parser_model_args_continuous,
+)
 from torchrl.agents.helpers.recorder import parser_recorder_args
-from torchrl.agents.helpers.replay_buffer import parser_replay_args, make_replay_buffer
-from torchrl.data.transforms import TransformedEnv, RewardScaling
+from torchrl.agents.helpers.replay_buffer import (
+    make_replay_buffer,
+    parser_replay_args,
+)
+from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 
 
 def make_args():
-    parser = configargparse.ArgumentParser()
-    parser.add_argument(
-        "-c", "--config", required=True, is_config_file=True, help="config file path"
-    )
+    parser = argparse.ArgumentParser()
+    if _configargparse:
+        parser.add_argument(
+            "-c",
+            "--config",
+            required=True,
+            is_config_file=True,
+            help="config file path",
+        )
     parser_agent_args(parser)
-    parser_collector_args_offline(parser)
+    parser_collector_args_offpolicy(parser)
     parser_env_args(parser)
-    parser_loss_args(parser)
+    parser_loss_args(parser, algorithm="SAC")
     parser_model_args_continuous(parser, "SAC")
     parser_recorder_args(parser)
     parser_replay_args(parser)
@@ -80,13 +97,13 @@ if __name__ == "__main__":
     proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
     model = make_sac_model(
         proof_env,
-        double_qvalue=args.double_qvalue,
         device=device,
         tanh_loc=args.tanh_loc,
         default_policy_scale=args.default_policy_scale,
         gSDE=args.gSDE,
     )
     loss_module, target_net_updater = make_sac_loss(model, args)
+
     actor_model_explore = model[0]
     if args.ou_exploration:
         actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
@@ -102,7 +119,7 @@ if __name__ == "__main__":
 
     create_env_fn = parallel_env_constructor(args=args, stats=stats)
 
-    collector = make_collector_offline(
+    collector = make_collector_offpolicy(
         make_env=create_env_fn,
         actor_model_explore=actor_model_explore,
         args=args,
@@ -111,7 +128,11 @@ if __name__ == "__main__":
     replay_buffer = make_replay_buffer(device, args)
 
     recorder = transformed_env_constructor(
-        args, video_tag=video_tag, norm_obs_only=True, stats=stats, writer=writer
+        args,
+        video_tag=video_tag,
+        norm_obs_only=True,
+        stats=stats,
+        writer=writer,
     )()
 
     # remove video recorder from recorder to have matching state_dict keys

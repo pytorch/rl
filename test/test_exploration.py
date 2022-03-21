@@ -4,12 +4,10 @@ import pytest
 import torch
 from scipy.stats import ttest_1samp
 from torch import nn
-
 from torchrl.data import NdBoundedTensorSpec
 from torchrl.data.tensordict.tensordict import TensorDict
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.distributions import TanhNormal
-from torchrl.modules.td_module import Actor
 from torchrl.modules.td_module.exploration import (
     _OrnsteinUhlenbeckProcess,
     OrnsteinUhlenbeckProcessWrapper,

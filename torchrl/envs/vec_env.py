@@ -3,14 +3,14 @@ from __future__ import annotations
 import os
 from collections import OrderedDict
 from multiprocessing import connection
-from typing import Callable, Iterable, Union, Optional
+from typing import Callable, Optional, Sequence, Union
 
 import torch
 from torch import multiprocessing as mp
 
 from torchrl.data import TensorDict, TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.data.utils import DEVICE_TYPING, CloudpickleWrapper
+from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvClass, make_tensor_dict
 
 __all__ = ["SerialEnv", "ParallelEnv"]
@@ -64,14 +64,14 @@ class _BatchedEnv(_EnvClass):
         self,
         num_workers: int,
         create_env_fn: Union[
-            Callable[[], _EnvClass], Iterable[Callable[[], _EnvClass]]
+            Callable[[], _EnvClass], Sequence[Callable[[], _EnvClass]]
         ],
-        create_env_kwargs: Union[dict, Iterable[dict]] = None,
+        create_env_kwargs: Union[dict, Sequence[dict]] = None,
         device: DEVICE_TYPING = "cpu",
-        action_keys: Optional[Iterable[str]] = None,
+        action_keys: Optional[Sequence[str]] = None,
         pin_memory: bool = False,
-        selected_keys: Optional[Iterable[str]] = None,
-        excluded_keys: Optional[Iterable[str]] = None,
+        selected_keys: Optional[Sequence[str]] = None,
+        excluded_keys: Optional[Sequence[str]] = None,
         share_individual_td: bool = False,
         shared_memory: bool = True,
         memmap: bool = False,
@@ -132,12 +132,7 @@ class _BatchedEnv(_EnvClass):
         self._is_done = value.all()
 
     def _create_td(self) -> None:
-        """
-        Creates self.shared_tensor_dict_parent, a TensorDict used to store the most recent observations.
-
-        Returns: None
-
-        """
+        """Creates self.shared_tensor_dict_parent, a TensorDict used to store the most recent observations."""
         shared_tensor_dict_parent = make_tensor_dict(
             self._dummy_env,
             None,
@@ -209,12 +204,7 @@ class _BatchedEnv(_EnvClass):
                 )
 
     def _start_workers(self) -> None:
-        """
-        Starts the various envs.
-
-        Returns: None
-
-        """
+        """Starts the various envs."""
         raise NotImplementedError
 
     def __repr__(self) -> str:

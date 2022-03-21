@@ -1,36 +1,35 @@
-from argparse import Namespace, ArgumentParser
-from typing import Optional, Callable, Union
+from argparse import ArgumentParser, Namespace
+from typing import Callable, Optional, Union
 
 import torch
-from torch.utils.tensorboard import SummaryWriter
 
 from torchrl.agents.env_creator import env_creator, EnvCreator
-from torchrl.data.transforms import (
+from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
+from torchrl.envs.common import _EnvClass
+from torchrl.envs.transforms import (
+    CatFrames,
+    CatTensors,
+    Compose,
     DoubleToFloat,
-    TransformedEnv,
     FiniteTensorDictCheck,
+    GrayScale,
+    NoopResetEnv,
+    ObservationNorm,
+    Resize,
     RewardScaling,
     ToTensorImage,
-    Resize,
-    GrayScale,
-    CatFrames,
-    ObservationNorm,
-    CatTensors,
+    TransformedEnv,
     VecNorm,
-    Compose,
-    NoopResetEnv,
 )
 from torchrl.data.transforms.transforms import gSDE
-from torchrl.envs import GymEnv, RetroEnv, DMControlEnv, ParallelEnv
-from torchrl.envs.common import _EnvClass
-from torchrl.record.recorder import VideoRecorder, TensorDictRecorder
+from torchrl.record.recorder import VideoRecorder
 
 __all__ = [
     "correct_for_frame_skip",
     "transformed_env_constructor",
     "parallel_env_constructor",
-    "parser_env_args",
     "get_stats_random_rollout",
+    "parser_env_args",
 ]
 
 LIBS = {
@@ -50,12 +49,13 @@ def correct_for_frame_skip(args: Namespace) -> Namespace:
     Args:
         args (argparse.Namespace): Namespace containing some frame-counting argument, including:
             "max_frames_per_traj", "total_frames", "frames_per_batch", "record_frames", "annealing_frames",
-                  "init_random_frames", "init_env_steps"
+            "init_random_frames", "init_env_steps"
 
-    Returns: the input Namespace, modified in-place.
+    Returns:
+         the input Namespace, modified in-place.
 
     """
-    ## Adapt all frame counts wrt frame_skip
+    # Adapt all frame counts wrt frame_skip
     if args.frame_skip != 1:
         fields = [
             "max_frames_per_traj",
@@ -76,15 +76,26 @@ def correct_for_frame_skip(args: Namespace) -> Namespace:
 def transformed_env_constructor(
     args: Namespace,
     video_tag: str = "",
-    writer: Optional[SummaryWriter] = None,
+    writer: Optional["SummaryWriter"] = None,
     stats: Optional[dict] = None,
     norm_obs_only: bool = False,
     use_env_creator: bool = True,
 ) -> Union[Callable, EnvCreator]:
+    """
+    Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
 
-    # fill gaps
-    if not hasattr(args, 'gSDE'):
-        args.gSDE = False
+    Args:
+        args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
+        video_tag (str, optional): video tag to be passed to the SummaryWriter object
+        writer (SummaryWriter, optional): tensorboard writer associated with the script
+        stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
+        norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
+            Default is `False`.
+        use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,
+            one can make sure that running statistics will be put in shared memory and accessible for all workers
+            when using a `VecNorm` transform. Default is `True`.
+
+    """
 
     def make_transformed_env() -> TransformedEnv:
         env_name = args.env_name
@@ -109,7 +120,6 @@ def transformed_env_constructor(
         env = env_library(**env_kwargs)
         keys = env.reset().keys()
         transforms = []
-
 
         if args.noops:
             transforms += [NoopResetEnv(env, args.noops)]
@@ -181,8 +191,6 @@ def transformed_env_constructor(
                 *transforms,
             ]
         transforms.append(FiniteTensorDictCheck())
-
-
         env = TransformedEnv(
             env,
             Compose(*transforms),
@@ -195,6 +203,12 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(args: Namespace, **kwargs) -> EnvCreator:
+    """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
+
+    Args:
+        args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
+        kwargs: keyword arguments for the `transformed_env_constructor` method.
+    """
     kwargs.update({"args": args, "use_env_creator": True})
     make_transformed_env = transformed_env_constructor(**kwargs)
     env = ParallelEnv(
@@ -227,7 +241,11 @@ def get_stats_random_rollout(args: Namespace, proof_environment: _EnvClass):
 
 def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
     """
-    To be used for DDPG, SAC
+    Populates the argument parser to build an environment constructor.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+
     """
 
     parser.add_argument(

@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 import torch
 from torch import multiprocessing as mp
-
 from torchrl.data import TensorDict, SavedTensorDict
 from torchrl.data.tensordict.tensordict import LazyStackedTensorDict, assert_allclose_td
 from torchrl.data.tensordict.utils import _getitem_batch_size
@@ -46,10 +45,6 @@ def test_stack():
     td_reconstruct = torch.stack(td_list, 0)
     assert td_reconstruct.batch_size == td.batch_size
     assert (td_reconstruct == td).all()
-
-
-def test_del():
-    raise NotImplementedError
 
 
 def test_tensor_dict_indexing():
@@ -254,10 +249,6 @@ def test_savedtensordict():
     torch.testing.assert_allclose(ss[1].get("a"), ss.get("a")[1])
 
 
-def test_merge():
-    raise NotImplementedError
-
-
 class TestTensorDicts:
     @property
     def td(self):
@@ -454,7 +445,7 @@ class TestTensorDicts:
     @pytest.mark.parametrize(
         "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
     )
-    def test_cpu_cuda(self, td_name, device):
+    def test_cpu_cuda(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
         td_device = td.cuda()
@@ -797,7 +788,7 @@ def test_stack_keys():
     )
     td = torch.stack([td1, td2], 0)
     assert "a" in td.keys()
-    assert not "b" in td.keys()
+    assert "b" not in td.keys()
     assert "b" in td[1].keys()
     td.set("b", torch.randn(2, 10), inplace=False)  # overwrites
     with pytest.raises(KeyError):

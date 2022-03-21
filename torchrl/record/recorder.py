@@ -1,10 +1,7 @@
-from typing import Optional, Iterable
+from typing import Optional, Sequence
 
 import torch
-from torch.utils.tensorboard import SummaryWriter
-
-from torchrl.data import TensorDict
-from torchrl.data.transforms import Transform, ObservationTransform
+from torchrl.envs.transforms import ObservationTransform, Transform
 
 __all__ = ["VideoRecorder", "TensorDictRecorder"]
 
@@ -12,25 +9,27 @@ __all__ = ["VideoRecorder", "TensorDictRecorder"]
 class VideoRecorder(ObservationTransform):
     """
     Video Recorder transform.
-    Will record a series of observations from an environment and write them to a TensorBoard SummaryWriter object when needed.
+    Will record a series of observations from an environment and write them
+    to a TensorBoard SummaryWriter object when needed.
 
     Args:
-        writer (SummaryWriter): a tb.SummaryWriter instance where the video should be written.
+        writer (SummaryWriter): a tb.SummaryWriter instance where the video
+            should be written.
         tag (str): the video tag in the writer.
-        keys (Iterable[str], optional): keys to be read to produce the video.
-            default: next_observation_pixels.
+        keys (Sequence[str], optional): keys to be read to produce the video.
+            Default is `"next_observation_pixels"`.
         skip (int): frame interval in the output video.
-            default: 2
+            Default is 2.
     """
 
     def __init__(
         self,
-        writer: SummaryWriter,
+        writer: "SummaryWriter",
         tag: str,
-        keys: Optional[Iterable[str]] = None,
+        keys: Optional[Sequence[str]] = None,
         skip: int = 2,
         **kwargs,
-    ):
+    ) -> None:
         if keys is None:
             keys = ["next_observation_pixels"]
 
@@ -45,8 +44,8 @@ class VideoRecorder(ObservationTransform):
         self.count = 0
         self.obs = []
         try:
-            import moviepy
-        except:
+            import moviepy  # noqa
+        except ImportError:
             raise Exception("moviepy not found, VideoRecorder cannot be created")
 
     def _apply(self, observation: torch.Tensor) -> torch.Tensor:
@@ -73,12 +72,7 @@ class VideoRecorder(ObservationTransform):
         return observation
 
     def dump(self) -> None:
-        """
-        Writes the video to the self.writer attribute.
-
-        Returns: None
-
-        """
+        """Writes the video to the self.writer attribute."""
         self.writer.add_video(
             tag=f"{self.tag}",
             vid_tensor=torch.stack(self.obs, 0).unsqueeze(0),
@@ -111,8 +105,8 @@ class TensorDictRecorder(Transform):
         out_file_base: str,
         skip_reset: bool = True,
         skip: int = 4,
-        keys: Optional[Iterable[str]] = None,
-    ):
+        keys: Optional[Sequence[str]] = None,
+    ) -> None:
         if keys is None:
             keys = []
 
@@ -124,7 +118,7 @@ class TensorDictRecorder(Transform):
         self.skip = skip
         self.count = 0
 
-    def _call(self, td: TensorDict):
+    def _call(self, td: _TensorDict) -> _TensorDict:
         self.count += 1
         if self.count % self.skip == 0:
             _td = td
@@ -133,12 +127,13 @@ class TensorDictRecorder(Transform):
             self.td.append(_td)
         return td
 
-    def dump(self):
+    def dump(self) -> None:
         td = self.td
         if self.skip_reset:
             td = td[1:]
         torch.save(
-            torch.stack(td, 0).contiguous(), f"{self.out_file_base}_tensor_dict.t"
+            torch.stack(td, 0).contiguous(),
+            f"{self.out_file_base}_tensor_dict.t",
         )
         self.iter += 1
         self.count = 0

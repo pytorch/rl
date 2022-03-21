@@ -1,17 +1,18 @@
 import math
-from copy import deepcopy
 from numbers import Number
-from typing import Tuple, Optional, Iterator, Union
+from typing import Tuple, Union
 
 import numpy as np
 import torch
 from torch import Tensor
-from torch.nn import Parameter
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.modules import ProbabilisticTDModule, Actor, reset_noise
-from torchrl.modules.td_module.actors import ActorCriticWrapper
-from torchrl.objectives.costs.utils import hold_out_net, next_state_value, distance_loss
+from torchrl.modules import TDModule
+from torchrl.modules.td_module.actors import (
+    ActorCriticWrapper,
+    ProbabilisticActor,
+)
+from torchrl.objectives.costs.utils import distance_loss, next_state_value
 from .common import _LossModule
 
 __all__ = ["SACLoss", "DoubleSACLoss"]
@@ -23,110 +24,117 @@ class SACLoss(_LossModule):
     Reinforcement Learning with a Stochastic Actor" https://arxiv.org/pdf/1801.01290.pdf
 
     Args:
-        actor_network (Actor): stochastic actor
-        qvalue_network (ProbabilisticTDModule): Q(s, a) parametric model
-        value_network (ProbabilisticTDModule): V(s) parametric model\
-        qvalue_network_bis (ProbabilisticTDModule, optional): if required, the Q-value can be computed twice
-            independently using two separate networks. The minimum predicted value will then be used for inference.
+        actor_network (ProbabilisticActor): stochastic actor
+        qvalue_network (TDModule): Q(s, a) parametric model
+        value_network (TDModule): V(s) parametric model\
+        qvalue_network_bis (ProbabilisticTDModule, optional): if required, the
+            Q-value can be computed twice independently using two separate
+            networks. The minimum predicted value will then be used for
+            inference.
         gamma (number, optional): discount for return computation
-            default: 0.99
-        priority_key (str, optional): tensordict key where to write the priority (for prioritized replay buffer usage).
-            default: td_error
-        loss_function (str, optional): loss function to be used with the value function loss.
-            default: "smooth_l1"
-        alpha_init (Number, optional): initial entropy multiplier.
-            default: 1.0
-        fixed_alpha (bool, optional): if True, alpha will be fixed to its initial value. Otherwise, alpha will be optimized to
+            Default is 0.99
+        priority_key (str, optional): tensordict key where to write the
+            priority (for prioritized replay buffer usage). Default is
+            `"td_error"`.
+        loss_function (str, optional): loss function to be used with
+            the value function loss. Default is `"smooth_l1"`.
+        alpha_init (float, optional): initial entropy multiplier.
+            Default is 1.0.
+        fixed_alpha (bool, optional): if True, alpha will be fixed to its
+            initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
-            default: False
-        target_entropy (Number or str, optional):
-            default: "auto", where target entropy is computed as
+            Default is `False`.
+        target_entropy (float or str, optional): Target entropy for the
+            stochastic policy. Default is "auto", where target entropy is
+            computed as `-prod(n_actions)`.
     """
+
+    delay_actor: bool = False
+    delay_qvalue: bool = False
+    delay_value: bool = False
 
     def __init__(
         self,
-        actor_network: Actor,
-        qvalue_network: ProbabilisticTDModule,
-        value_network: ProbabilisticTDModule,
-        qvalue_network_bis: Optional[ProbabilisticTDModule] = None,
+        actor_network: ProbabilisticActor,
+        qvalue_network: TDModule,
+        value_network: TDModule,
+        num_qvalue_nets: int = 2,
         gamma: Number = 0.99,
         priotity_key: str = "td_error",
         loss_function: str = "smooth_l1",
-        alpha_init: Number = 1.0,
+        alpha_init: float = 1.0,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, Number] = "auto",
+        target_entropy: Union[str, float] = "auto",
     ) -> None:
         super().__init__()
-        self.actor_network = actor_network
-        self.qvalue_network = qvalue_network
-        self.value_network = value_network
-        self.qvalue_network_bis = qvalue_network_bis
+
+        # Actor
+        self.convert_to_functional(
+            actor_network,
+            "actor_network",
+            create_target_params=self.delay_actor,
+        )
+
+        # Value
+        self.convert_to_functional(
+            value_network,
+            "value_network",
+            create_target_params=self.delay_value,
+        )
+
+        # Q value
+        self.num_qvalue_nets = num_qvalue_nets
+        self.convert_to_functional(
+            qvalue_network,
+            "qvalue_network",
+            num_qvalue_nets,
+            create_target_params=self.delay_qvalue,
+        )
+
         self.gamma = gamma
         self.priority_key = priotity_key
         self.loss_function = loss_function
         self.register_buffer("alpha_init", torch.tensor(alpha_init))
         self.fixed_alpha = fixed_alpha
+        try:
+            device = next(self.parameters()).device
+        except AttributeError:
+            device = torch.device("cpu")
         if fixed_alpha:
-            self.register_buffer("log_alpha", torch.tensor(math.log(alpha_init)))
+            self.register_buffer(
+                "log_alpha", torch.tensor(math.log(alpha_init), device=device)
+            )
         else:
             self.register_parameter(
-                "log_alpha", torch.nn.Parameter(torch.tensor(math.log(alpha_init)))
+                "log_alpha",
+                torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
             )
 
         if target_entropy == "auto":
             target_entropy = -float(np.prod(actor_network.spec.shape))
-        self.register_buffer("target_entropy", torch.tensor(target_entropy))
-
-    def parameters(self, recurse: bool = False) -> Iterator[Parameter]:
-        for p in self.actor_network.parameters():
-            yield p
-        for p in self.qvalue_network.parameters():
-            yield p
-        if self.qvalue_network_bis is not None:
-            for p in self.qvalue_network_bis.parameters():
-                yield p
-        for p in self.value_network.parameters():
-            yield p
-        if not self.fixed_alpha:
-            yield self.log_alpha
-
-    def named_parameters(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, Parameter]]:
-        _valid = set(self.parameters())
-        for name, param in super().named_parameters():
-            if param in _valid:
-                yield name, param
-
-    @property
-    def target_value_network(self):
-        return self.value_network
-
-    @property
-    def target_qvalue_network(self):
-        return self.qvalue_network
-
-    @property
-    def target_qvalue_network_bis(self):
-        return self.qvalue_network_bis
-
-    @property
-    def target_actor_network(self):
-        return self.actor_network
+        self.register_buffer(
+            "target_entropy", torch.tensor(target_entropy, device=device)
+        )
 
     @property
     def device(self) -> torch.device:
-        for p in self.actor_network.parameters():
+        for p in self.actor_network_params:
             return p.device
-        for p in self.qvalue_network.parameters():
+        for p in self.qvalue_network_params:
             return p.device
-        for p in self.value_network.parameters():
+        for p in self.value_network_params:
             return p.device
         raise RuntimeError(
-            "At least one of the networks of SACLoss must have trainable parameters."
+            "At least one of the networks of SACLoss must have trainable " "parameters."
         )
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
+        if tensordict.ndimension() > 1:
+            tensordict = tensordict.view(
+                -1
+            )  # with view, in-place modifications of the view will impact the
+            # original tensordict
+
         device = self.device
         td_device = tensordict.to(device)
 
@@ -155,27 +163,24 @@ class SACLoss(_LossModule):
 
     def _loss_actor(self, tensordict: _TensorDict) -> Tensor:
         # KL lossa
-        dist = self.actor_network.get_dist(tensordict)[0]
+        dist = self.actor_network.get_dist(
+            tensordict,
+            params=list(self.actor_network_params),
+            buffers=list(self.actor_network_buffers),
+        )[0]
         a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
 
-        ## TODO: assess if copmuting the q value using no_grad and writing a custom autograd.Function operator
-        # works faster
-        if self.target_qvalue_network_bis is not None:
-            qval_nets = (self.target_qvalue_network_bis, self.target_qvalue_network)
-        else:
-            qval_nets = (self.target_qvalue_network,)
+        td_q = tensordict.select(*self.qvalue_network.in_keys)
+        td_q.set("action", a_reparm, inplace=False)
+        td_q = self.qvalue_network(
+            td_q,
+            params=list(self.target_qvalue_network_params),
+            buffers=list(self.qvalue_network_buffers),
+            vmap=True,
+        )
+        min_q_logprob = td_q.get("state_action_value").min(0)[0].squeeze(-1)
 
-        min_q_logprob = []
-        for qval_net in qval_nets:
-            with hold_out_net(qval_net):
-                td_q = tensordict.select(*self.qvalue_network.in_keys)
-                td_q.set("action", a_reparm, inplace=False)
-                min_q_logprob.append(
-                    qval_net(td_q).get("state_action_value").squeeze(-1)
-                )
-
-        min_q_logprob = torch.stack(min_q_logprob, 0).min(dim=0)[0]
         if log_prob.shape != min_q_logprob.shape:
             raise RuntimeError(
                 f"Losses shape mismatch: {log_prob.shape} and {min_q_logprob.shape}"
@@ -186,71 +191,94 @@ class SACLoss(_LossModule):
         return self._alpha * log_prob - min_q_logprob
 
     def _loss_qvalue(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
-        actor_critic = ActorCriticWrapper(
-            self.target_actor_network, self.target_value_network
+        actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
+        params = list(self.target_actor_network_params) + list(
+            self.target_value_network_params
+        )
+        buffers = list(self.target_actor_network_buffers) + list(
+            self.target_value_network_buffers
         )
         target_value = next_state_value(
-            tensordict, actor_critic, gamma=self.gamma, next_val_key="state_value"
+            tensordict,
+            actor_critic,
+            gamma=self.gamma,
+            next_val_key="state_value",
+            params=params,
+            buffers=buffers,
         )
 
         # value loss
-        if self.qvalue_network_bis is not None:
-            nets = (self.qvalue_network_bis, self.qvalue_network)
-        else:
-            nets = (self.qvalue_network,)
+        qvalue_network = self.qvalue_network
 
         # Q-nets must be trained independently: as such, we split the data in 2 if required and train each q-net on
         # one half of the data.
-        tensordict_chunks = tensordict.chunk(len(nets), dim=0)
-        target_chunks = target_value.chunk(len(nets), dim=0)
-        loss_value = []
-        priority_value = []
-        for _td, _target, _net in zip(tensordict_chunks, target_chunks, nets):
-            td_copy = _td.select(*_net.in_keys).detach()
-            _net(td_copy)
-            pred_val = td_copy.get("state_action_value").squeeze(-1)
-            loss_value.append(
-                distance_loss(pred_val, _target, loss_function=self.loss_function)
+        shape = tensordict.shape
+        if shape[0] % self.num_qvalue_nets != 0:
+            raise RuntimeError(
+                f"Batch size={tensordict.shape} is incompatible "
+                f"with num_qvqlue_nets={self.num_qvalue_nets}."
             )
-            priority_value.append(abs(pred_val - _target))
+        tensordict_chunks = torch.stack(
+            tensordict.chunk(self.num_qvalue_nets, dim=0), 0
+        )
+        target_chunks = torch.stack(target_value.chunk(self.num_qvalue_nets, dim=0), 0)
 
-        loss_value = torch.cat(loss_value, 0)
-        priority_value = torch.cat(priority_value, 0)
+        # if vmap=True, it is assumed that the input tensordict must be cast to the param shape
+        tensordict_chunks = qvalue_network(
+            tensordict_chunks,
+            params=list(self.qvalue_network_params),
+            buffers=list(self.qvalue_network_buffers),
+            vmap=(
+                0,
+                0,
+                0,
+                0,
+            ),
+        )
+        pred_val = tensordict_chunks.get("state_action_value").squeeze(-1)
+        loss_value = distance_loss(
+            pred_val, target_chunks, loss_function=self.loss_function
+        ).view(*shape)
+        priority_value = torch.cat(abs(pred_val - target_chunks).unbind(0), 0)
 
         return loss_value, priority_value
 
     def _loss_value(self, tensordict: _TensorDict) -> Tensor:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys).detach()
-        self.value_network(td_copy)
+        self.value_network(
+            td_copy,
+            params=list(self.value_network_params),
+            buffers=list(self.value_network_buffers),
+        )
         pred_val = td_copy.get("state_value").squeeze(-1)
 
-        with hold_out_net(self.target_actor_network):
-            action_dist = self.target_actor_network.get_dist(td_copy)[
-                0
-            ]  # resample an action
-            action = action_dist.rsample()
-            td_copy.set("action", action, inplace=False)
+        action_dist = self.actor_network.get_dist(
+            td_copy,
+            params=list(self.target_actor_network_params),
+            buffers=list(self.target_actor_network_buffers),
+        )[
+            0
+        ]  # resample an action
+        action = action_dist.rsample()
+        td_copy.set("action", action, inplace=False)
 
-            if self.target_qvalue_network_bis is not None:
-                qval_nets = (self.target_qvalue_network_bis, self.target_qvalue_network)
-            else:
-                qval_nets = (self.target_qvalue_network,)
+        qval_net = self.qvalue_network
+        td_copy = qval_net(
+            td_copy,
+            params=list(self.target_qvalue_network_params),
+            buffers=list(self.target_qvalue_network_buffers),
+            vmap=True,
+        )
 
-            min_qval = []
-            for qval_net in qval_nets:
-                with hold_out_net(qval_net):
-                    min_qval.append(
-                        qval_net(td_copy).get("state_action_value").squeeze(-1)
-                    )
-            min_qval = torch.stack(min_qval, 0).min(dim=0)[0]
+        min_qval = td_copy.get("state_action_value").squeeze(-1).min(0)[0]
 
-            log_p = action_dist.log_prob(action)
-            if log_p.shape != min_qval.shape:
-                raise RuntimeError(
-                    f"Losses shape mismatch: {min_qval.shape} and {log_p.shape}"
-                )
-            target_val = min_qval - self._alpha * log_p
+        log_p = action_dist.log_prob(action)
+        if log_p.shape != min_qval.shape:
+            raise RuntimeError(
+                f"Losses shape mismatch: {min_qval.shape} and {log_p.shape}"
+            )
+        target_val = min_qval - self._alpha * log_p
 
         loss_value = distance_loss(
             pred_val, target_val, loss_function=self.loss_function
@@ -287,37 +315,7 @@ class DoubleSACLoss(SACLoss):
     """
 
     def __init__(self, *args, delay_actor=False, delay_qvalue=False, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.delay_qvalue = delay_qvalue
-        if delay_qvalue:
-            self._target_qvalue_network = deepcopy(self.qvalue_network)
-            self._target_qvalue_network.requires_grad_(False)
-            if self.qvalue_network_bis is not None:
-                raise RuntimeError(
-                    "qvalue_network_bis must be None if a separate qvalue target network has to be used"
-                )
-        self._target_value_network = deepcopy(self.value_network)
-        self._target_value_network.requires_grad_(False)
         self.delay_actor = delay_actor
-        if delay_actor:
-            self._target_actor_network = deepcopy(self.actor_network)
-            self._target_actor_network.requires_grad_(False)
-
-    @property
-    def target_value_network(self):
-        self._target_value_network.apply(reset_noise)
-        return self._target_value_network
-
-    @property
-    def target_qvalue_network(self):
-        if self.delay_qvalue:
-            self._target_qvalue_network.apply(reset_noise)
-            return self._target_qvalue_network
-        return self.qvalue_network
-
-    @property
-    def target_actor_network(self):
-        if self.delay_actor:
-            self._target_actor_network.apply(reset_noise)
-            return self._target_actor_network
-        return self.actor_network
+        self.delay_qvalue = delay_qvalue
+        self.delay_value = True
+        super().__init__(*args, **kwargs)

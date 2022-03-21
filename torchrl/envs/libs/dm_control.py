@@ -1,31 +1,30 @@
-from numbers import Number
-from typing import Tuple, Optional, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
 
 from torchrl.data import (
-    TensorSpec,
     CompositeSpec,
-    NdUnboundedContinuousTensorSpec,
     NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
+    TensorSpec,
 )
-from ..common import GymLikeEnv
 from ...data.utils import numpy_to_torch_dtype_dict
+from ..common import GymLikeEnv
 
 try:
-    import dm_control
-except ImportError:
-    _has_dmc = False
-else:
-    from dm_control.suite.wrappers import pixels
-    from dm_control import suite
-    import dm_env
     import collections
 
-    _has_dmc = True
+    import dm_env
+    from dm_control import suite
+    from dm_control.suite.wrappers import pixels
 
-__all__ = ["DMControlEnv"]
+    _has_dmc = True
+    __all__ = ["DMControlEnv"]
+
+except ImportError:
+    _has_dmc = False
+    __all__ = []
 
 
 def _dmcontrol_to_torchrl_spec_transform(
@@ -40,7 +39,10 @@ def _dmcontrol_to_torchrl_spec_transform(
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return NdBoundedTensorSpec(
-            shape=spec.shape, minimum=spec.minimum, maximum=spec.maximum, dtype=dtype
+            shape=spec.shape,
+            minimum=spec.minimum,
+            maximum=spec.maximum,
+            dtype=dtype,
         )
     elif isinstance(spec, dm_env.specs.Array):
         if dtype is None:
@@ -65,7 +67,7 @@ def _get_envs(to_dict: bool = True) -> dict:
     return d
 
 
-def _robust_to_tensor(array: Union[Number, np.ndarray]) -> torch.Tensor:
+def _robust_to_tensor(array: Union[float, np.ndarray]) -> torch.Tensor:
     if isinstance(array, np.ndarray):
         return torch.tensor(array.copy())
     else:
@@ -83,7 +85,8 @@ class DMControlEnv(GymLikeEnv):
         from_pixels (bool): if True, the observation
 
     Examples:
-        >>> env = DMControlEnv(envname="cheetah", taskname="run", from_pixels=True, frame_skip=4)
+        >>> env = DMControlEnv(envname="cheetah", taskname="run",
+        ...    from_pixels=True, frame_skip=4)
         >>> td = env.rand_step()
         >>> print(td)
         >>> print(env.available_envs)
@@ -105,8 +108,9 @@ class DMControlEnv(GymLikeEnv):
     ):
         if not _has_dmc:
             raise RuntimeError(
-                f"dm_control not found, unable to create {envname}: {taskname}. \
-            Consider downloading and installing dm_control from {self.git_url}"
+                f"dm_control not found, unable to create {envname}:"
+                f" {taskname}. Consider downloading and installing "
+                f"dm_control from {self.git_url}"
             )
         self.from_pixels = from_pixels
         self.pixels_only = pixels_only
@@ -120,7 +124,9 @@ class DMControlEnv(GymLikeEnv):
             if render_kwargs is not None:
                 self.render_kwargs.update(render_kwargs)
             env = pixels.Wrapper(
-                env, pixels_only=self.pixels_only, render_kwargs=self.render_kwargs
+                env,
+                pixels_only=self.pixels_only,
+                render_kwargs=self.render_kwargs,
             )
         self._env = env
         return env
@@ -137,8 +143,8 @@ class DMControlEnv(GymLikeEnv):
         return _seed
 
     def _output_transform(
-        self, timestep_tuple: Tuple[dm_env._environment.TimeStep]
-    ) -> Tuple[np.ndarray, Number, bool]:
+        self, timestep_tuple: Tuple["TimeStep"]
+    ) -> Tuple[np.ndarray, float, bool]:
         if type(timestep_tuple) is not tuple:
             timestep_tuple = (timestep_tuple,)
         reward = timestep_tuple[0].reward

@@ -1,4 +1,4 @@
-from typing import Optional, Union, Iterable
+from typing import Optional, Sequence, Union
 
 import torch
 from torch import distributions as D
@@ -8,7 +8,9 @@ __all__ = [
 ]
 
 
-def _treat_categorical_params(params: Optional[torch.Tensor] = None) -> torch.Tensor:
+def _treat_categorical_params(
+    params: Optional[torch.Tensor] = None,
+) -> Optional[torch.Tensor]:
     if params is None:
         return None
     if params.shape[-1] == 1:
@@ -25,10 +27,10 @@ def rand_one_hot(values: torch.Tensor, do_softmax: bool = True) -> torch.Tensor:
 
 
 class OneHotCategorical(D.Categorical):
-    """
-    One-hot categorical distribution.
+    """One-hot categorical distribution.
+
     This class behaves excacly as torch.distributions.Categorical except that it reads and produces one-hot encodings
-     of the discrete tensors.
+    of the discrete tensors.
 
     """
 
@@ -36,12 +38,11 @@ class OneHotCategorical(D.Categorical):
         self,
         logits: Optional[torch.Tensor] = None,
         probs: Optional[torch.Tensor] = None,
-        *args,
         **kwargs
-    ):
+    ) -> None:
         logits = _treat_categorical_params(logits)
         probs = _treat_categorical_params(probs)
-        return super().__init__(probs=probs, logits=logits, *args, **kwargs)
+        super().__init__(probs=probs, logits=logits, **kwargs)
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         return super().log_prob(value.argmax(dim=-1))
@@ -54,7 +55,7 @@ class OneHotCategorical(D.Categorical):
             return (self.probs == self.probs.max(-1, True)[0]).to(torch.long)
 
     def sample(
-        self, sample_shape: Union[torch.Size, Iterable] = torch.Size([])
+        self, sample_shape: Union[torch.Size, Sequence] = torch.Size([])
     ) -> torch.Tensor:
         out = super().sample(sample_shape=sample_shape)
         out = torch.nn.functional.one_hot(out).to(torch.long)

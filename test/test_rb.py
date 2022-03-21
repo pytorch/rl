@@ -3,9 +3,8 @@ import argparse
 import numpy as np
 import pytest
 import torch
-
 from torchrl.data import TensorDict
-from torchrl.data.replay_buffers import *
+from torchrl.data.replay_buffers import TensorDictPrioritizedReplayBuffer
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 
 

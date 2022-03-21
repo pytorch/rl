@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Union, Iterable
+from typing import Dict, Sequence, Union, Optional
 
 import numpy as np
 import torch
@@ -8,9 +8,10 @@ from torch.distributions import constraints
 
 from torchrl.modules.utils import mappings
 from .truncated_normal import TruncatedNormal as _TruncatedNormal
-from .utils import UNIFORM
 
 __all__ = ["NormalParamWrapper", "TanhNormal", "Delta", "TanhDelta", "TruncatedNormal"]
+
+D.Distribution.set_default_validate_args(False)
 
 
 class SafeTanhTransform(D.TanhTransform):
@@ -23,11 +24,11 @@ class SafeTanhTransform(D.TanhTransform):
 
     def _call(self, x: torch.Tensor) -> torch.Tensor:
         y = super()._call(x)
-        y = y.clamp(-1 + self.delta, 1 - self.delta)
+        y.data.clamp_(-1 + self.delta, 1 - self.delta)
         return y
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
-        y = y.clamp(-1 + self.delta, 1 - self.delta)
+        y.data.clamp_(-1 + self.delta, 1 - self.delta)
         x = super()._inverse(y)
         return x
 
@@ -63,26 +64,38 @@ class NormalParamWrapper(nn.Module):
 
 
 class TruncatedNormal(D.Independent):
-    """
-    Implements a Truncated Normal distribution with location scaling.
+    """Implements a Truncated Normal distribution with location scaling.
+
     Location scaling prevents the location to be "too far" from 0, which ultimately
     leads to numerically unstable samples and poor gradient computation (e.g. gradient explosion).
     In practice, the location is computed according to
-        loc = (loc / upscale).tanh() * upscale.
+
+        .. math::
+            loc = tanh(loc / upscale) * upscale.
+
     This behaviour can be disabled by switching off the tanh_loc parameter (see below).
 
 
     Args:
         loc (torch.Tensor): normal distribution location parameter
         scale (torch.Tensor): normal distribution sigma parameter (squared root of variance)
-        upscale (torch.Tensor or number): 'a' scaling factor in the formula:
-             loc = (loc / upscale).tanh() * upscale;
-        min (torch.Tensor or number): minimum value of the distribution. Default = -1.0;
-        max (torch.Tensor or number): maximum value of the distribution. Default = 1.0;
-        event_dims (int): number of dimensions describing the action.
-            default = 1;
-        tanh_loc (bool): if True, the above formula is used for the location scaling, otherwise the raw value is kept.
-            default: True;
+        upscale (torch.Tensor or number, optional): 'a' scaling factor in the formula:
+
+            .. math::
+                loc = tanh(loc / upscale) * upscale.
+
+            Default is 5.0
+
+        min (torch.Tensor or number, optional): minimum value of the distribution. Default = -1.0;
+        max (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
+        scale_mapping (str, optional): positive mapping function to be used with the std.
+            Default is "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
+            choices: "softplus", "exp", "relu", "biased_softplus_1";
+        event_dims (int, optional): number of dimensions describing the action.
+            Default is 1;
+        tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw value
+            is kept.
+            Default is `True`;
     """
 
     num_params = 2
@@ -96,50 +109,70 @@ class TruncatedNormal(D.Independent):
         self,
         loc: torch.Tensor,
         scale: torch.Tensor,
-        upscale: Union[torch.Tensor, Number] = 5.0,
-        min: Union[torch.Tensor, Number] = -1.0,
-        max: Union[torch.Tensor, Number] = 1.0,
+        upscale: Union[torch.Tensor, float] = 5.0,
+        min: Union[torch.Tensor, float] = -1.0,
+        max: Union[torch.Tensor, float] = 1.0,
         tanh_loc: bool = True,
     ):
-        err_msg = "TruncatedNormal max values must be strictly greater than min values"
+        err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
-            if not (max > min).all():
+            if not (max > min).all():  # type: ignore
                 raise RuntimeError(err_msg)
         elif isinstance(max, Number) and isinstance(min, Number):
             if not max > min:
                 raise RuntimeError(err_msg)
         else:
-            if not all(max > min):
+            if not all(max > min):  # type: ignore
                 raise RuntimeError(err_msg)
 
+        if isinstance(max, torch.Tensor):
+            self.non_trivial_max = (max != 1.0).any()
+        else:
+            self.non_trivial_max = max != 1.0
+
+        if isinstance(min, torch.Tensor):
+            self.non_trivial_min = (min != -1.0).any()
+        else:
+            self.non_trivial_min = min != -1.0
         self.tanh_loc = tanh_loc
-        if tanh_loc:
-            if (isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()) or (
-                not isinstance(upscale, torch.Tensor) and upscale != 1.0
-            ):
-                upscale = (
-                    upscale
-                    if not isinstance(upscale, torch.Tensor)
-                    else upscale.to(loc.device)
-                )
-            loc = loc / upscale
-            loc = loc.tanh() * upscale
 
-        if not isinstance(max, torch.Tensor):
-            max = torch.tensor(max)
-        if not isinstance(min, torch.Tensor):
-            min = torch.tensor(min)
-        max = max.to(loc.device)
-        min = min.to(loc.device)
-
-        loc = loc + (max - min) / 2 + min
-
-        self.upscale = upscale
-
-        base_dist = _TruncatedNormal(
-            loc, scale, min.expand_as(loc), max.expand_as(scale)
+        self.device = loc.device
+        self.upscale = (
+            upscale
+            if not isinstance(upscale, torch.Tensor)
+            else upscale.to(self.device)
         )
-        super().__init__(base_dist, 1, validate_args=False)
+
+        if isinstance(max, torch.Tensor):
+            max = max.to(self.device)
+        if isinstance(min, torch.Tensor):
+            min = min.to(self.device)
+        self.min = min
+        self.max = max
+        self.update(loc, scale)
+
+
+    def update(self, loc: torch.Tensor, scale: torch.Tensor) -> None:
+        if self.tanh_loc:
+            loc = (loc / self.upscale).tanh() * self.upscale
+        if self.non_trivial_max or self.non_trivial_min:
+            loc = loc + (self.max - self.min) / 2 + self.min
+        self.loc = loc
+        self.scale = scale
+
+        if (
+            hasattr(self, "base_dist")
+            and (self.base_dist.loc.shape == self.loc.shape)
+            and (self.base_dist.scale.shape == self.scale.shape)
+        ):
+            self.base_dist.loc = self.loc
+            self.base_dist.scale = self.scale
+
+        else:
+            base_dist = _TruncatedNormal(
+                loc, scale, self.min.expand_as(loc), self.max.expand_as(scale)
+            )
+            super().__init__(base_dist, 1, validate_args=False)
 
     @property
     def mode(self):
@@ -160,12 +193,15 @@ class TruncatedNormal(D.Independent):
 
 
 class TanhNormal(D.TransformedDistribution):
-    """
-    Implements a TanhNormal distribution with location scaling.
+    """Implements a TanhNormal distribution with location scaling.
+
     Location scaling prevents the location to be "too far" from 0 when a TanhTransform is applied, which ultimately
     leads to numerically unstable samples and poor gradient computation (e.g. gradient explosion).
     In practice, the location is computed according to
-        loc = (loc / upscale).tanh() * upscale.
+
+        .. math::
+            loc = tanh(loc / upscale) * upscale.
+
     This behaviour can be disabled by switching off the tanh_loc parameter (see below).
 
 
@@ -173,16 +209,19 @@ class TanhNormal(D.TransformedDistribution):
         loc (torch.Tensor): normal distribution location parameter
         scale (torch.Tensor): normal distribution sigma parameter (squared root of variance)
         upscale (torch.Tensor or number): 'a' scaling factor in the formula:
-             loc = (loc / upscale).tanh() * upscale;
-        min (torch.Tensor or number): minimum value of the distribution. Default = -1.0;
-        max (torch.Tensor or number): maximum value of the distribution. Default = 1.0;
-        scale_mapping (str): positive mapping function to be used with the std.
-            default = "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
+
+            .. math::
+                loc = tanh(loc / upscale) * upscale.
+
+        min (torch.Tensor or number, optional): minimum value of the distribution. Default is -1.0;
+        max (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
+        scale_mapping (str, optional): positive mapping function to be used with the std.
+            Default is "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
             choices: "softplus", "exp", "relu", "biased_softplus_1";
-        event_dims (int): number of dimensions describing the action.
-            default = 1;
-        tanh_loc (bool): if True, the above formula is used for the location scaling, otherwise the raw value is kept.
-            default: True;
+        event_dims (int, optional): number of dimensions describing the action.
+            Default is 1;
+        tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw
+            value is kept. Default is `True`;
     """
 
     arg_constraints = {
@@ -204,27 +243,34 @@ class TanhNormal(D.TransformedDistribution):
     ):
         err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
-            if not (max > min).all():
+            if not (max > min).all():  # type: ignore
                 raise RuntimeError(err_msg)
         elif isinstance(max, Number) and isinstance(min, Number):
             if not max > min:
                 raise RuntimeError(err_msg)
         else:
-            if not all(max > min):
+            if not all(max > min):  # type: ignore
                 raise RuntimeError(err_msg)
 
+        if isinstance(max, torch.Tensor):
+            self.non_trivial_max = (max != 1.0).any()
+        else:
+            self.non_trivial_max = max != 1.0
+
+        if isinstance(min, torch.Tensor):
+            self.non_trivial_min = (min != -1.0).any()
+        else:
+            self.non_trivial_min = min != -1.0
+
         self.tanh_loc = tanh_loc
-        if tanh_loc:
-            if (isinstance(upscale, torch.Tensor) and (upscale != 1.0).any()) or (
-                not isinstance(upscale, torch.Tensor) and upscale != 1.0
-            ):
-                upscale = (
-                    upscale
-                    if not isinstance(upscale, torch.Tensor)
-                    else upscale.to(loc.device)
-                )
-            loc = loc / upscale
-            loc = loc.tanh() * upscale
+        self._event_dims = event_dims
+
+        self.device = loc.device
+        self.upscale = (
+            upscale
+            if not isinstance(upscale, torch.Tensor)
+            else upscale.to(self.device)
+        )
 
         if isinstance(max, torch.Tensor):
             max = max.to(loc.device)
@@ -233,26 +279,37 @@ class TanhNormal(D.TransformedDistribution):
         self.min = min
         self.max = max
 
-        loc = loc + (max - min) / 2 + min
+        t = SafeTanhTransform()
+        if self.non_trivial_max or self.non_trivial_min:
+            t = D.ComposeTransform(
+                [
+                    t,
+                    D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                ]
+            )
+        self._t = t
 
+        self.update(loc, scale)
+
+    def update(self, loc: torch.Tensor, scale: torch.Tensor) -> None:
+        if self.tanh_loc:
+            loc = (loc / self.upscale).tanh() * self.upscale
+        if self.non_trivial_max or self.non_trivial_min:
+            loc = loc + (self.max - self.min) / 2 + self.min
         self.loc = loc
         self.scale = scale
-        self.upscale = upscale
 
-        t = SafeTanhTransform()
-        non_trivial_min = (isinstance(min, torch.Tensor) and (min != 1.0).any()) or (
-            not isinstance(min, torch.Tensor) and min != 1.0
-        )
-        non_trivial_max = (isinstance(max, torch.Tensor) and (max != 1.0).any()) or (
-            not isinstance(max, torch.Tensor) and max != 1.0
-        )
-        if non_trivial_max or non_trivial_min:
-            t = D.ComposeTransform(
-                [t, D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)]
-            )
-        base = D.Independent(D.Normal(self.loc, self.scale), event_dims)
+        if (
+            hasattr(self, "base_dist")
+            and (self.base_dist.base_dist.loc.shape == self.loc.shape)
+            and (self.base_dist.base_dist.scale.shape == self.scale.shape)
+        ):
+            self.base_dist.base_dist.loc = self.loc
+            self.base_dist.base_dist.scale = self.scale
 
-        super().__init__(base, t)
+        else:
+            base = D.Independent(D.Normal(self.loc, self.scale), self._event_dims)
+            super().__init__(base, self._t)
 
     @property
     def mode(self):
@@ -270,13 +327,11 @@ def uniform_sample_tanhnormal(dist: TanhNormal, size=torch.Size([])) -> torch.Te
         dist (TanhNormal): distribution defining the space where the sampling should occur.
         size (torch.Size): batch-size of the output tensor
 
-    Returns: a tensor sampled uniformly in the boundaries defined by the input distribution.
+    Returns:
+         a tensor sampled uniformly in the boundaries defined by the input distribution.
 
     """
     return torch.rand_like(dist.sample(size)) * (dist.max - dist.min) + dist.min
-
-
-UNIFORM[TanhNormal] = uniform_sample_tanhnormal
 
 
 class Delta(D.Distribution):
@@ -285,31 +340,35 @@ class Delta(D.Distribution):
 
     Args:
         param (torch.Tensor): parameter of the delta distribution;
-        atol (numbe): absolute tolerance to consider that a tensor matches the distribution parameter;
-            default: 1e-6
-        rtol (numbe): relative tolerance to consider that a tensor matches the distribution parameter;
-            default: 1e-6
-        batch_shape (torch.Size): batch shape;
-        event_shape (torch.Size): shape of the outcome;
+        atol (number, optional): absolute tolerance to consider that a tensor matches the distribution parameter;
+            Default is 1e-6
+        rtol (number, optional): relative tolerance to consider that a tensor matches the distribution parameter;
+            Default is 1e-6
+        batch_shape (torch.Size, optional): batch shape;
+        event_shape (torch.Size, optional): shape of the outcome.
+
     """
 
-    arg_constraints = {}
+    arg_constraints: Dict = {}
 
     def __init__(
         self,
         param: torch.Tensor,
-        atol: Number = 1e-6,
-        rtol: Number = 1e-6,
-        batch_shape: Union[torch.Size, Iterable] = torch.Size([]),
-        event_shape: Union[torch.Size, Iterable] = torch.Size([]),
+        atol: float = 1e-6,
+        rtol: float = 1e-6,
+        batch_shape: Union[torch.Size, Sequence[int]] = torch.Size([]),
+        event_shape: Union[torch.Size, Sequence[int]] = torch.Size([]),
     ):
-        self.param = param
+        self.update(param)
         self.atol = atol
         self.rtol = rtol
         if not len(batch_shape) and not len(event_shape):
             batch_shape = param.shape[:-1]
             event_shape = param.shape[-1:]
         super().__init__(batch_shape=batch_shape, event_shape=event_shape)
+
+    def update(self, param):
+        self.param = param
 
     def _is_equal(self, value: torch.Tensor) -> torch.Tensor:
         param = self.param.expand_as(value)
@@ -347,16 +406,17 @@ class TanhDelta(D.TransformedDistribution):
 
     Args:
         net_output (torch.Tensor): parameter of the delta distribution;
-                min (torch.Tensor or number): minimum value of the distribution. Default = -1.0;
-        max (torch.Tensor or number): maximum value of the distribution. Default = 1.0;
-        event_dims (int): number of dimensions describing the action.
-            default = 1;
-        atol (numbe): absolute tolerance to consider that a tensor matches the distribution parameter;
-            default: 1e-6
-        rtol (numbe): relative tolerance to consider that a tensor matches the distribution parameter;
-            default: 1e-6
-        batch_shape (torch.Size): batch shape;
-        event_shape (torch.Size): shape of the outcome;
+                min (torch.Tensor or number): minimum value of the distribution. Default is -1.0;
+        min (torch.Tensor or number, optional): minimum value of the distribution. Default is 1.0;
+        max (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
+        event_dims (int, optional): number of dimensions describing the action.
+            Default is 1;
+        atol (number, optional): absolute tolerance to consider that a tensor matches the distribution parameter;
+            Default is 1e-6
+        rtol (number, optional): relative tolerance to consider that a tensor matches the distribution parameter;
+            Default is 1e-6
+        batch_shape (torch.Size, optional): batch shape;
+        event_shape (torch.Size, optional): shape of the outcome;
 
     """
 
@@ -367,28 +427,27 @@ class TanhDelta(D.TransformedDistribution):
     def __init__(
         self,
         net_output: torch.Tensor,
-        min: Union[torch.Tensor, Number] = -1.0,
-        max: Union[torch.Tensor, Number] = 1.0,
+        min: Union[torch.Tensor, float] = -1.0,
+        max: Union[torch.Tensor, float] = 1.0,
         event_dims: int = 1,
-        atol: Number = 1e-4,
-        rtol: Number = 1e-4,
+        atol: float = 1e-4,
+        rtol: float = 1e-4,
         **kwargs,
     ):
         minmax_msg = "max value has been found to be equal or less than min value"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
-            if not (max > min).all():
+            if not (max > min).all():  # type: ignore
                 raise ValueError(minmax_msg)
         elif isinstance(max, Number) and isinstance(min, Number):
-            if max <= min:
+            if max <= min:  # type: ignore
                 raise ValueError(minmax_msg)
         else:
-            if not all(max > min):
+            if not all(max > min):  # type: ignore
                 raise ValueError(minmax_msg)
 
-        loc = net_output
-        loc = loc + (max - min) / 2 + min
-
-        self.loc = loc
+        self.min = min
+        self.max = max
+        loc = self.update(net_output)
 
         t = D.TanhTransform()
         non_trivial_min = (isinstance(min, torch.Tensor) and (min != 1.0).any()) or (
@@ -398,8 +457,11 @@ class TanhDelta(D.TransformedDistribution):
             not isinstance(max, torch.Tensor) and max != 1.0
         )
         if non_trivial_max or non_trivial_min:
-            t = D.ComposeTransform(
-                [t, D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)]
+            t = D.ComposeTransform(  # type: ignore
+                [
+                    t,
+                    D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                ]
             )
         event_shape = net_output.shape[-event_dims:]
         batch_shape = net_output.shape[:-event_dims]
@@ -413,6 +475,14 @@ class TanhDelta(D.TransformedDistribution):
         )
 
         super().__init__(base, t)
+
+    def update(self, net_output: torch.Tensor) -> Optional[torch.Tensor]:
+        loc = net_output
+        loc = loc + (self.max - self.min) / 2 + self.min
+        if hasattr(self, "base_dist"):
+            self.base_dist.update(loc)
+        else:
+            return loc
 
     @property
     def mode(self) -> torch.Tensor:
@@ -428,6 +498,3 @@ class TanhDelta(D.TransformedDistribution):
 
 def uniform_sample_delta(dist: Delta, size=torch.Size([])) -> torch.Tensor:
     return torch.randn_like(dist.sample(size))
-
-
-UNIFORM[Delta] = uniform_sample_delta

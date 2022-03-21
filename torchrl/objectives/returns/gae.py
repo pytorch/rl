@@ -1,4 +1,3 @@
-from numbers import Number
 from typing import Union
 
 import torch
@@ -12,7 +11,6 @@ import torch
 #     critic_loss = critic_loss + (R - value) ** 2 / 2
 #     entropy_loss = entropy_loss + entropy
 from torchrl.envs.utils import step_tensor_dict
-from .functional import generalized_advantage_estimate
 
 # from https://github.com/H-Huang/rpc-rl-experiments/blob/6621f0aadb347d1c4e24bcf46517ac36907401ff/a3c/process.py#L14
 # TODO: create function / object that vectorises that
@@ -22,10 +20,12 @@ from .functional import generalized_advantage_estimate
 # next_value = R
 from ...data.tensordict.tensordict import _TensorDict
 from ...modules import ProbabilisticTDModule
+from .functional import generalized_advantage_estimate
+
 
 #
 # def gae(values: torch.Tensor, log_prob_actions: torch.Tensor, rewards: torch.Tensor, entropies: torch.Tensor,
-#         gamma: Union[Number, torch.Tensor], tau: Number) -> torch.Tensor:
+#         gamma: Union[Number, torch.Tensor], tau: float) -> torch.Tensor:
 #     """
 #
 #     Args:
@@ -65,13 +65,13 @@ class GAE:
         critic (ProbabilisticTDModule): value operator used to retrieve the value estimates.
         average_rewards (bool): if True, rewards will be standardized before the GAE is computed.
         gradient_mode (bool): if True, gradients are propagated throught the computation of the value function.
-            Default is False.
+            Default is `False`.
     """
 
     def __init__(
         self,
-        gamma: Union[Number, torch.Tensor],
-        lamda: Number,
+        gamma: Union[float, torch.Tensor],
+        lamda: float,
         critic: ProbabilisticTDModule,
         average_rewards: bool = False,
         gradient_mode: bool = False,
@@ -83,14 +83,14 @@ class GAE:
         self.gradient_mode = gradient_mode
 
     def __call__(self, tensor_dict: _TensorDict) -> _TensorDict:
-        """
-        Computes the GAE given the data in tensor_dict.
+        """Computes the GAE given the data in tensor_dict.
 
         Args:
             tensor_dict (_TensorDict): A TensorDict containing the data (observation, action, reward, done state)
                 necessary to compute the value estimates and the GAE.
 
-        Returns: An updated TensorDict with an "advantage" and a "value_target" keys
+        Returns:
+            An updated TensorDict with an "advantage" and a "value_target" keys
 
         """
         with torch.set_grad_enabled(self.gradient_mode):

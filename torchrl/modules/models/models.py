@@ -1,6 +1,6 @@
 import math
 from numbers import Number
-from typing import Iterable, Type, Union, Optional, Tuple, Callable, Dict
+from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import torch
@@ -8,10 +8,10 @@ from torch import nn
 from torch.nn import functional as F
 
 from torchrl.modules.models.utils import (
-    Squeeze2dLayer,
+    _find_depth,
     LazyMapping,
     SquashDims,
-    _find_depth,
+    Squeeze2dLayer,
 )
 
 __all__ = [
@@ -31,10 +31,13 @@ from torchrl.modules.utils import inv_softplus
 
 class MLP(nn.Sequential):
     """
+
     A multi-layer perceptron.
     If MLP receives more than one input, it concatenates them all along the last dimension before passing the
     resulting tensor through the network. This is aimed at allowing for a seamless interface with calls of the type of
+
         >>> model(state, action)  # compute state-action value
+
     In the future, this feature may be moved to the ProbabilisticTDModule, though it would require it to handle
     different cases (vectors, images, ...)
 
@@ -46,7 +49,7 @@ class MLP(nn.Sequential):
             desired input and output size. A length of 1 will create 2 linear layers etc. If no depth is indicated,
             the depth information should be contained in the num_cells argument (see below). If num_cells is an
             iterable and depth is indicated, both should match: len(num_cells) must be equal to depth.
-        num_cells (int or Iterable[int], optional): number of cells of every layer in between the input and output. If
+        num_cells (int or Sequence[int], optional): number of cells of every layer in between the input and output. If
             an integer is provided, every layer will have the same number of cells. If an iterable is provided,
             the linear layers out_features will match the content of num_cells.
             default: 32;
@@ -67,29 +70,88 @@ class MLP(nn.Sequential):
             default: False.
 
     Examples:
-        All of the following examples provide valid, working MLPs
+        >>> # All of the following examples provide valid, working MLPs
         >>> mlp = MLP(in_features=3, out_features=6, depth=0) # MLP consisting of a single 3 x 6 linear layer
         >>> print(mlp)
+        MLP(
+          (0): Linear(in_features=3, out_features=6, bias=True)
+        )
         >>> mlp = MLP(in_features=3, out_features=6, depth=4, num_cells=32)
         >>> print(mlp)
+        MLP(
+          (0): Linear(in_features=3, out_features=32, bias=True)
+          (1): Tanh()
+          (2): Linear(in_features=32, out_features=32, bias=True)
+          (3): Tanh()
+          (4): Linear(in_features=32, out_features=32, bias=True)
+          (5): Tanh()
+          (6): Linear(in_features=32, out_features=32, bias=True)
+          (7): Tanh()
+          (8): Linear(in_features=32, out_features=6, bias=True)
+        )
         >>> mlp = MLP(out_features=6, depth=4, num_cells=32)  # LazyLinear for the first layer
         >>> print(mlp)
+        MLP(
+          (0): LazyLinear(in_features=0, out_features=32, bias=True)
+          (1): Tanh()
+          (2): Linear(in_features=32, out_features=32, bias=True)
+          (3): Tanh()
+          (4): Linear(in_features=32, out_features=32, bias=True)
+          (5): Tanh()
+          (6): Linear(in_features=32, out_features=32, bias=True)
+          (7): Tanh()
+          (8): Linear(in_features=32, out_features=6, bias=True)
+        )
         >>> mlp = MLP(out_features=6, num_cells=[32, 33, 34, 35])  # defines the depth by the num_cells arg
         >>> print(mlp)
+        MLP(
+          (0): LazyLinear(in_features=0, out_features=32, bias=True)
+          (1): Tanh()
+          (2): Linear(in_features=32, out_features=33, bias=True)
+          (3): Tanh()
+          (4): Linear(in_features=33, out_features=34, bias=True)
+          (5): Tanh()
+          (6): Linear(in_features=34, out_features=35, bias=True)
+          (7): Tanh()
+          (8): Linear(in_features=35, out_features=6, bias=True)
+        )
         >>> mlp = MLP(out_features=(6, 7), num_cells=[32, 33, 34, 35])  # returns a view of the output tensor with shape [*, 6, 7]
         >>> print(mlp)
+        MLP(
+          (0): LazyLinear(in_features=0, out_features=32, bias=True)
+          (1): Tanh()
+          (2): Linear(in_features=32, out_features=33, bias=True)
+          (3): Tanh()
+          (4): Linear(in_features=33, out_features=34, bias=True)
+          (5): Tanh()
+          (6): Linear(in_features=34, out_features=35, bias=True)
+          (7): Tanh()
+          (8): Linear(in_features=35, out_features=42, bias=True)
+        )
+        >>> from torchrl.modules import NoisyLinear
         >>> mlp = MLP(out_features=(6, 7), num_cells=[32, 33, 34, 35], layer_class=NoisyLinear)  # uses NoisyLinear layers
         >>> print(mlp)
+        MLP(
+          (0): NoisyLazyLinear(in_features=0, out_features=32, bias=False)
+          (1): Tanh()
+          (2): NoisyLinear(in_features=32, out_features=33, bias=True)
+          (3): Tanh()
+          (4): NoisyLinear(in_features=33, out_features=34, bias=True)
+          (5): Tanh()
+          (6): NoisyLinear(in_features=34, out_features=35, bias=True)
+          (7): Tanh()
+          (8): NoisyLinear(in_features=35, out_features=42, bias=True)
+        )
 
     """
 
     def __init__(
         self,
         in_features: Optional[int] = None,
-        out_features: [int, Iterable[int]] = None,
+        out_features: Union[int, Sequence[int]] = None,
         depth: Optional[int] = None,
-        num_cells: Optional[Union[Iterable, int]] = None,
-        activation_class: Type[Callable] = nn.Tanh,
+        num_cells: Optional[Union[Sequence, int]] = None,
+        activation_class: Type = nn.Tanh,
         activation_kwargs: Optional[dict] = None,
         norm_class: Optional[Type] = None,
         norm_kwargs: Optional[dict] = None,
@@ -131,13 +193,13 @@ class MLP(nn.Sequential):
         if single_bias_last_layer:
             raise NotImplementedError
 
-        if not (isinstance(num_cells, Iterable) or depth is not None):
+        if not (isinstance(num_cells, Sequence) or depth is not None):
             raise RuntimeError(
                 "If num_cells is provided as an integer, \
             depth must be provided too."
             )
         self.num_cells = (
-            list(num_cells) if isinstance(num_cells, Iterable) else [num_cells] * depth
+            list(num_cells) if isinstance(num_cells, Sequence) else [num_cells] * depth
         )
         self.depth = depth if depth is not None else len(self.num_cells)
         if not (len(self.num_cells) == depth or depth is None):
@@ -148,7 +210,7 @@ class MLP(nn.Sequential):
         layers = self._make_net()
         super().__init__(*layers)
 
-    def _make_net(self) -> nn.Module:
+    def _make_net(self) -> List[nn.Module]:
         layers = []
         in_features = [self.in_features] + self.num_cells
         out_features = self.num_cells + [self._out_features_num]
@@ -181,8 +243,6 @@ class MLP(nn.Sequential):
         out = super().forward(*inputs)
         if not isinstance(self.out_features, Number):
             out = out.view(*out.shape[:-1], *self.out_features)
-        if not torch.isfinite(out).all():
-            print(out)
         return out
 
 
@@ -190,20 +250,20 @@ class ConvNet(nn.Sequential):
     """
     A convolutional neural network.
 
-        Args:
+    Args:
         in_features (int, optional): number of input features;
         depth (int, optional): depth of the network. A depth of 1 will produce a single linear layer network with the
             desired input size, and with an output size equal to the last element of the num_cells argument.
             If no depth is indicated, the depth information should be contained in the num_cells argument (see below).
             If num_cells is an iterable and depth is indicated, both should match: len(num_cells) must be equal to
             the depth.
-        num_cells (int or Iterable[int], optional): number of cells of every layer in between the input and output. If
+        num_cells (int or Sequence[int], optional): number of cells of every layer in between the input and output. If
             an integer is provided, every layer will have the same number of cells. If an iterable is provided,
             the linear layers out_features will match the content of num_cells.
             default: [32, 32, 32];
-        kernel_sizes (int, Iterable[Union[int, Iterable[int]]]): Kernel size(s) of the conv network. If iterable, the length must match the
+        kernel_sizes (int, Sequence[Union[int, Sequence[int]]]): Kernel size(s) of the conv network. If iterable, the length must match the
             depth, defined by the num_cells or depth arguments.
-        strides (int or Iterable[int]): Stride(s) of the conv network. If iterable, the length must match the
+        strides (int or Sequence[int]): Stride(s) of the conv network. If iterable, the length must match the
             depth, defined by the num_cells or depth arguments.
         activation_class (Type): activation class to be used.
             default: nn.Tanh
@@ -219,15 +279,53 @@ class ConvNet(nn.Sequential):
             default: True.
 
     Examples:
-        All of the following examples provide valid, working MLPs
+        >>> # All of the following examples provide valid, working MLPs
         >>> cnet = ConvNet(in_features=3, depth=1, num_cells=[32,]) # MLP consisting of a single 3 x 6 linear layer
         >>> print(cnet)
+        ConvNet(
+          (0): Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1))
+          (1): ELU(alpha=1.0)
+          (2): SquashDims()
+        )
         >>> cnet = ConvNet(in_features=3, depth=4, num_cells=32)
         >>> print(cnet)
+        ConvNet(
+          (0): Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1))
+          (1): ELU(alpha=1.0)
+          (2): Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1))
+          (3): ELU(alpha=1.0)
+          (4): Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1))
+          (5): ELU(alpha=1.0)
+          (6): Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1))
+          (7): ELU(alpha=1.0)
+          (8): SquashDims()
+        )
         >>> cnet = ConvNet(in_features=3, num_cells=[32, 33, 34, 35])  # defines the depth by the num_cells arg
         >>> print(cnet)
+        ConvNet(
+          (0): Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1))
+          (1): ELU(alpha=1.0)
+          (2): Conv2d(32, 33, kernel_size=(3, 3), stride=(1, 1))
+          (3): ELU(alpha=1.0)
+          (4): Conv2d(33, 34, kernel_size=(3, 3), stride=(1, 1))
+          (5): ELU(alpha=1.0)
+          (6): Conv2d(34, 35, kernel_size=(3, 3), stride=(1, 1))
+          (7): ELU(alpha=1.0)
+          (8): SquashDims()
+        )
         >>> cnet = ConvNet(in_features=3, num_cells=[32, 33, 34, 35], kernel_sizes=[3, 4, 5, (2, 3)])  # defines kernels, possibly rectangular
         >>> print(cnet)
+        ConvNet(
+          (0): Conv2d(3, 32, kernel_size=(3, 3), stride=(1, 1))
+          (1): ELU(alpha=1.0)
+          (2): Conv2d(32, 33, kernel_size=(4, 4), stride=(1, 1))
+          (3): ELU(alpha=1.0)
+          (4): Conv2d(33, 34, kernel_size=(5, 5), stride=(1, 1))
+          (5): ELU(alpha=1.0)
+          (6): Conv2d(34, 35, kernel_size=(2, 3), stride=(1, 1))
+          (7): ELU(alpha=1.0)
+          (8): SquashDims()
+        )
 
     """
 
@@ -235,9 +333,9 @@ class ConvNet(nn.Sequential):
         self,
         in_features: Optional[int] = None,
         depth: Optional[int] = None,
-        num_cells: Union[Iterable, int] = [32, 32, 32],
-        kernel_sizes: Union[Iterable[Union[int, Iterable[int]]], int] = 3,
-        strides: Union[Iterable, int] = 1,
+        num_cells: Union[Sequence, int] = [32, 32, 32],
+        kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 3,
+        strides: Union[Sequence, int] = 1,
         actionvation_class: Type = nn.ELU,
         activation_kwargs: Optional[dict] = None,
         norm_class: Type = None,
@@ -275,9 +373,9 @@ class ConvNet(nn.Sequential):
             setattr(
                 self,
                 _field,
-                (_value if isinstance(_value, Iterable) else [_value] * _depth),
+                (_value if isinstance(_value, Sequence) else [_value] * _depth),
             )
-            if not (isinstance(_value, Iterable) or _depth is not None):
+            if not (isinstance(_value, Sequence) or _depth is not None):
                 raise RuntimeError(
                     f"If {_field} is provided as an integer, "
                     "depth must be provided too."
@@ -307,7 +405,11 @@ class ConvNet(nn.Sequential):
             if _in is not None:
                 layers.append(
                     nn.Conv2d(
-                        _in, _out, kernel_size=_kernel, stride=_stride, bias=_bias
+                        _in,
+                        _out,
+                        kernel_size=_kernel,
+                        stride=_stride,
+                        bias=_bias,
                     )
                 )
             else:
@@ -335,18 +437,23 @@ class DuelingCnnDQNet(nn.Module):
         out_features (int): number of features for the advantage network
         out_features_value (int): number of features for the value network
         cnn_kwargs (dict, optional): kwargs for the feature network.
-            default: {
-                'num_cells': [32, 64, 64],
-                'strides': [4, 2, 1],
-                'kernels': [8, 4, 3],
-            }
+            Default is
+
+            >>> cnn_kwargs = {
+            ...     'num_cells': [32, 64, 64],
+            ...     'strides': [4, 2, 1],
+            ...     'kernels': [8, 4, 3],
+            ... }
+
         mlp_kwargs (dict, optional): kwargs for the advantage and value network.
-            default: {
-                "depth": 1,
-                "activation_class": nn.ELU,
-                "num_cells": 512,
-                "bias_last_layer": True,
-            }
+            Default is
+
+            >>> mlp_kwargs = {
+            ...     "depth": 1,
+            ...     "activation_class": nn.ELU,
+            ...     "num_cells": 512,
+            ...     "bias_last_layer": True,
+            ... }
 
     """
 
@@ -366,7 +473,7 @@ class DuelingCnnDQNet(nn.Module):
             "kernel_sizes": [8, 4, 3],
         }
         _cnn_kwargs.update(cnn_kwargs)
-        self.features = ConvNet(**_cnn_kwargs)
+        self.features = ConvNet(**_cnn_kwargs)  # type: ignore
 
         _mlp_kwargs = {
             "depth": 1,
@@ -378,8 +485,8 @@ class DuelingCnnDQNet(nn.Module):
         _mlp_kwargs.update(mlp_kwargs)
         self.out_features = out_features
         self.out_features_value = out_features_value
-        self.advantage = MLP(out_features=out_features, **_mlp_kwargs)
-        self.value = MLP(out_features=out_features_value, **_mlp_kwargs)
+        self.advantage = MLP(out_features=out_features, **_mlp_kwargs)  # type: ignore
+        self.value = MLP(out_features=out_features_value, **_mlp_kwargs)  # type: ignore
         for layer in self.modules():
             if isinstance(layer, (nn.Conv2d, nn.Linear)) and isinstance(
                 layer.bias, torch.Tensor
@@ -399,7 +506,7 @@ class DistributionalDQNnet(nn.Module):
 
     Args:
         DQNet (nn.Module): Q-Network with output length equal to the number of atoms:
-            output.shape = [*batch, #atoms, #actions].
+            output.shape = [batch, atoms, actions].
 
     """
 
@@ -423,13 +530,17 @@ class DistributionalDQNnet(nn.Module):
         return F.log_softmax(q_values, dim=-2)
 
 
-def ddpg_init_last_layer(last_layer: nn.Module, scale: Number = 6e-4) -> None:
-    last_layer.weight.data.copy_(
-        torch.rand_like(last_layer.weight.data) * scale - scale / 2
+def ddpg_init_last_layer(last_layer: nn.Module, scale: float = 6e-4) -> None:
+    last_layer.weight.data.copy_(  # type: ignore
+        torch.rand_like(last_layer.weight.data) * scale
+        - scale / 2
+        # type: ignore
     )
     if last_layer.bias is not None:
-        last_layer.bias.data.copy_(
-            torch.rand_like(last_layer.bias.data) * scale - scale / 2
+        last_layer.bias.data.copy_(  # type: ignore
+            torch.rand_like(last_layer.bias.data) * scale
+            - scale / 2
+            # type: ignore
         )
 
 
@@ -501,8 +612,8 @@ class DdpgCnnActor(nn.Module):
         }
         mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
         mlp_net_default_kwargs.update(mlp_net_kwargs)
-        self.convnet = ConvNet(**conv_net_default_kwargs)
-        self.mlp = MLP(**mlp_net_default_kwargs)
+        self.convnet = ConvNet(**conv_net_default_kwargs)  # type: ignore
+        self.mlp = MLP(**mlp_net_default_kwargs)  # type: ignore
         ddpg_init_last_layer(self.mlp[-1], 6e-4)
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
@@ -545,7 +656,7 @@ class DdpgMlpActor(nn.Module):
         }
         mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
         mlp_net_default_kwargs.update(mlp_net_kwargs)
-        self.mlp = MLP(**mlp_net_default_kwargs)
+        self.mlp = MLP(**mlp_net_default_kwargs)  # type: ignore
         ddpg_init_last_layer(self.mlp[-1], 6e-3)
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
@@ -617,8 +728,8 @@ class DdpgCnnQNet(nn.Module):
         }
         mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
         mlp_net_default_kwargs.update(mlp_net_kwargs)
-        self.convnet = ConvNet(**conv_net_default_kwargs)
-        self.mlp = MLP(**mlp_net_default_kwargs)
+        self.convnet = ConvNet(**conv_net_default_kwargs)  # type: ignore
+        self.mlp = MLP(**mlp_net_default_kwargs)  # type: ignore
         ddpg_init_last_layer(self.mlp[-1], 6e-4)
 
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
@@ -674,11 +785,11 @@ class DdpgMlpQNet(nn.Module):
             "bias_last_layer": True,
             "activate_last_layer": True,
         }
-        mlp_net_kwargs_net1 = (
+        mlp_net_kwargs_net1: Dict = (
             mlp_net_kwargs_net1 if mlp_net_kwargs_net1 is not None else dict()
         )
         mlp1_net_default_kwargs.update(mlp_net_kwargs_net1)
-        self.mlp1 = MLP(**mlp1_net_default_kwargs)
+        self.mlp1 = MLP(**mlp1_net_default_kwargs)  # type: ignore
 
         mlp2_net_default_kwargs = {
             "in_features": None,
@@ -695,7 +806,7 @@ class DdpgMlpQNet(nn.Module):
             mlp_net_kwargs_net2 if mlp_net_kwargs_net2 is not None else dict()
         )
         mlp2_net_default_kwargs.update(mlp_net_kwargs_net2)
-        self.mlp2 = MLP(**mlp2_net_default_kwargs)
+        self.mlp2 = MLP(**mlp2_net_default_kwargs)  # type: ignore
         ddpg_init_last_layer(self.mlp2[-1], 6e-3)
 
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
@@ -714,7 +825,7 @@ class LSTMNet(nn.Module):
     def __init__(self, out_features, lstm_kwargs: Dict, mlp_kwargs: Dict) -> None:
         super().__init__()
         lstm_kwargs.update({"batch_first": True})
-        self.mlp = MLP(**mlp_kwargs)
+        self.mlp = MLP(**mlp_kwargs)  # type: ignore
         self.lstm = nn.LSTM(**lstm_kwargs)
         self.linear = nn.LazyLinear(out_features)
 
@@ -775,7 +886,7 @@ class LSTMNet(nn.Module):
                     + [out[i]],
                     1,
                 )
-        return tuple(out)
+        return tuple(out)  # type: ignore
 
     def forward(
         self,

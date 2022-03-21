@@ -1,6 +1,5 @@
 import pytest
 import torch
-
 from torchrl.modules import TanhNormal
 from torchrl.modules.distributions import TanhDelta, Delta
 
@@ -17,10 +16,6 @@ def test_delta():
     assert d.base_dist._is_equal(xinv).all()
     assert d.log_prob(d.mode).shape == x.shape[:-1]
     assert (d.log_prob(d.mode) == float("inf")).all()
-
-
-def test_categorical():
-    raise NotImplementedError
 
 
 @pytest.mark.parametrize(

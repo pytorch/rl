@@ -8,6 +8,11 @@ from torchrl.data.tensordict.tensordict import _TensorDict
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
 
+class classproperty(property):
+    def __get__(self, cls, owner):
+        return classmethod(self.fget).__get__(None, owner)()
+
+
 def step_tensor_dict(
     tensor_dict: _TensorDict, next_tensor_dict: _TensorDict = None
 ) -> _TensorDict:
@@ -20,7 +25,8 @@ def step_tensor_dict(
         tensor_dict (_TensorDict): tensordict with keys to be renamed
         next_tensor_dict (_TensorDict, optional): destination tensordict
 
-    Returns: A new tensordict (or next_tensor_dict) with the "next_*" keys renamed without the "next_" prefix.
+    Returns:
+         A new tensordict (or next_tensor_dict) with the "next_*" keys renamed without the "next_" prefix.
 
     Examples:
     This funtion allows for this kind of loop to be used:
@@ -51,7 +57,8 @@ def step_tensor_dict(
 def get_available_libraries():
     """
 
-    Returns: all the supported libraries
+    Returns:
+         all the supported libraries
 
     """
     return SUPPORTED_LIBRARIES
@@ -60,7 +67,8 @@ def get_available_libraries():
 def _check_gym():
     """
 
-    Returns: True if the gym library is installed
+    Returns:
+         True if the gym library is installed
 
     """
     return "gym" in AVAILABLE_LIBRARIES
@@ -69,7 +77,8 @@ def _check_gym():
 def _check_gym_atari():
     """
 
-    Returns: True if the gym library is installed and atari envs can be found.
+    Returns:
+         True if the gym library is installed and atari envs can be found.
 
     """
     if not _check_gym():
@@ -80,7 +89,8 @@ def _check_gym_atari():
 def _check_mario():
     """
 
-    Returns: True if the "gym-super-mario-bros" library is installed.
+    Returns:
+         True if the "gym-super-mario-bros" library is installed.
 
     """
 
@@ -90,7 +100,8 @@ def _check_mario():
 def _check_dmcontrol():
     """
 
-    Returns: True if the "dm-control" library is installed.
+    Returns:
+         True if the "dm-control" library is installed.
 
     """
 
@@ -100,7 +111,8 @@ def _check_dmcontrol():
 def _check_dmlab():
     """
 
-    Returns: True if the "deepmind-lab" library is installed.
+    Returns:
+         True if the "deepmind-lab" library is installed.
 
     """
 
@@ -111,14 +123,17 @@ SUPPORTED_LIBRARIES = {
     "gym": _check_gym(),  # OpenAI
     "gym[atari]": _check_gym_atari(),  #
     "vizdoom": None,  # 1.2k, https://github.com/mwydmuch/ViZDoom
-    "ml-agents": None,  # 11.5k, unity, https://github.com/Unity-Technologies/ml-agents
+    "ml-agents": None,
+    # 11.5k, unity, https://github.com/Unity-Technologies/ml-agents
     "pysc2": None,  # 7.3k, DM, https://github.com/deepmind/pysc2
     "deepmind_lab": _check_dmlab(),
     # 6.5k DM, https://github.com/deepmind/lab, https://github.com/deepmind/lab/tree/master/python/pip_package
     "serpent.ai": None,  # 6k, https://github.com/SerpentAI/SerpentAI
     "gfootball": None,  # 2.8k G, https://github.com/google-research/football
-    "dm_control": _check_dmcontrol(),  # 2.3k DM, https://github.com/deepmind/dm_control
-    "habitat": None,  # 1.2k FB, https://github.com/facebookresearch/habitat-sim
+    "dm_control": _check_dmcontrol(),
+    # 2.3k DM, https://github.com/deepmind/dm_control
+    "habitat": None,
+    # 1.2k FB, https://github.com/facebookresearch/habitat-sim
     "meta-world": None,  # 500, https://github.com/rlworkgroup/metaworld
     "minerl": None,  # 300, https://github.com/minerllabs/minerl
     "multi-agent-emergence-environments": None,
@@ -126,7 +141,8 @@ SUPPORTED_LIBRARIES = {
     "openspiel": None,  # 2.8k, DM, https://github.com/deepmind/open_spiel
     "procgen": None,  # 500, OpenAI, https://github.com/openai/procgen
     "pybullet": None,  # 641, https://github.com/benelot/pybullet-gym
-    "realworld_rl_suite": None,  # 250, G, https://github.com/google-research/realworldrl_suite
+    "realworld_rl_suite": None,
+    # 250, G, https://github.com/google-research/realworldrl_suite
     "rlcard": None,  # 1.4k, https://github.com/datamllab/rlcard
     "screeps": None,  # 2.3k https://github.com/screeps/screeps
     "gym-super-mario-bros": _check_mario(),
@@ -164,4 +180,5 @@ class set_exploration_mode(_DecoratorContextManager):
 
 
 def exploration_mode() -> Union[str, None]:
+    """Returns the exploration mode currently set."""
     return EXPLORATION_MODE

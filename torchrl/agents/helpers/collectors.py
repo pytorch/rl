@@ -1,11 +1,11 @@
 from argparse import ArgumentParser, Namespace
-from typing import Union, Callable, List, Optional, Type
+from typing import Callable, List, Optional, Type, Union
 
 from torchrl.collectors.collectors import (
+    _DataCollector,
+    _MultiDataCollector,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
-    _MultiDataCollector,
-    _DataCollector,
 )
 from torchrl.data import MultiStep
 from torchrl.data.tensordict.tensordict import _TensorDict
@@ -14,10 +14,10 @@ from torchrl.envs import ParallelEnv
 __all__ = [
     "sync_sync_collector",
     "sync_async_collector",
-    "make_collector_offline",
-    "parser_collector_args_offline",
-    "make_collector_online",
-    "parser_collector_args_online",
+    "make_collector_offpolicy",
+    "make_collector_onpolicy",
+    "parser_collector_args_offpolicy",
+    "parser_collector_args_onpolicy",
 ]
 
 from torchrl.envs.common import _EnvClass
@@ -32,20 +32,36 @@ def sync_async_collector(
     **kwargs,
 ) -> MultiaSyncDataCollector:
     """
-    Runs asynchronous collectors, each running synchronous environments, e.g.
-    |            MultiConcurrentCollector                 |              |
-    |   Collector 1   |   Collector 2   |   Collector 3   |     main     |
-    |  env1  |  env2  |  env3  |  env4  |  env5  |  env6  |              |
-    |=================|=================|=================|==============|
-    | reset  | reset  | reset  | reset  | reset  | reset  |              |
-    |      actor      |        |        |      actor      |              |
-    |  step  |  step  |      actor      |                 |              |
-    |        |        |                 |  step  |  step  |              |
-    |      actor      |  step  |  step  |      actor      |              |
-    |  yield batch 1  |      actor      |                 |collect, train|
-    |  step  |  step  |                 |  yield batch 2  |collect, train|
-    |                 |  yield batch 3  |                 |collect, train|
-    etc.
+    Runs asynchronous collectors, each running synchronous environments.
+
+    .. aafig::
+
+
+            +----------------------------------------------------------------------+
+            |           "MultiConcurrentCollector"                |                |
+            |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |
+            |  "Collector 1"  |  "Collector 2"  |  "Collector 3"  |     "Main"     |
+            |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|
+            | "env1" | "env2" | "env3" | "env4" | "env5" | "env6" |                |
+            |~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~~~~~~~~~|
+            |"reset" |"reset" |"reset" |"reset" |"reset" |"reset" |                |
+            |        |        |        |        |        |        |                |
+            |       "actor"   |        |        |       "actor"   |                |
+            |                 |        |        |                 |                |
+            | "step" | "step" |       "actor"   |                 |                |
+            |        |        |                 |                 |                |
+            |        |        |                 | "step" | "step" |                |
+            |        |        |                 |        |        |                |
+            |       "actor    | "step" | "step" |       "actor"   |                |
+            |                 |        |        |                 |                |
+            | "yield batch 1" |       "actor"   |                 |"collect, train"|
+            |                 |                 |                 |                |
+            | "step" | "step" |                 | "yield batch 2" |"collect, train"|
+            |        |        |                 |                 |                |
+            |        |        | "yield batch 3" |                 |"collect, train"|
+            |        |        |                 |                 |                |
+            +----------------------------------------------------------------------+
+
     Environment types can be identical or different. In the latter case, env_fns should be a list with all the creator
     fns for the various envs,
     and the policy should handle those envs in batch.
@@ -57,8 +73,6 @@ def sync_async_collector(
             num_env_per_collector * num_collectors should be less or equal to the number of workers available.
         num_collectors: Number of data collectors to be run in parallel.
         **kwargs: Other kwargs passed to the data collectors
-
-    Returns:
 
     """
 
@@ -80,26 +94,45 @@ def sync_sync_collector(
     **kwargs,
 ) -> MultiSyncDataCollector:
     """
-    Runs synchronous collectors, each running synchronous environments, e.g.
-    |            MultiConcurrentCollector                 |              |
-    |   Collector 1   |   Collector 2   |   Collector 3   |     main     |
-    |  env1  |  env2  |  env3  |  env4  |  env5  |  env6  |              |
-    |=================|=================|=================|==============|
-    | reset  | reset  | reset  | reset  | reset  | reset  |              |
-    |      actor      |        |        |      actor      |              |
-    |  step  |  step  |      actor      |                 |              |
-    |        |        |                 |  step  |  step  |              |
-    |      actor      |  step  |  step  |      actor      |              |
-    |                 |      actor      |                 |              |
-    |                yield batch of traj 1                |collect, train|
-    |  step  |  step  |  step  |  step  |  step  |  step  |              |
-    |      actor      |      actor      |        |        |              |
-    |                 |  step  |  step  |      actor      |              |
-    |  step  |  step  |      actor      |  step  |  step  |              |
-    |      actor      |                 |      actor      |              |
-    |                yield batch of traj 2                |collect, train|
+    Runs synchronous collectors, each running synchronous environments.
 
-    etc.
+    E.g.
+
+    .. aafig::
+
+            +----------------------------------------------------------------------+
+            |            "MultiConcurrentCollector"               |                |
+            |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |
+            |   "Collector 1" |  "Collector 2"  |  "Collector 3"  |     Main       |
+            |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|
+            | "env1" | "env2" | "env3" | "env4" | "env5" | "env6" |                |
+            |~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~~~~~~~~~|
+            |"reset" |"reset" |"reset" |"reset" |"reset" |"reset" |                |
+            |        |        |        |        |        |        |                |
+            |       "actor"   |        |        |       "actor"   |                |
+            |                 |        |        |                 |                |
+            | "step" | "step" |       "actor"   |                 |                |
+            |        |        |                 |                 |                |
+            |        |        |                 | "step" | "step" |                |
+            |        |        |                 |        |        |                |
+            |       "actor"   | "step" | "step" |       "actor"   |                |
+            |                 |        |        |                 |                |
+            |                 |       "actor"   |                 |                |
+            |                 |                 |                 |                |
+            |                       "yield batch of traj 1"------->"collect, train"|
+            |                                                     |                |
+            | "step" | "step" | "step" | "step" | "step" | "step" |                |
+            |        |        |        |        |        |        |                |
+            |       "actor"   |       "actor"   |        |        |                |
+            |                 | "step" | "step" |       "actor"   |                |
+            |                 |        |        |                 |                |
+            | "step" | "step" |       "actor"   | "step" | "step" |                |
+            |        |        |                 |        |        |                |
+            |       "actor"   |                 |       "actor"   |                |
+            |                       "yield batch of traj 2"------->"collect, train"|
+            |                                                     |                |
+            +----------------------------------------------------------------------+
+
     Envs can be identical or different. In the latter case, env_fns should be a list with all the creator fns
     for the various envs,
     and the policy should handle those envs in batch.
@@ -111,8 +144,6 @@ def sync_sync_collector(
             num_env_per_collector * num_collectors should be less or equal to the number of workers available.
         num_collectors: Number of data collectors to be run in parallel.
         **kwargs: Other kwargs passed to the data collectors
-
-    Returns:
 
     """
     return _make_collector(
@@ -202,12 +233,22 @@ def _make_collector(
     )
 
 
-def make_collector_offline(
+def make_collector_offpolicy(
     make_env: Callable[[], _EnvClass],
     actor_model_explore: Union[TDModuleWrapper, ProbabilisticTDModule],
     args: Namespace,
     make_env_kwargs=None,
 ) -> _DataCollector:
+    """
+    Returns a data collector for off-policy algorithms.
+
+    Args:
+        make_env (Callable): environment creator
+        actor_model_explore (TDModule): Model instance used for evaluation and exploration update
+        args (Namespace): argument namespace built from the parser constructor
+        make_env_kwargs (dict): kwargs for the env creator
+
+    """
     if args.async_collection:
         collector_helper = sync_async_collector
     else:
@@ -237,14 +278,15 @@ def make_collector_offline(
         "frames_per_batch": args.frames_per_batch,
         "total_frames": args.total_frames,
         "postproc": ms,
-        "num_env_per_collector": 1,  # we already took care of building the make_parallel_env function
+        "num_env_per_collector": 1,
+        # we already took care of building the make_parallel_env function
         "num_collectors": -args.num_workers // -args.env_per_collector,
         "devices": args.collector_devices,
         "passing_devices": args.collector_devices,
         "init_random_frames": args.init_random_frames,
         "pin_memory": args.pin_memory,
-        "split_trajs": ms
-        is not None,  # trajectories must be separated if multi-step is used
+        "split_trajs": ms is not None,
+        # trajectories must be separated if multi-step is used
         "init_with_lag": args.init_with_lag,
         "exploration_mode": args.exploration_mode,
     }
@@ -254,7 +296,7 @@ def make_collector_offline(
     return collector
 
 
-def make_collector_online(
+def make_collector_onpolicy(
     make_env: Callable[[], _EnvClass],
     actor_model_explore: Union[TDModuleWrapper, ProbabilisticTDModule],
     args: Namespace,
@@ -280,12 +322,14 @@ def make_collector_online(
         "frames_per_batch": args.frames_per_batch,
         "total_frames": args.total_frames,
         "postproc": ms,
-        "num_env_per_collector": 1,  # we already took care of building the make_parallel_env function
+        "num_env_per_collector": 1,
+        # we already took care of building the make_parallel_env function
         "num_collectors": -args.num_workers // -args.env_per_collector,
         "devices": args.collector_devices,
         "passing_devices": args.collector_devices,
         "pin_memory": args.pin_memory,
-        "split_trajs": True,  # trajectories must be separated in online settings
+        "split_trajs": True,
+        # trajectories must be separated in online settings
         "init_with_lag": args.init_with_lag,
         "exploration_mode": args.exploration_mode,
     }
@@ -384,9 +428,13 @@ def _parser_collector_args(parser: ArgumentParser) -> ArgumentParser:
     return parser
 
 
-def parser_collector_args_offline(parser: ArgumentParser) -> ArgumentParser:
+def parser_collector_args_offpolicy(parser: ArgumentParser) -> ArgumentParser:
     """
-    To be used for DQN, DDPG, SAC
+    Populates the argument parser to build a data collector for on-policy algorithms (DQN, DDPG, SAC, REDQ).
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+
     """
     parser = _parser_collector_args(parser)
     parser.add_argument(
@@ -414,9 +462,12 @@ def parser_collector_args_offline(parser: ArgumentParser) -> ArgumentParser:
     return parser
 
 
-def parser_collector_args_online(parser: ArgumentParser) -> ArgumentParser:
+def parser_collector_args_onpolicy(parser: ArgumentParser) -> ArgumentParser:
     """
-    To be used for PPO
+    Populates the argument parser to build a data collector for on-policy algorithms (PPO).
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
     """
     parser = _parser_collector_args(parser)
     return parser

@@ -1,19 +1,20 @@
 from types import ModuleType
-from typing import List, Iterable, Optional
+from typing import List, Optional, Sequence
 
 import torch
 
 from torchrl.data import (
-    TensorSpec,
-    OneHotDiscreteTensorSpec,
     BinaryDiscreteTensorSpec,
+    CompositeSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
+    OneHotDiscreteTensorSpec,
+    TensorSpec,
     UnboundedContinuousTensorSpec,
-    CompositeSpec,
 )
-from ..common import GymLikeEnv
 from ...data.utils import numpy_to_torch_dtype_dict
+from ..common import GymLikeEnv
+from ..utils import classproperty
 
 try:
     import gym
@@ -34,7 +35,7 @@ __all__ = ["GymEnv", "RetroEnv"]
 
 def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec:
     if isinstance(spec, gym.spaces.tuple.Tuple):
-        raise NotImplementedError(f"gym.spaces.tuple.Tuple mapping not yet implemented")
+        raise NotImplementedError("gym.spaces.tuple.Tuple mapping not yet implemented")
     if isinstance(spec, gym.spaces.discrete.Discrete):
         return OneHotDiscreteTensorSpec(spec.n)
     elif isinstance(spec, gym.spaces.multi_binary.MultiBinary):
@@ -97,8 +98,8 @@ class GymEnv(GymLikeEnv):
     git_url = "https://github.com/openai/gym"
     libname = "gym"
 
-    @property
-    def available_envs(self) -> List:
+    @classproperty
+    def available_envs(cls) -> List[str]:
         return _get_envs()
 
     @property
@@ -106,7 +107,7 @@ class GymEnv(GymLikeEnv):
         return gym
 
     def _set_seed(self, seed: int) -> int:
-        self._env.seed(seed)
+        self._env.reset(seed=seed)
         return seed
 
     def _build_env(
@@ -120,7 +121,8 @@ class GymEnv(GymLikeEnv):
         if not _has_gym:
             raise RuntimeError(
                 f"gym not found, unable to create {envname}. "
-                f"Consider downloading and installing dm_control from {self.git_url}"
+                f"Consider downloading and installing dm_control from"
+                f" {self.git_url}"
             )
         if not ((taskname == "") or (taskname is None)):
             raise ValueError(
@@ -153,11 +155,12 @@ class GymEnv(GymLikeEnv):
     def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
         if seed is not None:
             seed = self.set_seed(seed)
-        self.reset()  # make sure that _current_observation and _is_done are populated
+        self.reset()  # make sure that _current_observation and
+        # _is_done are populated
         return seed
 
 
-def _get_retro_envs() -> Iterable:
+def _get_retro_envs() -> Sequence:
     if not _has_retro:
         return tuple()
     else:

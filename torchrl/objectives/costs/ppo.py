@@ -1,19 +1,17 @@
 import math
-from numbers import Number
-from typing import Optional, Tuple, Callable
+from typing import Callable, Optional, Tuple
 
 import torch
 from torch import distributions as d
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import step_tensor_dict
-from torchrl.modules import Actor, ProbabilisticTDModule
+from torchrl.modules import ProbabilisticTDModule, TDModule
 
 __all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
 
-from .common import _LossModule
-
 from torchrl.objectives.costs.utils import distance_loss
+from .common import _LossModule
 
 
 class PPOLoss(_LossModule):
@@ -52,14 +50,14 @@ class PPOLoss(_LossModule):
 
     def __init__(
         self,
-        actor: Actor,
-        critic: ProbabilisticTDModule,
+        actor: ProbabilisticTDModule,
+        critic: TDModule,
         advantage_key: str = "advantage",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_factor: Number = 0.01,
-        critic_factor: Number = 1.0,
-        gamma: Number = 0.99,
+        entropy_factor: float = 0.01,
+        critic_factor: float = 1.0,
+        gamma: float = 0.99,
         loss_critic_type: str = "smooth_l1",
         advantage_module: Optional[Callable[[_TensorDict], _TensorDict]] = None,
     ):
@@ -81,7 +79,7 @@ class PPOLoss(_LossModule):
     def get_entropy_bonus(self, dist: Optional[d.Distribution] = None) -> torch.Tensor:
         try:
             entropy = dist.entropy()
-        except:
+        except NotImplementedError:
             x = dist.rsample((self.samples_mc_entropy,))
             entropy = -dist.log_prob(x)
         return entropy.unsqueeze(-1)
@@ -177,15 +175,15 @@ class ClipPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: Actor,
-        critic: ProbabilisticTDModule,
+        actor: ProbabilisticTDModule,
+        critic: TDModule,
         advantage_key: str = "advantage",
-        clip_epsilon: Number = 0.2,
+        clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_factor: Number = 0.01,
-        critic_factor: Number = 1.0,
-        gamma: Number = 0.99,
+        entropy_factor: float = 0.01,
+        critic_factor: float = 1.0,
+        gamma: float = 0.99,
         loss_critic_type: str = "l2",
         **kwargs,
     ):
@@ -291,19 +289,19 @@ class KLPENPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: Actor,
-        critic: ProbabilisticTDModule,
+        actor: ProbabilisticTDModule,
+        critic: TDModule,
         advantage_key="advantage",
-        dtarg: Number = 0.01,
-        beta: Number = 1.0,
-        increment: Number = 2,
-        decrement: Number = 0.5,
+        dtarg: float = 0.01,
+        beta: float = 1.0,
+        increment: float = 2,
+        decrement: float = 0.5,
         samples_mc_kl: int = 1,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_factor: Number = 0.01,
-        critic_factor: Number = 1.0,
-        gamma: Number = 0.99,
+        entropy_factor: float = 0.01,
+        critic_factor: float = 1.0,
+        gamma: float = 0.99,
         loss_critic_type: str = "l2",
         **kwargs,
     ):

@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torchrl.data.tensordict.tensordict import _TensorDict
+
 
 # TODO: code small architecture ref in Impala paper
 
@@ -90,7 +90,10 @@ class ImpalaNet(nn.Module):
 
         if use_lstm:
             self.core = nn.LSTM(
-                core_output_size, out_features, num_layers=1, batch_first=batch_first
+                core_output_size,
+                out_features,
+                num_layers=1,
+                batch_first=batch_first,
             )
             core_output_size = out_features
 
@@ -165,7 +168,7 @@ class ImpalaNet(nn.Module):
 class ImpalaNetTensorDict(ImpalaNet):
     observation_key = "observation_pixels"
 
-    def forward(self, tensor_dict: _TensorDict):
+    def forward(self, tensor_dict: _TensorDict):  # type: ignore
         x = tensor_dict.get(self.observation_key)
         done = tensor_dict.get("done").squeeze(-1)
         reward = tensor_dict.get("reward").squeeze(-1)

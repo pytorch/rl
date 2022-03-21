@@ -1,20 +1,15 @@
 import argparse
 from argparse import ArgumentParser, Namespace
-
-__all__ = ["make_agent", "parser_agent_args"]
-
 from typing import Optional, Union
 from warnings import warn
 
 from torch import optim
-from torch.utils.tensorboard import SummaryWriter
 
 from torchrl.agents.agents import Agent
-from torchrl.agents.helpers.collectors import parser_collector_args_offline
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import _EnvClass
-from torchrl.modules import TDModuleWrapper, TDModule
+from torchrl.modules import TDModule, TDModuleWrapper
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 
@@ -24,6 +19,11 @@ OPTIMIZERS = {
     "adamax": optim.Adamax,
 }
 
+__all__ = [
+    "make_agent",
+    "parser_agent_args",
+]
+
 
 def make_agent(
     collector: _DataCollector,
@@ -32,11 +32,10 @@ def make_agent(
     target_net_updater: Optional[_TargetNetUpdate] = None,
     policy_exploration: Optional[Union[TDModuleWrapper, TDModule]] = None,
     replay_buffer: Optional[ReplayBuffer] = None,
-    writer: Optional[SummaryWriter] = None,
+    writer: Optional["SummaryWriter"] = None,
     args: Optional[Namespace] = None,
 ) -> Agent:
-    """
-    Creates an Agent instance given its constituents.
+    """Creates an Agent instance given its constituents.
 
     Args:
         collector (_DataCollector): A data collector to be used to collect data.
@@ -140,10 +139,18 @@ def make_agent(
         record_frames=args.record_frames,
         normalize_rewards_online=args.normalize_rewards_online,
         sub_traj_len=args.sub_traj_len,
+        selected_keys=args.selected_keys,
     )
 
 
 def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
+    """
+    Populates the argument parser to build the agent.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+
+    """
     parser.add_argument(
         "--optim_steps_per_collection",
         type=int,
@@ -155,6 +162,16 @@ def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--optimizer", type=str, default="adam", help="Optimizer to be used."
     )
+    parser.add_argument(
+        "--selected_keys",
+        nargs="+",
+        default=None,
+        help="a list of strings that indicate the data that should be kept from the data collector. Since storing and "
+        "retrieving information from the replay buffer does not come for free, limiting the amount of data "
+        "passed to it can improve the algorithm performance."
+        "Default is None, i.e. all keys are kept.",
+    )
+
     parser.add_argument(
         "--batch_size",
         type=int,

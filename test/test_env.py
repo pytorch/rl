@@ -1,12 +1,12 @@
 import argparse
 import os.path
+from collections import defaultdict
 
 import numpy as np
 import pytest
 import torch
 import yaml
 from scipy.stats import chisquare
-
 from torchrl.agents import EnvCreator
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
@@ -15,22 +15,25 @@ from torchrl.data.tensor_specs import (
     NdBoundedTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
-from torchrl.data.transforms import (
+from torchrl.envs import gym, GymEnv
+from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
     ToTensorImage,
     RewardClipping,
 )
-from torchrl.data.transforms.transforms import DiscreteActionProjection
-from torchrl.envs import gym, GymEnv
-from torchrl.envs.libs.gym import _get_envs as _get_gym_envs
 from torchrl.envs.utils import step_tensor_dict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 
-with open(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs/atari.yaml"), "r"
-) as file:
-    atari_confs = yaml.load(file, Loader=yaml.FullLoader)
+try:
+    this_dir = os.path.dirname(os.path.realpath(__file__))
+    with open(os.path.join(this_dir, "configs", "atari.yaml"), "r") as file:
+        atari_confs = yaml.load(file, Loader=yaml.FullLoader)
+    _atari_found = True
+except FileNotFoundError:
+    _atari_found = False
+    atari_confs = defaultdict(lambda: "")
+
 
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
 ## the serial and parallel batched envs
@@ -44,7 +47,7 @@ with open(
 #
 #
 # @pytest.mark.skipif(
-#     "Pong-v0" not in _get_gym_envs(), reason="no Atari OpenAI Gym env available"
+#     "Pong-v4" not in _get_gym_envs(), reason="no Atari OpenAI Gym env available"
 # )
 # def test_composite_env():
 #     num_workers = 10
@@ -77,7 +80,7 @@ with open(
 #     assert_allclose_td(rollout1, rollout0)
 
 
-@pytest.mark.parametrize("env_name", ["Pendulum-v0", "CartPole-v1"])
+@pytest.mark.parametrize("env_name", ["Pendulum-v1", "CartPole-v1"])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_env_seed(env_name, frame_skip, seed=0):
     env = gym.GymEnv(env_name, frame_skip=frame_skip)
@@ -107,7 +110,7 @@ def test_env_seed(env_name, frame_skip, seed=0):
         assert_allclose_td(td1a, td1c)
 
 
-@pytest.mark.parametrize("env_name", ["Pendulum-v0", "Pong-v0"])
+@pytest.mark.parametrize("env_name", ["Pendulum-v1", "Pong-v4"])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_rollout(env_name, frame_skip, seed=0):
     env = gym.GymEnv(env_name, frame_skip=frame_skip)
@@ -137,9 +140,9 @@ def test_rollout(env_name, frame_skip, seed=0):
 def _make_envs(env_name, frame_skip, transformed, N):
     torch.manual_seed(0)
     if not transformed:
-        create_env_fn = lambda: GymEnv("Pong-v0", frame_skip=frame_skip)
+        create_env_fn = lambda: GymEnv("Pong-v4", frame_skip=frame_skip)
     else:
-        if env_name == "Pong-v0":
+        if env_name == "Pong-v4":
             create_env_fn = lambda: TransformedEnv(
                 GymEnv(env_name, frame_skip=frame_skip),
                 Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
@@ -155,12 +158,10 @@ def _make_envs(env_name, frame_skip, transformed, N):
     return env_parallel, env_serial, env0
 
 
-@pytest.mark.parametrize("env_name", ["Pong-v0", "Pendulum-v0"])
+@pytest.mark.parametrize("env_name", ["Pong-v4", "Pendulum-v1"])
 @pytest.mark.parametrize("frame_skip", [4, 1])
 @pytest.mark.parametrize("transformed", [True, False])
-def test_parallel_env(env_name, frame_skip, transformed):
-    N = 5
-
+def test_parallel_env(env_name, frame_skip, transformed, T=10, N=5):
     env_parallel, env_serial, env0 = _make_envs(env_name, frame_skip, transformed, N)
 
     td = TensorDict(
@@ -189,14 +190,13 @@ def test_parallel_env(env_name, frame_skip, transformed):
     )
     env_parallel.reset(tensor_dict=td_reset)
 
-    T = 100
     td = env_parallel.rollout(policy=None, n_steps=T)
     assert (
         td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
     ), f"{td.shape}, {td.get('done').sum(1)}"
 
 
-@pytest.mark.parametrize("env_name", ["Pong-v0", "Pendulum-v0"])
+@pytest.mark.parametrize("env_name", ["Pong-v4", "Pendulum-v1"])
 @pytest.mark.parametrize("frame_skip", [4, 1])
 @pytest.mark.parametrize("transformed", [True, False])
 def test_parallel_env_seed(env_name, frame_skip, transformed):
@@ -207,7 +207,7 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
     td0_serial = env_serial.current_tensordict
     torch.manual_seed(0)
 
-    td_serial = env_serial.rollout(n_steps=100, auto_reset=False).contiguous()
+    td_serial = env_serial.rollout(n_steps=10, auto_reset=False).contiguous()
     key = "observation_pixels" if "observation_pixels" in td_serial else "observation"
     torch.testing.assert_allclose(
         td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
@@ -216,9 +216,10 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
     out_seed_parallel = env_parallel.set_seed(0)
     env_parallel.reset()
     td0_parallel = env_parallel.current_tensordict
+
     torch.manual_seed(0)
     assert out_seed_parallel == out_seed_serial
-    td_parallel = env_parallel.rollout(n_steps=100, auto_reset=False).contiguous()
+    td_parallel = env_parallel.rollout(n_steps=10, auto_reset=False).contiguous()
     torch.testing.assert_allclose(
         td_parallel[:, 0].get("next_" + key), td_parallel[:, 1].get(key)
     )
@@ -230,7 +231,7 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
 
 
 def test_parallel_env_shutdown():
-    env_make = EnvCreator(lambda: GymEnv("Pendulum-v0"))
+    env_make = EnvCreator(lambda: GymEnv("Pendulum-v1"))
     env = ParallelEnv(4, env_make)
     env.reset()
     assert not env.is_closed
@@ -245,7 +246,7 @@ def test_parallel_env_shutdown():
 
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="no cuda device detected")
-@pytest.mark.parametrize("env_name", ["Pong-v0", "Pendulum-v0"])
+@pytest.mark.parametrize("env_name", ["Pong-v4", "Pendulum-v1"])
 @pytest.mark.parametrize("frame_skip", [4, 1])
 @pytest.mark.parametrize("transformed", [True, False])
 @pytest.mark.parametrize("device", [0, "cuda:0"])
@@ -253,9 +254,9 @@ def test_parallel_env_device(env_name, frame_skip, transformed, device):
     torch.manual_seed(0)
     N = 5
     if not transformed:
-        create_env_fn = lambda: GymEnv("Pong-v0", frame_skip=frame_skip)
+        create_env_fn = lambda: GymEnv("Pong-v4", frame_skip=frame_skip)
     else:
-        if env_name == "Pong-v0":
+        if env_name == "Pong-v4":
             create_env_fn = lambda: TransformedEnv(
                 GymEnv(env_name, frame_skip=frame_skip),
                 Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
@@ -363,13 +364,13 @@ class TestSpec:
 
 def test_seed():
     torch.manual_seed(0)
-    env1 = GymEnv("Pendulum-v0")
+    env1 = GymEnv("Pendulum-v1")
     env1.set_seed(0)
     state0_1 = env1.reset()
     state1_1 = env1.step(state0_1.set("action", env1.action_spec.rand()))
 
     torch.manual_seed(0)
-    env2 = GymEnv("Pendulum-v0")
+    env2 = GymEnv("Pendulum-v1")
     env2.set_seed(0)
     state0_2 = env2.reset()
     state1_2 = env2.step(state0_2.set("action", env2.action_spec.rand()))
@@ -380,7 +381,7 @@ def test_seed():
 
 def test_current_tensordict():
     torch.manual_seed(0)
-    env = GymEnv("Pendulum-v0")
+    env = GymEnv("Pendulum-v1")
     env.set_seed(0)
     tensor_dict = env.reset()
     assert_allclose_td(tensor_dict, env.current_tensordict)

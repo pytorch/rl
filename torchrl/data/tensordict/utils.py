@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from numbers import Number
-from typing import Union, Tuple, List
 
 import torch
 
+from torchrl.data.utils import INDEX_TYPING
 
-def _sub_index(tensor: torch.Tensor, idx: Union[Tuple, slice, Number]) -> torch.Tensor:
-    """
-    Allows indexing of tensors with nested tuples, i.e. tensor[tuple1][tuple2] can be indexed via _sub_index(tensor, (tuple1, tuple2))
+
+def _sub_index(tensor: torch.Tensor, idx: INDEX_TYPING) -> torch.Tensor:
+    """Allows indexing of tensors with nested tuples, i.e.
+    tensor[tuple1][tuple2] can be indexed via _sub_index(tensor, (tuple1,
+    tuple2))
     """
     if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
         idx0 = idx[0]
@@ -18,11 +20,15 @@ def _sub_index(tensor: torch.Tensor, idx: Union[Tuple, slice, Number]) -> torch.
 
 
 def _getitem_batch_size(
-    shape: torch.Size, items: Union[Tuple, torch.Tensor, List, Number, slice]
+    shape: torch.Size,
+    items: INDEX_TYPING,
 ):
     """
-    Given an input shape and an index, returns the size of the resulting indexed tensor.
-    This function is aimed to be used when indexing is an expensive operation.
+    Given an input shape and an index, returns the size of the resulting
+    indexed tensor.
+
+    This function is aimed to be used when indexing is an
+    expensive operation.
     Args:
         shape: Input shape
         items: Index of the hypothetical tensor
@@ -41,7 +47,8 @@ def _getitem_batch_size(
         for _item in items[1:]:
             if _item.shape != shape0:
                 raise RuntimeError(
-                    f"all tensor indices must have the same shape, got {_item.shape} and {shape0}"
+                    f"all tensor indices must have the same shape, "
+                    f"got {_item.shape} and {shape0}"
                 )
         return shape0
 

@@ -3,14 +3,13 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from torch import nn
-
 from mocking_classes import (
     DiscreteActionConvMockEnv,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
     DiscreteActionConvPolicy,
 )
+from torch import nn
 from torchrl.agents.env_creator import EnvCreator
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.collectors.collectors import (
@@ -19,9 +18,9 @@ from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.data.transforms import TransformedEnv, VecNorm
 from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs.transforms import TransformedEnv, VecNorm
 
 
 def make_make_env(env_name="conv"):
@@ -407,7 +406,7 @@ def test_collector_vecnorm_envcreator():
     """
     from torchrl.envs import GymEnv
 
-    env_make = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v0"), VecNorm()))
+    env_make = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
     env_make = ParallelEnv(4, env_make)
 
     policy = RandomPolicy(env_make.action_spec)

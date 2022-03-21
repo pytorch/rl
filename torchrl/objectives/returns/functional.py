@@ -1,12 +1,11 @@
-from numbers import Number
 from typing import Tuple
 
 import torch
 
 
 def generalized_advantage_estimate(
-    gamma: Number,
-    lamda: Number,
+    gamma: float,
+    lamda: float,
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,

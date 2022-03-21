@@ -1,35 +1,49 @@
 import uuid
 from datetime import datetime
 
-import configargparse
+try:
+    import configargparse as argparse
+
+    _configargparse = True
+except ImportError:
+    import argparse
+
+    _configargparse = False
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
-
-from torchrl.agents.helpers.agents import parser_agent_args, make_agent
+from torchrl.agents.helpers.agents import make_agent, parser_agent_args
 from torchrl.agents.helpers.collectors import (
-    parser_collector_args_online,
-    make_collector_online,
+    make_collector_onpolicy,
+    parser_collector_args_onpolicy,
 )
 from torchrl.agents.helpers.envs import (
-    transformed_env_constructor,
-    parallel_env_constructor,
     correct_for_frame_skip,
     get_stats_random_rollout,
+    parallel_env_constructor,
     parser_env_args,
+    transformed_env_constructor,
 )
 from torchrl.agents.helpers.losses import make_ppo_loss, parser_loss_args_ppo
-from torchrl.agents.helpers.models import make_ppo_model, parser_model_args_continuous
+from torchrl.agents.helpers.models import (
+    make_ppo_model,
+    parser_model_args_continuous,
+)
 from torchrl.agents.helpers.recorder import parser_recorder_args
-from torchrl.data.transforms import TransformedEnv, RewardScaling
+from torchrl.envs.transforms import RewardScaling, TransformedEnv
 
 
 def make_args():
-    parser = configargparse.ArgumentParser()
-    parser.add_argument(
-        "-c", "--config", required=True, is_config_file=True, help="config file path"
-    )
+    parser = argparse.ArgumentParser()
+    if _configargparse:
+        parser.add_argument(
+            "-c",
+            "--config",
+            required=True,
+            is_config_file=True,
+            help="config file path",
+        )
     parser_agent_args(parser)
-    parser_collector_args_online(parser)
+    parser_collector_args_onpolicy(parser)
     parser_env_args(parser)
     parser_loss_args_ppo(parser)
     parser_model_args_continuous(parser, "PPO")
@@ -77,14 +91,18 @@ if __name__ == "__main__":
 
     create_env_fn = parallel_env_constructor(args=args, stats=stats)
 
-    collector = make_collector_online(
+    collector = make_collector_onpolicy(
         make_env=create_env_fn,
         actor_model_explore=actor_model,
         args=args,
     )
 
     recorder = transformed_env_constructor(
-        args, video_tag=video_tag, norm_obs_only=True, stats=stats, writer=writer
+        args,
+        video_tag=video_tag,
+        norm_obs_only=True,
+        stats=stats,
+        writer=writer,
     )()
 
     # remove video recorder from recorder to have matching state_dict keys

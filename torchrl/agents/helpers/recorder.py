@@ -4,6 +4,14 @@ __all__ = ["parser_recorder_args"]
 
 
 def parser_recorder_args(parser: ArgumentParser) -> ArgumentParser:
+    """
+    Populates the argument parser to build a recorder.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+
+    """
+
     parser.add_argument(
         "--record_video",
         action="store_true",

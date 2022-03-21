@@ -1,4 +1,3 @@
-from numbers import Number
 from typing import Union
 
 import torch
@@ -9,7 +8,7 @@ def bellman_max(
     next_observation: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
-    gamma: Union[Number, torch.Tensor],
+    gamma: Union[float, torch.Tensor],
     value_model: nn.Module,
 ):
     qmax = value_model(next_observation).max(dim=-1)[0]
