@@ -142,7 +142,7 @@ class SACLoss(_LossModule):
         loss_qvalue, priority = self._loss_qvalue(td_device)
         loss_value = self._loss_value(td_device)
         loss_alpha = self._loss_alpha(td_device)
-        tensordict.set(self.priority_key, priority, inplace=True)
+        tensordict.set(self.priority_key, priority)
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_actor.shape != loss_value.shape
         ):
@@ -172,7 +172,7 @@ class SACLoss(_LossModule):
         log_prob = dist.log_prob(a_reparm)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys)
-        td_q.set("action", a_reparm, inplace=False)
+        td_q.set("action", a_reparm)
         td_q = self.qvalue_network(
             td_q,
             params=list(self.target_qvalue_network_params),
@@ -188,7 +188,7 @@ class SACLoss(_LossModule):
 
         # write log_prob in tensordict for alpha loss
         tensordict.set("_log_prob", log_prob.detach())
-        return self._alpha * log_prob - min_q_logprob
+        return self._alpha * log_prob  # - min_q_logprob
 
     def _loss_qvalue(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
         actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)

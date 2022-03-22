@@ -6,7 +6,12 @@ from torch import nn
 
 from torchrl.data import UnboundedContinuousTensorSpec, DEVICE_TYPING, CompositeSpec
 from torchrl.envs.common import _EnvClass
-from torchrl.modules import ActorValueOperator, NoisyLinear, TDModule
+from torchrl.modules import (
+    ActorValueOperator,
+    NoisyLinear,
+    TDModule,
+    NormalParamWrapper,
+)
 from torchrl.modules.distributions import (
     Delta,
     OneHotCategorical,
@@ -14,6 +19,7 @@ from torchrl.modules.distributions import (
     TanhNormal,
     TruncatedNormal,
 )
+from torchrl.modules.distributions.continuous import IndependentNormal
 from torchrl.modules.models.models import (
     ConvNet,
     DdpgCnnActor,
@@ -443,10 +449,14 @@ def make_ppo_model(
             out_features=out_features,
         )
         if not args.gSDE:
-            actor_net = NormalParamWrapper(policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}")
+            actor_net = NormalParamWrapper(
+                policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
+            )
             in_keys = ["hidden"]
         else:
-            actor_net = gSDEWrapper(policy_net, action_dim=action_spec.shape[0], state_dim=hidden_features)
+            actor_net = gSDEWrapper(
+                policy_net, action_dim=action_spec.shape[0], state_dim=hidden_features
+            )
             in_keys = ["hidden", "gSDE_noise"]
             out_keys += ["_action_duplicate"]
 
@@ -487,9 +497,13 @@ def make_ppo_model(
             )
 
         if not args.gSDE:
-            actor_net = NormalParamWrapper(policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}")
+            actor_net = NormalParamWrapper(
+                policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
+            )
         else:
-            actor_net = gSDEWrapper(policy_net, action_dim=action_spec.shape[0], state_dim=obs_spec.shape[0])
+            actor_net = gSDEWrapper(
+                policy_net, action_dim=action_spec.shape[0], state_dim=obs_spec.shape[0]
+            )
             in_keys_actor += ["_eps_gSDE"]
             out_keys += ["_action_duplicate"]
 
@@ -648,29 +662,36 @@ def make_sac_model(
         **value_net_kwargs_default,
     )
 
-    value_spec = UnboundedContinuousTensorSpec()
-
     if not gSDE:
-        actor_net = NormalParamWrapper(actor_net, scale_mapping=f"biased_softplus_{default_policy_scale}")
+        actor_net = NormalParamWrapper(
+            actor_net, scale_mapping=f"biased_softplus_{default_policy_scale}"
+        )
         in_keys_actor = in_keys
+        dist_class = TanhNormal
+        dist_kwargs = {
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
+            "tanh_loc": tanh_loc,
+        }
     else:
         if isinstance(obs_spec, CompositeSpec):
             obs_spec = obs_spec["vector"]
         obs_spec_len = obs_spec.shape[0]
-        actor_net = gSDEWrapper(actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len)
+        actor_net = gSDEWrapper(
+            actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len
+        )
         in_keys_actor = in_keys + ["_eps_gSDE"]
+        dist_class = IndependentNormal
+        dist_kwargs = {}
 
     actor = ProbabilisticActor(
         spec=action_spec,
         in_keys=in_keys_actor,
         module=actor_net,
-        distribution_class=TanhNormal,
-        distribution_kwargs={
-            "min": action_spec.space.minimum,
-            "max": action_spec.space.maximum,
-            "tanh_loc": tanh_loc,
-        },
-        default_interaction_mode="random",
+        distribution_class=dist_class,
+        distribution_kwargs=dist_kwargs,
+        default_interaction_mode="random" if not gSDE else "net_output",
+        safe=True,
     )
     qvalue = ValueOperator(
         in_keys=["action"] + in_keys,
@@ -695,7 +716,7 @@ def make_sac_model(
 
 def make_redq_model(
     proof_environment: _EnvClass,
-    in_keys: Optional[Iterable[str]] = None,
+    in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
     qvalue_net_kwargs=None,
     device: DEVICE_TYPING = "cpu",

@@ -901,7 +901,11 @@ class LSTMNet(nn.Module):
 
 class gSDEWrapper(nn.Module):
     def __init__(
-        self, policy_model: nn.Module, action_dim: int, state_dim: int, sigma_init: Number = None,
+        self,
+        policy_model: nn.Module,
+        action_dim: int,
+        state_dim: int,
+        sigma_init: Number = None,
     ) -> None:
         super().__init__()
         self.policy_model = policy_model
@@ -911,22 +915,20 @@ class gSDEWrapper(nn.Module):
             sigma_init = inv_softplus(math.sqrt(1 / state_dim))
         self.register_parameter(
             "log_sigma",
-            nn.Parameter(torch.zeros((action_dim, state_dim), requires_grad=True))
+            nn.Parameter(torch.zeros((action_dim, state_dim), requires_grad=True)),
         )
-        self.register_buffer('sigma_init', torch.tensor(sigma_init))
+        self.register_buffer("sigma_init", torch.tensor(sigma_init))
 
-
-    def forward(self, *tensors):
-        state = tensors[0]  # state is assumed to be the first input
+    def forward(self, state, *tensors):
         *tensors, gSDE_noise = tensors
-        sigma = torch.nn.functional.softplus(self.log_sigma+self.sigma_init)
+        sigma = torch.nn.functional.softplus(self.log_sigma + self.sigma_init)
         if gSDE_noise is None:
             gSDE_noise = torch.randn_like(sigma)
         gSDE_noise = sigma * gSDE_noise
         eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
-        mu = self.policy_model(*tensors)
+        mu = self.policy_model(state, *tensors)
         action = mu + eps
-        sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).sqrt().clamp_min(1e-5)
+        sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(1e-5).sqrt()
         if not torch.isfinite(sigma).all():
-            sigma
+            print("inf sigma")
         return mu, sigma, action

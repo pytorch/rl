@@ -167,7 +167,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def set(
-        self, key: str, item: COMPATIBLE_TYPES, inplace=True, **kwargs
+        self, key: str, item: COMPATIBLE_TYPES, inplace: bool = False, **kwargs
     ) -> _TensorDict:  # type: ignore
         """Sets a new key-value pair.
 
@@ -176,7 +176,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
             item (torch.Tensor): value to be stored in the tensordict
             inplace (bool, optional): if True and if a key matches an existing
                 key in the tensordict, then the update will occur in-place
-                for that key-value pair. Default is `True`.
+                for that key-value pair. Default is `False`.
 
         Returns:
             self
@@ -279,7 +279,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         self,
         input_dict_or_td: Union[Dict[str, COMPATIBLE_TYPES], _TensorDict],
         clone: bool = False,
-        inplace: bool = True,
+        inplace: bool = False,
         **kwargs,
     ) -> _TensorDict:
         """Updates the TensorDict with values from either a dictionary or
@@ -293,7 +293,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
                 `False`.
             inplace (bool, optional): if True and if a key matches an existing
                 key in the tensordict, then the update will occur in-place
-                for that key-value pair. Default is `True`.
+                for that key-value pair. Default is `False`.
             **kwargs: keyword arguments for the `TensorDict.set` method
 
         Returns:
@@ -1443,12 +1443,12 @@ class TensorDict(_TensorDict):
         self,
         key: str,
         value: COMPATIBLE_TYPES,
-        inplace: bool = True,
+        inplace: bool = False,
         _run_checks: bool = True,
         _meta_val: Optional[MetaTensor] = None,
     ) -> _TensorDict:
-        """Sets a value in the TensorDict. If inplace=True (default), if the
-        key already exists, set will call set_ (in place setting).
+        """Sets a value in the TensorDict. If inplace=True (default is False),
+        and if the key already exists, set will call set_ (in place setting).
         """
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
@@ -1978,7 +1978,7 @@ torch.Size([3, 2])
         self,
         key: str,
         tensor: COMPATIBLE_TYPES,
-        inplace: bool = True,
+        inplace: bool = False,
         _run_checks: bool = True,
     ) -> _TensorDict:  # type: ignore
         if inplace and key in self.keys():

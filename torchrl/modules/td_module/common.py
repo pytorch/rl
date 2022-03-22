@@ -579,7 +579,9 @@ class ProbabilisticTDModule(TDModule):
     ) -> _TensorDict:
 
         dist, *tensors = self.get_dist(tensor_dict, **kwargs)
-        out_tensor = self._dist_sample(dist, interaction_mode=exploration_mode())
+        out_tensor = self._dist_sample(
+            dist, *tensors, interaction_mode=exploration_mode()
+        )
         tensor_dict_out = self._write_to_tensor_dict(
             tensor_dict,
             [out_tensor] + list(tensors),
@@ -612,12 +614,12 @@ class ProbabilisticTDModule(TDModule):
     def _dist_sample(
         self,
         dist: d.Distribution,
+        *tensors: Tensor,
         interaction_mode: bool = None,
         eps: float = None,
     ) -> Tensor:
         if interaction_mode is None:
             interaction_mode = self.default_interaction_mode
-
         if not isinstance(dist, d.Distribution):
             raise TypeError(f"type {type(dist)} not recognised by _dist_sample")
 
@@ -651,6 +653,13 @@ class ProbabilisticTDModule(TDModule):
                 return dist.rsample()
             else:
                 return dist.sample()
+        elif interaction_mode == "net_output":
+            if len(tensors) > 1:
+                raise RuntimeError(
+                    "Multiple values passed to _dist_sample when trying to return a single action "
+                    "tensor."
+                )
+            return tensors[0]
         else:
             raise NotImplementedError(f"unknown interaction_mode {interaction_mode}")
 

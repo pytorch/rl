@@ -14,6 +14,20 @@ __all__ = ["NormalParamWrapper", "TanhNormal", "Delta", "TanhDelta", "TruncatedN
 D.Distribution.set_default_validate_args(False)
 
 
+class IndependentNormal(D.Independent):
+    num_params: int = 2
+
+    def __init__(
+        self, loc: torch.Tensor, scale: torch.Tensor, event_dim: int = 1, **kwargs
+    ):
+        self._event_dim = event_dim
+        self._kwargs = kwargs
+        super().__init__(D.Normal(loc, scale, **kwargs), event_dim)
+
+    def update(self, loc, scale):
+        super().__init__(D.Normal(loc, scale, **self._kwargs), self._event_dim)
+
+
 class SafeTanhTransform(D.TanhTransform):
     """
     TanhTransform subclass that ensured that the transformation is numerically invertible.
@@ -98,7 +112,7 @@ class TruncatedNormal(D.Independent):
             Default is `True`;
     """
 
-    num_params = 2
+    num_params: int = 2
 
     arg_constraints = {
         "loc": constraints.real,
@@ -145,12 +159,15 @@ class TruncatedNormal(D.Independent):
 
         if isinstance(max, torch.Tensor):
             max = max.to(self.device)
+        else:
+            max = torch.tensor(max, device=self.device)
         if isinstance(min, torch.Tensor):
             min = min.to(self.device)
+        else:
+            min = torch.tensor(min, device=self.device)
         self.min = min
         self.max = max
         self.update(loc, scale)
-
 
     def update(self, loc: torch.Tensor, scale: torch.Tensor) -> None:
         if self.tanh_loc:
@@ -160,19 +177,10 @@ class TruncatedNormal(D.Independent):
         self.loc = loc
         self.scale = scale
 
-        if (
-            hasattr(self, "base_dist")
-            and (self.base_dist.loc.shape == self.loc.shape)
-            and (self.base_dist.scale.shape == self.scale.shape)
-        ):
-            self.base_dist.loc = self.loc
-            self.base_dist.scale = self.scale
-
-        else:
-            base_dist = _TruncatedNormal(
-                loc, scale, self.min.expand_as(loc), self.max.expand_as(scale)
-            )
-            super().__init__(base_dist, 1, validate_args=False)
+        base_dist = _TruncatedNormal(
+            loc, scale, self.min.expand_as(loc), self.max.expand_as(scale)
+        )
+        super().__init__(base_dist, 1, validate_args=False)
 
     @property
     def mode(self):
@@ -306,7 +314,6 @@ class TanhNormal(D.TransformedDistribution):
         ):
             self.base_dist.base_dist.loc = self.loc
             self.base_dist.base_dist.scale = self.scale
-
         else:
             base = D.Independent(D.Normal(self.loc, self.scale), self._event_dims)
             super().__init__(base, self._t)

@@ -21,7 +21,7 @@ from torchrl.envs.transforms import (
     TransformedEnv,
     VecNorm,
 )
-from torchrl.data.transforms.transforms import gSDE
+from torchrl.envs.transforms.transforms import gSDE
 from torchrl.record.recorder import VideoRecorder
 
 __all__ = [
@@ -175,7 +175,11 @@ def transformed_env_constructor(
             transforms.append(DoubleToFloat(keys=double_to_float_list))
 
             if args.gSDE:
-                transforms.append(gSDE(action_dim=env.action_spec.shape[-1], ))
+                transforms.append(
+                    gSDE(
+                        action_dim=env.action_spec.shape[-1],
+                    )
+                )
 
         else:
             transforms.append(DoubleToFloat(keys=double_to_float_list))

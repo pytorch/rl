@@ -4,7 +4,7 @@ import pathlib
 import warnings
 from collections import OrderedDict
 from textwrap import indent
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Dict, Optional, Union, Sequence
 
 import numpy as np
 import torch.nn

@@ -182,16 +182,18 @@ class Transform(nn.Module):
         return f"{self.__class__.__name__}(keys={self.keys})"
 
     def set_parent(self, parent: Union[Transform, _EnvClass]) -> None:
-        self.__dict__['_parent'] = parent
+        self.__dict__["_parent"] = parent
 
     @property
     def parent(self) -> _EnvClass:
-        if not hasattr(self, '_parent'):
+        if not hasattr(self, "_parent"):
             raise AttributeError("transform parent uninitialized")
         parent = self._parent
         while not isinstance(parent, _EnvClass):
             if not isinstance(parent, Transform):
-                raise ValueError("A transform parent must be either another transform or an environment object.")
+                raise ValueError(
+                    "A transform parent must be either another transform or an environment object."
+                )
             parent = parent.parent
         return parent
 
@@ -825,7 +827,7 @@ class CatFrames(ObservationTransform):
 
     def _apply(self, obs: torch.Tensor) -> torch.Tensor:
         self.buffer.append(obs)
-        self.buffer = self.buffer[-self.N:]
+        self.buffer = self.buffer[-self.N :]
         buffer = list(reversed(self.buffer))
         buffer = [buffer[0]] * (self.N - len(buffer)) + buffer
         if len(buffer) != self.N:
