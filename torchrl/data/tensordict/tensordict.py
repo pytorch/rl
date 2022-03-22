@@ -2637,11 +2637,13 @@ class SavedTensorDict(_TensorDict):
         device: Optional[torch.device] = None,
         batch_size: Optional[Sequence[int]] = None,
     ):
-        if not isinstance(source, _TensorDict) or isinstance(source, SavedTensorDict):
+        if not isinstance(source, _TensorDict):
             raise TypeError(
-                f"Expected source to be a _TensorDict instance ("
-                f"excluded SavedTensorDict), but got {type(source)} instead."
+                f"Expected source to be a _TensorDict instance, but got {type(source)} instead."
             )
+        elif isinstance(source, SavedTensorDict):
+            source = source._load()
+
         self.file = tempfile.NamedTemporaryFile()
         self.filename = self.file.name
         if source.is_memmap():
@@ -2669,7 +2671,7 @@ class SavedTensorDict(_TensorDict):
         torch.save(tensor_dict, self.filename)
 
     def _load(self) -> _TensorDict:
-        return torch.load(self.filename, self._device)
+        return torch.load(self.filename, self.device)
 
     def _get_meta(self, key: str) -> MetaTensor:
         return self._tensor_dict_meta.get(key)  # type: ignore
@@ -2785,7 +2787,7 @@ class SavedTensorDict(_TensorDict):
         return self._load().contiguous()
 
     def clone(self, recursive: bool = True) -> _TensorDict:
-        return SavedTensorDict(self._load(), device=self.device)
+        return SavedTensorDict(self, device=self.device)
 
     def select(self, *keys: str, inplace: bool = False) -> _TensorDict:
         _source = self.contiguous().select(*keys)
