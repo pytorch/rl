@@ -2664,7 +2664,6 @@ class SavedTensorDict(_TensorDict):
 
     def _save(self, tensor_dict: _TensorDict) -> None:
         self._keys = list(tensor_dict.keys())
-        self._device = tensor_dict.device
         self._batch_size = tensor_dict.batch_size
         self._td_fields = _td_fields(tensor_dict)
         self._tensor_dict_meta = {key: value for key, value in tensor_dict.items_meta()}

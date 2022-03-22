@@ -89,15 +89,15 @@ def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
 def test_gsde(state_dim, action_dim, gSDE, device, safe, batch=16, bound=0.1):
     torch.manual_seed(0)
     if gSDE:
-        model = torch.nn.LazyLinear(action_dim).to(device)
-        wrapper = gSDEWrapper(model, action_dim, state_dim)
+        model = torch.nn.LazyLinear(action_dim)
+        wrapper = gSDEWrapper(model, action_dim, state_dim).to(device)
         exploration_mode = "net_output"
         distribution_class = IndependentNormal
         distribution_kwargs = {}
         in_keys = ["observation", "_eps_gSDE"]
     else:
-        model = torch.nn.LazyLinear(action_dim * 2).to(device)
-        wrapper = NormalParamWrapper(model)
+        model = torch.nn.LazyLinear(action_dim * 2)
+        wrapper = NormalParamWrapper(model).to(device)
         exploration_mode = "random"
         distribution_class = TanhNormal
         distribution_kwargs = {"min": -bound, "max": bound}
