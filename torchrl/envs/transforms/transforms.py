@@ -42,6 +42,7 @@ __all__ = [
     "BinerizeReward",
     "PinMemoryTransform",
     "VecNorm",
+    "gSDENoise",
 ]
 
 IMAGE_KEYS = ["next_observation", "next_observation_pixels"]

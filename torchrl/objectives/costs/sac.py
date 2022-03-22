@@ -130,9 +130,7 @@ class SACLoss(_LossModule):
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         if tensordict.ndimension() > 1:
-            tensordict = tensordict.view(
-                -1
-            )
+            tensordict = tensordict.view(-1)
 
         device = self.device
         td_device = tensordict.to(device)

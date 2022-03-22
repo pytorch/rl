@@ -4,7 +4,7 @@ from typing import Optional, Sequence
 import torch
 from torch import nn
 
-from torchrl.data import UnboundedContinuousTensorSpec, DEVICE_TYPING, CompositeSpec
+from torchrl.data import DEVICE_TYPING, CompositeSpec
 from torchrl.envs.common import _EnvClass
 from torchrl.modules import (
     ActorValueOperator,
@@ -20,6 +20,7 @@ from torchrl.modules.distributions import (
     TruncatedNormal,
 )
 from torchrl.modules.distributions.continuous import IndependentNormal
+from torchrl.modules.models.exploration import gSDEWrapper
 from torchrl.modules.models.models import (
     ConvNet,
     DdpgCnnActor,
@@ -29,7 +30,6 @@ from torchrl.modules.models.models import (
     DuelingCnnDQNet,
     LSTMNet,
     MLP,
-    gSDEWrapper,
 )
 from torchrl.modules.td_module import (
     Actor,
@@ -77,7 +77,7 @@ def make_dqn_actor(
     Examples:
         >>> from torchrl.agents.helpers.models import make_dqn_actor, parser_model_args_discrete
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.data.transforms import ToTensorImage, TransformedEnv
+        >>> from torchrl.envs.transforms import ToTensorImage, TransformedEnv
         >>> import argparse
         >>> proof_environment = TransformedEnv(GymEnv("Pong-v0", pixels_only=True), ToTensorImage())
         >>> device = torch.device("cpu")
@@ -186,7 +186,7 @@ def make_ddpg_actor(
     Examples:
         >>> from torchrl.agents.helpers.models import make_ddpg_actor, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.data.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
+        >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import argparse
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
@@ -336,7 +336,7 @@ def make_ppo_model(
     Examples:
         >>> from torchrl.agents.helpers.models import make_ppo_model, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.data.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
+        >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import argparse
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
@@ -577,7 +577,7 @@ def make_sac_model(
     Examples:
         >>> from torchrl.agents.helpers.models import make_sac_model, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.data.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
+        >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import argparse
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
@@ -751,7 +751,7 @@ def make_redq_model(
     Examples:
         >>> from torchrl.agents.helpers.models import make_redq_model, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.data.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
+        >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import argparse
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))

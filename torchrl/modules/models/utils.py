@@ -3,7 +3,7 @@ from typing import Optional, Sequence
 import torch
 from torch import nn
 
-from .noisy import NoisyLazyLinear, NoisyLinear
+from .exploration import NoisyLazyLinear, NoisyLinear
 
 LazyMapping = {
     nn.Linear: nn.LazyLinear,

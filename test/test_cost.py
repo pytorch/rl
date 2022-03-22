@@ -12,8 +12,7 @@ from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.data.utils import expand_as_right
 from torchrl.modules import DistributionalQValueActor, QValueActor
-from torchrl.modules.distributions.continuous import TanhNormal, \
-    NormalParamWrapper
+from torchrl.modules.distributions.continuous import TanhNormal, NormalParamWrapper
 from torchrl.modules.models.models import MLP
 from torchrl.modules.td_module.actors import ValueOperator, Actor, ProbabilisticActor
 from torchrl.objectives import (

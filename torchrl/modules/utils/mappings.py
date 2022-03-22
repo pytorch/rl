@@ -64,7 +64,7 @@ def mappings(key: str) -> Callable:
         "exp": torch.exp,
         "relu": torch.relu,
         "biased_softplus": biased_softplus(1.0),
-        "expln": expln
+        "expln": expln,
     }
     if key in _mappings:
         return _mappings[key]
