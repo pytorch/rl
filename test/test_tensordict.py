@@ -1,3 +1,4 @@
+import argparse
 import os.path
 
 import numpy as np
@@ -622,7 +623,7 @@ def test_set_sub_key(index0):
     assert (td0.get("c") == 0).all()
 
 
-def remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordict):
+def _remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordict):
     command_pipe_parent.close()
     while True:
         cmd, val = command_pipe_child.recv()
@@ -638,13 +639,13 @@ def remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordic
             ).all(), f'found {a} and {tensordict.get("a")}'
             command_pipe_child.send("done")
         elif cmd == "set_done":
-            tensordict.set("done", torch.ones(1, dtype=torch.bool))
+            tensordict.set_("done", torch.ones(1, dtype=torch.bool))
             command_pipe_child.send("done")
         elif cmd == "set_undone_":
             tensordict.set_("done", torch.zeros(1, dtype=torch.bool))
             command_pipe_child.send("done")
         elif cmd == "update":
-            tensordict.update(
+            tensordict.update_(
                 TensorDict(
                     source={"a": tensordict.get("a").clone() + 1},
                     batch_size=tensordict.batch_size,
@@ -665,7 +666,7 @@ def remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordic
             break
 
 
-def driver_func(tensordict, tensor_dict_unbind):
+def _driver_func(tensordict, tensor_dict_unbind):
     procs = []
     children = []
     parents = []
@@ -673,7 +674,7 @@ def driver_func(tensordict, tensor_dict_unbind):
     for i in range(2):
         command_pipe_parent, command_pipe_child = mp.Pipe()
         proc = mp.Process(
-            target=remote_process,
+            target=_remote_process,
             args=(i, command_pipe_child, command_pipe_parent, tensor_dict_unbind[i]),
         )
         proc.start()
@@ -683,7 +684,7 @@ def driver_func(tensordict, tensor_dict_unbind):
         procs.append(proc)
 
     b = torch.ones(2, 1) * 10
-    tensordict.set("b", b)
+    tensordict.set_("b", b)
     for i in range(2):
         parents[i].send(("recv", 10))
         is_done = parents[i].recv()
@@ -763,7 +764,7 @@ def test_mp(td_type):
         )
     else:
         raise NotImplementedError
-    driver_func(tensordict, tensordict.unbind(0))
+    _driver_func(tensordict, tensordict.unbind(0))
 
 
 def test_saved_delete():
@@ -832,4 +833,5 @@ def test_getitem_batch_size():
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "--capture", "no"])
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

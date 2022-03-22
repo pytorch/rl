@@ -288,6 +288,7 @@ def make_collector_offpolicy(
         "split_trajs": ms is not None,
         # trajectories must be separated if multi-step is used
         "init_with_lag": args.init_with_lag,
+        "exploration_mode": args.exploration_mode,
     }
 
     collector = collector_helper(**collector_helper_kwargs)
@@ -330,6 +331,7 @@ def make_collector_onpolicy(
         "split_trajs": True,
         # trajectories must be separated in online settings
         "init_with_lag": args.init_with_lag,
+        "exploration_mode": args.exploration_mode,
     }
 
     collector = collector_helper(**collector_helper_kwargs)
@@ -407,6 +409,12 @@ def _parser_collector_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=42,
         help="seed used for the environment, pytorch and numpy.",
+    )
+    parser.add_argument(
+        "--exploration_mode",
+        type=str,
+        default=None,
+        help="exploration mode of the data collector. If gSDE is being used, this should be set to `'net_output'`.",
     )
     parser.add_argument(
         "--async_collection",

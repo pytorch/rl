@@ -167,7 +167,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def set(
-        self, key: str, item: COMPATIBLE_TYPES, inplace=True, **kwargs
+        self, key: str, item: COMPATIBLE_TYPES, inplace: bool = False, **kwargs
     ) -> _TensorDict:  # type: ignore
         """Sets a new key-value pair.
 
@@ -176,7 +176,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
             item (torch.Tensor): value to be stored in the tensordict
             inplace (bool, optional): if True and if a key matches an existing
                 key in the tensordict, then the update will occur in-place
-                for that key-value pair. Default is `True`.
+                for that key-value pair. Default is `False`.
 
         Returns:
             self
@@ -279,7 +279,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         self,
         input_dict_or_td: Union[Dict[str, COMPATIBLE_TYPES], _TensorDict],
         clone: bool = False,
-        inplace: bool = True,
+        inplace: bool = False,
         **kwargs,
     ) -> _TensorDict:
         """Updates the TensorDict with values from either a dictionary or
@@ -293,7 +293,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
                 `False`.
             inplace (bool, optional): if True and if a key matches an existing
                 key in the tensordict, then the update will occur in-place
-                for that key-value pair. Default is `True`.
+                for that key-value pair. Default is `False`.
             **kwargs: keyword arguments for the `TensorDict.set` method
 
         Returns:
@@ -1443,12 +1443,12 @@ class TensorDict(_TensorDict):
         self,
         key: str,
         value: COMPATIBLE_TYPES,
-        inplace: bool = True,
+        inplace: bool = False,
         _run_checks: bool = True,
         _meta_val: Optional[MetaTensor] = None,
     ) -> _TensorDict:
-        """Sets a value in the TensorDict. If inplace=True (default), if the
-        key already exists, set will call set_ (in place setting).
+        """Sets a value in the TensorDict. If inplace=True (default is False),
+        and if the key already exists, set will call set_ (in place setting).
         """
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
@@ -1978,7 +1978,7 @@ torch.Size([3, 2])
         self,
         key: str,
         tensor: COMPATIBLE_TYPES,
-        inplace: bool = True,
+        inplace: bool = False,
         _run_checks: bool = True,
     ) -> _TensorDict:  # type: ignore
         if inplace and key in self.keys():
@@ -2637,11 +2637,13 @@ class SavedTensorDict(_TensorDict):
         device: Optional[torch.device] = None,
         batch_size: Optional[Sequence[int]] = None,
     ):
-        if not isinstance(source, _TensorDict) or isinstance(source, SavedTensorDict):
+        if not isinstance(source, _TensorDict):
             raise TypeError(
-                f"Expected source to be a _TensorDict instance ("
-                f"excluded SavedTensorDict), but got {type(source)} instead."
+                f"Expected source to be a _TensorDict instance, but got {type(source)} instead."
             )
+        elif isinstance(source, SavedTensorDict):
+            source = source._load()
+
         self.file = tempfile.NamedTemporaryFile()
         self.filename = self.file.name
         if source.is_memmap():
@@ -2662,14 +2664,13 @@ class SavedTensorDict(_TensorDict):
 
     def _save(self, tensor_dict: _TensorDict) -> None:
         self._keys = list(tensor_dict.keys())
-        self._device = tensor_dict.device
         self._batch_size = tensor_dict.batch_size
         self._td_fields = _td_fields(tensor_dict)
         self._tensor_dict_meta = {key: value for key, value in tensor_dict.items_meta()}
         torch.save(tensor_dict, self.filename)
 
     def _load(self) -> _TensorDict:
-        return torch.load(self.filename, self._device)
+        return torch.load(self.filename, self.device)
 
     def _get_meta(self, key: str) -> MetaTensor:
         return self._tensor_dict_meta.get(key)  # type: ignore
@@ -2785,7 +2786,7 @@ class SavedTensorDict(_TensorDict):
         return self._load().contiguous()
 
     def clone(self, recursive: bool = True) -> _TensorDict:
-        return SavedTensorDict(self._load(), device=self.device)
+        return SavedTensorDict(self, device=self.device)
 
     def select(self, *keys: str, inplace: bool = False) -> _TensorDict:
         _source = self.contiguous().select(*keys)

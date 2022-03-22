@@ -1,3 +1,3 @@
 from .models import *
-from .noisy import *
+from .exploration import *
 from .utils import *

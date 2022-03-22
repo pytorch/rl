@@ -21,6 +21,7 @@ from torchrl.envs.transforms import (
     TransformedEnv,
     VecNorm,
 )
+from torchrl.envs.transforms.transforms import gSDENoise
 from torchrl.record.recorder import VideoRecorder
 
 __all__ = [
@@ -172,8 +173,18 @@ def transformed_env_constructor(
 
             double_to_float_list.append(out_key)
             transforms.append(DoubleToFloat(keys=double_to_float_list))
+
+            if args.gSDE:
+                transforms.append(
+                    gSDENoise(
+                        action_dim=env.action_spec.shape[-1],
+                    )
+                )
+
         else:
             transforms.append(DoubleToFloat(keys=double_to_float_list))
+            if args.gSDE:
+                raise RuntimeError("gSDE not compatible with from_pixels=True")
 
         if len(video_tag):
             transforms = [

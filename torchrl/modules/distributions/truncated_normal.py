@@ -25,6 +25,7 @@ class TruncatedStandardNormal(Distribution):
         "b": constraints.real,
     }
     has_rsample = True
+    eps = 1e-6
 
     def __init__(self, a, b, validate_args=None):
         self.a, self.b = broadcast_all(a, b)
@@ -45,14 +46,15 @@ class TruncatedStandardNormal(Distribution):
             .tolist()
         ):
             raise ValueError("Incorrect truncation range")
-        eps = torch.finfo(self.a.dtype).eps
+        # eps = torch.finfo(self.a.dtype).eps * 10
+        eps = self.eps
         self._dtype_min_gt_0 = eps
         self._dtype_max_lt_1 = 1 - eps
         self._little_phi_a = self._little_phi(self.a)
         self._little_phi_b = self._little_phi(self.b)
         self._big_phi_a = self._big_phi(self.a)
         self._big_phi_b = self._big_phi(self.b)
-        self._Z = (self._big_phi_b - self._big_phi_a).clamp_min(eps)
+        self._Z = (self._big_phi_b - self._big_phi_a).clamp(eps, 1 - eps)
         self._log_Z = self._Z.log()
         little_phi_coeff_a = torch.nan_to_num(self.a, nan=math.nan)
         little_phi_coeff_b = torch.nan_to_num(self.b, nan=math.nan)
@@ -92,9 +94,9 @@ class TruncatedStandardNormal(Distribution):
     def _little_phi(x):
         return (-(x ** 2) * 0.5).exp() * CONST_INV_SQRT_2PI
 
-    @staticmethod
-    def _big_phi(x):
-        return 0.5 * (1 + (x * CONST_INV_SQRT_2).erf())
+    def _big_phi(self, x):
+        phi = 0.5 * (1 + (x * CONST_INV_SQRT_2).erf())
+        return phi.clamp(self.eps, 1 - self.eps)
 
     @staticmethod
     def _inv_big_phi(x):
@@ -106,7 +108,9 @@ class TruncatedStandardNormal(Distribution):
         return ((self._big_phi(value) - self._big_phi_a) / self._Z).clamp(0, 1)
 
     def icdf(self, value):
-        return self._inv_big_phi(self._big_phi_a + value * self._Z)
+        y = self._big_phi_a + value * self._Z
+        y = y.clamp(self.eps, 1 - self.eps)
+        return self._inv_big_phi(y)
 
     def log_prob(self, value):
         if self._validate_args:
@@ -130,6 +134,7 @@ class TruncatedNormal(TruncatedStandardNormal):
     has_rsample = True
 
     def __init__(self, loc, scale, a, b, validate_args=None):
+        scale = scale.clamp_min(self.eps)
         self.loc, self.scale, a, b = broadcast_all(loc, scale, a, b)
         self._non_std_a = a
         self._non_std_b = b
@@ -151,7 +156,17 @@ class TruncatedNormal(TruncatedStandardNormal):
         return super(TruncatedNormal, self).cdf(self._to_std_rv(value))
 
     def icdf(self, value):
-        return self._from_std_rv(super(TruncatedNormal, self).icdf(value))
+        sample = self._from_std_rv(super().icdf(value))
+
+        # clamp data but keep gradients
+        sample_clip = torch.stack(
+            [sample.detach(), self._non_std_a.detach().expand_as(sample)], 0
+        ).max(0)[0]
+        sample_clip = torch.stack(
+            [sample_clip, self._non_std_b.detach().expand_as(sample)], 0
+        ).min(0)[0]
+        sample.data.copy_(sample_clip)
+        return sample
 
     def log_prob(self, value):
         value = self._to_std_rv(value)

@@ -53,8 +53,10 @@ class _LossModule(nn.Module):
         params = network_orig.parameters()
         # unless we need to expand them, in that case we'll delete the weights to make sure that the user does not
         # run anything with them expecting them to be updated
+        params = list(params)
+        module_buffers = list(module_buffers)
         if expand_dim:
-            params = list(params)
+
             for i, p in enumerate(params):
                 p = p.repeat(expand_dim, *[1 for _ in p.shape])
                 p = nn.Parameter(
@@ -62,10 +64,9 @@ class _LossModule(nn.Module):
                 )
                 params[i] = p
 
-            module_buffers = list(module_buffers)
-            for i, p in enumerate(module_buffers):
-                p = p.expand(expand_dim, *p.shape).clone()
-                module_buffers[i] = p
+            for i, b in enumerate(module_buffers):
+                b = b.expand(expand_dim, *b.shape).clone()
+                module_buffers[i] = b
 
             # delete weights of original model as they do not correspond to the optimized weights
             network_orig.to("meta")

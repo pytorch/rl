@@ -7,7 +7,6 @@ from torchrl.data import (
     ReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
 )
-from torchrl.data.replay_buffers.replay_buffers import InPlaceSampler
 
 __all__ = ["make_replay_buffer", "parser_replay_args"]
 
@@ -18,7 +17,7 @@ def make_replay_buffer(device: DEVICE_TYPING, args: Namespace) -> ReplayBuffer:
     if not args.prb:
         buffer = ReplayBuffer(
             args.buffer_size,
-            collate_fn=InPlaceSampler(device),
+            # collate_fn=InPlaceSampler(device),
             pin_memory=device != torch.device("cpu"),
             prefetch=3,
         )
@@ -27,7 +26,7 @@ def make_replay_buffer(device: DEVICE_TYPING, args: Namespace) -> ReplayBuffer:
             args.buffer_size,
             alpha=0.7,
             beta=0.5,
-            collate_fn=InPlaceSampler(device),
+            # collate_fn=InPlaceSampler(device),
             pin_memory=device != torch.device("cpu"),
             prefetch=3,
         )

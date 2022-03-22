@@ -9,6 +9,7 @@ from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
 __all__ = ["NoisyLinear", "NoisyLazyLinear", "reset_noise"]
 
 from torchrl.data.utils import DEVICE_TYPING
+from torchrl.modules.utils import inv_softplus
 
 
 class NoisyLinear(nn.Linear):
@@ -239,3 +240,92 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
 def reset_noise(layer: nn.Module) -> None:
     if hasattr(layer, "reset_noise"):
         layer.reset_noise()  # type: ignore
+
+
+class gSDEWrapper(nn.Module):
+    """A gSDE exploration wrapper as presented in "Smooth Exploration for
+    Robotic Reinforcement Learning" by Antonin Raffin, Jens Kober,
+    Freek Stulp (https://arxiv.org/abs/2005.05719)
+
+    gSDEWrapper encapsulates nn.Module that outputs the average of a
+    normal distribution and adds a state-dependent exploration noise to it.
+    It outputs the mean, scale (standard deviation) of the normal
+    distribution as well as the chosen action.
+
+    For now, only vector states are considered, but the distribution can
+    read other inputs (e.g. hidden states etc.)
+
+    When used, the gSDEWrapper should also be accompanied by a few
+    configuration changes: the exploration mode of the policy should be set
+    to "net_output", meaning that the action from the ProbabilisticTDModule
+    will be retrieved directly from the network output and not simulated
+    from the constructed distribution. Second, the noise input should be
+    created through a `torchrl.envs.transforms.gSDENoise` instance,
+    which will reset this noise parameter each time the environment is reset.
+    Finally, a regular normal distribution should be used to sample the
+    actions, the `ProbabilisticTDModule` should be created
+    in safe mode (in order for the action to be clipped in the desired
+    range) and its input keys should include `"_eps_gSDE"` which is the
+    default gSDE noise key:
+
+        >>> actor = ProbabilisticActor(
+        ...     wrapped_module,
+        ...     in_keys=["observation", "_eps_gSDE"]
+        ...     spec,
+        ...     distribution_class=IndependentNormal,
+        ...     safe=True)
+
+    Args:
+        policy_model (nn.Module): a model that reads observations and
+            outputs a distribution average.
+        action_dim (int): the dimension of the action.
+        state_dim (int): the state dimension.
+        sigma_init (float): the initial value of the standard deviation. The
+            softplus non-linearity is used to map the log_sigma parameter to a
+            positive value.
+
+    Examples:
+        >>> batch, state_dim, action_dim = 3, 7, 5
+        >>> model = nn.Linear(state_dim, action_dim)
+        >>> wrapped_model = gSDEWrapper(model, action_dim=action_dim,
+        ...     state_dim=state_dim)
+        >>> state = torch.randn(batch, state_dim)
+        >>> eps_gSDE = torch.randn(batch, action_dim, state_dim)
+        >>> # the module takes inputs (state, *additional_vectors, noise_param)
+        >>> mu, sigma, action = wrapped_model(state, eps_gSDE)
+        >>> print(mu.shape, sigma.shape, action.shape)
+        torch.Size([3, 5]) torch.Size([3, 5]) torch.Size([3, 5])
+    """
+
+    def __init__(
+        self,
+        policy_model: nn.Module,
+        action_dim: int,
+        state_dim: int,
+        sigma_init: float = None,
+    ) -> None:
+        super().__init__()
+        self.policy_model = policy_model
+        self.action_dim = action_dim
+        self.state_dim = state_dim
+        if sigma_init is None:
+            sigma_init = inv_softplus(math.sqrt(1 / state_dim))
+        self.register_parameter(
+            "log_sigma",
+            nn.Parameter(torch.zeros((action_dim, state_dim), requires_grad=True)),
+        )
+        self.register_buffer("sigma_init", torch.tensor(sigma_init))
+
+    def forward(self, state, *tensors):
+        *tensors, gSDE_noise = tensors
+        sigma = torch.nn.functional.softplus(self.log_sigma + self.sigma_init)
+        if gSDE_noise is None:
+            gSDE_noise = torch.randn_like(sigma)
+        gSDE_noise = sigma * gSDE_noise
+        eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
+        mu = self.policy_model(state, *tensors)
+        action = mu + eps
+        sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(1e-5).sqrt()
+        if not torch.isfinite(sigma).all():
+            print("inf sigma")
+        return mu, sigma, action

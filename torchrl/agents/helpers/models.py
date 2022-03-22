@@ -4,9 +4,14 @@ from typing import Optional, Sequence
 import torch
 from torch import nn
 
-from torchrl.data import DEVICE_TYPING
+from torchrl.data import DEVICE_TYPING, CompositeSpec
 from torchrl.envs.common import _EnvClass
-from torchrl.modules import ActorValueOperator, NoisyLinear, TDModule
+from torchrl.modules import (
+    ActorValueOperator,
+    NoisyLinear,
+    TDModule,
+    NormalParamWrapper,
+)
 from torchrl.modules.distributions import (
     Delta,
     OneHotCategorical,
@@ -14,6 +19,8 @@ from torchrl.modules.distributions import (
     TanhNormal,
     TruncatedNormal,
 )
+from torchrl.modules.distributions.continuous import IndependentNormal
+from torchrl.modules.models.exploration import gSDEWrapper
 from torchrl.modules.models.models import (
     ConvNet,
     DdpgCnnActor,
@@ -70,7 +77,7 @@ def make_dqn_actor(
     Examples:
         >>> from torchrl.agents.helpers.models import make_dqn_actor, parser_model_args_discrete
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.data.transforms import ToTensorImage, TransformedEnv
+        >>> from torchrl.envs.transforms import ToTensorImage, TransformedEnv
         >>> import argparse
         >>> proof_environment = TransformedEnv(GymEnv("Pong-v0", pixels_only=True), ToTensorImage())
         >>> device = torch.device("cpu")
@@ -179,7 +186,7 @@ def make_ddpg_actor(
     Examples:
         >>> from torchrl.agents.helpers.models import make_ddpg_actor, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.data.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
+        >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import argparse
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
@@ -329,7 +336,7 @@ def make_ppo_model(
     Examples:
         >>> from torchrl.agents.helpers.models import make_ppo_model, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.data.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
+        >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import argparse
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
@@ -369,6 +376,7 @@ def make_ppo_model(
     # proof_environment.set_seed(args.seed)
     specs = proof_environment.specs  # TODO: use env.sepcs
     action_spec = specs["action_spec"]
+    obs_spec = specs["observation_spec"]
 
     if in_keys_actor is None and proof_environment.from_pixels:
         in_keys_actor = ["observation_pixels"]
@@ -379,13 +387,12 @@ def make_ppo_model(
     out_keys = ["action"]
 
     if action_spec.domain == "continuous":
-        out_features = 2 * action_spec.shape[-1]
+        out_features = (2 - args.gSDE) * action_spec.shape[-1]
         if args.distribution == "tanh_normal":
             policy_distribution_kwargs = {
                 "min": action_spec.space.minimum,
                 "max": action_spec.space.maximum,
                 "tanh_loc": args.tanh_loc,
-                "scale_mapping": f"biased_softplus_{args.default_policy_scale}",
             }
             policy_distribution_class = TanhNormal
         elif args.distribution == "truncated_normal":
@@ -393,7 +400,6 @@ def make_ppo_model(
                 "min": action_spec.space.minimum,
                 "max": action_spec.space.maximum,
                 "tanh_loc": args.tanh_loc,
-                "scale_mapping": f"biased_softplus_{args.default_policy_scale}",
             }
             policy_distribution_class = TruncatedNormal
     elif action_spec.domain == "discrete":
@@ -406,6 +412,7 @@ def make_ppo_model(
         )
 
     if args.shared_mapping:
+        hidden_features = 300
         if proof_environment.from_pixels:
             if in_keys_actor is None:
                 in_keys_actor = ["observation_pixels"]
@@ -416,6 +423,8 @@ def make_ppo_model(
                 kernel_sizes=[8, 4, 3],
                 strides=[4, 2, 1],
             )
+            if args.gSDE:
+                raise NotImplementedError("must define the hidden_features accordingly")
         else:
             if args.lstm:
                 raise NotImplementedError(
@@ -425,7 +434,7 @@ def make_ppo_model(
                 num_cells=[
                     400,
                 ],
-                out_features=300,
+                out_features=hidden_features,
                 activate_last_layer=True,
             )
         common_operator = TDModule(
@@ -439,10 +448,23 @@ def make_ppo_model(
             num_cells=[200],
             out_features=out_features,
         )
+        if not args.gSDE:
+            actor_net = NormalParamWrapper(
+                policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
+            )
+            in_keys = ["hidden"]
+        else:
+            actor_net = gSDEWrapper(
+                policy_net, action_dim=action_spec.shape[0], state_dim=hidden_features
+            )
+            in_keys = ["hidden", "gSDE_noise"]
+            out_keys += ["_action_duplicate"]
+
         policy_operator = ProbabilisticActor(
             spec=action_spec,
-            module=policy_net,
-            in_keys=["hidden"],
+            module=actor_net,
+            in_keys=in_keys,
+            out_keys=out_keys,
             default_interaction_mode="random",
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
@@ -474,9 +496,20 @@ def make_ppo_model(
                 out_features=out_features,
             )
 
+        if not args.gSDE:
+            actor_net = NormalParamWrapper(
+                policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
+            )
+        else:
+            actor_net = gSDEWrapper(
+                policy_net, action_dim=action_spec.shape[0], state_dim=obs_spec.shape[0]
+            )
+            in_keys_actor += ["_eps_gSDE"]
+            out_keys += ["_action_duplicate"]
+
         policy_po = ProbabilisticActor(
+            actor_net,
             action_spec,
-            policy_net,
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             in_keys=in_keys_actor,
@@ -512,6 +545,7 @@ def make_sac_model(
     device: DEVICE_TYPING = "cpu",
     tanh_loc: bool = True,
     default_policy_scale: float = 1.0,
+    gSDE: bool = False,
     **kwargs,
 ) -> nn.ModuleList:
     """
@@ -535,6 +569,7 @@ def make_sac_model(
             deviation of the normal distribution when the network output is 0). Caution: a higher standard
             deviation may not lead to a more entropic distribution, as a Tanh transform is applied to the
             generated variables. The maximum entropy configuration is with a standard deviation of 0.87. Default is 1.0.
+        gSDE (bool, optional): if True, the policy distribution is built according to gSDE. Default is False.
 
     Returns:
          A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
@@ -542,7 +577,7 @@ def make_sac_model(
     Examples:
         >>> from torchrl.agents.helpers.models import make_sac_model, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.data.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
+        >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import argparse
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
@@ -588,6 +623,7 @@ def make_sac_model(
     """
     td = proof_environment.reset()
     action_spec = proof_environment.action_spec
+    obs_spec = proof_environment.observation_spec
     if actor_net_kwargs is None:
         actor_net_kwargs = {}
     if value_net_kwargs is None:
@@ -600,7 +636,7 @@ def make_sac_model(
 
     actor_net_kwargs_default = {
         "num_cells": [256, 256],
-        "out_features": 2 * action_spec.shape[-1],
+        "out_features": (2 - gSDE) * action_spec.shape[-1],
         "activation_class": nn.ELU,
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
@@ -626,18 +662,36 @@ def make_sac_model(
         **value_net_kwargs_default,
     )
 
-    actor = ProbabilisticActor(
-        spec=action_spec,
-        in_keys=in_keys,
-        module=actor_net,
-        distribution_class=TanhNormal,
-        distribution_kwargs={
+    if not gSDE:
+        actor_net = NormalParamWrapper(
+            actor_net, scale_mapping=f"biased_softplus_{default_policy_scale}"
+        )
+        in_keys_actor = in_keys
+        dist_class = TanhNormal
+        dist_kwargs = {
             "min": action_spec.space.minimum,
             "max": action_spec.space.maximum,
             "tanh_loc": tanh_loc,
-            "scale_mapping": f"biased_softplus_{default_policy_scale}",
-        },
-        default_interaction_mode="random",
+        }
+    else:
+        if isinstance(obs_spec, CompositeSpec):
+            obs_spec = obs_spec["vector"]
+        obs_spec_len = obs_spec.shape[0]
+        actor_net = gSDEWrapper(
+            actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len
+        )
+        in_keys_actor = in_keys + ["_eps_gSDE"]
+        dist_class = IndependentNormal
+        dist_kwargs = {}
+
+    actor = ProbabilisticActor(
+        spec=action_spec,
+        in_keys=in_keys_actor,
+        module=actor_net,
+        distribution_class=dist_class,
+        distribution_kwargs=dist_kwargs,
+        default_interaction_mode="random" if not gSDE else "net_output",
+        safe=True,
     )
     qvalue = ValueOperator(
         in_keys=["action"] + in_keys,
@@ -662,7 +716,7 @@ def make_sac_model(
 
 def make_redq_model(
     proof_environment: _EnvClass,
-    in_keys: Optional[Iterable[str]] = None,
+    in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
     qvalue_net_kwargs=None,
     device: DEVICE_TYPING = "cpu",
@@ -697,7 +751,7 @@ def make_redq_model(
     Examples:
         >>> from torchrl.agents.helpers.models import make_redq_model, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.data.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
+        >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import argparse
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
@@ -843,6 +897,11 @@ def parser_model_args_continuous(
             help="if True, uses a Tanh-Normal transform for the policy location",
         )
         parser.add_argument(
+            "--gSDE",
+            action="store_true",
+            help="if True, exploration is achieved using the gSDE technique.",
+        )
+        parser.add_argument(
             "--default_policy_scale",
             default=1.0,
             help="Default policy scale parameter",
@@ -881,7 +940,7 @@ def parser_model_args_discrete(parser: ArgumentParser) -> ArgumentParser:
         "--annealing_frames",
         type=int,
         default=1000000,
-        help="float of frames used for annealing of the EGreedy exploration. Default=1e6.",
+        help="Number of frames used for annealing of the EGreedy exploration. Default=1e6.",
     )
 
     parser.add_argument(

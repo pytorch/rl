@@ -207,7 +207,7 @@ class SyncDataCollector(_DataCollector):
             at each iteration.
             default = False
         exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
-            "mode" or "mean".
+            "mode", "mean" or "net_output".
             default = "random"
         init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
             This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
@@ -582,6 +582,9 @@ class _MultiDataCollector(_DataCollector):
         init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
             This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
             default = True
+       exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
+            "mode", "mean" or "net_output".
+            default = "random"
 
     """
 
@@ -605,6 +608,7 @@ class _MultiDataCollector(_DataCollector):
         passing_devices: Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]] = "cpu",
         update_at_each_batch: bool = False,
         init_with_lag: bool = False,
+        exploration_mode: str = "random",
     ):
         self.closed = True
         self.create_env_fn = create_env_fn
@@ -691,6 +695,7 @@ class _MultiDataCollector(_DataCollector):
         self.init_random_frames = init_random_frames
         self.update_at_each_batch = update_at_each_batch
         self.init_with_lag = init_with_lag
+        self.exploration_mode = exploration_mode
         self.frames_per_worker = (
             -(self.total_frames // -self.num_workers) if total_frames > 0 else np.inf
         )  # ceil(total_frames/num_workers)
@@ -742,6 +747,7 @@ class _MultiDataCollector(_DataCollector):
                 "seed": self.seed,
                 "pin_memory": self.pin_memory,
                 "init_with_lag": self.init_with_lag,
+                "exploration_mode": self.exploration_mode,
                 "idx": i,
             }
             proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
@@ -1159,6 +1165,7 @@ def _main_async_collector(
     pin_memory: bool,
     idx: int = 0,
     init_with_lag: bool = False,
+    exploration_mode: str = "random",
     verbose: bool = False,
 ) -> None:
     pipe_parent.close()
@@ -1181,6 +1188,7 @@ def _main_async_collector(
         passing_device=passing_device,
         return_in_place=True,
         init_with_lag=init_with_lag,
+        exploration_mode=exploration_mode,
     )
     if verbose:
         print("Sync data collector created")

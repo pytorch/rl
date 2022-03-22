@@ -33,12 +33,27 @@ class biased_softplus(nn.Module):
         return torch.nn.functional.softplus(x + self.bias) + self.min_val
 
 
+def expln(x):
+    """
+    A smooth, continuous positive mapping presented in "State-Dependent
+    Exploration for Policy Gradient Methods"
+    https://people.idsia.ch/~juergen/ecml2008rueckstiess.pdf
+
+    """
+    out = torch.empty_like(x)
+    idx_neg = x <= 0
+    out[idx_neg] = x[idx_neg].exp()
+    out[~idx_neg] = x[~idx_neg].log1p() + 1
+    return out
+
+
 def mappings(key: str) -> Callable:
     """
     Given an input string, return a surjective function f(x): R -> R^+
 
     Args:
-        key (str): one of "softplus", "exp", "relu", or "biased_softplus".
+        key (str): one of "softplus", "exp", "relu", "expln",
+        or "biased_softplus".
 
     Returns:
          a Callable
@@ -49,6 +64,7 @@ def mappings(key: str) -> Callable:
         "exp": torch.exp,
         "relu": torch.relu,
         "biased_softplus": biased_softplus(1.0),
+        "expln": expln,
     }
     if key in _mappings:
         return _mappings[key]

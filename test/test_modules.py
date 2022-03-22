@@ -95,19 +95,19 @@ def test_value_based_policy():
                 mod.bias.data.zero_()
         return net
 
-    actor = QValueActor(action_spec, module=make_net(), safe=True)
+    actor = QValueActor(spec=action_spec, module=make_net(), safe=True)
     obs = torch.zeros(2, obs_dim)
     td = TensorDict(batch_size=[2], source={"observation": obs})
     action = actor(td).get("action")
     assert (action.sum(-1) == 1).all()
 
-    actor = QValueActor(action_spec, module=make_net(), safe=False)
+    actor = QValueActor(spec=action_spec, module=make_net(), safe=False)
     obs = torch.randn(2, obs_dim)
     td = TensorDict(batch_size=[2], source={"observation": obs})
     action = actor(td).get("action")
     assert (action.sum(-1) == 1).all()
 
-    actor = QValueActor(action_spec, module=make_net(), safe=False)
+    actor = QValueActor(spec=action_spec, module=make_net(), safe=False)
     obs = torch.zeros(2, obs_dim)
     td = TensorDict(batch_size=[2], source={"observation": obs})
     action = actor(td).get("action")
@@ -116,13 +116,11 @@ def test_value_based_policy():
 
 
 def test_actorcritic():
-    spec = None
-    in_keys = ["obs"]
     common_module = TDModule(
-        None, nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"]
+        spec=None, module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"]
     )
     policy_operator = ProbabilisticActor(
-        None, nn.Linear(4, 5), in_keys=["hidden"], return_log_prob=True
+        spec=None, module=nn.Linear(4, 5), in_keys=["hidden"], return_log_prob=True
     )
     value_operator = ValueOperator(nn.Linear(4, 1), in_keys=["hidden"])
     op = ActorValueOperator(
