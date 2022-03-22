@@ -1034,7 +1034,7 @@ class TestPPO:
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        module = nn.Linear(obs_dim, 2 * action_dim)
+        module = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
         actor = ProbabilisticActor(
             spec=action_spec,
             module=module,
@@ -1093,7 +1093,8 @@ class TestPPO:
         reward = torch.randn(batch, T, 1)
         done = torch.zeros(batch, T, 1, dtype=torch.bool)
         mask = ~torch.zeros(batch, T, 1, dtype=torch.bool)
-        params = torch.randn_like(action.repeat(1, 1, 2)) / 10
+        params_mean = torch.randn_like(action.repeat(1, 1, 2)) / 10
+        params_scale = torch.rand_like(action.repeat(1, 1, 2)) / 10
         td = TensorDict(
             batch_size=(batch, T),
             source={
@@ -1106,7 +1107,8 @@ class TestPPO:
                 "action_log_prob": torch.randn_like(action[..., :1])
                 / 10
                 * mask.to(obs.dtype),
-                "action_dist_param_0": params * mask.to(obs.dtype),
+                "action_dist_param_0": params_mean * mask.to(obs.dtype),
+                "action_dist_param_1": params_scale * mask.to(obs.dtype),
             },
         )
         return td

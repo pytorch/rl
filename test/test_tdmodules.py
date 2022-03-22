@@ -13,7 +13,7 @@ from torchrl.modules import (
     TDModule,
     ProbabilisticTDModule,
     TanhNormal,
-    TDSequence,
+    TDSequence, NormalParamWrapper,
 )
 
 
@@ -29,6 +29,9 @@ class TestTDModule:
             net = nn.LazyLinear(4 * param_multiplier)
         else:
             net = nn.Linear(3, 4 * param_multiplier)
+
+        if probabilistic:
+            net = NormalParamWrapper(net)
 
         if spec_type is None:
             spec = None
@@ -51,12 +54,14 @@ class TestTDModule:
                 "specified",
             ):
                 tdmodule = tdclass(
-                    spec, net, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
+                    module=net, spec=spec, in_keys=["in"], out_keys=["out"],
+                    safe=safe, **kwargs
                 )
             return
         else:
             tdmodule = tdclass(
-                spec, net, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
+                module=net, spec=spec, in_keys=["in"], out_keys=["out"], \
+                                                            safe=safe, **kwargs
             )
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -78,6 +83,9 @@ class TestTDModule:
         param_multiplier = 2 if probabilistic else 1
 
         net = nn.Linear(3, 4 * param_multiplier)
+        if probabilistic:
+            net = NormalParamWrapper(net)
+
         fnet, params = make_functional(net)
 
         if spec_type is None:
@@ -101,12 +109,13 @@ class TestTDModule:
                 "specified",
             ):
                 tdmodule = tdclass(
-                    spec, fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
+                    spec=spec, module=fnet, in_keys=["in"], out_keys=["out"],
+                    safe=safe, **kwargs
                 )
             return
         else:
             tdmodule = tdclass(
-                spec, fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
+                spec=spec, module=fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
             )
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -128,6 +137,9 @@ class TestTDModule:
         param_multiplier = 2 if probabilistic else 1
 
         net = nn.BatchNorm1d(32 * param_multiplier)
+        if probabilistic:
+            net = NormalParamWrapper(net)
+
         fnet, params, buffers = make_functional_with_buffers(net)
 
         if spec_type is None:
@@ -151,12 +163,13 @@ class TestTDModule:
                 "specified",
             ):
                 tdmodule = tdclass(
-                    spec, fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
+                    spec=spec, module=fnet, in_keys=["in"], out_keys=["out"],
+                    safe=safe, **kwargs
                 )
             return
         else:
             tdmodule = tdclass(
-                spec, fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
+                spec=spec, module=fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
             )
 
         td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
@@ -178,6 +191,9 @@ class TestTDModule:
         param_multiplier = 2 if probabilistic else 1
 
         net = nn.Linear(3, 4 * param_multiplier)
+        if probabilistic:
+            net = NormalParamWrapper(net)
+
         fnet, params = make_functional(net)
 
         if spec_type is None:
@@ -201,12 +217,12 @@ class TestTDModule:
                 "specified",
             ):
                 tdmodule = tdclass(
-                    spec, fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
+                    spec=spec, module=fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
                 )
             return
         else:
             tdmodule = tdclass(
-                spec, fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
+                spec=spec, module=fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
             )
 
         # vmap = True
@@ -260,6 +276,8 @@ class TestTDSequence:
         else:
             net1 = nn.Linear(3, 4)
             net2 = nn.Linear(4, 4 * param_multiplier)
+        if probabilistic:
+            net2 = NormalParamWrapper(net2)
 
         if spec_type is None:
             spec = None
@@ -279,14 +297,15 @@ class TestTDSequence:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
             tdmodule1 = TDModule(
-                None,
                 net1,
+                None,
                 in_keys=["in"],
                 out_keys=["hidden"],
                 safe=False,
             )
             tdmodule2 = tdclass(
-                spec, net2, in_keys=["hidden"], out_keys=["out"], safe=False, **kwargs
+                spec=spec, module=net2, in_keys=["hidden"], out_keys=["out"],
+                safe=False, **kwargs
             )
             tdmodule = TDSequence(tdmodule1, tdmodule2)
 
@@ -310,6 +329,9 @@ class TestTDSequence:
 
         net1 = nn.Linear(3, 4)
         net2 = nn.Linear(4, 4 * param_multiplier)
+        if probabilistic:
+            net2 = NormalParamWrapper(net2)
+
         fnet1, params1 = make_functional(net1)
         fnet2, params2 = make_functional(net2)
         params = list(params1) + list(params2)
@@ -332,14 +354,16 @@ class TestTDSequence:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
             tdmodule1 = TDModule(
-                None,
                 fnet1,
+                None,
                 in_keys=["in"],
                 out_keys=["hidden"],
                 safe=False,
             )
             tdmodule2 = tdclass(
-                spec, fnet2, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
+                fnet2,
+                spec,
+                in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
             )
             tdmodule = TDSequence(tdmodule1, tdmodule2)
 
@@ -365,6 +389,8 @@ class TestTDSequence:
         net2 = nn.Sequential(
             nn.Linear(7, 7 * param_multiplier), nn.BatchNorm1d(7 * param_multiplier)
         )
+        if probabilistic:
+            net2 = NormalParamWrapper(net2)
 
         fnet1, params1, buffers1 = make_functional_with_buffers(net1)
         fnet2, params2, buffers2 = make_functional_with_buffers(net2)
@@ -390,14 +416,16 @@ class TestTDSequence:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
             tdmodule1 = TDModule(
-                None,
                 fnet1,
+                None,
                 in_keys=["in"],
                 out_keys=["hidden"],
                 safe=False,
             )
             tdmodule2 = tdclass(
-                spec, fnet2, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
+                fnet2,
+                spec,
+                in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
             )
             tdmodule = TDSequence(tdmodule1, tdmodule2)
 
@@ -421,6 +449,9 @@ class TestTDSequence:
 
         net1 = nn.Linear(3, 4)
         net2 = nn.Linear(4, 4 * param_multiplier)
+        if probabilistic:
+            net2 = NormalParamWrapper(net2)
+
         fnet1, params1 = make_functional(net1)
         fnet2, params2 = make_functional(net2)
         params = params1 + params2
@@ -443,14 +474,16 @@ class TestTDSequence:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
             tdmodule1 = TDModule(
-                None,
                 fnet1,
+                None,
                 in_keys=["in"],
                 out_keys=["hidden"],
                 safe=False,
             )
             tdmodule2 = tdclass(
-                spec, fnet2, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
+                fnet2,
+                spec,
+                in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
             )
             tdmodule = TDSequence(tdmodule1, tdmodule2)
 

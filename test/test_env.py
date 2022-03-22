@@ -47,7 +47,7 @@ except FileNotFoundError:
 #
 #
 # @pytest.mark.skipif(
-#     "Pong-v4" not in _get_gym_envs(), reason="no Atari OpenAI Gym env available"
+#     "ALE/Pong-v5" not in _get_gym_envs(), reason="no Atari OpenAI Gym env available"
 # )
 # def test_composite_env():
 #     num_workers = 10
@@ -110,7 +110,7 @@ def test_env_seed(env_name, frame_skip, seed=0):
         assert_allclose_td(td1a, td1c)
 
 
-@pytest.mark.parametrize("env_name", ["Pendulum-v1", "Pong-v4"])
+@pytest.mark.parametrize("env_name", ["Pendulum-v1", "ALE/Pong-v5"])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_rollout(env_name, frame_skip, seed=0):
     env = gym.GymEnv(env_name, frame_skip=frame_skip)
@@ -140,9 +140,9 @@ def test_rollout(env_name, frame_skip, seed=0):
 def _make_envs(env_name, frame_skip, transformed, N):
     torch.manual_seed(0)
     if not transformed:
-        create_env_fn = lambda: GymEnv("Pong-v4", frame_skip=frame_skip)
+        create_env_fn = lambda: GymEnv(env_name, frame_skip=frame_skip)
     else:
-        if env_name == "Pong-v4":
+        if env_name == "ALE/Pong-v5":
             create_env_fn = lambda: TransformedEnv(
                 GymEnv(env_name, frame_skip=frame_skip),
                 Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
@@ -158,7 +158,7 @@ def _make_envs(env_name, frame_skip, transformed, N):
     return env_parallel, env_serial, env0
 
 
-@pytest.mark.parametrize("env_name", ["Pong-v4", "Pendulum-v1"])
+@pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
 @pytest.mark.parametrize("frame_skip", [4, 1])
 @pytest.mark.parametrize("transformed", [True, False])
 def test_parallel_env(env_name, frame_skip, transformed, T=10, N=5):
@@ -196,9 +196,9 @@ def test_parallel_env(env_name, frame_skip, transformed, T=10, N=5):
     ), f"{td.shape}, {td.get('done').sum(1)}"
 
 
-@pytest.mark.parametrize("env_name", ["Pong-v4", "Pendulum-v1"])
+@pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
 @pytest.mark.parametrize("frame_skip", [4, 1])
-@pytest.mark.parametrize("transformed", [True, False])
+@pytest.mark.parametrize("transformed", [False, True, ])
 def test_parallel_env_seed(env_name, frame_skip, transformed):
     env_parallel, env_serial, env0 = _make_envs(env_name, frame_skip, transformed, 5)
 
@@ -246,7 +246,7 @@ def test_parallel_env_shutdown():
 
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="no cuda device detected")
-@pytest.mark.parametrize("env_name", ["Pong-v4", "Pendulum-v1"])
+@pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
 @pytest.mark.parametrize("frame_skip", [4, 1])
 @pytest.mark.parametrize("transformed", [True, False])
 @pytest.mark.parametrize("device", [0, "cuda:0"])
@@ -254,9 +254,9 @@ def test_parallel_env_device(env_name, frame_skip, transformed, device):
     torch.manual_seed(0)
     N = 5
     if not transformed:
-        create_env_fn = lambda: GymEnv("Pong-v4", frame_skip=frame_skip)
+        create_env_fn = lambda: GymEnv("ALE/Pong-v5", frame_skip=frame_skip)
     else:
-        if env_name == "Pong-v4":
+        if env_name == "ALE/Pong-v5":
             create_env_fn = lambda: TransformedEnv(
                 GymEnv(env_name, frame_skip=frame_skip),
                 Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),

@@ -297,8 +297,8 @@ class TransformedEnv(_EnvClass):
         """Set the seeds of the environment"""
         return self.env.set_seed(seed)
 
-    def _reset(self, tensor_dict: Optional[_TensorDict] = None):
-        out_tensor_dict = self.env.reset().to(self.device)
+    def _reset(self, tensor_dict: Optional[_TensorDict] = None, **kwargs):
+        out_tensor_dict = self.env.reset(**kwargs).to(self.device)
         out_tensor_dict = self.transform.reset(out_tensor_dict)
 
         # Transforms are made for "next_observations" and alike. We convert

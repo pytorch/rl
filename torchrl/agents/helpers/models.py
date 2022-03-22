@@ -508,8 +508,8 @@ def make_ppo_model(
             out_keys += ["_action_duplicate"]
 
         policy_po = ProbabilisticActor(
-            action_spec,
             actor_net,
+            action_spec,
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             in_keys=in_keys_actor,

@@ -107,7 +107,7 @@ class GymEnv(GymLikeEnv):
         return gym
 
     def _set_seed(self, seed: int) -> int:
-        self._env.reset(seed=seed)
+        self.reset(seed=seed)
         return seed
 
     def _build_env(

@@ -58,7 +58,6 @@ class _BatchedEnv(_EnvClass):
     """
 
     _verbose: bool = False
-    is_closed: bool = True
 
     def __init__(
         self,
@@ -77,6 +76,8 @@ class _BatchedEnv(_EnvClass):
         memmap: bool = False,
     ):
         super().__init__(device=device)
+        self.is_closed = True
+
         create_env_kwargs = dict() if create_env_kwargs is None else create_env_kwargs
         if callable(create_env_fn):
             create_env_fn = [create_env_fn for _ in range(num_workers)]
@@ -298,7 +299,7 @@ class SerialEnv(_BatchedEnv):
         return seed
 
     @_check_start
-    def _reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _reset(self, tensor_dict: _TensorDict, **kwargs) -> _TensorDict:
         if tensor_dict is not None and "reset_workers" in tensor_dict.keys():
             self._assert_tensordict_shape(tensor_dict)
             reset_workers = tensor_dict.get("reset_workers")
@@ -309,9 +310,9 @@ class SerialEnv(_BatchedEnv):
         for i, _env in enumerate(self._envs):
             if not reset_workers[i]:
                 continue
-            _td = _env.reset()
+            _td = _env.reset(**kwargs)
             keys = keys.union(_td.keys())
-            self.shared_tensor_dicts[i].update(_td)
+            self.shared_tensor_dicts[i].update_(_td)
 
         return self.shared_tensor_dict_parent.select(*keys).clone()
 
@@ -324,6 +325,7 @@ class ParallelEnv(_BatchedEnv):
     """
 
     def _start_workers(self) -> None:
+
         _num_workers = self.num_workers
         ctx = mp.get_context("spawn")
 
@@ -461,7 +463,7 @@ class ParallelEnv(_BatchedEnv):
         return seed
 
     @_check_start
-    def _reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _reset(self, tensor_dict: _TensorDict, **kwargs) -> _TensorDict:
         cmd_out = "reset"
         if tensor_dict is not None and "reset_workers" in tensor_dict.keys():
             self._assert_tensordict_shape(tensor_dict)
@@ -472,7 +474,7 @@ class ParallelEnv(_BatchedEnv):
         for i, channel in enumerate(self.parent_channels):
             if not reset_workers[i]:
                 continue
-            channel.send((cmd_out, None))
+            channel.send((cmd_out, kwargs))
 
         keys = set()
         for i, channel in enumerate(self.parent_channels):
@@ -546,12 +548,13 @@ def _run_worker_pipe_shared_mem(
             initialized = True
 
         elif cmd == "reset":
+            reset_kwargs = data
             if verbose:
                 print(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensor_dict.select("observation").to(env.device).clone()
-            _td = env.reset()
+            _td = env.reset(**reset_kwargs)
             keys = set(_td.keys())
             if pin_memory:
                 _td.pin_memory()

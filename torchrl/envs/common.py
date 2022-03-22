@@ -210,17 +210,19 @@ class _EnvClass:
     ) -> _TensorDict:
         raise NotImplementedError
 
-    def _reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _reset(self, tensor_dict: _TensorDict, **kwargs) -> _TensorDict:
         raise NotImplementedError
 
-    def reset(self, tensor_dict: Optional[_TensorDict] = None) -> _TensorDict:
+    def reset(self, tensor_dict: Optional[_TensorDict] = None, **kwargs
+              ) -> _TensorDict:
         """Resets the environment.
         As for step and _step, only the private method `_reset` should be overwritten by _EnvClass subclasses.
 
         Args:
             tensor_dict (_TensorDict, optional): tensor_dict to be used to contain the resulting new observation.
                 In some cases, this input can also be used to pass argument to the reset function.
-
+            kwargs (optional): other arguments to be passed to the native
+                reset function.
         Returns:
             a tensor_dict (or the input tensor_dict, if any), modified in place with the resulting observations.
 
@@ -229,7 +231,7 @@ class _EnvClass:
         #     tensor_dict = self.specs.build_tensor_dict()
         if tensor_dict is None:
             tensor_dict = TensorDict({}, device=self.device, batch_size=self.batch_size)
-        tensor_dict_reset = self._reset(tensor_dict)
+        tensor_dict_reset = self._reset(tensor_dict, **kwargs)
         if tensor_dict_reset is tensor_dict:
             raise RuntimeError(
                 "_EnvClass._reset should return outplace changes to the input "
@@ -588,8 +590,9 @@ class GymLikeEnv(_EnvWrapper):
     def _set_seed(self, seed: Optional[int]) -> Optional[int]:
         raise NotImplementedError
 
-    def _reset(self, tensor_dict: Optional[_TensorDict] = None) -> _TensorDict:
-        obs, *_ = self._output_transform((self._env.reset(),))
+    def _reset(self, tensor_dict: Optional[_TensorDict] = None, **kwargs
+               ) -> _TensorDict:
+        obs, *_ = self._output_transform((self._env.reset(**kwargs),))
         tensor_dict_out = TensorDict(
             source=self._read_obs(obs), batch_size=self.batch_size
         )
