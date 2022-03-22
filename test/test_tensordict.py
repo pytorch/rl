@@ -760,8 +760,7 @@ def test_mp(td_type):
         tensordict = tensordict.memmap_()
     elif td_type == "memmap_stack":
         tensordict = torch.stack(
-            [tensordict[0].clone().memmap_(),
-             tensordict[1].clone().memmap_()], 0
+            [tensordict[0].clone().memmap_(), tensordict[1].clone().memmap_()], 0
         )
     else:
         raise NotImplementedError

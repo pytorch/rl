@@ -120,8 +120,7 @@ def test_actorcritic():
         spec=None, module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"]
     )
     policy_operator = ProbabilisticActor(
-        spec=None, module=nn.Linear(4, 5), in_keys=["hidden"],
-        return_log_prob=True
+        spec=None, module=nn.Linear(4, 5), in_keys=["hidden"], return_log_prob=True
     )
     value_operator = ValueOperator(nn.Linear(4, 1), in_keys=["hidden"])
     op = ActorValueOperator(

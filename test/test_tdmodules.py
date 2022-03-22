@@ -13,7 +13,8 @@ from torchrl.modules import (
     TDModule,
     ProbabilisticTDModule,
     TanhNormal,
-    TDSequence, NormalParamWrapper,
+    TDSequence,
+    NormalParamWrapper,
 )
 
 
@@ -54,14 +55,22 @@ class TestTDModule:
                 "specified",
             ):
                 tdmodule = tdclass(
-                    module=net, spec=spec, in_keys=["in"], out_keys=["out"],
-                    safe=safe, **kwargs
+                    module=net,
+                    spec=spec,
+                    in_keys=["in"],
+                    out_keys=["out"],
+                    safe=safe,
+                    **kwargs
                 )
             return
         else:
             tdmodule = tdclass(
-                module=net, spec=spec, in_keys=["in"], out_keys=["out"], \
-                                                            safe=safe, **kwargs
+                module=net,
+                spec=spec,
+                in_keys=["in"],
+                out_keys=["out"],
+                safe=safe,
+                **kwargs
             )
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -109,13 +118,22 @@ class TestTDModule:
                 "specified",
             ):
                 tdmodule = tdclass(
-                    spec=spec, module=fnet, in_keys=["in"], out_keys=["out"],
-                    safe=safe, **kwargs
+                    spec=spec,
+                    module=fnet,
+                    in_keys=["in"],
+                    out_keys=["out"],
+                    safe=safe,
+                    **kwargs
                 )
             return
         else:
             tdmodule = tdclass(
-                spec=spec, module=fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
+                spec=spec,
+                module=fnet,
+                in_keys=["in"],
+                out_keys=["out"],
+                safe=safe,
+                **kwargs
             )
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -163,13 +181,22 @@ class TestTDModule:
                 "specified",
             ):
                 tdmodule = tdclass(
-                    spec=spec, module=fnet, in_keys=["in"], out_keys=["out"],
-                    safe=safe, **kwargs
+                    spec=spec,
+                    module=fnet,
+                    in_keys=["in"],
+                    out_keys=["out"],
+                    safe=safe,
+                    **kwargs
                 )
             return
         else:
             tdmodule = tdclass(
-                spec=spec, module=fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
+                spec=spec,
+                module=fnet,
+                in_keys=["in"],
+                out_keys=["out"],
+                safe=safe,
+                **kwargs
             )
 
         td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
@@ -217,12 +244,22 @@ class TestTDModule:
                 "specified",
             ):
                 tdmodule = tdclass(
-                    spec=spec, module=fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
+                    spec=spec,
+                    module=fnet,
+                    in_keys=["in"],
+                    out_keys=["out"],
+                    safe=safe,
+                    **kwargs
                 )
             return
         else:
             tdmodule = tdclass(
-                spec=spec, module=fnet, in_keys=["in"], out_keys=["out"], safe=safe, **kwargs
+                spec=spec,
+                module=fnet,
+                in_keys=["in"],
+                out_keys=["out"],
+                safe=safe,
+                **kwargs
             )
 
         # vmap = True
@@ -304,8 +341,12 @@ class TestTDSequence:
                 safe=False,
             )
             tdmodule2 = tdclass(
-                spec=spec, module=net2, in_keys=["hidden"], out_keys=["out"],
-                safe=False, **kwargs
+                spec=spec,
+                module=net2,
+                in_keys=["hidden"],
+                out_keys=["out"],
+                safe=False,
+                **kwargs
             )
             tdmodule = TDSequence(tdmodule1, tdmodule2)
 
@@ -361,9 +402,7 @@ class TestTDSequence:
                 safe=False,
             )
             tdmodule2 = tdclass(
-                fnet2,
-                spec,
-                in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
+                fnet2, spec, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
             )
             tdmodule = TDSequence(tdmodule1, tdmodule2)
 
@@ -423,9 +462,7 @@ class TestTDSequence:
                 safe=False,
             )
             tdmodule2 = tdclass(
-                fnet2,
-                spec,
-                in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
+                fnet2, spec, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
             )
             tdmodule = TDSequence(tdmodule1, tdmodule2)
 
@@ -481,9 +518,7 @@ class TestTDSequence:
                 safe=False,
             )
             tdmodule2 = tdclass(
-                fnet2,
-                spec,
-                in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
+                fnet2, spec, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
             )
             tdmodule = TDSequence(tdmodule1, tdmodule2)
 

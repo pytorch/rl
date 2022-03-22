@@ -198,7 +198,13 @@ def test_parallel_env(env_name, frame_skip, transformed, T=10, N=5):
 
 @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
 @pytest.mark.parametrize("frame_skip", [4, 1])
-@pytest.mark.parametrize("transformed", [False, True, ])
+@pytest.mark.parametrize(
+    "transformed",
+    [
+        False,
+        True,
+    ],
+)
 def test_parallel_env_seed(env_name, frame_skip, transformed):
     env_parallel, env_serial, env0 = _make_envs(env_name, frame_skip, transformed, 5)
 

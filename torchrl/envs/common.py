@@ -213,8 +213,7 @@ class _EnvClass:
     def _reset(self, tensor_dict: _TensorDict, **kwargs) -> _TensorDict:
         raise NotImplementedError
 
-    def reset(self, tensor_dict: Optional[_TensorDict] = None, **kwargs
-              ) -> _TensorDict:
+    def reset(self, tensor_dict: Optional[_TensorDict] = None, **kwargs) -> _TensorDict:
         """Resets the environment.
         As for step and _step, only the private method `_reset` should be overwritten by _EnvClass subclasses.
 
@@ -590,8 +589,9 @@ class GymLikeEnv(_EnvWrapper):
     def _set_seed(self, seed: Optional[int]) -> Optional[int]:
         raise NotImplementedError
 
-    def _reset(self, tensor_dict: Optional[_TensorDict] = None, **kwargs
-               ) -> _TensorDict:
+    def _reset(
+        self, tensor_dict: Optional[_TensorDict] = None, **kwargs
+    ) -> _TensorDict:
         obs, *_ = self._output_transform((self._env.reset(**kwargs),))
         tensor_dict_out = TensorDict(
             source=self._read_obs(obs), batch_size=self.batch_size
