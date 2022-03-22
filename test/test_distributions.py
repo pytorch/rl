@@ -1,6 +1,9 @@
 import pytest
 import torch
-from torchrl.modules import TanhNormal
+from torch import nn
+
+from _utils_internal import get_available_devices
+from torchrl.modules import TanhNormal, NormalParamWrapper
 from torchrl.modules.distributions import TanhDelta, Delta
 
 
@@ -25,23 +28,47 @@ def test_delta():
     "max", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 3]
 )
 @pytest.mark.parametrize(
-    "vec", [torch.tensor([0.1, 1.0, 10.0, 100.0, 5.0, 0.01]), torch.zeros(3, 6)]
+    "vecs", [
+        (torch.tensor([0.1, 10.0, 5.0]),
+         torch.tensor([0.1, 10.0, 5.0])),
+        (torch.zeros(7, 3), torch.ones(7, 3)), ]
 )
 @pytest.mark.parametrize(
     "upscale", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 3]
 )
-@pytest.mark.parametrize(
-    "scale_mapping", ["biased_softplus_1.0", "biased_softplus_0.1", "exp"]
-)
 @pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])
-def test_tanhnormal(min, max, vec, upscale, scale_mapping, shape):
+def test_tanhnormal(min, max, vecs, upscale, shape):
     torch.manual_seed(0)
-    d = TanhNormal(vec, upscale, min, max, scale_mapping)
+    d = TanhNormal(*vecs, upscale=upscale, min=min, max=max, )
     for _ in range(100):
         a = d.rsample(shape)
         assert a.shape[: len(shape)] == shape
         assert (a >= d.min).all()
         assert (a <= d.max).all()
+
+
+@pytest.mark.parametrize("batch_size", [(3,), (5, 7,)])
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("scale_mapping", ["exp", "biased_softplus_1.0",
+                                           "biased_softplus_0.11", "expln",
+                                           "relu", "softplus", "raise_error"])
+def test_normal_mapping(batch_size, device, scale_mapping, action_dim=11,
+                        state_dim=3):
+    torch.manual_seed(0)
+    for _ in range(100):
+        module = nn.LazyLinear(2 * action_dim).to(device)
+        module = NormalParamWrapper(module, scale_mapping=scale_mapping).to(
+            device)
+        if scale_mapping != "raise_error":
+            loc, scale = module(
+                torch.randn(*batch_size, state_dim, device=device))
+            assert (scale > 0).all()
+        else:
+            with pytest.raises(NotImplementedError, match="Unknown mapping "
+                                                          "raise_error"):
+                loc, scale = module(
+                    torch.randn(*batch_size, state_dim, device=device))
+
 
 
 if __name__ == "__main__":

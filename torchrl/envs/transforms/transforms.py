@@ -1236,7 +1236,7 @@ def _sum_left(val, dest):
     return val
 
 
-class gSDE(Transform):
+class gSDENoise(Transform):
     inplace = False
 
     def __init__(self, action_dim: int, state_dim: Optional[int] = None) -> None:

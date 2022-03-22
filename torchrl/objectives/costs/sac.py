@@ -132,8 +132,7 @@ class SACLoss(_LossModule):
         if tensordict.ndimension() > 1:
             tensordict = tensordict.view(
                 -1
-            )  # with view, in-place modifications of the view will impact the
-            # original tensordict
+            )
 
         device = self.device
         td_device = tensordict.to(device)

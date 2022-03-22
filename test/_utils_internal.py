@@ -3,5 +3,16 @@ import os
 
 # Get relative file path
 # this returns relative path from current file.
+import torch.cuda
+
+
 def get_relative_path(curr_file, *path_components):
     return os.path.join(os.path.dirname(curr_file), *path_components)
+
+def get_available_devices():
+    devices = [torch.device("cpu")]
+    n_cuda = torch.cuda.device_count()
+    if n_cuda>0:
+        for i in range(n_cuda):
+            devices += torch.device(f"cuda:{i}")
+    return devices

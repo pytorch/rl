@@ -40,8 +40,8 @@ class Actor(TDModule):
         >>> action_spec = NdUnboundedContinuousTensorSpec(4)
         >>> module = torch.nn.Linear(4, 4)
         >>> td_module = Actor(
-        ...    spec=action_spec,
         ...    module=module,
+        ...    spec=action_spec,
         ...    )
         >>> td_module(td)
         >>> print(td.get("action"))
@@ -85,8 +85,8 @@ class ProbabilisticActor(ProbabilisticTDModule):
         >>> fmodule, params, buffers = functorch.make_functional_with_buffers(
         ...     module)
         >>> td_module = ProbabilisticActor(
-        ...    spec=action_spec,
         ...    module=fmodule,
+        ...    spec=action_spec,
         ...    distribution_class=TanhNormal,
         ...    )
         >>> td_module(td, params=params, buffers=buffers)
@@ -169,7 +169,7 @@ class ValueOperator(TDModule):
             )
         value_spec = UnboundedContinuousTensorSpec()
         super().__init__(
-            value_spec,
+            spec=value_spec,
             module=module,
             in_keys=in_keys,
             out_keys=out_keys,
@@ -201,7 +201,7 @@ class QValueHook:
         >>> hook = QValueHook("one_hot")
         >>> _ = fmodule.register_forward_hook(hook)
         >>> action_spec = OneHotDiscreteTensorSpec(4)
-        >>> qvalue_actor = Actor(spec=action_spec, module=fmodule, out_keys=["action", "action_value"])
+        >>> qvalue_actor = Actor(module=fmodule, spec=action_spec, out_keys=["action", "action_value"])
         >>> _ = qvalue_actor(td, params=params, buffers=buffers)
         >>> print(td)
         TensorDict(
@@ -295,7 +295,7 @@ class DistributionalQValueHook(QValueHook):
         >>> action_spec = OneHotDiscreteTensorSpec(4)
         >>> hook = DistributionalQValueHook("one_hot", support = torch.arange(nbins))
         >>> _ = fmodule.register_forward_hook(hook)
-        >>> qvalue_actor = Actor(spec=action_spec, module=fmodule, out_keys=["action", "action_value"])
+        >>> qvalue_actor = Actor(module=fmodule, spec=action_spec, out_keys=["action", "action_value"])
         >>> _ = qvalue_actor(td, params=params, buffers=buffers)
         >>> print(td)
         TensorDict(
@@ -383,7 +383,7 @@ class QValueActor(Actor):
         >>> module = nn.Linear(4, 4)
         >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         >>> action_spec = OneHotDiscreteTensorSpec(4)
-        >>> qvalue_actor = QValueActor(spec=action_spec, module=fmodule)
+        >>> qvalue_actor = QValueActor(module=fmodule, spec=action_spec)
         >>> _ = qvalue_actor(td, params=params, buffers=buffers)
         >>> print(td)
         TensorDict(
@@ -423,7 +423,7 @@ class DistributionalQValueActor(QValueActor):
         >>> nbins = 3
         >>> module = MLP(out_features=(nbins, 4), depth=2)
         >>> action_spec = OneHotDiscreteTensorSpec(4)
-        >>> qvalue_actor = DistributionalQValueActor(spec=action_spec, module=module, support=torch.arange(nbins))
+        >>> qvalue_actor = DistributionalQValueActor(module=module, spec=action_spec, support=torch.arange(nbins))
         >>> _ = qvalue_actor(td)
         >>> print(td)
         TensorDict(
@@ -504,16 +504,16 @@ class ActorValueOperator(TDSequence):
         >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
         >>> td_module_hidden = TDModule(
-        ...    spec=spec_hidden,
         ...    module=module_hidden,
+        ...    spec=spec_hidden,
         ...    in_keys=["observation"],
         ...    out_keys=["hidden"],
         ...    )
         >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
         >>> module_action = torch.nn.Linear(4, 8)
         >>> td_module_action = ProbabilisticActor(
-        ...    spec=spec_action,
         ...    module=module_action,
+        ...    spec=spec_action,
         ...    in_keys=["hidden"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
@@ -632,16 +632,16 @@ class ActorCriticOperator(ActorValueOperator):
         >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
         >>> td_module_hidden = TDModule(
-        ...    spec=spec_hidden,
         ...    module=module_hidden,
+        ...    spec=spec_hidden,
         ...    in_keys=["observation"],
         ...    out_keys=["hidden"],
         ...    )
         >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
         >>> module_action = torch.nn.Linear(4, 8)
         >>> td_module_action = ProbabilisticActor(
-        ...    spec=spec_action,
         ...    module=module_action,
+        ...    spec=spec_action,
         ...    in_keys=["hidden"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
@@ -743,8 +743,8 @@ class ActorCriticWrapper(TDSequence):
         >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
         >>> module_action = torch.nn.Linear(4, 8)
         >>> td_module_action = ProbabilisticActor(
-        ...    spec=spec_action,
         ...    module=module_action,
+        ...    spec=spec_action,
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )

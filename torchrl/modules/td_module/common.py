@@ -51,11 +51,11 @@ class TDModule(nn.Module):
     TensorDict, instead of reading and returning tensors.
 
     Args:
-        spec (TensorSpec): specs of the output tensor. If the module outputs multiple output tensors,
-            spec characterize the space of the first output tensor.
         module (nn.Module): a nn.Module used to map the input to the output parameter space. Can be a functional
             module (FunctionalModule or FunctionalModuleWithBuffers), in which case the `forward` method will expect
             the params (and possibly) buffers keyword arguments.
+        spec (TensorSpec): specs of the output tensor. If the module outputs multiple output tensors,
+            spec characterize the space of the first output tensor.
         in_keys (iterable of str): keys to be read from input tensordict and passed to the module. If it
             contains more than one element, the values will be passed in the order given by the in_keys iterable.
         out_keys (iterable of str): keys to be written to the input tensordict. The length of out_keys must match the
@@ -78,8 +78,8 @@ class TDModule(nn.Module):
         >>> module = torch.nn.GRUCell(4, 8)
         >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         >>> td_fmodule = TDModule(
-        ...    spec=spec,
         ...    module=fmodule,
+        ...    spec=spec,
         ...    in_keys=["input", "hidden"],
         ...    out_keys=["output"],
         ...    )
@@ -95,8 +95,8 @@ class TDModule(nn.Module):
 
     In the stateful case:
         >>> td_module = TDModule(
-        ...    spec=spec,
         ...    module=module,
+        ...    spec=spec,
         ...    in_keys=["input", "hidden"],
         ...    out_keys=["output"],
         ...    )
@@ -129,10 +129,10 @@ class TDModule(nn.Module):
 
     def __init__(
         self,
-        spec: Optional[TensorSpec],
         module: Union[
             FunctionalModule, FunctionalModuleWithBuffers, TDModule, nn.Module
         ],
+        spec: Optional[TensorSpec],
         in_keys: Iterable[str],
         out_keys: Iterable[str],
         safe: bool = False,
@@ -324,7 +324,8 @@ class TDModule(nn.Module):
             >>> from torchrl.data import NdUnboundedContinuousTensorSpec, TensorDict
             >>> lazy_module = nn.LazyLinear(4)
             >>> spec = NdUnboundedContinuousTensorSpec(18)
-            >>> td_module = TDModule(spec, lazy_module, ["some_input"], ["some_output"])
+            >>> td_module = TDModule(lazy_module, spec, ["some_input"],
+            ...     ["some_output"])
             >>> _, (params, buffers) = td_module.make_functional_with_buffers()
             >>> print(params[0].shape)  # the lazy module has been initialized
             torch.Size([4, 18])
@@ -391,11 +392,11 @@ class ProbabilisticTDModule(TDModule):
     TDModule).
 
     Args:
-        spec (TensorSpec): specs of the first output tensor. Used when calling td_module.random() to generate random
-            values in the target space.
         module (nn.Module): a nn.Module used to map the input to the output parameter space. Can be a functional
             module (FunctionalModule or FunctionalModuleWithBuffers), in which case the `forward` method will expect
             the params (and possibly) buffers keyword arguments.
+        spec (TensorSpec): specs of the first output tensor. Used when calling td_module.random() to generate random
+            values in the target space.
         in_keys (iterable of str): keys to be read from input tensordict and passed to the module. If it
             contains more than one element, the values will be passed in the order given by the in_keys iterable.
         out_keys (iterable of str): keys to be written to the input tensordict. The length of out_keys must match the
@@ -440,8 +441,8 @@ class ProbabilisticTDModule(TDModule):
         >>> module = torch.nn.GRUCell(4, 8)
         >>> module_func, params, buffers = functorch.make_functional_with_buffers(module)
         >>> td_module = ProbabilisticTDModule(
-        ...    spec=spec,
         ...    module=module_func,
+        ...    spec=spec,
         ...    in_keys=["input"],
         ...    out_keys=["output"],
         ...    distribution_class=TanhNormal,
@@ -478,8 +479,8 @@ class ProbabilisticTDModule(TDModule):
 
     def __init__(
         self,
-        spec: TensorSpec,
         module: Union[Callable[[Tensor], Tensor], nn.Module],
+        spec: TensorSpec,
         in_keys: Sequence[str],
         out_keys: Sequence[str],
         distribution_class: Type = Delta,
@@ -709,8 +710,8 @@ class TDSequence(TDModule):
         >>> module1 = torch.nn.Linear(4, 8)
         >>> fmodule1, params1, buffers1 = functorch.make_functional_with_buffers(module1)
         >>> td_module1 = ProbabilisticTDModule(
-        ...    spec=spec1,
         ...    module=fmodule1,
+        ...    spec=spec1,
         ...    in_keys=["input"],
         ...    out_keys=["hidden"],
         ...    distribution_class=TanhNormal,
@@ -720,8 +721,8 @@ class TDSequence(TDModule):
         >>> module2 = torch.nn.Linear(4, 8)
         >>> fmodule2, params2, buffers2 = functorch.make_functional_with_buffers(module2)
         >>> td_module2 = TDModule(
-        ...    spec=spec2,
         ...    module=fmodule2,
+        ...    spec=spec2,
         ...    in_keys=["hidden"],
         ...    out_keys=["output"],
         ...    )
@@ -961,7 +962,7 @@ class TDModuleWrapper(nn.Module):
         >>> module = torch.nn.Linear(4, 4, bias=False)  # should return a zero tensor if input is a zero tensor
         >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         >>> spec = NdUnboundedContinuousTensorSpec(4)
-        >>> tdmodule = TDModule(spec=spec, module=fmodule, in_keys=["input"], out_keys=["output"])
+        >>> tdmodule = TDModule(module=fmodule, spec=spec, in_keys=["input"], out_keys=["output"])
         >>> tdmodule_wrapped = EpsilonGreedyExploration(tdmodule)
         >>> tdmodule_wrapped(td, params=params, buffers=buffers)
         >>> print(td.get("output"))

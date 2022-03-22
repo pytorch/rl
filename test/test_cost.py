@@ -12,7 +12,8 @@ from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.data.utils import expand_as_right
 from torchrl.modules import DistributionalQValueActor, QValueActor
-from torchrl.modules.distributions.continuous import TanhNormal
+from torchrl.modules.distributions.continuous import TanhNormal, \
+    NormalParamWrapper
 from torchrl.modules.models.models import MLP
 from torchrl.modules.td_module.actors import ValueOperator, Actor, ProbabilisticActor
 from torchrl.objectives import (
@@ -459,7 +460,7 @@ class TestSAC:
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        module = nn.Linear(obs_dim, 2 * action_dim)
+        module = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
         actor = ProbabilisticActor(
             spec=action_spec,
             module=module,
@@ -759,7 +760,7 @@ class TestREDQ:
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        module = nn.Linear(obs_dim, 2 * action_dim)
+        module = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
         actor = ProbabilisticActor(
             spec=action_spec,
             module=module,
