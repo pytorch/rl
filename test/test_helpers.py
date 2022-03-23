@@ -2,6 +2,7 @@ import argparse
 
 import pytest
 import torch
+
 from _utils_internal import get_available_devices
 from mocking_classes import (
     ContinuousActionConvMockEnvNumpy,
@@ -19,10 +20,8 @@ from torchrl.agents.helpers.models import (
     make_sac_model,
     make_redq_model,
 )
-from torchrl.envs import GymEnv, gSDENoise
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
-from torchrl.envs.transforms import ToTensorImage
+
 
 ## these tests aren't truly unitary but setting up a fake env for the
 # purpose of building a model with args is a lot of unstable scaffoldings
@@ -43,7 +42,8 @@ def _assert_keys_match(td, expeceted_keys):
 @pytest.mark.parametrize("distributional", [tuple(), ("--distributional",)])
 @pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
 def test_dqn_maker(device, noisy, distributional, from_pixels):
-    flags = list(noisy + distributional + from_pixels) + ["--env_name=CartPole-v1"]
+    flags = list(noisy + distributional + from_pixels) + [
+        "--env_name=CartPole-v1"]
     parser = argparse.ArgumentParser()
     parser = parser_env_args(parser)
     parser = parser_model_args_discrete(parser)
@@ -71,7 +71,7 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
         expected_keys += ["chosen_action_value"]
     try:
         _assert_keys_match(td, expected_keys)
-    except:
+    except AssertionError:
         proof_environment.close()
         raise
     proof_environment.close()
@@ -80,7 +80,6 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
 def test_ddpg_maker(device, from_pixels):
-
     device = torch.device("cpu")
     flags = list(from_pixels)
     parser = argparse.ArgumentParser()
@@ -106,7 +105,7 @@ def test_ddpg_maker(device, from_pixels):
 
     try:
         _assert_keys_match(td, expected_keys)
-    except:
+    except AssertionError:
         proof_environment.close()
         raise
 
@@ -114,7 +113,7 @@ def test_ddpg_maker(device, from_pixels):
     expected_keys += ["state_action_value"]
     try:
         _assert_keys_match(td, expected_keys)
-    except:
+    except AssertionError:
         proof_environment.close()
         raise
 
@@ -162,7 +161,7 @@ def test_ppo_maker(device, from_pixels, shared_mapping):
     actor(td_clone)
     try:
         _assert_keys_match(td_clone, expected_keys)
-    except:
+    except AssertionError:
         proof_environment.close()
         raise
 
@@ -174,7 +173,7 @@ def test_ppo_maker(device, from_pixels, shared_mapping):
     value(td_clone)
     try:
         _assert_keys_match(td_clone, expected_keys)
-    except:
+    except AssertionError:
         proof_environment.close()
         raise
     proof_environment.close()
@@ -217,18 +216,19 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels):
 
     try:
         _assert_keys_match(td_clone, expected_keys)
-    except:
+    except AssertionError:
         proof_environment.close()
         raise
 
     qvalue(td_clone)
-    expected_keys = ["done", "observation_vector", "action", "state_action_value"]
+    expected_keys = ["done", "observation_vector", "action",
+                     "state_action_value"]
     if len(gsde):
         expected_keys += ["_eps_gSDE"]
 
     try:
         _assert_keys_match(td_clone, expected_keys)
-    except:
+    except AssertionError:
         proof_environment.close()
         raise
 
@@ -239,7 +239,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels):
 
     try:
         _assert_keys_match(td, expected_keys)
-    except:
+    except AssertionError:
         proof_environment.close()
         raise
     proof_environment.close()
@@ -275,7 +275,7 @@ def test_redq_make(device, from_pixels):
     expected_keys = ["done", "observation_vector", "action", "action_log_prob"]
     try:
         _assert_keys_match(td, expected_keys)
-    except:
+    except AssertionError:
         proof_environment.close()
         raise
 
@@ -289,7 +289,7 @@ def test_redq_make(device, from_pixels):
     ]
     try:
         _assert_keys_match(td, expected_keys)
-    except:
+    except AssertionError:
         proof_environment.close()
         raise
     proof_environment.close()
