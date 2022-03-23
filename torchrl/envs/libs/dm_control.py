@@ -12,6 +12,7 @@ from torchrl.data import (
 from ...data.utils import numpy_to_torch_dtype_dict
 from ..common import GymLikeEnv, _NoLibEnv
 
+__all__ = ["DMControlEnv"]
 try:
     import collections
 
@@ -20,13 +21,10 @@ try:
     from dm_control.suite.wrappers import pixels
 
     _has_dmc = True
-    __all__ = ["DMControlEnv"]
 
 except ImportError as err:
     _has_dmc = False
-    __all__ = []
-
-
+    
     class DMControlEnv(_NoLibEnv):
         err_msg = str(err)
 
