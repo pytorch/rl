@@ -426,6 +426,85 @@ class ConvNet(nn.Sequential):
         return layers
 
 
+class DuelingMlpDQNet(nn.Module):
+    """
+    Creates a Dueling MLP Q-network, as presented in
+    https://arxiv.org/abs/1511.06581
+
+    Args:
+        out_features (int): number of features for the advantage network
+        out_features_value (int): number of features for the value network
+        mlp_kwargs_feature (dict, optional): kwargs for the feature network.
+            Default is
+
+            >>> mlp_kwargs_feature = {
+            ...     'num_cells': [256, 256],
+            ...     'activation_class': nn.ELU,
+            ...     'out_features': 256,
+            ...     'activate_last_layer': True,
+            ... }
+
+        mlp_kwargs_output (dict, optional): kwargs for the advantage and
+            value networks.
+            Default is
+
+            >>> mlp_kwargs_output = {
+            ...     "depth": 1,
+            ...     "activation_class": nn.ELU,
+            ...     "num_cells": 512,
+            ...     "bias_last_layer": True,
+            ... }
+
+    """
+
+    def __init__(
+        self,
+        out_features: int,
+        out_features_value: int = 1,
+        mlp_kwargs_feature: Optional[dict] = None,
+        mlp_kwargs_output: Optional[dict] = None,
+    ):
+        super(DuelingMlpDQNet, self).__init__()
+
+        mlp_kwargs_feature = (
+            mlp_kwargs_feature if mlp_kwargs_feature is not None else dict()
+        )
+        _mlp_kwargs_feature = {
+            "num_cells": [256, 256],
+            "out_features": 256,
+            "activation_class": nn.ELU,
+            "activate_last_layer": True,
+        }
+        _mlp_kwargs_feature.update(mlp_kwargs_feature)
+        self.features = MLP(**_mlp_kwargs_feature)  # type: ignore
+
+        _mlp_kwargs_output = {
+            "depth": 1,
+            "activation_class": nn.ELU,
+            "num_cells": 512,
+            "bias_last_layer": True,
+        }
+        mlp_kwargs_output = (
+            mlp_kwargs_output if mlp_kwargs_output is not None else dict()
+        )
+        _mlp_kwargs_output.update(mlp_kwargs_output)
+        self.out_features = out_features
+        self.out_features_value = out_features_value
+        self.advantage = MLP(out_features=out_features, **_mlp_kwargs_output)  # type: ignore
+        self.value = MLP(out_features=out_features_value, **_mlp_kwargs_output)  # type: ignore
+        for layer in self.modules():
+            if isinstance(layer, (nn.Conv2d, nn.Linear)) and isinstance(
+                layer.bias, torch.Tensor
+            ):
+                layer.bias.data.zero_()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.features(x)
+        advantage = self.advantage(x)
+        value = self.value(x)
+        return value + advantage - advantage.mean(dim=-1, keepdim=True)
+
+
 class DuelingCnnDQNet(nn.Module):
     """
     Creates a Dueling CNN Q-network, as presented in https://arxiv.org/abs/1511.06581
@@ -503,13 +582,14 @@ class DistributionalDQNnet(nn.Module):
 
     Args:
         DQNet (nn.Module): Q-Network with output length equal to the number of atoms:
-            output.shape = [batch, atoms, actions].
+            output.shape = [*batch, atoms, actions].
 
     """
 
     _wrong_out_feature_dims_error = (
-        "DistributionalDQNnet requires dqn output to be at least 3-dimensional, "
-        "with dimensions Batch x #Atoms x #Actions"
+        "DistributionalDQNnet requires dqn output to be at least "
+        "2-dimensional, with dimensions *Batch x #Atoms x #Actions. Got {0} "
+        "instead."
     )
 
     def __init__(self, DQNet: nn.Module):
@@ -522,8 +602,10 @@ class DistributionalDQNnet(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         q_values = self.dqn(x)
-        if q_values.ndimension() < 3:
-            raise RuntimeError(self._wrong_out_feature_dims_error)
+        if q_values.ndimension() < 2:
+            raise RuntimeError(
+                self._wrong_out_feature_dims_error.format(q_values.shape)
+            )
         return F.log_softmax(q_values, dim=-2)
 
 
@@ -594,7 +676,7 @@ class DdpgCnnActor(nn.Module):
             "norm_class": None,
             "aggregator_class": SquashDims,
             "aggregator_kwargs": {"ndims_in": 3},
-            "squeeze_output": True,
+            "squeeze_output": False,
         }
         conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else dict()
         conv_net_default_kwargs.update(conv_net_kwargs)
@@ -710,7 +792,7 @@ class DdpgCnnQNet(nn.Module):
             "norm_class": None,
             "aggregator_class": SquashDims,
             "aggregator_kwargs": {"ndims_in": 3},
-            "squeeze_output": True,
+            "squeeze_output": False,
         }
         conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else dict()
         conv_net_default_kwargs.update(conv_net_kwargs)

@@ -114,6 +114,8 @@ if __name__ == "__main__":
     stats = None
     if not args.vecnorm:
         stats = get_stats_random_rollout(args, proof_env)
+    # make sure proof_env is closed
+    proof_env.close()
 
     create_env_fn = parallel_env_constructor(args=args, stats=stats)
 

@@ -239,6 +239,7 @@ class TransformedEnv(_EnvClass):
         self._reward_spec = None
         self._observation_spec = None
         self.batch_size = self.env.batch_size
+        self.is_closed = False
 
         super().__init__(**kwargs)
 
@@ -347,6 +348,10 @@ class TransformedEnv(_EnvClass):
 
     def __repr__(self) -> str:
         return f"TransformedEnv(env={self.env}, transform={self.transform})"
+
+    def close(self):
+        self.is_closed = True
+        self.env.close()
 
 
 class ObservationTransform(Transform):

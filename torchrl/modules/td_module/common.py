@@ -19,7 +19,12 @@ from functorch import FunctionalModule, FunctionalModuleWithBuffers, vmap
 from functorch._src.make_functional import _swap_state
 from torch import distributions as d, nn, Tensor
 
-from torchrl.data import CompositeSpec, DEVICE_TYPING, TensorSpec
+from torchrl.data import (
+    CompositeSpec,
+    DEVICE_TYPING,
+    TensorSpec,
+    UnboundedContinuousTensorSpec,
+)
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.distributions import Delta, distributions_maps
@@ -869,12 +874,16 @@ class TDSequence(TDModule):
         kwargs = {}
         for layer in self.module:  # type: ignore
             out_key = layer.out_keys[0]
-            if not isinstance(layer.spec, TensorSpec):
+            spec = layer.spec
+            if spec is None:
+                # By default, we consider that unspecified specs are unbounded.
+                spec = UnboundedContinuousTensorSpec()
+            if not isinstance(spec, TensorSpec):
                 raise RuntimeError(
                     f"TDSequence.spec requires all specs to be valid TensorSpec objects. Got "
                     f"{type(layer.spec)}"
                 )
-            kwargs[out_key] = layer.spec
+            kwargs[out_key] = spec
         return CompositeSpec(**kwargs)
 
     def make_functional_with_buffers(self, clone: bool = False):

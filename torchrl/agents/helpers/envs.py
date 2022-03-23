@@ -80,6 +80,7 @@ def transformed_env_constructor(
     stats: Optional[dict] = None,
     norm_obs_only: bool = False,
     use_env_creator: bool = True,
+    custom_env_maker: Optional[Callable] = None,
 ) -> Union[Callable, EnvCreator]:
     """
     Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
@@ -94,7 +95,10 @@ def transformed_env_constructor(
         use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,
             one can make sure that running statistics will be put in shared memory and accessible for all workers
             when using a `VecNorm` transform. Default is `True`.
-
+        custom_env_maker (callable, optional): if your env maker is not part
+            of torchrl env wrappers, a custom callable
+            can be passed instead. In this case it will override the
+            constructor retrieved from `args`.
     """
 
     def make_transformed_env() -> TransformedEnv:
@@ -108,16 +112,20 @@ def transformed_env_constructor(
         _norm_obs_only = norm_obs_only or not norm_rewards
         reward_scaling = args.reward_scaling
 
-        env_kwargs = {
-            "envname": env_name,
-            "device": "cpu",
-            "frame_skip": frame_skip,
-            "from_pixels": from_pixels or len(video_tag),
-            "pixels_only": from_pixels,
-        }
-        if env_library is DMControlEnv:
-            env_kwargs.update({"taskname": env_task})
-        env = env_library(**env_kwargs)
+        if custom_env_maker is None:
+            env_kwargs = {
+                "envname": env_name,
+                "device": "cpu",
+                "frame_skip": frame_skip,
+                "from_pixels": from_pixels or len(video_tag),
+                "pixels_only": from_pixels,
+            }
+            if env_library is DMControlEnv:
+                env_kwargs.update({"taskname": env_task})
+            env = env_library(**env_kwargs)
+        else:
+            env = custom_env_maker()
+
         keys = env.reset().keys()
         transforms = []
 
@@ -174,7 +182,7 @@ def transformed_env_constructor(
             double_to_float_list.append(out_key)
             transforms.append(DoubleToFloat(keys=double_to_float_list))
 
-            if args.gSDE:
+            if hasattr(args, "gSDE") and args.gSDE:
                 transforms.append(
                     gSDENoise(
                         action_dim=env.action_spec.shape[-1],
@@ -183,7 +191,7 @@ def transformed_env_constructor(
 
         else:
             transforms.append(DoubleToFloat(keys=double_to_float_list))
-            if args.gSDE:
+            if hasattr(args, "gSDE") and args.gSDE:
                 raise RuntimeError("gSDE not compatible with from_pixels=True")
 
         if len(video_tag):
