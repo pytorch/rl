@@ -2,7 +2,6 @@ import argparse
 
 import pytest
 import torch
-
 from _utils_internal import get_available_devices
 from mocking_classes import (
     ContinuousActionConvMockEnvNumpy,
@@ -42,8 +41,7 @@ def _assert_keys_match(td, expeceted_keys):
 @pytest.mark.parametrize("distributional", [tuple(), ("--distributional",)])
 @pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
 def test_dqn_maker(device, noisy, distributional, from_pixels):
-    flags = list(noisy + distributional + from_pixels) + [
-        "--env_name=CartPole-v1"]
+    flags = list(noisy + distributional + from_pixels) + ["--env_name=CartPole-v1"]
     parser = argparse.ArgumentParser()
     parser = parser_env_args(parser)
     parser = parser_model_args_discrete(parser)
@@ -221,8 +219,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels):
         raise
 
     qvalue(td_clone)
-    expected_keys = ["done", "observation_vector", "action",
-                     "state_action_value"]
+    expected_keys = ["done", "observation_vector", "action", "state_action_value"]
     if len(gsde):
         expected_keys += ["_eps_gSDE"]
 
