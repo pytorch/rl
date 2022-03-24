@@ -124,7 +124,7 @@ class _EnvClass:
     action_spec = None
     reward_spec = None
     observation_spec = None
-    from_pixels = False
+    from_pixels: bool
     device = torch.device("cpu")
     batch_size = torch.Size([])
 

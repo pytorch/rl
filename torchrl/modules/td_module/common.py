@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import copy, deepcopy
+from textwrap import indent
 from typing import (
     Any,
     Callable,
@@ -315,7 +316,15 @@ class TDModule(nn.Module):
         return out  # type: ignore
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(module={self.module}, device={self.device})"
+        fields = indent(
+            f"module={self.module}, \n"
+            f"device={self.device}, \n"
+            f"in_keys={self.in_keys}, \n"
+            f"out_keys={self.out_keys}",
+            4 * " ",
+        )
+
+        return f"{self.__class__.__name__}(\n{fields})"
 
     def make_functional_with_buffers(self, clone: bool = False):
         """

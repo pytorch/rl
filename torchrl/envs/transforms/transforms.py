@@ -487,7 +487,10 @@ class ToTensorImage(ObservationTransform):
         return observation
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        _observation_spec = observation_spec["pixels"]
+        if isinstance(observation_spec, CompositeSpec):
+            _observation_spec = observation_spec["pixels"]
+        else:
+            _observation_spec = observation_spec
         self._pixel_observation(_observation_spec)
         _observation_spec.shape = torch.Size(
             [
@@ -498,7 +501,10 @@ class ToTensorImage(ObservationTransform):
             ]
         )
         _observation_spec.dtype = self.dtype
-        observation_spec["pixels"] = _observation_spec
+        if isinstance(observation_spec, CompositeSpec):
+            observation_spec["pixels"] = _observation_spec
+        else:
+            observation_spec = _observation_spec
         return observation_spec
 
     def _pixel_observation(self, spec: TensorSpec) -> None:
@@ -627,7 +633,10 @@ class Resize(ObservationTransform):
         return observation
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        _observation_spec = observation_spec["pixels"]
+        if isinstance(observation_spec, CompositeSpec):
+            _observation_spec = observation_spec["pixels"]
+        else:
+            _observation_spec = observation_spec
         space = _observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply(space.minimum)
@@ -637,7 +646,11 @@ class Resize(ObservationTransform):
             _observation_spec.shape = self._apply(
                 torch.zeros(_observation_spec.shape)
             ).shape
-        observation_spec["pixels"] = _observation_spec
+
+        if isinstance(observation_spec, CompositeSpec):
+            observation_spec["pixels"] = _observation_spec
+        else:
+            observation_spec = _observation_spec
         return observation_spec
 
     def __repr__(self) -> str:
@@ -666,7 +679,10 @@ class GrayScale(ObservationTransform):
         return observation
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        _observation_spec = observation_spec["pixels"]
+        if isinstance(observation_spec, CompositeSpec):
+            _observation_spec = observation_spec["pixels"]
+        else:
+            _observation_spec = observation_spec
         space = _observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply(space.minimum)
@@ -676,7 +692,10 @@ class GrayScale(ObservationTransform):
             _observation_spec.shape = self._apply(
                 torch.zeros(_observation_spec.shape)
             ).shape
-        observation_spec["pixels"] = _observation_spec
+        if isinstance(observation_spec, CompositeSpec):
+            observation_spec["pixels"] = _observation_spec
+        else:
+            observation_spec = _observation_spec
         return observation_spec
 
 
@@ -820,7 +839,10 @@ class CatFrames(ObservationTransform):
         return tensor_dict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        _observation_spec = observation_spec["pixels"]
+        if isinstance(observation_spec, CompositeSpec):
+            _observation_spec = observation_spec["pixels"]
+        else:
+            _observation_spec = observation_spec
         space = _observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = torch.cat([space.minimum] * self.N, 0)
@@ -828,7 +850,10 @@ class CatFrames(ObservationTransform):
             _observation_spec.shape = space.minimum.shape
         else:
             _observation_spec.shape = torch.Size([self.N, *_observation_spec.shape])
-        observation_spec["pixels"] = _observation_spec
+        if isinstance(observation_spec, CompositeSpec):
+            observation_spec["pixels"] = _observation_spec
+        else:
+            observation_spec = _observation_spec
         return observation_spec
 
     def _apply(self, obs: torch.Tensor) -> torch.Tensor:
