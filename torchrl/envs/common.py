@@ -647,10 +647,3 @@ def make_tensor_dict(
             tensor_dict.set("action", env.action_spec.rand(), inplace=False)
         tensor_dict = env.step(tensor_dict.to("cpu"))
         return tensor_dict.zero_()
-
-class _NoLibEnv:
-    err_msg: str = ""
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError(
-            f"The environment class {self.__class__.__name__} could not be "
-            f"imported, the error message was: '{self.err_msg}'.")

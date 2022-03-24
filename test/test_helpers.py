@@ -267,7 +267,7 @@ def test_redq_make(device, from_pixels):
         args=args,
     )
     actor, qvalue = model
-    td = proof_environment.reset()
+    td = proof_environment.reset().to(device)
     actor(td)
     expected_keys = ["done", "observation_vector", "action", "action_log_prob"]
     try:
