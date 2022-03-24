@@ -443,6 +443,9 @@ class _EnvClass:
     def close(self):
         pass
 
+    def __del__(self):
+        self.close()
+
 
 class _EnvWrapper(_EnvClass):
     """Abstract environment wrapper class.

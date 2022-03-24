@@ -18,17 +18,19 @@ from ..utils import classproperty
 
 try:
     import gym
-except ImportError:
-    _has_gym = False
-else:
+
     _has_gym = True
     from gym.wrappers.pixel_observation import PixelObservationWrapper
+
+except ImportError:
+    _has_gym = False
+
 try:
     import retro
+
+    _has_retro = True
 except ImportError:
     _has_retro = False
-else:
-    _has_retro = True
 
 __all__ = ["GymEnv", "RetroEnv"]
 

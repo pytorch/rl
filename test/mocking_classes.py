@@ -80,6 +80,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         self.counter += 1
         state = torch.zeros(self.size) + self.counter
         tensor_dict = tensor_dict.select().set(self.out_key, self._get_out_obs(state))
+        tensor_dict.set("done", torch.zeros(*tensor_dict.shape, 1, dtype=torch.bool))
         return tensor_dict
 
     def _step(
@@ -103,6 +104,51 @@ class DiscreteActionVecMockEnv(_MockEnv):
         tensor_dict.set("reward", reward.to(torch.float))
         tensor_dict.set("done", done)
         return tensor_dict
+
+
+class ContinuousActionVecMockEnv(_MockEnv):
+    size = 7
+    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([size]))
+    action_spec = NdBoundedTensorSpec(-1, 1, (7,))
+    reward_spec = UnboundedContinuousTensorSpec()
+
+    out_key = "observation"
+
+    def _get_in_obs(self, obs):
+        return obs
+
+    def _get_out_obs(self, obs):
+        return obs
+
+    def _reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+        self.counter += 1
+        state = torch.zeros(self.size) + self.counter
+        tensor_dict = tensor_dict.select().set(self.out_key, self._get_out_obs(state))
+        tensor_dict.set("done", torch.zeros(*tensor_dict.shape, 1, dtype=torch.bool))
+        return tensor_dict
+
+    def _step(
+        self,
+        tensor_dict: _TensorDict,
+    ) -> _TensorDict:
+        tensor_dict = tensor_dict.to(self.device)
+        a = tensor_dict.get("action")
+        assert not self.is_done, "trying to execute step in done env"
+
+        obs = self._obs_step(
+            self._get_in_obs(self.current_tensordict.get(self.out_key)), a
+        )
+        tensor_dict = tensor_dict.select()  # empty tensordict
+        tensor_dict.set("next_" + self.out_key, self._get_out_obs(obs))
+        done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
+        reward = done.any(-1).unsqueeze(-1)
+        done = done.all(-1).unsqueeze(-1)
+        tensor_dict.set("reward", reward.to(torch.float))
+        tensor_dict.set("done", done)
+        return tensor_dict
+
+    def _obs_step(self, obs, a):
+        return obs + a / self.maxstep
 
 
 class DiscreteActionVecPolicy:
@@ -136,6 +182,51 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
 
     def _get_in_obs(self, obs):
         return obs.diagonal(0, -1, -2).squeeze()
+
+
+class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
+    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3]))
+
+    def _get_out_obs(self, obs):
+        obs = torch.diag_embed(obs, 0, -2, -1).unsqueeze(-1)
+        obs = obs.expand(*obs.shape[:-1], 3)
+        return obs
+
+    def _get_in_obs(self, obs):
+        return obs.diagonal(0, -2, -3)[..., 0]
+
+    def _obs_step(self, obs, a):
+        return obs + a.unsqueeze(-1) / self.maxstep
+
+
+class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
+    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([1, 7, 7]))
+    action_spec = NdBoundedTensorSpec(-1, 1, (7,))
+    reward_spec = UnboundedContinuousTensorSpec()
+
+    out_key = "observation_pixels"
+
+    def _get_out_obs(self, obs):
+        obs = torch.diag_embed(obs, 0, -2, -1).unsqueeze(0)
+        return obs
+
+    def _get_in_obs(self, obs):
+        return obs.diagonal(0, -1, -2).squeeze()
+
+
+class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
+    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3]))
+
+    def _get_out_obs(self, obs):
+        obs = torch.diag_embed(obs, 0, -2, -1).unsqueeze(-1)
+        obs = obs.expand(*obs.shape[:-1], 3)
+        return obs
+
+    def _get_in_obs(self, obs):
+        return obs.diagonal(0, -2, -3)[..., 0]
+
+    def _obs_step(self, obs, a):
+        return obs + a.unsqueeze(-1) / self.maxstep
 
 
 class DiscreteActionConvPolicy(DiscreteActionVecPolicy):

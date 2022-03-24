@@ -15,16 +15,53 @@ D.Distribution.set_default_validate_args(False)
 
 
 class IndependentNormal(D.Independent):
+    """Implements a Normal distribution with location scaling.
+
+    Location scaling prevents the location to be "too far" from 0, which ultimately
+    leads to numerically unstable samples and poor gradient computation (e.g. gradient explosion).
+    In practice, the location is computed according to
+
+        .. math::
+            loc = tanh(loc / upscale) * upscale.
+
+    This behaviour can be disabled by switching off the tanh_loc parameter (see below).
+
+
+    Args:
+        loc (torch.Tensor): normal distribution location parameter
+        scale (torch.Tensor): normal distribution sigma parameter (squared root of variance)
+        upscale (torch.Tensor or number, optional): 'a' scaling factor in the formula:
+
+            .. math::
+                loc = tanh(loc / upscale) * upscale.
+
+            Default is 5.0
+
+        tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw value
+            is kept.
+            Default is `True`;
+    """
+
     num_params: int = 2
 
     def __init__(
-        self, loc: torch.Tensor, scale: torch.Tensor, event_dim: int = 1, **kwargs
+        self,
+        loc: torch.Tensor,
+        scale: torch.Tensor,
+        upscale: float = 5.0,
+        tanh_loc: bool = True,
+        event_dim: int = 1,
+        **kwargs,
     ):
+        self.tanh_loc = tanh_loc
+        self.upscale = upscale
         self._event_dim = event_dim
         self._kwargs = kwargs
         super().__init__(D.Normal(loc, scale, **kwargs), event_dim)
 
     def update(self, loc, scale):
+        if self.tanh_loc:
+            loc = self.upscale * (loc / self.upscale).tanh()
         super().__init__(D.Normal(loc, scale, **self._kwargs), self._event_dim)
 
 
@@ -102,11 +139,6 @@ class TruncatedNormal(D.Independent):
 
         min (torch.Tensor or number, optional): minimum value of the distribution. Default = -1.0;
         max (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
-        scale_mapping (str, optional): positive mapping function to be used with the std.
-            Default is "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
-            choices: "softplus", "exp", "relu", "biased_softplus_1";
-        event_dims (int, optional): number of dimensions describing the action.
-            Default is 1;
         tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw value
             is kept.
             Default is `True`;
@@ -223,9 +255,6 @@ class TanhNormal(D.TransformedDistribution):
 
         min (torch.Tensor or number, optional): minimum value of the distribution. Default is -1.0;
         max (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
-        scale_mapping (str, optional): positive mapping function to be used with the std.
-            Default is "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
-            choices: "softplus", "exp", "relu", "biased_softplus_1";
         event_dims (int, optional): number of dimensions describing the action.
             Default is 1;
         tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw
