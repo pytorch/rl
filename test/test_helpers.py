@@ -120,11 +120,13 @@ def test_ddpg_maker(device, from_pixels):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("from_pixels", [tuple()])
+@pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
+@pytest.mark.parametrize("gsde", [tuple(), ("--gSDE",)])
 @pytest.mark.parametrize("shared_mapping", [tuple(), ("--shared_mapping",)])
-def test_ppo_maker(device, from_pixels, shared_mapping):
-    flags = list(from_pixels + shared_mapping)
-
+def test_ppo_maker(device, from_pixels, shared_mapping, gsde):
+    flags = list(from_pixels + shared_mapping + gsde)
+    if gsde and from_pixels:
+        pytest.skip("gsde and from_pixels are incompatible")
     parser = argparse.ArgumentParser()
     parser = parser_env_args(parser)
     parser = parser_model_args_continuous(parser, algorithm="PPO")
@@ -146,7 +148,7 @@ def test_ppo_maker(device, from_pixels, shared_mapping):
     actor = actor_value.get_policy_operator()
     expected_keys = [
         "done",
-        "observation_vector",
+        "observation_pixels" if len(from_pixels) else "observation_vector",
         "action_dist_param_0",
         "action_dist_param_1",
         "action",
@@ -154,6 +156,8 @@ def test_ppo_maker(device, from_pixels, shared_mapping):
     ]
     if shared_mapping:
         expected_keys += ["hidden"]
+    if len(gsde):
+        expected_keys += ["_eps_gSDE", "_action_duplicate", "action_dist_param_2"]
     td = proof_environment.reset().to(device)
     td_clone = td.clone()
     actor(td_clone)
@@ -164,9 +168,16 @@ def test_ppo_maker(device, from_pixels, shared_mapping):
         raise
 
     value = actor_value.get_value_operator()
-    expected_keys = ["done", "observation_vector", "state_value"]
+    expected_keys = [
+        "done",
+        "observation_pixels" if len(from_pixels) else "observation_vector",
+        "state_value",
+    ]
     if shared_mapping:
         expected_keys += ["hidden"]
+    if len(gsde):
+        expected_keys += ["_eps_gSDE"]
+
     td_clone = td.clone()
     value(td_clone)
     try:
@@ -185,6 +196,9 @@ def test_ppo_maker(device, from_pixels, shared_mapping):
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 def test_sac_make(device, gsde, tanh_loc, from_pixels):
     flags = list(gsde + tanh_loc + from_pixels)
+    if gsde and from_pixels:
+        pytest.skip("gsde and from_pixels are incompatible")
+
     parser = argparse.ArgumentParser()
     parser = parser_env_args(parser)
     parser = parser_model_args_continuous(parser, algorithm="SAC")
@@ -208,7 +222,11 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels):
     td = proof_environment.reset().to(device)
     td_clone = td.clone()
     actor(td_clone)
-    expected_keys = ["done", "observation_vector", "action"]
+    expected_keys = [
+        "done",
+        "observation_pixels" if len(from_pixels) else "observation_vector",
+        "action",
+    ]
     if len(gsde):
         expected_keys += ["_eps_gSDE"]
 
@@ -245,9 +263,13 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels):
 
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple()])
+@pytest.mark.parametrize("gsde", [tuple(), ("--gSDE",)])
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
-def test_redq_make(device, from_pixels):
-    flags = list(from_pixels)
+def test_redq_make(device, from_pixels, gsde):
+    flags = list(from_pixels + gsde)
+    if gsde and from_pixels:
+        pytest.skip("gsde and from_pixels are incompatible")
+
     parser = argparse.ArgumentParser()
     parser = parser_env_args(parser)
     parser = parser_model_args_continuous(parser, algorithm="REDQ")
@@ -270,6 +292,8 @@ def test_redq_make(device, from_pixels):
     td = proof_environment.reset().to(device)
     actor(td)
     expected_keys = ["done", "observation_vector", "action", "action_log_prob"]
+    if len(gsde):
+        expected_keys += ["_eps_gSDE"]
     try:
         _assert_keys_match(td, expected_keys)
     except AssertionError:
@@ -284,6 +308,8 @@ def test_redq_make(device, from_pixels):
         "action_log_prob",
         "state_action_value",
     ]
+    if len(gsde):
+        expected_keys += ["_eps_gSDE"]
     try:
         _assert_keys_match(td, expected_keys)
     except AssertionError:

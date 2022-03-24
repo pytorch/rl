@@ -64,6 +64,10 @@ class IndependentNormal(D.Independent):
             loc = self.upscale * (loc / self.upscale).tanh()
         super().__init__(D.Normal(loc, scale, **self._kwargs), self._event_dim)
 
+    @property
+    def mode(self):
+        return self.base_dist.mean
+
 
 class SafeTanhTransform(D.TanhTransform):
     """

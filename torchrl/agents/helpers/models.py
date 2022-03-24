@@ -413,7 +413,12 @@ def make_ppo_model(
 
     if action_spec.domain == "continuous":
         out_features = (2 - args.gSDE) * action_spec.shape[-1]
-        if args.distribution == "tanh_normal":
+        if args.gSDE:
+            policy_distribution_kwargs = {
+                "tanh_loc": args.tanh_loc,
+            }
+            policy_distribution_class = IndependentNormal
+        elif args.distribution == "tanh_normal":
             policy_distribution_kwargs = {
                 "min": action_spec.space.minimum,
                 "max": action_spec.space.maximum,
@@ -490,7 +495,7 @@ def make_ppo_model(
             module=actor_net,
             in_keys=in_keys,
             out_keys=out_keys,
-            default_interaction_mode="random",
+            default_interaction_mode="random" if not args.gSDE else "net_output",
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             return_log_prob=True,
@@ -541,6 +546,7 @@ def make_ppo_model(
             out_keys=out_keys,
             return_log_prob=True,
             save_dist_params=True,
+            default_interaction_mode="random" if not args.gSDE else "net_output",
         )
 
         value_net = MLP(
@@ -707,7 +713,9 @@ def make_sac_model(
         )
         in_keys_actor = in_keys + ["_eps_gSDE"]
         dist_class = IndependentNormal
-        dist_kwargs = {}
+        dist_kwargs = {
+            "tanh_loc": tanh_loc,
+        }
 
     actor = ProbabilisticActor(
         spec=action_spec,
@@ -812,11 +820,11 @@ def make_redq_model(
     tanh_loc = args.tanh_loc
     default_policy_scale = args.default_policy_scale
     gSDE = args.gSDE
-    if gSDE:
-        raise NotImplementedError
 
     td = proof_environment.reset()
     action_spec = proof_environment.action_spec
+    obs_spec = proof_environment.observation_spec
+
     if actor_net_kwargs is None:
         actor_net_kwargs = {}
     if qvalue_net_kwargs is None:
@@ -827,14 +835,11 @@ def make_redq_model(
 
     actor_net_kwargs_default = {
         "num_cells": [256, 256],
-        "out_features": 2 * action_spec.shape[-1],
+        "out_features": (2 - gSDE) * action_spec.shape[-1],
         "activation_class": nn.ELU,
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
-    actor_net = NormalParamWrapper(
-        MLP(**actor_net_kwargs_default),
-        scale_mapping=f"biased_softplus_{default_policy_scale}",
-    )
+    actor_net = MLP(**actor_net_kwargs_default)
 
     qvalue_net_kwargs_default = {
         "num_cells": [256, 256],
@@ -846,17 +851,37 @@ def make_redq_model(
         **qvalue_net_kwargs_default,
     )
 
-    actor = ProbabilisticActor(
-        spec=action_spec,
-        in_keys=in_keys,
-        module=actor_net,
-        distribution_class=TanhNormal,
-        distribution_kwargs={
+    if not gSDE:
+        actor_net = NormalParamWrapper(
+            actor_net, scale_mapping=f"biased_softplus_{default_policy_scale}"
+        )
+        in_keys_actor = in_keys
+        dist_class = TanhNormal
+        dist_kwargs = {
             "min": action_spec.space.minimum,
             "max": action_spec.space.maximum,
             "tanh_loc": tanh_loc,
-        },
-        default_interaction_mode="random",
+        }
+    else:
+        if isinstance(obs_spec, CompositeSpec):
+            obs_spec = obs_spec["vector"]
+        obs_spec_len = obs_spec.shape[0]
+        actor_net = gSDEWrapper(
+            actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len
+        )
+        in_keys_actor = in_keys + ["_eps_gSDE"]
+        dist_class = IndependentNormal
+        dist_kwargs = {
+            "tanh_loc": tanh_loc,
+        }
+
+    actor = ProbabilisticActor(
+        spec=action_spec,
+        in_keys=in_keys_actor,
+        module=actor_net,
+        distribution_class=dist_class,
+        distribution_kwargs=dist_kwargs,
+        default_interaction_mode="random" if not args.gSDE else "net_output",
         return_log_prob=True,
     )
     qvalue = ValueOperator(
