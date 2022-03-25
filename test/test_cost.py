@@ -4,10 +4,10 @@ from copy import deepcopy
 import numpy as np
 import pytest
 import torch
+from _utils_internal import get_available_devices
 from torch import nn
 from torchrl.data import TensorDict, NdBoundedTensorSpec, MultOneHotDiscreteTensorSpec
 from torchrl.data.postprocs.postprocs import MultiStep
-from _utils_internal import get_available_devices
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from torchrl.data.tensordict.tensordict import assert_allclose_td
@@ -61,8 +61,7 @@ def get_devices():
 class TestDQN:
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4,
-                           device="cpu"):
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -88,8 +87,9 @@ class TestDQN:
         )
         return actor
 
-    def _create_mock_data_dqn(self, batch=2, obs_dim=3, action_dim=4,
-                              atoms=None, device="cpu"):
+    def _create_mock_data_dqn(
+        self, batch=2, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+    ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim)
         next_obs = torch.randn(batch, obs_dim)
@@ -124,8 +124,9 @@ class TestDQN:
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
         if atoms:
-            action_value = torch.randn(batch, T, atoms, action_dim, device=device
-                                       ).softmax(-2)
+            action_value = torch.randn(
+                batch, T, atoms, action_dim, device=device
+            ).softmax(-2)
             action = (
                 action_value[..., 0, :] == action_value[..., 0, :].max(-1, True)[0]
             ).to(torch.long)
@@ -273,8 +274,7 @@ class TestDQN:
 class TestDDPG:
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4,
-                           device="cpu"):
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -286,8 +286,7 @@ class TestDDPG:
         )
         return actor.to(device)
 
-    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4,
-                           device="cpu"):
+    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
         class ValueClass(nn.Module):
             def __init__(self):
@@ -309,15 +308,16 @@ class TestDDPG:
     ):
         raise NotImplementedError
 
-    def _create_mock_data_ddpg(self, batch=8, obs_dim=3, action_dim=4,
-                               atoms=None, device="cpu"):
+    def _create_mock_data_ddpg(
+        self, batch=8, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+    ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim, device=device)
         next_obs = torch.randn(batch, obs_dim, device=device)
         if atoms:
             raise NotImplementedError
         else:
-            action = torch.randn(batch, action_dim , device=device).clamp(-1, 1)
+            action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, 1, device=device)
         done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
         td = TensorDict(
@@ -340,7 +340,9 @@ class TestDDPG:
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
         if atoms:
-            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(-1, 1)
+            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+                -1, 1
+            )
         else:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
@@ -464,8 +466,7 @@ class TestDDPG:
 class TestSAC:
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4,
-                           device="cpu"):
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -478,8 +479,7 @@ class TestSAC:
         )
         return actor.to(device)
 
-    def _create_mock_qvalue(self, batch=2, obs_dim=3, action_dim=4,
-                            device="cpu"):
+    def _create_mock_qvalue(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         class ValueClass(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -495,8 +495,7 @@ class TestSAC:
         )
         return qvalue.to(device)
 
-    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4,
-                           device="cpu"):
+    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         module = nn.Linear(obs_dim, 1)
         value = ValueOperator(
             module=module,
@@ -509,8 +508,9 @@ class TestSAC:
     ):
         raise NotImplementedError
 
-    def _create_mock_data_sac(self, batch=16, obs_dim=3, action_dim=4,
-                              atoms=None, device="cpu"):
+    def _create_mock_data_sac(
+        self, batch=16, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+    ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim, device=device)
         next_obs = torch.randn(batch, obs_dim, device=device)
@@ -540,8 +540,9 @@ class TestSAC:
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
         if atoms:
-            action = torch.randn(batch, T, atoms, action_dim,
-                                 device=device).clamp(-1, 1)
+            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+                -1, 1
+            )
         else:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
@@ -565,8 +566,7 @@ class TestSAC:
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_sac(self, loss_class, delay_actor, delay_qvalue, num_qvalue,
-                 device):
+    def test_sac(self, loss_class, delay_actor, delay_qvalue, num_qvalue, device):
         if (delay_actor or delay_qvalue) and loss_class is not DoubleSACLoss:
             pytest.skip("incompatible config")
 
@@ -675,8 +675,7 @@ class TestSAC:
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
     def test_sac_batcher(
-        self, n, loss_class, delay_actor, delay_qvalue, num_qvalue, device,
-        gamma=0.9
+        self, n, loss_class, delay_actor, delay_qvalue, num_qvalue, device, gamma=0.9
     ):
         if (delay_actor or delay_qvalue) and (loss_class is not DoubleSACLoss):
             pytest.skip("incompatible config")
@@ -773,8 +772,7 @@ class TestSAC:
 class TestREDQ:
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4,
-                           device="cpu"):
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -788,8 +786,7 @@ class TestREDQ:
         )
         return actor.to(device)
 
-    def _create_mock_qvalue(self, batch=2, obs_dim=3, action_dim=4,
-                            device="cpu"):
+    def _create_mock_qvalue(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         class ValueClass(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -805,8 +802,9 @@ class TestREDQ:
         )
         return qvalue.to(device)
 
-    def _create_mock_data_redq(self, batch=16, obs_dim=3, action_dim=4,
-                               atoms=None, device="cpu"):
+    def _create_mock_data_redq(
+        self, batch=16, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+    ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim, device=device)
         next_obs = torch.randn(batch, obs_dim, device=device)
@@ -836,7 +834,9 @@ class TestREDQ:
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
         if atoms:
-            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(-1, 1)
+            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+                -1, 1
+            )
         else:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
@@ -1054,8 +1054,7 @@ class TestREDQ:
 class TestPPO:
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4,
-                           device="cpu"):
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         # Actor
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -1069,8 +1068,7 @@ class TestPPO:
         )
         return actor.to(device)
 
-    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4,
-                           device="cpu"):
+    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
         module = nn.Linear(obs_dim, 1)
         value = ValueOperator(
             module=module,
@@ -1083,8 +1081,9 @@ class TestPPO:
     ):
         raise NotImplementedError
 
-    def _create_mock_data_ppo(self, batch=2, obs_dim=3, action_dim=4,
-                              atoms=None, device="cpu"):
+    def _create_mock_data_ppo(
+        self, batch=2, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+    ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim, device=device)
         next_obs = torch.randn(batch, obs_dim, device=device)
@@ -1115,11 +1114,11 @@ class TestPPO:
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
         if atoms:
-            action = torch.randn(batch, T, atoms, action_dim,
-                                 device=device).clamp(-1, 1)
+            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+                -1, 1
+            )
         else:
-            action = torch.randn(batch, T, action_dim,
-                                 device=device).clamp(-1, 1)
+            action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)

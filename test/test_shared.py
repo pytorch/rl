@@ -136,8 +136,10 @@ class TestStack:
         t_true = self.driver_func(tensordict, True)
         t_false = self.driver_func(tensordict, False)
         if t_true > t_false:
-            warnings.warn("Updating each element of the tensordict did "
-                          "not take longer than updating the stack.")
+            warnings.warn(
+                "Updating each element of the tensordict did "
+                "not take longer than updating the stack."
+            )
 
 
 @pytest.mark.parametrize(

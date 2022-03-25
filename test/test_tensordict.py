@@ -26,16 +26,13 @@ def test_tensor_dict_set(device):
     assert (td.get("key1") == 1).all()
 
     # robust to device casting
-    td.set("key_device", torch.ones(4, 5, device="cpu",
-                                     dtype=torch.double))
+    td.set("key_device", torch.ones(4, 5, device="cpu", dtype=torch.double))
     assert td.get("key_device").device == torch.device(device)
 
     with pytest.raises(
-        AttributeError,
-        match="for populating tensordict with new key-value pair"
+        AttributeError, match="for populating tensordict with new key-value pair"
     ):
-        td.set_("smartypants", torch.ones(4, 5, device="cpu",
-                                         dtype=torch.double))
+        td.set_("smartypants", torch.ones(4, 5, device="cpu", dtype=torch.double))
     # test set_at_
     td.set("key2", torch.randn(4, 5, 6, device=device))
     x = torch.randn(6, device=device)
@@ -47,11 +44,13 @@ def test_tensor_dict_set(device):
     td.set_at_("key2", x, (2, 2))  # robust to dtype casting
     torch.testing.assert_allclose(td.get("key2")[2, 2], x.to(torch.float))
 
-    td.set("key1", torch.zeros(4, 5, dtype=torch.double, device=device),
-           inplace=True)
-    assert (td.get("key1")==0).all()
-    td.set("key1", torch.randn(4, 5, 1, 2, dtype=torch.double, device=device),
-           inplace=False)
+    td.set("key1", torch.zeros(4, 5, dtype=torch.double, device=device), inplace=True)
+    assert (td.get("key1") == 0).all()
+    td.set(
+        "key1",
+        torch.randn(4, 5, 1, 2, dtype=torch.double, device=device),
+        inplace=False,
+    )
     assert td._tensor_dict_meta["key1"].shape == td._tensor_dict["key1"].shape
 
 
@@ -62,12 +61,14 @@ def test_stack(device):
     tds = torch.stack(tds_list, 0)
     assert tds[0] is tds_list[0]
 
-    td = TensorDict(source={"a": torch.randn(4, 5, 3, device=device)},
-                    batch_size=(4, 5))
+    td = TensorDict(
+        source={"a": torch.randn(4, 5, 3, device=device)}, batch_size=(4, 5)
+    )
     td_list = list(td)
     td_reconstruct = torch.stack(td_list, 0)
     assert td_reconstruct.batch_size == td.batch_size
     assert (td_reconstruct == td).all()
+
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensor_dict_indexing(device):
@@ -140,8 +141,10 @@ def test_subtensor_dict_construction(device):
 @pytest.mark.parametrize("device", get_available_devices())
 def test_mask_td(device):
     torch.manual_seed(1)
-    d = {"key1": torch.randn(4, 5, 6, device=device),
-         "key2": torch.randn(4, 5, 10, device=device)}
+    d = {
+        "key1": torch.randn(4, 5, 6, device=device),
+        "key2": torch.randn(4, 5, 10, device=device),
+    }
     mask = torch.zeros(4, 5, dtype=torch.bool, device=device).bernoulli_()
     td = TensorDict(batch_size=(4, 5), source=d)
     td_masked = td.masked_select(mask)
@@ -151,8 +154,10 @@ def test_mask_td(device):
 @pytest.mark.parametrize("device", get_available_devices())
 def test_unbind_td(device):
     torch.manual_seed(1)
-    d = {"key1": torch.randn(4, 5, 6, device=device),
-         "key2": torch.randn(4, 5, 10, device=device)}
+    d = {
+        "key1": torch.randn(4, 5, 6, device=device),
+        "key2": torch.randn(4, 5, 10, device=device),
+    }
     td = TensorDict(batch_size=(4, 5), source=d)
     td_unbind = td.unbind(1)
     assert (
@@ -163,11 +168,15 @@ def test_unbind_td(device):
 @pytest.mark.parametrize("device", get_available_devices())
 def test_cat_td(device):
     torch.manual_seed(1)
-    d = {"key1": torch.randn(4, 5, 6, device=device),
-         "key2": torch.randn(4, 5, 10, device=device)}
+    d = {
+        "key1": torch.randn(4, 5, 6, device=device),
+        "key2": torch.randn(4, 5, 10, device=device),
+    }
     td1 = TensorDict(batch_size=(4, 5), source=d)
-    d = {"key1": torch.randn(4, 10, 6, device=device),
-         "key2": torch.randn(4, 10, 10, device=device)}
+    d = {
+        "key1": torch.randn(4, 10, 6, device=device),
+        "key2": torch.randn(4, 10, 10, device=device),
+    }
     td2 = TensorDict(batch_size=(4, 10), source=d)
 
     td_cat = torch.cat([td1, td2], 1)
@@ -177,11 +186,14 @@ def test_cat_td(device):
     torch.cat([td1, td2], 1, out=td_out)
     assert td_out.batch_size == torch.Size([4, 15])
 
+
 @pytest.mark.parametrize("device", get_available_devices())
 def test_expand(device):
     torch.manual_seed(1)
-    d = {"key1": torch.randn(4, 5, 6, device=device),
-         "key2": torch.randn(4, 5, 10, device=device)}
+    d = {
+        "key1": torch.randn(4, 5, 6, device=device),
+        "key2": torch.randn(4, 5, 10, device=device),
+    }
     td1 = TensorDict(batch_size=(4, 5), source=d)
     td2 = td1.expand(3, 7)
     assert td2.batch_size == torch.Size([3, 7, 4, 5])
@@ -192,8 +204,10 @@ def test_expand(device):
 @pytest.mark.parametrize("device", get_available_devices())
 def test_squeeze(device):
     torch.manual_seed(1)
-    d = {"key1": torch.randn(4, 5, 6, device=device),
-         "key2": torch.randn(4, 5, 10, device=device)}
+    d = {
+        "key1": torch.randn(4, 5, 6, device=device),
+        "key2": torch.randn(4, 5, 10, device=device),
+    }
     td1 = TensorDict(batch_size=(4, 5), source=d)
     td2 = td1.unsqueeze(1)
     assert td2.batch_size == torch.Size([4, 1, 5])
@@ -210,8 +224,9 @@ def test_stacked_td(stack_dim, device):
             batch_size=[11, 12],
             source={
                 "key1": torch.randn(11, 12, 5, device=device),
-                "key2": torch.zeros(11, 12, 50, device=device,
-                                    dtype=torch.bool).bernoulli_(),
+                "key2": torch.zeros(
+                    11, 12, 50, device=device, dtype=torch.bool
+                ).bernoulli_(),
             },
         )
         for _ in range(10)
@@ -285,6 +300,7 @@ def test_savedtensordict(device):
     torch.testing.assert_allclose(ss_list[1].get("a"), ss[1].get("a"))
     torch.testing.assert_allclose(ss[1].get("a"), ss.get("a")[1])
     assert ss.get("a").device == device
+
 
 class TestTensorDicts:
     @property
