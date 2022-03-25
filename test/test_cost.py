@@ -120,7 +120,7 @@ class TestDQN:
         self, batch=2, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
     ):
         # create a tensordict
-        total_obs = torch.randn(batch, T + 1, obs_dim)
+        total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
         if atoms:
@@ -186,9 +186,9 @@ class TestDQN:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_dqn_batcher(self, n, loss_class, device, gamma=0.9):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor(device)
+        actor = self._create_mock_actor(device=device)
 
-        td = self._create_seq_mock_data_dqn(device)
+        td = self._create_seq_mock_data_dqn(device=device)
         loss_fn = loss_class(actor, gamma=gamma, loss_function="l2")
 
         ms = MultiStep(gamma=gamma, n_steps_max=n)
