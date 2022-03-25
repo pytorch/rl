@@ -32,8 +32,7 @@ def test_tensor_dict_set(device):
 
     with pytest.raises(
         AttributeError,
-        match="key smartypants not found in tensordict, call td.set("
-              "smartypants, value) for populating tensordict with new key-value pair"
+        match="for populating tensordict with new key-value pair"
     ):
         td.set_("smartypants", torch.ones(4, 5, device="cpu",
                                          dtype=torch.double))
@@ -97,7 +96,7 @@ def test_tensor_dict_indexing(device):
         td_reconstruct == td
     ).all(), f"td and td_reconstruct differ, got {td == td_reconstruct}"
 
-    x = torch.randn(4, 5)
+    x = torch.randn(4, 5, device=device)
     td = TensorDict(
         source={"key1": torch.zeros(3, 4, 5, device=device)},
         batch_size=[3, 4],
@@ -106,7 +105,7 @@ def test_tensor_dict_indexing(device):
     torch.testing.assert_allclose(td.get("key1")[0], x)
     torch.testing.assert_allclose(td.get("key1")[0], td[0].get("key1"))
 
-    y = torch.randn(3, 5)
+    y = torch.randn(3, 5, device=device)
     td[:, 0].set_("key1", y)
     torch.testing.assert_allclose(td.get("key1")[:, 0], y)
     torch.testing.assert_allclose(td.get("key1")[:, 0], td[:, 0].get("key1"))
