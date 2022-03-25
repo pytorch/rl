@@ -26,10 +26,17 @@ def test_tensor_dict_set(device):
     assert (td.get("key1") == 1).all()
 
     # robust to device casting
-    td.set_("key_device", torch.ones(4, 5, device="cpu",
+    td.set("key_device", torch.ones(4, 5, device="cpu",
                                      dtype=torch.double))
     assert td.get("key_device").device == torch.device(device)
 
+    with pytest.raises(
+        AttributeError,
+        match="key smartypants not found in tensordict, call td.set("
+              "smartypants, value) for populating tensordict with new key-value pair"
+    ):
+        td.set_("smartypants", torch.ones(4, 5, device="cpu",
+                                         dtype=torch.double))
     # test set_at_
     td.set("key2", torch.randn(4, 5, 6, device=device))
     x = torch.randn(6, device=device)

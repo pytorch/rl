@@ -192,7 +192,7 @@ class TestDQN:
         td = self._create_seq_mock_data_dqn(device=device)
         loss_fn = loss_class(actor, gamma=gamma, loss_function="l2")
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n)
+        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
         ms_td = ms(td.clone())
 
         with _check_td_steady(ms_td):
@@ -439,7 +439,7 @@ class TestDDPG:
         td = self._create_seq_mock_data_ddpg(device=device)
         loss_fn = loss_class(actor, value, gamma=gamma, loss_function="l2")
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n)
+        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
         ms_td = ms(td.clone())
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
@@ -703,7 +703,7 @@ class TestSAC:
             **kwargs,
         )
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n)
+        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
 
         td_clone = td.clone()
         ms_td = ms(td_clone)
@@ -988,7 +988,7 @@ class TestREDQ:
             loss_function="l2",
         )
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n)
+        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
 
         td_clone = td.clone()
         ms_td = ms(td_clone)
