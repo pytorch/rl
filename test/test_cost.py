@@ -7,6 +7,7 @@ import torch
 from torch import nn
 from torchrl.data import TensorDict, NdBoundedTensorSpec, MultOneHotDiscreteTensorSpec
 from torchrl.data.postprocs.postprocs import MultiStep
+from _utils_internal import get_available_devices
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from torchrl.data.tensordict.tensordict import assert_allclose_td
@@ -60,7 +61,8 @@ def get_devices():
 class TestDQN:
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4):
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4,
+                           device="cpu"):
         # Actor
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -69,7 +71,7 @@ class TestDQN:
         actor = QValueActor(
             spec=action_spec,
             module=module,
-        )
+        ).to(device)
         return actor
 
     def _create_mock_distributional_actor(
@@ -86,7 +88,8 @@ class TestDQN:
         )
         return actor
 
-    def _create_mock_data_dqn(self, batch=2, obs_dim=3, action_dim=4, atoms=None):
+    def _create_mock_data_dqn(self, batch=2, obs_dim=3, action_dim=4,
+                              atoms=None, device="cpu"):
         # create a tensordict
         obs = torch.randn(batch, obs_dim)
         next_obs = torch.randn(batch, obs_dim)
@@ -110,11 +113,11 @@ class TestDQN:
                 "action": action,
                 "action_value": action_value,
             },
-        )
+        ).to(device)
         return td
 
     def _create_seq_mock_data_dqn(
-        self, batch=2, T=4, obs_dim=3, action_dim=4, atoms=None
+        self, batch=2, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim)
@@ -147,10 +150,11 @@ class TestDQN:
         return td
 
     @pytest.mark.parametrize("loss_class", (DQNLoss, DoubleDQNLoss))
-    def test_dqn(self, loss_class):
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_dqn(self, loss_class, device):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor()
-        td = self._create_mock_data_dqn()
+        actor = self._create_mock_actor(device=device)
+        td = self._create_mock_data_dqn(device=device)
         loss_fn = loss_class(actor, gamma=0.9, loss_function="l2")
         with _check_td_steady(td):
             loss = loss_fn(td)
@@ -179,11 +183,12 @@ class TestDQN:
 
     @pytest.mark.parametrize("n", range(4))
     @pytest.mark.parametrize("loss_class", (DQNLoss, DoubleDQNLoss))
-    def test_dqn_batcher(self, n, loss_class, gamma=0.9):
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_dqn_batcher(self, n, loss_class, device, gamma=0.9):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor()
+        actor = self._create_mock_actor(device)
 
-        td = self._create_seq_mock_data_dqn()
+        td = self._create_seq_mock_data_dqn(device)
         loss_fn = loss_class(actor, gamma=gamma, loss_function="l2")
 
         ms = MultiStep(gamma=gamma, n_steps_max=n)
