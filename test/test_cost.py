@@ -36,7 +36,7 @@ from torchrl.objectives.costs.redq import (
     REDQLoss_deprecated,
     DoubleREDQLoss_deprecated,
 )
-from torchrl.objectives.costs.utils import hold_out_net
+from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
 
 
 class _check_td_steady:
@@ -1198,6 +1198,110 @@ def test_hold_out():
         net = torch.nn.Sequential()
         with hold_out_net(net):
             pass
+
+
+@pytest.mark.parametrize("mode", ["hard", "soft"])
+@pytest.mark.parametrize("value_network_update_interval", [100, 1000])
+@pytest.mark.parametrize("device", get_available_devices())
+def test_updater(mode, value_network_update_interval, device):
+    torch.manual_seed(100)
+
+    class custom_module_error(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self._target_params = [torch.randn(3, 4)]
+            self._target_error_params = [torch.randn(3, 4)]
+            self.params = nn.ParameterList(
+                [nn.Parameter(torch.randn(3, 4, requires_grad=True))]
+            )
+
+    module = custom_module_error().to(device)
+    with pytest.raises(
+        RuntimeError, match="Incongruent target and source " "parameter lists"
+    ):
+        if mode == "hard":
+            upd = HardUpdate(module, value_network_update_interval)
+        elif mode == "soft":
+            upd = SoftUpdate(module, 1 - 1 / value_network_update_interval)
+
+    class custom_module(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self._target_params = [torch.randn(3, 4)]
+            self.params = nn.ParameterList(
+                [nn.Parameter(torch.randn(3, 4, requires_grad=True))]
+            )
+            self.no_target_params = nn.ParameterList(
+                [nn.Parameter(torch.randn(3, 4, requires_grad=True))]
+            )
+
+    module = custom_module().to(device)
+    if mode == "hard":
+        upd = HardUpdate(
+            module, value_network_update_interval=value_network_update_interval
+        )
+    elif mode == "soft":
+        upd = SoftUpdate(module, 1 - 1 / value_network_update_interval)
+    upd.init_()
+    for _, v in upd._targets.items():
+        v[0].copy_(torch.randn_like(v[0]))
+    # total dist
+    d0 = sum(
+        [
+            (target_val[0] - val[0]).norm().item()
+            for (_, target_val), (_, val) in zip(
+                upd._targets.items(), upd._sources.items()
+            )
+        ]
+    )
+    assert d0 > 0
+    if mode == "hard":
+        for i in range(value_network_update_interval + 1):
+            d1 = sum(
+                [
+                    (target_val[0] - val[0]).norm().item()
+                    for (_, target_val), (_, val) in zip(
+                        upd._targets.items(), upd._sources.items()
+                    )
+                ]
+            )
+            assert d1 == d0, i
+            assert upd.counter == i
+            upd.step()
+        assert upd.counter == 0
+        d1 = sum(
+            [
+                (target_val[0] - val[0]).norm().item()
+                for (_, target_val), (_, val) in zip(
+                    upd._targets.items(), upd._sources.items()
+                )
+            ]
+        )
+        assert d1 < d0
+
+    elif mode == "soft":
+        upd.step()
+        d1 = sum(
+            [
+                (target_val[0] - val[0]).norm().item()
+                for (_, target_val), (_, val) in zip(
+                    upd._targets.items(), upd._sources.items()
+                )
+            ]
+        )
+        assert d1 < d0
+
+    upd.init_()
+    upd.step()
+    d2 = sum(
+        [
+            (target_val[0] - val[0]).norm().item()
+            for (_, target_val), (_, val) in zip(
+                upd._targets.items(), upd._sources.items()
+            )
+        ]
+    )
+    assert d2 < 1e-6
 
 
 if __name__ == "__main__":

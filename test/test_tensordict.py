@@ -404,6 +404,18 @@ class TestTensorDicts:
     @pytest.mark.parametrize(
         "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
     )
+    def test_masked_fill_(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        mask = torch.zeros(td.shape, dtype=torch.bool).bernoulli_()
+        new_td = td.masked_fill_(mask, -10.0)
+        assert new_td is td
+        for k, item in td.items():
+            assert (item[mask] == -10).all()
+
+    @pytest.mark.parametrize(
+        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+    )
     def test_zero_(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
@@ -444,7 +456,7 @@ class TestTensorDicts:
     @pytest.mark.parametrize(
         "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
     )
-    @pytest.mark.parametrize("device", [0, "cuda:0"])
+    @pytest.mark.parametrize("device", [0, "cuda:0", "cuda", torch.device("cuda:0")])
     def test_pin_memory(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)
@@ -474,7 +486,7 @@ class TestTensorDicts:
     @pytest.mark.parametrize(
         "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
     )
-    @pytest.mark.parametrize("device", [0, "cuda:0"])
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_cast_device(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)

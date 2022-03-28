@@ -2622,7 +2622,7 @@ class LazyStackedTensorDict(_TensorDict):
     def masked_fill_(
         self, mask: torch.Tensor, value: Union[float, bool]
     ) -> _TensorDict:
-        mask_unbind = mask.unique(self.stack_dim)
+        mask_unbind = mask.unique(dim=self.stack_dim)
         for _mask, td in zip(mask_unbind, self.tensor_dicts):
             td.masked_fill_(_mask, value)
         return self
@@ -3102,12 +3102,13 @@ class _CustomOpTensorDict(_TensorDict):
         self, mask: torch.Tensor, value: Union[float, bool]
     ) -> _TensorDict:
         for key, item in self.items():
-            mask_expand = expand_as_right(mask, item)
             source_meta_tensor = self._get_meta(key)
-            transformed_mask = getattr(mask_expand, self.custom_op)(
-                **self._update_custom_op_kwargs(source_meta_tensor)
+            mask_proc_inv = getattr(mask, self.inv_op)(
+                **self._update_inv_op_kwargs(source_meta_tensor)
             )
-            item.masked_fill_(transformed_mask, value)
+            val = self._source.get(key)
+            val[mask_proc_inv] = value
+            self._source.set(key, val)
         return self
 
     def memmap_(self):

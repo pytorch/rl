@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import pytest
 import torch
+from _utils_internal import get_available_devices
 from torchrl.data import TensorDict
 from torchrl.data.replay_buffers import TensorDictPrioritizedReplayBuffer
 from torchrl.data.tensordict.tensordict import assert_allclose_td
@@ -10,7 +11,8 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])
-def test_prb(priority_key, contiguous):
+@pytest.mark.parametrize("device", get_available_devices())
+def test_prb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)
     rb = TensorDictPrioritizedReplayBuffer(
@@ -27,7 +29,7 @@ def test_prb(priority_key, contiguous):
             "_idx": torch.arange(3).view(3, 1),
         },
         batch_size=[3],
-    )
+    ).to(device)
     rb.extend(td1)
     s = rb.sample(2)
     assert s.batch_size == torch.Size(
@@ -46,7 +48,7 @@ def test_prb(priority_key, contiguous):
             "_idx": torch.arange(5).view(5, 1),
         },
         batch_size=[5],
-    )
+    ).to(device)
     rb.extend(td2)
     s = rb.sample(5)
     assert s.batch_size == torch.Size(
@@ -66,6 +68,7 @@ def test_prb(priority_key, contiguous):
         torch.ones(
             idx_match.numel(),
             1,
+            device=device,
         )
         * 100000000,
         idx_match,
