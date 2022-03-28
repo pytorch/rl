@@ -298,7 +298,7 @@ jobs:
           path: test-results
 
 
-  unittest_linux_cpu:
+  unittest_linux_stable_cpu:
     <<: *binary_common
 
     docker:
