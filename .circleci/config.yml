@@ -302,7 +302,7 @@ jobs:
     <<: *binary_common
 
     docker:
-      - image: "pytorch/manylinux-cuda113"
+      - image: "pytorch/manylinux-cuda102"
     resource_class: 2xlarge+
 
     environment:
@@ -350,7 +350,7 @@ jobs:
       image: ubuntu-1604-cuda-10.2:202012-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda113"
+      image_name: "pytorch/manylinux-cuda102"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
 
@@ -423,6 +423,6 @@ workflows:
           python_version: '3.8'
 
       - unittest_linux_stable_gpu:
-          cu_version: cu113
+          cu_version: cu102
           name: unittest_linux_stable_gpu_py3.8
           python_version: '3.8'
