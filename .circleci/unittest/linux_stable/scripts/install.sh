@@ -43,7 +43,6 @@ fi
 
 printf "Installing functorch\n"
 pip install functorch
-
 # smoke test
 python -c "import functorch"
 
