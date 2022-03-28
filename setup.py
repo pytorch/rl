@@ -77,5 +77,6 @@ def _main():
         install_requires=[pytorch_package_dep],
     )
 
+
 if __name__ == "__main__":
     _main()
