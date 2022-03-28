@@ -50,7 +50,6 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 conda env update --file "${this_dir}/environment.yml" --prune
-pip install git+git://github.com/deepmind/dm_control.git
 
 yum makecache
 yum -y install glfw-devel
