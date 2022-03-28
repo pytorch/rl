@@ -3,6 +3,8 @@ channels:
   - defaults
 dependencies:
   - pip
+  - ninja
+  - cmake >= 3.18
   - pip:
     - hypothesis
     - protobuf
