@@ -23,4 +23,5 @@ dependencies:
     - pyyaml
     - scipy
     - dm_control
+    - ninja
     - mujoco_py

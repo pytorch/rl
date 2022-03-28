@@ -48,4 +48,4 @@ pip install functorch
 python -c "import functorch"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python setup.py install
