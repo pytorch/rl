@@ -414,8 +414,12 @@ jobs:
   build_docs:
     <<: *binary_common
     docker:
-      - image: circleci/python:3.7
+      - image: "pytorch/manylinux-cuda102"
     resource_class: 2xlarge+
+
+#    docker:
+#      - image: circleci/python:3.7
+#    resource_class: 2xlarge+
     steps:
       - attach_workspace:
           at: ~/workspace
@@ -431,7 +435,6 @@ jobs:
           name: Build docs
           command: |
             set -ex
-            # turn v1.12.0rc3 into 1.12.0
             tag=$(echo $CIRCLE_TAG | sed -e 's/v*\([0-9.]*\).*/\1/')
             VERSION=${tag:-main}
             eval "$(./conda/bin/conda shell.bash hook)"
