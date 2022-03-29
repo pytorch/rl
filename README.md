@@ -29,6 +29,73 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 - [SAC](examples/sac/sac.py)
 and many more to come!
 
+## Installation
+Create a conda environment where the packages will be installed. 
+Before installing anything, make sure you have the latest version of `cmake` and `ninja` libraries:
+
+```
+conda create --name torch_rl python=3.9
+conda activate torch_rl
+conda install cmake -c conda-forge
+pip install ninja
+```
+
+Depending on the use of functorch that you want to make, you may want to install the latest (nightly) pytorch release or the latest stable version of pytorch:
+
+**Stable**
+
+```
+conda install pytorch torchvision cudatoolkit=10.2 -c pytorch  # refer to pytorch official website for cudatoolkit installation
+pip install functorch
+```
+
+**Nightly**
+```
+# For CUDA 10.2
+pip install --pre torch -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html --upgrade
+# For CUDA 11.1
+pip install --pre torch -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html --upgrade
+# For CPU-only build
+pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --upgrade
+```
+
+and functorch
+```
+pip install --user "git+https://github.com/pytorch/functorch.git"
+```
+
+**Torchrl**
+
+Go to the directory where you have cloned the torchrl repo and install it
+```
+cd /path/to/torchrl/
+python setup.py install
+```
+To run a quick sanity check, leave that directory and try to import the library.
+```
+python -c "import torchrl"
+```
+
+**Optional dependencies**
+
+The following libraries can be installed depending on the usage one wants to make of torchrl:
+```
+# diverse
+pip install tqdm pyyaml configargparse
+
+# rendering
+pip install moviepy
+
+# deepmind control suite
+pip install dm_control 
+
+# gym, atari games
+pip install gym gym[accept-rom-license] pygame gym_retro
+
+# tests
+pip install pytest
+```
+
 ## Running examples
 Examples are coded in a very similar way but the configuration may change from one algorithm to the other (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)
 To train an algorithm it is therefore advised to do use the predefined configurations that are found in the `configs` sub-folder in each algorithm directory:
