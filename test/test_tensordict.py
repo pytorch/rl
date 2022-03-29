@@ -503,7 +503,8 @@ class TestTensorDicts:
             f"td_device first tensor device is " f"{next(td_device.items())[1].device}"
         )
         assert td_device.clone().device == device
-        assert td_device is not td
+        if device != td.device:
+            assert td_device is not td
         assert td_device.to(device) is td_device
         assert td.to("cpu") is td
         # assert type(td_device) is type(td)

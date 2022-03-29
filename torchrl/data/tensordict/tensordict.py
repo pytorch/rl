@@ -2466,9 +2466,7 @@ class LazyStackedTensorDict(_TensorDict):
             if dest == self.device:
                 return self
             tds = [td.to(dest) for td in self.tensor_dicts]
-            self_copy = copy(self)
-            self_copy.tensor_dicts = tds
-            return self_copy
+            return LazyStackedTensorDict(*tds, stack_dim=self.stack_dim)
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "

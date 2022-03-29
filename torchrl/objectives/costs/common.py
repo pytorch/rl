@@ -136,8 +136,8 @@ class _LossModule(nn.Module):
             )
 
         else:
-            setattr(self, name_params_target, None)
-            setattr(self, name_buffers_target, None)
+            setattr(self.__class__, name_params_target, None)
+            setattr(self.__class__, name_buffers_target, None)
 
         setattr(
             self.__class__,
