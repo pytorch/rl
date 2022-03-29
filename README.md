@@ -122,3 +122,6 @@ In the near future, we plan to:
 - provide tutorials on how to design new actors or environment wrappers;
 - implement IMPALA (as a distributed RL example) and Meta-RL algorithms;
 - improve the tests, documentation and nomenclature.
+
+# License
+TorchRL is licensed under the MIT License. See [LICENSE](LICENSE) for details.
