@@ -440,6 +440,19 @@ workflows:
       - lint_python_and_config
       - lint_c
 #      - type_check_python
+  build:
+    jobs:
+      - binary_linux_wheel:
+          conda_docker_image: pytorch/conda-builder:cpu
+          cu_version: cpu
+          filters:
+            branches:
+              only: /.*/
+            tags:
+              only: /v[0-9]+(\.[0-9]+)*-rc[0-9]+/
+          name: binary_linux_wheel_py3.7_cpu
+          python_version: '3.7'
+          wheel_docker_image: pytorch/manylinux-cuda102
 
   unittest:
     jobs:
@@ -463,3 +476,14 @@ workflows:
           cu_version: cu102
           name: unittest_linux_stable_gpu_py3.8
           python_version: '3.8'
+      - build_docs:
+#          filters:
+#            branches:
+#              only:
+#              - /.*/
+#            tags:
+#              only: /v[0-9]+(\.[0-9]+)*-rc[0-9]+/
+          name: build_docs
+          python_version: '3.7'
+          requires:
+          - binary_linux_wheel_py3.7_cpu
