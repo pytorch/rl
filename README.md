@@ -15,6 +15,7 @@ On the high-level end, it provides:
 - a generic [agent class](torchrl/agents/agents.py);
 - efficient and generic [replay buffers](torchrl/data/replay_buffers/replay_buffers.py);
 - [TensorDict](torchrl/data/tensordict/tensordict.py), a convenient data structure to pass data from one object to another without friction;
+- An associated [`TDModule` class](torchrl/modules/td_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible! 
 - [interfaces for environments](torchrl/envs) from common libraries (OpenAI gym, deepmind control lab, etc.) and [wrappers for parallel execution](torchrl/envs/vec_env.py), as well as a new pytorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py);
 - [environment transforms](torchrl/envs/transforms/transforms.py), which process and prepare the data coming out of the environments to be used by the agent;
 - various tools for distributed learning (e.g. [memory mapped tensors](torchrl/data/tensordict/memmap.py));
@@ -27,6 +28,8 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 - [DDPG](examples/ddpg/ddpg.py)
 - [PPO](examples/ppo/ppo.py)
 - [SAC](examples/sac/sac.py)
+- [REDQ](examples/redq/redq.py)
+
 and many more to come!
 
 ## Installation
