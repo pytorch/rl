@@ -492,7 +492,9 @@ class TestTensorDicts:
         td = getattr(self, td_name)
         td_device = td.to(device)
         _device = torch.device("cuda:0")
-        assert td_device.device == _device
+        assert td_device.device == _device, \
+            f"td_device first tensor device is " \
+            f"{next(td_device.items())[1].device}"
         assert td_device.clone().device == _device
         assert td_device is not td
         assert td_device.to(device) is td_device

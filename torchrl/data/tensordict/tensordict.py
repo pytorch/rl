@@ -425,7 +425,9 @@ dtype=torch.float32)},
         else:
             tensor = input
 
-        if check_device and self.device and tensor.device is not self.device:
+        if check_device and \
+            (self.device is not None) and \
+            (tensor.device is not self.device):
             tensor = tensor.to(self.device)
 
         if check_shared:
@@ -1182,6 +1184,10 @@ dtype=torch.float32)},
         """Returns a new, empty tensordict with the same device and batch size."""
         return self.select()
 
+    def is_empty(self):
+        for i in self.items_meta():
+            return True
+        return False
 
 class TensorDict(_TensorDict):
     """A batched dictionary of tensors.
@@ -1353,7 +1359,7 @@ class TensorDict(_TensorDict):
     @property
     def device(self) -> torch.device:
         device = self._device
-        if device is None and len(self):
+        if device is None and not self.is_empty():
             device = next(self.items_meta())[1].device
         if not isinstance(device, torch.device) and device is not None:
             device = torch.device(device)
