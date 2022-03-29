@@ -1186,8 +1186,8 @@ dtype=torch.float32)},
 
     def is_empty(self):
         for i in self.items_meta():
-            return True
-        return False
+            return False
+        return True
 
 class TensorDict(_TensorDict):
     """A batched dictionary of tensors.
@@ -1360,7 +1360,9 @@ class TensorDict(_TensorDict):
     def device(self) -> torch.device:
         device = self._device
         if device is None and not self.is_empty():
-            device = next(self.items_meta())[1].device
+            for _, item in self.items_meta():
+                device = item.device
+                break
         if not isinstance(device, torch.device) and device is not None:
             device = torch.device(device)
         self._device = device

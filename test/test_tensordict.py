@@ -492,6 +492,14 @@ class TestTensorDicts:
         td = getattr(self, td_name)
         td_device = td.to(device)
         _device = torch.device("cuda:0")
+
+        for k, item in td_device.items_meta():
+            assert item.device == _device
+        for k, item in td_device.items():
+            assert item.device == _device
+        for k, item in td_device.clone().items():
+            assert item.device == _device
+
         assert td_device.device == _device, \
             f"td_device first tensor device is " \
             f"{next(td_device.items())[1].device}"
@@ -499,10 +507,6 @@ class TestTensorDicts:
         assert td_device is not td
         assert td_device.to(device) is td_device
         assert td.to("cpu") is td
-        for k, item in td_device.items():
-            assert item.device == _device
-        for k, item in td_device.clone().items():
-            assert item.device == _device
         # assert type(td_device) is type(td)
         assert_allclose_td(td, td_device.to("cpu"))
 
