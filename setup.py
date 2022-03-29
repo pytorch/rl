@@ -17,7 +17,7 @@ def _get_pytorch_version():
     return "torch"
 
 
-def _get_packages(branch_name, tag):
+def _get_packages():
     exclude = [
         "build*",
         "test*",
@@ -57,21 +57,26 @@ def _run_cmd(cmd):
         return None
 
 
-pytorch_package_dep = _get_pytorch_version()
-print("-- PyTorch dependency:", pytorch_package_dep)
-branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
-tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
+def _main():
+    pytorch_package_dep = _get_pytorch_version()
+    print("-- PyTorch dependency:", pytorch_package_dep)
+    # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
 
-setup(
-    name="torchrl",
-    version="0.1",
-    author="torchrl contributors",
-    author_email="vmoens@fb.com",
-    packages=_get_packages(branch, tag),
-    ext_modules=setup_helpers.get_ext_modules(),
-    cmdclass={
-        "build_ext": setup_helpers.CMakeBuild,
-        "clean": clean,
-    },
-    install_requires=[pytorch_package_dep],
-)
+    setup(
+        name="torchrl",
+        version="0.1",
+        author="torchrl contributors",
+        author_email="vmoens@fb.com",
+        packages=_get_packages(),
+        ext_modules=setup_helpers.get_ext_modules(),
+        cmdclass={
+            "build_ext": setup_helpers.CMakeBuild,
+            "clean": clean,
+        },
+        install_requires=[pytorch_package_dep],
+    )
+
+
+if __name__ == "__main__":
+    _main()

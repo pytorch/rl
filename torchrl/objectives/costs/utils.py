@@ -98,7 +98,8 @@ class _TargetNetUpdate:
     ):
 
         _target_names = []
-        for name in loss_module.__dict__:
+        # for properties
+        for name in loss_module.__class__.__dict__:
             if (
                 name.startswith("_target_")
                 and (name.endswith("params") or name.endswith("buffers"))
@@ -106,32 +107,47 @@ class _TargetNetUpdate:
             ):
                 _target_names.append(name)
 
+        # for regular lists: raise an exception
+        for name in loss_module.__dict__:
+            if (
+                name.startswith("_target_")
+                and (name.endswith("params") or name.endswith("buffers"))
+                and (getattr(loss_module, name) is not None)
+            ):
+                raise RuntimeError(
+                    "Your module seems to have a _target tensor list contained "
+                    "in a non-dynamic structure (such as a list). If the "
+                    "module is cast onto a device, the reference to these "
+                    "tensors will be lost."
+                )
+
         _source_names = ["".join(name.split("_target_")) for name in _target_names]
 
-        if not all(
-            (name in loss_module.__dict__) or (name in loss_module._modules)
-            for name in _source_names
-        ):
-            ex_list = [
-                name
-                for name in _source_names
-                if not (
-                    (name in loss_module.__dict__) or (name in loss_module._modules)
+        for _source in _source_names:
+            try:
+                getattr(loss_module, _source)
+            except AttributeError:
+                raise RuntimeError(
+                    f"Incongruent target and source parameter lists: "
+                    f"{_source} is not an attribute of the loss_module"
                 )
-            ]
-            raise RuntimeError(
-                f"Incongruent target and source parameter lists: "
-                f"{ex_list} are not in "
-                f"loss_module.__dict__"
-            )
 
-        self._targets = OrderedDict(
-            {name: getattr(loss_module, name) for name in _target_names}
-        )
-        self._sources = OrderedDict(
-            {name: getattr(loss_module, name) for name in _source_names}
-        )
+        self._target_names = _target_names
+        self._source_names = _source_names
+        self.loss_module = loss_module
         self.initialized = False
+
+    @property
+    def _targets(self):
+        return OrderedDict(
+            {name: getattr(self.loss_module, name) for name in self._target_names}
+        )
+
+    @property
+    def _sources(self):
+        return OrderedDict(
+            {name: getattr(self.loss_module, name) for name in self._source_names}
+        )
 
     def init_(self) -> None:
         for source, target in zip(self._sources.values(), self._targets.values()):

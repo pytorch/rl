@@ -3,6 +3,7 @@ channels:
   - defaults
 dependencies:
   - pip
+  - ninja
   - cmake >= 3.18
   - pip:
     - hypothesis
@@ -23,5 +24,4 @@ dependencies:
     - pyyaml
     - scipy
     - dm_control
-    - ninja
     - mujoco_py

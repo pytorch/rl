@@ -58,5 +58,5 @@ class OneHotCategorical(D.Categorical):
         self, sample_shape: Union[torch.Size, Sequence] = torch.Size([])
     ) -> torch.Tensor:
         out = super().sample(sample_shape=sample_shape)
-        out = torch.nn.functional.one_hot(out).to(torch.long)
+        out = torch.nn.functional.one_hot(out, self.logits.shape[-1]).to(torch.long)
         return out

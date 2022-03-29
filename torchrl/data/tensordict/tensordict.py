@@ -425,7 +425,11 @@ dtype=torch.float32)},
         else:
             tensor = input
 
-        if check_device and self.device and tensor.device is not self.device:
+        if (
+            check_device
+            and (self.device is not None)
+            and (tensor.device is not self.device)
+        ):
             tensor = tensor.to(self.device)
 
         if check_shared:
@@ -1182,6 +1186,11 @@ dtype=torch.float32)},
         """Returns a new, empty tensordict with the same device and batch size."""
         return self.select()
 
+    def is_empty(self):
+        for i in self.items_meta():
+            return False
+        return True
+
 
 class TensorDict(_TensorDict):
     """A batched dictionary of tensors.
@@ -1323,7 +1332,8 @@ class TensorDict(_TensorDict):
                 if map_item_to_device:
                     value = value.to(device)  # type: ignore
                 _meta_val = None if _meta_source is None else _meta_source[key]
-                self.set(key, value, _meta_val=_meta_val)
+                self.set(key, value, _meta_val=_meta_val, _run_checks=False)
+
         self._check_batch_size()
         self._check_device()
 
@@ -1353,9 +1363,11 @@ class TensorDict(_TensorDict):
     @property
     def device(self) -> torch.device:
         device = self._device
-        if device is None and len(self):
-            device = next(self.items_meta())[1].device
-        if not isinstance(device, torch.device) and device is not None:
+        if device is None and not self.is_empty():
+            for _, item in self.items_meta():
+                device = item.device
+                break
+        if (not isinstance(device, torch.device)) and (device is not None):
             device = torch.device(device)
         self._device = device
         return device  # type: ignore
@@ -1460,6 +1472,7 @@ class TensorDict(_TensorDict):
             value,
             check_tensor_shape=_run_checks,
             check_shared=_run_checks,
+            check_device=_run_checks,
         )  # check_tensor_shape=_run_checks
         if key in self._tensor_dict and inplace:
             return self.set_(key, proc_value)
@@ -2453,9 +2466,7 @@ class LazyStackedTensorDict(_TensorDict):
             if dest == self.device:
                 return self
             tds = [td.to(dest) for td in self.tensor_dicts]
-            self_copy = copy(self)
-            self_copy.tensor_dicts = tds
-            return self_copy
+            return LazyStackedTensorDict(*tds, stack_dim=self.stack_dim)
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "
@@ -2622,7 +2633,7 @@ class LazyStackedTensorDict(_TensorDict):
     def masked_fill_(
         self, mask: torch.Tensor, value: Union[float, bool]
     ) -> _TensorDict:
-        mask_unbind = mask.unique(self.stack_dim)
+        mask_unbind = mask.unique(dim=self.stack_dim)
         for _mask, td in zip(mask_unbind, self.tensor_dicts):
             td.masked_fill_(_mask, value)
         return self
@@ -2822,6 +2833,8 @@ class SavedTensorDict(_TensorDict):
                 return self
             self_copy = copy(self)
             self_copy._device = dest
+            for k, item in self.items_meta():
+                item.device = dest
             return self_copy
         else:
             raise NotImplementedError(
@@ -3102,12 +3115,13 @@ class _CustomOpTensorDict(_TensorDict):
         self, mask: torch.Tensor, value: Union[float, bool]
     ) -> _TensorDict:
         for key, item in self.items():
-            mask_expand = expand_as_right(mask, item)
             source_meta_tensor = self._get_meta(key)
-            transformed_mask = getattr(mask_expand, self.custom_op)(
-                **self._update_custom_op_kwargs(source_meta_tensor)
+            mask_proc_inv = getattr(mask, self.inv_op)(
+                **self._update_inv_op_kwargs(source_meta_tensor)
             )
-            item.masked_fill_(transformed_mask, value)
+            val = self._source.get(key)
+            val[mask_proc_inv] = value
+            self._source.set(key, val)
         return self
 
     def memmap_(self):
