@@ -2833,6 +2833,8 @@ class SavedTensorDict(_TensorDict):
                 return self
             self_copy = copy(self)
             self_copy._device = dest
+            for k, item in self.items_meta():
+                item.device = dest
             return self_copy
         else:
             raise NotImplementedError(
