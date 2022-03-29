@@ -198,6 +198,21 @@ jobs:
           name: Check Python types statically
           command: mypy --install-types --non-interactive --config-file mypy.ini
 
+  binary_linux_wheel:
+    <<: *binary_common
+    docker:
+      - image: << parameters.wheel_docker_image >>
+    resource_class: 2xlarge+
+    steps:
+      - checkout_merge
+      - designate_upload_channel
+      - run: packaging/build_wheel.sh
+      - store_artifacts:
+          path: dist
+      - persist_to_workspace:
+          root: dist
+          paths:
+            - "*"
 
   unittest_linux_cpu:
     <<: *binary_common
@@ -440,23 +455,23 @@ workflows:
       - lint_python_and_config
       - lint_c
 #      - type_check_python
-  build:
-    jobs:
-      - binary_linux_wheel:
-          conda_docker_image: pytorch/conda-builder:cpu
-          cu_version: cpu
-          filters:
-            branches:
-              only: /.*/
-            tags:
-              only: /v[0-9]+(\.[0-9]+)*-rc[0-9]+/
-          name: binary_linux_wheel_py3.7_cpu
-          python_version: '3.7'
-          wheel_docker_image: pytorch/manylinux-cuda102
+
+#  build:
+#    jobs:
+#      - binary_linux_wheel:
+#          conda_docker_image: pytorch/conda-builder:cpu
+#          cu_version: cpu
+#          filters:
+#            branches:
+#              only: /.*/
+#            tags:
+#              only: /v[0-9]+(\.[0-9]+)*-rc[0-9]+/
+#          name: binary_linux_wheel_py3.7_cpu
+#          python_version: '3.7'
+#          wheel_docker_image: pytorch/manylinux-cuda102
 
   unittest:
     jobs:
-
       - unittest_linux_cpu:
           cu_version: cpu
           name: unittest_linux_cpu_py3.8
@@ -485,5 +500,5 @@ workflows:
 #              only: /v[0-9]+(\.[0-9]+)*-rc[0-9]+/
           name: build_docs
           python_version: '3.7'
-          requires:
-          - binary_linux_wheel_py3.7_cpu
+#          requires:
+#          - binary_linux_wheel_py3.7_cpu
