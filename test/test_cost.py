@@ -1227,7 +1227,7 @@ def test_updater(mode, value_network_update_interval, device):
     class custom_module(nn.Module):
         def __init__(self):
             super().__init__()
-            self.register_buffer('_target_tensor', torch.randn(3, 4))
+            self.register_buffer("_target_tensor", torch.randn(3, 4))
             self._target_params = [self._target_tensor]
             self.params = nn.ParameterList(
                 [nn.Parameter(torch.randn(3, 4, requires_grad=True))]

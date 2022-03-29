@@ -425,9 +425,11 @@ dtype=torch.float32)},
         else:
             tensor = input
 
-        if check_device and \
-            (self.device is not None) and \
-            (tensor.device is not self.device):
+        if (
+            check_device
+            and (self.device is not None)
+            and (tensor.device is not self.device)
+        ):
             tensor = tensor.to(self.device)
 
         if check_shared:
@@ -1189,6 +1191,7 @@ dtype=torch.float32)},
             return False
         return True
 
+
 class TensorDict(_TensorDict):
     """A batched dictionary of tensors.
 
@@ -1330,8 +1333,7 @@ class TensorDict(_TensorDict):
                     value = value.to(device)  # type: ignore
                 _meta_val = None if _meta_source is None else _meta_source[key]
                 self.set(key, value, _meta_val=_meta_val, _run_checks=False)
-                # TODO: REMOVE
-                assert self.get(key).device == value.device
+
         self._check_batch_size()
         self._check_device()
 
@@ -1365,8 +1367,7 @@ class TensorDict(_TensorDict):
             for _, item in self.items_meta():
                 device = item.device
                 break
-        if (not isinstance(device, torch.device)) \
-            and (device is not None):
+        if (not isinstance(device, torch.device)) and (device is not None):
             device = torch.device(device)
         self._device = device
         return device  # type: ignore
@@ -1471,7 +1472,7 @@ class TensorDict(_TensorDict):
             value,
             check_tensor_shape=_run_checks,
             check_shared=_run_checks,
-            check_device=_run_checks
+            check_device=_run_checks,
         )  # check_tensor_shape=_run_checks
         if key in self._tensor_dict and inplace:
             return self.set_(key, proc_value)

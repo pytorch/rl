@@ -125,13 +125,22 @@ class _TargetNetUpdate:
                 f"loss_module.__dict__"
             )
 
-        self._targets = OrderedDict(
-            {name: getattr(loss_module, name) for name in _target_names}
-        )
-        self._sources = OrderedDict(
-            {name: getattr(loss_module, name) for name in _source_names}
-        )
+        self._target_names = _target_names
+        self._source_names = _source_names
+        self.loss_module = loss_module
         self.initialized = False
+
+    @property
+    def _targets(self):
+        return OrderedDict(
+            {name: getattr(self.loss_module, name) for name in self._target_names}
+        )
+
+    @property
+    def _sources(self):
+        return OrderedDict(
+            {name: getattr(self.loss_module, name) for name in self._source_names}
+        )
 
     def init_(self) -> None:
         for source, target in zip(self._sources.values(), self._targets.values()):
