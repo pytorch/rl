@@ -118,7 +118,8 @@ class _TargetNetUpdate:
                     "Your module seems to have a _target tensor list contained "
                     "in a non-dynamic structure (such as a list). If the "
                     "module is cast onto a device, the reference to these "
-                    "tensors will be lost.")
+                    "tensors will be lost."
+                )
 
         _source_names = ["".join(name.split("_target_")) for name in _target_names]
 

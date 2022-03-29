@@ -56,12 +56,18 @@ class _LossModule(nn.Module):
                 module_buffers,
             ) = module.make_functional_with_buffers(clone=True)
         else:
-            functional_module, module_params, module_buffers = \
-                functorch.make_functional_with_buffers(module)
+            (
+                functional_module,
+                module_params,
+                module_buffers,
+            ) = functorch.make_functional_with_buffers(module)
             # Erase meta params
             none_state = [None for _ in module_params + module_buffers]
-            _swap_state(functional_module.stateless_model, functional_module.split_names,
-                        none_state)
+            _swap_state(
+                functional_module.stateless_model,
+                functional_module.split_names,
+                none_state,
+            )
             del module_params
 
         param_name = module_name + "_params"
@@ -101,8 +107,7 @@ class _LossModule(nn.Module):
         setattr(
             self.__class__,
             buffer_name,
-            property(lambda _self: [getattr(_self, _name)
-                                    for _name in module_buffers]),
+            property(lambda _self: [getattr(_self, _name) for _name in module_buffers]),
         )
 
         # we set the functional module
@@ -119,8 +124,9 @@ class _LossModule(nn.Module):
             setattr(
                 self.__class__,
                 name_params_target,
-                property(lambda _self: [getattr(_self, _name)
-                                        for _name in target_params]),
+                property(
+                    lambda _self: [getattr(_self, _name) for _name in target_params]
+                ),
             )
 
             target_buffers = [p.detach().clone() for p in getattr(self, buffer_name)]
@@ -131,8 +137,9 @@ class _LossModule(nn.Module):
             setattr(
                 self.__class__,
                 name_buffers_target,
-                property(lambda _self: [getattr(_self, _name)
-                                        for _name in target_buffers]),
+                property(
+                    lambda _self: [getattr(_self, _name) for _name in target_buffers]
+                ),
             )
 
         else:

@@ -1229,8 +1229,7 @@ def test_updater(mode, value_network_update_interval, device):
         def __init__(self):
             super().__init__()
             module1 = torch.nn.BatchNorm2d(10).eval()
-            self.convert_to_functional(module1, "module1",
-                                       create_target_params=True)
+            self.convert_to_functional(module1, "module1", create_target_params=True)
             module2 = torch.nn.BatchNorm2d(10).eval()
             self.module2 = module2
             for target in self.target_module1_params:
