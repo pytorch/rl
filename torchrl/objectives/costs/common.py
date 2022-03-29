@@ -2,7 +2,9 @@ __all__ = ["_LossModule"]
 
 from typing import Iterator, Optional, Tuple
 
+import functorch
 import torch
+from functorch._src.make_functional import _swap_state
 from torch import nn
 from torch.nn import Parameter
 
@@ -42,21 +44,37 @@ class _LossModule(nn.Module):
         expand_dim: Optional[int] = None,
         create_target_params: bool = False,
     ) -> None:
+        # To make it robust to device casting, we must register list of
+        # tensors as lazy calls to `getattr(self, name_of_tensor)`.
+        # Otherwise, casting the module to a device will keep old references
+        # to uncast tensors
 
         network_orig = module
-        functional_module, (
-            _,
-            module_buffers,
-        ) = module.make_functional_with_buffers(clone=True)
+        if hasattr(module, "make_functional_with_buffers"):
+            functional_module, (
+                _,
+                module_buffers,
+            ) = module.make_functional_with_buffers(clone=True)
+        else:
+            functional_module, module_params, module_buffers = \
+                functorch.make_functional_with_buffers(module)
+            # Erase meta params
+            none_state = [None for _ in module_params + module_buffers]
+            _swap_state(functional_module.stateless_model, functional_module.split_names,
+                        none_state)
+            del module_params
+
         param_name = module_name + "_params"
+
         # we keep the original parameters and not the copy returned by functorch
         params = network_orig.parameters()
+
         # unless we need to expand them, in that case we'll delete the weights to make sure that the user does not
         # run anything with them expecting them to be updated
         params = list(params)
         module_buffers = list(module_buffers)
-        if expand_dim:
 
+        if expand_dim:
             for i, p in enumerate(params):
                 p = p.repeat(expand_dim, *[1 for _ in p.shape])
                 p = nn.Parameter(
@@ -77,9 +95,15 @@ class _LossModule(nn.Module):
         for i, p in enumerate(module_buffers):
             _name = module_name + f"_buffer_{i}"
             self.register_buffer(_name, p)
-            module_buffers[i] = getattr(self, _name)
+            # replace buffer by its name
+            module_buffers[i] = _name
         buffer_name = module_name + "_buffers"
-        setattr(self, buffer_name, module_buffers)
+        setattr(
+            self.__class__,
+            buffer_name,
+            property(lambda _self: [getattr(_self, _name)
+                                    for _name in module_buffers]),
+        )
 
         # we set the functional module
         setattr(self, module_name, functional_module)
@@ -91,15 +115,26 @@ class _LossModule(nn.Module):
             for i, p in enumerate(target_params):
                 name = "_".join([name_params_target, str(i)])
                 self.register_buffer(name, p)
-                target_params[i] = getattr(self, name)
-            setattr(self, name_params_target, target_params)
+                target_params[i] = name
+            setattr(
+                self.__class__,
+                name_params_target,
+                property(lambda _self: [getattr(_self, _name)
+                                        for _name in target_params]),
+            )
 
             target_buffers = [p.detach().clone() for p in getattr(self, buffer_name)]
             for i, p in enumerate(target_buffers):
                 name = "_".join([name_buffers_target, str(i)])
                 self.register_buffer(name, p)
-                target_buffers[i] = getattr(self, name)
-            setattr(self, name_buffers_target, target_buffers)
+                target_buffers[i] = name
+            setattr(
+                self.__class__,
+                name_buffers_target,
+                property(lambda _self: [getattr(_self, _name)
+                                        for _name in target_buffers]),
+            )
+
         else:
             setattr(self, name_params_target, None)
             setattr(self, name_buffers_target, None)

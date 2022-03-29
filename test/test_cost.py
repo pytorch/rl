@@ -30,6 +30,7 @@ from torchrl.objectives import (
     KLPENPPOLoss,
     GAE,
 )
+from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.redq import (
     REDQLoss,
     DoubleREDQLoss,
@@ -1217,24 +1218,28 @@ def test_updater(mode, value_network_update_interval, device):
 
     module = custom_module_error().to(device)
     with pytest.raises(
-        RuntimeError, match="Incongruent target and source " "parameter lists"
+        RuntimeError, match="Your module seems to have a _target tensor list "
     ):
         if mode == "hard":
             upd = HardUpdate(module, value_network_update_interval)
         elif mode == "soft":
             upd = SoftUpdate(module, 1 - 1 / value_network_update_interval)
 
-    class custom_module(nn.Module):
+    class custom_module(_LossModule):
         def __init__(self):
             super().__init__()
-            self.register_buffer("_target_tensor", torch.randn(3, 4))
-            self._target_params = [self._target_tensor]
-            self.params = nn.ParameterList(
-                [nn.Parameter(torch.randn(3, 4, requires_grad=True))]
-            )
-            self.no_target_params = nn.ParameterList(
-                [nn.Parameter(torch.randn(3, 4, requires_grad=True))]
-            )
+            module1 = torch.nn.BatchNorm2d(10).eval()
+            self.convert_to_functional(module1, "module1",
+                                       create_target_params=True)
+            module2 = torch.nn.BatchNorm2d(10).eval()
+            self.module2 = module2
+            for target in self.target_module1_params:
+                target.data.normal_()
+            for target in self.target_module1_buffers:
+                if target.dtype is not torch.int64:
+                    target.data.normal_()
+                else:
+                    target.data += 10
 
     module = custom_module().to(device)
     if mode == "hard":
@@ -1245,7 +1250,12 @@ def test_updater(mode, value_network_update_interval, device):
         upd = SoftUpdate(module, 1 - 1 / value_network_update_interval)
     upd.init_()
     for _, v in upd._targets.items():
-        v[0].copy_(torch.randn_like(v[0]))
+        for _v in v:
+            if _v.dtype is not torch.int64:
+                _v.copy_(torch.randn_like(_v))
+            else:
+                _v += 10
+
     # total dist
     d0 = sum(
         [
