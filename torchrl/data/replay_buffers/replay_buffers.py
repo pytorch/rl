@@ -593,19 +593,22 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         self.priority_key = priority_key
 
     def _get_priority(self, tensor_dict: _TensorDict) -> torch.Tensor:
-        if tensor_dict.batch_dims:
-            raise RuntimeError(
-                "expected void batch_size for input tensor_dict in "
-                "rb._get_priority()"
-            )
         try:
-            priority = tensor_dict.get(self.priority_key).item()
-        except ValueError:
-            raise ValueError(
-                f"Found a priority key of size"
-                f" {tensor_dict.get(self.priority_key).shape} but expected "
-                f"scalar value"
-            )
+            if tensor_dict.batch_dims:
+                priority = tensor_dict.get(self.priority_key).mean().item()
+                # raise RuntimeError(
+                #     "expected void batch_size for input tensor_dict in "
+                #     "rb._get_priority()"
+                # )
+            else:
+                try:
+                    priority = tensor_dict.get(self.priority_key).item()
+                except ValueError:
+                    raise ValueError(
+                        f"Found a priority key of size"
+                        f" {tensor_dict.get(self.priority_key).shape} but expected "
+                        f"scalar value"
+                    )
         except KeyError:
             priority = self._default_priority
         return priority
