@@ -20,7 +20,8 @@ if __name__ == "__main__":
     policy = nn.LazyLinear(env.action_spec.shape[-1])
     policy_wrap = MaskedLogitPolicy(policy)
     policy_td_module = ProbabilisticTDModule(
-        policy_wrap,
+        module=policy_wrap,
+        spec=None,
         in_keys=["observation", "available_actions"],
         out_keys=["action"],
         distribution_class=OneHotCategorical,
