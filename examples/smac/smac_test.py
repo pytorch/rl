@@ -1,5 +1,6 @@
 from env import SCEnv
 from examples.smac.policy import MaskedLogitPolicy
+from torchrl.agents.helpers import sync_async_collector
 from torchrl.envs import TransformedEnv, ObservationNorm
 from torchrl.modules import ProbabilisticTDModule, OneHotCategorical, QValueActor
 from torch import nn
@@ -52,3 +53,19 @@ if __name__ == "__main__":
     print('action: ', td.get("action"))
     env.step(td)
     print('next_obs: ', td.get("next_observation"))
+
+    # now let's collect data, see MultiaSyncDataCollector for info
+    print('\n\nCollector')
+    collector = sync_async_collector(
+        env_fns=lambda: SCEnv("8m"),
+        num_collectors=4,  # 4 main processes
+        num_env_per_collector=8,  # each of the 4 collectors has 8 processes
+        policy=policy_td_module,
+        devices=["cuda:0"]*4,  # each collector will execute the policy on cuda
+        total_frames=1000,  # we'd like to have a total of 1000 frames
+        max_frames_per_traj=10,  # we'll reset after 10 steps
+        frames_per_batch=64,  # each batch should have 64 frames
+        init_random_frames=0,  # we won't execute random actions
+    )
+    for td in collector:
+        print(td)
