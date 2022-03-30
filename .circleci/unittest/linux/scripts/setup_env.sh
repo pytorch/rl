@@ -51,7 +51,7 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 conda env update --file "${this_dir}/environment.yml" --prune
 
-yum makecache
-yum -y install glfw-devel
-yum -y install libGLEW
-yum -y install gcc-c++
+#yum makecache
+#yum -y install glfw-devel
+#yum -y install libGLEW
+#yum -y install gcc-c++
