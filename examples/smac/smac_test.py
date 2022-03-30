@@ -31,6 +31,10 @@ if __name__ == "__main__":
     # Test the policy
     policy_td_module(td)
     print(td)
+    print('param: ', td.get("action_dist_param_0"))
+    print('action: ', td.get("action"))
+    print('mask: ', td.get("available_actions"))
+    print('mask from env: ', env.env._env.get_avail_actions())
 
     # check that an ation can be performed in the env with this
     env.step(td)
