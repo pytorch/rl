@@ -42,6 +42,9 @@ else
 fi
 
 printf "\n* Installing torchrl\n"
+printf "g++ version: "
+gcc --version
+
 python setup.py install
 
 # smoke test

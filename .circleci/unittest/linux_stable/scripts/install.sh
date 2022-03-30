@@ -48,4 +48,7 @@ pip install functorch
 python -c "import functorch"
 
 printf "* Installing torchrl\n"
+printf "g++ version: "
+gcc --version
+
 python setup.py install
