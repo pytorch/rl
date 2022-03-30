@@ -1,6 +1,7 @@
 from env import SCEnv
 from examples.smac.policy import MaskedLogitPolicy
 from torchrl.agents.helpers import sync_async_collector
+from torchrl.data import TensorDictPrioritizedReplayBuffer
 from torchrl.envs import TransformedEnv, ObservationNorm
 from torchrl.modules import ProbabilisticTDModule, OneHotCategorical, QValueActor
 from torch import nn
@@ -68,5 +69,9 @@ if __name__ == "__main__":
         frames_per_batch=64,  # each batch should have 64 frames
         init_random_frames=0,  # we won't execute random actions
     )
+    print('replay buffer')
+    rb = TensorDictPrioritizedReplayBuffer(size=100, alpha=0.7, beta=1.1)
     for td in collector:
-        print(td)
+        rb.extend(td.view(-1))
+
+    print('rb sample: ', rb.sample(2))
