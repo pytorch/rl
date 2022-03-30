@@ -58,6 +58,7 @@ if __name__ == "__main__":
     print('\n\nCollector')
     collector = sync_async_collector(
         env_fns=lambda: SCEnv("8m"),
+        env_kwargs=None,
         num_collectors=4,  # 4 main processes
         num_env_per_collector=8,  # each of the 4 collectors has 8 processes
         policy=policy_td_module,
