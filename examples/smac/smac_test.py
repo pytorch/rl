@@ -1,7 +1,7 @@
 from env import SCEnv
 from examples.smac.policy import MaskedLogitPolicy
 from torchrl.envs import TransformedEnv, ObservationNorm
-from torchrl.modules import ProbabilisticTDModule, OneHotCategorical
+from torchrl.modules import ProbabilisticTDModule, OneHotCategorical, QValueActor
 from torch import nn
 
 if __name__ == "__main__":
@@ -39,3 +39,15 @@ if __name__ == "__main__":
     # check that an ation can be performed in the env with this
     env.step(td)
     print(td)
+
+    # we can also have a regular Q-Value actor
+    print('\n\nQValue')
+    policy_td_module = QValueActor(
+        policy_wrap, spec=None,
+        in_keys=["observation", "available_actions"],
+        out_keys=["actions"])
+    td = env.reset()
+    policy_td_module(td)
+    print('action: ', td.get("action"))
+    env.step(td)
+    print('next_obs: ', td.get("next_observation"))
