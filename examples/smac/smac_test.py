@@ -45,7 +45,8 @@ if __name__ == "__main__":
     policy_td_module = QValueActor(
         policy_wrap, spec=None,
         in_keys=["observation", "available_actions"],
-        out_keys=["actions"])
+        # out_keys=["actions"]
+    )
     td = env.reset()
     policy_td_module(td)
     print('action: ', td.get("action"))
