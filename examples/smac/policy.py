@@ -1,3 +1,4 @@
+import torch
 from torch import nn, Tensor
 
 class MaskedLogitPolicy(nn.Module):
@@ -11,6 +12,8 @@ class MaskedLogitPolicy(nn.Module):
         if isinstance(outputs, Tensor):
             outputs = (outputs,)
         # first output is logits
-        outputs[0].masked_fill_(~mask.expand_as(outputs[0]), -float("inf"))
+        outputs[0].masked_fill_(
+            ~mask.to(torch.bool).expand_as(outputs[0]),
+            -float("inf"))
         return tuple(outputs)
 
