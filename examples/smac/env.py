@@ -120,10 +120,10 @@ class SCEnv(GymLikeEnv):
     def _reset(
         self, tensor_dict: Optional[_TensorDict] = None, **kwargs
     ) -> _TensorDict:
-        obs = np.ndarray(self._env.get_obs())
+        obs = self._env.get_obs()
 
         tensor_dict_out = TensorDict(
-            source=self._read_obs(obs), batch_size=self.batch_size
+            source=self._read_obs(np.array(obs)), batch_size=self.batch_size
         )
         self._is_done = torch.zeros(1, dtype=torch.bool)
         tensor_dict_out.set("done", self._is_done)
@@ -157,7 +157,7 @@ class SCEnv(GymLikeEnv):
             if done:
                 break
 
-        obs_dict = self._read_obs(obs)
+        obs_dict = self._read_obs(np.array(obs))
 
         if reward is None:
             reward = np.nan
