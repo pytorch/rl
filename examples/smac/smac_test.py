@@ -25,6 +25,7 @@ if __name__ == "__main__":
         in_keys=["observation", "available_actions"],
         out_keys=["action"],
         distribution_class=OneHotCategorical,
+        save_dist_params=True,
     )
 
     # Test the policy
