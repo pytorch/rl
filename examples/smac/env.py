@@ -120,7 +120,7 @@ class SCEnv(GymLikeEnv):
     def _reset(
         self, tensor_dict: Optional[_TensorDict] = None, **kwargs
     ) -> _TensorDict:
-        obs = self._env.get_obs()
+        obs = np.ndarray(self._env.get_obs())
 
         tensor_dict_out = TensorDict(
             source=self._read_obs(obs), batch_size=self.batch_size

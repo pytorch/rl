@@ -74,7 +74,7 @@ if __name__ == "__main__":
     for td in collector:
         print(f'collected tensordict has shape [Batch x Time]={td.shape}')
         # rb.extend(td.view(-1))  # we split each action
-        rb.extend(td)  # we split each trajectory
+        rb.extend(td.unbind(0))  # we split each trajectory
 
         collector.update_policy_weights_()  # if you have updated the local
         # policy (on cpu) you may want to sync the collectors' policies to it
