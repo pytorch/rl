@@ -2369,8 +2369,8 @@ class LazyStackedTensorDict(_TensorDict):
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes "
-                "mismatch: got tensor.shape = {tensor.shape} and "
-                "tensordict.batch_size={self.batch_size}"
+                f"mismatch: got tensor.shape = {tensor.shape} and "
+                f"tensordict.batch_size={self.batch_size}"
             )
         proc_tensor = self._process_tensor(
             tensor, check_device=False, check_tensor_shape=False
@@ -2384,8 +2384,8 @@ class LazyStackedTensorDict(_TensorDict):
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes "
-                "mismatch: got tensor.shape = {tensor.shape} and "
-                "tensordict.batch_size={self.batch_size}"
+                f"mismatch: got tensor.shape = {tensor.shape} and "
+                f"tensordict.batch_size={self.batch_size}"
             )
         if key not in self.valid_keys:
             raise KeyError(
