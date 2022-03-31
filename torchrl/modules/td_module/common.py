@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import warnings
 from copy import copy, deepcopy
 from textwrap import indent
 from typing import (
@@ -393,16 +392,10 @@ class TDModule(nn.Module):
             none_state = [None for _ in params + buffers]
             if hasattr(fmodule, "all_names_map"):
                 # functorch >= 0.2.0
-                _swap_state(
-                    fmodule.stateless_model,
-                    fmodule.all_names_map,
-                    none_state)
+                _swap_state(fmodule.stateless_model, fmodule.all_names_map, none_state)
             else:
                 # functorch < 0.2.0
-                _swap_state(
-                    fmodule.stateless_model,
-                    fmodule.split_names,
-                    none_state)
+                _swap_state(fmodule.stateless_model, fmodule.split_names, none_state)
 
             break
 

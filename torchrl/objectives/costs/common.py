@@ -5,7 +5,6 @@
 
 __all__ = ["_LossModule"]
 
-import warnings
 from typing import Iterator, Optional, Tuple
 
 import functorch
@@ -75,13 +74,15 @@ class _LossModule(nn.Module):
                     _swap_state(
                         functional_module.stateless_model,
                         functional_module.all_names_map,
-                        none_state)
+                        none_state,
+                    )
                 else:
                     # functorch < 0.2.0
                     _swap_state(
                         functional_module.stateless_model,
                         functional_module.split_names,
-                        none_state)
+                        none_state,
+                    )
                 break
             del module_params
 

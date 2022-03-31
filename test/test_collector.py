@@ -151,7 +151,7 @@ def test_collector_batch_size(num_env, env_name, seed=100):
         create_env_fn=[env_fn for _ in range(num_workers)],
         policy=policy,
         frames_per_batch=frames_per_batch,
-        max_frames_per_traj=20,
+        max_frames_per_traj=1000,
         total_frames=frames_per_batch * 100,
         pin_memory=False,
     )
@@ -166,7 +166,7 @@ def test_collector_batch_size(num_env, env_name, seed=100):
         create_env_fn=[env_fn for _ in range(num_workers)],
         policy=policy,
         frames_per_batch=frames_per_batch,
-        max_frames_per_traj=20,
+        max_frames_per_traj=1000,
         total_frames=frames_per_batch * 100,
         pin_memory=False,
     )
