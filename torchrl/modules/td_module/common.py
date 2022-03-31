@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import warnings
 from copy import copy, deepcopy
 from textwrap import indent
 from typing import (
@@ -388,8 +389,13 @@ class TDModule(nn.Module):
         self_copy.module = fmodule
 
         # Erase meta params
-        none_state = [None for _ in params + buffers]
-        _swap_state(fmodule.stateless_model, fmodule.split_names, none_state)
+        if len(fmodule.parameters()):
+            warnings.warn(
+                "With functorch < 0.2.0, functional modules still had a "
+                "non-empty list of parameters. "
+                "Support for older versions of functorch is not guaranteed.")
+            none_state = [None for _ in params + buffers]
+            _swap_state(fmodule.stateless_model, fmodule.split_names, none_state)
 
         return self_copy, (params, buffers)
 
