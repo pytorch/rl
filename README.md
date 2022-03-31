@@ -1,5 +1,4 @@
-# Template:
-[![facebookresearch](https://circleci.com/gh/facebookresearch/rl.svg?style=svg)](https://circleci.com/gh/facebookresearch/rl)
+[![facebookresearch](https://circleci.com/gh/facebookresearch/rl.svg?style=svg&circle-token=eafd3d28568024a3a41c14d476489d74e5059d54)](https://circleci.com/gh/facebookresearch/rl)
 
 # TorchRL
 
