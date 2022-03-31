@@ -1,0 +1,27 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - ninja
+  - cmake >= 3.18
+  - pip:
+    - hypothesis
+    - protobuf
+    - future
+    - cloudpickle
+    - gym_retro
+    - gym
+    - pygame
+    - gym[accept-rom-license]
+    - gym[atari]
+    - moviepy
+    - tqdm
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - expecttest
+    - pyyaml
+    - scipy
+    - dm_control
+    - mujoco_py

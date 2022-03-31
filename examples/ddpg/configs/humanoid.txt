@@ -1,0 +1,10 @@
+env_name=humanoid
+env_task=walk
+env_library=dm_control
+async_collection
+record_video
+normalize_rewards_online
+frame_skip=2
+prb
+multi_step
+exp_name=humanoid_stats_wd
