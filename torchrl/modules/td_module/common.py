@@ -390,13 +390,8 @@ class TDModule(nn.Module):
 
         # Erase meta params
         for _ in fmodule.parameters():
-            warnings.warn(
-                "With functorch < 0.2.0, functional modules still had a "
-                "non-empty list of parameters. "
-                "For now, torchrl takes care of removing those placeholders "
-                "but this behaviour will soon be deprecated.")
             none_state = [None for _ in params + buffers]
-            _swap_state(fmodule.stateless_model, fmodule.split_names, none_state)
+            _swap_state(fmodule.stateless_model, fmodule.all_names_map, none_state)
             break
 
         return self_copy, (params, buffers)
