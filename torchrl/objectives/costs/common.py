@@ -5,6 +5,7 @@
 
 __all__ = ["_LossModule"]
 
+import warnings
 from typing import Iterator, Optional, Tuple
 
 import functorch
@@ -66,13 +67,20 @@ class _LossModule(nn.Module):
                 module_params,
                 module_buffers,
             ) = functorch.make_functional_with_buffers(module)
-            # Erase meta params
-            none_state = [None for _ in module_params + module_buffers]
-            _swap_state(
-                functional_module.stateless_model,
-                functional_module.split_names,
-                none_state,
-            )
+            for _ in functional_module.parameters():
+                warnings.warn(
+                    "With functorch < 0.2.0, functional modules still had a "
+                    "non-empty list of parameters. "
+                    "For now, torchrl takes care of removing those placeholders "
+                    "but this behaviour will soon be deprecated.")
+                # Erase meta params
+                none_state = [None for _ in module_params + module_buffers]
+                _swap_state(
+                    functional_module.stateless_model,
+                    functional_module.split_names,
+                    none_state,
+                )
+                break
             del module_params
 
         param_name = module_name + "_params"
