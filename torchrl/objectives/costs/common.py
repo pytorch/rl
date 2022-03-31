@@ -70,11 +70,18 @@ class _LossModule(nn.Module):
             for _ in functional_module.parameters():
                 # Erase meta params
                 none_state = [None for _ in module_params + module_buffers]
-                _swap_state(
-                    functional_module.stateless_model,
-                    functional_module.all_names_map,
-                    none_state,
-                )
+                if hasattr(functional_module, "all_names_map"):
+                    # functorch >= 0.2.0
+                    _swap_state(
+                        functional_module.stateless_model,
+                        functional_module.all_names_map,
+                        none_state)
+                else:
+                    # functorch < 0.2.0
+                    _swap_state(
+                        functional_module.stateless_model,
+                        functional_module.split_names,
+                        none_state)
                 break
             del module_params
 
