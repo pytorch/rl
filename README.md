@@ -1,3 +1,5 @@
+[![facebookresearch](https://circleci.com/gh/facebookresearch/rl.svg?style=shield&circle-token=eafd3d28568024a3a41c14d476489d74e5059d54)](https://circleci.com/gh/facebookresearch/rl)
+
 # TorchRL
 
 TorchRL is an open-source Reinforcement Learning (RL) library for PyTorch. 
