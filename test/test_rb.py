@@ -96,6 +96,31 @@ def test_prb(priority_key, contiguous, device):
     )
 
 
+def test_rb_trajectories():
+    traj_td = TensorDict(
+        {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
+        batch_size=[3, 4],
+    )
+    rb = TensorDictPrioritizedReplayBuffer(
+        5,
+        alpha=0.7,
+        beta=0.9,
+        collate_fn=lambda x: torch.stack(x, 0),
+        priority_key="td_error",
+    )
+    rb.extend(traj_td)
+    sampled_td = rb.sample(3)
+    sampled_td.set("td_error", torch.rand(3))
+    rb.update_priority(sampled_td)
+    sampled_td = rb.sample(3, return_weight=True)
+    assert (sampled_td.get("_weight") > 0).all()
+    assert sampled_td.batch_size == torch.Size([3])
+
+    # set back the trajectory length
+    sampled_td_filtered = sampled_td.to_tensordict().exclude("_weight", "index")
+    sampled_td_filtered.batch_size = [4]
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

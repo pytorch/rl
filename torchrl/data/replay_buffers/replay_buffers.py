@@ -594,10 +594,8 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
 
     def _get_priority(self, tensor_dict: _TensorDict) -> torch.Tensor:
         if tensor_dict.batch_dims:
-            raise RuntimeError(
-                "expected void batch_size for input tensor_dict in "
-                "rb._get_priority()"
-            )
+            tensor_dict = tensor_dict.clone(recursive=False)
+            tensor_dict.batch_size = []
         try:
             priority = tensor_dict.get(self.priority_key).item()
         except ValueError:
@@ -622,6 +620,9 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                 priorities = tensor_dicts.get(self.priority_key)
             except KeyError:
                 priorities = None
+            if tensor_dicts.batch_dims > 1:
+                tensor_dicts = tensor_dicts.clone(recursive=False)
+                tensor_dicts.batch_size = tensor_dicts.batch_size[:1]
             tensor_dicts = list(tensor_dicts.unbind(0))
         else:
             priorities = [self._get_priority(td) for td in tensor_dicts]
@@ -649,7 +650,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
             )
         return super().update_priority(tensor_dict.get("index"), priority=priority)
 
-    def sample(self, size: int) -> _TensorDict:
+    def sample(self, size: int, return_weight: bool = False) -> _TensorDict:
         """
         Gather a batch of tensordicts according to the non-uniform multinomial
         distribution with weights computed with the priority_key of each
@@ -657,12 +658,18 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
 
         Args:
             size (int): size of the batch to be returned
+            return_weight (bool, optional): if True, a '_weight' key will be
+                written in the output tensordict that indicates the weight
+                of the selected items
 
         Returns:
             Stack of tensordicts
 
         """
-        return super(TensorDictPrioritizedReplayBuffer, self).sample(size)[0]
+        td, weight, _ = super(TensorDictPrioritizedReplayBuffer, self).sample(size)
+        if return_weight:
+            td.set("_weight", weight)
+        return td
 
 
 def create_replay_buffer(
