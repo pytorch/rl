@@ -498,6 +498,20 @@ class _EnvWrapper(_EnvClass):
         self._build_env(envname, taskname, **kwargs)  # writes the self._env attribute
         self._init_env(seed=seed)  # runs all the steps to have a ready-to-use env
 
+    def __getattr__(self, attr: str) -> Any:
+        if attr in self.__dir__():
+            return self.__getattribute__(
+                attr
+            )  # make sure that appropriate exceptions are raised
+
+        elif "_env" in self.__dir__():
+            env = self.__getattribute__("_env")
+            return getattr(env, attr)
+
+        raise AttributeError(
+            f"env not set in {self.__class__.__name__}, cannot access {attr}"
+        )
+
     def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
         """Runs all the necessary steps such that the environment is ready to use.
 
