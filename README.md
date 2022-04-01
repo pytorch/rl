@@ -2,6 +2,14 @@
 
 # TorchRL
 
+## Disclaimer
+
+This library is not officially released yet and is subject to change.
+
+The features are available before an official release so that users and collaborators can get early access and provide feedback. No guarantee of stability, robustness or backward compatibility is provided.
+
+---
+
 TorchRL is an open-source Reinforcement Learning (RL) library for PyTorch. 
 
 It provides pytorch and python-first, low and high level abstractions for RL that are intended to be efficient, docummented and properly tested. 
