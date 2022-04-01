@@ -118,7 +118,7 @@ def test_rb_trajectories():
 
     # set back the trajectory length
     sampled_td_filtered = sampled_td.to_tensordict().exclude("_weight", "index")
-    sampled_td_filtered.batch_size = [4]
+    sampled_td_filtered.batch_size = [3, 4]
 
 
 if __name__ == "__main__":
