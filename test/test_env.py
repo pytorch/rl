@@ -279,6 +279,7 @@ def test_parallel_env_device(env_name, frame_skip, transformed, device):
             )
     env_parallel = ParallelEnv(N, create_env_fn, device=device)
     out = env_parallel.rollout(n_steps=20)
+    env_parallel.close()
 
 
 class TestSpec:
