@@ -97,7 +97,7 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=100):
             break
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b2)
-    collector.close()
+    collector.shutdown()
 
     ccollector = aSyncDataCollector(
         create_env_fn=env_fn,
@@ -121,7 +121,7 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=100):
     assert_allclose_td(b1c, b1)
     assert_allclose_td(b2c, b2)
 
-    ccollector.close()
+    ccollector.shutdown()
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
@@ -160,7 +160,7 @@ def test_collector_batch_size(num_env, env_name, seed=100):
         assert b.numel() == -(-frames_per_batch // num_env) * num_env
         if i == 5:
             break
-    ccollector.close()
+    ccollector.shutdown()
 
     ccollector = MultiSyncDataCollector(
         create_env_fn=[env_fn for _ in range(num_workers)],
@@ -178,7 +178,7 @@ def test_collector_batch_size(num_env, env_name, seed=100):
         )
         if i == 5:
             break
-    ccollector.close()
+    ccollector.shutdown()
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
@@ -225,7 +225,7 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
     assert_allclose_td(b1, b2)
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b3)
-    ccollector.close()
+    ccollector.shutdown()
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
@@ -341,7 +341,7 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     data1 = torch.cat(data1, 1)
     data1 = data1[:, :max_frames_per_traj]
 
-    collector1.close()
+    collector1.shutdown()
     del collector1
 
     collector10 = collector_class(
@@ -366,7 +366,7 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     data10 = torch.cat(data10, 1)
     data10 = data10[:, :max_frames_per_traj]
 
-    collector10.close()
+    collector10.shutdown()
     del collector10
 
     collector20 = collector_class(
@@ -388,7 +388,7 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
         if count > max_frames_per_traj:
             break
 
-    collector20.close()
+    collector20.shutdown()
     del collector20
     data20 = torch.cat(data20, 1)
     data20 = data20[:, :max_frames_per_traj]
@@ -416,7 +416,9 @@ def test_collector_vecnorm_envcreator():
 
     policy = RandomPolicy(env_make.action_spec)
     c = MultiSyncDataCollector(
-        [env_make, env_make], policy=policy, total_frames=int(1e6)
+        [env_make, env_make],
+        policy=policy,
+        total_frames=int(1e6)
     )
     final_seed = c.set_seed(0)
     assert final_seed == 7
@@ -497,7 +499,7 @@ def test_update_weights(use_async):
                 policy_state_dict[k].cpu(),
             )
 
-    collector.close()
+    collector.shutdown()
     del collector
 
 

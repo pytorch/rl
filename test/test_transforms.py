@@ -211,7 +211,9 @@ def test_parallelenv_vecnorm():
     parallel_env = ParallelEnv(3, make_env)
     queue_out = mp.Queue(1)
     queue_in = mp.Queue(1)
-    proc = mp.Process(target=_run_parallelenv, args=(parallel_env, queue_out, queue_in))
+    proc = mp.Process(
+        target=_run_parallelenv,
+        args=(parallel_env, queue_out, queue_in))
     proc.start()
     parallel_sd = parallel_env.state_dict()
     assert "worker0" in parallel_sd

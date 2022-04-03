@@ -534,7 +534,11 @@ class ParallelEnv(_BatchedEnv):
         return self.shared_tensor_dict_parent.select(*keys).clone()
 
     def __reduce__(self):
-        self.close()
+        if not self.is_closed:
+            # ParallelEnv contains non-instantiated envs, thus it can be
+            # closed and serialized if the environment building functions
+            # permit it
+            self.close()
         return super().__reduce__()
 
     def __getattr__(self, attr: str) -> Any:
