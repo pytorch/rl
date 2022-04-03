@@ -416,9 +416,7 @@ def test_collector_vecnorm_envcreator():
 
     policy = RandomPolicy(env_make.action_spec)
     c = MultiSyncDataCollector(
-        [env_make, env_make],
-        policy=policy,
-        total_frames=int(1e6)
+        [env_make, env_make], policy=policy, total_frames=int(1e6)
     )
     final_seed = c.set_seed(0)
     assert final_seed == 7

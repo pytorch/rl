@@ -220,7 +220,8 @@ class _BatchedEnv(_EnvClass):
         if not self.is_closed:
             raise RuntimeError(
                 "Batched environment must be explicitely closed before it "
-                "turns out of scope.")
+                "turns out of scope."
+            )
 
     def close(self) -> None:
         if self.is_closed:
@@ -476,10 +477,10 @@ class ParallelEnv(_BatchedEnv):
         for i, channel in enumerate(self.parent_channels):
             if self._verbose:
                 print(f"closing {i}")
-            try:
-                channel.send(("close", None))
-            except:
-                raise RuntimeError(f'closing {channel} number {i} failed')
+            # try:
+            channel.send(("close", None))
+            # except:
+            #     raise RuntimeError(f"closing {channel} number {i} failed")
             msg, _ = channel.recv()
             if msg != "closing":
                 raise RuntimeError(
