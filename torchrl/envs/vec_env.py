@@ -228,11 +228,8 @@ class _BatchedEnv(_EnvClass):
             raise RuntimeError("trying to close a closed environment")
         if self._verbose:
             print(f"closing {self.__class__.__name__}")
-        self.shutdown()
-        self.is_closed = True
-
-    def shutdown(self) -> None:
         self._shutdown_workers()
+        self.is_closed = True
 
     def _shutdown_workers(self) -> None:
         raise NotImplementedError
@@ -368,6 +365,10 @@ class _dispatch_caller_parallel:
             results.append(result)
 
         return results
+
+    def __iter__(self):
+        # if the object returned is not a callable
+        return self.__call__()
 
 
 class ParallelEnv(_BatchedEnv):
@@ -550,6 +551,7 @@ class ParallelEnv(_BatchedEnv):
 
         else:
             try:
+                _ = getattr(self._dummy_env, attr)
                 # dispatch to workers
                 return _dispatch_caller_parallel(attr, self)
             except AttributeError:

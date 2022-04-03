@@ -252,8 +252,6 @@ def test_parallel_env_shutdown():
     assert env.is_closed
     env.reset()
     assert not env.is_closed
-    env.shutdown()
-    assert env.is_closed
 
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="no cuda device detected")

@@ -142,6 +142,7 @@ class _EnvClass:
         self.dtype = dtype_map.get(dtype, dtype)
         self._is_done = torch.zeros(self.batch_size, device=device)
         self._cache = dict()
+        self.is_closed = False
 
     def step(self, tensor_dict: _TensorDict) -> _TensorDict:
         """Makes a step in the environment.
@@ -446,6 +447,7 @@ class _EnvClass:
         return value
 
     def close(self):
+        self.is_closed = True
         pass
 
     def __del__(self):
@@ -497,6 +499,7 @@ class _EnvWrapper(_EnvClass):
             )
         self._build_env(envname, taskname, **kwargs)  # writes the self._env attribute
         self._init_env(seed=seed)  # runs all the steps to have a ready-to-use env
+        self.is_closed = False
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
