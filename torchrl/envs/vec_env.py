@@ -31,6 +31,37 @@ def _check_start(fun):
     return decorated_fun
 
 
+class _dispatch_caller_parallel:
+    def __init__(self, attr, parallel_env):
+        self.attr = attr
+        self.parallel_env = parallel_env
+
+    def __call__(self, *args, **kwargs):
+        # remove self from args
+        args = [_arg if _arg is not self.parallel_env else "_self" for _arg in args]
+        for i, channel in enumerate(self.parallel_env.parent_channels):
+            channel.send((self.attr, (args, kwargs)))
+
+        results = []
+        for channel in self.parallel_env.parent_channels:
+            msg, result = channel.recv()
+            results.append(result)
+
+        return results
+
+    def __iter__(self):
+        # if the object returned is not a callable
+        return iter(self.__call__())
+
+
+class _dispatch_caller_serial:
+    def __init__(self, list_callable: List[Callable, Any]):
+        self.list_callable = list_callable
+
+    def __call__(self, *args, **kwargs):
+        return [_callable(*args, **kwargs) for _callable in self.list_callable]
+
+
 class _BatchedEnv(_EnvClass):
     """
     Batched environment abstract class.
@@ -235,14 +266,6 @@ class _BatchedEnv(_EnvClass):
         raise NotImplementedError
 
 
-class _dispatch_caller_serial:
-    def __init__(self, list_callable: List[Callable, Any]):
-        self.list_callable = list_callable
-
-    def __call__(self, *args, **kwargs):
-        return [_callable(*args, **kwargs) for _callable in self.list_callable]
-
-
 class SerialEnv(_BatchedEnv):
     """
     Creates a series of environments in the same process.
@@ -331,13 +354,24 @@ class SerialEnv(_BatchedEnv):
             return self.__getattribute__(
                 attr
             )  # make sure that appropriate exceptions are raised
-
+        elif attr.startswith("__"):
+            raise AttributeError(
+                "dispatching built-in private methods is "
+                f"not permitted with type {type(self)}. "
+                f"Got attribute {attr}."
+            )
         else:
             try:
                 # determine if attr is a callable
                 callable_attr = callable(getattr(self._dummy_env, attr))
                 list_attr = [getattr(env, attr) for env in self._envs]
                 if callable_attr:
+                    if self.is_closed:
+                        raise RuntimeError(
+                            "Trying to access attributes of closed/non started "
+                            "environments. Check that the batched environment "
+                            "has been started (e.g. by calling env.reset)"
+                        )
                     return _dispatch_caller_serial(list_attr)
                 else:
                     return list_attr
@@ -346,29 +380,6 @@ class SerialEnv(_BatchedEnv):
                     f"attribute {attr} not found in "
                     f"{self._dummy_env.__class__.__name__}"
                 )
-
-
-class _dispatch_caller_parallel:
-    def __init__(self, attr, parallel_env):
-        self.attr = attr
-        self.parallel_env = parallel_env
-
-    def __call__(self, *args, **kwargs):
-        # remove self from args
-        args = [_arg if _arg is not self.parallel_env else "_self" for _arg in args]
-        for i, channel in enumerate(self.parallel_env.parent_channels):
-            channel.send((self.attr, (args, kwargs)))
-
-        results = []
-        for channel in self.parallel_env.parent_channels:
-            msg, result = channel.recv()
-            results.append(result)
-
-        return results
-
-    def __iter__(self):
-        # if the object returned is not a callable
-        return self.__call__()
 
 
 class ParallelEnv(_BatchedEnv):
@@ -548,10 +559,19 @@ class ParallelEnv(_BatchedEnv):
             return self.__getattribute__(
                 attr
             )  # make sure that appropriate exceptions are raised
-
+        elif attr.startswith("__"):
+            raise AttributeError(
+                "dispatching built-in private methods is not permitted."
+            )
         else:
             try:
                 _ = getattr(self._dummy_env, attr)
+                if self.is_closed:
+                    raise RuntimeError(
+                        "Trying to access attributes of closed/non started "
+                        "environments. Check that the batched environment "
+                        "has been started (e.g. by calling env.reset)"
+                    )
                 # dispatch to workers
                 return _dispatch_caller_parallel(attr, self)
             except AttributeError:

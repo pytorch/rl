@@ -66,6 +66,15 @@ class _MockEnv(_EnvClass):
         self.counter = seed - 1
         return seed
 
+    def custom_fun(self):
+        return 0
+
+    custom_attr = 1
+
+    @property
+    def custom_prop(self):
+        return 2
+
 
 class DiscreteActionVecMockEnv(_MockEnv):
     size = 7

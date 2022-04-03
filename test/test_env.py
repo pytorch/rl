@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import torch
 import yaml
+from mocking_classes import DiscreteActionVecMockEnv
 from scipy.stats import chisquare
 from torchrl.agents import EnvCreator
 from torchrl.data.tensor_specs import (
@@ -20,7 +21,7 @@ from torchrl.data.tensor_specs import (
     NdBoundedTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
-from torchrl.envs import gym, GymEnv
+from torchrl.envs import GymEnv
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
@@ -88,7 +89,7 @@ except FileNotFoundError:
 @pytest.mark.parametrize("env_name", ["Pendulum-v1", "CartPole-v1"])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_env_seed(env_name, frame_skip, seed=0):
-    env = gym.GymEnv(env_name, frame_skip=frame_skip)
+    env = GymEnv(env_name, frame_skip=frame_skip)
     action = env.action_spec.rand()
 
     env.set_seed(seed)
@@ -118,7 +119,7 @@ def test_env_seed(env_name, frame_skip, seed=0):
 @pytest.mark.parametrize("env_name", ["Pendulum-v1", "ALE/Pong-v5"])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_rollout(env_name, frame_skip, seed=0):
-    env = gym.GymEnv(env_name, frame_skip=frame_skip)
+    env = GymEnv(env_name, frame_skip=frame_skip)
 
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -252,6 +253,23 @@ def test_parallel_env_shutdown():
     assert env.is_closed
     env.reset()
     assert not env.is_closed
+
+
+@pytest.mark.parametrize("parallel", [True, False])
+def test_parallel_env_custom_method(parallel):
+    # define env
+
+    if parallel:
+        env = ParallelEnv(3, lambda: DiscreteActionVecMockEnv())
+    else:
+        env = SerialEnv(3, lambda: DiscreteActionVecMockEnv())
+
+    # we must start the environment first
+    env.reset()
+    assert all(result == 0 for result in env.custom_fun())
+    assert all(result == 1 for result in env.custom_attr)
+    assert all(result == 2 for result in env.custom_prop)
+    env.close()
 
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="no cuda device detected")

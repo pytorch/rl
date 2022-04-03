@@ -451,7 +451,8 @@ class _EnvClass:
         pass
 
     def __del__(self):
-        self.close()
+        if not self.is_closed:
+            self.close()
 
 
 class _EnvWrapper(_EnvClass):
@@ -506,6 +507,13 @@ class _EnvWrapper(_EnvClass):
             return self.__getattribute__(
                 attr
             )  # make sure that appropriate exceptions are raised
+
+        elif attr.startswith("__"):
+            raise AttributeError(
+                "passing built-in private methods is "
+                f"not permitted with type {type(self)}. "
+                f"Got attribute {attr}."
+            )
 
         elif "_env" in self.__dir__():
             env = self.__getattribute__("_env")

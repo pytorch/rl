@@ -342,7 +342,12 @@ class TransformedEnv(_EnvClass):
             return self.__getattribute__(
                 attr
             )  # make sure that appropriate exceptions are raised
-
+        elif attr.startswith("__"):
+            raise AttributeError(
+                "passing built-in private methods is "
+                f"not permitted with type {type(self)}. "
+                f"Got attribute {attr}."
+            )
         elif "env" in self.__dir__():
             env = self.__getattribute__("env")
             return getattr(env, attr)
