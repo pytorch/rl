@@ -12,15 +12,15 @@ The features are available before an official release so that users and collabor
 
 TorchRL is an open-source Reinforcement Learning (RL) library for PyTorch. 
 
-It provides pytorch and python-first, low and high level abstractions for RL that are intended to be efficient, docummented and properly tested. 
+It provides pytorch and python-first, low and high level abstractions for RL that are intended to be efficient, documented and properly tested. 
 The code is aimed at supporting research in RL. Most of it is written in python in a highly modular way, such that researchers can easily swap components, transform them or write new ones with little effort.
 
-This repo attempts to align with the existing pytorch ecosystem libraries in that it has a dataset pillar ([torchrl/envs](torchrl/envs)), [transforms](torchrl/envs/transforms), [models](torchrl/modules), data utilities (e.g. collectors and containers)... 
+This repo attempts to align with the existing pytorch ecosystem libraries in that it has a dataset pillar ([torchrl/envs](torchrl/envs)), [transforms](torchrl/envs/transforms), [models](torchrl/modules), data utilities (e.g. collectors and containers), etc. 
 TorchRL aims at having as few dependencies as possible (python standard library, numpy and pytorch). Common environment libraries (e.g. OpenAI gym) are only optional.
 
 On the low-level end, torchrl comes with a set of highly re-usable functionals for [cost functions](torchrl/objectives/costs), [returns](torchrl/objectives/returns) and data processing.
 
-On the high-level end, it provides:
+On the high-level end, torchrl provides:
 - multiprocess [data collectors](torchrl/collectors/collectors.py);
 - a generic [agent class](torchrl/agents/agents.py);
 - efficient and generic [replay buffers](torchrl/data/replay_buffers/replay_buffers.py);
@@ -110,8 +110,8 @@ pip install pytest
 ```
 
 ## Running examples
-Examples are coded in a very similar way but the configuration may change from one algorithm to the other (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)
-To train an algorithm it is therefore advised to do use the predefined configurations that are found in the `configs` sub-folder in each algorithm directory:
+Examples are coded in a very similar way but the configuration may change from one algorithm to another (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)
+To train an algorithm it is therefore advised to use the predefined configurations that are found in the `configs` sub-folder in each algorithm directory:
 ```
 python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt
 ```
