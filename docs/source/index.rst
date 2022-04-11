@@ -10,6 +10,13 @@ Welcome to torchrl's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   getting_started
+   td
+   environments
+   models
+   collecting
+   losses
+   agents
    reference/index
 
 Indices and tables

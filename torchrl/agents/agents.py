@@ -258,6 +258,7 @@ class Agent:
                 f"Expected keys {expected_keys} in the loaded file but got"
                 f" {actual_keys}"
             )
+        # TODO: account for generic iterables
         self.collector.load_state_dict(loaded_dict["env"])
         self.model.load_state_dict(loaded_dict["model"])
         for key in [
@@ -270,12 +271,14 @@ class Agent:
         return self
 
     def set_seed(self):
+        # TODO: account for generic iterables
         seed = self.collector.set_seed(self.seed)
         torch.manual_seed(seed)
         np.random.seed(seed)
 
     def state_dict(self) -> Dict:
         state_dict = OrderedDict(
+            # TODO: account for generic iterables
             env=self.collector.state_dict(),
             loss_module=self.loss_module.state_dict(),
             _collected_frames=self._collected_frames,
@@ -289,10 +292,12 @@ class Agent:
         model_state_dict = state_dict["loss_module"]
         env_state_dict = state_dict["env"]
         self.loss_module.load_state_dict(model_state_dict)
+        # TODO: account for generic iterables
         self.collector.load_state_dict(env_state_dict)
 
     @property
     def collector(self) -> _DataCollector:
+        # TODO: account for generic iterables
         return self._collector
 
     @collector.setter
@@ -336,6 +341,7 @@ class Agent:
                 reward = batch.get("reward")
                 self._update_reward_stats(reward)
 
+            # TODO: account for generic iterables
             if collected_frames > self.collector.init_random_frames:
                 self.steps(batch)
             self._collector_scheduler_step(i, current_frames)
@@ -348,6 +354,7 @@ class Agent:
             if collected_frames > self.total_frames:
                 break
 
+        # TODO: account for generic iterables
         self.collector.shutdown()
 
     @torch.no_grad()
@@ -385,6 +392,7 @@ class Agent:
             self.policy_exploration.step(current_frames)
 
         if step % self.update_weights_interval == 0:
+            # TODO: account for generic iterables
             self.collector.update_policy_weights_()
 
     def steps(self, batch: _TensorDict) -> None:
