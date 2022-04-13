@@ -345,7 +345,9 @@ class SyncDataCollector(_DataCollector):
                 tensordict_out = split_trajectories(tensordict_out)
             if self.postproc is not None:
                 tensordict_out = self.postproc(tensordict_out)
-            yield tensordict_out
+            selected_keys = [key for key in tensordict_out.keys() if not key.startswith("_")]
+            yield tensordict_out.select(*selected_keys)
+
             del tensordict_out
             if self._frames >= self.total_frames:
                 break
@@ -952,7 +954,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 frames += math.prod(out.shape)
             if self.postprocs:
                 out = self.postprocs[out.device](out)
-            yield out
+            selected_keys = [key for key in out.keys() if not key.startswith("_")]
+            yield out.select(*selected_keys)
 
         del out_tensordicts_shared
         self._shutdown_main()
@@ -1030,8 +1033,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             else:
                 print(f"{idx} is done!")
                 dones[idx] = True
-
-            yield out
+            selected_keys = [key for key in out.keys() if not key.startswith("_")]
+            yield out.select(*selected_keys)
 
         self._shutdown_main()
         self.running = False
