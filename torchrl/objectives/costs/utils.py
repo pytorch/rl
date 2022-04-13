@@ -12,7 +12,7 @@ from torch import nn, Tensor
 from torch.nn import functional as F
 
 from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.envs.utils import step_tensor_dict
+from torchrl.envs.utils import step_tensordict
 from torchrl.modules import TDModule
 
 __all__ = ["SoftUpdate", "HardUpdate", "distance_loss", "hold_out_params"]
@@ -283,7 +283,7 @@ class hold_out_params(_context_manager):
 
 @torch.no_grad()
 def next_state_value(
-    tensor_dict: _TensorDict,
+    tensordict: _TensorDict,
     operator: Optional[TDModule] = None,
     next_val_key: str = "state_action_value",
     gamma: float = 0.99,
@@ -299,7 +299,7 @@ def next_state_value(
     from the input tensordict.
 
     Args:
-        tensor_dict (_TensorDict): Tensordict containing a reward and done key (and a n_steps_to_next key for n-steps
+        tensordict (_TensorDict): Tensordict containing a reward and done key (and a n_steps_to_next key for n-steps
             rewards).
         operator (ProbabilisticTDModule, optional): the value function operator. Should write a 'next_val_key'
             key-value in the input tensordict when called. It does not need to be provided if pred_next_val is given.
@@ -313,15 +313,15 @@ def next_state_value(
         a Tensor of the size of the input tensordict containing the predicted value state.
     """
     try:
-        steps_to_next_obs = tensor_dict.get("steps_to_next_obs").squeeze(-1)
+        steps_to_next_obs = tensordict.get("steps_to_next_obs").squeeze(-1)
     except KeyError:
         steps_to_next_obs = 1
 
-    rewards = tensor_dict.get("reward").squeeze(-1)
-    done = tensor_dict.get("done").squeeze(-1)
+    rewards = tensordict.get("reward").squeeze(-1)
+    done = tensordict.get("done").squeeze(-1)
 
     if pred_next_val is None:
-        next_td = step_tensor_dict(tensor_dict)  # next_observation -> observation
+        next_td = step_tensordict(tensordict)  # next_observation -> observation
         next_td = next_td.select(*operator.in_keys)
         operator(next_td, **kwargs)
         pred_next_val_detach = next_td.get(next_val_key).squeeze(-1)

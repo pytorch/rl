@@ -32,19 +32,26 @@ def generalized_advantage_estimate(
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
     """
+    for tensor in (next_state_value, state_value, reward, done):
+        if tensor.shape[-1] != 1:
+            raise RuntimeError(
+                "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
+            )
     not_done = 1 - done.to(next_state_value.dtype)
-    batch_size, time_steps = not_done.shape[:2]
+    *batch_size, time_steps = not_done.shape[:-1]
     device = state_value.device
-    advantage = torch.zeros(batch_size, time_steps + 1, 1, device=device)
+    advantage = torch.zeros(*batch_size, time_steps + 1, 1, device=device)
 
     for t in reversed(range(time_steps)):
         delta = (
-            reward[:, t]
-            + (gamma * next_state_value[:, t] * not_done[:, t])
-            - state_value[:, t]
+            reward[..., t, :]
+            + (gamma * next_state_value[..., t, :] * not_done[..., t, :])
+            - state_value[..., t, :]
         )
-        advantage[:, t] = delta + (gamma * lamda * advantage[:, t + 1] * not_done[:, t])
+        advantage[..., t, :] = delta + (
+            gamma * lamda * advantage[..., t + 1, :] * not_done[..., t, :]
+        )
 
-    value_target = advantage[:, :time_steps] + state_value
+    value_target = advantage[..., :time_steps, :] + state_value
 
-    return advantage[:, :time_steps], value_target
+    return advantage[..., :time_steps, :], value_target

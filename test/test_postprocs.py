@@ -33,7 +33,7 @@ def test_multistep(n, key, T=11):
     mask = ~mask
 
     total_obs = torch.randn(1, T + 1, 1).expand(b, T + 1, 1)
-    tensor_dict = TensorDict(
+    tensordict = TensorDict(
         source={
             key: total_obs[:, :T] * mask.to(torch.float),
             "next_" + key: total_obs[:, 1:] * mask.to(torch.float),
@@ -48,44 +48,42 @@ def test_multistep(n, key, T=11):
         0.9,
         n,
     )
-    ms_tensor_dict = ms(tensor_dict.clone())
+    ms_tensordict = ms(tensordict.clone())
 
-    assert ms_tensor_dict.get("done").max() == 1
+    assert ms_tensordict.get("done").max() == 1
 
     if n == 0:
-        assert_allclose_td(
-            tensor_dict, ms_tensor_dict.select(*list(tensor_dict.keys()))
-        )
+        assert_allclose_td(tensordict, ms_tensordict.select(*list(tensordict.keys())))
 
     # assert that done at last step is similar to unterminated traj
-    assert (ms_tensor_dict.get("gamma")[4] == ms_tensor_dict.get("gamma")[0]).all()
+    assert (ms_tensordict.get("gamma")[4] == ms_tensordict.get("gamma")[0]).all()
     assert (
-        ms_tensor_dict.get("next_" + key)[4] == ms_tensor_dict.get("next_" + key)[0]
+        ms_tensordict.get("next_" + key)[4] == ms_tensordict.get("next_" + key)[0]
     ).all()
     assert (
-        ms_tensor_dict.get("steps_to_next_obs")[4]
-        == ms_tensor_dict.get("steps_to_next_obs")[0]
+        ms_tensordict.get("steps_to_next_obs")[4]
+        == ms_tensordict.get("steps_to_next_obs")[0]
     ).all()
 
     # check that next obs is properly replaced, or that it is terminated
-    next_obs = ms_tensor_dict.get(key)[:, (1 + ms.n_steps_max) :]
-    true_next_obs = ms_tensor_dict.get("next_" + key)[:, : -(1 + ms.n_steps_max)]
-    terminated = ~ms_tensor_dict.get("nonterminal")
+    next_obs = ms_tensordict.get(key)[:, (1 + ms.n_steps_max) :]
+    true_next_obs = ms_tensordict.get("next_" + key)[:, : -(1 + ms.n_steps_max)]
+    terminated = ~ms_tensordict.get("nonterminal")
     assert ((next_obs == true_next_obs) | terminated[:, (1 + ms.n_steps_max) :]).all()
 
     # test gamma computation
     torch.testing.assert_allclose(
-        ms_tensor_dict.get("gamma"), ms.gamma ** ms_tensor_dict.get("steps_to_next_obs")
+        ms_tensordict.get("gamma"), ms.gamma ** ms_tensordict.get("steps_to_next_obs")
     )
 
     # test reward
     if n > 0:
         assert (
-            ms_tensor_dict.get("reward") != ms_tensor_dict.get("original_reward")
+            ms_tensordict.get("reward") != ms_tensordict.get("original_reward")
         ).any()
     else:
         assert (
-            ms_tensor_dict.get("reward") == ms_tensor_dict.get("original_reward")
+            ms_tensordict.get("reward") == ms_tensordict.get("original_reward")
         ).all()
 
 
