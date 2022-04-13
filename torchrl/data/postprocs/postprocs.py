@@ -138,9 +138,9 @@ class MultiStep(nn.Module):
             ).reshape(1, 1, -1),
         )
 
-    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: _TensorDict) -> _TensorDict:
         """Args:
-            tensor_dict: TennsorDict instance with Batch x Time-steps x ...
+            tensordict: TennsorDict instance with Batch x Time-steps x ...
                 dimensions.
                 The TensorDict must contain a "reward" and "done" key. All
                 keys that start with the "next_" prefix will be shifted by (
@@ -163,15 +163,15 @@ class MultiStep(nn.Module):
             in-place transformation of the input tensordict.
 
         """
-        if tensor_dict.batch_dims != 2:
+        if tensordict.batch_dims != 2:
             raise RuntimeError("Expected a tensordict with B x T x ... dimensions")
 
-        done = tensor_dict.get("done")
+        done = tensordict.get("done")
         try:
-            mask = tensor_dict.get("mask")
+            mask = tensordict.get("mask")
         except KeyError:
             mask = done.clone().flip(1).cumsum(1).flip(1).to(torch.bool)
-        reward = tensor_dict.get("reward")
+        reward = tensordict.get("reward")
         b, T, *_ = mask.shape
 
         terminal, post_terminal = _get_terminal(done, self.n_steps_max)
@@ -186,16 +186,16 @@ class MultiStep(nn.Module):
         # Discounted summed reward
         partial_return = _conv1d(reward, self.gammas, self.n_steps_max)
 
-        selected_td = tensor_dict.select(
+        selected_td = tensordict.select(
             *[
                 key
-                for key in tensor_dict.keys()
+                for key in tensordict.keys()
                 if (key.startswith("next_") or key == "done")
             ]
         )
 
         for key, item in selected_td.items():
-            tensor_dict.set_(
+            tensordict.set_(
                 key,
                 select_and_repeat(
                     item,
@@ -206,11 +206,11 @@ class MultiStep(nn.Module):
                 ),
             )
 
-        tensor_dict.set("gamma", gamma_masked)
-        tensor_dict.set("steps_to_next_obs", steps_to_next_obs)
-        tensor_dict.set("nonterminal", nonterminal)
-        tensor_dict.rename_key("reward", "original_reward")
-        tensor_dict.set("reward", partial_return)
+        tensordict.set("gamma", gamma_masked)
+        tensordict.set("steps_to_next_obs", steps_to_next_obs)
+        tensordict.set("nonterminal", nonterminal)
+        tensordict.rename_key("reward", "original_reward")
+        tensordict.set("reward", partial_return)
 
-        tensor_dict.set_("done", done)
-        return tensor_dict
+        tensordict.set_("done", done)
+        return tensordict

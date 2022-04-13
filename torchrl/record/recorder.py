@@ -140,7 +140,7 @@ class TensorDictRecorder(Transform):
             td = td[1:]
         torch.save(
             torch.stack(td, 0).contiguous(),
-            f"{self.out_file_base}_tensor_dict.t",
+            f"{self.out_file_base}_tensordict.t",
         )
         self.iter += 1
         self.count = 0

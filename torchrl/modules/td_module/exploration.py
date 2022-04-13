@@ -229,11 +229,11 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
                     f"number of frames."
                 )
 
-    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
-        tensor_dict = super().forward(tensor_dict)
+    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+        tensordict = super().forward(tensordict)
         if exploration_mode() == "random" or exploration_mode() is None:
-            tensor_dict = self.ou.add_sample(tensor_dict, self.eps.item())
-        return tensor_dict
+            tensordict = self.ou.add_sample(tensordict, self.eps.item())
+        return tensordict
 
 
 # Based on http://math.stackexchange.com/questions/1287634/implementing-ornstein-uhlenbeck-in-matlab
@@ -278,29 +278,29 @@ class _OrnsteinUhlenbeckProcess:
     def steps_key(self):
         return self._steps_key  # + str(id(self))
 
-    def _make_noise_pair(self, tensor_dict: _TensorDict) -> None:
-        tensor_dict.set(
+    def _make_noise_pair(self, tensordict: _TensorDict) -> None:
+        tensordict.set(
             self.noise_key,
-            torch.zeros(tensor_dict.get(self.key).shape, device=tensor_dict.device),
+            torch.zeros(tensordict.get(self.key).shape, device=tensordict.device),
         )
-        tensor_dict.set(
+        tensordict.set(
             self.steps_key,
             torch.zeros(
-                torch.Size([*tensor_dict.batch_size, 1]),
+                torch.Size([*tensordict.batch_size, 1]),
                 dtype=torch.long,
-                device=tensor_dict.device,
+                device=tensordict.device,
             ),
         )
 
-    def add_sample(self, tensor_dict: _TensorDict, eps: float = 1.0) -> _TensorDict:
+    def add_sample(self, tensordict: _TensorDict, eps: float = 1.0) -> _TensorDict:
 
-        if self.noise_key not in set(tensor_dict.keys()):
-            self._make_noise_pair(tensor_dict)
+        if self.noise_key not in set(tensordict.keys()):
+            self._make_noise_pair(tensordict)
 
-        prev_noise = tensor_dict.get(self.noise_key)
+        prev_noise = tensordict.get(self.noise_key)
         prev_noise = prev_noise + self.x0
 
-        n_steps = tensor_dict.get(self.steps_key)
+        n_steps = tensordict.get(self.steps_key)
 
         noise = (
             prev_noise
@@ -309,10 +309,10 @@ class _OrnsteinUhlenbeckProcess:
             * np.sqrt(self.dt)
             * torch.randn_like(prev_noise)
         )
-        tensor_dict.set_(self.noise_key, noise - self.x0)
-        tensor_dict.set_(self.key, tensor_dict.get(self.key) + eps * noise)
-        tensor_dict.set_(self.steps_key, n_steps + 1)
-        return tensor_dict
+        tensordict.set_(self.noise_key, noise - self.x0)
+        tensordict.set_(self.key, tensordict.get(self.key) + eps * noise)
+        tensordict.set_(self.steps_key, n_steps + 1)
+        return tensordict
 
     def current_sigma(self, n_steps: torch.Tensor) -> torch.Tensor:
         sigma = (self.m * n_steps + self.c).clamp_min(self.sigma_min)

@@ -22,8 +22,8 @@ Helpers
     :toctree: generated/
     :template: rl_template_fun.rst
 
-    step_tensor_dict
+    step_tensordict
     get_available_libraries
     set_exploration_mode
     exploration_mode
-    make_tensor_dict
+    make_tensordict

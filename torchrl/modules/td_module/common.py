@@ -43,17 +43,17 @@ __all__ = [
 ]
 
 
-def _forward_hook_safe_action(module, tensor_dict_in, tensor_dict_out):
-    if not module.spec.is_in(tensor_dict_out.get(module.out_keys[0])):
+def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
+    if not module.spec.is_in(tensordict_out.get(module.out_keys[0])):
         try:
-            tensor_dict_out.set_(
+            tensordict_out.set_(
                 module.out_keys[0],
-                module.spec.project(tensor_dict_out.get(module.out_keys[0])),
+                module.spec.project(tensordict_out.get(module.out_keys[0])),
             )
         except RuntimeError:
-            tensor_dict_out.set(
+            tensordict_out.set(
                 module.out_keys[0],
-                module.spec.project(tensor_dict_out.get(module.out_keys[0])),
+                module.spec.project(tensordict_out.get(module.out_keys[0])),
             )
 
 
@@ -188,11 +188,11 @@ class TDModule(nn.Module):
             )
         self._spec = spec
 
-    def _write_to_tensor_dict(
+    def _write_to_tensordict(
         self,
-        tensor_dict: _TensorDict,
+        tensordict: _TensorDict,
         tensors: List,
-        tensor_dict_out: Optional[_TensorDict] = None,
+        tensordict_out: Optional[_TensorDict] = None,
         out_keys: Optional[Iterable[str]] = None,
         vmap: Optional[int] = None,
     ) -> _TensorDict:
@@ -200,21 +200,21 @@ class TDModule(nn.Module):
         if out_keys is None:
             out_keys = self.out_keys
         if (
-            (tensor_dict_out is None)
+            (tensordict_out is None)
             and vmap
             and (isinstance(vmap, bool) or vmap[-1] is None)
         ):
             dim = tensors[0].shape[0]
-            shape = [dim, *tensor_dict.shape]
-            tensor_dict_out = TensorDict(
-                {key: val.expand(dim, *val.shape) for key, val in tensor_dict.items()},
+            shape = [dim, *tensordict.shape]
+            tensordict_out = TensorDict(
+                {key: val.expand(dim, *val.shape) for key, val in tensordict.items()},
                 shape,
             )
-        elif tensor_dict_out is None:
-            tensor_dict_out = tensor_dict
+        elif tensordict_out is None:
+            tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):
-            tensor_dict_out.set(_out_key, _tensor)
-        return tensor_dict_out
+            tensordict_out.set(_out_key, _tensor)
+        return tensordict_out
 
     def _make_vmap(self, kwargs, n_input):
         if "vmap" in kwargs and kwargs["vmap"]:
@@ -273,36 +273,36 @@ class TDModule(nn.Module):
 
     def forward(
         self,
-        tensor_dict: _TensorDict,
-        tensor_dict_out: Optional[_TensorDict] = None,
+        tensordict: _TensorDict,
+        tensordict_out: Optional[_TensorDict] = None,
         **kwargs,
     ) -> _TensorDict:
-        tensors = tuple(tensor_dict.get(in_key) for in_key in self.in_keys)
+        tensors = tuple(tensordict.get(in_key) for in_key in self.in_keys)
         tensors = self._call_module(tensors, **kwargs)
         if not isinstance(tensors, tuple):
             tensors = (tensors,)
-        tensor_dict_out = self._write_to_tensor_dict(
-            tensor_dict,
+        tensordict_out = self._write_to_tensordict(
+            tensordict,
             tensors,
-            tensor_dict_out,
+            tensordict_out,
             vmap=kwargs.get("vmap", False),
         )
-        return tensor_dict_out
+        return tensordict_out
 
-    def random(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def random(self, tensordict: _TensorDict) -> _TensorDict:
         """Samples a random element in the target space, irrespective of any input. If multiple output keys are present,
         only the first will be written in the input `tensordict`.
 
         Args:
-            tensor_dict (_TensorDict): tensordict where the output value should be written.
+            tensordict (_TensorDict): tensordict where the output value should be written.
 
         Returns:
             the original tensordict with a new/updated value for the output key.
 
         """
         key0 = self.out_keys[0]
-        tensor_dict.set(key0, self.spec.rand(tensor_dict.batch_size))
-        return tensor_dict
+        tensordict.set(key0, self.spec.rand(tensordict.batch_size))
+        return tensordict
 
     def random_sample(self, tensordict: _TensorDict) -> _TensorDict:
         """see TDModule.random(...)"""
@@ -546,26 +546,26 @@ class ProbabilisticTDModule(TDModule):
 
     def get_dist(
         self,
-        tensor_dict: _TensorDict,
+        tensordict: _TensorDict,
         **kwargs,
     ) -> Tuple[torch.distributions.Distribution, ...]:
         """Calls the module using the tensors retrieved from the 'in_keys' attribute and returns a distribution
         using its output.
 
         Args:
-            tensor_dict (_TensorDict): tensordict with the input values for the creation of the distribution.
+            tensordict (_TensorDict): tensordict with the input values for the creation of the distribution.
 
         Returns:
             a distribution along with other tensors returned by the module.
 
         """
-        tensors = [tensor_dict.get(key, None) for key in self.in_keys]
+        tensors = [tensordict.get(key, None) for key in self.in_keys]
         out_tensors = self._call_module(tensors, **kwargs)
         if isinstance(out_tensors, Tensor):
             out_tensors = (out_tensors,)
         if self.save_dist_params:
             for i, _tensor in enumerate(out_tensors):
-                tensor_dict.set(f"{self.out_keys[0]}_dist_param_{i}", _tensor)
+                tensordict.set(f"{self.out_keys[0]}_dist_param_{i}", _tensor)
         dist, num_params = self.build_dist_from_params(out_tensors)
         tensors = out_tensors[num_params:]
 
@@ -601,43 +601,43 @@ class ProbabilisticTDModule(TDModule):
 
     def forward(
         self,
-        tensor_dict: _TensorDict,
-        tensor_dict_out: Optional[_TensorDict] = None,
+        tensordict: _TensorDict,
+        tensordict_out: Optional[_TensorDict] = None,
         **kwargs,
     ) -> _TensorDict:
 
-        dist, *tensors = self.get_dist(tensor_dict, **kwargs)
+        dist, *tensors = self.get_dist(tensordict, **kwargs)
         out_tensor = self._dist_sample(
             dist, *tensors, interaction_mode=exploration_mode()
         )
-        tensor_dict_out = self._write_to_tensor_dict(
-            tensor_dict,
+        tensordict_out = self._write_to_tensordict(
+            tensordict,
             [out_tensor] + list(tensors),
-            tensor_dict_out,
+            tensordict_out,
             vmap=kwargs.get("vmap", 0),
         )
         if self.return_log_prob:
             log_prob = dist.log_prob(out_tensor)
-            tensor_dict_out.set("_".join([self.out_keys[0], "log_prob"]), log_prob)
-        return tensor_dict_out
+            tensordict_out.set("_".join([self.out_keys[0], "log_prob"]), log_prob)
+        return tensordict_out
 
-    def log_prob(self, tensor_dict: _TensorDict, **kwargs) -> _TensorDict:
+    def log_prob(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
         """
         Samples/computes an action using the module and writes this value onto the input tensordict along
         with its log-probability.
 
         Args:
-            tensor_dict (_TensorDict): tensordict containing the in_keys specified in the initializer.
+            tensordict (_TensorDict): tensordict containing the in_keys specified in the initializer.
 
         Returns:
             the same tensordict with the out_keys values added/updated as well as a
                 f"{out_keys[0]}_log_prob" key containing the log-probability of the first output.
 
         """
-        dist, *_ = self.get_dist(tensor_dict, **kwargs)
-        lp = dist.log_prob(tensor_dict.get(self.out_keys[0]))
-        tensor_dict.set(self.out_keys[0] + "_log_prob", lp)
-        return tensor_dict
+        dist, *_ = self.get_dist(tensordict, **kwargs)
+        lp = dist.log_prob(tensordict.get(self.out_keys[0]))
+        tensordict.set(self.out_keys[0] + "_log_prob", lp)
+        return tensordict
 
     def _dist_sample(
         self,
@@ -846,7 +846,7 @@ class TDSequence(TDModule):
             out.append(param_list[a:b])
         return out
 
-    def forward(self, tensor_dict: _TensorDict, **kwargs) -> _TensorDict:
+    def forward(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
         if "params" in kwargs and "buffers" in kwargs:
             param_splits = self._split_param(kwargs["params"], "params")
             buffer_splits = self._split_param(kwargs["buffers"], "buffers")
@@ -861,8 +861,8 @@ class TDSequence(TDModule):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, 0, *(0,) * len(module.in_keys))
-                tensor_dict = module(
-                    tensor_dict, params=param, buffers=buffer, **kwargs_pruned
+                tensordict = module(
+                    tensordict, params=param, buffers=buffer, **kwargs_pruned
                 )
 
         elif "params" in kwargs:
@@ -876,17 +876,17 @@ class TDSequence(TDModule):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
-                tensor_dict = module(tensor_dict, params=param, **kwargs_pruned)
+                tensordict = module(tensordict, params=param, **kwargs_pruned)
 
         elif not len(kwargs):
             for module in self.module:  # type: ignore
-                tensor_dict = module(tensor_dict)
+                tensordict = module(tensordict)
         else:
             raise RuntimeError(
                 "TDSequence does not support keyword arguments other than 'params', 'buffers' and 'vmap'"
             )
 
-        return tensor_dict
+        return tensordict
 
     def __len__(self):
         return len(self.module)  # type: ignore

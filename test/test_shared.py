@@ -62,7 +62,7 @@ class TestShared:
         assert subtd2.is_shared()
         print("sub td2 is shared: ", subtd2.is_shared())
 
-        subtd1 = td1.get_sub_tensor_dict(0)
+        subtd1 = td1.get_sub_tensordict(0)
         t0 = time.time()
         self.driver_func(subtd1, td1)
         t_elapsed = time.time() - t0
@@ -86,7 +86,7 @@ class TestStack:
         command_pipe_parent.close()
         assert isinstance(tensordict, TensorDict), f"td is of type {type(tensordict)}"
         assert tensordict.is_shared() or tensordict.is_memmap()
-        new_tensor_dict = torch.stack(
+        new_tensordict = torch.stack(
             [
                 tensordict[i].contiguous().clone().zero_()
                 for i in range(tensordict.shape[0])
@@ -96,9 +96,9 @@ class TestStack:
         cmd = command_pipe_child.recv()
         t0 = time.time()
         if cmd == "stack":
-            tensordict.copy_(new_tensor_dict)
+            tensordict.copy_(new_tensordict)
         elif cmd == "serial":
-            for i, td in enumerate(new_tensor_dict.tensor_dicts):
+            for i, td in enumerate(new_tensordict.tensordicts):
                 tensordict.update_at_(td, i)
         time_spent = time.time() - t0
         command_pipe_child.send(time_spent)

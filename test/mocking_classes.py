@@ -91,19 +91,19 @@ class DiscreteActionVecMockEnv(_MockEnv):
     def _get_out_obs(self, obs):
         return obs
 
-    def _reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _reset(self, tensordict: _TensorDict) -> _TensorDict:
         self.counter += 1
         state = torch.zeros(self.size) + self.counter
-        tensor_dict = tensor_dict.select().set(self.out_key, self._get_out_obs(state))
-        tensor_dict.set("done", torch.zeros(*tensor_dict.shape, 1, dtype=torch.bool))
-        return tensor_dict
+        tensordict = tensordict.select().set(self.out_key, self._get_out_obs(state))
+        tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
+        return tensordict
 
     def _step(
         self,
-        tensor_dict: _TensorDict,
+        tensordict: _TensorDict,
     ) -> _TensorDict:
-        tensor_dict = tensor_dict.to(self.device)
-        a = tensor_dict.get("action")
+        tensordict = tensordict.to(self.device)
+        a = tensordict.get("action")
         assert (a.sum(-1) == 1).all()
         assert not self.is_done, "trying to execute step in done env"
 
@@ -111,14 +111,14 @@ class DiscreteActionVecMockEnv(_MockEnv):
             self._get_in_obs(self.current_tensordict.get(self.out_key))
             + a / self.maxstep
         )
-        tensor_dict = tensor_dict.select()  # empty tensordict
-        tensor_dict.set("next_" + self.out_key, self._get_out_obs(obs))
+        tensordict = tensordict.select()  # empty tensordict
+        tensordict.set("next_" + self.out_key, self._get_out_obs(obs))
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
         reward = done.any(-1).unsqueeze(-1)
         done = done.all(-1).unsqueeze(-1)
-        tensor_dict.set("reward", reward.to(torch.float))
-        tensor_dict.set("done", done)
-        return tensor_dict
+        tensordict.set("reward", reward.to(torch.float))
+        tensordict.set("done", done)
+        return tensordict
 
 
 class ContinuousActionVecMockEnv(_MockEnv):
@@ -136,32 +136,32 @@ class ContinuousActionVecMockEnv(_MockEnv):
     def _get_out_obs(self, obs):
         return obs
 
-    def _reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _reset(self, tensordict: _TensorDict) -> _TensorDict:
         self.counter += 1
         state = torch.zeros(self.size) + self.counter
-        tensor_dict = tensor_dict.select().set(self.out_key, self._get_out_obs(state))
-        tensor_dict.set("done", torch.zeros(*tensor_dict.shape, 1, dtype=torch.bool))
-        return tensor_dict
+        tensordict = tensordict.select().set(self.out_key, self._get_out_obs(state))
+        tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
+        return tensordict
 
     def _step(
         self,
-        tensor_dict: _TensorDict,
+        tensordict: _TensorDict,
     ) -> _TensorDict:
-        tensor_dict = tensor_dict.to(self.device)
-        a = tensor_dict.get("action")
+        tensordict = tensordict.to(self.device)
+        a = tensordict.get("action")
         assert not self.is_done, "trying to execute step in done env"
 
         obs = self._obs_step(
             self._get_in_obs(self.current_tensordict.get(self.out_key)), a
         )
-        tensor_dict = tensor_dict.select()  # empty tensordict
-        tensor_dict.set("next_" + self.out_key, self._get_out_obs(obs))
+        tensordict = tensordict.select()  # empty tensordict
+        tensordict.set("next_" + self.out_key, self._get_out_obs(obs))
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
         reward = done.any(-1).unsqueeze(-1)
         done = done.all(-1).unsqueeze(-1)
-        tensor_dict.set("reward", reward.to(torch.float))
-        tensor_dict.set("done", done)
-        return tensor_dict
+        tensordict.set("reward", reward.to(torch.float))
+        tensordict.set("done", done)
+        return tensordict
 
     def _obs_step(self, obs, a):
         return obs + a / self.maxstep
@@ -171,18 +171,18 @@ class DiscreteActionVecPolicy:
     in_keys = ["observation"]
     out_keys = ["action"]
 
-    def _get_in_obs(self, tensor_dict):
-        obs = tensor_dict.get(*self.in_keys)
+    def _get_in_obs(self, tensordict):
+        obs = tensordict.get(*self.in_keys)
         return obs
 
-    def __call__(self, tensor_dict):
-        obs = self._get_in_obs(tensor_dict)
+    def __call__(self, tensordict):
+        obs = self._get_in_obs(tensordict)
         max_obs = (obs == obs.max(dim=-1, keepdim=True)[0]).cumsum(-1).argmax(-1)
-        k = tensor_dict.get(*self.in_keys).shape[-1]
+        k = tensordict.get(*self.in_keys).shape[-1]
         max_obs = (max_obs + 1) % k
         action = torch.nn.functional.one_hot(max_obs, k)
-        tensor_dict.set(*self.out_keys, action)
-        return tensor_dict
+        tensordict.set(*self.out_keys, action)
+        return tensordict
 
 
 class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
@@ -253,6 +253,6 @@ class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
     in_keys = ["observation_pixels"]
     out_keys = ["action"]
 
-    def _get_in_obs(self, tensor_dict):
-        obs = tensor_dict.get(*self.in_keys).diagonal(0, -1, -2).squeeze()
+    def _get_in_obs(self, tensordict):
+        obs = tensordict.get(*self.in_keys).diagonal(0, -1, -2).squeeze()
         return obs
