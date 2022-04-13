@@ -135,7 +135,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             policy.share_memory()
             # if not (len(list(policy.parameters())) == 0 or next(policy.parameters()).is_shared()):
             #     raise RuntimeError("Provided policy parameters must be shared.")
-        if hasattr(env, "close"):
+        if hasattr(env, "close") and not env.is_closed:
             env.close()
         return policy, device, get_weights_fn
 
@@ -246,6 +246,7 @@ class SyncDataCollector(_DataCollector):
         exploration_mode: str = "random",
         init_with_lag: bool = False,
     ):
+        self.closed = True
         if seed is not None:
             torch.manual_seed(seed)
             np.random.seed(seed)
@@ -258,6 +259,7 @@ class SyncDataCollector(_DataCollector):
             env = create_env_fn
 
         self.env: _EnvClass = env
+        self.closed = False
         self.n_env = self.env.numel()
 
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
@@ -305,7 +307,6 @@ class SyncDataCollector(_DataCollector):
         self._td_env = None
         self._td_policy = None
         self._has_been_done = None
-        self.closed = False
         self._exclude_private_keys = True
 
     def set_seed(self, seed: int) -> int:
