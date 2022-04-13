@@ -23,10 +23,10 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.envs.common import _EnvClass, make_tensor_dict
+from torchrl.envs.common import _EnvClass, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import FiniteTensor
-from torchrl.envs.utils import step_tensor_dict
+from torchrl.envs.utils import step_tensordict
 
 __all__ = [
     "Transform",
@@ -85,9 +85,9 @@ class Transform(nn.Module):
         super().__init__()
         self.keys = keys
 
-    def reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def reset(self, tensordict: _TensorDict) -> _TensorDict:
         """Resets a tranform if it is stateful."""
-        return tensor_dict
+        return tensordict
 
     def _check_inplace(self) -> None:
         if not hasattr(self, "inplace"):
@@ -96,7 +96,7 @@ class Transform(nn.Module):
                 f"attribute inplace, consider implementing it."
             )
 
-    def init(self, tensor_dict) -> None:
+    def init(self, tensordict) -> None:
         pass
 
     def _apply(self, obs: torch.Tensor) -> None:
@@ -107,21 +107,21 @@ class Transform(nn.Module):
         """
         raise NotImplementedError
 
-    def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _call(self, tensordict: _TensorDict) -> _TensorDict:
         """Reads the input tensordict, and for the selected keys, applies the
         transform.
 
         """
         self._check_inplace()
-        for _obs_key in tensor_dict.keys():
+        for _obs_key in tensordict.keys():
             if _obs_key in self.keys:
-                observation = self._apply(tensor_dict.get(_obs_key))
-                tensor_dict.set(_obs_key, observation, inplace=self.inplace)
-        return tensor_dict
+                observation = self._apply(tensordict.get(_obs_key))
+                tensordict.set(_obs_key, observation, inplace=self.inplace)
+        return tensordict
 
-    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
-        self._call(tensor_dict)
-        return tensor_dict
+    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+        self._call(tensordict)
+        return tensordict
 
     def _inv_apply(self, obs: torch.Tensor) -> torch.Tensor:
         if self.invertible:
@@ -129,17 +129,17 @@ class Transform(nn.Module):
         else:
             return obs
 
-    def _inv_call(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _inv_call(self, tensordict: _TensorDict) -> _TensorDict:
         self._check_inplace()
-        for _obs_key in tensor_dict.keys():
+        for _obs_key in tensordict.keys():
             if _obs_key in self.keys:
-                observation = self._inv_apply(tensor_dict.get(_obs_key))
-                tensor_dict.set(_obs_key, observation, inplace=self.inplace)
-        return tensor_dict
+                observation = self._inv_apply(tensordict.get(_obs_key))
+                tensordict.set(_obs_key, observation, inplace=self.inplace)
+        return tensordict
 
-    def inv(self, tensor_dict: _TensorDict) -> _TensorDict:
-        self._inv_call(tensor_dict)
-        return tensor_dict
+    def inv(self, tensordict: _TensorDict) -> _TensorDict:
+        self._inv_call(tensordict)
+        return tensordict
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
         """Transforms the action spec such that the resulting spec matches
@@ -289,38 +289,38 @@ class TransformedEnv(_EnvClass):
             reward_spec = self._reward_spec
         return reward_spec
 
-    def _step(self, tensor_dict: _TensorDict) -> _TensorDict:
-        selected_keys = [key for key in tensor_dict.keys() if "action" in key]
-        tensor_dict_in = tensor_dict.select(*selected_keys).clone()
-        tensor_dict_in = self.transform.inv(tensor_dict_in)
-        tensor_dict_out = self.env._step(tensor_dict_in).to(self.device)
-        # tensor_dict should already have been processed by the transforms
+    def _step(self, tensordict: _TensorDict) -> _TensorDict:
+        selected_keys = [key for key in tensordict.keys() if "action" in key]
+        tensordict_in = tensordict.select(*selected_keys).clone()
+        tensordict_in = self.transform.inv(tensordict_in)
+        tensordict_out = self.env._step(tensordict_in).to(self.device)
+        # tensordict should already have been processed by the transforms
         # for logging purposes
-        tensor_dict_out = self.transform(tensor_dict_out)
-        return tensor_dict_out
+        tensordict_out = self.transform(tensordict_out)
+        return tensordict_out
 
     def set_seed(self, seed: int) -> int:
         """Set the seeds of the environment"""
         return self.env.set_seed(seed)
 
-    def _reset(self, tensor_dict: Optional[_TensorDict] = None, **kwargs):
-        out_tensor_dict = self.env.reset(**kwargs).to(self.device)
-        out_tensor_dict = self.transform.reset(out_tensor_dict)
+    def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs):
+        out_tensordict = self.env.reset(**kwargs).to(self.device)
+        out_tensordict = self.transform.reset(out_tensordict)
 
         # Transforms are made for "next_observations" and alike. We convert
         # all the observations in next_observations, then map them back to
         # their original key name
-        keys = list(out_tensor_dict.keys())
+        keys = list(out_tensordict.keys())
         for key in keys:
             if key.startswith("observation"):
-                out_tensor_dict.rename_key(key, "next_" + key, safe=True)
+                out_tensordict.rename_key(key, "next_" + key, safe=True)
 
-        out_tensor_dict = self.transform(out_tensor_dict)
-        keys = list(out_tensor_dict.keys())
+        out_tensordict = self.transform(out_tensordict)
+        keys = list(out_tensordict.keys())
         for key in keys:
             if key.startswith("next_observation"):
-                out_tensor_dict.rename_key(key, key[5:], safe=True)
-        return out_tensor_dict
+                out_tensordict.rename_key(key, key[5:], safe=True)
+        return out_tensordict
 
     def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
         state_dict = self.transform.state_dict(destination)
@@ -402,10 +402,10 @@ class Compose(Transform):
         for t in self.transforms:
             t.set_parent(self)
 
-    def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _call(self, tensordict: _TensorDict) -> _TensorDict:
         for t in self.transforms:
-            tensor_dict = t(tensor_dict)
-        return tensor_dict
+            tensordict = t(tensordict)
+        return tensordict
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms:
@@ -433,14 +433,14 @@ class Compose(Transform):
         for t in self:
             t.dump()
 
-    def reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def reset(self, tensordict: _TensorDict) -> _TensorDict:
         for t in self.transforms:
-            tensor_dict = t.reset(tensor_dict)
-        return tensor_dict
+            tensordict = t.reset(tensordict)
+        return tensordict
 
-    def init(self, tensor_dict: _TensorDict) -> None:
+    def init(self, tensordict: _TensorDict) -> None:
         for t in self.transforms:
-            t.init(tensor_dict)
+            t.init(tensordict)
 
     def __repr__(self) -> str:
         layers_str = ", \n\t".join([str(trsf) for trsf in self.transforms])
@@ -844,9 +844,9 @@ class CatFrames(ObservationTransform):
         self.cat_dim = cat_dim
         self.buffer = []
 
-    def reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def reset(self, tensordict: _TensorDict) -> _TensorDict:
         self.buffer = []
-        return tensor_dict
+        return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):
@@ -949,9 +949,9 @@ class FiniteTensorDictCheck(Transform):
     def __init__(self):
         super().__init__(keys=[])
 
-    def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _call(self, tensordict: _TensorDict) -> _TensorDict:
         source = {}
-        for key, item in tensor_dict.items():
+        for key, item in tensordict.items():
             try:
                 source[key] = FiniteTensor(item)
             except RuntimeError as err:
@@ -960,10 +960,8 @@ class FiniteTensorDictCheck(Transform):
                 else:
                     raise RuntimeError(str(err))
 
-        finite_tensor_dict = TensorDict(
-            batch_size=tensor_dict.batch_size, source=source
-        )
-        return finite_tensor_dict
+        finite_tensordict = TensorDict(batch_size=tensordict.batch_size, source=source)
+        return finite_tensordict
 
 
 class DoubleToFloat(Transform):
@@ -1085,19 +1083,19 @@ class CatTensors(Transform):
                 "is not allowed."
             )
 
-    def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
-        if all([key in tensor_dict.keys() for key in self.keys]):
-            out_tensor = torch.cat([tensor_dict.get(key) for key in self.keys], -1)
-            tensor_dict.set(self.out_key, out_tensor)
+    def _call(self, tensordict: _TensorDict) -> _TensorDict:
+        if all([key in tensordict.keys() for key in self.keys]):
+            out_tensor = torch.cat([tensordict.get(key) for key in self.keys], -1)
+            tensordict.set(self.out_key, out_tensor)
             for key in self.keys:
-                tensor_dict.del_(key)
+                tensordict.del_(key)
         else:
             raise Exception(
                 f"CatTensor failed, as it expected input keys ="
                 f" {sorted(list(self.keys))} but got a TensorDict with keys"
-                f" {sorted(list(tensor_dict.keys()))}"
+                f" {sorted(list(tensordict.keys()))}"
             )
-        return tensor_dict
+        return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if not isinstance(observation_spec, CompositeSpec):
@@ -1224,9 +1222,9 @@ class NoopResetEnv(Transform):
         self.noops = noops
         self.random = random
 
-    def reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def reset(self, tensordict: _TensorDict) -> _TensorDict:
         """Do no-op action for a number of steps in [1, noop_max]."""
-        keys = tensor_dict.keys()
+        keys = tensordict.keys()
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
@@ -1234,21 +1232,21 @@ class NoopResetEnv(Transform):
         trial = 0
         while i < noops:
             i += 1
-            tensor_dict = self.env.rand_step()
+            tensordict = self.env.rand_step()
             if self.env.is_done:
                 self.env.reset()
                 i = 0
                 trial += 1
                 if trial > _MAX_NOOPS_TRIALS:
                     self.env.reset()
-                    tensor_dict = self.env.rand_step()
+                    tensordict = self.env.rand_step()
                     break
         if self.env.is_done:
             raise RuntimeError("NoopResetEnv concluded with done environment")
-        td = step_tensor_dict(tensor_dict).select(*keys)
+        td = step_tensordict(tensordict).select(*keys)
         for k in keys:
             if k not in td.keys():
-                td.set(k, tensor_dict.get(k))
+                td.set(k, tensordict.get(k))
         return td
 
     def __repr__(self) -> str:
@@ -1267,8 +1265,8 @@ class PinMemoryTransform(Transform):
     def __init__(self):
         super().__init__([])
 
-    def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
-        return tensor_dict.pin_memory()
+    def _call(self, tensordict: _TensorDict) -> _TensorDict:
+        return tensordict.pin_memory()
 
 
 def _sum_left(val, dest):
@@ -1285,8 +1283,8 @@ class gSDENoise(Transform):
         self.action_dim = action_dim
         self.state_dim = state_dim
 
-    def reset(self, tensor_dict: _TensorDict) -> _TensorDict:
-        tensor_dict = super().reset(tensor_dict=tensor_dict)
+    def reset(self, tensordict: _TensorDict) -> _TensorDict:
+        tensordict = super().reset(tensordict=tensordict)
         if self.state_dim is None:
             obs_spec = self.parent.observation_spec
             if isinstance(obs_spec, CompositeSpec):
@@ -1295,16 +1293,16 @@ class gSDENoise(Transform):
         else:
             state_dim = self.state_dim
 
-        tensor_dict.set(
+        tensordict.set(
             "_eps_gSDE",
             torch.randn(
-                *tensor_dict.batch_size,
+                *tensordict.batch_size,
                 self.action_dim,
                 state_dim,
-                device=tensor_dict.device,
+                device=tensordict.device,
             ),
         )
-        return tensor_dict
+        return tensordict
 
 
 class VecNorm(Transform):
@@ -1473,7 +1471,7 @@ class VecNorm(Transform):
         """
         if keys_prefix is None:
             keys_prefix = ["next_", "reward"]
-        td = make_tensor_dict(env)
+        td = make_tensordict(env)
         keys = set(
             key
             for key in td.keys()

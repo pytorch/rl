@@ -28,7 +28,7 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     RewardClipping,
 )
-from torchrl.envs.utils import step_tensor_dict
+from torchrl.envs.utils import step_tensordict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 
 try:
@@ -97,8 +97,8 @@ def test_env_seed(env_name, frame_skip, seed=0):
     td1a = env.step(td0a.clone().set("action", action))
 
     env.set_seed(seed)
-    td0b = env.specs.build_tensor_dict()
-    td0b = env.reset(tensor_dict=td0b)
+    td0b = env.specs.build_tensordict()
+    td0b = env.reset(tensordict=td0b)
     td1b = env.step(td0b.clone().set("action", action))
 
     assert_allclose_td(td0a, td0b.select(*td0a.keys()))
@@ -194,7 +194,7 @@ def test_parallel_env(env_name, frame_skip, transformed, T=10, N=5):
             N,
         ],
     )
-    env_parallel.reset(tensor_dict=td_reset)
+    env_parallel.reset(tensordict=td_reset)
 
     td = env_parallel.rollout(policy=None, n_steps=T)
     assert (
@@ -411,12 +411,12 @@ def test_current_tensordict():
     torch.manual_seed(0)
     env = GymEnv("Pendulum-v1")
     env.set_seed(0)
-    tensor_dict = env.reset()
-    assert_allclose_td(tensor_dict, env.current_tensordict)
-    tensor_dict = env.step(
+    tensordict = env.reset()
+    assert_allclose_td(tensordict, env.current_tensordict)
+    tensordict = env.step(
         TensorDict(source={"action": env.action_spec.rand()}, batch_size=[])
     )
-    assert_allclose_td(step_tensor_dict(tensor_dict), env.current_tensordict)
+    assert_allclose_td(step_tensordict(tensordict), env.current_tensordict)
 
 
 # TODO: test for frame-skip

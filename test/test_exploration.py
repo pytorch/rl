@@ -66,7 +66,7 @@ def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     ).to(device)
     exploratory_policy = OrnsteinUhlenbeckProcessWrapper(policy)
 
-    tensor_dict = TensorDict(
+    tensordict = TensorDict(
         batch_size=[batch],
         source={"observation": torch.randn(batch, d_obs, device=device)},
         device=device,
@@ -74,11 +74,11 @@ def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     out_noexp = []
     out = []
     for i in range(n_steps):
-        tensor_dict_noexp = policy(tensor_dict.select("observation"))
-        tensor_dict = exploratory_policy(tensor_dict)
-        out.append(tensor_dict.clone())
-        out_noexp.append(tensor_dict_noexp.clone())
-        tensor_dict.set_("observation", torch.randn(batch, d_obs, device=device))
+        tensordict_noexp = policy(tensordict.select("observation"))
+        tensordict = exploratory_policy(tensordict)
+        out.append(tensordict.clone())
+        out_noexp.append(tensordict_noexp.clone())
+        tensordict.set_("observation", torch.randn(batch, d_obs, device=device))
     out = torch.stack(out, 0)
     out_noexp = torch.stack(out_noexp, 0)
     assert (out_noexp.get("action") != out.get("action")).all()
