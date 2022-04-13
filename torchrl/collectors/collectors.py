@@ -350,7 +350,7 @@ class SyncDataCollector(_DataCollector):
                 excluded_keys = [
                     key for key in tensordict_out.keys() if key.startswith("_")
                 ]
-                tensordict_out = tensordict_out.exclude(*excluded_keys)
+                tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
             yield tensordict_out
 
             del tensordict_out
