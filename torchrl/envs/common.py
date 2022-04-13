@@ -460,6 +460,14 @@ class _EnvWrapper(_EnvClass):
 
     Unlike _EnvClass, _EnvWrapper comes with a `_build_env` private method that will be called upon instantiation.
     Interfaces with other libraries should be coded using _EnvWrapper.
+
+    It is possible to directly query attributed from the nested environment it its name does not conflict with
+    an attribute of the wrapper:
+        >>> env = SomeWrapper(...)
+        >>> custom_attribute0 = env._env.custom_attribute
+        >>> custom_attribute1 = env.custom_attribute
+        >>> assert custom_attribute0 is custom_attribute1  # should return True
+
     """
 
     git_url: str = ""

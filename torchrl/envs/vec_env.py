@@ -64,7 +64,13 @@ class _dispatch_caller_serial:
 
 class _BatchedEnv(_EnvClass):
     """
-    Batched environment abstract class.
+
+    Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.
+    Those queries will return a list of length equal to the number of workers containing the
+    values resulting from those queries.
+        >>> env = ParallelEnv(3, my_env_fun)
+        >>> custom_attribute_list = env.custom_attribute
+        >>> custom_method_list = env.custom_method(*args)
 
     Args:
         num_workers: number of workers (i.e. env instances) to be deployed simultaneously;
@@ -271,6 +277,7 @@ class SerialEnv(_BatchedEnv):
     Creates a series of environments in the same process.
 
     """
+    __doc__ += _BatchedEnv.__doc__
 
     _share_memory = False
 
@@ -388,6 +395,7 @@ class ParallelEnv(_BatchedEnv):
     TensorDicts are passed via shared memory or memory map.
 
     """
+    __doc__ += _BatchedEnv.__doc__
 
     def _start_workers(self) -> None:
 
