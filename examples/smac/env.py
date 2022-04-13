@@ -4,11 +4,17 @@ from typing import Optional, Union
 import numpy as np
 import torch
 from smac.env import StarCraft2Env
-
-from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, \
-    UnboundedContinuousTensorSpec, OneHotDiscreteTensorSpec
-from torchrl.data.tensor_specs import _default_dtype_and_device, DiscreteBox, \
-    DEVICE_TYPING
+from torchrl.data import (
+    TensorDict,
+    NdUnboundedContinuousTensorSpec,
+    UnboundedContinuousTensorSpec,
+    OneHotDiscreteTensorSpec,
+)
+from torchrl.data.tensor_specs import (
+    _default_dtype_and_device,
+    DiscreteBox,
+    DEVICE_TYPING,
+)
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.common import GymLikeEnv
 
@@ -29,9 +35,15 @@ class NdOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             n,
         )
         self.d = d
-        shape = torch.Size((d, space.n,))
-        super(OneHotDiscreteTensorSpec, self).__init__(shape, space, device,
-                                                       dtype, "discrete")
+        shape = torch.Size(
+            (
+                d,
+                space.n,
+            )
+        )
+        super(OneHotDiscreteTensorSpec, self).__init__(
+            shape, space, device, dtype, "discrete"
+        )
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
         return torch.nn.functional.gumbel_softmax(
@@ -59,9 +71,15 @@ class CustomNdOneHotDiscreteTensorSpec(NdOneHotDiscreteTensorSpec):
             n,
         )
         self.d = d
-        shape = torch.Size((d, space.n,))
-        super(OneHotDiscreteTensorSpec, self).__init__(shape, space, device,
-                                                       dtype, "discrete")
+        shape = torch.Size(
+            (
+                d,
+                space.n,
+            )
+        )
+        super(OneHotDiscreteTensorSpec, self).__init__(
+            shape, space, device, dtype, "discrete"
+        )
 
     def to(self, dest):
         out = super().to(dest)
@@ -88,22 +106,21 @@ class SCEnv(GymLikeEnv):
     @property
     def observation_spec(self):
         info = self._env.get_env_info()
-        dim = (info['n_agents'], info['obs_shape'])
+        dim = (info["n_agents"], info["obs_shape"])
         return NdUnboundedContinuousTensorSpec(dim)
 
     @property
     def action_spec(self):
-        info = self._env.get_env_info()
+        # info = self._env.get_env_info()
         return CustomNdOneHotDiscreteTensorSpec(
-            torch.tensor(self._env.get_avail_actions()))
+            torch.tensor(self._env.get_avail_actions())
+        )
 
     @property
     def reward_spec(self):
         return UnboundedContinuousTensorSpec()
 
-    def _build_env(
-        self, map_name: str, taskname=None, **kwargs
-    ) -> None:
+    def _build_env(self, map_name: str, taskname=None, **kwargs) -> None:
         if taskname:
             raise RuntimeError
 
