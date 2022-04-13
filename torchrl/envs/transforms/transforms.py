@@ -960,9 +960,7 @@ class FiniteTensorDictCheck(Transform):
                 else:
                     raise RuntimeError(str(err))
 
-        finite_tensordict = TensorDict(
-            batch_size=tensordict.batch_size, source=source
-        )
+        finite_tensordict = TensorDict(batch_size=tensordict.batch_size, source=source)
         return finite_tensordict
 
 

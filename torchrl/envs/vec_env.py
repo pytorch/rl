@@ -208,9 +208,7 @@ class _BatchedEnv(_EnvClass):
                     raise RuntimeError(
                         f"found 0 action keys in {sorted(list(self.selected_keys))}"
                     )
-        shared_tensordict_parent = shared_tensordict_parent.select(
-            *self.selected_keys
-        )
+        shared_tensordict_parent = shared_tensordict_parent.select(*self.selected_keys)
         self.shared_tensordict_parent = shared_tensordict_parent.to(self.device)
 
         if self.share_individual_td:

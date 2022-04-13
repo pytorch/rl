@@ -53,9 +53,7 @@ def test_multistep(n, key, T=11):
     assert ms_tensordict.get("done").max() == 1
 
     if n == 0:
-        assert_allclose_td(
-            tensordict, ms_tensordict.select(*list(tensordict.keys()))
-        )
+        assert_allclose_td(tensordict, ms_tensordict.select(*list(tensordict.keys())))
 
     # assert that done at last step is similar to unterminated traj
     assert (ms_tensordict.get("gamma")[4] == ms_tensordict.get("gamma")[0]).all()

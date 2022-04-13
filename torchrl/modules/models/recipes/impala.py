@@ -179,8 +179,6 @@ class ImpalaNetTensorDict(ImpalaNet):
         reward = tensordict.get("reward").squeeze(-1)
         mask = tensordict.get("mask").squeeze(-1)
         core_state = (
-            tensordict.get("core_state")
-            if "core_state" in tensordict.keys()
-            else None
+            tensordict.get("core_state") if "core_state" in tensordict.keys() else None
         )
         return super().forward(x, reward, done, core_state=core_state, mask=mask)

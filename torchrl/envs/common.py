@@ -625,9 +625,7 @@ class GymLikeEnv(_EnvWrapper):
     def _set_seed(self, seed: Optional[int]) -> Optional[int]:
         raise NotImplementedError
 
-    def _reset(
-        self, tensordict: Optional[_TensorDict] = None, **kwargs
-    ) -> _TensorDict:
+    def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs) -> _TensorDict:
         obs, *_ = self._output_transform((self._env.reset(**kwargs),))
         tensordict_out = TensorDict(
             source=self._read_obs(obs), batch_size=self.batch_size

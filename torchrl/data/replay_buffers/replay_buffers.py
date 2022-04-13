@@ -595,8 +595,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
     def _get_priority(self, tensordict: _TensorDict) -> torch.Tensor:
         if tensordict.batch_dims:
             raise RuntimeError(
-                "expected void batch_size for input tensordict in "
-                "rb._get_priority()"
+                "expected void batch_size for input tensordict in " "rb._get_priority()"
             )
         try:
             priority = tensordict.get(self.priority_key).item()
