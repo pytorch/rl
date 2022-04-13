@@ -473,7 +473,6 @@ class _EnvWrapper(_EnvClass):
         frame_skip: int = 1,
         dtype: Optional[np.dtype] = None,
         device: DEVICE_TYPING = "cpu",
-        seed: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(
@@ -499,7 +498,7 @@ class _EnvWrapper(_EnvClass):
                 f"{envname} with task {taskname} is unknown in {self.libname}"
             )
         self._build_env(envname, taskname, **kwargs)  # writes the self._env attribute
-        self._init_env(seed=seed)  # runs all the steps to have a ready-to-use env
+        self._init_env()  # runs all the steps to have a ready-to-use env
         self.is_closed = False
 
     def __getattr__(self, attr: str) -> Any:
@@ -523,21 +522,17 @@ class _EnvWrapper(_EnvClass):
             f"env not set in {self.__class__.__name__}, cannot access {attr}"
         )
 
-    def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
+    def _init_env(self) -> Optional[int]:
         """Runs all the necessary steps such that the environment is ready to use.
 
         This step is intended to ensure that a seed is provided to the environment (if needed) and that the environment
         is reset (if needed). For instance, DMControl envs require the env to be reset before being used, but Gym envs
         don't.
 
-        Args:
-            seed (int, optional): seed to be set, if any.
-
         Returns:
             the resulting seed
 
         """
-
         raise NotImplementedError
 
     def _build_env(

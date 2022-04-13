@@ -160,13 +160,9 @@ class GymEnv(GymLikeEnv):
             device=self.device,
         )  # default
 
-    def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
-        if seed is not None:
-            seed = self.set_seed(seed)
+    def _init_env(self):
         self.reset()  # make sure that _current_observation and
         # _is_done are populated
-        return seed
-
 
 def _get_retro_envs() -> Sequence:
     if not _has_retro:

@@ -99,9 +99,9 @@ class GAE:
 
         """
         with torch.set_grad_enabled(self.gradient_mode):
-            if tensor_dict.batch_dims < 2:
+            if tensor_dict.batch_dims < 1:
                 raise RuntimeError(
-                    "Expected input tensordict to have at least two dimensions, got"
+                    "Expected input tensordict to have at least one dimensions, got"
                     f"tensor_dict.batch_size = {tensor_dict.batch_size}"
                 )
             reward = tensor_dict.get("reward")
@@ -116,15 +116,16 @@ class GAE:
             self.critic(tensor_dict)
             value = tensor_dict.get("state_value")
 
+        with torch.set_grad_enabled(False):
             step_td = step_tensor_dict(tensor_dict)
             self.critic(step_td)
             next_value = step_td.get("state_value")
 
-            done = tensor_dict.get("done")
-
+        done = tensor_dict.get("done")
+        with torch.set_grad_enabled(self.gradient_mode):
             adv, value_target = generalized_advantage_estimate(
                 gamma, lamda, value, next_value, reward, done
             )
-            tensor_dict.set("advantage", adv)
-            tensor_dict.set("value_target", value_target)
-            return tensor_dict
+        tensor_dict.set("advantage", adv)
+        tensor_dict.set("value_target", value_target)
+        return tensor_dict
