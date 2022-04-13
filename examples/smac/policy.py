@@ -1,6 +1,7 @@
 import torch
 from torch import nn, Tensor
 
+
 class MaskedLogitPolicy(nn.Module):
     def __init__(self, policy_module):
         super().__init__()
@@ -13,7 +14,6 @@ class MaskedLogitPolicy(nn.Module):
             outputs = (outputs,)
         # first output is logits
         outputs[0].masked_fill_(
-            ~mask.to(torch.bool).expand_as(outputs[0]),
-            -float("inf"))
+            ~mask.to(torch.bool).expand_as(outputs[0]), -float("inf")
+        )
         return tuple(outputs)
-
