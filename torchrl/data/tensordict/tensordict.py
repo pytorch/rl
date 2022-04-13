@@ -62,6 +62,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
     """
 
     _safe = False
+    _lazy = False
 
     def __init__(
         self,
@@ -90,6 +91,19 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
 
         """
         raise NotImplementedError
+
+    def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
+        if self._lazy:
+            raise RuntimeError(
+                "modifying the batch size of a lazy repesentation of a "
+                "tensordict is not permitted. Consider instantiating the "
+                "tensordict fist by calling `td = td.to_tensordict()` before "
+                "resetting the batch size."
+            )
+        if not isinstance(new_batch_size, torch.Size):
+            new_batch_size = torch.Size(new_batch_size)
+        self._check_new_batch_size(new_batch_size)
+        self._change_batch_size(new_batch_size)
 
     @property
     def batch_dims(self) -> int:
@@ -610,6 +624,10 @@ dtype=torch.float32)},
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
+    def exclude(self, *keys: str, inplace: bool = False) -> _TensorDict:
+        keys = [key for key in self.keys() if key not in keys]
+        return self.select(*keys, inplace=inplace)
+
     @abc.abstractmethod
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
@@ -793,21 +811,36 @@ dtype=torch.float32)},
         return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
     @abc.abstractmethod
-    def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs) -> _TensorDict:
+    def to(self, dest: Union[DEVICE_TYPING, Type, torch.Size], **kwargs) -> _TensorDict:
         """Maps a _TensorDict subclass either on a new device or to another
         _TensorDict subclass (if permitted). Casting tensors to a new dtype
         is not allowed, as tensordicts are not bound to contain a single
         tensor dtype.
 
         Args:
-            dest (device or _TensorDict subclass): destination of the
-                tensordict.
+            dest (device, size or _TensorDict subclass): destination of the
+                tensordict. If it is a torch.Size object, the batch_size
+                will be updated provided that it is compatible with the
+                stored tensors.
 
         Returns:
             a new tensordict. If device indicated by dest differs from
             the tensordict device, this is a no-op.
 
         """
+        raise NotImplementedError
+
+    def _check_new_batch_size(self, new_size: torch.Size):
+        n = len(new_size)
+        for key, meta_tensor in self.items_meta():
+            if (meta_tensor.ndimension() < n) or (meta_tensor.shape[:n] != new_size):
+                raise RuntimeError(
+                    f"the tensor {key} has shape {meta_tensor.shape} which "
+                    f"is incompatible with the new shape {new_size}"
+                )
+
+    @abc.abstractmethod
+    def _change_batch_size(self, new_size: torch.Size):
         raise NotImplementedError
 
     def cpu(self) -> _TensorDict:
@@ -1298,6 +1331,7 @@ class TensorDict(_TensorDict):
 
     #     TODO: split, transpose, permute
     _safe = True
+    _lazy = False
 
     def __init__(
         self,
@@ -1326,7 +1360,7 @@ class TensorDict(_TensorDict):
                 else:
                     batch_size = torch.Size(batch_size)
             self._batch_size = batch_size
-            self._batch_dims = len(batch_size)
+
         elif isinstance(source, _TensorDict):
             self._batch_size = source.batch_size
         else:
@@ -1360,9 +1394,6 @@ class TensorDict(_TensorDict):
 
     @property
     def batch_dims(self) -> int:
-        if self._safe and hasattr(self, "_batch_dims"):
-            if len(self.batch_size) != self._batch_dims:
-                raise RuntimeError("len(self.batch_size) and self._batch_dims mismatch")
         return len(self.batch_size)
 
     @batch_dims.setter
@@ -1406,11 +1437,15 @@ class TensorDict(_TensorDict):
         return self._batch_size
 
     @batch_size.setter
-    def batch_size(self, value: COMPATIBLE_TYPES) -> None:
-        raise RuntimeError(
-            f"Setting batch size on {self.__class__.__name__} instances is "
-            f"not allowed."
-        )
+    def batch_size(self, new_size: torch.Size):
+        return self._batch_size_setter(new_size)
+
+    def _change_batch_size(self, new_size: torch.Size):
+        if not hasattr(self, "_orig_batch_size"):
+            self._orig_batch_size = self.batch_size
+        elif self._orig_batch_size == new_size:
+            del self._orig_batch_size
+        self._batch_size = new_size
 
     # Checks
     def _check_is_shared(self) -> bool:
@@ -1634,7 +1669,7 @@ class TensorDict(_TensorDict):
             value.memmap_()
         return self
 
-    def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs) -> _TensorDict:
+    def to(self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs) -> _TensorDict:
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             td = dest(
                 source=self,
@@ -1657,6 +1692,9 @@ class TensorDict(_TensorDict):
                 self_copy._check_device()
                 self_copy._check_is_shared()
             return self_copy
+        elif isinstance(dest, torch.Size):
+            self.batch_size = dest
+            return self
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "
@@ -1983,6 +2021,7 @@ torch.Size([3, 2])
     """
 
     _safe = False
+    _lazy = True
 
     def __init__(
         self,
@@ -2008,6 +2047,10 @@ torch.Size([3, 2])
     @property
     def batch_size(self) -> torch.Size:
         return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, new_size: torch.Size):
+        return self._batch_size_setter(new_size)
 
     @property
     def device(self) -> torch.device:
@@ -2060,7 +2103,7 @@ torch.Size([3, 2])
         self._source.set_at_(key, tensor, self.idx)
         return self
 
-    def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs) -> _TensorDict:
+    def to(self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs) -> _TensorDict:
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             return dest(
                 source=self.clone(),
@@ -2073,11 +2116,21 @@ torch.Size([3, 2])
             td = self.to(TensorDict)
             # must be device
             return td.to(dest, **kwargs)
+        elif isinstance(dest, torch.Size):
+            self.batch_size = dest
+            return self
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "
                 f"instance, {dest} not allowed"
             )
+
+    def _change_batch_size(self, new_size: torch.Size):
+        if not hasattr(self, "_orig_batch_size"):
+            self._orig_batch_size = self.batch_size
+        elif self._orig_batch_size == new_size:
+            del self._orig_batch_size
+        self._batch_size = new_size
 
     def get(  # type: ignore
         self, key: str, default: Optional[Union[torch.Tensor, str]] = None
@@ -2286,6 +2339,7 @@ class LazyStackedTensorDict(_TensorDict):
     """
 
     _safe = False
+    _lazy = True
 
     def __init__(
         self,
@@ -2331,7 +2385,6 @@ class LazyStackedTensorDict(_TensorDict):
         self.tensordicts: List[_TensorDict] = list(tensordicts)
         self.stack_dim = stack_dim
         self._batch_size = self._compute_batch_size(_batch_size, stack_dim, N)
-        self._batch_dims = len(self._batch_size)
         self._update_valid_keys()
         self._meta_dict = dict()
         self._meta_dict.update({k: value for k, value in self.items_meta()})
@@ -2350,6 +2403,10 @@ class LazyStackedTensorDict(_TensorDict):
     @property
     def batch_size(self) -> torch.Size:
         return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, new_size: torch.Size):
+        return self._batch_size_setter(new_size)
 
     def is_shared(self, no_check: bool = False) -> bool:
         are_shared = [td.is_shared(no_check=no_check) for td in self.tensordicts]
@@ -2401,8 +2458,8 @@ class LazyStackedTensorDict(_TensorDict):
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes "
-                "mismatch: got tensor.shape = {tensor.shape} and "
-                "tensordict.batch_size={self.batch_size}"
+                f"mismatch: got tensor.shape = {tensor.shape} and "
+                f"tensordict.batch_size={self.batch_size}"
             )
         proc_tensor = self._process_tensor(
             tensor, check_device=False, check_tensor_shape=False
@@ -2416,8 +2473,8 @@ class LazyStackedTensorDict(_TensorDict):
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes "
-                "mismatch: got tensor.shape = {tensor.shape} and "
-                "tensordict.batch_size={self.batch_size}"
+                f"mismatch: got tensor.shape = {tensor.shape} and "
+                f"tensordict.batch_size={self.batch_size}"
             )
         if key not in self.valid_keys:
             raise KeyError(
@@ -2504,11 +2561,29 @@ class LazyStackedTensorDict(_TensorDict):
                 return self
             tds = [td.to(dest) for td in self.tensordicts]
             return LazyStackedTensorDict(*tds, stack_dim=self.stack_dim)
+        elif isinstance(dest, torch.Size):
+            self.batch_size = dest
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "
                 f"instance, {dest} not allowed"
             )
+
+    def _check_new_batch_size(self, new_size: torch.Size):
+        if len(new_size) <= self.stack_dim:
+            raise RuntimeError(
+                "Changing the batch_size of a LazyStackedTensorDicts can only "
+                "be done with sizes that are at least as long as the "
+                "stacking dimension."
+            )
+        super()._check_new_batch_size(new_size)
+
+    def _change_batch_size(self, new_size: torch.Size):
+        if not hasattr(self, "_orig_batch_size"):
+            self._orig_batch_size = self.batch_size
+        elif self._orig_batch_size == new_size:
+            del self._orig_batch_size
+        self._batch_size = new_size
 
     def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:  # type: ignore
         for key in self.keys():
@@ -2688,6 +2763,7 @@ class LazyStackedTensorDict(_TensorDict):
 
 class SavedTensorDict(_TensorDict):
     _safe = False
+    _lazy = False
 
     def __init__(
         self,
@@ -2736,6 +2812,10 @@ class SavedTensorDict(_TensorDict):
     @property
     def batch_size(self) -> torch.Size:
         return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, new_size: torch.Size):
+        return self._batch_size_setter(new_size)
 
     @property
     def device(self) -> torch.device:
@@ -2889,11 +2969,20 @@ class SavedTensorDict(_TensorDict):
             for k, item in self.items_meta():
                 item.device = dest
             return self_copy
+        if isinstance(dest, torch.Size):
+            self.batch_size = dest
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "
                 f"instance, {dest} not allowed"
             )
+
+    def _change_batch_size(self, new_size: torch.Size):
+        if not hasattr(self, "_orig_batch_size"):
+            self._orig_batch_size = self.batch_size
+        elif self._orig_batch_size == new_size:
+            del self._orig_batch_size
+        self._batch_size = new_size
 
     def del_(self, key: str) -> _TensorDict:
         td = self._load()
@@ -2934,6 +3023,9 @@ class SavedTensorDict(_TensorDict):
 
 
 class _CustomOpTensorDict(_TensorDict):
+
+    _lazy = True
+
     def __init__(
         self,
         source: _TensorDict,
@@ -2955,6 +3047,7 @@ class _CustomOpTensorDict(_TensorDict):
         self.inv_op = inv_op
         self.custom_op_kwargs = custom_op_kwargs if custom_op_kwargs is not None else {}
         self.inv_op_kwargs = inv_op_kwargs if inv_op_kwargs is not None else {}
+        self._batch_size = None
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
 
@@ -3014,9 +3107,22 @@ class _CustomOpTensorDict(_TensorDict):
             
     @property
     def batch_size(self) -> torch.Size:
-        return getattr(MetaTensor(*self._source.batch_size), self.custom_op)(
-            **self.custom_op_kwargs
-        ).shape
+        if self._batch_size is None:
+            self._batch_size = getattr(
+                MetaTensor(*self._source.batch_size), self.custom_op
+            )(**self.custom_op_kwargs).shape
+        return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, new_size: torch.Size):
+        return self._batch_size_setter(new_size)
+
+    def _change_batch_size(self, new_size: torch.Size):
+        if not hasattr(self, "_orig_batch_size"):
+            self._orig_batch_size = self.batch_size
+        elif self._orig_batch_size == new_size:
+            del self._orig_batch_size
+        self._batch_size = new_size
 
     def get(  # type: ignore
         self,
