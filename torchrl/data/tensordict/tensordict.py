@@ -477,12 +477,28 @@ dtype=torch.float32)},
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
+    def values(self) -> Iterator[COMPATIBLE_TYPES]:  # type: ignore
+        """
+        Returns a generator representing the values for the tensordict.
+
+        """
+        raise NotImplementedError(f"{self.__class__.__name__}")
+
+    @abc.abstractmethod
     def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
         """Returns a generator of key-value pairs for the tensordict, where the
         values are MetaTensor instances corresponding to the stored tensors.
 
         """
 
+        raise NotImplementedError(f"{self.__class__.__name__}")
+
+    @abc.abstractmethod
+    def values_meta(self) -> Iterator[MetaTensor]:
+        """Returns a generator representing the values for the tensordict, those
+        values are MetaTensor instances corresponding to the stored tensors.
+
+        """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
@@ -1683,9 +1699,17 @@ class TensorDict(_TensorDict):
         for k in self._tensordict:
             yield k, self.get(k)
 
+    def values(self) -> Iterator[COMPATIBLE_TYPES]:  # type: ignore
+        for k in self._tensordict:
+            yield self.get(k)
+
     def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
         for k in self._tensordict_meta:
             yield k, self._get_meta(k)
+
+    def values_meta(self) -> Iterator[MetaTensor]:
+        for k in self._tensor_dict_meta:
+            yield self._get_meta(k)
 
     def keys(self) -> KeysView:
         return self._tensordict.keys()
@@ -2159,9 +2183,17 @@ torch.Size([3, 2])
         for k in self.keys():
             yield k, self.get(k)
 
+    def values(self) -> Iterator[COMPATIBLE_TYPES]:  # type: ignore
+        for k in self.keys():
+            yield self.get(k)
+
     def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
         for key, value in self._source.items_meta():
             yield key, value[self.idx]
+
+    def values_meta(self) -> Iterator[MetaTensor]:
+        for key, value in self._source.items_meta():
+            yield value[self.idx]
 
     def select(self, *keys: str, inplace: bool = False) -> _TensorDict:
         if inplace:
@@ -2483,10 +2515,20 @@ class LazyStackedTensorDict(_TensorDict):
             item = self.get(key)
             yield key, item
 
+    def values(self) -> Iterator[COMPATIBLE_TYPES]:  # type: ignore
+        for key in self.keys():
+            item = self.get(key)
+            yield item
+
     def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
         for key in self.keys():
             item = self._get_meta(key)
             yield key, item
+
+    def values_meta(self) -> Iterator[MetaTensor]:
+        for key in self.keys():
+            item = self._get_meta(key)
+            yield item
 
     def keys(self) -> Iterator[str]:  # type: ignore
         for key in self.valid_keys:
@@ -2792,8 +2834,14 @@ class SavedTensorDict(_TensorDict):
     def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:  # type: ignore
         return self._load().items()
 
+    def values(self) -> Iterator[COMPATIBLE_TYPES]:  # type: ignore
+        return self._load().values()
+
     def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
         return self._tensordict_meta.items()  # type: ignore
+
+    def values_meta(self) -> Iterator[MetaTensor]:
+        return self._tensor_dict_meta.values()  # type: ignore
 
     def is_contiguous(self) -> bool:
         return False
@@ -2952,10 +3000,18 @@ class _CustomOpTensorDict(_TensorDict):
         for key, value in self._source.items_meta():
             yield key, self._get_meta(key)
 
+    def values_meta(self) -> Iterator[MetaTensor]:
+        for key, value in self._source.items_meta():
+            yield self._get_meta(key)
+
     def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:  # type: ignore
         for key in self._source.keys():
             yield key, self.get(key)
 
+    def values(self) -> Iterator[COMPATIBLE_TYPES]:  # type: ignore
+        for key in self._source.keys():
+            yield self.get(key)
+            
     @property
     def batch_size(self) -> torch.Size:
         return getattr(MetaTensor(*self._source.batch_size), self.custom_op)(
