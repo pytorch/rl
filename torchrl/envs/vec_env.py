@@ -277,6 +277,7 @@ class SerialEnv(_BatchedEnv):
     Creates a series of environments in the same process.
 
     """
+
     __doc__ += _BatchedEnv.__doc__
 
     _share_memory = False
@@ -395,6 +396,7 @@ class ParallelEnv(_BatchedEnv):
     TensorDicts are passed via shared memory or memory map.
 
     """
+
     __doc__ += _BatchedEnv.__doc__
 
     def _start_workers(self) -> None:
