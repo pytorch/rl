@@ -135,6 +135,8 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             policy.share_memory()
             # if not (len(list(policy.parameters())) == 0 or next(policy.parameters()).is_shared()):
             #     raise RuntimeError("Provided policy parameters must be shared.")
+        if hasattr(env, "close"):
+            env.close()
         return policy, device, get_weights_fn
 
     def update_policy_weights_(self) -> None:

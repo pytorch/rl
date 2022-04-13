@@ -620,8 +620,10 @@ def _run_worker_pipe_shared_mem(
     while True:
         try:
             cmd, data = child_pipe.recv()
-        except EOFError:
-            raise EOFError(f"proc {pid} failed, last command: {cmd}")
+        except EOFError as err:
+            raise EOFError(
+                f"proc {pid} failed, last command: {cmd}. " f"\nErr={str(err)}"
+            )
         if cmd == "seed":
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
