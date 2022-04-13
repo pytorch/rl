@@ -1,16 +1,26 @@
+[![facebookresearch](https://circleci.com/gh/facebookresearch/rl.svg?style=shield&circle-token=eafd3d28568024a3a41c14d476489d74e5059d54)](https://circleci.com/gh/facebookresearch/rl)
+
 # TorchRL
+
+## Disclaimer
+
+This library is not officially released yet and is subject to change.
+
+The features are available before an official release so that users and collaborators can get early access and provide feedback. No guarantee of stability, robustness or backward compatibility is provided.
+
+---
 
 TorchRL is an open-source Reinforcement Learning (RL) library for PyTorch. 
 
-It provides pytorch and python-first, low and high level abstractions for RL that are intended to be efficient, docummented and properly tested. 
+It provides pytorch and python-first, low and high level abstractions for RL that are intended to be efficient, documented and properly tested. 
 The code is aimed at supporting research in RL. Most of it is written in python in a highly modular way, such that researchers can easily swap components, transform them or write new ones with little effort.
 
-This repo attempts to align with the existing pytorch ecosystem libraries in that it has a dataset pillar ([torchrl/envs](torchrl/envs)), [transforms](torchrl/envs/transforms), [models](torchrl/modules), data utilities (e.g. collectors and containers)... 
+This repo attempts to align with the existing pytorch ecosystem libraries in that it has a dataset pillar ([torchrl/envs](torchrl/envs)), [transforms](torchrl/envs/transforms), [models](torchrl/modules), data utilities (e.g. collectors and containers), etc. 
 TorchRL aims at having as few dependencies as possible (python standard library, numpy and pytorch). Common environment libraries (e.g. OpenAI gym) are only optional.
 
 On the low-level end, torchrl comes with a set of highly re-usable functionals for [cost functions](torchrl/objectives/costs), [returns](torchrl/objectives/returns) and data processing.
 
-On the high-level end, it provides:
+On the high-level end, torchrl provides:
 - multiprocess [data collectors](torchrl/collectors/collectors.py);
 - a generic [agent class](torchrl/agents/agents.py);
 - efficient and generic [replay buffers](torchrl/data/replay_buffers/replay_buffers.py);
@@ -99,9 +109,13 @@ pip install gym gym[accept-rom-license] pygame gym_retro
 pip install pytest
 ```
 
+**Troubleshooting**
+
+If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs, it means that the C++ extensions were not installed. This may be caused by several dependency issues: cmake, gcc or ninja versioning, or absence of the CuDNN library when working in a CUDA environment.
+
 ## Running examples
-Examples are coded in a very similar way but the configuration may change from one algorithm to the other (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)
-To train an algorithm it is therefore advised to do use the predefined configurations that are found in the `configs` sub-folder in each algorithm directory:
+Examples are coded in a very similar way but the configuration may change from one algorithm to another (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)
+To train an algorithm it is therefore advised to use the predefined configurations that are found in the `configs` sub-folder in each algorithm directory:
 ```
 python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt
 ```

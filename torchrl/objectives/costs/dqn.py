@@ -6,7 +6,7 @@
 import torch
 
 from torchrl.data import TensorDict
-from torchrl.envs.utils import step_tensor_dict
+from torchrl.envs.utils import step_tensordict
 from torchrl.modules import (
     DistributionalQValueActor,
     QValueActor,
@@ -58,14 +58,14 @@ class DQNLoss(_LossModule):
         self.loss_function = loss_function
         self.priority_key = priority_key
 
-    def forward(self, input_tensor_dict: _TensorDict) -> TensorDict:
+    def forward(self, input_tensordict: _TensorDict) -> TensorDict:
         """
         Computes the DQN loss given a tensordict sampled from the replay buffer.
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
 
         Args:
-            input_tensor_dict (_TensorDict): a tensordict with keys ["done", "reward", "action"] and the in_keys of
+            input_tensordict (_TensorDict): a tensordict with keys ["done", "reward", "action"] and the in_keys of
                 the value network.
 
         Returns:
@@ -73,27 +73,27 @@ class DQNLoss(_LossModule):
 
         """
 
-        device = self.device if self.device is not None else input_tensor_dict.device
-        tensor_dict = input_tensor_dict.to(device)
-        if tensor_dict.device != device:
+        device = self.device if self.device is not None else input_tensordict.device
+        tensordict = input_tensordict.to(device)
+        if tensordict.device != device:
             raise RuntimeError(
                 f"device {device} was expected for "
-                f"{tensor_dict.__class__.__name__} but {tensor_dict.device} was found"
+                f"{tensordict.__class__.__name__} but {tensordict.device} was found"
             )
 
-        for k, t in tensor_dict.items():
+        for k, t in tensordict.items():
             if t.device != device:
                 raise RuntimeError(
                     f"found key value pair {k}-{t.shape} "
                     f"with device {t.device} when {device} was required"
                 )
 
-        action = tensor_dict.get("action")
+        action = tensordict.get("action")
 
         action = action.to(torch.float)
-        td_copy = tensor_dict.clone()
-        if td_copy.device != tensor_dict.device:
-            raise RuntimeError(f"{tensor_dict} and {td_copy} have different devices")
+        td_copy = tensordict.clone()
+        if td_copy.device != tensordict.device:
+            raise RuntimeError(f"{tensordict} and {td_copy} have different devices")
         self.value_network(
             td_copy,
             params=self.value_network_params,
@@ -105,7 +105,7 @@ class DQNLoss(_LossModule):
 
         with torch.no_grad():
             target_value = next_state_value(
-                tensor_dict,
+                tensordict,
                 self.value_network,
                 gamma=self.gamma,
                 params=self.target_value_network_params,
@@ -114,9 +114,9 @@ class DQNLoss(_LossModule):
             )
         priority_tensor = abs(pred_val_index - target_value)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)
-        priority_tensor = priority_tensor.to(input_tensor_dict.device)
+        priority_tensor = priority_tensor.to(input_tensordict.device)
 
-        input_tensor_dict.set(
+        input_tensordict.set(
             self.priority_key,
             priority_tensor,
             inplace=True,
@@ -185,35 +185,35 @@ class DistributionalDQNLoss(_LossModule):
             create_target_params=self.delay_value,
         )
 
-    def forward(self, input_tensor_dict: _TensorDict) -> TensorDict:
+    def forward(self, input_tensordict: _TensorDict) -> TensorDict:
         # from https://github.com/Kaixhin/Rainbow/blob/9ff5567ad1234ae0ed30d8471e8f13ae07119395/agent.py
         device = self.device
-        tensor_dict = TensorDict(
-            source=input_tensor_dict, batch_size=input_tensor_dict.batch_size
+        tensordict = TensorDict(
+            source=input_tensordict, batch_size=input_tensordict.batch_size
         ).to(device)
 
-        if tensor_dict.batch_dims != 1:
+        if tensordict.batch_dims != 1:
             raise RuntimeError(
                 f"{self.__class__.__name___} expects a 1-dimensional "
-                "tensor_dict as input"
+                "tensordict as input"
             )
-        batch_size = tensor_dict.batch_size[0]
+        batch_size = tensordict.batch_size[0]
         support = self.value_network.support
         atoms = support.numel()
         Vmin = support.min().item()
         Vmax = support.max().item()
         delta_z = (Vmax - Vmin) / (atoms - 1)
 
-        action = tensor_dict.get("action")
-        reward = tensor_dict.get("reward")
-        done = tensor_dict.get("done")
+        action = tensordict.get("action")
+        reward = tensordict.get("reward")
+        done = tensordict.get("done")
 
-        steps_to_next_obs = tensor_dict.get("steps_to_next_obs", 1)
+        steps_to_next_obs = tensordict.get("steps_to_next_obs", 1)
         discount = self.gamma ** steps_to_next_obs
 
         # Calculate current state probabilities (online network noise already
         # sampled)
-        td_clone = tensor_dict.clone()
+        td_clone = tensordict.clone()
         self.value_network(
             td_clone,
             params=self.value_network_params,
@@ -226,7 +226,7 @@ class DistributionalDQNLoss(_LossModule):
 
         with torch.no_grad():
             # Calculate nth next state probabilities
-            next_td = step_tensor_dict(tensor_dict)
+            next_td = step_tensordict(tensordict)
             self.value_network(
                 next_td,
                 params=self.value_network_params,
@@ -291,9 +291,9 @@ class DistributionalDQNLoss(_LossModule):
 
         # Cross-entropy loss (minimises DKL(m||p(s_t, a_t)))
         loss = -torch.sum(m.to(device) * log_ps_a, 1)
-        input_tensor_dict.set(
+        input_tensordict.set(
             self.priority_key,
-            loss.detach().unsqueeze(1).to(input_tensor_dict.device),
+            loss.detach().unsqueeze(1).to(input_tensordict.device),
             inplace=True,
         )
         loss_td = TensorDict({"loss": loss.mean()}, [])

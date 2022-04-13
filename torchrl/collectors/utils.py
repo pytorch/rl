@@ -27,17 +27,17 @@ def _stack_output_zip(fun) -> Callable:
     return stacked_output_fun
 
 
-def split_trajectories(rollout_tensor_dict: _TensorDict) -> _TensorDict:
+def split_trajectories(rollout_tensordict: _TensorDict) -> _TensorDict:
     """Takes a tensordict with a key traj_ids that indicates the id of each trajectory.
     From there, builds a B x T x ... zero-padded tensordict with B batches on max duration T
     """
-    traj_ids = rollout_tensor_dict.get("traj_ids")
-    ndim = len(rollout_tensor_dict.batch_size)
+    traj_ids = rollout_tensordict.get("traj_ids")
+    ndim = len(rollout_tensordict.batch_size)
     splits = traj_ids.view(-1)
     splits = [(splits == i).sum().item() for i in splits.unique_consecutive()]
     out_splits = {
         key: _d.contiguous().view(-1, *_d.shape[ndim:]).split(splits, 0)
-        for key, _d in rollout_tensor_dict.items()
+        for key, _d in rollout_tensordict.items()
         # if key not in ("step_count", "traj_ids")
     }
     # select complete rollouts
@@ -52,7 +52,7 @@ def split_trajectories(rollout_tensor_dict: _TensorDict) -> _TensorDict:
     }
     td = TensorDict(
         source=out_dict,
-        device=rollout_tensor_dict.device,
+        device=rollout_tensordict.device,
         batch_size=out_dict["mask"].shape[:-1],
     )
     if (out_dict["done"].sum(1) > 1).any():

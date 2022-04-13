@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import torch
 import yaml
+from mocking_classes import DiscreteActionVecMockEnv
 from scipy.stats import chisquare
 from torchrl.agents import EnvCreator
 from torchrl.data.tensor_specs import (
@@ -20,14 +21,14 @@ from torchrl.data.tensor_specs import (
     NdBoundedTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
-from torchrl.envs import gym, GymEnv
+from torchrl.envs import GymEnv
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
     ToTensorImage,
     RewardClipping,
 )
-from torchrl.envs.utils import step_tensor_dict
+from torchrl.envs.utils import step_tensordict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 
 try:
@@ -88,7 +89,7 @@ except FileNotFoundError:
 @pytest.mark.parametrize("env_name", ["Pendulum-v1", "CartPole-v1"])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_env_seed(env_name, frame_skip, seed=0):
-    env = gym.GymEnv(env_name, frame_skip=frame_skip)
+    env = GymEnv(env_name, frame_skip=frame_skip)
     action = env.action_spec.rand()
 
     env.set_seed(seed)
@@ -96,8 +97,8 @@ def test_env_seed(env_name, frame_skip, seed=0):
     td1a = env.step(td0a.clone().set("action", action))
 
     env.set_seed(seed)
-    td0b = env.specs.build_tensor_dict()
-    td0b = env.reset(tensor_dict=td0b)
+    td0b = env.specs.build_tensordict()
+    td0b = env.reset(tensordict=td0b)
     td1b = env.step(td0b.clone().set("action", action))
 
     assert_allclose_td(td0a, td0b.select(*td0a.keys()))
@@ -118,7 +119,7 @@ def test_env_seed(env_name, frame_skip, seed=0):
 @pytest.mark.parametrize("env_name", ["Pendulum-v1", "ALE/Pong-v5"])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_rollout(env_name, frame_skip, seed=0):
-    env = gym.GymEnv(env_name, frame_skip=frame_skip)
+    env = GymEnv(env_name, frame_skip=frame_skip)
 
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -193,7 +194,7 @@ def test_parallel_env(env_name, frame_skip, transformed, T=10, N=5):
             N,
         ],
     )
-    env_parallel.reset(tensor_dict=td_reset)
+    env_parallel.reset(tensordict=td_reset)
 
     td = env_parallel.rollout(policy=None, n_steps=T)
     assert (
@@ -252,8 +253,23 @@ def test_parallel_env_shutdown():
     assert env.is_closed
     env.reset()
     assert not env.is_closed
-    env.shutdown()
-    assert env.is_closed
+
+
+@pytest.mark.parametrize("parallel", [True, False])
+def test_parallel_env_custom_method(parallel):
+    # define env
+
+    if parallel:
+        env = ParallelEnv(3, lambda: DiscreteActionVecMockEnv())
+    else:
+        env = SerialEnv(3, lambda: DiscreteActionVecMockEnv())
+
+    # we must start the environment first
+    env.reset()
+    assert all(result == 0 for result in env.custom_fun())
+    assert all(result == 1 for result in env.custom_attr)
+    assert all(result == 2 for result in env.custom_prop)
+    env.close()
 
 
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="no cuda device detected")
@@ -279,6 +295,7 @@ def test_parallel_env_device(env_name, frame_skip, transformed, device):
             )
     env_parallel = ParallelEnv(N, create_env_fn, device=device)
     out = env_parallel.rollout(n_steps=20)
+    env_parallel.close()
 
 
 class TestSpec:
@@ -394,12 +411,12 @@ def test_current_tensordict():
     torch.manual_seed(0)
     env = GymEnv("Pendulum-v1")
     env.set_seed(0)
-    tensor_dict = env.reset()
-    assert_allclose_td(tensor_dict, env.current_tensordict)
-    tensor_dict = env.step(
+    tensordict = env.reset()
+    assert_allclose_td(tensordict, env.current_tensordict)
+    tensordict = env.step(
         TensorDict(source={"action": env.action_spec.rand()}, batch_size=[])
     )
-    assert_allclose_td(step_tensor_dict(tensor_dict), env.current_tensordict)
+    assert_allclose_td(step_tensordict(tensordict), env.current_tensordict)
 
 
 # TODO: test for frame-skip

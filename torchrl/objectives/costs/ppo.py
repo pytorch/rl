@@ -10,7 +10,7 @@ import torch
 from torch import distributions as d
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.envs.utils import step_tensor_dict
+from torchrl.envs.utils import step_tensordict
 from torchrl.modules import ProbabilisticTDModule, TDModule
 
 __all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
@@ -90,53 +90,53 @@ class PPOLoss(_LossModule):
         return entropy.unsqueeze(-1)
 
     def _log_weight(
-        self, tensor_dict: _TensorDict
+        self, tensordict: _TensorDict
     ) -> Tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
-        action = tensor_dict.get("action")
+        action = tensordict.get("action")
         if action.requires_grad:
-            raise RuntimeError("tensor_dict stored action requires grad.")
-        tensor_dict_clone = tensor_dict.select(*self.actor.in_keys).clone()
+            raise RuntimeError("tensordict stored action requires grad.")
+        tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
 
-        dist, *_ = self.actor.get_dist(tensor_dict_clone)
+        dist, *_ = self.actor.get_dist(tensordict_clone)
         log_prob = dist.log_prob(action)
         log_prob = log_prob.unsqueeze(-1)
 
-        prev_log_prob = tensor_dict.get("action_log_prob")
+        prev_log_prob = tensordict.get("action_log_prob")
         if prev_log_prob.requires_grad:
-            raise RuntimeError("tensor_dict prev_log_prob requires grad.")
+            raise RuntimeError("tensordict prev_log_prob requires grad.")
 
         log_weight = log_prob - prev_log_prob
         return log_weight, dist
 
-    def loss_critic(self, tensor_dict: _TensorDict) -> torch.Tensor:
+    def loss_critic(self, tensordict: _TensorDict) -> torch.Tensor:
 
-        if "value_target" in tensor_dict.keys():
-            value_target = tensor_dict.get("value_target")
+        if "value_target" in tensordict.keys():
+            value_target = tensordict.get("value_target")
             if value_target.requires_grad:
                 raise RuntimeError(
-                    "value_target retrieved from tensor_dict requires grad."
+                    "value_target retrieved from tensordict requires grad."
                 )
 
         else:
             with torch.no_grad():
-                reward = tensor_dict.get("reward")
-                next_td = step_tensor_dict(tensor_dict)
+                reward = tensordict.get("reward")
+                next_td = step_tensordict(tensordict)
                 next_value = self.critic(next_td).get("state_value")
                 value_target = reward + next_value * self.gamma
-        tensor_dict_select = tensor_dict.select(*self.critic.in_keys).clone()
-        value = self.critic(tensor_dict_select).get("state_value")
+        tensordict_select = tensordict.select(*self.critic.in_keys).clone()
+        value = self.critic(tensordict_select).get("state_value")
         loss_value = distance_loss(
             value, value_target, loss_function=self.loss_critic_type
         )
         return self.critic_factor * loss_value
 
-    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: _TensorDict) -> _TensorDict:
         if self.advantage_module is not None:
-            tensor_dict = self.advantage_module(tensor_dict)
-        tensor_dict = tensor_dict.clone()
-        advantage = tensor_dict.get(self.advantage_key)
-        log_weight, dist = self._log_weight(tensor_dict)
+            tensordict = self.advantage_module(tensordict)
+        tensordict = tensordict.clone()
+        advantage = tensordict.get(self.advantage_key)
+        log_weight, dist = self._log_weight(tensordict)
         neg_loss = (log_weight.exp() * advantage).mean()
         print(log_weight)
         td_out = TensorDict({"loss_objective": -neg_loss.mean()}, [])
@@ -145,7 +145,7 @@ class PPOLoss(_LossModule):
             td_out.set("entropy", entropy.mean().detach())  # for logging
             td_out.set("loss_entropy", -self.entropy_factor * entropy.mean())
         if self.critic_factor:
-            loss_critic = self.loss_critic(tensor_dict).mean()
+            loss_critic = self.loss_critic(tensordict).mean()
             td_out.set("loss_critic", loss_critic.mean())
         return td_out
 
@@ -210,17 +210,17 @@ class ClipPPOLoss(PPOLoss):
             math.log1p(self.clip_epsilon),
         )
 
-    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: _TensorDict) -> _TensorDict:
         if self.advantage_module is not None:
-            tensor_dict = self.advantage_module(tensor_dict)
-        tensor_dict = tensor_dict.clone()
-        for key, value in tensor_dict.items():
+            tensordict = self.advantage_module(tensordict)
+        tensordict = tensordict.clone()
+        for key, value in tensordict.items():
             if value.requires_grad:
                 raise RuntimeError(
                     f"The key {key} returns a value that requires a gradient, consider detaching."
                 )
-        advantage = tensor_dict.get(self.advantage_key)
-        log_weight, dist = self._log_weight(tensor_dict)
+        advantage = tensordict.get(self.advantage_key)
+        log_weight, dist = self._log_weight(tensordict)
         # ESS for logging
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
@@ -251,7 +251,7 @@ class ClipPPOLoss(PPOLoss):
             td_out.set("entropy", entropy.mean().detach())  # for logging
             td_out.set("loss_entropy", -self.entropy_factor * entropy.mean())
         if self.critic_factor:
-            loss_critic = self.loss_critic(tensor_dict)
+            loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic.mean())
         td_out.set("ESS", ess.mean() / batch)
         return td_out
@@ -339,22 +339,22 @@ class KLPENPPOLoss(PPOLoss):
         self.decrement = decrement
         self.samples_mc_kl = samples_mc_kl
 
-    def forward(self, tensor_dict: _TensorDict) -> TensorDict:
+    def forward(self, tensordict: _TensorDict) -> TensorDict:
         if self.advantage_module is not None:
-            tensor_dict = self.advantage_module(tensor_dict)
-        tensor_dict = tensor_dict.clone()
-        advantage = tensor_dict.get(self.advantage_key)
-        log_weight, dist = self._log_weight(tensor_dict)
+            tensordict = self.advantage_module(tensordict)
+        tensordict = tensordict.clone()
+        advantage = tensordict.get(self.advantage_key)
+        log_weight, dist = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
 
-        tensor_dict_clone = tensor_dict.select(*self.actor.in_keys).clone()
+        tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
         params = []
         out_key = self.actor.out_keys[0]
         i = 0
         while True:
             key = f"{out_key}_dist_param_{i}"
-            if key in tensor_dict.keys():
-                params.append(tensor_dict.get(key))
+            if key in tensordict.keys():
+                params.append(tensordict.get(key))
                 i += 1
             else:
                 break
@@ -364,7 +364,7 @@ class KLPENPPOLoss(PPOLoss):
                 "No parameter was found for the policy distribution. Consider building the policy with save_dist_params=True"
             )
         previous_dist, *_ = self.actor.build_dist_from_params(params)
-        current_dist, *_ = self.actor.get_dist(tensor_dict_clone)
+        current_dist, *_ = self.actor.get_dist(tensordict_clone)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
@@ -390,7 +390,7 @@ class KLPENPPOLoss(PPOLoss):
             td_out.set("loss_entropy", -self.entropy_factor * entropy.mean())
 
         if self.critic_factor:
-            loss_critic = self.loss_critic(tensor_dict)
+            loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic.mean())
 
         return td_out

@@ -18,7 +18,7 @@ from torchrl.data.tensordict.utils import _getitem_batch_size
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-def test_tensor_dict_set(device):
+def test_tensordict_set(device):
     torch.manual_seed(1)
     td = TensorDict({}, batch_size=(4, 5))
     td.set("key1", torch.randn(4, 5, device=device))
@@ -57,7 +57,7 @@ def test_tensor_dict_set(device):
         torch.randn(4, 5, 1, 2, dtype=torch.double, device=device),
         inplace=False,
     )
-    assert td._tensor_dict_meta["key1"].shape == td._tensor_dict["key1"].shape
+    assert td._tensordict_meta["key1"].shape == td._tensordict["key1"].shape
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -77,7 +77,7 @@ def test_stack(device):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-def test_tensor_dict_indexing(device):
+def test_tensordict_indexing(device):
     torch.manual_seed(1)
     td = TensorDict({}, batch_size=(4, 5))
     td.set("key1", torch.randn(4, 5, 1, device=device))
@@ -119,14 +119,14 @@ def test_tensor_dict_indexing(device):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-def test_subtensor_dict_construction(device):
+def test_subtensordict_construction(device):
     torch.manual_seed(1)
     td = TensorDict({}, batch_size=(4, 5))
     td.set("key1", torch.randn(4, 5, 1, device=device))
     td.set("key2", torch.randn(4, 5, 6, dtype=torch.double, device=device))
-    std1 = td.get_sub_tensor_dict(2)
-    std2 = std1.get_sub_tensor_dict(2)
-    std_control = td.get_sub_tensor_dict((2, 2))
+    std1 = td.get_sub_tensordict(2)
+    std2 = std1.get_sub_tensordict(2)
+    std_control = td.get_sub_tensordict((2, 2))
     assert (std_control.get("key1") == std2.get("key1")).all()
     assert (std_control.get("key2") == std2.get("key2")).all()
 
@@ -137,10 +137,10 @@ def test_subtensor_dict_construction(device):
     assert (std_control.get("key1") == std2.get("key1")).all()
     assert (std_control.get("key2") == std2.get("key2")).all()
 
-    assert std_control.get_parent_tensor_dict() is td
+    assert std_control.get_parent_tensordict() is td
     assert (
-        std_control.get_parent_tensor_dict()
-        is std2.get_parent_tensor_dict().get_parent_tensor_dict()
+        std_control.get_parent_tensordict()
+        is std2.get_parent_tensordict().get_parent_tensordict()
     )
 
 
@@ -225,7 +225,7 @@ def test_squeeze(device):
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("stack_dim", [0, 1])
 def test_stacked_td(stack_dim, device):
-    tensor_dicts = [
+    tensordicts = [
         TensorDict(
             batch_size=[11, 12],
             source={
@@ -238,17 +238,17 @@ def test_stacked_td(stack_dim, device):
         for _ in range(10)
     ]
 
-    tensor_dicts0 = tensor_dicts[0]
-    tensor_dicts1 = tensor_dicts[1]
-    tensor_dicts2 = tensor_dicts[2]
-    tensor_dicts3 = tensor_dicts[3]
-    sub_td = LazyStackedTensorDict(*tensor_dicts, stack_dim=stack_dim)
+    tensordicts0 = tensordicts[0]
+    tensordicts1 = tensordicts[1]
+    tensordicts2 = tensordicts[2]
+    tensordicts3 = tensordicts[3]
+    sub_td = LazyStackedTensorDict(*tensordicts, stack_dim=stack_dim)
 
-    std_bis = torch.stack(tensor_dicts, dim=stack_dim)
+    std_bis = torch.stack(tensordicts, dim=stack_dim)
     assert (sub_td == std_bis).all()
 
     item = tuple([*[slice(None) for _ in range(stack_dim)], 0])
-    tensor_dicts0.zero_()
+    tensordicts0.zero_()
     assert (sub_td[item].get("key1") == sub_td.get("key1")[item]).all()
     assert (
         sub_td.contiguous()[item].get("key1") == sub_td.contiguous().get("key1")[item]
@@ -257,7 +257,7 @@ def test_stacked_td(stack_dim, device):
 
     item = tuple([*[slice(None) for _ in range(stack_dim)], 1])
     std2 = sub_td[:5]
-    tensor_dicts1.zero_()
+    tensordicts1.zero_()
     assert (std2[item].get("key1") == std2.get("key1")[item]).all()
     assert (
         std2.contiguous()[item].get("key1") == std2.contiguous().get("key1")[item]
@@ -265,7 +265,7 @@ def test_stacked_td(stack_dim, device):
     assert (std2.contiguous().get("key1")[item] == 0).all()
 
     std3 = sub_td[:5, :, :5]
-    tensor_dicts2.zero_()
+    tensordicts2.zero_()
     item = tuple([*[slice(None) for _ in range(stack_dim)], 2])
     assert (std3[item].get("key1") == std3.get("key1")[item]).all()
     assert (
@@ -274,7 +274,7 @@ def test_stacked_td(stack_dim, device):
     assert (std3.contiguous().get("key1")[item] == 0).all()
 
     std4 = sub_td.select("key1")
-    tensor_dicts3.zero_()
+    tensordicts3.zero_()
     item = tuple([*[slice(None) for _ in range(stack_dim)], 3])
     assert (std4[item].get("key1") == std4.get("key1")[item]).all()
     assert (
@@ -330,7 +330,7 @@ class TestTensorDicts:
 
     @property
     def sub_td(self):
-        return self.td.get_sub_tensor_dict(0)
+        return self.td.get_sub_tensordict(0)
 
     @property
     def saved_td(self):
@@ -994,9 +994,9 @@ def test_set_sub_key(index0):
     source = {"a": torch.randn(10, 10, 10), "b": torch.ones(10, 10, 2)}
     td = TensorDict(source, batch_size=batch_size)
     idx0 = (index0, 0) if index0 is not None else 0
-    td0 = td.get_sub_tensor_dict(idx0)
+    td0 = td.get_sub_tensordict(idx0)
     idx = (index0, slice(2, 4)) if index0 is not None else slice(2, 4)
-    sub_td = td.get_sub_tensor_dict(idx)
+    sub_td = td.get_sub_tensordict(idx)
     if index0 is None:
         c = torch.randn(2, 10, 10)
     else:
@@ -1005,7 +1005,7 @@ def test_set_sub_key(index0):
     assert (td.get("c")[idx] == sub_td.get("c")).all()
     assert (sub_td.get("c") == c).all()
     assert (td.get("c")[idx0] == 0).all()
-    assert (td.get_sub_tensor_dict(idx0).get("c") == 0).all()
+    assert (td.get_sub_tensordict(idx0).get("c") == 0).all()
     assert (td0.get("c") == 0).all()
 
 
@@ -1052,7 +1052,7 @@ def _remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordi
             break
 
 
-def _driver_func(tensordict, tensor_dict_unbind):
+def _driver_func(tensordict, tensordict_unbind):
     procs = []
     children = []
     parents = []
@@ -1061,7 +1061,7 @@ def _driver_func(tensordict, tensor_dict_unbind):
         command_pipe_parent, command_pipe_child = mp.Pipe()
         proc = mp.Process(
             target=_remote_process,
-            args=(i, command_pipe_child, command_pipe_parent, tensor_dict_unbind[i]),
+            args=(i, command_pipe_child, command_pipe_parent, tensordict_unbind[i]),
         )
         proc.start()
         command_pipe_child.close()

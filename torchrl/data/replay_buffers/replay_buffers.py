@@ -592,63 +592,63 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         )
         self.priority_key = priority_key
 
-    def _get_priority(self, tensor_dict: _TensorDict) -> torch.Tensor:
-        if tensor_dict.batch_dims:
-            tensor_dict = tensor_dict.clone(recursive=False)
-            tensor_dict.batch_size = []
+    def _get_priority(self, tensordict: _TensorDict) -> torch.Tensor:
+        if tensordict.batch_dims:
+            tensordict = tensordict.clone(recursive=False)
+            tensordict.batch_size = []
         try:
-            priority = tensor_dict.get(self.priority_key).item()
+            priority = tensordict.get(self.priority_key).item()
         except ValueError:
             raise ValueError(
                 f"Found a priority key of size"
-                f" {tensor_dict.get(self.priority_key).shape} but expected "
+                f" {tensordict.get(self.priority_key).shape} but expected "
                 f"scalar value"
             )
         except KeyError:
             priority = self._default_priority
         return priority
 
-    def add(self, tensor_dict: _TensorDict) -> torch.Tensor:
-        priority = self._get_priority(tensor_dict)
-        index = super().add(tensor_dict, priority)
-        tensor_dict.set("index", index)
+    def add(self, tensordict: _TensorDict) -> torch.Tensor:
+        priority = self._get_priority(tensordict)
+        index = super().add(tensordict, priority)
+        tensordict.set("index", index)
         return index
 
-    def extend(self, tensor_dicts: _TensorDict) -> torch.Tensor:
-        if isinstance(tensor_dicts, _TensorDict):
+    def extend(self, tensordicts: _TensorDict) -> torch.Tensor:
+        if isinstance(tensordicts, _TensorDict):
             try:
-                priorities = tensor_dicts.get(self.priority_key)
+                priorities = tensordicts.get(self.priority_key)
             except KeyError:
                 priorities = None
-            if tensor_dicts.batch_dims > 1:
-                tensor_dicts = tensor_dicts.clone(recursive=False)
-                tensor_dicts.batch_size = tensor_dicts.batch_size[:1]
-            tensor_dicts = list(tensor_dicts.unbind(0))
+            if tensordicts.batch_dims > 1:
+                tensordicts = tensordicts.clone(recursive=False)
+                tensordicts.batch_size = tensordicts.batch_size[:1]
+            tensordicts = list(tensordicts.unbind(0))
         else:
-            priorities = [self._get_priority(td) for td in tensor_dicts]
+            priorities = [self._get_priority(td) for td in tensordicts]
 
-        stacked_td = torch.stack(tensor_dicts, 0)
-        idx = super().extend(tensor_dicts, priorities)
+        stacked_td = torch.stack(tensordicts, 0)
+        idx = super().extend(tensordicts, priorities)
         stacked_td.set("index", idx)
         return idx
 
-    def update_priority(self, tensor_dict: _TensorDict) -> None:
+    def update_priority(self, tensordict: _TensorDict) -> None:
         """Updates the priorities of the tensordicts stored in the replay
         buffer.
 
         Args:
-            tensor_dict: tensordict with key-value pairs 'self.priority_key'
+            tensordict: tensordict with key-value pairs 'self.priority_key'
                 and 'index'.
 
 
         """
-        priority = tensor_dict.get(self.priority_key)
+        priority = tensordict.get(self.priority_key)
         if (priority < 0).any():
             raise RuntimeError(
                 f"Priority must be a positive value, got "
                 f"{(priority < 0).sum()} negative priority values."
             )
-        return super().update_priority(tensor_dict.get("index"), priority=priority)
+        return super().update_priority(tensordict.get("index"), priority=priority)
 
     def sample(self, size: int, return_weight: bool = False) -> _TensorDict:
         """

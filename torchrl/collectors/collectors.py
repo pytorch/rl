@@ -18,7 +18,7 @@ import torch
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
-from torchrl.envs.utils import set_exploration_mode, step_tensor_dict
+from torchrl.envs.utils import set_exploration_mode, step_tensordict
 from torchrl.modules import ProbabilisticTDModule
 from .utils import split_trajectories
 
@@ -282,11 +282,11 @@ class SyncDataCollector(_DataCollector):
 
         self.passing_device = torch.device(passing_device)
 
-        self._tensor_dict = env.reset().to(self.passing_device)
-        self._tensor_dict.set(
+        self._tensordict = env.reset().to(self.passing_device)
+        self._tensordict.set(
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
-        self._tensor_dict_out = TensorDict(
+        self._tensordict_out = TensorDict(
             {},
             batch_size=[*self.env.batch_size, self.frames_per_batch],
             device=self.passing_device,
@@ -336,17 +336,17 @@ class SyncDataCollector(_DataCollector):
         while True:
             i += 1
             self._iter = i
-            tensor_dict_out = self.rollout()
-            self._frames += tensor_dict_out.numel()
+            tensordict_out = self.rollout()
+            self._frames += tensordict_out.numel()
             if self._frames >= total_frames:
                 self.env.close()
 
             if self.split_trajs:
-                tensor_dict_out = split_trajectories(tensor_dict_out)
+                tensordict_out = split_trajectories(tensordict_out)
             if self.postproc is not None:
-                tensor_dict_out = self.postproc(tensor_dict_out)
-            yield tensor_dict_out
-            del tensor_dict_out
+                tensordict_out = self.postproc(tensordict_out)
+            yield tensordict_out
+            del tensordict_out
             if self._frames >= self.total_frames:
                 break
 
@@ -376,8 +376,8 @@ class SyncDataCollector(_DataCollector):
             return dest.update(td, inplace=True)
 
     def _reset_if_necessary(self) -> None:
-        done = self._tensor_dict.get("done")
-        steps = self._tensor_dict.get("step_count")
+        done = self._tensordict.get("done")
+        steps = self._tensordict.get("step_count")
         done_or_terminated = done | (steps == self.max_frames_per_traj)
         if self._has_been_done is None:
             self._has_been_done = done_or_terminated
@@ -390,26 +390,26 @@ class SyncDataCollector(_DataCollector):
             _reset[self._has_been_done] = False
             done_or_terminated = done_or_terminated | _reset
         if done_or_terminated.any():
-            traj_ids = self._tensor_dict.get("traj_ids").clone()
+            traj_ids = self._tensordict.get("traj_ids").clone()
             steps = steps.clone()
             if len(self.env.batch_size):
-                self._tensor_dict.masked_fill_(done_or_terminated.squeeze(-1), 0)
-                self._tensor_dict.set("reset_workers", done_or_terminated)
+                self._tensordict.masked_fill_(done_or_terminated.squeeze(-1), 0)
+                self._tensordict.set("reset_workers", done_or_terminated)
             else:
-                self._tensor_dict.zero_()
-            self.env.reset(tensor_dict=self._tensor_dict)
-            if self._tensor_dict.get("done").any():
+                self._tensordict.zero_()
+            self.env.reset(tensordict=self._tensordict)
+            if self._tensordict.get("done").any():
                 raise RuntimeError(
-                    f"Got {sum(self._tensor_dict.get('done'))} done envs after reset."
+                    f"Got {sum(self._tensordict.get('done'))} done envs after reset."
                 )
             if len(self.env.batch_size):
-                self._tensor_dict.del_("reset_workers")
+                self._tensordict.del_("reset_workers")
             traj_ids[done_or_terminated] = traj_ids.max() + torch.arange(
                 1, done_or_terminated.sum() + 1, device=traj_ids.device
             )
             steps[done_or_terminated] = 0
-            self._tensor_dict.set("traj_ids", traj_ids)  # no ops if they already match
-            self._tensor_dict.set("step_count", steps)
+            self._tensordict.set("traj_ids", traj_ids)  # no ops if they already match
+            self._tensordict.set("step_count", steps)
 
     @torch.no_grad()
     def rollout(self) -> _TensorDict:
@@ -420,37 +420,37 @@ class SyncDataCollector(_DataCollector):
 
         """
         if self.reset_at_each_iter:
-            self._tensor_dict.update(self.env.reset())
-            self._tensor_dict.fill_("step_count", 0)
+            self._tensordict.update(self.env.reset())
+            self._tensordict.fill_("step_count", 0)
 
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
-        self._tensor_dict.set("traj_ids", torch.arange(n).unsqueeze(-1))
+        self._tensordict.set("traj_ids", torch.arange(n).unsqueeze(-1))
 
-        tensor_dict_out = []
+        tensordict_out = []
         with set_exploration_mode(self.exploration_mode):
             for t in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
-                    self.env.rand_step(self._tensor_dict)
+                    self.env.rand_step(self._tensordict)
                 else:
-                    td_cast = self._cast_to_policy(self._tensor_dict)
+                    td_cast = self._cast_to_policy(self._tensordict)
                     td_cast = self.policy(td_cast)
-                    self._cast_to_env(td_cast, self._tensor_dict)
-                    self.env.step(self._tensor_dict)
+                    self._cast_to_env(td_cast, self._tensordict)
+                    self.env.step(self._tensordict)
 
-                step_count = self._tensor_dict.get("step_count")
+                step_count = self._tensordict.get("step_count")
                 step_count += 1
-                tensor_dict_out.append(self._tensor_dict.clone())
+                tensordict_out.append(self._tensordict.clone())
 
                 self._reset_if_necessary()
-                self._tensor_dict.update(step_tensor_dict(self._tensor_dict))
-            if self.return_in_place and len(self._tensor_dict_out.keys()) > 0:
-                tensor_dict_out = torch.stack(tensor_dict_out, len(self.env.batch_size))
-                tensor_dict_out = tensor_dict_out.select(*self._tensor_dict_out.keys())
-                return self._tensor_dict_out.update_(tensor_dict_out)
+                self._tensordict.update(step_tensordict(self._tensordict))
+            if self.return_in_place and len(self._tensordict_out.keys()) > 0:
+                tensordict_out = torch.stack(tensordict_out, len(self.env.batch_size))
+                tensordict_out = tensordict_out.select(*self._tensordict_out.keys())
+                return self._tensordict_out.update_(tensordict_out)
         return torch.stack(
-            tensor_dict_out,
+            tensordict_out,
             len(self.env.batch_size),
-            out=self._tensor_dict_out,
+            out=self._tensordict_out,
         )  # dim 0 for single env, dim 1 for batch
 
     def reset(self, index=None, **kwargs) -> None:
@@ -467,20 +467,21 @@ class SyncDataCollector(_DataCollector):
             )
             reset_workers[index] = 1
             td_in = TensorDict({"reset_workers": reset_workers}, self.env.batch_size)
-            self._tensor_dict[index].zero_()
+            self._tensordict[index].zero_()
         else:
             td_in = None
-            self._tensor_dict.zero_()
+            self._tensordict.zero_()
 
-        self._tensor_dict.update(self.env.reset(td_in, **kwargs))
-        self._tensor_dict.fill_("step_count", 0)
+        self._tensordict.update(self.env.reset(td_in, **kwargs))
+        self._tensordict.fill_("step_count", 0)
 
     def shutdown(self) -> None:
         """Shuts down all workers and/or closes the local environment."""
         if not self.closed:
             self.closed = True
-            del self._tensor_dict, self._tensor_dict_out
-            self.env.close()
+            del self._tensordict, self._tensordict_out
+            if not self.env.is_closed:
+                self.env.close()
             del self.env
 
     def __del__(self):
@@ -537,7 +538,7 @@ class SyncDataCollector(_DataCollector):
     def __repr__(self) -> str:
         env_str = indent(f"env={self.env}", 4 * " ")
         policy_str = indent(f"policy={self.policy}", 4 * " ")
-        td_out_str = indent(f"td_out={self._tensor_dict_out}", 4 * " ")
+        td_out_str = indent(f"td_out={self._tensordict_out}", 4 * " ")
         string = f"{self.__class__.__name__}(\n{env_str},\n{policy_str},\n{td_out_str})"
         return string
 
@@ -1175,7 +1176,7 @@ def _main_async_collector(
 ) -> None:
     pipe_parent.close()
     #  init variables that will be cleared when closing
-    tensor_dict = data = d = data_in = dc = dc_iter = None
+    tensordict = data = d = data_in = dc = dc_iter = None
 
     dc = SyncDataCollector(
         create_env_fn,
@@ -1231,15 +1232,15 @@ def _main_async_collector(
                 # sending the trajectory in the queue until timeout when it's never going to be received.
                 continue
             if j == 0:
-                tensor_dict = d
-                if passing_device is not None and tensor_dict.device != passing_device:
+                tensordict = d
+                if passing_device is not None and tensordict.device != passing_device:
                     raise RuntimeError(
-                        f"expected device to be {passing_device} but got {tensor_dict.device}"
+                        f"expected device to be {passing_device} but got {tensordict.device}"
                     )
-                tensor_dict.share_memory_()
-                data = (tensor_dict, idx)
+                tensordict.share_memory_()
+                data = (tensordict, idx)
             else:
-                if d is not tensor_dict:
+                if d is not tensordict:
                     raise RuntimeError(
                         "SyncDataCollector should return the same tensordict modified in-place."
                     )
@@ -1293,7 +1294,7 @@ def _main_async_collector(
             continue
 
         elif msg == "close":
-            del tensor_dict, data, d, data_in
+            del tensordict, data, d, data_in
             dc.shutdown()
             del dc, dc_iter
             pipe_child.send("closed")

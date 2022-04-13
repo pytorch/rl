@@ -289,6 +289,11 @@ class MemmapTensor(object):
             return self.__getattribute__(
                 attr
             )  # make sure that appropriate exceptions are raised
+
+        # elif attr.startswith('__'):
+        #     raise AttributeError('passing built-in private methods is '
+        #                          f'not permitted with type {type(self)}. '
+        #                          f'Got attribute {attr}.')
         if attr not in self.__getattribute__("_tensor_dir"):
             raise AttributeError(f"{attr} not found")
         _tensor = self.__getattribute__("_tensor")
