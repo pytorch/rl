@@ -76,8 +76,6 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
 
 
 class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
-
-
     def _get_policy_and_device(
         self,
         create_env_fn: Optional[
@@ -349,7 +347,9 @@ class SyncDataCollector(_DataCollector):
             if self.postproc is not None:
                 tensordict_out = self.postproc(tensordict_out)
             if self._exclude_private_keys:
-                excluded_keys = [key for key in tensordict_out.keys() if key.startswith("_")]
+                excluded_keys = [
+                    key for key in tensordict_out.keys() if key.startswith("_")
+                ]
                 tensordict_out = tensordict_out.exclude(*excluded_keys)
             yield tensordict_out
 
