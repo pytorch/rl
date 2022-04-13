@@ -1708,7 +1708,7 @@ class TensorDict(_TensorDict):
             yield k, self._get_meta(k)
 
     def values_meta(self) -> Iterator[MetaTensor]:
-        for k in self._tensor_dict_meta:
+        for k in self._tensordict_meta:
             yield self._get_meta(k)
 
     def keys(self) -> KeysView:
@@ -2841,7 +2841,7 @@ class SavedTensorDict(_TensorDict):
         return self._tensordict_meta.items()  # type: ignore
 
     def values_meta(self) -> Iterator[MetaTensor]:
-        return self._tensor_dict_meta.values()  # type: ignore
+        return self._tensordict_meta.values()  # type: ignore
 
     def is_contiguous(self) -> bool:
         return False
@@ -3011,7 +3011,7 @@ class _CustomOpTensorDict(_TensorDict):
     def values(self) -> Iterator[COMPATIBLE_TYPES]:  # type: ignore
         for key in self._source.keys():
             yield self.get(key)
-            
+
     @property
     def batch_size(self) -> torch.Size:
         return getattr(MetaTensor(*self._source.batch_size), self.custom_op)(
