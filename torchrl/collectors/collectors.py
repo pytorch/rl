@@ -76,6 +76,8 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
 
 
 class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
+
+
     def _get_policy_and_device(
         self,
         create_env_fn: Optional[
@@ -304,6 +306,7 @@ class SyncDataCollector(_DataCollector):
         self._td_policy = None
         self._has_been_done = None
         self.closed = False
+        self._exclude_private_keys = True
 
     def set_seed(self, seed: int) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -345,8 +348,10 @@ class SyncDataCollector(_DataCollector):
                 tensordict_out = split_trajectories(tensordict_out)
             if self.postproc is not None:
                 tensordict_out = self.postproc(tensordict_out)
-            selected_keys = [key for key in tensordict_out.keys() if not key.startswith("_")]
-            yield tensordict_out.select(*selected_keys)
+            if self._exclude_private_keys:
+                excluded_keys = [key for key in tensordict_out.keys() if key.startswith("_")]
+                tensordict_out = tensordict_out.exclude(*excluded_keys)
+            yield tensordict_out
 
             del tensordict_out
             if self._frames >= self.total_frames:
@@ -708,6 +713,7 @@ class _MultiDataCollector(_DataCollector):
             -(self.total_frames // -self.num_workers) if total_frames > 0 else np.inf
         )  # ceil(total_frames/num_workers)
         self._run_processes()
+        self._exclude_private_keys = True
 
     @property
     def frames_per_batch_worker(self):
@@ -954,8 +960,10 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 frames += math.prod(out.shape)
             if self.postprocs:
                 out = self.postprocs[out.device](out)
-            selected_keys = [key for key in out.keys() if not key.startswith("_")]
-            yield out.select(*selected_keys)
+            if self._exclude_private_keys:
+                excluded_keys = [key for key in out.keys() if key.startswith("_")]
+                out = out.exclude(*excluded_keys)
+            yield out
 
         del out_tensordicts_shared
         self._shutdown_main()
@@ -1033,8 +1041,10 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             else:
                 print(f"{idx} is done!")
                 dones[idx] = True
-            selected_keys = [key for key in out.keys() if not key.startswith("_")]
-            yield out.select(*selected_keys)
+            if self._exclude_private_keys:
+                excluded_keys = [key for key in out.keys() if key.startswith("_")]
+                out = out.exclude(*excluded_keys)
+            yield out
 
         self._shutdown_main()
         self.running = False

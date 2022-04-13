@@ -8,13 +8,14 @@ import argparse
 import numpy as np
 import pytest
 import torch
+from torch import nn
+
 from mocking_classes import (
     DiscreteActionConvMockEnv,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
-    DiscreteActionConvPolicy,
+    DiscreteActionConvPolicy, ContinuousActionVecMockEnv,
 )
-from torch import nn
 from torchrl.agents.env_creator import EnvCreator
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.collectors.collectors import (
@@ -26,6 +27,7 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
+from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
 
 
 def make_make_env(env_name="conv"):
@@ -174,7 +176,8 @@ def test_collector_batch_size(num_env, env_name, seed=100):
     for i, b in enumerate(ccollector):
         assert (
             b.numel()
-            == -(-frames_per_batch // num_env // num_workers) * num_env * num_workers
+            == -(
+            -frames_per_batch // num_env // num_workers) * num_env * num_workers
         )
         if i == 5:
             break
@@ -290,7 +293,8 @@ def test_collector_consistency(num_env, env_name, seed=100):
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
-@pytest.mark.parametrize("collector_class", [SyncDataCollector, aSyncDataCollector])
+@pytest.mark.parametrize("collector_class",
+                         [SyncDataCollector, aSyncDataCollector])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     """
@@ -411,7 +415,8 @@ def test_collector_vecnorm_envcreator():
     """
     from torchrl.envs import GymEnv
 
-    env_make = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
+    env_make = EnvCreator(
+        lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
     env_make = ParallelEnv(4, env_make)
 
     policy = RandomPolicy(env_make.action_spec)
@@ -445,7 +450,8 @@ def test_collector_vecnorm_envcreator():
 
 
 @pytest.mark.parametrize("use_async", [False, True])
-@pytest.mark.skipif(torch.cuda.device_count() <= 1, reason="no cuda device found")
+@pytest.mark.skipif(torch.cuda.device_count() <= 1,
+                    reason="no cuda device found")
 def test_update_weights(use_async):
     policy = torch.nn.Linear(3, 4).cuda(1)
     policy.share_memory()
@@ -499,6 +505,44 @@ def test_update_weights(use_async):
 
     collector.shutdown()
     del collector
+
+
+@pytest.mark.parametrize("collector_class",
+                         [MultiSyncDataCollector, MultiaSyncDataCollector,
+                          SyncDataCollector])
+@pytest.mark.parametrize("exclude", [True, False])
+def test_excluded_keys(collector_class, exclude):
+    if not exclude and collector_class is not SyncDataCollector:
+        pytest.skip("defining _exclude_private_keys is not possible")
+    make_env = lambda: ContinuousActionVecMockEnv()
+    dummy_env = make_env()
+    policy_module = nn.Linear(
+        dummy_env.observation_spec.shape[-1],
+        dummy_env.action_spec.shape[-1]
+    )
+    policy = Actor(policy_module, spec=dummy_env.action_spec)
+    policy_explore = OrnsteinUhlenbeckProcessWrapper(policy)
+
+    collector_kwargs = {
+        'create_env_fn': make_env,
+        'policy': policy_explore,
+        'frames_per_batch': 30,
+    }
+    if collector_class is not SyncDataCollector:
+        collector_kwargs['create_env_fn'] = [collector_kwargs['create_env_fn']
+                                             for _ in range(3)]
+
+    collector = collector_class(**collector_kwargs)
+    collector._exclude_private_keys = exclude
+    for b in collector:
+        keys = b.keys()
+        if exclude:
+            assert not any(key.startswith('_') for key in keys)
+        else:
+            assert any(key.startswith('_') for key in keys)
+        break
+    collector.shutdown()
+    dummy_env.close()
 
 
 def weight_reset(m):
