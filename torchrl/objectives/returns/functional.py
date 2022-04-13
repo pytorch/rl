@@ -34,7 +34,9 @@ def generalized_advantage_estimate(
     """
     for tensor in (next_state_value, state_value, reward, done):
         if tensor.shape[-1] != 1:
-            raise RuntimeError("Last dimension of generalized_advantage_estimate inputs must be a singleton dimension.")
+            raise RuntimeError(
+                "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
+            )
     not_done = 1 - done.to(next_state_value.dtype)
     *batch_size, time_steps = not_done.shape[:-1]
     device = state_value.device
@@ -46,7 +48,9 @@ def generalized_advantage_estimate(
             + (gamma * next_state_value[..., t, :] * not_done[..., t, :])
             - state_value[..., t, :]
         )
-        advantage[..., t, :] = delta + (gamma * lamda * advantage[..., t + 1, :] * not_done[..., t, :])
+        advantage[..., t, :] = delta + (
+            gamma * lamda * advantage[..., t + 1, :] * not_done[..., t, :]
+        )
 
     value_target = advantage[..., :time_steps, :] + state_value
 

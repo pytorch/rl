@@ -164,6 +164,7 @@ class GymEnv(GymLikeEnv):
         self.reset()  # make sure that _current_observation and
         # _is_done are populated
 
+
 def _get_retro_envs() -> Sequence:
     if not _has_retro:
         return tuple()

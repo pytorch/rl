@@ -700,16 +700,22 @@ def _run_worker_pipe_shared_mem(
             child_pipe.send((msg, state_dict))
 
         else:
-            attr = getattr(env, cmd)
-            if callable(attr):
-                args, kwargs = data
-                args_replace = []
-                for _arg in args:
-                    if isinstance(_arg, str) and _arg == "_self":
-                        continue
-                    else:
-                        args_replace.append(_arg)
-                result = attr(*args_replace, **kwargs)
-            else:
-                result = attr
+            err_msg = f"{cmd} from env"
+            try:
+                attr = getattr(env, cmd)
+                if callable(attr):
+                    args, kwargs = data
+                    args_replace = []
+                    for _arg in args:
+                        if isinstance(_arg, str) and _arg == "_self":
+                            continue
+                        else:
+                            args_replace.append(_arg)
+                    result = attr(*args_replace, **kwargs)
+                else:
+                    result = attr
+            except Exception as err:
+                raise RuntimeError(
+                    f"querying {err_msg} resulted in the following error: " f"{err}"
+                )
             child_pipe.send(("_".join([cmd, "done"]), result))
