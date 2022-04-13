@@ -530,7 +530,7 @@ class ProbabilisticTDModule(TDModule):
 
         self.save_dist_params = save_dist_params
         self._n_empirical_est = _n_empirical_est
-        self.cache_dist = cache_dist
+        self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self._dist = None
 
         if isinstance(distribution_class, str):

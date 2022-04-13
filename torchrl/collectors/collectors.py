@@ -480,7 +480,8 @@ class SyncDataCollector(_DataCollector):
         if not self.closed:
             self.closed = True
             del self._tensor_dict, self._tensor_dict_out
-            self.env.close()
+            if not self.env.is_closed:
+                self.env.close()
             del self.env
 
     def __del__(self):

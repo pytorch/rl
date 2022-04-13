@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import argparse
 
 import pytest
 import torch
@@ -130,6 +131,7 @@ def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.
     queue_out.put((obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count))
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "all_done"
+    env.close()
 
 
 @pytest.mark.parametrize("nprc", [2, 5])
@@ -203,6 +205,7 @@ def _run_parallelenv(parallel_env, queue_in, queue_out):
     for _ in range(10):
         parallel_env.rand_step()
     queue_out.put("second round")
+    parallel_env.close()
     del parallel_env
 
 
@@ -228,6 +231,7 @@ def test_parallelenv_vecnorm():
     for k, item in values.items():
         assert (item != new_values.get(k)).any(), k
     proc.join()
+    parallel_env.close()
 
 
 @pytest.mark.parametrize("parallel", [False, True])
@@ -255,7 +259,9 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     assert (abs(mean) < thr).all()
     std = obs.std(0)
     assert (abs(std - 1) < thr).all()
+    env.close()
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "--capture", "no"])
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

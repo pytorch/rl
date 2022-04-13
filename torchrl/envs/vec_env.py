@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from collections import OrderedDict
 from multiprocessing import connection
-from typing import Callable, Optional, Sequence, Union
+from typing import Callable, Optional, Sequence, Union, Any, List
 
 import torch
 from torch import multiprocessing as mp
@@ -31,9 +31,46 @@ def _check_start(fun):
     return decorated_fun
 
 
+class _dispatch_caller_parallel:
+    def __init__(self, attr, parallel_env):
+        self.attr = attr
+        self.parallel_env = parallel_env
+
+    def __call__(self, *args, **kwargs):
+        # remove self from args
+        args = [_arg if _arg is not self.parallel_env else "_self" for _arg in args]
+        for i, channel in enumerate(self.parallel_env.parent_channels):
+            channel.send((self.attr, (args, kwargs)))
+
+        results = []
+        for channel in self.parallel_env.parent_channels:
+            msg, result = channel.recv()
+            results.append(result)
+
+        return results
+
+    def __iter__(self):
+        # if the object returned is not a callable
+        return iter(self.__call__())
+
+
+class _dispatch_caller_serial:
+    def __init__(self, list_callable: List[Callable, Any]):
+        self.list_callable = list_callable
+
+    def __call__(self, *args, **kwargs):
+        return [_callable(*args, **kwargs) for _callable in self.list_callable]
+
+
 class _BatchedEnv(_EnvClass):
     """
-    Batched environment abstract class.
+
+    Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.
+    Those queries will return a list of length equal to the number of workers containing the
+    values resulting from those queries.
+        >>> env = ParallelEnv(3, my_env_fun)
+        >>> custom_attribute_list = env.custom_attribute
+        >>> custom_method_list = env.custom_method(*args)
 
     Args:
         num_workers: number of workers (i.e. env instances) to be deployed simultaneously;
@@ -218,14 +255,18 @@ class _BatchedEnv(_EnvClass):
 
     def __del__(self) -> None:
         if not self.is_closed:
-            self.close()
+            raise RuntimeError(
+                "Batched environment must be explicitely closed before it "
+                "turns out of scope."
+            )
 
     def close(self) -> None:
-        self.shutdown()
-        self.is_closed = True
-
-    def shutdown(self) -> None:
+        if self.is_closed:
+            raise RuntimeError("trying to close a closed environment")
+        if self._verbose:
+            print(f"closing {self.__class__.__name__}")
         self._shutdown_workers()
+        self.is_closed = True
 
     def _shutdown_workers(self) -> None:
         raise NotImplementedError
@@ -236,6 +277,8 @@ class SerialEnv(_BatchedEnv):
     Creates a series of environments in the same process.
 
     """
+
+    __doc__ += _BatchedEnv.__doc__
 
     _share_memory = False
 
@@ -288,13 +331,6 @@ class SerialEnv(_BatchedEnv):
                 env.close()
             del self._envs
 
-    def __del__(self) -> None:
-        self.close()
-
-    def close(self) -> None:
-        self.shutdown()
-        self.is_closed = True
-
     @_check_start
     def set_seed(self, seed: int) -> int:
         for i, env in enumerate(self._envs):
@@ -321,6 +357,38 @@ class SerialEnv(_BatchedEnv):
 
         return self.shared_tensor_dict_parent.select(*keys).clone()
 
+    def __getattr__(self, attr: str) -> Any:
+        if attr in self.__dir__():
+            return self.__getattribute__(
+                attr
+            )  # make sure that appropriate exceptions are raised
+        elif attr.startswith("__"):
+            raise AttributeError(
+                "dispatching built-in private methods is "
+                f"not permitted with type {type(self)}. "
+                f"Got attribute {attr}."
+            )
+        else:
+            try:
+                # determine if attr is a callable
+                callable_attr = callable(getattr(self._dummy_env, attr))
+                list_attr = [getattr(env, attr) for env in self._envs]
+                if callable_attr:
+                    if self.is_closed:
+                        raise RuntimeError(
+                            "Trying to access attributes of closed/non started "
+                            "environments. Check that the batched environment "
+                            "has been started (e.g. by calling env.reset)"
+                        )
+                    return _dispatch_caller_serial(list_attr)
+                else:
+                    return list_attr
+            except AttributeError:
+                raise AttributeError(
+                    f"attribute {attr} not found in "
+                    f"{self._dummy_env.__class__.__name__}"
+                )
+
 
 class ParallelEnv(_BatchedEnv):
     """
@@ -328,6 +396,8 @@ class ParallelEnv(_BatchedEnv):
     TensorDicts are passed via shared memory or memory map.
 
     """
+
+    __doc__ += _BatchedEnv.__doc__
 
     def _start_workers(self) -> None:
 
@@ -429,7 +499,10 @@ class ParallelEnv(_BatchedEnv):
         for i, channel in enumerate(self.parent_channels):
             if self._verbose:
                 print(f"closing {i}")
+            # try:
             channel.send(("close", None))
+            # except:
+            #     raise RuntimeError(f"closing {channel} number {i} failed")
             msg, _ = channel.recv()
             if msg != "closing":
                 raise RuntimeError(
@@ -442,18 +515,8 @@ class ParallelEnv(_BatchedEnv):
             channel.close()
         for proc in self._workers:
             proc.join()
-        self.is_closed = True
         del self._workers
         del self.parent_channels
-
-    def close(self) -> None:
-        if self.is_closed:
-            return None
-        if self._verbose:
-            print(f"closing {self.__class__.__name__}")
-        self.shutdown()
-        if not self.is_closed:
-            raise RuntimeError(f"expected {self.__class__.__name__} to be closed")
 
     @_check_start
     def set_seed(self, seed: int) -> int:
@@ -494,8 +557,38 @@ class ParallelEnv(_BatchedEnv):
         return self.shared_tensor_dict_parent.select(*keys).clone()
 
     def __reduce__(self):
-        self.close()
+        if not self.is_closed:
+            # ParallelEnv contains non-instantiated envs, thus it can be
+            # closed and serialized if the environment building functions
+            # permit it
+            self.close()
         return super().__reduce__()
+
+    def __getattr__(self, attr: str) -> Any:
+        if attr in self.__dir__():
+            return self.__getattribute__(
+                attr
+            )  # make sure that appropriate exceptions are raised
+        elif attr.startswith("__"):
+            raise AttributeError(
+                "dispatching built-in private methods is not permitted."
+            )
+        else:
+            try:
+                _ = getattr(self._dummy_env, attr)
+                if self.is_closed:
+                    raise RuntimeError(
+                        "Trying to access attributes of closed/non started "
+                        "environments. Check that the batched environment "
+                        "has been started (e.g. by calling env.reset)"
+                    )
+                # dispatch to workers
+                return _dispatch_caller_parallel(attr, self)
+            except AttributeError:
+                raise AttributeError(
+                    f"attribute {attr} not found in "
+                    f"{self._dummy_env.__class__.__name__}"
+                )
 
 
 def _run_worker_pipe_shared_mem(
@@ -593,7 +686,7 @@ def _run_worker_pipe_shared_mem(
             child_pipe.send(data)
             just_reset = False
 
-        if cmd == "close":
+        elif cmd == "close":
             del tensor_dict, _td, data
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
@@ -606,12 +699,33 @@ def _run_worker_pipe_shared_mem(
                 print(f"{pid} closed")
             break
 
-        if cmd == "load_state_dict":
+        elif cmd == "load_state_dict":
             env.load_state_dict(data)
             msg = "loaded"
             child_pipe.send((msg, None))
 
-        if cmd == "state_dict":
+        elif cmd == "state_dict":
             state_dict = env.state_dict()
             msg = "state_dict"
             child_pipe.send((msg, state_dict))
+
+        else:
+            err_msg = f"{cmd} from env"
+            try:
+                attr = getattr(env, cmd)
+                if callable(attr):
+                    args, kwargs = data
+                    args_replace = []
+                    for _arg in args:
+                        if isinstance(_arg, str) and _arg == "_self":
+                            continue
+                        else:
+                            args_replace.append(_arg)
+                    result = attr(*args_replace, **kwargs)
+                else:
+                    result = attr
+            except Exception as err:
+                raise RuntimeError(
+                    f"querying {err_msg} resulted in the following error: " f"{err}"
+                )
+            child_pipe.send(("_".join([cmd, "done"]), result))

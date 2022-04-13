@@ -123,6 +123,7 @@ class GymEnv(GymLikeEnv):
         taskname: str,
         from_pixels: bool = False,
         pixels_only: bool = False,
+        **kwargs,
     ) -> gym.core.Env:
         self.pixels_only = pixels_only
         if not _has_gym:
@@ -136,7 +137,7 @@ class GymEnv(GymLikeEnv):
                 f"gym does not support taskname, received {taskname} instead."
             )
         try:
-            env = self.lib.make(envname, frameskip=self.frame_skip)
+            env = self.lib.make(envname, frameskip=self.frame_skip, **kwargs)
             self.wrapper_frame_skip = 1
         except TypeError as err:
             if "unexpected keyword argument 'frameskip" not in str(err):
@@ -159,12 +160,9 @@ class GymEnv(GymLikeEnv):
             device=self.device,
         )  # default
 
-    def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
-        if seed is not None:
-            seed = self.set_seed(seed)
+    def _init_env(self):
         self.reset()  # make sure that _current_observation and
         # _is_done are populated
-        return seed
 
 
 def _get_retro_envs() -> Sequence:
