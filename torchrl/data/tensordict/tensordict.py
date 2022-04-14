@@ -81,8 +81,8 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
     def batch_size(self) -> torch.Size:
         """Shape of (or batch_size) of a TensorDict.
         The shape of a tensordict corresponds to the common N first
-        dimensions of the tensors it contains, where N is an arbitrary number. 
-        The TensorDict shape is controlled by the user upon
+        dimensions of the tensors it contains, where N is an arbitrary 
+        number. The TensorDict shape is controlled by the user upon
         initialization (i.e. it is not inferred from the tensor shapes) and
         it should not be changed dynamically.
 
