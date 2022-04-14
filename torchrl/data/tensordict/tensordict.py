@@ -1735,7 +1735,7 @@ class TensorDict(_TensorDict):
         )
 
     def keys(self) -> KeysView:
-        return self._tensordict.keys()
+        return self._tensordict_meta.keys()  # _tensordict_meta is ordered
 
 
 def implements_for_td(torch_function: Callable) -> Callable:
@@ -2475,7 +2475,7 @@ class LazyStackedTensorDict(_TensorDict):
         if key in self._meta_dict:
             return self._meta_dict[key]
         if key not in self.valid_keys:
-            raise KeyError(f"key {key} not found in {list(self._valid_keys)}")
+            raise KeyError(f"key {key} not found in {self._valid_keys}")
         return torch.stack(
             [td._get_meta(key) for td in self.tensordicts], self.stack_dim
         )
@@ -2547,7 +2547,7 @@ class LazyStackedTensorDict(_TensorDict):
         valid_keys = set(self.tensordicts[0].keys())
         for td in self.tensordicts[1:]:
             valid_keys = valid_keys.intersection(td.keys())
-        self._valid_keys = valid_keys
+        self._valid_keys = sorted(list(valid_keys))
 
     def select(self, *keys: str, inplace: bool = False) -> _TensorDict:
         if len(self.valid_keys.intersection(keys)) != len(keys):
