@@ -9,18 +9,21 @@ from copy import deepcopy
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices
-from torch import nn
-from torchrl.data import TensorDict, NdBoundedTensorSpec, MultOneHotDiscreteTensorSpec
-from torchrl.data.postprocs.postprocs import MultiStep
+from torch import nn, autograd
 
+from _utils_internal import get_available_devices
+from torchrl.data import TensorDict, NdBoundedTensorSpec, \
+    MultOneHotDiscreteTensorSpec, NdUnboundedContinuousTensorSpec
+from torchrl.data.postprocs.postprocs import MultiStep
 # from torchrl.data.postprocs.utils import expand_as_right
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.data.utils import expand_as_right
 from torchrl.modules import DistributionalQValueActor, QValueActor
-from torchrl.modules.distributions.continuous import TanhNormal, NormalParamWrapper
+from torchrl.modules.distributions.continuous import TanhNormal, \
+    NormalParamWrapper
 from torchrl.modules.models.models import MLP
-from torchrl.modules.td_module.actors import ValueOperator, Actor, ProbabilisticActor
+from torchrl.modules.td_module.actors import ValueOperator, Actor, \
+    ProbabilisticActor
 from torchrl.objectives import (
     DQNLoss,
     DoubleDQNLoss,
@@ -42,6 +45,7 @@ from torchrl.objectives.costs.redq import (
     REDQLoss_deprecated,
     DoubleREDQLoss_deprecated,
 )
+from torchrl.objectives.costs.reinforce import ReinforceLoss
 from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
 
 
@@ -67,7 +71,8 @@ def get_devices():
 class TestDQN:
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4,
+                           device="cpu"):
         # Actor
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -102,11 +107,13 @@ class TestDQN:
         if atoms:
             action_value = torch.randn(batch, atoms, action_dim).softmax(-2)
             action = (
-                action_value[..., 0, :] == action_value[..., 0, :].max(-1, True)[0]
+                action_value[..., 0, :] ==
+                action_value[..., 0, :].max(-1, True)[0]
             ).to(torch.long)
         else:
             action_value = torch.randn(batch, action_dim)
-            action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
+            action = (action_value == action_value.max(-1, True)[0]).to(
+                torch.long)
         reward = torch.randn(batch, 1)
         done = torch.zeros(batch, 1, dtype=torch.bool)
         td = TensorDict(
@@ -134,11 +141,13 @@ class TestDQN:
                 batch, T, atoms, action_dim, device=device
             ).softmax(-2)
             action = (
-                action_value[..., 0, :] == action_value[..., 0, :].max(-1, True)[0]
+                action_value[..., 0, :] ==
+                action_value[..., 0, :].max(-1, True)[0]
             ).to(torch.long)
         else:
             action_value = torch.randn(batch, T, action_dim, device=device)
-            action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
+            action = (action_value == action_value.max(-1, True)[0]).to(
+                torch.long)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
@@ -152,7 +161,8 @@ class TestDQN:
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
                 "action_value": action_value
-                * expand_as_right(mask.to(obs.dtype).squeeze(-1), action_value),
+                                * expand_as_right(
+                    mask.to(obs.dtype).squeeze(-1), action_value),
             },
         )
         return td
@@ -169,15 +179,18 @@ class TestDQN:
         assert loss_fn.priority_key in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
-        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
+        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(),
+                                                        1.0) > 0.0
 
         # Check param update effect on targets
         target_value = [p.clone() for p in loss_fn.target_value_network_params]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
-        target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
+        target_value2 = [p.clone() for p in
+                         loss_fn.target_value_network_params]
         if loss_fn.delay_value:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
+            assert all((p1 == p2).all() for p1, p2 in
+                       zip(target_value, target_value2))
         else:
             assert not any(
                 (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
@@ -187,7 +200,8 @@ class TestDQN:
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
-        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+        assert all(
+            (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize("n", range(4))
     @pytest.mark.parametrize("loss_class", (DQNLoss, DoubleDQNLoss))
@@ -219,15 +233,18 @@ class TestDQN:
             with pytest.raises(AssertionError):
                 assert_allclose_td(loss, loss_ms)
         sum([item for _, item in loss_ms.items()]).backward()
-        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
+        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(),
+                                                        1.0) > 0.0
 
         # Check param update effect on targets
         target_value = [p.clone() for p in loss_fn.target_value_network_params]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
-        target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
+        target_value2 = [p.clone() for p in
+                         loss_fn.target_value_network_params]
         if loss_fn.delay_value:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
+            assert all((p1 == p2).all() for p1, p2 in
+                       zip(target_value, target_value2))
         else:
             assert not any(
                 (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
@@ -237,7 +254,8 @@ class TestDQN:
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
-        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+        assert all(
+            (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize(
@@ -256,15 +274,18 @@ class TestDQN:
         assert loss_fn.priority_key in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
-        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
+        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(),
+                                                        1.0) > 0.0
 
         # Check param update effect on targets
         target_value = [p.clone() for p in loss_fn.target_value_network_params]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
-        target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
+        target_value2 = [p.clone() for p in
+                         loss_fn.target_value_network_params]
         if loss_fn.delay_value:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
+            assert all((p1 == p2).all() for p1, p2 in
+                       zip(target_value, target_value2))
         else:
             assert not any(
                 (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
@@ -274,13 +295,15 @@ class TestDQN:
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
-        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+        assert all(
+            (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
 
 class TestDDPG:
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4,
+                           device="cpu"):
         # Actor
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -292,7 +315,8 @@ class TestDDPG:
         )
         return actor.to(device)
 
-    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4,
+                           device="cpu"):
         # Actor
         class ValueClass(nn.Module):
             def __init__(self):
@@ -346,11 +370,13 @@ class TestDDPG:
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
         if atoms:
-            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+            action = torch.randn(batch, T, atoms, action_dim,
+                                 device=device).clamp(
                 -1, 1
             )
         else:
-            action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+            action = torch.randn(batch, T, action_dim, device=device).clamp(-1,
+                                                                            1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
@@ -416,16 +442,20 @@ class TestDDPG:
         target_value = [p.clone() for p in loss_fn.target_value_network_params]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
-        target_actor2 = [p.clone() for p in loss_fn.target_actor_network_params]
-        target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
+        target_actor2 = [p.clone() for p in
+                         loss_fn.target_actor_network_params]
+        target_value2 = [p.clone() for p in
+                         loss_fn.target_value_network_params]
         if loss_fn.delay_actor:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
+            assert all((p1 == p2).all() for p1, p2 in
+                       zip(target_actor, target_actor2))
         else:
             assert not any(
                 (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
             )
         if loss_fn.delay_value:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
+            assert all((p1 == p2).all() for p1, p2 in
+                       zip(target_value, target_value2))
         else:
             assert not any(
                 (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
@@ -435,7 +465,8 @@ class TestDDPG:
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
-        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+        assert all(
+            (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("device", get_available_devices())
@@ -472,7 +503,8 @@ class TestDDPG:
 class TestSAC:
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4,
+                           device="cpu"):
         # Actor
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -485,7 +517,8 @@ class TestSAC:
         )
         return actor.to(device)
 
-    def _create_mock_qvalue(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_qvalue(self, batch=2, obs_dim=3, action_dim=4,
+                            device="cpu"):
         class ValueClass(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -501,7 +534,8 @@ class TestSAC:
         )
         return qvalue.to(device)
 
-    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4,
+                           device="cpu"):
         module = nn.Linear(obs_dim, 1)
         value = ValueOperator(
             module=module,
@@ -546,11 +580,13 @@ class TestSAC:
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
         if atoms:
-            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+            action = torch.randn(batch, T, atoms, action_dim,
+                                 device=device).clamp(
                 -1, 1
             )
         else:
-            action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+            action = torch.randn(batch, T, action_dim, device=device).clamp(-1,
+                                                                            1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
@@ -572,7 +608,8 @@ class TestSAC:
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_sac(self, loss_class, delay_actor, delay_qvalue, num_qvalue, device):
+    def test_sac(self, loss_class, delay_actor, delay_qvalue, num_qvalue,
+                 device):
         if (delay_actor or delay_qvalue) and loss_class is not DoubleSACLoss:
             pytest.skip("incompatible config")
 
@@ -668,8 +705,10 @@ class TestSAC:
         named_parameters = list(loss_fn.named_parameters())
         named_buffers = list(loss_fn.named_buffers())
 
-        assert len(set(p for n, p in named_parameters)) == len(list(named_parameters))
-        assert len(set(p for n, p in named_buffers)) == len(list(named_buffers))
+        assert len(set(p for n, p in named_parameters)) == len(
+            list(named_parameters))
+        assert len(set(p for n, p in named_buffers)) == len(
+            list(named_buffers))
 
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
@@ -681,7 +720,8 @@ class TestSAC:
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
     def test_sac_batcher(
-        self, n, loss_class, delay_actor, delay_qvalue, num_qvalue, device, gamma=0.9
+        self, n, loss_class, delay_actor, delay_qvalue, num_qvalue, device,
+        gamma=0.9
     ):
         if (delay_actor or delay_qvalue) and (loss_class is not DoubleSACLoss):
             pytest.skip("incompatible config")
@@ -740,29 +780,37 @@ class TestSAC:
 
         # Check param update effect on targets
         target_actor = [p.clone() for p in loss_fn.target_actor_network_params]
-        target_qvalue = [p.clone() for p in loss_fn.target_qvalue_network_params]
+        target_qvalue = [p.clone() for p in
+                         loss_fn.target_qvalue_network_params]
         target_value = [p.clone() for p in loss_fn.target_value_network_params]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
-        target_actor2 = [p.clone() for p in loss_fn.target_actor_network_params]
-        target_qvalue2 = [p.clone() for p in loss_fn.target_qvalue_network_params]
-        target_value2 = [p.clone() for p in loss_fn.target_value_network_params]
+        target_actor2 = [p.clone() for p in
+                         loss_fn.target_actor_network_params]
+        target_qvalue2 = [p.clone() for p in
+                          loss_fn.target_qvalue_network_params]
+        target_value2 = [p.clone() for p in
+                         loss_fn.target_value_network_params]
         if loss_fn.delay_actor:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
+            assert all((p1 == p2).all() for p1, p2 in
+                       zip(target_actor, target_actor2))
         else:
             assert not any(
                 (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
             )
         if loss_fn.delay_qvalue:
             assert all(
-                (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
+                (p1 == p2).all() for p1, p2 in
+                zip(target_qvalue, target_qvalue2)
             )
         else:
             assert not any(
-                (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
+                (p1 == p2).any() for p1, p2 in
+                zip(target_qvalue, target_qvalue2)
             )
         if loss_fn.delay_value:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_value, target_value2))
+            assert all((p1 == p2).all() for p1, p2 in
+                       zip(target_value, target_value2))
         else:
             assert not any(
                 (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
@@ -772,13 +820,15 @@ class TestSAC:
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
-        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+        assert all(
+            (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
 
 class TestREDQ:
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4,
+                           device="cpu"):
         # Actor
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -792,7 +842,8 @@ class TestREDQ:
         )
         return actor.to(device)
 
-    def _create_mock_qvalue(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_qvalue(self, batch=2, obs_dim=3, action_dim=4,
+                            device="cpu"):
         class ValueClass(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -840,11 +891,13 @@ class TestREDQ:
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
         if atoms:
-            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+            action = torch.randn(batch, T, atoms, action_dim,
+                                 device=device).clamp(
                 -1, 1
             )
         else:
-            action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+            action = torch.randn(batch, T, action_dim, device=device).clamp(-1,
+                                                                            1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
@@ -926,8 +979,10 @@ class TestREDQ:
         named_parameters = list(loss_fn.named_parameters())
         named_buffers = list(loss_fn.named_buffers())
 
-        assert len(set(p for n, p in named_parameters)) == len(list(named_parameters))
-        assert len(set(p for n, p in named_buffers)) == len(list(named_buffers))
+        assert len(set(p for n, p in named_parameters)) == len(
+            list(named_parameters))
+        assert len(set(p for n, p in named_buffers)) == len(
+            list(named_buffers))
 
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
@@ -1027,24 +1082,30 @@ class TestREDQ:
 
         # Check param update effect on targets
         target_actor = [p.clone() for p in loss_fn.target_actor_network_params]
-        target_qvalue = [p.clone() for p in loss_fn.target_qvalue_network_params]
+        target_qvalue = [p.clone() for p in
+                         loss_fn.target_qvalue_network_params]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
-        target_actor2 = [p.clone() for p in loss_fn.target_actor_network_params]
-        target_qvalue2 = [p.clone() for p in loss_fn.target_qvalue_network_params]
+        target_actor2 = [p.clone() for p in
+                         loss_fn.target_actor_network_params]
+        target_qvalue2 = [p.clone() for p in
+                          loss_fn.target_qvalue_network_params]
         if loss_fn.delay_actor:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
+            assert all((p1 == p2).all() for p1, p2 in
+                       zip(target_actor, target_actor2))
         else:
             assert not any(
                 (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
             )
         if loss_fn.delay_qvalue:
             assert all(
-                (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
+                (p1 == p2).all() for p1, p2 in
+                zip(target_qvalue, target_qvalue2)
             )
         else:
             assert not any(
-                (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
+                (p1 == p2).any() for p1, p2 in
+                zip(target_qvalue, target_qvalue2)
             )
 
         # check that policy is updated after parameter update
@@ -1054,13 +1115,15 @@ class TestREDQ:
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
-        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+        assert all(
+            (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
 
 class TestPPO:
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4,
+                           device="cpu"):
         # Actor
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -1074,7 +1137,8 @@ class TestPPO:
         )
         return actor.to(device)
 
-    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4,
+                           device="cpu"):
         module = nn.Linear(obs_dim, 1)
         value = ValueOperator(
             module=module,
@@ -1120,11 +1184,13 @@ class TestPPO:
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
         if atoms:
-            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+            action = torch.randn(batch, T, atoms, action_dim,
+                                 device=device).clamp(
                 -1, 1
             )
         else:
-            action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+            action = torch.randn(batch, T, action_dim, device=device).clamp(-1,
+                                                                            1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
@@ -1140,15 +1206,16 @@ class TestPPO:
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
                 "action_log_prob": torch.randn_like(action[..., :1])
-                / 10
-                * mask.to(obs.dtype),
+                                   / 10
+                                   * mask.to(obs.dtype),
                 "action_dist_param_0": params_mean * mask.to(obs.dtype),
                 "action_dist_param_1": params_scale * mask.to(obs.dtype),
             },
         )
         return td
 
-    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    @pytest.mark.parametrize("loss_class",
+                             (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_ppo(self, loss_class, device):
         torch.manual_seed(self.seed)
@@ -1158,7 +1225,8 @@ class TestPPO:
         value = self._create_mock_value(device=device)
         gae = GAE(gamma=0.9, lamda=0.9, critic=value)
         loss_fn = loss_class(
-            actor, value, advantage_module=gae, gamma=0.9, loss_critic_type="l2"
+            actor, value, advantage_module=gae, gamma=0.9,
+            loss_critic_type="l2"
         )
 
         loss = loss_fn(td)
@@ -1166,6 +1234,66 @@ class TestPPO:
         named_parameters = loss_fn.named_parameters()
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+
+class TestReinforce:
+
+    @pytest.mark.parametrize("delay_value", [True, False])
+    @pytest.mark.parametrize("advantage", ["gae", "a2c"])
+    def test_reinforce_value_net(self, advantage, delay_value):
+        n_obs = 3
+        n_act = 5
+        batch = 4
+        value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
+
+        actor_net = ProbabilisticActor(
+            NormalParamWrapper(nn.Linear(n_obs, 2 * n_act)),
+            spec=NdUnboundedContinuousTensorSpec(n_act),
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+        )
+
+        loss_fn = ReinforceLoss(
+            actor_net,
+            value_network=value_net,
+            advantage_module=advantage,
+            delay_value=delay_value
+        )
+
+        td = TensorDict(
+            {
+                'reward': torch.randn(batch, 1),
+                'observation': torch.randn(batch, n_obs),
+                'next_observation': torch.randn(batch, n_obs),
+                'done': torch.zeros(batch, 1, dtype=torch.bool),
+                'action': torch.randn(batch, n_act),
+            }, [batch])
+
+        loss_td = loss_fn(td)
+        grad_actor = autograd.grad(
+            loss_td.get("loss_actor"),
+            actor_net.parameters(),
+            retain_graph=True,
+        )
+        grad_value = autograd.grad(
+            loss_td.get("loss_value"),
+            value_net.parameters(),
+            retain_graph=True,
+        )
+        with pytest.raises(RuntimeError, match="One of the "):
+            grad_actor = autograd.grad(
+                loss_td.get("loss_actor"),
+                value_net.parameters(),
+                retain_graph=True,
+                allow_unused=False,
+            )
+        with pytest.raises(RuntimeError, match="One of the "):
+            grad_value = autograd.grad(
+                loss_td.get("loss_value"),
+                actor_net.parameters(),
+                retain_graph=True,
+                allow_unused=False,
+            )
 
 
 def test_hold_out():
@@ -1234,7 +1362,8 @@ def test_updater(mode, value_network_update_interval, device):
         def __init__(self):
             super().__init__()
             module1 = torch.nn.BatchNorm2d(10).eval()
-            self.convert_to_functional(module1, "module1", create_target_params=True)
+            self.convert_to_functional(module1, "module1",
+                                       create_target_params=True)
             module2 = torch.nn.BatchNorm2d(10).eval()
             self.module2 = module2
             for target in self.target_module1_params:
@@ -1265,8 +1394,8 @@ def test_updater(mode, value_network_update_interval, device):
         [
             (target_val[0] - val[0]).norm().item()
             for (_, target_val), (_, val) in zip(
-                upd._targets.items(), upd._sources.items()
-            )
+            upd._targets.items(), upd._sources.items()
+        )
         ]
     )
     assert d0 > 0
@@ -1276,8 +1405,8 @@ def test_updater(mode, value_network_update_interval, device):
                 [
                     (target_val[0] - val[0]).norm().item()
                     for (_, target_val), (_, val) in zip(
-                        upd._targets.items(), upd._sources.items()
-                    )
+                    upd._targets.items(), upd._sources.items()
+                )
                 ]
             )
             assert d1 == d0, i
@@ -1288,8 +1417,8 @@ def test_updater(mode, value_network_update_interval, device):
             [
                 (target_val[0] - val[0]).norm().item()
                 for (_, target_val), (_, val) in zip(
-                    upd._targets.items(), upd._sources.items()
-                )
+                upd._targets.items(), upd._sources.items()
+            )
             ]
         )
         assert d1 < d0
@@ -1300,8 +1429,8 @@ def test_updater(mode, value_network_update_interval, device):
             [
                 (target_val[0] - val[0]).norm().item()
                 for (_, target_val), (_, val) in zip(
-                    upd._targets.items(), upd._sources.items()
-                )
+                upd._targets.items(), upd._sources.items()
+            )
             ]
         )
         assert d1 < d0
@@ -1312,8 +1441,8 @@ def test_updater(mode, value_network_update_interval, device):
         [
             (target_val[0] - val[0]).norm().item()
             for (_, target_val), (_, val) in zip(
-                upd._targets.items(), upd._sources.items()
-            )
+            upd._targets.items(), upd._sources.items()
+        )
         ]
     )
     assert d2 < 1e-6

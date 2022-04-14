@@ -18,17 +18,14 @@ import torch
 from torch import Tensor
 
 from torchrl.envs.utils import step_tensordict
-from .functional import generalized_advantage_estimate
+from .functional import a2c_advantage_estimate
 from ...data.tensordict.tensordict import _TensorDict
 from ...modules import TDModule
 
 
+class A2C:
+    """A2C advantage function.
 
-class GAE:
-    """
-    A class wrapper around the generalized advantage estimate functional.
-    Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
-    https://arxiv.org/pdf/1506.02438.pdf for more context.
 
     Args:
         gamma (scalar): exponential mean discount.
@@ -42,13 +39,11 @@ class GAE:
     def __init__(
         self,
         gamma: Union[float, torch.Tensor],
-        lamda: float,
         critic: TDModule,
         average_rewards: bool = False,
         gradient_mode: bool = False,
     ):
         self.gamma = gamma
-        self.lamda = lamda
         self.critic = critic
         self.average_rewards = average_rewards
         self.gradient_mode = gradient_mode
@@ -85,7 +80,7 @@ class GAE:
                     "reward", reward
                 )  # we must update the rewards if they are used later in the code
 
-            gamma, lamda = self.gamma, self.lamda
+            gamma = self.gamma
             kwargs = {}
             if params is not None:
                 kwargs['params'] = params
@@ -105,9 +100,9 @@ class GAE:
 
         done = tensordict.get("done")
         with torch.set_grad_enabled(self.gradient_mode):
-            adv, value_target = generalized_advantage_estimate(
-                gamma, lamda, value, next_value, reward, done
+            adv = a2c_advantage_estimate(
+                gamma, value, next_value, reward, done
             )
             tensordict.set("advantage", adv.detach())
-            tensordict.set("value_target", value_target)
+            tensordict.set("value_target", adv)
         return tensordict
