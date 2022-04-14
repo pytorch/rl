@@ -10,8 +10,13 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from torch import nn
-from torchrl.data import TensorDict, NdBoundedTensorSpec, MultOneHotDiscreteTensorSpec
+from torch import nn, autograd
+from torchrl.data import (
+    TensorDict,
+    NdBoundedTensorSpec,
+    MultOneHotDiscreteTensorSpec,
+    NdUnboundedContinuousTensorSpec,
+)
 from torchrl.data.postprocs.postprocs import MultiStep
 
 # from torchrl.data.postprocs.utils import expand_as_right
@@ -42,6 +47,7 @@ from torchrl.objectives.costs.redq import (
     REDQLoss_deprecated,
     DoubleREDQLoss_deprecated,
 )
+from torchrl.objectives.costs.reinforce import ReinforceLoss
 from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
 
 
@@ -1156,7 +1162,7 @@ class TestPPO:
 
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
-        gae = GAE(gamma=0.9, lamda=0.9, critic=value)
+        gae = GAE(gamma=0.9, lamda=0.9, value_network=value)
         loss_fn = loss_class(
             actor, value, advantage_module=gae, gamma=0.9, loss_critic_type="l2"
         )
@@ -1166,6 +1172,67 @@ class TestPPO:
         named_parameters = loss_fn.named_parameters()
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+
+class TestReinforce:
+    @pytest.mark.parametrize("delay_value", [True, False])
+    @pytest.mark.parametrize("advantage", ["gae", "a2c"])
+    def test_reinforce_value_net(self, advantage, delay_value):
+        n_obs = 3
+        n_act = 5
+        batch = 4
+        value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
+
+        actor_net = ProbabilisticActor(
+            NormalParamWrapper(nn.Linear(n_obs, 2 * n_act)),
+            spec=NdUnboundedContinuousTensorSpec(n_act),
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+        )
+
+        loss_fn = ReinforceLoss(
+            actor_net,
+            critic=value_net,
+            advantage_module=advantage,
+            delay_value=delay_value,
+        )
+
+        td = TensorDict(
+            {
+                "reward": torch.randn(batch, 1),
+                "observation": torch.randn(batch, n_obs),
+                "next_observation": torch.randn(batch, n_obs),
+                "done": torch.zeros(batch, 1, dtype=torch.bool),
+                "action": torch.randn(batch, n_act),
+            },
+            [batch],
+        )
+
+        loss_td = loss_fn(td)
+        grad_actor = autograd.grad(
+            loss_td.get("loss_actor"),
+            actor_net.parameters(),
+            retain_graph=True,
+        )
+        grad_value = autograd.grad(
+            loss_td.get("loss_value"),
+            value_net.parameters(),
+            retain_graph=True,
+        )
+        with pytest.raises(RuntimeError, match="One of the "):
+            grad_actor = autograd.grad(
+                loss_td.get("loss_actor"),
+                value_net.parameters(),
+                retain_graph=True,
+                allow_unused=False,
+            )
+        with pytest.raises(RuntimeError, match="One of the "):
+            grad_value = autograd.grad(
+                loss_td.get("loss_value"),
+                actor_net.parameters(),
+                retain_graph=True,
+                allow_unused=False,
+            )
 
 
 def test_hold_out():
