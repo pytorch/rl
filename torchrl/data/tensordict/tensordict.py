@@ -2550,7 +2550,7 @@ class LazyStackedTensorDict(_TensorDict):
         self._valid_keys = sorted(list(valid_keys))
 
     def select(self, *keys: str, inplace: bool = False) -> _TensorDict:
-        if len(self.valid_keys.intersection(keys)) != len(keys):
+        if len(set(self.valid_keys).intersection(keys)) != len(keys):
             raise KeyError(
                 f"Selected and existing keys mismatch, got self.valid_keys"
                 f"={self.valid_keys} and keys={keys}"
