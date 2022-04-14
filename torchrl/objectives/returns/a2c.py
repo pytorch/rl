@@ -31,11 +31,11 @@ class A2C:
 
     Args:
         gamma (scalar): exponential mean discount.
-        lamda (scalar): trajectory discount.
         value_network (TDModule): value operator used to retrieve the value estimates.
-        average_rewards (bool): if True, rewards will be standardized before the GAE is computed.
-        gradient_mode (bool): if True, gradients are propagated throught the computation of the value function.
+        average_rewards (bool, optional): if True, rewards will be standardized before the GAE is computed.
+        gradient_mode (bool, optional): if True, gradients are propagated throught the computation of the value function.
             Default is `False`.
+        value_key (str, optional): key pointing to the state value. Default is `"state_value"`.
     """
 
     def __init__(
