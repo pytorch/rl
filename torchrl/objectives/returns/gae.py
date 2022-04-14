@@ -18,10 +18,9 @@ import torch
 from torch import Tensor
 
 from torchrl.envs.utils import step_tensordict
-from .functional import generalized_advantage_estimate
 from ...data.tensordict.tensordict import _TensorDict
 from ...modules import TDModule
-
+from .functional import generalized_advantage_estimate
 
 
 class GAE:
@@ -33,7 +32,7 @@ class GAE:
     Args:
         gamma (scalar): exponential mean discount.
         lamda (scalar): trajectory discount.
-        critic (TDModule): value operator used to retrieve the value estimates.
+        value_network (TDModule): value operator used to retrieve the value estimates.
         average_rewards (bool): if True, rewards will be standardized before the GAE is computed.
         gradient_mode (bool): if True, gradients are propagated throught the computation of the value function.
             Default is `False`.
@@ -43,21 +42,21 @@ class GAE:
         self,
         gamma: Union[float, torch.Tensor],
         lamda: float,
-        critic: TDModule,
+        value_network: TDModule,
         average_rewards: bool = False,
         gradient_mode: bool = False,
     ):
         self.gamma = gamma
         self.lamda = lamda
-        self.critic = critic
+        self.value_network = value_network
         self.average_rewards = average_rewards
         self.gradient_mode = gradient_mode
 
     def __call__(
         self,
         tensordict: _TensorDict,
-        params: Optional[List[Tensor]]=None,
-        buffers: Optional[List[Tensor]]=None,
+        params: Optional[List[Tensor]] = None,
+        buffers: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
         target_buffers: Optional[List[Tensor]] = None,
     ) -> _TensorDict:
@@ -88,19 +87,19 @@ class GAE:
             gamma, lamda = self.gamma, self.lamda
             kwargs = {}
             if params is not None:
-                kwargs['params'] = params
+                kwargs["params"] = params
             if buffers is not None:
-                kwargs['buffers'] = buffers
-            self.critic(tensordict, **kwargs)
+                kwargs["buffers"] = buffers
+            self.value_network(tensordict, **kwargs)
             value = tensordict.get("state_value")
 
         with torch.set_grad_enabled(False):
             step_td = step_tensordict(tensordict)
             if target_params is not None:
-                kwargs['params'] = target_params
+                kwargs["params"] = target_params
             if target_buffers is not None:
-                kwargs['buffers'] = target_buffers
-            self.critic(step_td, **kwargs)
+                kwargs["buffers"] = target_buffers
+            self.value_network(step_td, **kwargs)
             next_value = step_td.get("state_value")
 
         done = tensordict.get("done")
@@ -109,5 +108,5 @@ class GAE:
                 gamma, lamda, value, next_value, reward, done
             )
             tensordict.set("advantage", adv.detach())
-            tensordict.set("value_target", value_target)
+            tensordict.set("advantage_diff", adv)
         return tensordict

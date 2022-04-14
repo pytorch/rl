@@ -6,7 +6,6 @@
 from typing import Union, Optional, List
 
 import torch
-
 # for value, log_policy, reward, entropy in list(zip(values, log_policies, rewards, entropies))[::-1]:
 #     gae = gae * opt.gamma * opt.tau
 #     gae = gae + reward + opt.gamma * next_value.detach() - value.detach()
@@ -26,11 +25,13 @@ from ...modules import TDModule
 class A2C:
     """A2C advantage function.
 
+    Ref: Asynchronous Methods for Deep Reinforcement Learning (https://arxiv.org/pdf/1602.01783.pdf) by
+    Volodymyr Mnih et al.
 
     Args:
         gamma (scalar): exponential mean discount.
         lamda (scalar): trajectory discount.
-        critic (TDModule): value operator used to retrieve the value estimates.
+        value_network (TDModule): value operator used to retrieve the value estimates.
         average_rewards (bool): if True, rewards will be standardized before the GAE is computed.
         gradient_mode (bool): if True, gradients are propagated throught the computation of the value function.
             Default is `False`.
@@ -39,20 +40,22 @@ class A2C:
     def __init__(
         self,
         gamma: Union[float, torch.Tensor],
-        critic: TDModule,
+        value_network: TDModule,
         average_rewards: bool = False,
         gradient_mode: bool = False,
+        value_key: str= "state_value",
     ):
         self.gamma = gamma
-        self.critic = critic
+        self.value_network = value_network
         self.average_rewards = average_rewards
         self.gradient_mode = gradient_mode
+        self.value_key = value_key
 
     def __call__(
         self,
         tensordict: _TensorDict,
-        params: Optional[List[Tensor]]=None,
-        buffers: Optional[List[Tensor]]=None,
+        params: Optional[List[Tensor]] = None,
+        buffers: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
         target_buffers: Optional[List[Tensor]] = None,
     ) -> _TensorDict:
@@ -83,26 +86,24 @@ class A2C:
             gamma = self.gamma
             kwargs = {}
             if params is not None:
-                kwargs['params'] = params
+                kwargs["params"] = params
             if buffers is not None:
-                kwargs['buffers'] = buffers
-            self.critic(tensordict, **kwargs)
-            value = tensordict.get("state_value")
+                kwargs["buffers"] = buffers
+            self.value_network(tensordict, **kwargs)
+            value = tensordict.get(self.value_key)
 
         with torch.set_grad_enabled(False):
             step_td = step_tensordict(tensordict)
             if target_params is not None:
-                kwargs['params'] = target_params
+                kwargs["params"] = target_params
             if target_buffers is not None:
-                kwargs['buffers'] = target_buffers
-            self.critic(step_td, **kwargs)
-            next_value = step_td.get("state_value")
+                kwargs["buffers"] = target_buffers
+            self.value_network(step_td, **kwargs)
+            next_value = step_td.get(self.value_key)
 
         done = tensordict.get("done")
         with torch.set_grad_enabled(self.gradient_mode):
-            adv = a2c_advantage_estimate(
-                gamma, value, next_value, reward, done
-            )
+            adv = a2c_advantage_estimate(gamma, value, next_value, reward, done)
             tensordict.set("advantage", adv.detach())
-            tensordict.set("value_target", adv)
+            tensordict.set("advantage_diff", adv)
         return tensordict

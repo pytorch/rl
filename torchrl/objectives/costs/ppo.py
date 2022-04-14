@@ -58,6 +58,7 @@ class PPOLoss(_LossModule):
         actor: ProbabilisticTDModule,
         critic: TDModule,
         advantage_key: str = "advantage",
+        advantage_diff_key: str = "value_target",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_factor: float = 0.01,
@@ -70,6 +71,7 @@ class PPOLoss(_LossModule):
         self.actor = actor
         self.critic = critic
         self.advantage_key = advantage_key
+        self.advantage_diff_key = advantage_diff_key
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_factor
         self.entropy_factor = entropy_factor
@@ -110,25 +112,27 @@ class PPOLoss(_LossModule):
         return log_weight, dist
 
     def loss_critic(self, tensordict: _TensorDict) -> torch.Tensor:
-
-        if "value_target" in tensordict.keys():
-            value_target = tensordict.get("value_target")
-            if value_target.requires_grad:
+        if self.advantage_diff_key in tensordict.keys():
+            advantage_diff = tensordict.get("advantage_diff")
+            if not advantage_diff.requires_grad:
                 raise RuntimeError(
-                    "value_target retrieved from tensordict requires grad."
+                    "value_target retrieved from tensordict does not requires grad."
                 )
-
+            loss_value = distance_loss(
+                advantage_diff, torch.zeros_like(advantage_diff),
+                loss_function=self.loss_critic_type
+            )
         else:
             with torch.no_grad():
                 reward = tensordict.get("reward")
                 next_td = step_tensordict(tensordict)
                 next_value = self.critic(next_td).get("state_value")
                 value_target = reward + next_value * self.gamma
-        tensordict_select = tensordict.select(*self.critic.in_keys).clone()
-        value = self.critic(tensordict_select).get("state_value")
-        loss_value = distance_loss(
-            value, value_target, loss_function=self.loss_critic_type
-        )
+            tensordict_select = tensordict.select(*self.critic.in_keys).clone()
+            value = self.critic(tensordict_select).get("state_value")
+            loss_value = distance_loss(
+                value, value_target, loss_function=self.loss_critic_type
+            )
         return self.critic_factor * loss_value
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
@@ -138,7 +142,6 @@ class PPOLoss(_LossModule):
         advantage = tensordict.get(self.advantage_key)
         log_weight, dist = self._log_weight(tensordict)
         neg_loss = (log_weight.exp() * advantage).mean()
-        print(log_weight)
         td_out = TensorDict({"loss_objective": -neg_loss.mean()}, [])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
