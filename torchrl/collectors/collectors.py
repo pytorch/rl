@@ -135,6 +135,8 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             policy.share_memory()
             # if not (len(list(policy.parameters())) == 0 or next(policy.parameters()).is_shared()):
             #     raise RuntimeError("Provided policy parameters must be shared.")
+        if hasattr(env, "close") and not env.is_closed:
+            env.close()
         return policy, device, get_weights_fn
 
     def update_policy_weights_(self) -> None:
@@ -244,6 +246,7 @@ class SyncDataCollector(_DataCollector):
         exploration_mode: str = "random",
         init_with_lag: bool = False,
     ):
+        self.closed = True
         if seed is not None:
             torch.manual_seed(seed)
             np.random.seed(seed)
@@ -256,6 +259,7 @@ class SyncDataCollector(_DataCollector):
             env = create_env_fn
 
         self.env: _EnvClass = env
+        self.closed = False
         self.n_env = self.env.numel()
 
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
@@ -303,7 +307,7 @@ class SyncDataCollector(_DataCollector):
         self._td_env = None
         self._td_policy = None
         self._has_been_done = None
-        self.closed = False
+        self._exclude_private_keys = True
 
     def set_seed(self, seed: int) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -345,7 +349,13 @@ class SyncDataCollector(_DataCollector):
                 tensordict_out = split_trajectories(tensordict_out)
             if self.postproc is not None:
                 tensordict_out = self.postproc(tensordict_out)
+            if self._exclude_private_keys:
+                excluded_keys = [
+                    key for key in tensordict_out.keys() if key.startswith("_")
+                ]
+                tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
             yield tensordict_out
+
             del tensordict_out
             if self._frames >= self.total_frames:
                 break
@@ -706,6 +716,7 @@ class _MultiDataCollector(_DataCollector):
             -(self.total_frames // -self.num_workers) if total_frames > 0 else np.inf
         )  # ceil(total_frames/num_workers)
         self._run_processes()
+        self._exclude_private_keys = True
 
     @property
     def frames_per_batch_worker(self):
@@ -952,6 +963,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 frames += math.prod(out.shape)
             if self.postprocs:
                 out = self.postprocs[out.device](out)
+            if self._exclude_private_keys:
+                excluded_keys = [key for key in out.keys() if key.startswith("_")]
+                out = out.exclude(*excluded_keys)
             yield out
 
         del out_tensordicts_shared
@@ -1030,7 +1044,9 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             else:
                 print(f"{idx} is done!")
                 dones[idx] = True
-
+            if self._exclude_private_keys:
+                excluded_keys = [key for key in out.keys() if key.startswith("_")]
+                out = out.exclude(*excluded_keys)
             yield out
 
         self._shutdown_main()
