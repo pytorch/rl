@@ -6,6 +6,7 @@
 from typing import Union, Optional, List
 
 import torch
+
 # for value, log_policy, reward, entropy in list(zip(values, log_policies, rewards, entropies))[::-1]:
 #     gae = gae * opt.gamma * opt.tau
 #     gae = gae + reward + opt.gamma * next_value.detach() - value.detach()
@@ -17,9 +18,9 @@ import torch
 from torch import Tensor
 
 from torchrl.envs.utils import step_tensordict
-from .functional import a2c_advantage_estimate
 from ...data.tensordict.tensordict import _TensorDict
 from ...modules import TDModule
+from .functional import a2c_advantage_estimate
 
 
 class A2C:
@@ -43,7 +44,7 @@ class A2C:
         value_network: TDModule,
         average_rewards: bool = False,
         gradient_mode: bool = False,
-        value_key: str= "state_value",
+        value_key: str = "state_value",
     ):
         self.gamma = gamma
         self.value_network = value_network

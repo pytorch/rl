@@ -119,8 +119,9 @@ class PPOLoss(_LossModule):
                     "value_target retrieved from tensordict does not requires grad."
                 )
             loss_value = distance_loss(
-                advantage_diff, torch.zeros_like(advantage_diff),
-                loss_function=self.loss_critic_type
+                advantage_diff,
+                torch.zeros_like(advantage_diff),
+                loss_function=self.loss_critic_type,
             )
         else:
             with torch.no_grad():

@@ -178,7 +178,7 @@ def make_ppo_loss(model, args) -> PPOLoss:
         args.lamda,
         value_network=critic_model,
         average_rewards=True,
-        gradient_mode=True
+        gradient_mode=True,
     )
     loss_module = loss_dict[args.loss](
         actor=actor_model,

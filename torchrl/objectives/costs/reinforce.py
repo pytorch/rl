@@ -47,16 +47,11 @@ class ReinforceLoss(_LossModule):
 
         if advantage_module == "gae":
             self.advantage_module = GAE(
-                gamma,
-                lamda,
-                value_network=self.critic,
-                gradient_mode=True
+                gamma, lamda, value_network=self.critic, gradient_mode=True
             )
         elif advantage_module == "a2c":
             self.advantage_module = A2C(
-                gamma,
-                value_network=self.critic,
-                gradient_mode=True
+                gamma, value_network=self.critic, gradient_mode=True
             )
         else:
             raise NotImplementedError
@@ -96,8 +91,9 @@ class ReinforceLoss(_LossModule):
                     "value_target retrieved from tensordict does not requires grad."
                 )
             loss_value = distance_loss(
-                advantage_diff, torch.zeros_like(advantage_diff),
-                loss_function=self.loss_critic_type
+                advantage_diff,
+                torch.zeros_like(advantage_diff),
+                loss_function=self.loss_critic_type,
             )
         else:
             with torch.no_grad():
