@@ -335,8 +335,8 @@ class BoundedTensorSpec(TensorSpec):
         return out
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        minimum = self.space.minimum.to(val.device)  # type: ignore
-        maximum = self.space.maximum.to(val.device)  # type: ignore
+        minimum = self.space.minimum.to(val.device)
+        maximum = self.space.maximum.to(val.device)
         try:
             val = val.clamp_(minimum.item(), maximum.item())
         except ValueError:
@@ -349,7 +349,7 @@ class BoundedTensorSpec(TensorSpec):
     def is_in(self, val: torch.Tensor) -> bool:
         return (val >= self.space.minimum.to(val.device)).all() and (
             val <= self.space.maximum.to(val.device)
-        ).all()  # type: ignore
+        ).all()
 
 
 @dataclass(repr=False)
@@ -648,7 +648,7 @@ class BinaryDiscreteTensorSpec(TensorSpec):
 
     def index(
         self, index: INDEX_TYPING, tensor_to_index: torch.Tensor
-    ) -> torch.Tensor:  # type: ignore
+    ) -> torch.Tensor:
         if not isinstance(index, torch.Tensor):
             raise ValueError(
                 f"Only tensors are allowed for indexing using"
@@ -746,7 +746,7 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
 
     def index(
         self, index: INDEX_TYPING, tensor_to_index: torch.Tensor
-    ) -> torch.Tensor:  # type: ignore
+    ) -> torch.Tensor:
         if not isinstance(index, torch.Tensor):
             raise ValueError(
                 f"Only tensors are allowed for indexing using"
@@ -857,10 +857,10 @@ dtype=torch.float32)},
             if _key in key:
                 self._specs[_key].type_check(value, _key)
 
-    def is_in(self, val: Union[dict, _TensorDict]) -> bool:  # type: ignore
+    def is_in(self, val: Union[dict, _TensorDict]) -> bool:
         return all([self[key].is_in(val.get(key)) for key in self._specs])
 
-    def project(self, val: _TensorDict) -> _TensorDict:  # type: ignore
+    def project(self, val: _TensorDict) -> _TensorDict:
         for key in self._specs:
             _val = val.get(key)
             if not self._specs[key].is_in(_val):

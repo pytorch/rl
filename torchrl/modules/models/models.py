@@ -481,7 +481,7 @@ class DuelingMlpDQNet(nn.Module):
             "activate_last_layer": True,
         }
         _mlp_kwargs_feature.update(mlp_kwargs_feature)
-        self.features = MLP(**_mlp_kwargs_feature)  # type: ignore
+        self.features = MLP(**_mlp_kwargs_feature)
 
         _mlp_kwargs_output = {
             "depth": 1,
@@ -495,8 +495,8 @@ class DuelingMlpDQNet(nn.Module):
         _mlp_kwargs_output.update(mlp_kwargs_output)
         self.out_features = out_features
         self.out_features_value = out_features_value
-        self.advantage = MLP(out_features=out_features, **_mlp_kwargs_output)  # type: ignore
-        self.value = MLP(out_features=out_features_value, **_mlp_kwargs_output)  # type: ignore
+        self.advantage = MLP(out_features=out_features, **_mlp_kwargs_output)
+        self.value = MLP(out_features=out_features_value, **_mlp_kwargs_output)
         for layer in self.modules():
             if isinstance(layer, (nn.Conv2d, nn.Linear)) and isinstance(
                 layer.bias, torch.Tensor
@@ -554,7 +554,7 @@ class DuelingCnnDQNet(nn.Module):
             "kernel_sizes": [8, 4, 3],
         }
         _cnn_kwargs.update(cnn_kwargs)
-        self.features = ConvNet(**_cnn_kwargs)  # type: ignore
+        self.features = ConvNet(**_cnn_kwargs)
 
         _mlp_kwargs = {
             "depth": 1,
@@ -566,8 +566,8 @@ class DuelingCnnDQNet(nn.Module):
         _mlp_kwargs.update(mlp_kwargs)
         self.out_features = out_features
         self.out_features_value = out_features_value
-        self.advantage = MLP(out_features=out_features, **_mlp_kwargs)  # type: ignore
-        self.value = MLP(out_features=out_features_value, **_mlp_kwargs)  # type: ignore
+        self.advantage = MLP(out_features=out_features, **_mlp_kwargs)
+        self.value = MLP(out_features=out_features_value, **_mlp_kwargs)
         for layer in self.modules():
             if isinstance(layer, (nn.Conv2d, nn.Linear)) and isinstance(
                 layer.bias, torch.Tensor
@@ -615,16 +615,16 @@ class DistributionalDQNnet(nn.Module):
 
 
 def ddpg_init_last_layer(last_layer: nn.Module, scale: float = 6e-4) -> None:
-    last_layer.weight.data.copy_(  # type: ignore
+    last_layer.weight.data.copy_(
         torch.rand_like(last_layer.weight.data) * scale
         - scale / 2
-        # type: ignore
+      
     )
     if last_layer.bias is not None:
-        last_layer.bias.data.copy_(  # type: ignore
+        last_layer.bias.data.copy_(
             torch.rand_like(last_layer.bias.data) * scale
             - scale / 2
-            # type: ignore
+          
         )
 
 
@@ -696,8 +696,8 @@ class DdpgCnnActor(nn.Module):
         }
         mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
         mlp_net_default_kwargs.update(mlp_net_kwargs)
-        self.convnet = ConvNet(**conv_net_default_kwargs)  # type: ignore
-        self.mlp = MLP(**mlp_net_default_kwargs)  # type: ignore
+        self.convnet = ConvNet(**conv_net_default_kwargs)
+        self.mlp = MLP(**mlp_net_default_kwargs)
         ddpg_init_last_layer(self.mlp[-1], 6e-4)
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
@@ -740,7 +740,7 @@ class DdpgMlpActor(nn.Module):
         }
         mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
         mlp_net_default_kwargs.update(mlp_net_kwargs)
-        self.mlp = MLP(**mlp_net_default_kwargs)  # type: ignore
+        self.mlp = MLP(**mlp_net_default_kwargs)
         ddpg_init_last_layer(self.mlp[-1], 6e-3)
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
@@ -812,8 +812,8 @@ class DdpgCnnQNet(nn.Module):
         }
         mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
         mlp_net_default_kwargs.update(mlp_net_kwargs)
-        self.convnet = ConvNet(**conv_net_default_kwargs)  # type: ignore
-        self.mlp = MLP(**mlp_net_default_kwargs)  # type: ignore
+        self.convnet = ConvNet(**conv_net_default_kwargs)
+        self.mlp = MLP(**mlp_net_default_kwargs)
         ddpg_init_last_layer(self.mlp[-1], 6e-4)
 
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
@@ -873,7 +873,7 @@ class DdpgMlpQNet(nn.Module):
             mlp_net_kwargs_net1 if mlp_net_kwargs_net1 is not None else dict()
         )
         mlp1_net_default_kwargs.update(mlp_net_kwargs_net1)
-        self.mlp1 = MLP(**mlp1_net_default_kwargs)  # type: ignore
+        self.mlp1 = MLP(**mlp1_net_default_kwargs)
 
         mlp2_net_default_kwargs = {
             "in_features": None,
@@ -890,7 +890,7 @@ class DdpgMlpQNet(nn.Module):
             mlp_net_kwargs_net2 if mlp_net_kwargs_net2 is not None else dict()
         )
         mlp2_net_default_kwargs.update(mlp_net_kwargs_net2)
-        self.mlp2 = MLP(**mlp2_net_default_kwargs)  # type: ignore
+        self.mlp2 = MLP(**mlp2_net_default_kwargs)
         ddpg_init_last_layer(self.mlp2[-1], 6e-3)
 
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
@@ -909,7 +909,7 @@ class LSTMNet(nn.Module):
     def __init__(self, out_features, lstm_kwargs: Dict, mlp_kwargs: Dict) -> None:
         super().__init__()
         lstm_kwargs.update({"batch_first": True})
-        self.mlp = MLP(**mlp_kwargs)  # type: ignore
+        self.mlp = MLP(**mlp_kwargs)
         self.lstm = nn.LSTM(**lstm_kwargs)
         self.linear = nn.LazyLinear(out_features)
 
@@ -970,7 +970,7 @@ class LSTMNet(nn.Module):
                     + [out[i]],
                     1,
                 )
-        return tuple(out)  # type: ignore
+        return tuple(out)
 
     def forward(
         self,
