@@ -646,9 +646,7 @@ class BinaryDiscreteTensorSpec(TensorSpec):
             *shape, *self.shape, device=self.device, dtype=self.dtype
         ).bernoulli_()
 
-    def index(
-        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor
-    ) -> torch.Tensor:
+    def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
         if not isinstance(index, torch.Tensor):
             raise ValueError(
                 f"Only tensors are allowed for indexing using"
@@ -744,9 +742,7 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         out = torch.stack([val.argmax(-1) for val in vals], -1).numpy()
         return out
 
-    def index(
-        self, index: INDEX_TYPING, tensor_to_index: torch.Tensor
-    ) -> torch.Tensor:
+    def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
         if not isinstance(index, torch.Tensor):
             raise ValueError(
                 f"Only tensors are allowed for indexing using"

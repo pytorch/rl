@@ -174,28 +174,16 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         self.out_features = out_features
         self.std_init = std_init
 
-        self.weight_mu = UninitializedParameter(
-            device=device, dtype=dtype
-        )
-        self.weight_sigma = UninitializedParameter(
-            device=device, dtype=dtype
-        )
+        self.weight_mu = UninitializedParameter(device=device, dtype=dtype)
+        self.weight_sigma = UninitializedParameter(device=device, dtype=dtype)
         self.register_buffer(
-            "weight_epsilon",
-            UninitializedBuffer(device=device, dtype=dtype)
-          
+            "weight_epsilon", UninitializedBuffer(device=device, dtype=dtype)
         )
         if bias:
-            self.bias_mu = UninitializedParameter(
-                device=device, dtype=dtype
-            )
-            self.bias_sigma = UninitializedParameter(
-                device=device, dtype=dtype
-            )
+            self.bias_mu = UninitializedParameter(device=device, dtype=dtype)
+            self.bias_sigma = UninitializedParameter(device=device, dtype=dtype)
             self.register_buffer(
-                "bias_epsilon",
-                UninitializedBuffer(device=device, dtype=dtype)
-              
+                "bias_epsilon", UninitializedBuffer(device=device, dtype=dtype)
             )
         else:
             self.bias_mu = None
@@ -209,21 +197,13 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         if not self.has_uninitialized_params() and self.in_features != 0:
             super().reset_noise()
 
-    def initialize_parameters(
-        self, input: torch.Tensor
-    ) -> None:[override]
+    def initialize_parameters(self, input: torch.Tensor) -> None:
         if self.has_uninitialized_params():
             with torch.no_grad():
                 self.in_features = input.shape[-1]
-                self.weight_mu.materialize(
-                    (self.out_features, self.in_features)
-                )
-                self.weight_sigma.materialize(
-                    (self.out_features, self.in_features)
-                )
-                self.weight_epsilon.materialize(
-                    (self.out_features, self.in_features)
-                )
+                self.weight_mu.materialize((self.out_features, self.in_features))
+                self.weight_sigma.materialize((self.out_features, self.in_features))
+                self.weight_epsilon.materialize((self.out_features, self.in_features))
                 if self.bias_mu is not None:
                     self.bias_mu.materialize((self.out_features,))
                     self.bias_sigma.materialize((self.out_features,))

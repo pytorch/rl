@@ -870,9 +870,7 @@ class TDSequence(TDModule):
             kwargs_pruned = {
                 key: item for key, item in kwargs.items() if key not in ("params",)
             }
-            for i, (module, param) in enumerate(
-                zip(self.module, param_splits)
-            ):
+            for i, (module, param) in enumerate(zip(self.module, param_splits)):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
