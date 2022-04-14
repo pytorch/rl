@@ -318,7 +318,7 @@ class TDModule(nn.Module):
         if self.spec is not None:
             self.spec = self.spec.to(dest)
         out = super().to(dest)
-        return out  # type: ignore
+        return out
 
     def __repr__(self) -> str:
         fields = indent(
@@ -857,7 +857,7 @@ class TDSequence(TDModule):
             }
             for i, (module, param, buffer) in enumerate(
                 zip(self.module, param_splits, buffer_splits)
-            ):  # type: ignore
+            ):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, 0, *(0,) * len(module.in_keys))
@@ -870,16 +870,14 @@ class TDSequence(TDModule):
             kwargs_pruned = {
                 key: item for key, item in kwargs.items() if key not in ("params",)
             }
-            for i, (module, param) in enumerate(
-                zip(self.module, param_splits)
-            ):  # type: ignore
+            for i, (module, param) in enumerate(zip(self.module, param_splits)):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
                 tensordict = module(tensordict, params=param, **kwargs_pruned)
 
         elif not len(kwargs):
-            for module in self.module:  # type: ignore
+            for module in self.module:
                 tensordict = module(tensordict)
         else:
             raise RuntimeError(
@@ -889,12 +887,12 @@ class TDSequence(TDModule):
         return tensordict
 
     def __len__(self):
-        return len(self.module)  # type: ignore
+        return len(self.module)
 
     @property
     def spec(self):
         kwargs = {}
-        for layer in self.module:  # type: ignore
+        for layer in self.module:
             out_key = layer.out_keys[0]
             spec = layer.spec
             if spec is None:
@@ -949,7 +947,7 @@ class TDSequence(TDModule):
             self_copy = self
         params = []
         buffers = []
-        for i, module in enumerate(self.module):  # type: ignore
+        for i, module in enumerate(self.module):
             self_copy.module[i], (
                 _params,
                 _buffers,
