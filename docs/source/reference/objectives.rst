@@ -12,7 +12,6 @@ DQN
 
     DQNLoss
     DistributionalDQNLoss
-    DoubleDistributionalDQNLoss
 
 DDPG
 ----
