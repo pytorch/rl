@@ -22,7 +22,6 @@ from torchrl.objectives import (
     ClipPPOLoss,
     DDPGLoss,
     DistributionalDQNLoss,
-    DoubleSACLoss,
     DQNLoss,
     GAE,
     HardUpdate,
@@ -69,16 +68,15 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
         raise NotImplementedError
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
+        loss_class = SACLoss
         if args.loss == "double":
-            loss_class = DoubleSACLoss
             loss_kwargs.update(
                 {
                     "delay_actor": False,
                     "delay_qvalue": False,
+                    "delay_value": True,
                 }
             )
-        else:
-            loss_class = SACLoss
     actor_model, qvalue_model, value_model = model
 
     loss_module = loss_class(

@@ -30,7 +30,6 @@ SAC
     :template: rl_template_noinherit.rst
 
     SACLoss
-    DoubleSACLoss
 
 REDQ
 ----

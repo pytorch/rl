@@ -31,7 +31,6 @@ from torchrl.objectives import (
     DistributionalDQNLoss,
     DDPGLoss,
     SACLoss,
-    DoubleSACLoss,
     PPOLoss,
     ClipPPOLoss,
     KLPENPPOLoss,
@@ -588,13 +587,13 @@ class TestSAC:
         )
         return td
 
-    @pytest.mark.parametrize("loss_class", (SACLoss, DoubleSACLoss))
+    @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_sac(self, loss_class, delay_actor, delay_qvalue, num_qvalue, device):
-        if (delay_actor or delay_qvalue) and loss_class is not DoubleSACLoss:
+    def test_sac(self, delay_value, delay_actor, delay_qvalue, num_qvalue, device):
+        if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
 
         torch.manual_seed(self.seed)
@@ -696,15 +695,15 @@ class TestSAC:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
     @pytest.mark.parametrize("n", list(range(4)))
-    @pytest.mark.parametrize("loss_class", (SACLoss, DoubleSACLoss))
+    @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
     def test_sac_batcher(
-        self, n, loss_class, delay_actor, delay_qvalue, num_qvalue, device, gamma=0.9
+        self, n, delay_value, delay_actor, delay_qvalue, num_qvalue, device, gamma=0.9
     ):
-        if (delay_actor or delay_qvalue) and (loss_class is not DoubleSACLoss):
+        if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_sac(device=device)
@@ -719,7 +718,7 @@ class TestSAC:
         if delay_qvalue:
             kwargs["delay_qvalue"] = True
 
-        loss_fn = loss_class(
+        loss_fn = SACLoss(
             actor_network=actor,
             qvalue_network=qvalue,
             value_network=value,

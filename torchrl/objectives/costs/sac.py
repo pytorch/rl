@@ -20,7 +20,7 @@ from torchrl.modules.td_module.actors import (
 from torchrl.objectives.costs.utils import distance_loss, next_state_value
 from .common import _LossModule
 
-__all__ = ["SACLoss", "DoubleSACLoss"]
+__all__ = ["SACLoss"]
 
 
 class SACLoss(_LossModule):
@@ -52,11 +52,13 @@ class SACLoss(_LossModule):
         target_entropy (float or str, optional): Target entropy for the
             stochastic policy. Default is "auto", where target entropy is
             computed as `-prod(n_actions)`.
+        delay_actor (bool, optional): Whether to separate the target actor
+            networks from the actor networks used for data collection.
+        delay_qvalue (bool, optional): Whether to separate the target Q value
+            networks from the Q value networks used for data collection.
+        delay_value (bool, optional): Whether to separate the target value
+            networks from the value networks used for data collection.
     """
-
-    delay_actor: bool = False
-    delay_qvalue: bool = False
-    delay_value: bool = False
 
     def __init__(
         self,
@@ -70,10 +72,14 @@ class SACLoss(_LossModule):
         alpha_init: float = 1.0,
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
+        delay_actor: bool = False,
+        delay_qvalue: bool = False,
+        delay_value: bool = False,
     ) -> None:
         super().__init__()
 
         # Actor
+        self.delay_actor = delay_actor
         self.convert_to_functional(
             actor_network,
             "actor_network",
@@ -81,6 +87,7 @@ class SACLoss(_LossModule):
         )
 
         # Value
+        self.delay_value = delay_value
         self.convert_to_functional(
             value_network,
             "value_network",
@@ -88,6 +95,7 @@ class SACLoss(_LossModule):
         )
 
         # Q value
+        self.delay_qvalue = delay_qvalue
         self.num_qvalue_nets = num_qvalue_nets
         self.convert_to_functional(
             qvalue_network,
@@ -302,22 +310,3 @@ class SACLoss(_LossModule):
         with torch.no_grad():
             alpha = self.log_alpha.detach().exp()
         return alpha
-
-
-class DoubleSACLoss(SACLoss):
-    """
-    A Double SAC loss class.
-    As for Double DDPG/DQN losses, this class separates the target critic/value/actor networks from the
-    critic/value/actor networks used for data collection. Those target networks should be updated from their original
-    counterparts with some delay using dedicated classes (SoftUpdate and HardUpdate in objectives.cost.utils).
-    Note that the original networks will be copied at initialization using the copy.deepcopy method: in some rare cases
-    this may lead to unexpected behaviours (for instance if the networks change in a way that won't be reflected by their
-    state_dict). Please report any such bug if encountered.
-
-    """
-
-    def __init__(self, *args, delay_actor=False, delay_qvalue=False, **kwargs):
-        self.delay_actor = delay_actor
-        self.delay_qvalue = delay_qvalue
-        self.delay_value = True
-        super().__init__(*args, **kwargs)
