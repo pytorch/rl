@@ -21,7 +21,6 @@ DDPG
     :template: rl_template_noinherit.rst
 
     DDPGLoss
-    DoubleDDPGLoss
 
 SAC
 ----

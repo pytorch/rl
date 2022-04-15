@@ -22,7 +22,6 @@ from torchrl.objectives import (
     ClipPPOLoss,
     DDPGLoss,
     DistributionalDQNLoss,
-    DoubleDDPGLoss,
     DoubleSACLoss,
     DQNLoss,
     GAE,
@@ -126,12 +125,11 @@ def make_ddpg_loss(model, args) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
         raise NotImplementedError
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
-        if args.loss == "single":
-            loss_class = DDPGLoss
-        elif args.loss == "double":
-            loss_class = DoubleDDPGLoss
-        else:
-            raise NotImplementedError
+        loss_class = DDPGLoss
+    if args.loss not in ("single", "double"):
+        raise NotImplementedError
+    double_loss = args.loss == "double"
+    loss_kwargs.update({"delay_actor": double_loss, "delay_value": double_loss})
     loss_module = loss_class(actor, value_net, gamma=args.gamma, **loss_kwargs)
     target_net_updater = make_target_updater(args, loss_module)
     return loss_module, target_net_updater

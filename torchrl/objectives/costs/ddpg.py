@@ -30,10 +30,11 @@ class DDPGLoss(_LossModule):
         device (str, int or torch.device, optional): a device where the losses will be computed, if it can't be found
             via the value operator.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+        delay_actor (bool): whether to separate the target actor networks from the actor networks used for data
+            collection.
+        delay_value (bool): whether to separate the target value networks from the value networks used for data
+            collection.
     """
-
-    delay_actor: bool = False
-    delay_value: bool = False
 
     def __init__(
         self,
@@ -41,8 +42,12 @@ class DDPGLoss(_LossModule):
         value_network: TDModule,
         gamma: float,
         loss_function: str = "l2",
+        delay_actor: bool = False,
+        delay_value: bool = False,
     ) -> None:
         super().__init__()
+        self.delay_actor = delay_actor
+        self.delay_value = delay_value
         self.convert_to_functional(
             actor_network,
             "actor_network",
@@ -152,19 +157,3 @@ class DDPGLoss(_LossModule):
         )
 
         return loss_value, abs(pred_val - target_value), pred_val, target_value
-
-
-class DoubleDDPGLoss(DDPGLoss):
-    """
-    A Double DDPG loss class.
-    As for Double DQN loss, this class separates the target value/actor networks from the value/actor networks used for
-    data collection. Those target networks should be updated from their original counterparts with some delay using
-    dedicated classes (SoftUpdate and HardUpdate in objectives.cost.utils).
-    Note that the original networks will be copied at initialization using the copy.deepcopy method: in some rare cases
-    this may lead to unexpected behaviours (for instance if the networks change in a way that won't be reflected by their
-    state_dict). Please report any such bug if encountered.
-
-    """
-
-    delay_actor: bool = True
-    delay_value: bool = True

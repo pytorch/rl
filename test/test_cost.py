@@ -30,7 +30,6 @@ from torchrl.objectives import (
     DQNLoss,
     DistributionalDQNLoss,
     DDPGLoss,
-    DoubleDDPGLoss,
     SACLoss,
     DoubleSACLoss,
     PPOLoss,
@@ -372,13 +371,22 @@ class TestDDPG:
         return td
 
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("loss_class", (DDPGLoss, DoubleDDPGLoss))
-    def test_ddpg(self, loss_class, device):
+    @pytest.mark.parametrize(
+        "target_actor,target_value", [(False, False), (True, True)]
+    )
+    def test_ddpg(self, target_actor, target_value, device):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
         td = self._create_mock_data_ddpg(device=device)
-        loss_fn = loss_class(actor, value, gamma=0.9, loss_function="l2")
+        loss_fn = DDPGLoss(
+            actor,
+            value,
+            gamma=0.9,
+            loss_function="l2",
+            target_actor=target_actor,
+            target_value=target_value,
+        )
         with _check_td_steady(td):
             loss = loss_fn(td)
 
@@ -443,13 +451,22 @@ class TestDDPG:
 
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("loss_class", (DDPGLoss, DoubleDDPGLoss))
-    def test_ddpg_batcher(self, n, loss_class, device, gamma=0.9):
+    @pytest.mark.parametrize(
+        "target_actor,target_value", [(False, False), (True, True)]
+    )
+    def test_ddpg_batcher(self, n, target_actor, target_value, device, gamma=0.9):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
         td = self._create_seq_mock_data_ddpg(device=device)
-        loss_fn = loss_class(actor, value, gamma=gamma, loss_function="l2")
+        loss_fn = DDPGLoss(
+            actor,
+            value,
+            gamma=gamma,
+            loss_function="l2",
+            target_actor=target_actor,
+            target_value=target_value,
+        )
 
         ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
         ms_td = ms(td.clone())
