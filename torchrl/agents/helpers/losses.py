@@ -21,10 +21,8 @@ from typing import Optional, Tuple
 from torchrl.objectives import (
     ClipPPOLoss,
     DDPGLoss,
-    DistributionalDoubleDQNLoss,
     DistributionalDQNLoss,
     DoubleDDPGLoss,
-    DoubleDQNLoss,
     DoubleSACLoss,
     DQNLoss,
     GAE,
@@ -143,20 +141,13 @@ def make_dqn_loss(model, args) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
     """Builds the DQN loss module."""
     loss_kwargs = {}
     if args.distributional:
-        if args.loss == "single":
-            loss_class = DistributionalDQNLoss
-        elif args.loss == "double":
-            loss_class = DistributionalDoubleDQNLoss
-        else:
-            raise NotImplementedError
+        loss_class = DistributionalDQNLoss
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
-        if args.loss == "single":
-            loss_class = DQNLoss
-        elif args.loss == "double":
-            loss_class = DoubleDQNLoss
-        else:
-            raise NotImplementedError
+        loss_class = DQNLoss
+    if args.loss not in ("single", "double"):
+        raise NotImplementedError
+    loss_kwargs.update({"delay_value": args.loss == "double"})
     loss_module = loss_class(model, gamma=args.gamma, **loss_kwargs)
     target_net_updater = make_target_updater(args, loss_module)
     return loss_module, target_net_updater

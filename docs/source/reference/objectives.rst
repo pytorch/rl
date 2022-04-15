@@ -11,7 +11,6 @@ DQN
     :template: rl_template_noinherit.rst
 
     DQNLoss
-    DoubleDQNLoss
     DistributionalDQNLoss
     DoubleDistributionalDQNLoss
 

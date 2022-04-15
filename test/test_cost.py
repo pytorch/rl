@@ -28,9 +28,7 @@ from torchrl.modules.models.models import MLP
 from torchrl.modules.td_module.actors import ValueOperator, Actor, ProbabilisticActor
 from torchrl.objectives import (
     DQNLoss,
-    DoubleDQNLoss,
     DistributionalDQNLoss,
-    DistributionalDoubleDQNLoss,
     DDPGLoss,
     DoubleDDPGLoss,
     SACLoss,
@@ -163,13 +161,13 @@ class TestDQN:
         )
         return td
 
-    @pytest.mark.parametrize("loss_class", (DQNLoss, DoubleDQNLoss))
+    @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_dqn(self, loss_class, device):
+    def test_dqn(self, delay_value, device):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         td = self._create_mock_data_dqn(device=device)
-        loss_fn = loss_class(actor, gamma=0.9, loss_function="l2")
+        loss_fn = DQNLoss(actor, gamma=0.9, loss_function="l2", delay_value=delay_value)
         with _check_td_steady(td):
             loss = loss_fn(td)
         assert loss_fn.priority_key in td.keys()
@@ -196,14 +194,16 @@ class TestDQN:
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize("n", range(4))
-    @pytest.mark.parametrize("loss_class", (DQNLoss, DoubleDQNLoss))
+    @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_dqn_batcher(self, n, loss_class, device, gamma=0.9):
+    def test_dqn_batcher(self, n, delay_value, device, gamma=0.9):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
 
         td = self._create_seq_mock_data_dqn(device=device)
-        loss_fn = loss_class(actor, gamma=gamma, loss_function="l2")
+        loss_fn = DQNLoss(
+            actor, gamma=gamma, loss_function="l2", delay_value=delay_value
+        )
 
         ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
         ms_td = ms(td.clone())
@@ -246,16 +246,14 @@ class TestDQN:
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize("atoms", range(4, 10))
-    @pytest.mark.parametrize(
-        "loss_class", (DistributionalDQNLoss, DistributionalDoubleDQNLoss)
-    )
+    @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_devices())
-    def test_distributional_dqn(self, atoms, loss_class, device, gamma=0.9):
+    def test_distributional_dqn(self, atoms, delay_value, device, gamma=0.9):
         torch.manual_seed(self.seed)
         actor = self._create_mock_distributional_actor(atoms=atoms).to(device)
 
         td = self._create_mock_data_dqn(atoms=atoms).to(device)
-        loss_fn = loss_class(actor, gamma=gamma)
+        loss_fn = DistributionalDQNLoss(actor, gamma=gamma, delay_value=delay_value)
 
         with _check_td_steady(td):
             loss = loss_fn(td)
