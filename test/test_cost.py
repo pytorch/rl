@@ -39,7 +39,6 @@ from torchrl.objectives import (
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.redq import (
     REDQLoss,
-    DoubleREDQLoss,
     REDQLoss_deprecated,
     DoubleREDQLoss_deprecated,
 )
@@ -608,8 +607,10 @@ class TestSAC:
             kwargs["delay_actor"] = True
         if delay_qvalue:
             kwargs["delay_qvalue"] = True
+        if delay_value:
+            kwargs["delay_value"] = True
 
-        loss_fn = loss_class(
+        loss_fn = SACLoss(
             actor_network=actor,
             qvalue_network=qvalue,
             value_network=value,
@@ -717,6 +718,8 @@ class TestSAC:
             kwargs["delay_actor"] = True
         if delay_qvalue:
             kwargs["delay_qvalue"] = True
+        if delay_value:
+            kwargs["delay_value"] = True
 
         loss_fn = SACLoss(
             actor_network=actor,
@@ -881,10 +884,10 @@ class TestREDQ:
         )
         return td
 
-    @pytest.mark.parametrize("loss_class", (REDQLoss, DoubleREDQLoss))
+    @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_redq(self, loss_class, num_qvalue, device):
+    def test_redq(self, delay_qvalue, num_qvalue, device):
 
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(device=device)
@@ -892,12 +895,13 @@ class TestREDQ:
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
 
-        loss_fn = loss_class(
+        loss_fn = REDQLoss(
             actor_network=actor,
             qvalue_network=qvalue,
             num_qvalue_nets=num_qvalue,
             gamma=0.9,
             loss_function="l2",
+            delay_qvalue=delay_qvalue,
         )
 
         with _check_td_steady(td):
@@ -952,10 +956,10 @@ class TestREDQ:
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
-    @pytest.mark.parametrize("loss_class", (REDQLoss, DoubleREDQLoss))
+    @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_redq_batched(self, loss_class, num_qvalue, device):
+    def test_redq_batched(self, delay_qvalue, num_qvalue, device):
 
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(device=device)
@@ -963,16 +967,17 @@ class TestREDQ:
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
 
-        loss_fn = loss_class(
+        loss_fn = REDQLoss(
             actor_network=deepcopy(actor),
             qvalue_network=deepcopy(qvalue),
             num_qvalue_nets=num_qvalue,
             gamma=0.9,
             loss_function="l2",
+            delay_qvalue=delay_qvalue,
         )
 
         loss_class_deprec = (
-            REDQLoss_deprecated if loss_class is REDQLoss else DoubleREDQLoss_deprecated
+            REDQLoss_deprecated if not delay_qvalue else DoubleREDQLoss_deprecated
         )
         loss_fn_deprec = loss_class_deprec(
             actor_network=deepcopy(actor),
@@ -996,7 +1001,7 @@ class TestREDQ:
         #  so setting seed has little impact
 
     @pytest.mark.parametrize("n", list(range(4)))
-    @pytest.mark.parametrize("loss_class", (REDQLoss, DoubleREDQLoss))
+    @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
     def test_redq_batcher(self, n, loss_class, num_qvalue, device, gamma=0.9):

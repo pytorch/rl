@@ -31,9 +31,9 @@ from torchrl.objectives import (
     SoftUpdate,
 )
 from torchrl.objectives.costs.common import _LossModule
-from torchrl.objectives.costs.redq import DoubleREDQLoss, REDQLoss
+from torchrl.objectives.costs.redq import REDQLoss
 
-# from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
+# from torchrl.objectives.costs.redq import REDQLoss
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 
 
@@ -98,10 +98,7 @@ def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
         raise NotImplementedError
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
-        if args.loss == "double":
-            loss_class = DoubleREDQLoss
-        else:
-            loss_class = REDQLoss
+        loss_class = REDQLoss
     actor_model, qvalue_model = model
 
     loss_module = loss_class(

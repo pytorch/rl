@@ -39,7 +39,6 @@ REDQ
     :template: rl_template_noinherit.rst
 
     REDQLoss
-    DoubleREDQLoss
 
 PPO
 ----
