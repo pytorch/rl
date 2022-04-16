@@ -1,0 +1,18 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - cmake >= 3.18
+  - pip:
+    - hypothesis
+    - protobuf
+    - future
+    - cloudpickle
+    - tqdm
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - expecttest
+    - pyyaml
+    - scipy
