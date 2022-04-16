@@ -1004,19 +1004,20 @@ class TestREDQ:
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_redq_batcher(self, n, loss_class, num_qvalue, device, gamma=0.9):
+    def test_redq_batcher(self, n, delay_qvalue, num_qvalue, device, gamma=0.9):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_redq(device=device)
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
 
-        loss_fn = loss_class(
+        loss_fn = REDQLoss(
             actor_network=actor,
             qvalue_network=qvalue,
             num_qvalue_nets=num_qvalue,
             gamma=0.9,
             loss_function="l2",
+            delay_qvalue=delay_qvalue,
         )
 
         ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
