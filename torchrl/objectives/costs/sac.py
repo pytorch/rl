@@ -54,10 +54,13 @@ class SACLoss(_LossModule):
             computed as `-prod(n_actions)`.
         delay_actor (bool, optional): Whether to separate the target actor
             networks from the actor networks used for data collection.
+            Default is `False`.
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used for data collection.
+            Default is `False`.
         delay_value (bool, optional): Whether to separate the target value
             networks from the value networks used for data collection.
+            Default is `False`.
     """
 
     def __init__(
