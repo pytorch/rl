@@ -77,7 +77,7 @@ def _main():
             "build_ext": setup_helpers.CMakeBuild,
             "clean": clean,
         },
-        install_requires=[pytorch_package_dep],
+        install_requires=[pytorch_package_dep, "numpy"],
     )
 
 
