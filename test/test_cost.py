@@ -369,10 +369,8 @@ class TestDDPG:
         return td
 
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize(
-        "target_actor,target_value", [(False, False), (True, True)]
-    )
-    def test_ddpg(self, target_actor, target_value, device):
+    @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
+    def test_ddpg(self, delay_actor, delay_value, device):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
@@ -382,8 +380,8 @@ class TestDDPG:
             value,
             gamma=0.9,
             loss_function="l2",
-            target_actor=target_actor,
-            target_value=target_value,
+            delay_actor=delay_actor,
+            delay_value=delay_value,
         )
         with _check_td_steady(td):
             loss = loss_fn(td)
@@ -449,10 +447,8 @@ class TestDDPG:
 
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize(
-        "target_actor,target_value", [(False, False), (True, True)]
-    )
-    def test_ddpg_batcher(self, n, target_actor, target_value, device, gamma=0.9):
+    @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
+    def test_ddpg_batcher(self, n, delay_actor, delay_value, device, gamma=0.9):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
@@ -462,8 +458,8 @@ class TestDDPG:
             value,
             gamma=gamma,
             loss_function="l2",
-            target_actor=target_actor,
-            target_value=target_value,
+            delay_actor=delay_actor,
+            delay_value=delay_value,
         )
 
         ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
