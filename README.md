@@ -74,7 +74,7 @@ pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_ni
 
 and functorch
 ```
-pip install --user "git+https://github.com/pytorch/functorch.git"
+pip install "git+https://github.com/pytorch/functorch.git"
 ```
 
 **Torchrl**
