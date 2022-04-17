@@ -80,15 +80,15 @@ class SafeTanhTransform(D.TanhTransform):
 
     """
 
-    delta = 1e-4
-
     def _call(self, x: torch.Tensor) -> torch.Tensor:
+        eps = torch.finfo(x.dtype).eps
         y = super()._call(x)
-        y.data.clamp_(-1 + self.delta, 1 - self.delta)
+        y.data.clamp_(-1 + eps, 1 - eps)
         return y
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
-        y.data.clamp_(-1 + self.delta, 1 - self.delta)
+        eps = torch.finfo(y.dtype).eps
+        y.data.clamp_(-1 + eps, 1 - eps)
         x = super()._inverse(y)
         return x
 
@@ -475,8 +475,8 @@ class TanhDelta(D.TransformedDistribution):
         min: Union[torch.Tensor, float] = -1.0,
         max: Union[torch.Tensor, float] = 1.0,
         event_dims: int = 1,
-        atol: float = 1e-4,
-        rtol: float = 1e-4,
+        atol: float = 1e-6,
+        rtol: float = 1e-6,
         **kwargs,
     ):
         minmax_msg = "max value has been found to be equal or less than min value"

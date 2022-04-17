@@ -10,9 +10,14 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Union
 
 import torch
 from torch import nn
-from torchvision.transforms.functional_tensor import (
-    resize,
-)  # as of now resize is imported from torchvision
+
+try:
+    _has_tv = True
+    from torchvision.transforms.functional_tensor import (
+        resize,
+    )  # as of now resize is imported from torchvision
+except ImportError:
+    _has_tv = False
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
@@ -628,6 +633,12 @@ class Resize(ObservationTransform):
         interpolation: str = "bilinear",
         keys: Optional[Sequence[str]] = None,
     ):
+        if not _has_tv:
+            raise ImportError(
+                "Torchvision not found. The Resize transform relies on "
+                "torchvision implementation. "
+                "Consider installing this dependency."
+            )
         if keys is None:
             keys = IMAGE_KEYS  # default
         super().__init__(keys=keys)

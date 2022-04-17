@@ -65,16 +65,16 @@ pip install functorch
 **Nightly**
 ```
 # For CUDA 10.2
-pip install --pre torch -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html --upgrade
+pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html --upgrade
 # For CUDA 11.1
-pip install --pre torch -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html --upgrade
+pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html --upgrade
 # For CPU-only build
-pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --upgrade
+pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --upgrade
 ```
 
 and functorch
 ```
-pip install --user "git+https://github.com/pytorch/functorch.git"
+pip install "git+https://github.com/pytorch/functorch.git"
 ```
 
 **Torchrl**
