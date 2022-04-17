@@ -124,7 +124,7 @@ class GymEnv(GymLikeEnv):
         from_pixels: bool = False,
         pixels_only: bool = False,
         **kwargs,
-    ) -> gym.core.Env:
+    ) -> "gym.core.Env":
         self.pixels_only = pixels_only
         if not _has_gym:
             raise RuntimeError(
