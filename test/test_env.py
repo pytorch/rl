@@ -22,6 +22,7 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import GymEnv
+from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
@@ -30,7 +31,6 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.utils import step_tensordict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
-from torchrl.envs.libs.gym import _has_gym
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -85,6 +85,7 @@ except FileNotFoundError:
 #     del p
 #
 #     assert_allclose_td(rollout1, rollout0)
+
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
 @pytest.mark.parametrize("env_name", ["Pendulum-v1", "CartPole-v1"])
