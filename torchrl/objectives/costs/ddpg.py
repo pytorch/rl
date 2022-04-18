@@ -30,10 +30,10 @@ class DDPGLoss(_LossModule):
         device (str, int or torch.device, optional): a device where the losses will be computed, if it can't be found
             via the value operator.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
-        delay_actor (bool): whether to separate the target actor networks from the actor networks used for data
-            collection.
-        delay_value (bool): whether to separate the target value networks from the value networks used for data
-            collection.
+        delay_actor (bool, optional): whether to separate the target actor networks from the actor networks used for
+            data collection. Default is `False`.
+        delay_value (bool, optional): whether to separate the target value networks from the value networks used for
+            data collection. Default is `False`.
     """
 
     def __init__(

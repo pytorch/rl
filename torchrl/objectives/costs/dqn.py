@@ -28,7 +28,8 @@ class DQNLoss(_LossModule):
         value_network (ProbabilisticTDModule): a Q value operator.
         gamma (scalar): a discount factor for return computation.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
-        delay_value (bool): whether to duplicate the value network into a new target value network to create double DQN
+        delay_value (bool, optional): whether to duplicate the value network into a new target value network to
+            create a double DQN. Default is `False`.
     """
 
     def __init__(
