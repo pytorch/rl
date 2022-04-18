@@ -21,11 +21,7 @@ from typing import Optional, Tuple
 from torchrl.objectives import (
     ClipPPOLoss,
     DDPGLoss,
-    DistributionalDoubleDQNLoss,
     DistributionalDQNLoss,
-    DoubleDDPGLoss,
-    DoubleDQNLoss,
-    DoubleSACLoss,
     DQNLoss,
     GAE,
     HardUpdate,
@@ -35,9 +31,9 @@ from torchrl.objectives import (
     SoftUpdate,
 )
 from torchrl.objectives.costs.common import _LossModule
-from torchrl.objectives.costs.redq import DoubleREDQLoss, REDQLoss
+from torchrl.objectives.costs.redq import REDQLoss
 
-# from torchrl.objectives.costs.redq import REDQLoss, DoubleREDQLoss
+# from torchrl.objectives.costs.redq import REDQLoss
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 
 
@@ -72,16 +68,15 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
         raise NotImplementedError
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
+        loss_class = SACLoss
         if args.loss == "double":
-            loss_class = DoubleSACLoss
             loss_kwargs.update(
                 {
                     "delay_actor": False,
                     "delay_qvalue": False,
+                    "delay_value": True,
                 }
             )
-        else:
-            loss_class = SACLoss
     actor_model, qvalue_model, value_model = model
 
     loss_module = loss_class(
@@ -103,10 +98,7 @@ def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
         raise NotImplementedError
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
-        if args.loss == "double":
-            loss_class = DoubleREDQLoss
-        else:
-            loss_class = REDQLoss
+        loss_class = REDQLoss
     actor_model, qvalue_model = model
 
     loss_module = loss_class(
@@ -128,12 +120,11 @@ def make_ddpg_loss(model, args) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
         raise NotImplementedError
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
-        if args.loss == "single":
-            loss_class = DDPGLoss
-        elif args.loss == "double":
-            loss_class = DoubleDDPGLoss
-        else:
-            raise NotImplementedError
+        loss_class = DDPGLoss
+    if args.loss not in ("single", "double"):
+        raise NotImplementedError
+    double_loss = args.loss == "double"
+    loss_kwargs.update({"delay_actor": double_loss, "delay_value": double_loss})
     loss_module = loss_class(actor, value_net, gamma=args.gamma, **loss_kwargs)
     target_net_updater = make_target_updater(args, loss_module)
     return loss_module, target_net_updater
@@ -143,20 +134,13 @@ def make_dqn_loss(model, args) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
     """Builds the DQN loss module."""
     loss_kwargs = {}
     if args.distributional:
-        if args.loss == "single":
-            loss_class = DistributionalDQNLoss
-        elif args.loss == "double":
-            loss_class = DistributionalDoubleDQNLoss
-        else:
-            raise NotImplementedError
+        loss_class = DistributionalDQNLoss
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
-        if args.loss == "single":
-            loss_class = DQNLoss
-        elif args.loss == "double":
-            loss_class = DoubleDQNLoss
-        else:
-            raise NotImplementedError
+        loss_class = DQNLoss
+    if args.loss not in ("single", "double"):
+        raise NotImplementedError
+    loss_kwargs.update({"delay_value": args.loss == "double"})
     loss_module = loss_class(model, gamma=args.gamma, **loss_kwargs)
     target_net_updater = make_target_updater(args, loss_module)
     return loss_module, target_net_updater

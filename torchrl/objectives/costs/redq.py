@@ -21,7 +21,7 @@ from torchrl.objectives.costs.utils import (
     next_state_value as get_next_state_value,
 )
 
-__all__ = ["REDQLoss", "DoubleREDQLoss"]
+__all__ = ["REDQLoss"]
 
 
 class REDQLoss_deprecated(_LossModule):
@@ -271,11 +271,12 @@ class REDQLoss(_LossModule):
         alpha_init (Number, optional): initial value of the alpha factor. Default is 1.0.
         fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is `False`.
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
+        delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
+            for data collection. Default is `False`.
 
     """
 
     delay_actor: bool = False
-    delay_qvalue: bool = False
 
     def __init__(
         self,
@@ -289,6 +290,7 @@ class REDQLoss(_LossModule):
         alpha_init: Number = 1.0,
         fixed_alpha: bool = False,
         target_entropy: Union[str, Number] = "auto",
+        delay_qvalue: bool = False,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -296,6 +298,7 @@ class REDQLoss(_LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
+        self.delay_qvalue = delay_qvalue
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
@@ -492,7 +495,3 @@ class REDQLoss(_LossModule):
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
         return alpha_loss
-
-
-class DoubleREDQLoss(REDQLoss):
-    delay_qvalue: bool = True
