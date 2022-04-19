@@ -798,10 +798,9 @@ class ObservationNorm(ObservationTransform):
         if isinstance(observation_spec, CompositeSpec):
             keys = [key for key in observation_spec.keys() if key in self.keys]
             for key in keys:
-                self._transform_spec(observation_spec[key])
-        else:
-            _observation_spec = observation_spec
-        space = _observation_spec.space
+                observation_spec[key] = self.transform_observation_spec(observation_spec[key])
+            return observation_spec
+        space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply(space.minimum)
             space.maximum = self._apply(space.maximum)
@@ -1032,21 +1031,12 @@ class DoubleToFloat(Transform):
         return reward_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        keys = [key for key in self.keys if "observation" in key]
-        if keys:
-            keys = [key.split("observation_")[-1] for key in keys]
-        if len(keys) > 1 or isinstance(observation_spec, CompositeSpec):
-            if not isinstance(observation_spec, CompositeSpec):
-                raise TypeError(
-                    f"observation_spec was found to be of type"
-                    f" {type(observation_spec)} when CompositeSpec "
-                    f"was expected (as more than one observation key has to "
-                    f"be converted to float)."
-                )
+        if isinstance(observation_spec, CompositeSpec):
+            keys = [key for key in self.keys if key in observation_spec.keys()]
             for key in keys:
-                self._transform_spec(observation_spec[key])
-        elif len(keys):
-            self._transform_spec(observation_spec)
+                observation_spec[key] = self.transform_observation_spec(observation_spec[key])
+            return observation_spec
+        self._transform_spec(observation_spec)
         return observation_spec
 
 

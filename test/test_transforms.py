@@ -8,11 +8,12 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from mocking_classes import ContinuousActionVecMockEnv
-from torch import multiprocessing as mp, Tensor
 from mocking_classes import ContinuousActionVecMockEnv
+from torch import multiprocessing as mp, Tensor
 from torch import multiprocessing as mp
 from torchrl.agents.env_creator import EnvCreator
 from torchrl.data import TensorDict, NdBoundedTensorSpec, CompositeSpec
+from torchrl.data import TensorDict
 from torchrl.envs import (
     GymEnv,
     ParallelEnv,
@@ -26,9 +27,8 @@ from torchrl.envs import (
     DoubleToFloat,
     CatTensors,
 )
-from torchrl.envs.libs.gym import _has_gym
-from torchrl.data import TensorDict
 from torchrl.envs import GymEnv, ParallelEnv
+from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import VecNorm, TransformedEnv
 from torchrl.envs.transforms.transforms import (
