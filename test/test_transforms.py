@@ -250,26 +250,21 @@ def test_parallelenv_vecnorm():
     assert msg == "second round"
     new_values = td.clone()
     for k, item in values.items():
+        if k in ["reward_sum", "reward_ssq"] and not _has_gym:
+            # mocking env rewards are sparse
+            continue
         assert (item != new_values.get(k)).any(), k
     proc.join()
     parallel_env.close()
 
 
+@pytest.mark.skipif(not _has_gym, reason="no gym library found")
 @pytest.mark.parametrize("parallel", [False, True])
 def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     torch.manual_seed(0)
 
     if parallel:
-        if _has_gym:
-            env = ParallelEnv(
-                num_workers=5, create_env_fn=lambda: GymEnv("Pendulum-v1")
-            )
-        else:
-            env = ParallelEnv(
-                num_workers=5, create_env_fn=lambda: ContinuousActionVecMockEnv()
-            )
-    elif _has_gym:
-        env = GymEnv("Pendulum-v1")
+        env = ParallelEnv(num_workers=5, create_env_fn=lambda: GymEnv("Pendulum-v1"))
     else:
         env = ContinuousActionVecMockEnv()
 
