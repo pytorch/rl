@@ -25,7 +25,7 @@ def _test_vecnorm_subproc(idx, queue_out: mp.Queue, queue_in: mp.Queue):
         env = ContinuousActionVecMockEnv()
     t = VecNorm(shared_td=td)
     env = TransformedEnv(env, t)
-    env.set_seed(1000+idx)
+    env.set_seed(1000 + idx)
     env.reset()
     assert env.current_tensordict is not None
     for _ in range(10):
@@ -124,7 +124,7 @@ def test_vecnorm_parallel(nprc):
 
 def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.Queue):
     env = make_env()
-    env.set_seed(1000+idx)
+    env.set_seed(1000 + idx)
     env.reset()
     for _ in range(10):
         env.rand_step()

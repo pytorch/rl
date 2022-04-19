@@ -269,7 +269,9 @@ class _EnvClass:
         try:
             td = self._current_tensordict
             if td is None:
-                raise RuntimeError("env.current_tensordict returned None. make sure env has been reset.")
+                raise RuntimeError(
+                    "env.current_tensordict returned None. make sure env has been reset."
+                )
             return td
         except AttributeError:
             print(
