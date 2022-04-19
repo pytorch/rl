@@ -967,7 +967,7 @@ class FiniteTensorDictCheck(Transform):
                 source[key] = FiniteTensor(item)
             except RuntimeError as err:
                 if str(err).rfind("FiniteTensor encountered") > -1:
-                    raise Exception(f"Found non-finite elements in {key}")
+                    raise ValueError(f"Found non-finite elements in {key}")
                 else:
                     raise RuntimeError(str(err))
 

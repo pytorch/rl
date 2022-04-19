@@ -6,7 +6,7 @@ import argparse
 
 import pytest
 import torch
-from torch import multiprocessing as mp
+from torch import multiprocessing as mp, Tensor
 from torchrl.agents.env_creator import EnvCreator
 from torchrl.data import TensorDict
 from torchrl.envs import GymEnv, ParallelEnv, Resize, GrayScale, ToTensorImage, \
@@ -335,21 +335,42 @@ class TestTransforms:
     @pytest.mark.parametrize("keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("nchannels", [1, 3])
-    @pytest.mark.parametrize(["loc", "scale", "standard_normal"], [1, 3])
+    @pytest.mark.parametrize("standard_normal", [True, False])
+    @pytest.mark.parametrize(["loc", "scale"], [(0, 1), (1, 2), (torch.ones(32, 32), torch.ones(1)), (torch.ones(1), torch.ones(32, 32))])
     def test_observationnorm(self, batch, keys, device, nchannels, loc, scale, standard_normal):
         torch.manual_seed(0)
         nchannels = 3
-        on = ObservationNorm(loc, scale, keys=keys, standard_normal)
+        if isinstance(loc, Tensor):
+            loc = loc.to(device)
+        if isinstance(scale, Tensor):
+            scale = scale.to(device)
+        on = ObservationNorm(loc, scale, keys=keys, standard_normal=standard_normal)
         dont_touch = torch.randn(1, nchannels, 32, 32, device=device)
-        td = TensorDict({key: torch.randn(1, nchannels, 32, 32, device=device) for key in keys}, [1])
+        td = TensorDict({key: torch.zeros(1, nchannels, 32, 32, device=device) for key in keys}, [1])
         td.set("dont touch", dont_touch.clone())
-        gs(td)
+        on(td)
+        for key in keys:
+            if standard_normal:
+                assert (td.get(key) == -loc/scale).all()
+            else:
+                assert (td.get(key) == loc).all()
+        assert (td.get("dont touch") == dont_touch).all()
 
-    def test_catframes(self):
+    @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
+    @pytest.mark.parametrize("keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]])
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("N", [1, 4, 5])
+    def test_catframes(self, batch, keys, device, N):
         pass
 
-    def test_finitetensordictcheck(self):
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_finitetensordictcheck(self, device):
         ftd = FiniteTensorDictCheck()
+        td = TensorDict({key: torch.randn(1, 32, 32, device=device) for key in ['a', 'b', 'c']}, [1])
+        ftd(td)
+        td.set('inf', torch.zeros(1, 3).fill_(float("inf")))
+        with pytest.raises(ValueError, match="Found non-finite elements"):
+            ftd(td)
 
     def test_double2float(self):
         double2float = DoubleToFloat()
