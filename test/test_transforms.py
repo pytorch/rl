@@ -9,8 +9,12 @@ import torch
 from torch import multiprocessing as mp
 from torchrl.agents.env_creator import EnvCreator
 from torchrl.data import TensorDict
-from torchrl.envs import GymEnv, ParallelEnv
+from torchrl.envs import GymEnv, ParallelEnv, Resize, GrayScale, ToTensorImage, \
+    Compose, ObservationNorm, CatFrames, FiniteTensorDictCheck, DoubleToFloat, \
+    CatTensors
 from torchrl.envs.transforms import VecNorm, TransformedEnv
+from torchrl.envs.transforms.transforms import _has_tv, NoopResetEnv, \
+    BinerizeReward, PinMemoryTransform
 
 TIMEOUT = 10.0
 
@@ -261,6 +265,45 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     assert (abs(std - 1) < thr).all()
     env.close()
 
+class TestTransforms:
+
+    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
+    def test_resize(self):
+        resize = Resize()
+
+    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
+    def test_grayscale(self):
+        resize = GrayScale()
+
+    def test_totensorimage(self):
+        resize = ToTensorImage()
+
+    def test_compose(self):
+        resize = Compose()
+
+    def test_observationNorm(self):
+        on = ObservationNorm()
+
+    def test_catframes(self):
+        catframes = CatFrames()
+
+    def test_finitetensordictcheck(self):
+        ftd = FiniteTensorDictCheck()
+
+    def test_double2float(self):
+        double2float = DoubleToFloat()
+
+    def test_cattensors(self):
+        double2float = CatTensors()
+
+    def test_noop_reset_env(self):
+        noop_reset_env = NoopResetEnv()
+
+    def test_binerized_reward(self):
+        binerized_reward = BinerizeReward()
+
+    def test_pin_mem(self):
+        pin_mem = PinMemoryTransform()
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
