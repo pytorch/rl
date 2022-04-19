@@ -82,7 +82,7 @@ pip install "git+https://github.com/pytorch/functorch.git"
 Go to the directory where you have cloned the torchrl repo and install it
 ```
 cd /path/to/torchrl/
-python setup.py install
+python setup.py develop
 ```
 To run a quick sanity check, leave that directory and try to import the library.
 ```
@@ -111,7 +111,7 @@ pip install pytest
 
 **Troubleshooting**
 
-If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs, it means that the C++ extensions were not installed. This may be caused by several dependency issues: cmake, gcc or ninja versioning, or absence of the CuDNN library when working in a CUDA environment. Os MacOs, we recommend installing XCode first.
+If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs, it means that the C++ extensions were not installed. This may be caused by several dependency issues: cmake, gcc or ninja versioning, or absence of the CuDNN library when working in a CUDA environment. On MacOs, we recommend installing XCode first.
 
 ## Running examples
 Examples are coded in a very similar way but the configuration may change from one algorithm to another (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)
