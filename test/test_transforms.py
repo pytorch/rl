@@ -6,10 +6,12 @@ import argparse
 
 import pytest
 import torch
+from mocking_classes import ContinuousActionVecMockEnv
 from torch import multiprocessing as mp
 from torchrl.agents.env_creator import EnvCreator
 from torchrl.data import TensorDict
 from torchrl.envs import GymEnv, ParallelEnv
+from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import VecNorm, TransformedEnv
 
 TIMEOUT = 10.0
@@ -17,7 +19,10 @@ TIMEOUT = 10.0
 
 def _test_vecnorm_subproc(idx, queue_out: mp.Queue, queue_in: mp.Queue):
     td = queue_in.get(timeout=TIMEOUT)
-    env = GymEnv("Pendulum-v1")
+    if _has_gym:
+        env = GymEnv("Pendulum-v1")
+    else:
+        env = ContinuousActionVecMockEnv()
     env.set_seed(idx)
     t = VecNorm(shared_td=td)
     env = TransformedEnv(env, t)
@@ -53,7 +58,10 @@ def _test_vecnorm_subproc(idx, queue_out: mp.Queue, queue_in: mp.Queue):
 def test_vecnorm_parallel(nprc):
     queues = []
     prcs = []
-    td = VecNorm.build_td_for_shared_vecnorm(GymEnv("Pendulum-v1"))
+    if _has_gym:
+        td = VecNorm.build_td_for_shared_vecnorm(GymEnv("Pendulum-v1"))
+    else:
+        td = VecNorm.build_td_for_shared_vecnorm(ContinuousActionVecMockEnv())
     for idx in range(nprc):
         prc_queue_in = mp.Queue(1)
         prc_queue_out = mp.Queue(1)
@@ -138,7 +146,12 @@ def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.
 def test_vecnorm_parallel_auto(nprc):
     queues = []
     prcs = []
-    make_env = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
+    if _has_gym:
+        make_env = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
+    else:
+        make_env = EnvCreator(
+            lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
+        )
     for idx in range(nprc):
         prc_queue_in = mp.Queue(1)
         prc_queue_out = mp.Queue(1)
@@ -210,7 +223,12 @@ def _run_parallelenv(parallel_env, queue_in, queue_out):
 
 
 def test_parallelenv_vecnorm():
-    make_env = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
+    if _has_gym:
+        make_env = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
+    else:
+        make_env = EnvCreator(
+            lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
+        )
     parallel_env = ParallelEnv(3, make_env)
     queue_out = mp.Queue(1)
     queue_in = mp.Queue(1)
@@ -239,9 +257,19 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     torch.manual_seed(0)
 
     if parallel:
-        env = ParallelEnv(num_workers=5, create_env_fn=lambda: GymEnv("Pendulum-v1"))
-    else:
+        if _has_gym:
+            env = ParallelEnv(
+                num_workers=5, create_env_fn=lambda: GymEnv("Pendulum-v1")
+            )
+        else:
+            env = ParallelEnv(
+                num_workers=5, create_env_fn=lambda: ContinuousActionVecMockEnv()
+            )
+    elif _has_gym:
         env = GymEnv("Pendulum-v1")
+    else:
+        env = ContinuousActionVecMockEnv()
+
     env.set_seed(0)
     t = VecNorm()
     env = TransformedEnv(env, t)
