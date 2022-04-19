@@ -266,7 +266,7 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     if parallel:
         env = ParallelEnv(num_workers=5, create_env_fn=lambda: GymEnv("Pendulum-v1"))
     else:
-        env = ContinuousActionVecMockEnv()
+        env = GymEnv("Pendulum-v1")
 
     env.set_seed(0)
     t = VecNorm()
