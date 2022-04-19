@@ -175,7 +175,7 @@ class _EnvClass:
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
         self.is_done = tensordict_out.get("done")
-        self._current_tensordict = step_tensordict(tensordict_out)
+        self.current_tensordict = step_tensordict(tensordict_out)
 
         for key in self._select_observation_keys(tensordict_out):
             obs = tensordict_out.get(key)
@@ -243,8 +243,12 @@ class _EnvClass:
                 "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
                 "tensordict.select()) inside _reset before writing new tensors onto this new instance."
             )
+        if not isinstance(tensordict_reset, _TensorDict):
+            raise RuntimeError(
+                f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
+            )
 
-        self._current_tensordict = tensordict_reset
+        self.current_tensordict = tensordict_reset
         self.is_done = tensordict_reset.get(
             "done",
             torch.zeros(self.batch_size, dtype=torch.bool, device=self.device),
@@ -257,18 +261,32 @@ class _EnvClass:
             tensordict.update(tensordict_reset)
         else:
             tensordict = tensordict_reset
-        del tensordict_reset
         return tensordict
 
     @property
     def current_tensordict(self) -> _TensorDict:
         """Returns the last tensordict encountered after calling `reset` or `step`."""
         try:
-            return self._current_tensordict
+            td = self._current_tensordict
+            if td is None:
+                raise RuntimeError(
+                    "env.current_tensordict returned None. make sure env has been reset."
+                )
+            return td
         except AttributeError:
             print(
-                f"env {self} does not have a _current_tensordict attribute. Consider calling reset() before step()."
+                f"env {self} does not have a _current_tensordict attribute. Consider calling reset() before querying it."
             )
+
+    @current_tensordict.setter
+    def current_tensordict(self, value: Union[_TensorDict, dict]):
+        if isinstance(value, dict):
+            value = TensorDict(value, [])
+        if not isinstance(value, _TensorDict):
+            raise RuntimeError(
+                f"current_tensordict setter got an object of type {type(value)} but a TensorDict was expected"
+            )
+        self._current_tensordict = value
 
     def numel(self) -> int:
         return math.prod(self.batch_size)
@@ -608,7 +626,7 @@ class GymLikeEnv(_EnvWrapper):
         reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
         done = self._to_tensor(done, dtype=torch.bool)
         self._is_done = done
-        self._current_tensordict = obs_dict
+        self.current_tensordict = obs_dict
 
         tensordict_out = TensorDict({}, batch_size=tensordict.batch_size)
         for key, value in obs_dict.items():
