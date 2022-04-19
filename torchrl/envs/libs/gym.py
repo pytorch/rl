@@ -157,7 +157,9 @@ class GymEnv(GymLikeEnv):
             self._env.observation_space
         )
         if not isinstance(self.observation_spec, CompositeSpec):
-            self.observation_spec = CompositeSpec(next_observation=self.observation_spec)
+            self.observation_spec = CompositeSpec(
+                next_observation=self.observation_spec
+            )
         self.reward_spec = UnboundedContinuousTensorSpec(
             device=self.device,
         )  # default

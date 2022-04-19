@@ -159,8 +159,7 @@ def transformed_env_constructor(
             ]  # DMControl requires double-precision
         if not from_pixels:
             selected_keys = [
-                key for key in env.observation_specs.keys() if
-                not "pixels" in key
+                key for key in env.observation_specs.keys() if not "pixels" in key
             ]
 
             # even if there is a single tensor, it'll be renamed in "next_observation_vector"
@@ -173,14 +172,12 @@ def transformed_env_constructor(
                 else:
                     _stats = stats
                 transforms.append(
-                    ObservationNorm(**_stats, keys=[out_key],
-                                    standard_normal=True)
+                    ObservationNorm(**_stats, keys=[out_key], standard_normal=True)
                 )
             else:
                 transforms.append(
                     VecNorm(
-                        keys=[out_key, "reward"] if not _norm_obs_only else [
-                            out_key],
+                        keys=[out_key, "reward"] if not _norm_obs_only else [out_key],
                         decay=0.9999,
                     )
                 )
@@ -238,8 +235,9 @@ def parallel_env_constructor(args: Namespace, **kwargs) -> EnvCreator:
     return env
 
 
-def get_stats_random_rollout(args: Namespace, proof_environment: _EnvClass,
-                             key: Optional[str] = None):
+def get_stats_random_rollout(
+    args: Namespace, proof_environment: _EnvClass, key: Optional[str] = None
+):
     if not hasattr(args, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
@@ -300,12 +298,11 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=1,
         help="frame_skip for the environment. Note that this value does NOT impact the buffer size,"
-             "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
-             "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
-             "the actual number of frames retrieved will be 200e6. Default=1.",
+        "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
+        "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
+        "the actual number of frames retrieved will be 200e6. Default=1.",
     )
-    parser.add_argument("--reward_scaling", type=float,
-                        help="scale of the reward.")
+    parser.add_argument("--reward_scaling", type=float, help="scale of the reward.")
     parser.add_argument(
         "--init_env_steps",
         type=int,
@@ -316,13 +313,13 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "--vecnorm",
         action="store_true",
         help="Normalizes the environment observation and reward outputs with the running statistics "
-             "obtained across processes.",
+        "obtained across processes.",
     )
     parser.add_argument(
         "--norm_rewards",
         action="store_true",
         help="If True, rewards will be normalized on the fly. This may interfere with SAC update rule and "
-             "should be used cautiously.",
+        "should be used cautiously.",
     )
     parser.add_argument(
         "--noops",
@@ -335,7 +332,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=1000,
         help="Number of steps before a reset of the environment is called (if it has not been flagged as "
-             "done before). ",
+        "done before). ",
     )
 
     return parser

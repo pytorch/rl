@@ -491,8 +491,14 @@ class ToTensorImage(ObservationTransform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):
-            return CompositeSpec(**{key: self.transform_observation_spec(_obs_spec) if key in self.keys else _obs_spec
-                                    for key, _obs_spec in observation_spec._specs.items()})
+            return CompositeSpec(
+                **{
+                    key: self.transform_observation_spec(_obs_spec)
+                    if key in self.keys
+                    else _obs_spec
+                    for key, _obs_spec in observation_spec._specs.items()
+                }
+            )
         else:
             _observation_spec = observation_spec
         self._pixel_observation(_observation_spec)
@@ -641,8 +647,14 @@ class Resize(ObservationTransform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):
-            return CompositeSpec(**{key: self.transform_observation_spec(_obs_spec) if key in self.keys else _obs_spec
-                                    for key, _obs_spec in observation_spec._specs.items()})
+            return CompositeSpec(
+                **{
+                    key: self.transform_observation_spec(_obs_spec)
+                    if key in self.keys
+                    else _obs_spec
+                    for key, _obs_spec in observation_spec._specs.items()
+                }
+            )
         else:
             _observation_spec = observation_spec
         space = _observation_spec.space
@@ -685,8 +697,14 @@ class GrayScale(ObservationTransform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):
-            return CompositeSpec(**{key: self.transform_observation_spec(_obs_spec) if key in self.keys else _obs_spec
-                                    for key, _obs_spec in observation_spec._specs.items()})
+            return CompositeSpec(
+                **{
+                    key: self.transform_observation_spec(_obs_spec)
+                    if key in self.keys
+                    else _obs_spec
+                    for key, _obs_spec in observation_spec._specs.items()
+                }
+            )
         else:
             _observation_spec = observation_spec
         space = _observation_spec.space
@@ -841,8 +859,14 @@ class CatFrames(ObservationTransform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):
-            return CompositeSpec(**{key: self.transform_observation_spec(_obs_spec) if key in self.keys else _obs_spec
-                                    for key, _obs_spec in observation_spec._specs.items()})
+            return CompositeSpec(
+                **{
+                    key: self.transform_observation_spec(_obs_spec)
+                    if key in self.keys
+                    else _obs_spec
+                    for key, _obs_spec in observation_spec._specs.items()
+                }
+            )
         else:
             _observation_spec = observation_spec
         space = _observation_spec.space
@@ -1064,9 +1088,13 @@ class CatTensors(Transform):
         if keys is None:
             raise Exception("CatTensors requires keys to be non-empty")
         super().__init__(keys=keys)
-        if not out_key.startswith("next_") and all(key.startswith("next_") for key in keys):
-            warn(f"It seems that 'next_'-like keys are being concatenated to a non 'next_' key {out_key}. This may result in unwanted behaviours, and the 'next_' flag is missing from the output key."
-                 f"Consider renaming the out_key to 'next_{out_key}'")
+        if not out_key.startswith("next_") and all(
+            key.startswith("next_") for key in keys
+        ):
+            warn(
+                f"It seems that 'next_'-like keys are being concatenated to a non 'next_' key {out_key}. This may result in unwanted behaviours, and the 'next_' flag is missing from the output key."
+                f"Consider renaming the out_key to 'next_{out_key}'"
+            )
         self.out_key = out_key
         self.keys = sorted(list(self.keys))
         if (

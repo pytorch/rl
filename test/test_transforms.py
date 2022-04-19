@@ -7,9 +7,8 @@ import argparse
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from torch import multiprocessing as mp, Tensor
-
 from mocking_classes import ContinuousActionVecMockEnv
+from torch import multiprocessing as mp, Tensor
 from torchrl.agents.env_creator import EnvCreator
 from torchrl.data import TensorDict, NdBoundedTensorSpec, CompositeSpec
 from torchrl.envs import (
@@ -306,8 +305,7 @@ class TestTransforms:
 
         if len(keys) == 1:
             observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32))
-            observation_spec = resize.transform_observation_spec(
-                observation_spec)
+            observation_spec = resize.transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([nchannels, 20, 21])
         else:
             observation_spec = CompositeSpec(
@@ -315,8 +313,7 @@ class TestTransforms:
             )
             observation_spec = resize.transform_observation_spec(observation_spec)
             for key in keys:
-                assert observation_spec[key].shape == torch.Size(
-                    [nchannels, 20, 21])
+                assert observation_spec[key].shape == torch.Size([nchannels, 20, 21])
 
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize(
@@ -339,8 +336,7 @@ class TestTransforms:
 
         if len(keys) == 1:
             observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32))
-            observation_spec = gs.transform_observation_spec(
-                observation_spec)
+            observation_spec = gs.transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([1, 32, 32])
         else:
             observation_spec = CompositeSpec(
@@ -348,8 +344,7 @@ class TestTransforms:
             )
             observation_spec = gs.transform_observation_spec(observation_spec)
             for key in keys:
-                assert observation_spec[key].shape == torch.Size(
-                    [1, 32, 32])
+                assert observation_spec[key].shape == torch.Size([1, 32, 32])
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
@@ -378,7 +373,8 @@ class TestTransforms:
         if len(keys) == 1:
             observation_spec = NdBoundedTensorSpec(0, 255, (32, 32, 3))
             observation_spec = totensorimage.transform_observation_spec(
-                observation_spec)
+                observation_spec
+            )
             assert observation_spec.shape == torch.Size([3, 32, 32])
             assert (observation_spec.space.minimum == 0).all()
             assert (observation_spec.space.maximum == 1).all()
@@ -386,10 +382,11 @@ class TestTransforms:
             observation_spec = CompositeSpec(
                 **{key: NdBoundedTensorSpec(0, 255, (32, 32, 3)) for key in keys}
             )
-            observation_spec = totensorimage.transform_observation_spec(observation_spec)
+            observation_spec = totensorimage.transform_observation_spec(
+                observation_spec
+            )
             for key in keys:
-                assert observation_spec[key].shape == torch.Size(
-                    [3, 32, 32])
+                assert observation_spec[key].shape == torch.Size([3, 32, 32])
                 assert (observation_spec[key].space.minimum == 0).all()
                 assert (observation_spec[key].space.maximum == 1).all()
 
@@ -419,17 +416,20 @@ class TestTransforms:
 
         if len(keys) == 1:
             observation_spec = NdBoundedTensorSpec(0, 255, (nchannels, 32, 32))
-            observation_spec = compose.transform_observation_spec(
-                observation_spec)
+            observation_spec = compose.transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([nchannels * N, 32, 32])
         else:
             observation_spec = CompositeSpec(
-                **{key: NdBoundedTensorSpec(0, 255, (nchannels, 32, 32)) for key in keys}
+                **{
+                    key: NdBoundedTensorSpec(0, 255, (nchannels, 32, 32))
+                    for key in keys
+                }
             )
             observation_spec = compose.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].shape == torch.Size(
-                    [nchannels * N, 32, 32])
+                    [nchannels * N, 32, 32]
+                )
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
@@ -472,14 +472,13 @@ class TestTransforms:
 
         if len(keys) == 1:
             observation_spec = NdBoundedTensorSpec(0, 1, (nchannels, 32, 32))
-            observation_spec = on.transform_observation_spec(
-                observation_spec)
+            observation_spec = on.transform_observation_spec(observation_spec)
             if standard_normal:
                 assert (observation_spec.space.minimum == -loc / scale).all()
-                assert (observation_spec.space.maximum == (1-loc) / scale).all()
+                assert (observation_spec.space.maximum == (1 - loc) / scale).all()
             else:
                 assert (observation_spec.space.minimum == loc).all()
-                assert (observation_spec.space.maximum == scale+loc).all()
+                assert (observation_spec.space.maximum == scale + loc).all()
 
         else:
             observation_spec = CompositeSpec(
@@ -488,14 +487,13 @@ class TestTransforms:
             observation_spec = on.transform_observation_spec(observation_spec)
             for key in keys:
                 if standard_normal:
-                    assert (observation_spec[
-                                key].space.minimum == -loc / scale).all()
-                    assert (observation_spec[key].space.maximum == (
-                            1 - loc) / scale).all()
+                    assert (observation_spec[key].space.minimum == -loc / scale).all()
+                    assert (
+                        observation_spec[key].space.maximum == (1 - loc) / scale
+                    ).all()
                 else:
                     assert (observation_spec[key].space.minimum == loc).all()
-                    assert (observation_spec[
-                                key].space.maximum == scale + loc).all()
+                    assert (observation_spec[key].space.maximum == scale + loc).all()
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
@@ -550,19 +548,22 @@ class TestTransforms:
 
         if len(keys) == 1 and keys[0] == "action":
             action_spec = NdBoundedTensorSpec(0, 1, (1, 32, 32), dtype=torch.double)
-            action_spec = double2float.transform_action_spec(
-                action_spec)
+            action_spec = double2float.transform_action_spec(action_spec)
             assert action_spec.dtype == torch.float
 
         elif len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(0, 1, (1, 32, 32), dtype=torch.double)
-            observation_spec = double2float.transform_observation_spec(
-                observation_spec)
+            observation_spec = NdBoundedTensorSpec(
+                0, 1, (1, 32, 32), dtype=torch.double
+            )
+            observation_spec = double2float.transform_observation_spec(observation_spec)
             assert observation_spec.dtype == torch.float
 
         else:
             observation_spec = CompositeSpec(
-                **{key: NdBoundedTensorSpec(0, 1, (1, 32, 32), dtype=torch.double) for key in keys}
+                **{
+                    key: NdBoundedTensorSpec(0, 1, (1, 32, 32), dtype=torch.double)
+                    for key in keys
+                }
             )
             observation_spec = double2float.transform_observation_spec(observation_spec)
             for key in keys:
@@ -604,15 +605,16 @@ class TestTransforms:
 
         if len(keys) == 1:
             observation_spec = NdBoundedTensorSpec(0, 1, (1, 4, 32))
-            observation_spec = cattensors.transform_observation_spec(
-                observation_spec)
+            observation_spec = cattensors.transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([1, len(keys) * 4, 32])
         else:
             observation_spec = CompositeSpec(
                 **{key: NdBoundedTensorSpec(0, 1, (1, 4, 32)) for key in keys}
             )
             observation_spec = cattensors.transform_observation_spec(observation_spec)
-            assert observation_spec["observation_out"].shape == torch.Size([1, len(keys) * 4, 32])
+            assert observation_spec["observation_out"].shape == torch.Size(
+                [1, len(keys) * 4, 32]
+            )
 
     @pytest.mark.parametrize("random", [True, False])
     def test_noop_reset_env(self, random):
@@ -635,7 +637,7 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_pin_mem(self, device):
         pin_mem = PinMemoryTransform()
-        td = TensorDict({key: torch.randn(3) for key in ['a', 'b', 'c']}, [])
+        td = TensorDict({key: torch.randn(3) for key in ["a", "b", "c"]}, [])
         pin_mem(td)
         for key, item in td.items():
             assert item.is_pinned
