@@ -111,7 +111,31 @@ pip install pytest
 
 **Troubleshooting**
 
-If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs, it means that the C++ extensions were not installed. This may be caused by several dependency issues: cmake, gcc or ninja versioning, or absence of the CuDNN library when working in a CUDA environment.
+If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs, it means that the C++ extensions were not installed or not found. 
+One common reason might be that you are trying to import torchrl from within the git repo location. Indeed the following code snippet should return an error if torchrl has not been installed in `develop` mode:
+```
+cd ~/path/to/rl/repo
+python -c 'from torchrl.envs import GymEnv'
+```
+If this is the case, consider executing torchrl from another location.
+
+This may also be caused by several dependency issues: cmake, gcc or ninja versioning, or absence of the CuDNN library when working in a CUDA environment. 
+
+On **MacOs**, we recommend installing XCode first. 
+With Apple Silicon M1 chips, make sure you are using the arm64-built python (e.g. [here](https://betterprogramming.pub/how-to-install-pytorch-on-apple-m1-series-512b3ad9bc6)). Running the following lines of code
+
+```
+wget https://raw.githubusercontent.com/pytorch/pytorch/master/torch/utils/collect_env.py
+python collect_env.py
+```
+should display
+```
+OS: macOS *** (arm64)
+```
+and not
+```
+OS: macOS **** (x86_64)
+```
 
 ## Running examples
 Examples are coded in a very similar way but the configuration may change from one algorithm to another (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)

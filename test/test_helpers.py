@@ -41,6 +41,7 @@ def _assert_keys_match(td, expeceted_keys):
     assert len(td_keys) == len(expeceted_keys)
 
 
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("noisy", [tuple(), ("--noisy",)])
 @pytest.mark.parametrize("distributional", [tuple(), ("--distributional",)])
@@ -80,6 +81,7 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
     proof_environment.close()
 
 
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
 def test_ddpg_maker(device, from_pixels):
@@ -124,6 +126,7 @@ def test_ddpg_maker(device, from_pixels):
     del proof_environment
 
 
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
 @pytest.mark.parametrize("gsde", [tuple(), ("--gSDE",)])
