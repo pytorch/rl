@@ -315,14 +315,38 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
 
-    def test_compose(self):
-        resize = Compose()
+    @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
+    @pytest.mark.parametrize("keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_compose(self, keys, batch, device, nchannels=1, N=4):
+        torch.manual_seed(0)
+        t1 = CatFrames(keys=keys, N=4)
+        t2 = FiniteTensorDictCheck()
+        compose = Compose(t1, t2)
+        dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
+        td = TensorDict({key: torch.randint(255, (*batch, nchannels, 32, 32), device=device) for key in keys}, batch)
+        td.set("dont touch", dont_touch.clone())
+        compose(td)
+        for key in keys:
+            assert td.get(key).shape[-3] == nchannels * N
+        assert (td.get("dont touch") == dont_touch).all()
 
-    def test_observationNorm(self):
-        on = ObservationNorm()
+    @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
+    @pytest.mark.parametrize("keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]])
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize(["loc", "scale", "standard_normal"], [1, 3])
+    def test_observationnorm(self, batch, keys, device, nchannels, loc, scale, standard_normal):
+        torch.manual_seed(0)
+        nchannels = 3
+        on = ObservationNorm(loc, scale, keys=keys, standard_normal)
+        dont_touch = torch.randn(1, nchannels, 32, 32, device=device)
+        td = TensorDict({key: torch.randn(1, nchannels, 32, 32, device=device) for key in keys}, [1])
+        td.set("dont touch", dont_touch.clone())
+        gs(td)
 
     def test_catframes(self):
-        catframes = CatFrames()
+        pass
 
     def test_finitetensordictcheck(self):
         ftd = FiniteTensorDictCheck()
@@ -337,7 +361,7 @@ class TestTransforms:
         noop_reset_env = NoopResetEnv()
 
     def test_binerized_reward(self):
-        binerized_reward = BinerizeReward()
+        pass
 
     def test_pin_mem(self):
         pin_mem = PinMemoryTransform()
