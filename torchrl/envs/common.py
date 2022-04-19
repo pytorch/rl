@@ -365,12 +365,9 @@ class _EnvClass:
             policy_device = "cpu"
 
         if auto_reset:
-            tensordict = self.reset()
-        else:
-            # tensordict = (
-            #     self.specs.build_tensordict().expand(*self.batch_size).contiguous()
-            # )
-            tensordict = self.current_tensordict.clone()
+            self.reset()
+
+        tensordict = self.current_tensordict.clone()
 
         if policy is None:
 
