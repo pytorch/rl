@@ -111,7 +111,7 @@ pip install pytest
 
 **Troubleshooting**
 
-If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs, it means that the C++ extensions were not installed. This may be caused by several dependency issues: cmake, gcc or ninja versioning, or absence of the CuDNN library when working in a CUDA environment.
+If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs, it means that the C++ extensions were not installed. This may be caused by several dependency issues: cmake, gcc or ninja versioning, or absence of the CuDNN library when working in a CUDA environment. Os MacOs, we recommend installing XCode first.
 
 ## Running examples
 Examples are coded in a very similar way but the configuration may change from one algorithm to another (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)
