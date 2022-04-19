@@ -798,7 +798,9 @@ class ObservationNorm(ObservationTransform):
         if isinstance(observation_spec, CompositeSpec):
             keys = [key for key in observation_spec.keys() if key in self.keys]
             for key in keys:
-                observation_spec[key] = self.transform_observation_spec(observation_spec[key])
+                observation_spec[key] = self.transform_observation_spec(
+                    observation_spec[key]
+                )
             return observation_spec
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
@@ -1034,7 +1036,9 @@ class DoubleToFloat(Transform):
         if isinstance(observation_spec, CompositeSpec):
             keys = [key for key in self.keys if key in observation_spec.keys()]
             for key in keys:
-                observation_spec[key] = self.transform_observation_spec(observation_spec[key])
+                observation_spec[key] = self.transform_observation_spec(
+                    observation_spec[key]
+                )
             return observation_spec
         self._transform_spec(observation_spec)
         return observation_spec
