@@ -279,7 +279,9 @@ class _EnvClass:
             )
 
     @current_tensordict.setter
-    def current_tensordict(self, value: _TensorDict):
+    def current_tensordict(self, value: Union[_TensorDict, dict]):
+        if isinstance(value, dict):
+            value = TensorDict(value, [])
         if not isinstance(value, _TensorDict):
             raise RuntimeError(
                 f"current_tensordict setter got an object of type {type(value)} but a TensorDict was expected"
