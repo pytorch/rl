@@ -895,6 +895,63 @@ class TestTensorDicts:
         assert sum([_td.shape[dim] for _td in td_chunks]) == td.shape[dim]
         assert (torch.cat(td_chunks, dim) == td).all()
 
+    # Use pytest decorator to test all subclasses of TensorDict
+    # ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td", "td_reset_bs"]
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
+    def test_items_values_keys(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        keys = list(td.keys())
+        values = list(td.values())
+        items = list(td.items())
+
+        # Test that the lengths of values, items and keys are equal
+        # items = [key, value]
+        assert len(values) == len(items)
+        assert len(keys) == len(items)
+
+        # Test that keys is sorted
+        assert all(keys[i] <= keys[i + 1] for i in range(len(keys) - 1))
+
+        # Test that item = [key, value]
+        assert all(len(values[i]) == len(items[i][1]) for i in range(len(items)))
+        assert all(keys[i] == items[i][0] for i in range(len(items)))
+
+        # Add new element to tensor
+        a = td.get("a")
+        td.set("x", torch.randn_like(a))
+        keys = list(td.keys())
+        values = list(td.values())
+        items = list(td.items())
+
+        # Test that the lengths of values, items and keys
+        # are still equal after adding the new element
+        assert len(values) == len(items)
+        assert len(keys) == len(items)
+
+        # Test that keys is still sorted after adding the element
+        assert all(keys[i] <= keys[i + 1] for i in range(len(keys) - 1))
+
+        # Test that item = [key, value] is still verified
+        assert all(len(values[i]) == len(items[i][1]) for i in range(len(items)))
+        assert all(keys[i] == items[i][0] for i in range(len(items)))
+
+        # Test the methods values_meta() and items_meta()
+        values_meta = list(td.values_meta())
+        items_meta = list(td.items_meta())
+        assert len(values_meta) == len(items_meta)
+        assert all(values_meta[i] == items_meta[i][1] for i in range(len(items_meta)))
 
 def test_batchsize_reset():
     td = TensorDict(
