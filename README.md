@@ -82,7 +82,7 @@ pip install "git+https://github.com/pytorch/functorch.git"
 Go to the directory where you have cloned the torchrl repo and install it
 ```
 cd /path/to/torchrl/
-python setup.py develop
+python setup.py install
 ```
 To run a quick sanity check, leave that directory and try to import the library.
 ```
