@@ -15,7 +15,7 @@ from torchrl.envs import GymEnv, ParallelEnv, Resize, GrayScale, ToTensorImage, 
 from torchrl.envs.transforms import VecNorm, TransformedEnv
 from torchrl.envs.transforms.transforms import _has_tv, NoopResetEnv, \
     BinerizeReward, PinMemoryTransform
-
+from _utils_internal import get_available_devices
 TIMEOUT = 10.0
 
 
@@ -268,15 +268,52 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
 class TestTransforms:
 
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
-    def test_resize(self):
-        resize = Resize()
+    @pytest.mark.parametrize("interpolation", ["bilinear", "bicubic"])
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_resize(self, interpolation, keys, nchannels, device):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(1, nchannels, 32, 32, device=device)
+        resize = Resize(w=20, h=21, interpolation=interpolation, keys=keys)
+        td = TensorDict({key: torch.randn(1, nchannels, 32, 32, device=device) for key in keys}, [1])
+        td.set("dont touch", dont_touch.clone())
+        resize(td)
+        for key in keys:
+            assert td.get(key).shape[-2:] == torch.Size([20, 21])
+        assert (td.get("dont touch") == dont_touch).all()
 
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
-    def test_grayscale(self):
-        resize = GrayScale()
+    @pytest.mark.parametrize("keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_grayscale(self, keys, device):
+        torch.manual_seed(0)
+        nchannels = 3
+        gs = GrayScale(keys=keys)
+        dont_touch = torch.randn(1, nchannels, 32, 32, device=device)
+        td = TensorDict({key: torch.randn(1, nchannels, 32, 32, device=device) for key in keys}, [1])
+        td.set("dont touch", dont_touch.clone())
+        gs(td)
+        for key in keys:
+            assert td.get(key).shape[-3] == 1
+        assert (td.get("dont touch") == dont_touch).all()
 
-    def test_totensorimage(self):
-        resize = ToTensorImage()
+    @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
+    @pytest.mark.parametrize("keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_totensorimage(self, keys, batch, device):
+        torch.manual_seed(0)
+        nchannels = 3
+        totensorimage = ToTensorImage(keys=keys)
+        dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
+        td = TensorDict({key: torch.randint(255, (*batch, 32, 32, 3), device=device) for key in keys}, batch)
+        td.set("dont touch", dont_touch.clone())
+        totensorimage(td)
+        for key in keys:
+            assert td.get(key).shape[-3:] == torch.Size([3, 32, 32])
+            assert td.get(key).device == device
+        assert (td.get("dont touch") == dont_touch).all()
+
 
     def test_compose(self):
         resize = Compose()
