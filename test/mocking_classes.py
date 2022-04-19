@@ -138,6 +138,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
 
     def _reset(self, tensordict: _TensorDict) -> _TensorDict:
         self.counter += 1
+        self.step_count = 0
         state = torch.zeros(self.size) + self.counter
         tensordict = tensordict.select().set(self.out_key, self._get_out_obs(state))
         tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
@@ -147,6 +148,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         self,
         tensordict: _TensorDict,
     ) -> _TensorDict:
+        self.step_count += 1
         tensordict = tensordict.to(self.device)
         a = tensordict.get("action")
         assert not self.is_done, "trying to execute step in done env"

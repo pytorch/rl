@@ -244,7 +244,7 @@ class _EnvClass:
                 "tensordict.select()) inside _reset before writing new tensors onto this new instance."
             )
 
-        self._current_tensordict = tensordict_reset
+        self._current_tensordict = step_tensordict(tensordict_reset)
         self.is_done = tensordict_reset.get(
             "done",
             torch.zeros(self.batch_size, dtype=torch.bool, device=self.device),
@@ -608,13 +608,12 @@ class GymLikeEnv(_EnvWrapper):
         reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
         done = self._to_tensor(done, dtype=torch.bool)
         self._is_done = done
-        self._current_tensordict = obs_dict
 
         tensordict_out = TensorDict({}, batch_size=tensordict.batch_size)
-        for key, value in obs_dict.items():
-            tensordict_out.set(f"next_{key}", value)
+        tensordict_out.update(obs_dict)
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
+        self._current_tensordict = step_tensordict(tensordict_out)
         return tensordict_out
 
     def set_seed(self, seed: Optional[int] = None) -> Optional[int]:
@@ -634,14 +633,13 @@ class GymLikeEnv(_EnvWrapper):
         tensordict_out.set("done", self._is_done)
         return tensordict_out
 
-    def _read_obs(self, observations: torch.Tensor) -> dict:
-        observations = self.observation_spec.encode(observations)
+    def _read_obs(self, observations: Union[dict, torch.Tensor, np.ndarray]) -> dict:
         if isinstance(observations, dict):
-            obs_dict = {f"observation_{key}": obs for key, obs in observations.items()}
-        else:
-            obs_dict = {"observation": observations}
-        obs_dict = self._to_tensor(obs_dict)
-        return obs_dict
+            observations = {"next_" + key: value for key, value in observations.items()}
+        if not isinstance(observations, (TensorDict, dict)):
+            observations = {"next_observation": observations}
+        observations = self.observation_spec.encode(observations)
+        return observations
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
         """To be overwritten when step_outputs differ from Tuple[Observation: Union[np.ndarray, dict], reward: Number, done:Bool]"""

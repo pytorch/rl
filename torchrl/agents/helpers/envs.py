@@ -141,8 +141,8 @@ def transformed_env_constructor(
                 ToTensorImage(),
                 Resize(84, 84),
                 GrayScale(),
-                CatFrames(keys=["next_observation_pixels"]),
-                ObservationNorm(loc=-1.0, scale=2.0, keys=["next_observation_pixels"]),
+                CatFrames(keys=["next_pixels"]),
+                ObservationNorm(loc=-1.0, scale=2.0, keys=["next_pixels"]),
             ]
         if norm_rewards:
             reward_scaling = 1.0
@@ -159,9 +159,8 @@ def transformed_env_constructor(
             ]  # DMControl requires double-precision
         if not from_pixels:
             selected_keys = [
-                "next_" + key
-                for key in keys
-                if key.startswith("observation") and "pixels" not in key
+                key for key in env.observation_specs.keys() if
+                not "pixels" in key
             ]
 
             # even if there is a single tensor, it'll be renamed in "next_observation_vector"
@@ -174,12 +173,14 @@ def transformed_env_constructor(
                 else:
                     _stats = stats
                 transforms.append(
-                    ObservationNorm(**_stats, keys=[out_key], standard_normal=True)
+                    ObservationNorm(**_stats, keys=[out_key],
+                                    standard_normal=True)
                 )
             else:
                 transforms.append(
                     VecNorm(
-                        keys=[out_key, "reward"] if not _norm_obs_only else [out_key],
+                        keys=[out_key, "reward"] if not _norm_obs_only else [
+                            out_key],
                         decay=0.9999,
                     )
                 )
@@ -237,17 +238,22 @@ def parallel_env_constructor(args: Namespace, **kwargs) -> EnvCreator:
     return env
 
 
-def get_stats_random_rollout(args: Namespace, proof_environment: _EnvClass):
+def get_stats_random_rollout(args: Namespace, proof_environment: _EnvClass,
+                             key: Optional[str] = None):
     if not hasattr(args, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
     td_stats = proof_environment.rollout(n_steps=args.init_env_steps)
-    if args.from_pixels:
-        m = td_stats.get("observation_pixels").mean(dim=0)
-        s = td_stats.get("observation_pixels").std(dim=0).clamp_min(1e-5)
-    else:
-        m = td_stats.get("observation_vector").mean(dim=0)
-        s = td_stats.get("observation_vector").std(dim=0).clamp_min(1e-5)
+    if key is None:
+        keys = list(proof_environment.observation_spec.keys())
+        key = keys.pop()
+        if len(keys):
+            raise RuntimeError(
+                f"More than one key exists in the observation_specs: {[key] + keys} were found, "
+                "thus get_stats_random_rollout cannot infer which to compute the stats of."
+            )
+    m = td_stats.get(key).mean(dim=0)
+    s = td_stats.get(key).std(dim=0).clamp_min(1e-5)
     if not torch.isfinite(m).all():
         raise RuntimeError("non-finite values found in mean")
     if not torch.isfinite(s).all():
@@ -294,11 +300,12 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=1,
         help="frame_skip for the environment. Note that this value does NOT impact the buffer size,"
-        "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
-        "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
-        "the actual number of frames retrieved will be 200e6. Default=1.",
+             "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
+             "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
+             "the actual number of frames retrieved will be 200e6. Default=1.",
     )
-    parser.add_argument("--reward_scaling", type=float, help="scale of the reward.")
+    parser.add_argument("--reward_scaling", type=float,
+                        help="scale of the reward.")
     parser.add_argument(
         "--init_env_steps",
         type=int,
@@ -309,13 +316,13 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "--vecnorm",
         action="store_true",
         help="Normalizes the environment observation and reward outputs with the running statistics "
-        "obtained across processes.",
+             "obtained across processes.",
     )
     parser.add_argument(
         "--norm_rewards",
         action="store_true",
         help="If True, rewards will be normalized on the fly. This may interfere with SAC update rule and "
-        "should be used cautiously.",
+             "should be used cautiously.",
     )
     parser.add_argument(
         "--noops",
@@ -328,7 +335,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=1000,
         help="Number of steps before a reset of the environment is called (if it has not been flagged as "
-        "done before). ",
+             "done before). ",
     )
 
     return parser

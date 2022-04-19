@@ -49,7 +49,7 @@ def step_tensordict(
         >>> print(td_out) # should contain keys 'observation', 'next_observation', 'action', 'reward', 'done' or similar
 
     """
-    keys = [key for key in tensordict.keys() if key.rfind("next_") == 0]
+    keys = [key for key in tensordict.keys() if key.startswith("next_")]
     select_tensordict = tensordict.select(*keys).clone()
     for key in keys:
         select_tensordict.rename_key(key, key[5:], safe=True)

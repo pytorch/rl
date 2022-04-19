@@ -85,8 +85,8 @@ class _BatchedEnv(_EnvClass):
         pin_memory (bool): if True and device is "cpu", calls `pin_memory` on the tensordicts when created.
         selected_keys (list of str, optional): keys that have to be returned by the environment.
             When creating a batch of environment, it might be the case that only some of the keys are to be returned.
-            For instance, if the environment returns 'observation_pixels' and 'observation_vector', the user might only
-            be interested in, say, 'observation_vector'. By indicating which keys must be returned in the tensordict,
+            For instance, if the environment returns 'next_pixels' and 'next_vector', the user might only
+            be interested in, say, 'next_vector'. By indicating which keys must be returned in the tensordict,
             one can easily control the amount of data occupied in memory (for instance to limit the memory size of a
             replay buffer) and/or limit the amount of data passed from one process to the other;
         excluded_keys (list of str, optional): list of keys to be excluded from the returned tensordicts.

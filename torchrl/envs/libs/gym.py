@@ -59,7 +59,7 @@ def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec
             dtype=dtype,
         )
     elif isinstance(spec, (dict, gym.spaces.dict.Dict)):
-        spec = {k: _gym_to_torchrl_spec_transform(spec[k]) for k in spec}
+        spec = {"next_" + k: _gym_to_torchrl_spec_transform(spec[k]) for k in spec}
         return CompositeSpec(**spec)
     else:
         raise NotImplementedError(
@@ -156,6 +156,8 @@ class GymEnv(GymLikeEnv):
         self.observation_spec = _gym_to_torchrl_spec_transform(
             self._env.observation_space
         )
+        if not isinstance(self.observation_spec, CompositeSpec):
+            self.observation_spec = CompositeSpec(next_observation=self.observation_spec)
         self.reward_spec = UnboundedContinuousTensorSpec(
             device=self.device,
         )  # default

@@ -36,7 +36,7 @@ def _dmcontrol_to_torchrl_spec_transform(
 ) -> TensorSpec:
     if isinstance(spec, collections.OrderedDict):
         spec = {
-            k: _dmcontrol_to_torchrl_spec_transform(item) for k, item in spec.items()
+            "next_"+k: _dmcontrol_to_torchrl_spec_transform(item) for k, item in spec.items()
         }
         return CompositeSpec(**spec)
     elif isinstance(spec, dm_env.specs.BoundedArray):
