@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
-
 from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
     NdBoundedTensorSpec,
@@ -33,8 +32,7 @@ default_spec_kwargs = {
     BoundedTensorSpec: {"minimum": -1.0, "maximum": 1.0},
     OneHotDiscreteTensorSpec: {"n": 7},
     UnboundedContinuousTensorSpec: {},
-    NdBoundedTensorSpec: {"minimum": -torch.ones(4),
-                          "maxmimum": torch.ones(4)},
+    NdBoundedTensorSpec: {"minimum": -torch.ones(4), "maxmimum": torch.ones(4)},
     NdUnboundedContinuousTensorSpec: {
         "shape": [
             7,
@@ -80,8 +78,7 @@ class _MockEnv(_EnvClass):
 
 class DiscreteActionVecMockEnv(_MockEnv):
     size = 7
-    observation_spec = NdUnboundedContinuousTensorSpec(
-        shape=torch.Size([size]))
+    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([size]))
     action_spec = OneHotDiscreteTensorSpec(7)
     reward_spec = UnboundedContinuousTensorSpec()
     from_pixels = False
@@ -98,11 +95,9 @@ class DiscreteActionVecMockEnv(_MockEnv):
         self.counter += 1
         state = torch.zeros(self.size) + self.counter
         tensordict = tensordict.select().set(
-            "next_" + self.out_key,
-            self._get_out_obs(state)
+            "next_" + self.out_key, self._get_out_obs(state)
         )
-        tensordict.set("done",
-                       torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
+        tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
         return tensordict
 
     def _step(
@@ -130,8 +125,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
 
 class ContinuousActionVecMockEnv(_MockEnv):
     size = 7
-    observation_spec = NdUnboundedContinuousTensorSpec(
-        shape=torch.Size([size]))
+    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([size]))
     action_spec = NdBoundedTensorSpec(-1, 1, (7,))
     reward_spec = UnboundedContinuousTensorSpec()
     from_pixels = False
@@ -149,11 +143,9 @@ class ContinuousActionVecMockEnv(_MockEnv):
         self.step_count = 0
         state = torch.zeros(self.size) + self.counter
         tensordict = tensordict.select().set(
-            "next_" + self.out_key,
-            self._get_out_obs(state)
+            "next_" + self.out_key, self._get_out_obs(state)
         )
-        tensordict.set("done",
-                       torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
+        tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
         return tensordict
 
     def _step(
@@ -191,8 +183,7 @@ class DiscreteActionVecPolicy:
 
     def __call__(self, tensordict):
         obs = self._get_in_obs(tensordict)
-        max_obs = (obs == obs.max(dim=-1, keepdim=True)[0]).cumsum(-1).argmax(
-            -1)
+        max_obs = (obs == obs.max(dim=-1, keepdim=True)[0]).cumsum(-1).argmax(-1)
         k = tensordict.get(*self.in_keys).shape[-1]
         max_obs = (max_obs + 1) % k
         action = torch.nn.functional.one_hot(max_obs, k)
@@ -201,8 +192,7 @@ class DiscreteActionVecPolicy:
 
 
 class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
-    observation_spec = NdUnboundedContinuousTensorSpec(
-        shape=torch.Size([1, 7, 7]))
+    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([1, 7, 7]))
     action_spec = OneHotDiscreteTensorSpec(7)
     reward_spec = UnboundedContinuousTensorSpec()
     from_pixels = True
@@ -218,8 +208,7 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
 
 
 class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
-    observation_spec = NdUnboundedContinuousTensorSpec(
-        shape=torch.Size([7, 7, 3]))
+    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3]))
     from_pixels = True
 
     def _get_out_obs(self, obs):
@@ -235,8 +224,7 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
 
 
 class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
-    observation_spec = NdUnboundedContinuousTensorSpec(
-        shape=torch.Size([1, 7, 7]))
+    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([1, 7, 7]))
     action_spec = NdBoundedTensorSpec(-1, 1, (7,))
     reward_spec = UnboundedContinuousTensorSpec()
     from_pixels = True
@@ -252,8 +240,7 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
 
 
 class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
-    observation_spec = NdUnboundedContinuousTensorSpec(
-        shape=torch.Size([7, 7, 3]))
+    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3]))
     from_pixels = True
 
     def _get_out_obs(self, obs):
