@@ -28,7 +28,6 @@ from torchrl.envs.transforms import VecNorm, TransformedEnv
 from torchrl.envs.transforms.transforms import (
     _has_tv,
     NoopResetEnv,
-    BinerizeReward,
     PinMemoryTransform,
 )
 
