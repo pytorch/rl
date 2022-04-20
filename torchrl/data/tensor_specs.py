@@ -8,7 +8,18 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from textwrap import indent
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    ItemsView,
+    KeysView,
+    ValuesView,
+)
 
 import numpy as np
 import torch
@@ -778,19 +789,19 @@ class CompositeSpec(TensorSpec):
         to be stored
 
     Examples:
-        >>> observation_pixels_spec = NdBoundedTensorSpec(
+        >>> pixels_spec = NdBoundedTensorSpec(
         ...    torch.zeros(3,32,32),
         ...    torch.ones(3, 32, 32))
         >>> observation_vector_spec = NdBoundedTensorSpec(torch.zeros(33),
         ...    torch.ones(33))
         >>> composite_spec = CompositeSpec(
-        ...     observation_pixels=observation_pixels_spec,
+        ...     pixels=pixels_spec,
         ...     observation_vector=observation_vector_spec)
-        >>> td = TensorDict({"observation_pixels": torch.rand(10,3,32,32),
+        >>> td = TensorDict({"pixels": torch.rand(10,3,32,32),
         ...    "observation_vector": torch.rand(10,33)}, batch_size=[10])
         >>> print("td (rand) is within bounds: ", composite_spec.is_in(td))
         td (rand) is within bounds:  True
-        >>> td = TensorDict({"observation_pixels": torch.randn(10,3,32,32),
+        >>> td = TensorDict({"pixels": torch.randn(10,3,32,32),
         ...    "observation_vector": torch.randn(10,33)}, batch_size=[10])
         >>> print("td (randn) is within bounds: ", composite_spec.is_in(td))
         td (randn) is within bounds:  False
@@ -803,7 +814,7 @@ class CompositeSpec(TensorSpec):
         >>> print("random td: ", composite_spec.rand([3,]))
         random td:  TensorDict(
             fields={
-                observation_pixels: Tensor(torch.Size([3, 3, 32, 32]), \
+                pixels: Tensor(torch.Size([3, 3, 32, 32]), \
 dtype=torch.float32),
                 observation_vector: Tensor(torch.Size([3, 33]), \
 dtype=torch.float32)},
@@ -868,3 +879,12 @@ dtype=torch.float32)},
             {key: value.rand(shape) for key, value in self._specs.items()},
             batch_size=shape,
         )
+
+    def keys(self) -> KeysView:
+        return self._specs.keys()
+
+    def items(self) -> ItemsView:
+        return self._specs.items()
+
+    def values(self) -> ValuesView:
+        return self._specs.values()

@@ -22,6 +22,7 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import GymEnv
+from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
@@ -86,6 +87,7 @@ except FileNotFoundError:
 #     assert_allclose_td(rollout1, rollout0)
 
 
+@pytest.mark.skipif(not _has_gym, reason="no gym")
 @pytest.mark.parametrize("env_name", ["Pendulum-v1", "CartPole-v1"])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_env_seed(env_name, frame_skip, seed=0):
@@ -114,8 +116,10 @@ def test_env_seed(env_name, frame_skip, seed=0):
         assert_allclose_td(td0a, td0c.select(*td0a.keys()))
     with pytest.raises(AssertionError):
         assert_allclose_td(td1a, td1c)
+    env.close()
 
 
+@pytest.mark.skipif(not _has_gym, reason="no gym")
 @pytest.mark.parametrize("env_name", ["Pendulum-v1", "ALE/Pong-v5"])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_rollout(env_name, frame_skip, seed=0):
@@ -141,6 +145,7 @@ def test_rollout(env_name, frame_skip, seed=0):
     rollout3 = env.rollout(n_steps=100)
     with pytest.raises(AssertionError):
         assert_allclose_td(rollout1, rollout3)
+    env.close()
 
 
 def _make_envs(env_name, frame_skip, transformed, N):
@@ -164,6 +169,7 @@ def _make_envs(env_name, frame_skip, transformed, N):
     return env_parallel, env_serial, env0
 
 
+@pytest.mark.skipif(not _has_gym, reason="no gym")
 @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
 @pytest.mark.parametrize("frame_skip", [4, 1])
 @pytest.mark.parametrize("transformed", [True, False])
@@ -202,6 +208,7 @@ def test_parallel_env(env_name, frame_skip, transformed, T=10, N=5):
     ), f"{td.shape}, {td.get('done').sum(1)}"
 
 
+@pytest.mark.skipif(not _has_gym, reason="no gym")
 @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
 @pytest.mark.parametrize("frame_skip", [4, 1])
 @pytest.mark.parametrize(
@@ -220,7 +227,7 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
     torch.manual_seed(0)
 
     td_serial = env_serial.rollout(n_steps=10, auto_reset=False).contiguous()
-    key = "observation_pixels" if "observation_pixels" in td_serial else "observation"
+    key = "pixels" if "pixels" in td_serial else "observation"
     torch.testing.assert_allclose(
         td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
     )
@@ -240,8 +247,12 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
     assert_allclose_td(td_serial[:, 0], td_parallel[:, 0])  # first step
     assert_allclose_td(td_serial[:, 1], td_parallel[:, 1])  # second step
     assert_allclose_td(td_serial, td_parallel)
+    env_parallel.close()
+    env_serial.close()
+    env0.close()
 
 
+@pytest.mark.skipif(not _has_gym, reason="no gym")
 def test_parallel_env_shutdown():
     env_make = EnvCreator(lambda: GymEnv("Pendulum-v1"))
     env = ParallelEnv(4, env_make)
@@ -253,6 +264,7 @@ def test_parallel_env_shutdown():
     assert env.is_closed
     env.reset()
     assert not env.is_closed
+    env.close()
 
 
 @pytest.mark.parametrize("parallel", [True, False])
@@ -272,6 +284,7 @@ def test_parallel_env_custom_method(parallel):
     env.close()
 
 
+@pytest.mark.skipif(not _has_gym, reason="no gym")
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="no cuda device detected")
 @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
 @pytest.mark.parametrize("frame_skip", [4, 1])
@@ -390,6 +403,7 @@ class TestSpec:
         assert sample.shape == torch.Size([100, 10, 5])
 
 
+@pytest.mark.skipif(not _has_gym, reason="no gym")
 def test_seed():
     torch.manual_seed(0)
     env1 = GymEnv("Pendulum-v1")
@@ -407,6 +421,7 @@ def test_seed():
     assert_allclose_td(state1_1, state1_2)
 
 
+@pytest.mark.skipif(not _has_gym, reason="no gym")
 def test_current_tensordict():
     torch.manual_seed(0)
     env = GymEnv("Pendulum-v1")

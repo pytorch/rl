@@ -24,7 +24,7 @@ class VideoRecorder(ObservationTransform):
             should be written.
         tag (str): the video tag in the writer.
         keys (Sequence[str], optional): keys to be read to produce the video.
-            Default is `"next_observation_pixels"`.
+            Default is `"next_pixels"`.
         skip (int): frame interval in the output video.
             Default is 2.
     """
@@ -38,7 +38,7 @@ class VideoRecorder(ObservationTransform):
         **kwargs,
     ) -> None:
         if keys is None:
-            keys = ["next_observation_pixels"]
+            keys = ["next_pixels"]
 
         super().__init__(keys=keys)
         video_kwargs = {"fps": 6}
