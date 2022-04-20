@@ -799,7 +799,7 @@ class TestTensorDicts:
             "td_reset_bs",
         ],
     )
-    def test_rename_key(self, td_name):
+    def test_rename_key(self, td_name) -> None:
         torch.manual_seed(1)
         td = getattr(self, td_name)
         with pytest.raises(KeyError, match="already present in TensorDict"):
@@ -895,9 +895,6 @@ class TestTensorDicts:
         assert sum([_td.shape[dim] for _td in td_chunks]) == td.shape[dim]
         assert (torch.cat(td_chunks, dim) == td).all()
 
-    # Use pytest decorator to test all subclasses of TensorDict
-    # ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td", "td_reset_bs"]
-        
     @pytest.mark.parametrize(
         "td_name",
         [
