@@ -1303,17 +1303,18 @@ def _sum_left(val, dest):
 class gSDENoise(Transform):
     inplace = False
 
-    def __init__(self, action_dim: int, state_dim: Optional[int] = None) -> None:
+    def __init__(self, action_dim: int, state_dim: Optional[int] = None,
+                 observation_key="next_observation_vector") -> None:
         super().__init__(keys=[])
         self.action_dim = action_dim
         self.state_dim = state_dim
+        self.observation_key = observation_key
 
     def reset(self, tensordict: _TensorDict) -> _TensorDict:
         tensordict = super().reset(tensordict=tensordict)
         if self.state_dim is None:
             obs_spec = self.parent.observation_spec
-            if isinstance(obs_spec, CompositeSpec):
-                obs_spec = obs_spec["vector"]
+            obs_spec = obs_spec[self.observation_key]
             state_dim = obs_spec.shape[-1]
         else:
             state_dim = self.state_dim

@@ -73,14 +73,16 @@ class Specs:
         else:
             for i, (key, item) in enumerate(self["observation_spec"].items()):
                 if not key.startswith("next_"):
-                    raise RuntimeError(f"All observation keys must start with the `'next_'` prefix. Found {key}")
+                    raise RuntimeError(
+                        f"All observation keys must start with the `'next_'` prefix. Found {key}"
+                    )
                 observation_placeholder = torch.zeros(item.shape, dtype=item.dtype)
                 if next_observation:
                     td.set(key, observation_placeholder)
                 td.set(
                     key[5:],
-                        observation_placeholder.clone(),
-                    )
+                    observation_placeholder.clone(),
+                )
 
         reward_placeholder = torch.zeros(
             self["reward_spec"].shape, dtype=self["reward_spec"].dtype
@@ -216,7 +218,12 @@ class _EnvClass:
     def _reset(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
         raise NotImplementedError
 
-    def reset(self, tensordict: Optional[_TensorDict] = None, execute_step: bool=True, **kwargs) -> _TensorDict:
+    def reset(
+        self,
+        tensordict: Optional[_TensorDict] = None,
+        execute_step: bool = True,
+        **kwargs,
+    ) -> _TensorDict:
         """Resets the environment.
         As for step and _step, only the private method `_reset` should be overwritten by _EnvClass subclasses.
 
@@ -247,7 +254,7 @@ class _EnvClass:
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
 
-        self.current_tensordict = step_tensordict(tensordict_reset)
+        self.current_tensordict = step_tensordict(tensordict_reset, keep_other=True)
         self.is_done = tensordict_reset.get(
             "done",
             torch.zeros(self.batch_size, dtype=torch.bool, device=self.device),

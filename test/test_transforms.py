@@ -496,7 +496,9 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(0, 1, (nchannels, 32, 32))
+            observation_spec = NdBoundedTensorSpec(
+                0, 1, (nchannels, 32, 32), device=device
+            )
             observation_spec = on.transform_observation_spec(observation_spec)
             if standard_normal:
                 assert (observation_spec.space.minimum == -loc / scale).all()
@@ -507,7 +509,10 @@ class TestTransforms:
 
         else:
             observation_spec = CompositeSpec(
-                **{key: NdBoundedTensorSpec(0, 1, (nchannels, 32, 32)) for key in keys}
+                **{
+                    key: NdBoundedTensorSpec(0, 1, (nchannels, 32, 32), device=device)
+                    for key in keys
+                }
             )
             observation_spec = on.transform_observation_spec(observation_spec)
             for key in keys:

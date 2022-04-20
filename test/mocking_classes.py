@@ -78,7 +78,9 @@ class _MockEnv(_EnvClass):
 
 class DiscreteActionVecMockEnv(_MockEnv):
     size = 7
-    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([size]))
+    observation_spec = CompositeSpec(
+        next_observation=NdUnboundedContinuousTensorSpec(shape=torch.Size([size]))
+    )
     action_spec = OneHotDiscreteTensorSpec(7)
     reward_spec = UnboundedContinuousTensorSpec()
     from_pixels = False
@@ -125,7 +127,9 @@ class DiscreteActionVecMockEnv(_MockEnv):
 
 class ContinuousActionVecMockEnv(_MockEnv):
     size = 7
-    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([size]))
+    observation_spec = CompositeSpec(
+        next_observation=NdUnboundedContinuousTensorSpec(shape=torch.Size([size]))
+    )
     action_spec = NdBoundedTensorSpec(-1, 1, (7,))
     reward_spec = UnboundedContinuousTensorSpec()
     from_pixels = False
@@ -192,7 +196,9 @@ class DiscreteActionVecPolicy:
 
 
 class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
-    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([1, 7, 7]))
+    observation_spec = CompositeSpec(
+        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([1, 7, 7]))
+    )
     action_spec = OneHotDiscreteTensorSpec(7)
     reward_spec = UnboundedContinuousTensorSpec()
     from_pixels = True
@@ -208,7 +214,9 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
 
 
 class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
-    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3]))
+    observation_spec = CompositeSpec(
+        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3]))
+    )
     from_pixels = True
 
     def _get_out_obs(self, obs):
@@ -224,7 +232,9 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
 
 
 class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
-    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([1, 7, 7]))
+    observation_spec = CompositeSpec(
+        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([1, 7, 7]))
+    )
     action_spec = NdBoundedTensorSpec(-1, 1, (7,))
     reward_spec = UnboundedContinuousTensorSpec()
     from_pixels = True
@@ -240,7 +250,9 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
 
 
 class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
-    observation_spec = NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3]))
+    observation_spec = CompositeSpec(
+        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3]))
+    )
     from_pixels = True
 
     def _get_out_obs(self, obs):

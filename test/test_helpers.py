@@ -67,7 +67,7 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
 
     expected_keys = ["done", "action", "action_value"]
     if from_pixels:
-        expected_keys += ["observation_pixels"]
+        expected_keys += ["pixels"]
     else:
         expected_keys += ["observation_vector"]
 
@@ -104,7 +104,7 @@ def test_ddpg_maker(device, from_pixels):
     actor(td)
     expected_keys = ["done", "action"]
     if from_pixels:
-        expected_keys += ["observation_pixels"]
+        expected_keys += ["pixels"]
     else:
         expected_keys += ["observation_vector"]
 
@@ -156,7 +156,7 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde):
     actor = actor_value.get_policy_operator()
     expected_keys = [
         "done",
-        "observation_pixels" if len(from_pixels) else "observation_vector",
+        "pixels" if len(from_pixels) else "observation_vector",
         "action_dist_param_0",
         "action_dist_param_1",
         "action",
@@ -178,7 +178,7 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde):
     value = actor_value.get_value_operator()
     expected_keys = [
         "done",
-        "observation_pixels" if len(from_pixels) else "observation_vector",
+        "pixels" if len(from_pixels) else "observation_vector",
         "state_value",
     ]
     if shared_mapping:
@@ -232,7 +232,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels):
     actor(td_clone)
     expected_keys = [
         "done",
-        "observation_pixels" if len(from_pixels) else "observation_vector",
+        "pixels" if len(from_pixels) else "observation_vector",
         "action",
     ]
     if len(gsde):

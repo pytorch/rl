@@ -158,7 +158,7 @@ def transformed_env_constructor(
             ]  # DMControl requires double-precision
         if not from_pixels:
             selected_keys = [
-                key for key in env.observation_specs.keys() if "pixels" not in key
+                key for key in env.observation_spec.keys() if "pixels" not in key
             ]
 
             # even if there is a single tensor, it'll be renamed in "next_observation_vector"

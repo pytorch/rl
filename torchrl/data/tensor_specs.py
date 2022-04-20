@@ -8,7 +8,18 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from textwrap import indent
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, ItemsView, KeysView
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    ItemsView,
+    KeysView,
+    ValuesView,
+)
 
 import numpy as np
 import torch
@@ -874,3 +885,6 @@ dtype=torch.float32)},
 
     def items(self) -> ItemsView:
         return self._specs.items()
+
+    def values(self) -> ValuesView:
+        return self._specs.values()
