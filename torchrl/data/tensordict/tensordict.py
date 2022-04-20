@@ -796,6 +796,7 @@ dtype=torch.float32)},
             batch_size=self.batch_size,
         )
 
+    @classmethod
     def __torch_function__(
         self,
         func: Callable,
