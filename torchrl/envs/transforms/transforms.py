@@ -310,7 +310,7 @@ class TransformedEnv(_EnvClass):
         return self.env.set_seed(seed)
 
     def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs):
-        out_tensordict = self.env.reset(**kwargs).to(self.device)
+        out_tensordict = self.env.reset(execute_step=False, **kwargs).to(self.device)
         out_tensordict = self.transform.reset(out_tensordict)
         out_tensordict = self.transform(out_tensordict)
         return out_tensordict

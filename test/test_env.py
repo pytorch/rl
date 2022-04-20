@@ -116,6 +116,7 @@ def test_env_seed(env_name, frame_skip, seed=0):
         assert_allclose_td(td0a, td0c.select(*td0a.keys()))
     with pytest.raises(AssertionError):
         assert_allclose_td(td1a, td1c)
+    env.close()
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
@@ -144,6 +145,7 @@ def test_rollout(env_name, frame_skip, seed=0):
     rollout3 = env.rollout(n_steps=100)
     with pytest.raises(AssertionError):
         assert_allclose_td(rollout1, rollout3)
+    env.close()
 
 
 def _make_envs(env_name, frame_skip, transformed, N):
@@ -225,7 +227,7 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
     torch.manual_seed(0)
 
     td_serial = env_serial.rollout(n_steps=10, auto_reset=False).contiguous()
-    key = "observation_pixels" if "observation_pixels" in td_serial else "observation"
+    key = "pixels" if "pixels" in td_serial else "observation"
     torch.testing.assert_allclose(
         td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
     )
@@ -245,6 +247,9 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
     assert_allclose_td(td_serial[:, 0], td_parallel[:, 0])  # first step
     assert_allclose_td(td_serial[:, 1], td_parallel[:, 1])  # second step
     assert_allclose_td(td_serial, td_parallel)
+    env_parallel.close()
+    env_serial.close()
+    env0.close()
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
@@ -259,6 +264,7 @@ def test_parallel_env_shutdown():
     assert env.is_closed
     env.reset()
     assert not env.is_closed
+    env.close()
 
 
 @pytest.mark.parametrize("parallel", [True, False])

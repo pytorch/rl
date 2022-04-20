@@ -69,19 +69,16 @@ class Specs:
             self["action_spec"].shape, dtype=self["action_spec"].dtype
         )
         if not isinstance(self["observation_spec"], CompositeSpec):
-            observation_placeholder = torch.zeros(
-                self["observation_spec"].shape,
-                dtype=self["observation_spec"].dtype,
-            )
-            td.set("observation", observation_placeholder)
+            raise RuntimeError("observation_spec is expected to be of Composite type.")
         else:
-            for i, key in enumerate(self["observation_spec"]):
-                item = self["observation_spec"][key]
+            for i, (key, item) in enumerate(self["observation_spec"].items()):
+                if not key.startswith("next_"):
+                    raise RuntimeError(f"All observation keys must start with the `'next_'` prefix. Found {key}")
                 observation_placeholder = torch.zeros(item.shape, dtype=item.dtype)
-                td.set(f"observation_{key}", observation_placeholder)
                 if next_observation:
-                    td.set(
-                        f"next_observation_{key}",
+                    td.set(key, observation_placeholder)
+                td.set(
+                    key[5:],
                         observation_placeholder.clone(),
                     )
 
@@ -219,13 +216,15 @@ class _EnvClass:
     def _reset(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
         raise NotImplementedError
 
-    def reset(self, tensordict: Optional[_TensorDict] = None, **kwargs) -> _TensorDict:
+    def reset(self, tensordict: Optional[_TensorDict] = None, execute_step: bool=True, **kwargs) -> _TensorDict:
         """Resets the environment.
         As for step and _step, only the private method `_reset` should be overwritten by _EnvClass subclasses.
 
         Args:
             tensordict (_TensorDict, optional): tensordict to be used to contain the resulting new observation.
                 In some cases, this input can also be used to pass argument to the reset function.
+            execute_step (bool, optional): if True, a `step_tensordict` is executed on the output TensorDict,
+                hereby removing the `"next_"` prefixes from the keys.
             kwargs (optional): other arguments to be passed to the native
                 reset function.
         Returns:
@@ -257,6 +256,8 @@ class _EnvClass:
             raise RuntimeError(
                 f"Env {self} was done after reset. This is (currently) not allowed."
             )
+        if execute_step:
+            tensordict_reset = self.current_tensordict
         if tensordict is not None:
             tensordict.update(tensordict_reset)
         else:

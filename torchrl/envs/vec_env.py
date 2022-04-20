@@ -349,7 +349,7 @@ class SerialEnv(_BatchedEnv):
         for i, _env in enumerate(self._envs):
             if not reset_workers[i]:
                 continue
-            _td = _env.reset(**kwargs)
+            _td = _env.reset(execute_step=False, **kwargs)
             keys = keys.union(_td.keys())
             self.shared_tensordicts[i].update_(_td)
 
@@ -652,7 +652,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
-            _td = env.reset(**reset_kwargs)
+            _td = env.reset(execute_step=False, **reset_kwargs)
             keys = set(_td.keys())
             if pin_memory:
                 _td.pin_memory()
