@@ -61,7 +61,7 @@ def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
                  [[0., 0.]]]))
 
     """
-    return tuple(torch.stack(tensors, 0) for tensors in zip(*list_of_tensor_iterators))
+    return tuple(torch.stack(tensors, 0) for tensors in zip(*list(list_of_tensor_iterators)))
 
 
 def _pin_memory(output: Any) -> Any:
