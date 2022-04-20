@@ -508,9 +508,6 @@ class SyncDataCollector(_DataCollector):
         """Returns the local state_dict of the data collector (environment
         and policy).
 
-        Args:
-            destination (optional): ordered dictionary to be updated.
-
         Returns:
             an ordered dictionary with fields `"policy_state_dict"` and
             `"env_state_dict"`.
@@ -861,10 +858,6 @@ class _MultiDataCollector(_DataCollector):
         """
         Returns the state_dict of the data collector.
         Each field represents a worker containing its own state_dict.
-
-        Args:
-            destination (optional): A destination ordered dictionary where
-                to place the fetched data.
 
         """
         for idx in range(self.num_workers):

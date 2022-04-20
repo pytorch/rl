@@ -102,6 +102,7 @@ if __name__ == "__main__":
     proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
     model = make_sac_model(
         proof_env,
+        args=args,
         device=device,
     )
     loss_module, target_net_updater = make_sac_loss(model, args)

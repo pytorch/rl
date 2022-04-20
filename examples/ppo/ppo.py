@@ -85,7 +85,7 @@ if __name__ == "__main__":
     video_tag = exp_name if args.record_video else ""
 
     proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
-    model = make_ppo_model(proof_env, args, device)
+    model = make_ppo_model(proof_env, args=args, device=device)
     actor_model = model.get_policy_operator()
 
     loss_module = make_ppo_loss(model, args)

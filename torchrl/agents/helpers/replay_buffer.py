@@ -10,7 +10,8 @@ import torch
 from torchrl.data import (
     DEVICE_TYPING,
     ReplayBuffer,
-    TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
 )
 
 __all__ = ["make_replay_buffer", "parser_replay_args"]
