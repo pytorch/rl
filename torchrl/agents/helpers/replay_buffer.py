@@ -10,7 +10,7 @@ import torch
 from torchrl.data import (
     DEVICE_TYPING,
     ReplayBuffer,
-    TensorDictPrioritizedReplayBuffer,
+    TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer,
 )
 
 __all__ = ["make_replay_buffer", "parser_replay_args"]
@@ -20,7 +20,7 @@ def make_replay_buffer(device: DEVICE_TYPING, args: Namespace) -> ReplayBuffer:
     """Builds a replay buffer using the arguments build from the parser returned by parser_replay_args."""
     device = torch.device(device)
     if not args.prb:
-        buffer = ReplayBuffer(
+        buffer = TensorDictReplayBuffer(
             args.buffer_size,
             # collate_fn=InPlaceSampler(device),
             pin_memory=device != torch.device("cpu"),
