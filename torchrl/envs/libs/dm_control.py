@@ -18,8 +18,10 @@ from ...data.utils import numpy_to_torch_dtype_dict
 from ..common import GymLikeEnv
 
 __all__ = ["DMControlEnv"]
+
+import collections
+
 try:
-    import collections
 
     import dm_env
     from dm_control import suite
