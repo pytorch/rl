@@ -61,10 +61,10 @@ def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
                  [[0., 0.]]]))
 
     """
-    list_of_tensor_iterators = list(list_of_tensor_iterators)
+    list_of_tensor_iterators = list(zip(*list_of_tensor_iterators))
     if not len(list_of_tensor_iterators):
         raise RuntimeError("list_of_tensor_iterators is empty!")
-    return tuple(torch.stack(tensors, 0) for tensors in zip(*list_of_tensor_iterators))
+    return tuple(torch.stack(tensors, 0) for tensors in list_of_tensor_iterators)
 
 
 def _pin_memory(output: Any) -> Any:
