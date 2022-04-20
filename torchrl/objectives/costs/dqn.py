@@ -17,9 +17,7 @@ from .utils import distance_loss, next_state_value
 
 __all__ = [
     "DQNLoss",
-    "DoubleDQNLoss",
     "DistributionalDQNLoss",
-    "DistributionalDoubleDQNLoss",
 ]
 
 
@@ -30,9 +28,9 @@ class DQNLoss(_LossModule):
         value_network (ProbabilisticTDModule): a Q value operator.
         gamma (scalar): a discount factor for return computation.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+        delay_value (bool, optional): whether to duplicate the value network into a new target value network to
+            create a double DQN. Default is `False`.
     """
-
-    delay_value: bool = False
 
     def __init__(
         self,
@@ -40,9 +38,11 @@ class DQNLoss(_LossModule):
         gamma: float,
         loss_function: str = "l2",
         priority_key: str = "td_error",
+        delay_value: bool = False,
     ) -> None:
 
         super().__init__()
+        self.delay_value = delay_value
         self.convert_to_functional(
             value_network,
             "value_network",
@@ -125,25 +125,6 @@ class DQNLoss(_LossModule):
         return TensorDict({"loss": loss.mean()}, [])
 
 
-class DoubleDQNLoss(DQNLoss):
-    """
-    A Double DQN loss class.
-    This class duplicates the value network into a new target value network, which differs from the value networks used
-    for data collection in that it has a similar weight configuration but delayed of a certain number of optimization
-    steps. The target network should be updated from its original counterpart with some delay using dedicated classes
-    (SoftUpdate and HardUpdate in objectives.cost.utils).
-    More information on double DQN can be found in "Deep Reinforcement Learning with Double Q-learning",
-    https://arxiv.org/abs/1509.06461.
-
-    Note that the original network will be copied at initialization using the copy.deepcopy method: in some rare cases
-    this may lead to unexpected behaviours (for instance if the network changes in a way that won't be reflected by its
-    state_dict). Please report any such bug if encountered.
-
-    """
-
-    delay_value: bool = True
-
-
 class DistributionalDQNLoss(_LossModule):
     """
     A distributional DQN loss class.
@@ -160,19 +141,20 @@ class DistributionalDQNLoss(_LossModule):
         value_network (DistributionalQValueActor): the distributional Q
             value operator.
         gamma (scalar): a discount factor for return computation.
+        delay_value (bool): whether to duplicate the value network into a new target value network to create double DQN
     """
-
-    delay_value: bool = False
 
     def __init__(
         self,
         value_network: DistributionalQValueActor,
         gamma: float,
         priority_key: str = "td_error",
+        delay_value: bool = False,
     ):
         super().__init__()
         self.gamma = gamma
         self.priority_key = priority_key
+        self.delay_value = delay_value
         if not isinstance(value_network, DistributionalQValueActor):
             raise TypeError(
                 "Expected value_network to be of type "
@@ -298,19 +280,3 @@ class DistributionalDQNLoss(_LossModule):
         )
         loss_td = TensorDict({"loss": loss.mean()}, [])
         return loss_td
-
-
-class DistributionalDoubleDQNLoss(DistributionalDQNLoss):
-    """
-    A distributional, double DQN loss class.
-    This class mixes distributional and double DQN losses.
-
-    For more details regarding Distributional DQN, refer to "A Distributional
-    Perspective on Reinforcement Learning",
-    https://arxiv.org/pdf/1707.06887.pdf
-    More information on double DQN can be found in "Deep Reinforcement
-    Learning with Double Q-learning", https://arxiv.org/abs/1509.06461.
-
-    """
-
-    delay_value: bool = True

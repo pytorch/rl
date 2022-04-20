@@ -17,6 +17,7 @@ from torchrl.modules import (
     OneHotCategorical,
 )
 from torchrl.modules.distributions import TanhDelta, Delta
+from torchrl.modules.distributions.continuous import SafeTanhTransform
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -168,6 +169,24 @@ def test_categorical(shape, device):
         assert s.shape[-1] == logits.shape[-1]
         assert (s.sum(-1) == 1).all()
         assert torch.isfinite(dist.log_prob(s)).all()
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_tanhtrsf(dtype):
+    torch.manual_seed(0)
+    trsf = SafeTanhTransform()
+    some_big_number = (
+        torch.randn(10, dtype=dtype).sign() * torch.randn(10, dtype=dtype).pow(2) * 1e6
+    )
+    some_other_number = trsf(some_big_number)
+    assert torch.isfinite(some_other_number).all()
+    assert (some_big_number.sign() == some_other_number.sign()).all()
+
+    ones = torch.ones(2, dtype=dtype)
+    ones[1] = -1
+    some_big_number = trsf.inv(ones)
+    assert torch.isfinite(some_big_number).all()
+    assert (some_big_number.sign() == ones.sign()).all()
 
 
 if __name__ == "__main__":

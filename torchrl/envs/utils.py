@@ -19,7 +19,9 @@ class classproperty(property):
 
 
 def step_tensordict(
-    tensordict: _TensorDict, next_tensordict: _TensorDict = None
+    tensordict: _TensorDict,
+    next_tensordict: _TensorDict = None,
+    keep_other: bool = False,
 ) -> _TensorDict:
     """
     Given a tensordict retrieved after a step, returns another tensordict with all the 'next_' prefixes are removed,
@@ -29,6 +31,8 @@ def step_tensordict(
     Args:
         tensordict (_TensorDict): tensordict with keys to be renamed
         next_tensordict (_TensorDict, optional): destination tensordict
+        keep_other (bool, optional): if True, all keys that do not start with `'next_'` will be kept.
+            Default is False.
 
     Returns:
          A new tensordict (or next_tensordict) with the "next_*" keys renamed without the "next_" prefix.
@@ -49,10 +53,14 @@ def step_tensordict(
         >>> print(td_out) # should contain keys 'observation', 'next_observation', 'action', 'reward', 'done' or similar
 
     """
-    keys = [key for key in tensordict.keys() if key.rfind("next_") == 0]
-    select_tensordict = tensordict.select(*keys).clone()
-    for key in keys:
-        select_tensordict.rename_key(key, key[5:], safe=True)
+    other_keys = []
+    keys = [key for key in tensordict.keys() if key.startswith("next_")]
+    new_keys = [key[5:] for key in keys]
+    if keep_other:
+        other_keys = [key for key in tensordict.keys() if key not in new_keys]
+    select_tensordict = tensordict.select(*other_keys, *keys).clone()
+    for new_key, key in zip(new_keys, keys):
+        select_tensordict.rename_key(key, new_key, safe=True)
     if next_tensordict is not None:
         return next_tensordict.update(select_tensordict)
     else:

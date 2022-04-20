@@ -11,9 +11,7 @@ from torchrl.data.tensordict.tensordict import TensorDict, assert_allclose_td
 
 
 @pytest.mark.parametrize("n", range(13))
-@pytest.mark.parametrize(
-    "key", ["observation", "observation_pixels", "observation_whatever"]
-)
+@pytest.mark.parametrize("key", ["observation", "pixels", "observation_whatever"])
 def test_multistep(n, key, T=11):
     torch.manual_seed(0)
 

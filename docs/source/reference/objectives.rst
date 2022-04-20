@@ -11,9 +11,7 @@ DQN
     :template: rl_template_noinherit.rst
 
     DQNLoss
-    DoubleDQNLoss
     DistributionalDQNLoss
-    DoubleDistributionalDQNLoss
 
 DDPG
 ----
@@ -23,7 +21,6 @@ DDPG
     :template: rl_template_noinherit.rst
 
     DDPGLoss
-    DoubleDDPGLoss
 
 SAC
 ----
@@ -33,7 +30,6 @@ SAC
     :template: rl_template_noinherit.rst
 
     SACLoss
-    DoubleSACLoss
 
 REDQ
 ----
@@ -43,7 +39,6 @@ REDQ
     :template: rl_template_noinherit.rst
 
     REDQLoss
-    DoubleREDQLoss
 
 PPO
 ----
