@@ -917,18 +917,25 @@ class TestTensorDicts:
         values = list(td.values())
         items = list(td.items())
 
-        # Test that the lengths of values, items and keys are equal
-        # items = [key, value]
+        # Test td.items()
+        constructed_td1 = TensorDict({}, batch_size=td.shape)
+        for key, value in items:
+            constructed_td1.set(key, value)
+
+        assert (td == constructed_td1).all()
+
+        # Test td.keys() and td.values()
+        # items = [key, value] should be verified
         assert len(values) == len(items)
         assert len(keys) == len(items)
+        constructed_td2 = TensorDict({}, batch_size=td.shape)
+        for key, value in list(zip(td.keys(), td.values())):
+            constructed_td2.set(key, value)
+
+        assert (td == constructed_td2).all()
 
         # Test that keys is sorted
         assert all(keys[i] <= keys[i + 1] for i in range(len(keys) - 1))
-
-        # Test that item = [key, value]
-        assert all(keys[i] == items[i][0] for i in range(len(items)))
-        assert all(len(values[i]) == len(items[i][1]) for i in range(len(items)))
-        
 
         # Add new element to tensor
         a = td.get("a")
@@ -937,23 +944,34 @@ class TestTensorDicts:
         values = list(td.values())
         items = list(td.items())
 
-        # Test that the lengths of values, items and keys
-        # are still equal after adding the new element
-        assert len(values) == len(items)
-        assert len(keys) == len(items)
-
         # Test that keys is still sorted after adding the element
         assert all(keys[i] <= keys[i + 1] for i in range(len(keys) - 1))
 
-        # Test that item = [key, value] is still verified
-        assert all(keys[i] == items[i][0] for i in range(len(items)))
-        assert all(len(values[i]) == len(items[i][1]) for i in range(len(items)))
+        # Test td.items()
+        # after adding the new element
+        constructed_td1 = TensorDict({}, batch_size=td.shape)
+        for key, value in items:
+            constructed_td1.set(key, value)
+
+        assert (td == constructed_td1).all()
+
+        # Test td.keys() and td.values()
+        # items = [key, value] should be verified
+        # even after adding the new element
+        assert len(values) == len(items)
+        assert len(keys) == len(items)
+
+        constructed_td2 = TensorDict({}, batch_size=td.shape)
+        for key, value in list(zip(td.keys(), td.values())):
+            constructed_td2.set(key, value)
+
+        assert (td == constructed_td2).all()
 
         # Test the methods values_meta() and items_meta()
         values_meta = list(td.values_meta())
         items_meta = list(td.items_meta())
         assert len(values_meta) == len(items_meta)
-       
+
 
 def test_batchsize_reset():
     td = TensorDict(
