@@ -168,8 +168,9 @@ class MetaTensor:
             _is_shared=self.is_shared(),
         )
 
+    @classmethod
     def __torch_function__(
-        self,
+        cls,
         func: Callable,
         types,
         args: Tuple = (),

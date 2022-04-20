@@ -153,7 +153,7 @@ class _BatchedEnv(_EnvClass):
         self._reward_spec = self._dummy_env.reward_spec
         self._dummy_env.close()
 
-    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
+    def state_dict(self) -> OrderedDict:
         raise NotImplementedError
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:
@@ -291,14 +291,11 @@ class SerialEnv(_BatchedEnv):
         self.is_closed = False
 
     @_check_start
-    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
+    def state_dict(self) -> OrderedDict:
         state_dict = OrderedDict()
         for idx, env in enumerate(self._envs):
             state_dict[f"worker{idx}"] = env.state_dict()
 
-        if destination is not None:
-            destination.update(state_dict)
-            return destination
         return state_dict
 
     @_check_start
@@ -440,7 +437,7 @@ class ParallelEnv(_BatchedEnv):
         self.is_closed = False
 
     @_check_start
-    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
+    def state_dict(self) -> OrderedDict:
         state_dict = OrderedDict()
         for idx, channel in enumerate(self.parent_channels):
             channel.send(("state_dict", None))
@@ -450,9 +447,6 @@ class ParallelEnv(_BatchedEnv):
                 raise RuntimeError(f"Expected 'state_dict' but received {msg}")
             state_dict[f"worker{idx}"] = _state_dict
 
-        if destination is not None:
-            destination.update(state_dict)
-            return destination
         return state_dict
 
     @_check_start
