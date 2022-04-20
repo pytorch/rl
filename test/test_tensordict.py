@@ -897,6 +897,7 @@ class TestTensorDicts:
 
     # Use pytest decorator to test all subclasses of TensorDict
     # ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td", "td_reset_bs"]
+        
     @pytest.mark.parametrize(
         "td_name",
         [
@@ -925,8 +926,9 @@ class TestTensorDicts:
         assert all(keys[i] <= keys[i + 1] for i in range(len(keys) - 1))
 
         # Test that item = [key, value]
-        assert all(len(values[i]) == len(items[i][1]) for i in range(len(items)))
         assert all(keys[i] == items[i][0] for i in range(len(items)))
+        assert all(len(values[i]) == len(items[i][1]) for i in range(len(items)))
+        
 
         # Add new element to tensor
         a = td.get("a")
@@ -944,14 +946,14 @@ class TestTensorDicts:
         assert all(keys[i] <= keys[i + 1] for i in range(len(keys) - 1))
 
         # Test that item = [key, value] is still verified
-        assert all(len(values[i]) == len(items[i][1]) for i in range(len(items)))
         assert all(keys[i] == items[i][0] for i in range(len(items)))
+        assert all(len(values[i]) == len(items[i][1]) for i in range(len(items)))
 
         # Test the methods values_meta() and items_meta()
         values_meta = list(td.values_meta())
         items_meta = list(td.items_meta())
         assert len(values_meta) == len(items_meta)
-        assert all(values_meta[i] == items_meta[i][1] for i in range(len(items_meta)))
+       
 
 def test_batchsize_reset():
     td = TensorDict(
