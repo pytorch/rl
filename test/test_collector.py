@@ -513,9 +513,8 @@ def test_excluded_keys(collector_class, exclude):
         pytest.skip("defining _exclude_private_keys is not possible")
     make_env = lambda: ContinuousActionVecMockEnv()
     dummy_env = make_env()
-    policy_module = nn.Linear(
-        dummy_env.observation_spec.shape[-1], dummy_env.action_spec.shape[-1]
-    )
+    obs_spec = dummy_env.observation_spec["next_observation"]
+    policy_module = nn.Linear(obs_spec.shape[-1], dummy_env.action_spec.shape[-1])
     policy = Actor(policy_module, spec=dummy_env.action_spec)
     policy_explore = OrnsteinUhlenbeckProcessWrapper(policy)
 

@@ -171,7 +171,7 @@ class ImpalaNet(nn.Module):
 
 
 class ImpalaNetTensorDict(ImpalaNet):
-    observation_key = "observation_pixels"
+    observation_key = "pixels"
 
     def forward(self, tensordict: _TensorDict):
         x = tensordict.get(self.observation_key)
