@@ -104,8 +104,7 @@ if __name__ == "__main__":
     model = make_redq_model(
         proof_env,
         device=device,
-        tanh_loc=args.tanh_loc,
-        default_policy_scale=args.default_policy_scale,
+        args=args,
     )
     loss_module, target_net_updater = make_redq_loss(model, args)
 

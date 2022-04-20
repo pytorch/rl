@@ -195,9 +195,7 @@ class _EnvClass:
         del tensordict_out
         return tensordict
 
-    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
-        if destination is not None:
-            return destination
+    def state_dict(self) -> OrderedDict:
         return OrderedDict()
 
     def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:

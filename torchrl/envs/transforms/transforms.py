@@ -315,8 +315,8 @@ class TransformedEnv(_EnvClass):
         out_tensordict = self.transform(out_tensordict)
         return out_tensordict
 
-    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
-        state_dict = self.transform.state_dict(destination)
+    def state_dict(self) -> OrderedDict:
+        state_dict = self.transform.state_dict()
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:

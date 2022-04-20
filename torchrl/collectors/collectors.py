@@ -156,7 +156,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
+    def state_dict(self) -> OrderedDict:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -504,12 +504,9 @@ class SyncDataCollector(_DataCollector):
     def __del__(self):
         self.shutdown()  # make sure env is closed
 
-    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
+    def state_dict(self) -> OrderedDict:
         """Returns the local state_dict of the data collector (environment
         and policy).
-
-        Args:
-            destination (optional): ordered dictionary to be updated.
 
         Returns:
             an ordered dictionary with fields `"policy_state_dict"` and
@@ -533,9 +530,6 @@ class SyncDataCollector(_DataCollector):
         else:
             state_dict = OrderedDict(env_state_dict=env_state_dict)
 
-        if destination is not None:
-            destination.update(state_dict)
-            return destination
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
@@ -860,14 +854,10 @@ class _MultiDataCollector(_DataCollector):
                 if msg != "reset":
                     raise RuntimeError(f"Expected msg='reset', got {msg}")
 
-    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
+    def state_dict(self) -> OrderedDict:
         """
         Returns the state_dict of the data collector.
         Each field represents a worker containing its own state_dict.
-
-        Args:
-            destination (optional): A destination ordered dictionary where
-                to place the fetched data.
 
         """
         for idx in range(self.num_workers):
@@ -879,9 +869,6 @@ class _MultiDataCollector(_DataCollector):
                 raise RuntimeError(f"Expected msg='state_dict', got {msg}")
             state_dict[f"worker{idx}"] = _state_dict
 
-        if destination is not None:
-            destination.update(state_dict)
-            return destination
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:

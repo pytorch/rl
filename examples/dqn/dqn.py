@@ -55,7 +55,7 @@ def make_args():
     parser_agent_args(parser)
     parser_collector_args_offpolicy(parser)
     parser_env_args(parser)
-    parser_loss_args(parser)
+    parser_loss_args(parser, algorithm="DQN")
     parser_model_args_discrete(parser)
     parser_recorder_args(parser)
     parser_replay_args(parser)

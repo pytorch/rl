@@ -125,12 +125,9 @@ class EnvCreator:
         env.load_state_dict(self._transform_state_dict, strict=False)
         return env
 
-    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
+    def state_dict(self) -> OrderedDict:
         if self._transform_state_dict is None:
-            return destination if destination is not None else OrderedDict()
-        if destination is not None:
-            destination.update(self._transform_state_dict)
-            return destination
+            return OrderedDict()
         return self._transform_state_dict
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:

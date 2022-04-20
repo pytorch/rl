@@ -796,8 +796,9 @@ dtype=torch.float32)},
             batch_size=self.batch_size,
         )
 
+    @classmethod
     def __torch_function__(
-        self,
+        cls,
         func: Callable,
         types,
         args: Tuple = (),
