@@ -80,15 +80,15 @@ class SafeTanhTransform(D.TanhTransform):
 
     """
 
-    delta = 1e-4
-
     def _call(self, x: torch.Tensor) -> torch.Tensor:
+        eps = torch.finfo(x.dtype).eps
         y = super()._call(x)
-        y.data.clamp_(-1 + self.delta, 1 - self.delta)
+        y.data.clamp_(-1 + eps, 1 - eps)
         return y
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
-        y.data.clamp_(-1 + self.delta, 1 - self.delta)
+        eps = torch.finfo(y.dtype).eps
+        y.data.clamp_(-1 + eps, 1 - eps)
         x = super()._inverse(y)
         return x
 
@@ -171,13 +171,13 @@ class TruncatedNormal(D.Independent):
     ):
         err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
-            if not (max > min).all():  # type: ignore
+            if not (max > min).all():
                 raise RuntimeError(err_msg)
         elif isinstance(max, Number) and isinstance(min, Number):
             if not max > min:
                 raise RuntimeError(err_msg)
         else:
-            if not all(max > min):  # type: ignore
+            if not all(max > min):
                 raise RuntimeError(err_msg)
 
         if isinstance(max, torch.Tensor):
@@ -289,13 +289,13 @@ class TanhNormal(D.TransformedDistribution):
     ):
         err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
-            if not (max > min).all():  # type: ignore
+            if not (max > min).all():
                 raise RuntimeError(err_msg)
         elif isinstance(max, Number) and isinstance(min, Number):
             if not max > min:
                 raise RuntimeError(err_msg)
         else:
-            if not all(max > min):  # type: ignore
+            if not all(max > min):
                 raise RuntimeError(err_msg)
 
         if isinstance(max, torch.Tensor):
@@ -475,19 +475,19 @@ class TanhDelta(D.TransformedDistribution):
         min: Union[torch.Tensor, float] = -1.0,
         max: Union[torch.Tensor, float] = 1.0,
         event_dims: int = 1,
-        atol: float = 1e-4,
-        rtol: float = 1e-4,
+        atol: float = 1e-6,
+        rtol: float = 1e-6,
         **kwargs,
     ):
         minmax_msg = "max value has been found to be equal or less than min value"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
-            if not (max > min).all():  # type: ignore
+            if not (max > min).all():
                 raise ValueError(minmax_msg)
         elif isinstance(max, Number) and isinstance(min, Number):
-            if max <= min:  # type: ignore
+            if max <= min:
                 raise ValueError(minmax_msg)
         else:
-            if not all(max > min):  # type: ignore
+            if not all(max > min):
                 raise ValueError(minmax_msg)
 
         self.min = min
@@ -502,7 +502,7 @@ class TanhDelta(D.TransformedDistribution):
             not isinstance(max, torch.Tensor) and max != 1.0
         )
         if non_trivial_max or non_trivial_min:
-            t = D.ComposeTransform(  # type: ignore
+            t = D.ComposeTransform(
                 [
                     t,
                     D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),

@@ -135,6 +135,8 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             policy.share_memory()
             # if not (len(list(policy.parameters())) == 0 or next(policy.parameters()).is_shared()):
             #     raise RuntimeError("Provided policy parameters must be shared.")
+        if hasattr(env, "close") and not env.is_closed:
+            env.close()
         return policy, device, get_weights_fn
 
     def update_policy_weights_(self) -> None:
@@ -244,6 +246,7 @@ class SyncDataCollector(_DataCollector):
         exploration_mode: str = "random",
         init_with_lag: bool = False,
     ):
+        self.closed = True
         if seed is not None:
             torch.manual_seed(seed)
             np.random.seed(seed)
@@ -256,6 +259,7 @@ class SyncDataCollector(_DataCollector):
             env = create_env_fn
 
         self.env: _EnvClass = env
+        self.closed = False
         self.n_env = self.env.numel()
 
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
@@ -282,7 +286,8 @@ class SyncDataCollector(_DataCollector):
 
         self.passing_device = torch.device(passing_device)
 
-        self._tensordict = env.reset().to(self.passing_device)
+        env.reset()
+        self._tensordict = env.current_tensordict.to(self.passing_device)
         self._tensordict.set(
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
@@ -303,7 +308,7 @@ class SyncDataCollector(_DataCollector):
         self._td_env = None
         self._td_policy = None
         self._has_been_done = None
-        self.closed = False
+        self._exclude_private_keys = True
 
     def set_seed(self, seed: int) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -345,7 +350,13 @@ class SyncDataCollector(_DataCollector):
                 tensordict_out = split_trajectories(tensordict_out)
             if self.postproc is not None:
                 tensordict_out = self.postproc(tensordict_out)
+            if self._exclude_private_keys:
+                excluded_keys = [
+                    key for key in tensordict_out.keys() if key.startswith("_")
+                ]
+                tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
             yield tensordict_out
+
             del tensordict_out
             if self._frames >= self.total_frames:
                 break
@@ -397,7 +408,8 @@ class SyncDataCollector(_DataCollector):
                 self._tensordict.set("reset_workers", done_or_terminated)
             else:
                 self._tensordict.zero_()
-            self.env.reset(tensordict=self._tensordict)
+            self.env.reset()
+            self._tensordict.update(self.env.current_tensordict)
             if self._tensordict.get("done").any():
                 raise RuntimeError(
                     f"Got {sum(self._tensordict.get('done'))} done envs after reset."
@@ -420,7 +432,8 @@ class SyncDataCollector(_DataCollector):
 
         """
         if self.reset_at_each_iter:
-            self._tensordict.update(self.env.reset())
+            self.env.reset()
+            self._tensordict.update(self.env.current_tensordict)
             self._tensordict.fill_("step_count", 0)
 
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
@@ -472,7 +485,11 @@ class SyncDataCollector(_DataCollector):
             td_in = None
             self._tensordict.zero_()
 
-        self._tensordict.update(self.env.reset(td_in, **kwargs))
+        if td_in:
+            self._tensordict.update(td_in)
+        self.env.reset(**kwargs)
+
+        self._tensordict.update(self.env.current_tensordict)
         self._tensordict.fill_("step_count", 0)
 
     def shutdown(self) -> None:
@@ -706,6 +723,7 @@ class _MultiDataCollector(_DataCollector):
             -(self.total_frames // -self.num_workers) if total_frames > 0 else np.inf
         )  # ceil(total_frames/num_workers)
         self._run_processes()
+        self._exclude_private_keys = True
 
     @property
     def frames_per_batch_worker(self):
@@ -952,6 +970,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 frames += math.prod(out.shape)
             if self.postprocs:
                 out = self.postprocs[out.device](out)
+            if self._exclude_private_keys:
+                excluded_keys = [key for key in out.keys() if key.startswith("_")]
+                out = out.exclude(*excluded_keys)
             yield out
 
         del out_tensordicts_shared
@@ -1030,7 +1051,9 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             else:
                 print(f"{idx} is done!")
                 dones[idx] = True
-
+            if self._exclude_private_keys:
+                excluded_keys = [key for key in out.keys() if key.startswith("_")]
+                out = out.exclude(*excluded_keys)
             yield out
 
         self._shutdown_main()

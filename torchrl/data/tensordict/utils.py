@@ -67,7 +67,12 @@ def _getitem_batch_size(
         elif _item is None:
             v = 1
         elif isinstance(_item, Number):
-            batch = next(iter_bs)
+            try:
+                batch = next(iter_bs)
+            except StopIteration:
+                raise RuntimeError(
+                    f"The shape {shape} is incompatible with " f"the index {items}."
+                )
             continue
         else:
             raise NotImplementedError(

@@ -85,8 +85,8 @@ class _BatchedEnv(_EnvClass):
         pin_memory (bool): if True and device is "cpu", calls `pin_memory` on the tensordicts when created.
         selected_keys (list of str, optional): keys that have to be returned by the environment.
             When creating a batch of environment, it might be the case that only some of the keys are to be returned.
-            For instance, if the environment returns 'observation_pixels' and 'observation_vector', the user might only
-            be interested in, say, 'observation_vector'. By indicating which keys must be returned in the tensordict,
+            For instance, if the environment returns 'next_pixels' and 'next_vector', the user might only
+            be interested in, say, 'next_vector'. By indicating which keys must be returned in the tensordict,
             one can easily control the amount of data occupied in memory (for instance to limit the memory size of a
             replay buffer) and/or limit the amount of data passed from one process to the other;
         excluded_keys (list of str, optional): list of keys to be excluded from the returned tensordicts.
@@ -349,7 +349,7 @@ class SerialEnv(_BatchedEnv):
         for i, _env in enumerate(self._envs):
             if not reset_workers[i]:
                 continue
-            _td = _env.reset(**kwargs)
+            _td = _env.reset(execute_step=False, **kwargs)
             keys = keys.union(_td.keys())
             self.shared_tensordicts[i].update_(_td)
 
@@ -620,8 +620,10 @@ def _run_worker_pipe_shared_mem(
     while True:
         try:
             cmd, data = child_pipe.recv()
-        except EOFError:
-            raise EOFError(f"proc {pid} failed, last command: {cmd}")
+        except EOFError as err:
+            raise EOFError(
+                f"proc {pid} failed, last command: {cmd}. " f"\nErr={str(err)}"
+            )
         if cmd == "seed":
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
@@ -650,7 +652,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
-            _td = env.reset(**reset_kwargs)
+            _td = env.reset(execute_step=False, **reset_kwargs)
             keys = set(_td.keys())
             if pin_memory:
                 _td.pin_memory()

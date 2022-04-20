@@ -593,22 +593,17 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         self.priority_key = priority_key
 
     def _get_priority(self, tensordict: _TensorDict) -> torch.Tensor:
+        if tensordict.batch_dims:
+            tensordict = tensordict.clone(recursive=False)
+            tensordict.batch_size = []
         try:
-            if tensordict.batch_dims:
-                priority = tensordict.get(self.priority_key).mean().item()
-                # raise RuntimeError(
-                #     "expected void batch_size for input tensordict in "
-                #     "rb._get_priority()"
-                # )
-            else:
-                try:
-                    priority = tensordict.get(self.priority_key).item()
-                except ValueError:
-                    raise ValueError(
-                        f"Found a priority key of size"
-                        f" {tensordict.get(self.priority_key).shape} but expected "
-                        f"scalar value"
-                    )
+            priority = tensordict.get(self.priority_key).item()
+        except ValueError:
+            raise ValueError(
+                f"Found a priority key of size"
+                f" {tensordict.get(self.priority_key).shape} but expected "
+                f"scalar value"
+            )
         except KeyError:
             priority = self._default_priority
         return priority
@@ -625,6 +620,9 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                 priorities = tensordicts.get(self.priority_key)
             except KeyError:
                 priorities = None
+            if tensordicts.batch_dims > 1:
+                tensordicts = tensordicts.clone(recursive=False)
+                tensordicts.batch_size = tensordicts.batch_size[:1]
             tensordicts = list(tensordicts.unbind(0))
         else:
             priorities = [self._get_priority(td) for td in tensordicts]
@@ -652,7 +650,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
             )
         return super().update_priority(tensordict.get("index"), priority=priority)
 
-    def sample(self, size: int) -> _TensorDict:
+    def sample(self, size: int, return_weight: bool = False) -> _TensorDict:
         """
         Gather a batch of tensordicts according to the non-uniform multinomial
         distribution with weights computed with the priority_key of each
@@ -660,12 +658,18 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
 
         Args:
             size (int): size of the batch to be returned
+            return_weight (bool, optional): if True, a '_weight' key will be
+                written in the output tensordict that indicates the weight
+                of the selected items
 
         Returns:
             Stack of tensordicts
 
         """
-        return super(TensorDictPrioritizedReplayBuffer, self).sample(size)[0]
+        td, weight, _ = super(TensorDictPrioritizedReplayBuffer, self).sample(size)
+        if return_weight:
+            td.set("_weight", weight)
+        return td
 
 
 def create_replay_buffer(
