@@ -1303,8 +1303,12 @@ def _sum_left(val, dest):
 class gSDENoise(Transform):
     inplace = False
 
-    def __init__(self, action_dim: int, state_dim: Optional[int] = None,
-                 observation_key="next_observation_vector") -> None:
+    def __init__(
+        self,
+        action_dim: int,
+        state_dim: Optional[int] = None,
+        observation_key="next_observation_vector",
+    ) -> None:
         super().__init__(keys=[])
         self.action_dim = action_dim
         self.state_dim = state_dim

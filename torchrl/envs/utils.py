@@ -19,7 +19,9 @@ class classproperty(property):
 
 
 def step_tensordict(
-    tensordict: _TensorDict, next_tensordict: _TensorDict = None, keep_other: bool=False,
+    tensordict: _TensorDict,
+    next_tensordict: _TensorDict = None,
+    keep_other: bool = False,
 ) -> _TensorDict:
     """
     Given a tensordict retrieved after a step, returns another tensordict with all the 'next_' prefixes are removed,

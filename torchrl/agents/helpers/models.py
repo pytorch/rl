@@ -9,7 +9,7 @@ from typing import Optional, Sequence
 import torch
 from torch import nn
 
-from torchrl.data import DEVICE_TYPING, CompositeSpec
+from torchrl.data import DEVICE_TYPING
 from torchrl.envs.common import _EnvClass
 from torchrl.modules import (
     ActorValueOperator,
@@ -344,6 +344,7 @@ def make_ppo_model(
     args: Namespace,
     device: DEVICE_TYPING,
     in_keys_actor: Optional[Sequence[str]] = None,
+    observation_key=None,
     **kwargs,
 ) -> ActorValueOperator:
     """
@@ -411,13 +412,20 @@ def make_ppo_model(
     specs = proof_environment.specs  # TODO: use env.sepcs
     action_spec = specs["action_spec"]
     obs_spec = specs["observation_spec"]
-    obs_spec_values = list(obs_spec.values())
-    if len(obs_spec_values) > 1:
-        raise RuntimeError(
-            "There is more than one observation in the spec, PPO helper "
-            "cannot infer automatically which to pick."
-        )
-    obs_spec = obs_spec_values[0]
+
+    if observation_key is not None:
+        obs_spec = obs_spec[observation_key]
+    else:
+        obs_spec_values = list(obs_spec.values())
+        if len(obs_spec_values) > 1:
+            raise RuntimeError(
+                "There is more than one observation in the spec, PPO helper "
+                "cannot infer automatically which to pick. "
+                "Please indicate which key to read via the `observation_key` "
+                "keyword in this helper."
+            )
+        else:
+            obs_spec = obs_spec_values[0]
 
     if in_keys_actor is None and proof_environment.from_pixels:
         in_keys_actor = ["pixels"]
@@ -548,9 +556,7 @@ def make_ppo_model(
             )
         else:
             actor_net = gSDEWrapper(
-                policy_net,
-                action_dim=action_spec.shape[0],
-                state_dim=obs_spec.shape[0]
+                policy_net, action_dim=action_spec.shape[0], state_dim=obs_spec.shape[0]
             )
             in_keys_actor += ["_eps_gSDE"]
             out_keys += ["_action_duplicate"]
@@ -594,6 +600,7 @@ def make_sac_model(
     actor_net_kwargs=None,
     qvalue_net_kwargs=None,
     value_net_kwargs=None,
+    observation_key=None,
     **kwargs,
 ) -> nn.ModuleList:
     """
@@ -674,13 +681,19 @@ def make_sac_model(
     action_spec = proof_environment.action_spec
     obs_spec = proof_environment.observation_spec
 
-    obs_spec_values = list(obs_spec.values())
-    if len(obs_spec_values) > 1:
-        raise RuntimeError(
-            "There is more than one observation in the spec, SAC helper "
-            "cannot infer automatically which to pick."
-        )
-    obs_spec = obs_spec_values[0]
+    if observation_key is not None:
+        obs_spec = obs_spec[observation_key]
+    else:
+        obs_spec_values = list(obs_spec.values())
+        if len(obs_spec_values) > 1:
+            raise RuntimeError(
+                "There is more than one observation in the spec, SAC helper "
+                "cannot infer automatically which to pick. "
+                "Please indicate which key to read via the `observation_key` "
+                "keyword in this helper."
+            )
+        else:
+            obs_spec = obs_spec_values[0]
 
     if actor_net_kwargs is None:
         actor_net_kwargs = {}
@@ -777,6 +790,7 @@ def make_redq_model(
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
     qvalue_net_kwargs=None,
+    observation_key=None,
     **kwargs,
 ) -> nn.ModuleList:
     """
@@ -850,13 +864,19 @@ def make_redq_model(
     action_spec = proof_environment.action_spec
     obs_spec = proof_environment.observation_spec
 
-    obs_spec_values = list(obs_spec.values())
-    if len(obs_spec_values) > 1:
-        raise RuntimeError(
-            "There is more than one observation in the spec, REDQ helper "
-            "cannot infer automatically which to pick."
-        )
-    obs_spec = obs_spec_values[0]
+    if observation_key is not None:
+        obs_spec = obs_spec[observation_key]
+    else:
+        obs_spec_values = list(obs_spec.values())
+        if len(obs_spec_values) > 1:
+            raise RuntimeError(
+                "There is more than one observation in the spec, REDQ helper "
+                "cannot infer automatically which to pick. "
+                "Please indicate which key to read via the `observation_key` "
+                "keyword in this helper."
+            )
+        else:
+            obs_spec = obs_spec_values[0]
 
     if actor_net_kwargs is None:
         actor_net_kwargs = {}
