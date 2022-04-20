@@ -102,8 +102,7 @@ if __name__ == "__main__":
     proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
     model = make_ddpg_actor(
         proof_env,
-        args.from_pixels,
-        noisy=args.noisy,
+        args,
         device=device,
     )
     loss_module, target_net_updater = make_ddpg_loss(model, args)
