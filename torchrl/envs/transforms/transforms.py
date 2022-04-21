@@ -27,6 +27,7 @@ from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
+    BinaryDiscreteTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.common import _EnvClass, make_tensordict
@@ -591,19 +592,14 @@ class BinerizeReward(Transform):
         super().__init__(keys=keys)
 
     def _apply(self, reward: torch.Tensor) -> torch.Tensor:
-        return (reward != 0.0).to(reward.dtype)
+        if not reward.shape or reward.shape[-1] != 1:
+            raise RuntimeError(
+                f"Reward shape last dimension must be singleton, got reward of shape {reward.shape}"
+            )
+        return (reward > 0.0).to(torch.long)
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        if isinstance(reward_spec, UnboundedContinuousTensorSpec):
-            return BoundedTensorSpec(
-                0.0, 1.0, device=reward_spec.device, dtype=reward_spec.dtype
-            )
-        else:
-            raise NotImplementedError(
-                f"{self.__class__.__name__}.transform_reward_spec not "
-                f"implemented for tensor spec of type "
-                f"{type(reward_spec).__name__}"
-            )
+        return BinaryDiscreteTensorSpec(n=1, device=reward_spec.device)
 
 
 class Resize(ObservationTransform):
@@ -860,14 +856,12 @@ class CatFrames(ObservationTransform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):
-            return CompositeSpec(
-                **{
-                    key: self.transform_observation_spec(_obs_spec)
-                    if key in self.keys
-                    else _obs_spec
-                    for key, _obs_spec in observation_spec._specs.items()
-                }
-            )
+            keys = [key for key in observation_spec.keys() if key in self.keys]
+            for key in keys:
+                observation_spec[key] = self.transform_observation_spec(
+                    observation_spec[key]
+                )
+            return observation_spec
         else:
             _observation_spec = observation_spec
         space = _observation_spec.space
