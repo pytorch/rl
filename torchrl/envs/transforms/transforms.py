@@ -51,7 +51,7 @@ __all__ = [
     "DoubleToFloat",
     "CatTensors",
     "NoopResetEnv",
-    "BinerizeReward",
+    "BinarizeReward",
     "PinMemoryTransform",
     "VecNorm",
     "gSDENoise",
@@ -577,7 +577,7 @@ class RewardClipping(Transform):
         )
 
 
-class BinerizeReward(Transform):
+class BinarizeReward(Transform):
     """
     Maps the reward to a binary value (0 or 1) if the reward is null or
     non-null, respectively.
