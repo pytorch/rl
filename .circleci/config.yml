@@ -494,7 +494,7 @@ jobs:
             - conda
             - env
       - run:
-          name: Install torchvision
+          name: Install torchrl
           command: .circleci/unittest/linux/scripts/install.sh
       - run:
           name: Run tests
