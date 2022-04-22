@@ -13,89 +13,11 @@ from torchrl.data import (
 from torchrl.data.tensor_specs import (
     _default_dtype_and_device,
     DiscreteBox,
+    CustomNdOneHotDiscreteTensorSpec,
     DEVICE_TYPING,
 )
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.common import GymLikeEnv
-
-
-@dataclass(repr=False)
-class NdOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
-    def __init__(
-        self,
-        n: int,
-        d: int,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = torch.long,
-        use_register: bool = False,
-    ):
-        dtype, device = _default_dtype_and_device(dtype, device)
-        self.use_register = use_register
-        space = DiscreteBox(
-            n,
-        )
-        self.d = d
-        shape = torch.Size(
-            (
-                d,
-                space.n,
-            )
-        )
-        super(OneHotDiscreteTensorSpec, self).__init__(
-            shape, space, device, dtype, "discrete"
-        )
-
-    def rand(self, shape=torch.Size([])) -> torch.Tensor:
-        return torch.nn.functional.gumbel_softmax(
-            torch.rand(*shape, self.d, self.space.n, device=self.device),
-            hard=True,
-            dim=-1,
-        ).to(torch.long)
-
-
-@dataclass(repr=False)
-class CustomNdOneHotDiscreteTensorSpec(NdOneHotDiscreteTensorSpec):
-    def __init__(
-        self,
-        mask: torch.Tensor,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = torch.long,
-        use_register: bool = False,
-    ):
-        self.mask = mask
-        *_, d, n = mask.shape
-
-        dtype, device = _default_dtype_and_device(dtype, device)
-        self.use_register = use_register
-        space = DiscreteBox(
-            n,
-        )
-        self.d = d
-        shape = torch.Size(
-            (
-                d,
-                space.n,
-            )
-        )
-        super(OneHotDiscreteTensorSpec, self).__init__(
-            shape, space, device, dtype, "discrete"
-        )
-
-    def to(self, dest):
-        out = super().to(dest)
-        out.mask = self.mask.to(dest)
-        return out
-
-    def rand(self, shape=torch.Size([])) -> torch.Tensor:
-        mask = self.mask.to(torch.float)
-        return torch.nn.functional.gumbel_softmax(
-            mask.log(),
-            hard=True,
-            dim=-1,
-        ).to(torch.long)
-
-    def is_in(self, value):
-        return ((self.mask - value) >= 0).all()
 
 
 class SCEnv(GymLikeEnv):
