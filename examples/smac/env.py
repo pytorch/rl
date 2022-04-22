@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 import torch
@@ -8,13 +7,9 @@ from torchrl.data import (
     TensorDict,
     NdUnboundedContinuousTensorSpec,
     UnboundedContinuousTensorSpec,
-    OneHotDiscreteTensorSpec,
 )
 from torchrl.data.tensor_specs import (
-    _default_dtype_and_device,
-    DiscreteBox,
     CustomNdOneHotDiscreteTensorSpec,
-    DEVICE_TYPING,
 )
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.common import GymLikeEnv

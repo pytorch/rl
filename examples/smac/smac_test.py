@@ -1,10 +1,14 @@
 from env import SCEnv
-from examples.smac.policy import MaskedLogitPolicy
 from torch import nn
 from torchrl.agents.helpers import sync_async_collector
 from torchrl.data import TensorDictPrioritizedReplayBuffer
 from torchrl.envs import TransformedEnv, ObservationNorm
-from torchrl.modules import ProbabilisticTDModule, OneHotCategorical, QValueActor
+from torchrl.modules import (
+    ProbabilisticTDModule,
+    OneHotCategorical,
+    QValueActor,
+    MaskedLogitPolicy,
+)
 
 if __name__ == "__main__":
     # create an env
