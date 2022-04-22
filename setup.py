@@ -10,9 +10,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from setuptools import setup, find_packages
-
 from build_tools import setup_helpers
+from setuptools import setup, find_packages
 
 
 def _get_pytorch_version():
