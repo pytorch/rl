@@ -111,10 +111,12 @@ pip install pytest
 
 Alternatively, extra dependencies can be installed using
 ```
-pip install ".[atari,dm_control,gym_continuous,rendering,tests,utils]"
+pip install ".[atari,dm_control,gym_continuous,rendering,tests,utils,smac]"
 ```
 or a selection of these.
 
+**N.B.**: SMAC (Starcraft Multiagent Contest) requires you to install Starcraft II. 
+Support on non-linux machines is limited. Please refer to the [original repo](https://github.com/oxwhirl/smac) for more information.
 
 **Troubleshooting**
 

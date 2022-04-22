@@ -86,6 +86,7 @@ def _main():
             "rendering": ["moviepy"],
             "tests": ["pytest"],
             "utils": ["tqdm", "configargparse"],
+            "smac": ["smac @ git+https://github.com/oxwhirl/smac.git"],
         },
     )
 
