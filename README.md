@@ -109,6 +109,13 @@ pip install gym gym[accept-rom-license] pygame gym_retro
 pip install pytest
 ```
 
+Alternatively, extra dependencies can be installed using
+```
+pip install ".[atari,dm_control,gym_continuous,rendering,tests,utils]"
+```
+or a selection of these.
+
+
 **Troubleshooting**
 
 If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs, it means that the C++ extensions were not installed or not found. 

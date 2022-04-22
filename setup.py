@@ -78,6 +78,14 @@ def _main():
             "clean": clean,
         },
         install_requires=[pytorch_package_dep, "numpy"],
+        extras_require={
+            "atari": ["gym", "atari-py", "ale-py", "gym[accept-rom-license]", "pygame"],
+            "dm_control": ["dm_control"],
+            "gym_continuous": ["mujoco-py", "mujoco"],
+            "rendering": ["moviepy"],
+            "tests": ["pytest"],
+            "utils": ["tqdm", "configargparse"],
+        },
     )
 
 
