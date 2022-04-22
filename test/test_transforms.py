@@ -663,6 +663,10 @@ class TestTransforms:
     def test_binerized_reward(self, device):
         pass
 
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_reward_scaling(self, device):
+        pass
+
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device found")
     @pytest.mark.parametrize("device", get_available_devices())
     def test_pin_mem(self, device):

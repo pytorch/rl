@@ -55,7 +55,7 @@ def make_args():
     parser_agent_args(parser)
     parser_collector_args_offpolicy(parser)
     parser_env_args(parser)
-    parser_loss_args(parser)
+    parser_loss_args(parser, algorithm="DDPG")
     parser_model_args_continuous(parser, "DDPG")
     parser_recorder_args(parser)
     parser_replay_args(parser)
@@ -102,8 +102,7 @@ if __name__ == "__main__":
     proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
     model = make_ddpg_actor(
         proof_env,
-        args.from_pixels,
-        noisy=args.noisy,
+        args,
         device=device,
     )
     loss_module, target_net_updater = make_ddpg_loss(model, args)
