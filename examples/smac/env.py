@@ -49,7 +49,7 @@ class SCEnv(GymLikeEnv):
         reward, done, *other = step_result
         obs = self._env.get_obs()
         available_actions = self._env.get_avail_actions()
-        return obs, reward, done, available_actions, *other
+        return (obs, reward, done, available_actions, *other)
 
     def _reset(
         self, tensor_dict: Optional[_TensorDict] = None, **kwargs
