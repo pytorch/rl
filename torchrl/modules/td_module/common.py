@@ -517,7 +517,7 @@ class ProbabilisticTDModule(TDModule):
         return_log_prob: bool = False,
         safe: bool = False,
         save_dist_params: bool = False,
-        cache_dist: bool = True,
+        cache_dist: bool = False,
     ):
 
         super().__init__(
