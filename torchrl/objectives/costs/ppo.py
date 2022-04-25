@@ -217,7 +217,7 @@ class ClipPPOLoss(PPOLoss):
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         if self.advantage_module is not None:
             tensordict = self.advantage_module(tensordict)
-        tensordict = tensordict.clone()
+        tensordict = tensordict.clone().detach()
         for key, value in tensordict.items():
             if value.requires_grad:
                 raise RuntimeError(
