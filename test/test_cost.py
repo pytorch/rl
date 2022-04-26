@@ -1171,23 +1171,46 @@ class TestPPO:
         return td
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_ppo(self, loss_class, device):
+    def test_ppo(self, loss_class, device, gradient_mode):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
 
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
-        gae = GAE(gamma=0.9, lamda=0.9, value_network=value)
+        gae = GAE(
+            gamma=0.9, lamda=0.9, value_network=value, gradient_mode=gradient_mode
+        )
         loss_fn = loss_class(
             actor, value, advantage_module=gae, gamma=0.9, loss_critic_type="l2"
         )
 
         loss = loss_fn(td)
-        sum([item for _, item in loss.items()]).backward()
+        loss_critic = loss["loss_critic"]
+        loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
+        loss_critic.backward(retain_graph=True)
+        # check that grads are independent and non null
         named_parameters = loss_fn.named_parameters()
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" not in name
+                assert "critic" in name
+            if p.grad is None:
+                assert "actor" in name
+                assert "critic" not in name
+
+        value.zero_grad()
+        loss_objective.backward()
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "critic" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "critic" in name
+        actor.zero_grad()
 
 
 class TestReinforce:
