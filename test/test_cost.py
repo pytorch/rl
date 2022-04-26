@@ -1150,8 +1150,8 @@ class TestPPO:
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        params_mean = torch.randn_like(action.repeat(1, 1, 2)) / 10
-        params_scale = torch.rand_like(action.repeat(1, 1, 2)) / 10
+        params_mean = torch.randn_like(action) / 10
+        params_scale = torch.rand_like(action) / 10
         td = TensorDict(
             batch_size=(batch, T),
             source={
