@@ -217,12 +217,7 @@ class ClipPPOLoss(PPOLoss):
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         if self.advantage_module is not None:
             tensordict = self.advantage_module(tensordict)
-        tensordict = tensordict.clone().detach()
-        for key, value in tensordict.items():
-            if value.requires_grad:
-                raise RuntimeError(
-                    f"The key {key} returns a value that requires a gradient, consider detaching."
-                )
+        tensordict = tensordict.clone()
         advantage = tensordict.get(self.advantage_key)
         log_weight, dist = self._log_weight(tensordict)
         # ESS for logging
