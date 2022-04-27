@@ -34,6 +34,7 @@ from warnings import warn
 
 import numpy as np
 import torch
+
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.metatensor import MetaTensor
 from torchrl.data.tensordict.utils import _getitem_batch_size, _sub_index
@@ -1092,7 +1093,7 @@ dtype=torch.float32)},
                     f"dimension out of range (expected to be in range of [{min_dim}, {max_dim}], but got {idx})"
                 )
             if seen[idx]:
-                raise RuntimeError(f"repeated dim in permute")
+                raise RuntimeError("repeated dim in permute")
             seen[idx] = True
 
         return PermutedTensorDict(
