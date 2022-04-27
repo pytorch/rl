@@ -223,6 +223,68 @@ def test_squeeze(device):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
+def test_permute(device):
+    torch.manual_seed(1)
+    d = {
+         "a": torch.randn(4, 5, 6, 9, device=device),
+         "b": torch.randn(4, 5, 6, 7, device=device),
+         "c": torch.randn(4, 5, 6, device=device),
+    }
+    td1 = TensorDict(batch_size=(4, 5, 6), source=d)
+    td2 = td1.permute(2, 1, 0)
+    assert td2.shape == torch.Size((6, 5, 4))
+    assert td2["a"].shape == torch.Size((6, 5, 4, 9))
+
+    td2 = td1.permute(-1, -3, -2)
+    assert td2.shape == torch.Size((6, 4, 5))
+    assert td2["c"].shape == torch.Size((6, 4, 5, 1))
+
+    td2 = td1.permute(0, 1, 2)
+    assert td2["a"].shape == torch.Size((4, 5, 6, 9))
+
+    t = TensorDict({'a': torch.randn(3, 4, 1)}, [3, 4])
+    t.permute(1, 0).set('b', torch.randn(4, 3));
+    assert t["b"].shape == torch.Size((3, 4, 1))
+
+    t.permute(1, 0).fill_('a', 0.0);
+    assert torch.sum(t["a"]) == torch.Tensor([0])
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_permute_exceptions(device):
+    torch.manual_seed(1)
+    d = {
+         "a": torch.randn(4, 5, 6, 7, device=device),
+         "b": torch.randn(4, 5, 6, 8, 9, device=device),
+    }
+    td1 = TensorDict(batch_size=(4, 5, 6), source=d)
+
+    with pytest.raises(RuntimeError) as e_info:
+        td2 = td1.permute(1, 1, 0)
+        _ = td2.shape
+
+    with pytest.raises(RuntimeError) as e_info:
+        td2 = td1.permute(3, 2, 1, 0)
+        _ = td2.shape
+
+    with pytest.raises(RuntimeError) as e_info:
+        td2 = td1.permute(2, -1, 0)
+        _ = td2.shape
+
+    with pytest.raises(IndexError) as e_info:
+        td2 = td1.permute(2, 3, 0)
+        _ = td2.shape
+
+    with pytest.raises(IndexError) as e_info:
+        td2 = td1.permute(2, -4, 0)
+        _ = td2.shape
+
+    with pytest.raises(RuntimeError) as e_info:
+        td2 = td1.permute(2, 1)
+        _ = td2.shape
+
+
+@pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("stack_dim", [0, 1])
 def test_stacked_td(stack_dim, device):
     tensordicts = [
