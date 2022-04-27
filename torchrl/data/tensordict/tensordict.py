@@ -34,7 +34,6 @@ from warnings import warn
 
 import numpy as np
 import torch
-
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.metatensor import MetaTensor
 from torchrl.data.tensordict.utils import _getitem_batch_size, _sub_index
@@ -1067,7 +1066,7 @@ dtype=torch.float32)},
     def permute(
         self,
         *dims: int,
-        ) -> _TensorDict:
+    ) -> _TensorDict:
         """Returns a view of a tensordict with the batch dimensions permuted according to dims
 
         Args:
@@ -1081,13 +1080,17 @@ dtype=torch.float32)},
         """
 
         if len(dims) != len(self.shape):
-            raise RuntimeError(f"number of dims don't match in permute (got {len(dims)}, expected {len(self.shape)}")
+            raise RuntimeError(
+                f"number of dims don't match in permute (got {len(dims)}, expected {len(self.shape)}"
+            )
 
-        min_dim, max_dim = -self.batch_dims, self.batch_dims-1
-        seen = [False for dim in range(max_dim+1)]
+        min_dim, max_dim = -self.batch_dims, self.batch_dims - 1
+        seen = [False for dim in range(max_dim + 1)]
         for idx in dims:
             if idx < min_dim or idx > max_dim:
-                raise IndexError(f"dimension out of range (expected to be in range of [{min_dim}, {max_dim}], but got {idx})")
+                raise IndexError(
+                    f"dimension out of range (expected to be in range of [{min_dim}, {max_dim}], but got {idx})"
+                )
             if seen[idx]:
                 raise RuntimeError(f"repeated dim in permute")
             seen[idx] = True
@@ -3300,7 +3303,6 @@ class SqueezedTensorDict(_CustomOpTensorDict):
 
 
 class ViewedTensorDict(_CustomOpTensorDict):
-
     def _update_custom_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:
         new_dim_list = list(self.custom_op_kwargs.get("size"))
         new_dim_list += list(source_meta_tensor.shape[self._source.batch_dims :])
@@ -3346,13 +3348,17 @@ class PermutedTensorDict(_CustomOpTensorDict):
         return tuple(all_dims)
 
     def _update_custom_op_kwargs(self, source_meta_tensor: MetaTensor) -> Dict:
-        new_dims = self.add_missing_dims(len(source_meta_tensor.shape), self.custom_op_kwargs["dims"])
+        new_dims = self.add_missing_dims(
+            len(source_meta_tensor.shape), self.custom_op_kwargs["dims"]
+        )
         kwargs = deepcopy(self.custom_op_kwargs)
         kwargs.update({"dims": new_dims})
         return kwargs
 
     def _update_inv_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:
-        new_dims = self.add_missing_dims(len(source_meta_tensor.shape), self.custom_op_kwargs["dims"])
+        new_dims = self.add_missing_dims(
+            len(source_meta_tensor.shape), self.custom_op_kwargs["dims"]
+        )
         kwargs = deepcopy(self.custom_op_kwargs)
         kwargs.update({"dims": new_dims})
         return kwargs

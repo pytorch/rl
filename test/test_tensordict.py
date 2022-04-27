@@ -226,9 +226,9 @@ def test_squeeze(device):
 def test_permute(device):
     torch.manual_seed(1)
     d = {
-         "a": torch.randn(4, 5, 6, 9, device=device),
-         "b": torch.randn(4, 5, 6, 7, device=device),
-         "c": torch.randn(4, 5, 6, device=device),
+        "a": torch.randn(4, 5, 6, 9, device=device),
+        "b": torch.randn(4, 5, 6, 7, device=device),
+        "c": torch.randn(4, 5, 6, device=device),
     }
     td1 = TensorDict(batch_size=(4, 5, 6), source=d)
     td2 = td1.permute(2, 1, 0)
@@ -242,11 +242,11 @@ def test_permute(device):
     td2 = td1.permute(0, 1, 2)
     assert td2["a"].shape == torch.Size((4, 5, 6, 9))
 
-    t = TensorDict({'a': torch.randn(3, 4, 1)}, [3, 4])
-    t.permute(1, 0).set('b', torch.randn(4, 3));
+    t = TensorDict({"a": torch.randn(3, 4, 1)}, [3, 4])
+    t.permute(1, 0).set("b", torch.randn(4, 3))
     assert t["b"].shape == torch.Size((3, 4, 1))
 
-    t.permute(1, 0).fill_('a', 0.0);
+    t.permute(1, 0).fill_("a", 0.0)
     assert torch.sum(t["a"]) == torch.Tensor([0])
 
 
@@ -254,8 +254,8 @@ def test_permute(device):
 def test_permute_exceptions(device):
     torch.manual_seed(1)
     d = {
-         "a": torch.randn(4, 5, 6, 7, device=device),
-         "b": torch.randn(4, 5, 6, 8, 9, device=device),
+        "a": torch.randn(4, 5, 6, 7, device=device),
+        "b": torch.randn(4, 5, 6, 8, 9, device=device),
     }
     td1 = TensorDict(batch_size=(4, 5, 6), source=d)
 
