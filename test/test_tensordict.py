@@ -285,6 +285,48 @@ def test_permute_exceptions(device):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
+def test_permute_with_tensordict_operations(device):
+    torch.manual_seed(1)
+    d = {
+        "a": torch.randn(20, 6, 9, device=device),
+        "b": torch.randn(20, 6, 7, device=device),
+        "c": torch.randn(20, 6, device=device),
+    }
+    td1 = TensorDict(batch_size=(20, 6), source=d).view(4, 5, 6).permute(2, 1, 0)
+    assert td1.shape == torch.Size((6, 5, 4))
+
+    d = {
+        "a": torch.randn(4, 5, 6, 9, device=device),
+        "b": torch.randn(4, 5, 6, 7, device=device),
+        "c": torch.randn(4, 5, 6, device=device),
+    }
+    td1 = (
+        TensorDict(batch_size=(4, 5, 6), source=d).to(SavedTensorDict).permute(2, 1, 0)
+    )
+    assert td1.shape == torch.Size((6, 5, 4))
+
+    d = {
+        "a": torch.randn(4, 5, 6, 7, 9, device=device),
+        "b": torch.randn(4, 5, 6, 7, 7, device=device),
+        "c": torch.randn(4, 5, 6, 7, device=device),
+    }
+    td1 = TensorDict(batch_size=(4, 5, 6, 7), source=d)[
+        :, :, :, torch.tensor([1, 2])
+    ].permute(3, 2, 1, 0)
+    assert td1.shape == torch.Size((2, 6, 5, 4))
+
+    d = {
+        "a": torch.randn(4, 5, 9, device=device),
+        "b": torch.randn(4, 5, 7, device=device),
+        "c": torch.randn(4, 5, device=device),
+    }
+    td1 = torch.stack(
+        [TensorDict(batch_size=(4, 5), source=d).clone() for _ in range(6)], 2
+    ).permute(2, 1, 0)
+    assert td1.shape == torch.Size((6, 5, 4))
+
+
+@pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("stack_dim", [0, 1])
 def test_stacked_td(stack_dim, device):
     tensordicts = [
