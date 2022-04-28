@@ -223,6 +223,12 @@ class MetaTensor:
         clone.shape = torch.Size(new_shape)
         return clone
 
+    def permute(self, dims: int) -> MetaTensor:
+        clone = self.clone()
+        new_shape = [self.shape[dim] for dim in dims]
+        clone.shape = torch.Size(new_shape)
+        return clone
+
     def view(
         self,
         *shape: Sequence,
