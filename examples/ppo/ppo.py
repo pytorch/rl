@@ -129,5 +129,7 @@ if __name__ == "__main__":
     agent = make_agent(
         collector, loss_module, recorder, None, actor_model, None, writer, args
     )
+    if args.loss == "kl":
+        agent.register_op("pre_optim_steps", loss_module.reset)
 
     agent.train()

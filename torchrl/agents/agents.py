@@ -369,9 +369,6 @@ class Agent:
                 self.optim_steps(batch)
             self._post_steps()
 
-            # TODO: move to post_steps
-            # self._collector_scheduler_step(i, current_frames)
-
             self._post_steps_log(batch)
 
             if self.progress_bar:
@@ -401,9 +398,6 @@ class Agent:
         average_losses = None
 
         self._pre_optim()
-
-        # TODO: move to pre-steps in PPO
-        # self.loss_module.reset()
 
         for j in range(self.optim_steps_per_batch):
             self._optim_count += 1
