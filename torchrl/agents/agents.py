@@ -8,10 +8,8 @@ from __future__ import annotations
 import pathlib
 import warnings
 from collections import OrderedDict, defaultdict
-from inspect import signature, Parameter
 from textwrap import indent
-from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type, \
-    get_args
+from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type
 
 import numpy as np
 import torch.nn
@@ -35,9 +33,8 @@ from torchrl.data.utils import expand_right
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import reset_noise, TDModuleWrapper, TDModule
+from torchrl.modules import TDModuleWrapper, TDModule
 from torchrl.objectives.costs.common import _LossModule
-from torchrl.objectives.costs.utils import _TargetNetUpdate
 
 REPLAY_BUFFER_CLASS = {
     "prioritized": TensorDictPrioritizedReplayBuffer,
@@ -163,9 +160,7 @@ class Agent:
         self.save_agent_interval = save_agent_interval
         self.save_agent_file = save_agent_file
 
-        self._log_dict = defaultdict(
-            lambda: []
-        )
+        self._log_dict = defaultdict(lambda: [])
 
         self._batch_process_ops = []
         self._post_optim_hooks = []
@@ -181,8 +176,7 @@ class Agent:
     def save_agent(self) -> None:
         _save = False
         if self.save_agent_file is not None:
-            if (
-                self._collected_frames - self._last_save) > self.save_agent_interval:
+            if (self._collected_frames - self._last_save) > self.save_agent_interval:
                 self._last_save = self._collected_frames
                 _save = True
         if _save:
@@ -249,8 +243,7 @@ class Agent:
 
     def register_op(self, dest: str, op: Callable) -> None:
         if dest == "batch_process":
-            _check_input_output_typehint(op, input=_TensorDict,
-                                         output=_TensorDict)
+            _check_input_output_typehint(op, input=_TensorDict, output=_TensorDict)
             self._batch_process_ops.append(op)
 
         elif dest == "pre_optim_steps":
@@ -258,13 +251,11 @@ class Agent:
             self._pre_optim_ops.append(op)
 
         elif dest == "process_optim_batch":
-            _check_input_output_typehint(op, input=_TensorDict,
-                                         output=_TensorDict)
+            _check_input_output_typehint(op, input=_TensorDict, output=_TensorDict)
             self._process_optim_batch_ops.append(op)
 
         elif dest == "post_loss":
-            _check_input_output_typehint(op, input=_TensorDict,
-                                         output=_TensorDict)
+            _check_input_output_typehint(op, input=_TensorDict, output=_TensorDict)
             self._post_loss_ops.append(op)
 
         elif dest == "post_steps":
@@ -272,23 +263,25 @@ class Agent:
             self._post_steps_ops.append(op)
 
         elif dest == "post_optim":
-            _check_input_output_typehint(op, input=None,
-                                         output=None)
+            _check_input_output_typehint(op, input=None, output=None)
             self._post_optim_ops.append(op)
 
         elif dest == "pre_steps_log":
-            _check_input_output_typehint(op, input=_TensorDict,
-                                         output=Tuple[str, float])
+            _check_input_output_typehint(
+                op, input=_TensorDict, output=Tuple[str, float]
+            )
             self._pre_steps_log_ops.append(op)
 
         elif dest == "post_steps_log":
-            _check_input_output_typehint(op, input=_TensorDict,
-                                         output=Tuple[str, float])
+            _check_input_output_typehint(
+                op, input=_TensorDict, output=Tuple[str, float]
+            )
             self._post_steps_log_ops.append(op)
 
         elif dest == "post_optim_log":
-            _check_input_output_typehint(op, input=_TensorDict,
-                                         output=Tuple[str, float])
+            _check_input_output_typehint(
+                op, input=_TensorDict, output=Tuple[str, float]
+            )
             self._post_optim_log_ops.append(op)
 
         else:
@@ -362,7 +355,10 @@ class Agent:
         for i, batch in enumerate(self.collector):
             batch = self._process_batch_hook(batch)
             self._pre_steps_log(batch)
-            current_frames = batch.get("mask", torch.tensor(batch.numel())).sum().item() * self.frame_skip
+            current_frames = (
+                batch.get("mask", torch.tensor(batch.numel())).sum().item()
+                * self.frame_skip
+            )
             self.collected_frames += current_frames
 
             if self.collected_frames > self.collector.init_random_frames:
@@ -383,9 +379,7 @@ class Agent:
 
     def _optimizer_step(self, losses_td: _TensorDict) -> None:
         # sum all keys that start with 'loss_'
-        loss = sum(
-            [item for key, item in losses_td.items() if key.startswith("loss")]
-        )
+        loss = sum([item for key, item in losses_td.items() if key.startswith("loss")])
         loss.backward()
 
         grad_norm = self._grad_clip()
@@ -436,16 +430,14 @@ class Agent:
         for key, item in kwargs.items():
             self._log_dict[key].append(item)
 
-            if (collected_frames -
-                self._last_log.get(key, 0)) > self._log_interval:
+            if (collected_frames - self._last_log.get(key, 0)) > self._log_interval:
                 self._last_log[key] = collected_frames
                 _log = True
             else:
                 _log = False
             method = WRITER_METHODS.get(key, "add_scalar")
             if _log and self.writer is not None:
-                getattr(self.writer, method)(key, item,
-                                             global_step=collected_frames)
+                getattr(self.writer, method)(key, item, global_step=collected_frames)
             if method == "add_scalar" and self.progress_bar:
                 self._pbar_str[key] = float(item)
 
@@ -462,8 +454,7 @@ class Agent:
 
     def __repr__(self) -> str:
         loss_str = indent(f"loss={self.loss_module}", 4 * " ")
-        policy_str = indent(f"policy_exploration={self.policy_exploration}",
-                            4 * " ")
+        policy_str = indent(f"policy_exploration={self.policy_exploration}", 4 * " ")
         collector_str = indent(f"collector={self.collector}", 4 * " ")
         optimizer_str = indent(f"optimizer={self.optimizer}", 4 * " ")
         writer = indent(f"writer={self.writer}", 4 * " ")
@@ -527,8 +518,10 @@ class LogReward:
 
     def __call__(self, batch: _TensorDict) -> Tuple[str, torch.Tensor]:
         if "mask" in batch.keys():
-            return self.logname, batch.get("reward")[
-                batch.get("mask").squeeze(-1)].mean().item()
+            return (
+                self.logname,
+                batch.get("reward")[batch.get("mask").squeeze(-1)].mean().item(),
+            )
         return self.logname, batch.get("reward").mean().item()
 
 
@@ -548,7 +541,8 @@ class RewardNormalizer:
         if self._update_has_been_called and not self._normalize_has_been_called:
             raise RuntimeError(
                 "There have been two consecutive calls to update_reward_stats without a call to normalize_reward. "
-                "Check that normalize_reward has been registered in the agent.")
+                "Check that normalize_reward has been registered in the agent."
+            )
         decay = self._reward_stats.get("decay", 0.999)
         sum = self._reward_stats["sum"] = (
             decay * self._reward_stats.get("sum", 0.0) + reward.sum()
@@ -592,8 +586,9 @@ class BatchSubSampler:
 
     """
 
-    def __init__(self, batch_size: int, sub_traj_len: int = 0,
-                 min_sub_traj_len: int = 0) -> None:
+    def __init__(
+        self, batch_size: int, sub_traj_len: int = 0, min_sub_traj_len: int = 0
+    ) -> None:
         self.batch_size = batch_size
         self.sub_traj_len = sub_traj_len
         self.min_sub_traj_len = min_sub_traj_len
@@ -611,8 +606,7 @@ class BatchSubSampler:
         if batch.ndimension() == 1:
             return batch[torch.randperm(batch.shape[0])[: self.batch_size]]
 
-        sub_traj_len = self.sub_traj_len if self.sub_traj_len > 0 else \
-            batch.shape[1]
+        sub_traj_len = self.sub_traj_len if self.sub_traj_len > 0 else batch.shape[1]
         if "mask" in batch.keys():
             # if a valid mask is present, it's important to sample only
             # valid steps
@@ -623,8 +617,7 @@ class BatchSubSampler:
             )
         else:
             traj_len = (
-                torch.ones(batch.shape[0], device=batch.device,
-                           dtype=torch.bool)
+                torch.ones(batch.shape[0], device=batch.device, dtype=torch.bool)
                 * batch.shape[1]
             )
         len_mask = traj_len >= sub_traj_len
@@ -659,8 +652,7 @@ class BatchSubSampler:
         td = td.apply(
             lambda t: t.gather(
                 dim=1,
-                index=expand_right(seq_idx,
-                                   (batch_size, sub_traj_len, *t.shape[2:])),
+                index=expand_right(seq_idx, (batch_size, sub_traj_len, *t.shape[2:])),
             ),
             batch_size=(batch_size, sub_traj_len),
         )
@@ -746,8 +738,7 @@ class Recorder:
 
 
 class UpdateWeights:
-    def __init__(self, collector: _DataCollector,
-                 update_weights_interval: int):
+    def __init__(self, collector: _DataCollector, update_weights_interval: int):
         self.collector = collector
         self.update_weights_interval = update_weights_interval
         self.counter = 0
