@@ -163,7 +163,6 @@ class Agent:
         self._log_dict = defaultdict(lambda: [])
 
         self._batch_process_ops = []
-        self._post_optim_hooks = []
         self._post_steps_ops = []
         self._post_steps_log_ops = []
         self._pre_steps_log_ops = []
@@ -299,7 +298,7 @@ class Agent:
                 batch = out
         return batch
 
-    def _post_steps(self) -> None:
+    def _post_steps_hook(self) -> None:
         for op in self._post_steps_ops:
             op()
 
@@ -310,36 +309,36 @@ class Agent:
                 key, value = result
                 self._log(key=value)
 
-    def _pre_optim(self):
+    def _pre_optim_hook(self):
         for op in self._pre_optim_ops:
             op()
 
-    def _process_optim_batch(self, batch):
+    def _process_optim_batch_hook(self, batch):
         for op in self._process_optim_batch_ops:
             out = op(batch)
             if isinstance(out, _TensorDict):
                 batch = out
         return batch
 
-    def _post_loss(self, batch):
+    def _post_loss_hook(self, batch):
         for op in self._post_loss_ops:
             out = op(batch)
             if isinstance(out, _TensorDict):
                 batch = out
         return batch
 
-    def _post_optim(self):
+    def _post_optim_hook(self):
         for op in self._post_optim_ops:
             op()
 
-    def _pre_steps_log(self, batch: _TensorDict) -> None:
+    def _pre_steps_log_hook(self, batch: _TensorDict) -> None:
         for op in self._pre_steps_log_ops:
             result = op(batch)
             if result is not None:
                 key, value = result
                 self._log(key=value)
 
-    def _post_steps_log(self, batch: _TensorDict) -> None:
+    def _post_steps_log_hook(self, batch: _TensorDict) -> None:
         for op in self._post_steps_log_ops:
             result = op(batch)
             if result is not None:
@@ -354,7 +353,7 @@ class Agent:
         self.collected_frames = 0
         for i, batch in enumerate(self.collector):
             batch = self._process_batch_hook(batch)
-            self._pre_steps_log(batch)
+            self._pre_steps_log_hook(batch)
             current_frames = (
                 batch.get("mask", torch.tensor(batch.numel())).sum().item()
                 * self.frame_skip
@@ -363,9 +362,9 @@ class Agent:
 
             if self.collected_frames > self.collector.init_random_frames:
                 self.optim_steps(batch)
-            self._post_steps()
+            self._post_steps_hook()
 
-            self._post_steps_log(batch)
+            self._post_steps_log_hook(batch)
 
             if self.progress_bar:
                 self._pbar.update(current_frames)
@@ -391,18 +390,18 @@ class Agent:
         # average_grad_norm = 0.0
         average_losses = None
 
-        self._pre_optim()
+        self._pre_optim_hook()
 
         for j in range(self.optim_steps_per_batch):
             self._optim_count += 1
 
-            sub_batch = self._process_optim_batch(batch)
+            sub_batch = self._process_optim_batch_hook(batch)
             sub_batch_device = sub_batch.to(self.loss_module.device)
             losses_td = self.loss_module(sub_batch_device)
-            self._post_loss(sub_batch_device)
+            self._post_loss_hook(sub_batch_device)
 
             losses_detached = self._optimizer_step(losses_td)
-            self._post_optim()
+            self._post_optim_hook()
 
             if average_losses is None:
                 average_losses: _TensorDict = losses_detached
@@ -788,7 +787,7 @@ def _check_input_output_typehint(func: Callable, input: Type, output: Type):
     #     if isinstance(param_type, str) or issubclass(param_type, Parameter.empty):
     #         raise Warning(
     #             "One of the function parameters is not typed. "
-    #             "While this is a perfectly valid way of using the agent hooks, "
+    #             "While this is a perfectly valid way of using the agent hook, "
     #             "it comes at the price of potentially poorly indicative exceptions. "
     #             "Make sure every function signature matches the expected signature for the "
     #             "desired hook."
@@ -801,7 +800,7 @@ def _check_input_output_typehint(func: Callable, input: Type, output: Type):
     # if issubclass(t.return_annotation, Parameter.empty):
     #     raise Warning(
     #         "The function output is not typed. "
-    #         "While this is a perfectly valid way of using the agent hooks, "
+    #         "While this is a perfectly valid way of using the agent hook, "
     #         "it comes at the price of potentially poorly indicative exceptions. "
     #         "Make sure every function signature matches the expected signature for the "
     #         "desired hook."
