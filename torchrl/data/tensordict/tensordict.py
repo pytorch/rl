@@ -1065,6 +1065,46 @@ dtype=torch.float32)},
             inv_op_kwargs={"size": self.batch_size},
         )
 
+    def permute(
+        self,
+        *dims: int,
+    ) -> _TensorDict:
+        """Returns a view of a tensordict with the batch dimensions permuted according to dims
+
+        Args:
+            *dims (int): the new ordering of the batch dims of the tensordict.
+
+        Returns:
+            a new tensordict with the batch dimensions in the desired order.
+
+        Examples:
+            >>> TODO
+        """
+
+        if len(dims) != len(self.shape):
+            raise RuntimeError(
+                f"number of dims don't match in permute (got {len(dims)}, expected {len(self.shape)}"
+            )
+
+        min_dim, max_dim = -self.batch_dims, self.batch_dims - 1
+        seen = [False for dim in range(max_dim + 1)]
+        for idx in dims:
+            if idx < min_dim or idx > max_dim:
+                raise IndexError(
+                    f"dimension out of range (expected to be in range of [{min_dim}, {max_dim}], but got {idx})"
+                )
+            if seen[idx]:
+                raise RuntimeError("repeated dim in permute")
+            seen[idx] = True
+
+        return PermutedTensorDict(
+            source=self,
+            custom_op="permute",
+            inv_op="permute",
+            custom_op_kwargs={"dims": dims},
+            inv_op_kwargs={"dims": dims},
+        )
+
     def __repr__(self) -> str:
         fields = _td_fields(self)
         field_str = indent(f"fields={{{fields}}}", 4 * " ")
@@ -3293,6 +3333,37 @@ class ViewedTensorDict(_CustomOpTensorDict):
         if shape == self._source.batch_size:
             return self._source
         return super().view(*shape)
+
+
+class PermutedTensorDict(_CustomOpTensorDict):
+    """
+    A lazy view on a TensorDict with the batch dimensions permuted.
+    """
+
+    def add_missing_dims(self, num_dims: int, batch_dims: tuple) -> tuple:
+        dim_diff = num_dims - len(batch_dims)
+        all_dims = [i for i in range(num_dims)]
+        for i, x in enumerate(batch_dims):
+            if x < 0:
+                x = x - dim_diff
+            all_dims[i] = x
+        return tuple(all_dims)
+
+    def _update_custom_op_kwargs(self, source_meta_tensor: MetaTensor) -> Dict:
+        new_dims = self.add_missing_dims(
+            len(source_meta_tensor.shape), self.custom_op_kwargs["dims"]
+        )
+        kwargs = deepcopy(self.custom_op_kwargs)
+        kwargs.update({"dims": new_dims})
+        return kwargs
+
+    def _update_inv_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:
+        new_dims = self.add_missing_dims(
+            len(source_meta_tensor.shape), self.custom_op_kwargs["dims"]
+        )
+        kwargs = deepcopy(self.custom_op_kwargs)
+        kwargs.update({"dims": new_dims})
+        return kwargs
 
 
 def _td_fields(td: _TensorDict) -> str:
