@@ -132,6 +132,7 @@ if __name__ == "__main__":
         recorder_rm = recorder
 
     recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
+    create_env_fn.close()
     # reset reward scaling
     for t in recorder.transform:
         if isinstance(t, RewardScaling):
