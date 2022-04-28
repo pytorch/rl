@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import pathlib
 import warnings
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
+from inspect import signature, Parameter
 from textwrap import indent
-from typing import Callable, Dict, Optional, Union, Sequence
+from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type, \
+    get_args
 
 import numpy as np
 import torch.nn
@@ -33,7 +35,7 @@ from torchrl.data.utils import expand_right
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import reset_noise, TDModuleWrapper
+from torchrl.modules import reset_noise, TDModuleWrapper, TDModule
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 
@@ -72,12 +74,6 @@ class Agent:
             TensorDict where every key points to a different loss component.
         optimizer (optim.Optimizer): An optimizer that trains the parameters
             of the model.
-        recorder (_EnvClass, optional): An environment instance to be used
-            for testing.
-        optim_scheduler (optim.lr_scheduler._LRScheduler, optional):
-            learning rate scheduler.
-        target_net_updater (_TargetNetUpdate, optional):
-            a target network updater.
         policy_exploration (ProbabilisticTDModule, optional): a policy
             instance used for
 
@@ -89,34 +85,13 @@ class Agent:
             the performance of the policy, it should be possible to turn off
             the explorative behaviour by calling the
             `set_exploration_mode('mode')` context manager.
-        replay_buffer (ReplayBuffer, optional): a replay buffer for offline
-            learning.
         writer (SummaryWriter, optional): a Tensorboard summary writer for
             logging purposes.
-        update_weights_interval (int, optional): interval between two updates
-            of the weights of a model living on another device. By default,
-            the weights will be updated after every collection of data.
-        record_interval (int, optional): total number of optimisation steps
-            between two calls to the recorder for testing. Default is 10000.
-        record_frames (int, optional): number of frames to be recorded during
-            testing. Default is 1000.
-        frame_skip (int, optional): frame_skip used in the environment. It is
-            important to let the agent know the number of frames skipped at
-            each iteration, otherwise the frame count can be underestimated.
-            For logging, this parameter is important to normalize the reward.
-            Finally, to compare different runs with different frame_skip,
-            one must normalize the frame count and rewards. Default is 1.
         optim_steps_per_batch (int, optional): number of optimization steps
             per collection of data. An agent works as follows: a main loop
             collects batches of data (epoch loop), and a sub-loop (training
             loop) performs model updates in between two collections of data.
             Default is 500
-        batch_size (int, optional): batch size when sampling data from the
-            latest collection or from the replay buffer, if it is present.
-            If no replay buffer is present, the sub-sampling will be
-            achieved over the latest collection with a resulting batch of
-            size (batch_size x sub_traj_len).
-            Default is 256
         clip_grad_norm (bool, optional): If True, the gradients will be clipped
             based on the total norm of the model parameters. If False,
             all the partial derivatives will be clamped to
@@ -132,23 +107,6 @@ class Agent:
             saved to disk. Default is 10000.
         save_agent_file (path, optional): path where to save the agent.
             Default is None (no saving)
-        normalize_rewards_online (bool, optional): if True, the running
-            statistics of the rewards are computed and the rewards used for
-            training will be normalized based on these.
-            Default is `False`
-        sub_traj_len (int, optional): length of the trajectories that
-            sub-samples must have in online settings. Default is -1 (i.e.
-            takes the full length of the trajectory)
-        min_sub_traj_len (int, optional): minimum value of `sub_traj_len`, in
-            case some elements of the batch contain few steps.
-            Default is -1 (i.e. no minimum value)
-        selected_keys (iterable of str, optional): a list of strings that
-            indicate the data that should be kept from the data collector.
-            Since storing and retrieving information from the replay buffer
-            does not come for free, limiting the amount of data passed to
-            it can improve the algorithm performance. Default is None,
-            i.e. all keys are kept.
-
     """
 
     # trackers
@@ -163,41 +121,26 @@ class Agent:
         self,
         collector: _DataCollector,
         total_frames: int,
+        frame_skip: int,
         loss_module: Union[_LossModule, Callable[[_TensorDict], _TensorDict]],
         optimizer: optim.Optimizer,
-        recorder: Optional[_EnvClass] = None,
-        optim_scheduler: Optional[optim.lr_scheduler._LRScheduler] = None,
-        target_net_updater: Optional[_TargetNetUpdate] = None,
         policy_exploration: Optional[TDModuleWrapper] = None,
-        replay_buffer: Optional[ReplayBuffer] = None,
         writer: Optional["SummaryWriter"] = None,
-        update_weights_interval: int = -1,
-        record_interval: int = 10000,
-        record_frames: int = 1000,
-        frame_skip: int = 1,
         optim_steps_per_batch: int = 500,
-        batch_size: int = 256,
         clip_grad_norm: bool = True,
         clip_norm: float = 100.0,
         progress_bar: bool = True,
         seed: int = 42,
         save_agent_interval: int = 10000,
         save_agent_file: Optional[Union[str, pathlib.Path]] = None,
-        normalize_rewards_online: bool = False,
-        sub_traj_len: int = -1,
-        min_sub_traj_len: int = -1,
-        selected_keys: Optional[Sequence[str]] = None,
     ) -> None:
 
         # objects
+        self.frame_skip = frame_skip
         self.collector = collector
         self.loss_module = loss_module
-        self.recorder = recorder
         self.optimizer = optimizer
-        self.optim_scheduler = optim_scheduler
-        self.replay_buffer = replay_buffer
         self.policy_exploration = policy_exploration
-        self.target_net_updater = target_net_updater
         self.writer = writer
         self._params = []
         for p in self.optimizer.param_groups:
@@ -208,11 +151,8 @@ class Agent:
         self.set_seed()
 
         # constants
-        self.update_weights_interval = update_weights_interval
         self.optim_steps_per_batch = optim_steps_per_batch
-        self.batch_size = batch_size
         self.total_frames = total_frames
-        self.frame_skip = frame_skip
         self.clip_grad_norm = clip_grad_norm
         self.clip_norm = clip_norm
         if progress_bar and not _has_tqdm:
@@ -220,19 +160,29 @@ class Agent:
                 "tqdm library not found. Consider installing tqdm to use the Agent progress bar."
             )
         self.progress_bar = progress_bar and _has_tqdm
-        self.record_interval = record_interval
-        self.record_frames = record_frames
         self.save_agent_interval = save_agent_interval
         self.save_agent_file = save_agent_file
-        self.normalize_rewards_online = normalize_rewards_online
-        self.sub_traj_len = sub_traj_len
-        self.min_sub_traj_len = min_sub_traj_len
-        self.selected_keys = selected_keys
+
+        self._log_dict = defaultdict(
+            lambda: []
+        )
+
+        self._batch_process_ops = []
+        self._post_optim_hooks = []
+        self._post_steps_ops = []
+        self._post_steps_log_ops = []
+        self._pre_steps_log_ops = []
+        self._post_optim_log_ops = []
+        self._pre_optim_ops = []
+        self._post_loss_ops = []
+        self._process_optim_batch_ops = []
+        self._post_optim_ops = []
 
     def save_agent(self) -> None:
         _save = False
         if self.save_agent_file is not None:
-            if (self._collected_frames - self._last_save) > self.save_agent_interval:
+            if (
+                self._collected_frames - self._last_save) > self.save_agent_interval:
                 self._last_save = self._collected_frames
                 _save = True
         if _save:
@@ -245,7 +195,6 @@ class Agent:
         expected_keys = {
             "env",
             "loss_module",
-            "_collected_frames",
             "_last_log",
             "_last_save",
             "_optim_count",
@@ -261,7 +210,6 @@ class Agent:
         self.collector.load_state_dict(loaded_dict["env"])
         self.model.load_state_dict(loaded_dict["model"])
         for key in [
-            "_collected_frames",
             "_last_log",
             "_last_save",
             "_optim_count",
@@ -299,59 +247,314 @@ class Agent:
     def collector(self, collector: _DataCollector) -> None:
         self._collector = collector
 
+    def register_op(self, dest: str, op: Callable) -> None:
+        if dest == "batch_process":
+            _check_input_output_typehint(op, input=_TensorDict,
+                                         output=_TensorDict)
+            self._batch_process_ops.append(op)
+
+        elif dest == "pre_optim_steps":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._pre_optim_ops.append(op)
+
+        elif dest == "process_optim_batch":
+            _check_input_output_typehint(op, input=_TensorDict,
+                                         output=_TensorDict)
+            self._process_optim_batch_ops.append(op)
+
+        elif dest == "post_loss":
+            _check_input_output_typehint(op, input=_TensorDict,
+                                         output=_TensorDict)
+            self._post_loss_ops.append(op)
+
+        elif dest == "post_steps":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._post_steps_ops.append(op)
+
+        elif dest == "post_optim":
+            _check_input_output_typehint(op, input=None,
+                                         output=None)
+            self._post_optim_ops.append(op)
+
+        elif dest == "pre_steps_log":
+            _check_input_output_typehint(op, input=_TensorDict,
+                                         output=Tuple[str, float])
+            self._pre_steps_log_ops.append(op)
+
+        elif dest == "post_steps_log":
+            _check_input_output_typehint(op, input=_TensorDict,
+                                         output=Tuple[str, float])
+            self._post_steps_log_ops.append(op)
+
+        elif dest == "post_optim_log":
+            _check_input_output_typehint(op, input=_TensorDict,
+                                         output=Tuple[str, float])
+            self._post_optim_log_ops.append(op)
+
+        else:
+            raise RuntimeError(
+                f"The hook collection {dest} is not recognised. Choose from:"
+                f"(batch_process, pre_steps, pre_step, post_loss, post_steps, "
+                f"post_steps_log, post_optim_log)"
+            )
+
+    # Process batch
+    def _process_batch_hook(self, batch: _TensorDict) -> _TensorDict:
+        for op in self._batch_process_ops:
+            out = op(batch)
+            if isinstance(out, _TensorDict):
+                batch = out
+        return batch
+
+    def _post_steps(self) -> None:
+        for op in self._post_steps_ops:
+            op()
+
+    def _post_optim_log(self, batch: _TensorDict) -> None:
+        for op in self._post_optim_log_ops:
+            result = op(batch)
+            if result is not None:
+                key, value = result
+                self._log(key=value)
+
+    def _pre_optim(self):
+        for op in self._pre_optim_ops:
+            op()
+
+    def _process_optim_batch(self, batch):
+        for op in self._process_optim_batch_ops:
+            out = op(batch)
+            if isinstance(out, _TensorDict):
+                batch = out
+        return batch
+
+    def _post_loss(self, batch):
+        for op in self._post_loss_ops:
+            out = op(batch)
+            if isinstance(out, _TensorDict):
+                batch = out
+        return batch
+
+    def _post_optim(self):
+        for op in self._post_optim_ops:
+            op()
+
+    def _pre_steps_log(self, batch: _TensorDict) -> None:
+        for op in self._pre_steps_log_ops:
+            result = op(batch)
+            if result is not None:
+                key, value = result
+                self._log(key=value)
+
+    def _post_steps_log(self, batch: _TensorDict) -> None:
+        for op in self._post_steps_log_ops:
+            result = op(batch)
+            if result is not None:
+                key, value = result
+                self._log(key=value)
+
     def train(self):
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames)
             self._pbar_str = OrderedDict()
 
-        collected_frames = 0
+        self.collected_frames = 0
         for i, batch in enumerate(self.collector):
-            if self.selected_keys:
-                batch = batch.select(*self.selected_keys, "mask")
+            batch = self._process_batch_hook(batch)
+            self._pre_steps_log(batch)
+            current_frames = batch.get("mask", torch.tensor(batch.numel())).sum().item() * self.frame_skip
+            self.collected_frames += current_frames
 
-            if "mask" in batch.keys():
-                current_frames = batch.get("mask").sum().item() * self.frame_skip
-            else:
-                current_frames = batch.numel() * self.frame_skip
-            collected_frames += current_frames
-            self._collected_frames = collected_frames
+            if self.collected_frames > self.collector.init_random_frames:
+                self.optim_steps(batch)
+            self._post_steps()
 
-            if self.replay_buffer is not None:
-                if "mask" in batch.keys():
-                    batch = batch[batch.get("mask").squeeze(-1)]
-                else:
-                    batch = batch.reshape(-1)
-                reward_training = batch.get("reward").mean().item()
-                batch = batch.cpu()
-                self.replay_buffer.extend(batch)
-            else:
-                if "mask" in batch.keys():
-                    reward_training = batch.get("reward")
-                    mask = batch.get("mask").squeeze(-1)
-                    reward_training = reward_training[mask].mean().item()
-                else:
-                    reward_training = batch.get("reward").mean().item()
+            # TODO: move to post_steps
+            # self._collector_scheduler_step(i, current_frames)
 
-            if self.normalize_rewards_online:
-                reward = batch.get("reward")
-                self._update_reward_stats(reward)
+            self._post_steps_log(batch)
 
-            if collected_frames > self.collector.init_random_frames:
-                self.steps(batch)
-            self._collector_scheduler_step(i, current_frames)
-
-            self._log(reward_training=reward_training)
             if self.progress_bar:
                 self._pbar.update(current_frames)
                 self._pbar_description()
 
-            if collected_frames > self.total_frames:
+            if self.collected_frames > self.total_frames:
                 break
 
+        print("shutting down collector")
         self.collector.shutdown()
 
+    def _optimizer_step(self, losses_td: _TensorDict) -> None:
+        # sum all keys that start with 'loss_'
+        loss = sum(
+            [item for key, item in losses_td.items() if key.startswith("loss")]
+        )
+        loss.backward()
+
+        grad_norm = self._grad_clip()
+        self.optimizer.step()
+        self.optimizer.zero_grad()
+        return losses_td.detach().set("grad_norm", grad_norm)
+
+    def optim_steps(self, batch: _TensorDict) -> None:
+        # average_grad_norm = 0.0
+        average_losses = None
+
+        self._pre_optim()
+
+        # TODO: move to pre-steps in PPO
+        # self.loss_module.reset()
+
+        for j in range(self.optim_steps_per_batch):
+            self._optim_count += 1
+
+            sub_batch = self._process_optim_batch(batch)
+            sub_batch_device = sub_batch.to(self.loss_module.device)
+            losses_td = self.loss_module(sub_batch_device)
+            self._post_loss(sub_batch_device)
+
+            losses_detached = self._optimizer_step(losses_td)
+            self._post_optim()
+
+            if average_losses is None:
+                average_losses: _TensorDict = losses_detached
+            else:
+                for key, item in losses_detached.items():
+                    val = average_losses.get(key)
+                    average_losses.set(key, val * j / (j + 1) + item / (j + 1))
+
+        if self.optim_steps_per_batch > 0:
+            self._log(
+                optim_steps=self._optim_count,
+                **average_losses,
+            )
+
+    def _grad_clip(self) -> float:
+        if self.clip_grad_norm:
+            gn = nn.utils.clip_grad_norm_(self._params, self.clip_norm)
+        else:
+            gn = sum([p.grad.pow(2).sum() for p in self._params]).sqrt()
+            nn.utils.clip_grad_value_(self._params, self.clip_norm)
+        return float(gn)
+
+    def _log(self, **kwargs) -> None:
+        collected_frames = self.collected_frames
+        for key, item in kwargs.items():
+            self._log_dict[key].append(item)
+
+            if (collected_frames -
+                self._last_log.get(key, 0)) > self._log_interval:
+                self._last_log[key] = collected_frames
+                _log = True
+            else:
+                _log = False
+            method = WRITER_METHODS.get(key, "add_scalar")
+            if _log and self.writer is not None:
+                getattr(self.writer, method)(key, item,
+                                             global_step=collected_frames)
+            if method == "add_scalar" and self.progress_bar:
+                self._pbar_str[key] = float(item)
+
+    def _pbar_description(self) -> None:
+        if self.progress_bar:
+            self._pbar.set_description(
+                ", ".join(
+                    [
+                        f"{key}: {float(item):4.4f}"
+                        for key, item in self._pbar_str.items()
+                    ]
+                )
+            )
+
+    def __repr__(self) -> str:
+        loss_str = indent(f"loss={self.loss_module}", 4 * " ")
+        policy_str = indent(f"policy_exploration={self.policy_exploration}",
+                            4 * " ")
+        collector_str = indent(f"collector={self.collector}", 4 * " ")
+        optimizer_str = indent(f"optimizer={self.optimizer}", 4 * " ")
+        writer = indent(f"writer={self.writer}", 4 * " ")
+
+        string = "\n".join(
+            [
+                loss_str,
+                policy_str,
+                collector_str,
+                optimizer_str,
+                writer,
+            ]
+        )
+        string = f"Agent(\n{string})"
+        return string
+
+
+class SelectKeys:
+    def __init__(self, keys: Sequence[str]):
+        self.keys = keys
+
+    def __call__(self, batch: _TensorDict) -> _TensorDict:
+        return batch.select(*self.keys)
+
+
+class ReplayBufferAgent:
+    """
+    Args:
+        replay_buffer (ReplayBuffer): replay buffer to be used.
+        batch_size (int): batch size when sampling data from the
+            latest collection or from the replay buffer, if it is present.
+            If no replay buffer is present, the sub-sampling will be
+            achieved over the latest collection with a resulting batch of
+            size (batch_size x sub_traj_len).
+    """
+
+    def __init__(self, replay_buffer: ReplayBuffer, batch_size: int) -> None:
+        self.replay_buffer = replay_buffer
+        self.batch_size = batch_size
+
+    def extend(self, batch: _TensorDict) -> _TensorDict:
+        if "mask" in batch.keys():
+            batch = batch[batch.get("mask").squeeze(-1)]
+        else:
+            batch = batch.reshape(-1)
+        # reward_training = batch.get("reward").mean().item()
+        batch = batch.cpu()
+        self.replay_buffer.extend(batch)
+
+    def sample(self, batch: _TensorDict) -> _TensorDict:
+        return self.replay_buffer.sample(self.batch_size)
+
+    def update_priority(self, batch: _TensorDict) -> None:
+        if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
+            self.replay_buffer.update_priority(batch)
+
+
+class LogReward:
+    def __init__(self, logname="reward_training"):
+        self.logname = logname
+
+    def __call__(self, batch: _TensorDict) -> Tuple[str, torch.Tensor]:
+        if "mask" in batch.keys():
+            return self.logname, batch.get("reward")[
+                batch.get("mask").squeeze(-1)].mean().item()
+        return self.logname, batch.get("reward").mean().item()
+
+
+class RewardNormalizer:
+    _reward_stats: dict = {"decay": 0.999}
+
+    def __init__(self):
+        self._normalize_has_been_called = False
+        self._update_has_been_called = False
+        pass
+
     @torch.no_grad()
-    def _update_reward_stats(self, reward: torch.Tensor) -> None:
+    def update_reward_stats(self, batch: _TensorDict) -> None:
+        reward = batch.get("reward")
+        if "mask" in batch.keys():
+            reward = reward[batch.get("mask").squeeze(-1)]
+        if self._update_has_been_called and not self._normalize_has_been_called:
+            raise RuntimeError(
+                "There have been two consecutive calls to update_reward_stats without a call to normalize_reward. "
+                "Check that normalize_reward has been registered in the agent.")
         decay = self._reward_stats.get("decay", 0.999)
         sum = self._reward_stats["sum"] = (
             decay * self._reward_stats.get("sum", 0.0) + reward.sum()
@@ -366,88 +569,42 @@ class Agent:
         mean = self._reward_stats["mean"] = sum / count
         var = self._reward_stats["var"] = ssq / count - mean.pow(2)
         self._reward_stats["std"] = var.clamp_min(1e-6).sqrt()
+        self._update_has_been_called = True
 
-    def _normalize_reward(self, tensordict: _TensorDict) -> None:
+    def normalize_reward(self, tensordict: _TensorDict) -> _TensorDict:
         reward = tensordict.get("reward")
         reward = reward - self._reward_stats["mean"]
         reward = reward / self._reward_stats["std"]
         tensordict.set_("reward", reward)
+        self._normalize_has_been_called = True
+        return tensordict
 
-    def _collector_scheduler_step(self, step: int, current_frames: int):
-        """Runs entropy annealing steps for exploration, policy weights update
-        across workers etc.
 
-        """
+def mask_batch(batch: _TensorDict) -> _TensorDict:
+    if "mask" in batch.keys():
+        mask = batch.get("batch")
+        return batch[mask.squeeze(-1)]
 
-        if self.policy_exploration is not None and hasattr(
-            self.policy_exploration, "step"
-        ):
-            self.policy_exploration.step(current_frames)
 
-        if step % self.update_weights_interval == 0:
-            self.collector.update_policy_weights_()
+class BatchSubSampler:
+    """
+    Args:
+        sub_traj_len (int, optional): length of the trajectories that
+            sub-samples must have in online settings. Default is -1 (i.e.
+            takes the full length of the trajectory)
+        min_sub_traj_len (int, optional): minimum value of `sub_traj_len`, in
+            case some elements of the batch contain few steps.
+            Default is -1 (i.e. no minimum value)
 
-    def steps(self, batch: _TensorDict) -> None:
-        average_grad_norm = 0.0
-        average_losses = None
+    """
 
-        self.loss_module.apply(reset_noise)  # TODO: group in loss_module.reset?
-        self.loss_module.reset()
+    def __init__(self, batch_size: int, sub_traj_len: int = 0,
+                 min_sub_traj_len: int = 0) -> None:
+        self.batch_size = batch_size
+        self.sub_traj_len = sub_traj_len
+        self.min_sub_traj_len = min_sub_traj_len
 
-        for j in range(self.optim_steps_per_batch):
-            self._optim_count += 1
-            if self.replay_buffer is not None:
-                sub_batch = self.replay_buffer.sample(self.batch_size)
-            else:
-                sub_batch = self._sub_sample_batch(batch)
-
-            if self.normalize_rewards_online:
-                self._normalize_reward(sub_batch)
-
-            sub_batch_device = sub_batch.to(self.loss_module.device)
-            losses_td = self.loss_module(sub_batch_device)
-            if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
-                self.replay_buffer.update_priority(sub_batch_device)
-
-            # sum all keys that start with 'loss_'
-            loss = sum(
-                [item for key, item in losses_td.items() if key.startswith("loss")]
-            )
-            loss.backward()
-            if average_losses is None:
-                average_losses: _TensorDict = losses_td.detach()
-            else:
-                for key, item in losses_td.items():
-                    val = average_losses.get(key)
-                    average_losses.set(key, val * j / (j + 1) + item / (j + 1))
-
-            grad_norm = self._grad_clip()
-            average_grad_norm = average_grad_norm * j / (j + 1) + grad_norm / (j + 1)
-            self.optimizer.step()
-            self.optimizer.zero_grad()
-
-            self._optim_schedule_step()
-
-            if self._optim_count % self.record_interval == 0:
-                self.record()
-
-        if self.optim_steps_per_batch > 0:
-            self._log(
-                grad_norm=average_grad_norm,
-                optim_steps=self._optim_count,
-                **average_losses,
-            )
-
-    def _optim_schedule_step(self) -> None:
-        """Runs scheduler steps, target network update steps etc.
-        Returns:
-        """
-        if self.optim_scheduler is not None:
-            self.optim_scheduler.step()
-        if self.target_net_updater is not None:
-            self.target_net_updater.step()
-
-    def _sub_sample_batch(self, batch: _TensorDict) -> _TensorDict:
+    def __call__(self, batch: _TensorDict) -> _TensorDict:
         """Sub-sampled part of a batch randomly.
 
         If the batch has one dimension, a random subsample of length
@@ -460,7 +617,8 @@ class Agent:
         if batch.ndimension() == 1:
             return batch[torch.randperm(batch.shape[0])[: self.batch_size]]
 
-        sub_traj_len = self.sub_traj_len if self.sub_traj_len > 0 else batch.shape[1]
+        sub_traj_len = self.sub_traj_len if self.sub_traj_len > 0 else \
+            batch.shape[1]
         if "mask" in batch.keys():
             # if a valid mask is present, it's important to sample only
             # valid steps
@@ -471,7 +629,8 @@ class Agent:
             )
         else:
             traj_len = (
-                torch.ones(batch.shape[0], device=batch.device, dtype=torch.bool)
+                torch.ones(batch.shape[0], device=batch.device,
+                           dtype=torch.bool)
                 * batch.shape[1]
             )
         len_mask = traj_len >= sub_traj_len
@@ -506,7 +665,8 @@ class Agent:
         td = td.apply(
             lambda t: t.gather(
                 dim=1,
-                index=expand_right(seq_idx, (batch_size, sub_traj_len, *t.shape[2:])),
+                index=expand_right(seq_idx,
+                                   (batch_size, sub_traj_len, *t.shape[2:])),
             ),
             batch_size=(batch_size, sub_traj_len),
         )
@@ -514,78 +674,155 @@ class Agent:
             raise RuntimeError("Sampled invalid steps")
         return td
 
-    def _grad_clip(self) -> float:
-        if self.clip_grad_norm:
-            gn = nn.utils.clip_grad_norm_(self._params, self.clip_norm)
-        else:
-            gn = sum([p.grad.pow(2).sum() for p in self._params]).sqrt()
-            nn.utils.clip_grad_value_(self._params, self.clip_norm)
-        return float(gn)
 
-    def _log(self, **kwargs) -> None:
-        collected_frames = self._collected_frames
-        for key, item in kwargs.items():
-            if (collected_frames - self._last_log.get(key, 0)) > self._log_interval:
-                self._last_log[key] = collected_frames
-                _log = True
-            else:
-                _log = False
-            method = WRITER_METHODS.get(key, "add_scalar")
-            if _log and self.writer is not None:
-                getattr(self.writer, method)(key, item, global_step=collected_frames)
-            if method == "add_scalar" and self.progress_bar:
-                self._pbar_str[key] = float(item)
+class Recorder:
+    """
+    Args:
+        record_interval (int): total number of optimisation steps
+            between two calls to the recorder for testing.
+        record_frames (int): number of frames to be recorded during
+            testing.
+        frame_skip (int): frame_skip used in the environment. It is
+            important to let the agent know the number of frames skipped at
+            each iteration, otherwise the frame count can be underestimated.
+            For logging, this parameter is important to normalize the reward.
+            Finally, to compare different runs with different frame_skip,
+            one must normalize the frame count and rewards. Default is 1.
+        policy_exploration (ProbabilisticTDModule): a policy
+            instance used for
 
-    def _pbar_description(self) -> None:
-        if self.progress_bar:
-            self._pbar.set_description(
-                ", ".join(
-                    [
-                        f"{key}: {float(item):4.4f}"
-                        for key, item in self._pbar_str.items()
-                    ]
-                )
-            )
+            (1) updating the exploration noise schedule;
+
+            (2) testing the policy on the recorder.
+
+            Given that this instance is supposed to both explore and render
+            the performance of the policy, it should be possible to turn off
+            the explorative behaviour by calling the
+            `set_exploration_mode('mode')` context manager.
+        recorder (_EnvClass): An environment instance to be used
+            for testing.
+        exploration_mode (str, optional): exploration mode to use for the
+            policy. By default, no exploration is used and the value used is
+            "mode". Set to "random" to enable exploration
+        out_key (str, optional): reward key to set to the logger. Default is
+            `"reward_evaluation"`.
+
+    """
+
+    def __init__(
+        self,
+        record_interval: int,
+        record_frames: int,
+        frame_skip: int,
+        policy_exploration: TDModule,
+        recorder: _EnvClass,
+        exploration_mode: str = "mode",
+        out_key: str = "reward_evaluation",
+    ) -> None:
+
+        self.policy_exploration = policy_exploration
+        self.recorder = recorder
+        self.record_frames = record_frames
+        self.frame_skip = frame_skip
+        self._count = 0
+        self.record_interval = record_interval
+        self.exploration_mode = exploration_mode
+        self.out_key = out_key
 
     @torch.no_grad()
-    @set_exploration_mode("mode")
-    def record(self) -> None:
-        if self.recorder is not None:
-            self.policy_exploration.eval()
-            self.recorder.eval()
-            if isinstance(self.recorder, TransformedEnv):
-                self.recorder.transform.eval()
-            td_record = self.recorder.rollout(
-                policy=self.policy_exploration,
-                n_steps=self.record_frames,
-            )
-            self.policy_exploration.train()
-            self.recorder.train()
-            reward = td_record.get("reward").mean() / self.frame_skip
-            self._log(reward_evaluation=reward)
-            self.recorder.transform.dump()
+    def __call__(self, batch: _TensorDict) -> Tuple[str, torch.Tensor]:
+        out = None
+        if self._count % self.record_interval == 0:
+            with set_exploration_mode(self.exploration_mode):
+                self.policy_exploration.eval()
+                self.recorder.eval()
+                if isinstance(self.recorder, TransformedEnv):
+                    self.recorder.transform.eval()
+                td_record = self.recorder.rollout(
+                    policy=self.policy_exploration,
+                    n_steps=self.record_frames,
+                )
+                self.policy_exploration.train()
+                self.recorder.train()
+                reward = td_record.get("reward").mean() / self.frame_skip
+                self.recorder.transform.dump()
+                out = self.out_key, reward
+        self._count += 1
+        return out
 
-    def __repr__(self) -> str:
-        loss_str = indent(f"loss={self.loss_module}", 4 * " ")
-        policy_str = indent(f"policy_exploration={self.policy_exploration}", 4 * " ")
-        collector_str = indent(f"collector={self.collector}", 4 * " ")
-        buffer_str = indent(f"buffer={self.replay_buffer}", 4 * " ")
-        optimizer_str = indent(f"optimizer={self.optimizer}", 4 * " ")
-        target_net_updater = indent(
-            f"target_net_updater={self.target_net_updater}", 4 * " "
-        )
-        writer = indent(f"writer={self.writer}", 4 * " ")
 
-        string = "\n".join(
-            [
-                loss_str,
-                policy_str,
-                collector_str,
-                buffer_str,
-                optimizer_str,
-                target_net_updater,
-                writer,
-            ]
-        )
-        string = f"Agent(\n{string})"
-        return string
+class UpdateWeights:
+    def __init__(self, collector: _DataCollector,
+                 update_weights_interval: int):
+        self.collector = collector
+        self.update_weights_interval = update_weights_interval
+        self.counter = 0
+
+    def __call__(self):
+        self.counter += 1
+        if self.counter % self.update_weights_interval == 0:
+            self.collector.update_policy_weights_()
+
+
+class CountFramesLog:
+    def __init__(self, frame_skip: int):
+        self.frame_count = 0
+        self.frame_skip = frame_skip
+
+    def __call__(self, batch: _TensorDict) -> Tuple[str, int]:
+        if "mask" in batch.keys():
+            current_frames = batch.get("mask").sum().item() * self.frame_skip
+        else:
+            current_frames = batch.numel() * self.frame_skip
+        self.frame_count += current_frames
+        return "collected_frames", current_frames
+
+
+def _check_input_output_typehint(func: Callable, input: Type, output: Type):
+    # Placeholder for a function that checks the types input / output against expectations
+    return
+
+    # if not isinstance(input, (tuple, list)):
+    #     if input is None:
+    #         input = []
+    #     else:
+    #         input = [input]
+    #
+    # output = get_args(output) if get_args(output) else output  # gets rid of Tuple
+    #
+    # # get signature
+    # t = signature(func)
+    #
+    # # check the inputs
+    # for i, (param_key, param_type) in enumerate(t.parameters.items()):
+    #     _input = get_args(input[i])  # convert Union to a tuple
+    #     if not len(_input):
+    #         _input = input[i]
+    #     param_type = param_type.annotation
+    #
+    #     if isinstance(param_type, str) or issubclass(param_type, Parameter.empty):
+    #         raise Warning(
+    #             "One of the function parameters is not typed. "
+    #             "While this is a perfectly valid way of using the agent hooks, "
+    #             "it comes at the price of potentially poorly indicative exceptions. "
+    #             "Make sure every function signature matches the expected signature for the "
+    #             "desired hook."
+    #         )
+    #     elif not issubclass(_input, param_type):
+    #         raise Exception(
+    #             f"Got parameter type param_type={param_type} which is incompatible with expected type {_input}."
+    #         )
+    #
+    # if issubclass(t.return_annotation, Parameter.empty):
+    #     raise Warning(
+    #         "The function output is not typed. "
+    #         "While this is a perfectly valid way of using the agent hooks, "
+    #         "it comes at the price of potentially poorly indicative exceptions. "
+    #         "Make sure every function signature matches the expected signature for the "
+    #         "desired hook."
+    #     )
+    # elif not issubclass(output, t.return_annotation):
+    #     raise Exception(
+    #         f"Got a return type {t.return_annotation} which is incompatible "
+    #         f"with expected type {output}."
+    #     )

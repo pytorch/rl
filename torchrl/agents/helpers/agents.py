@@ -10,11 +10,13 @@ from warnings import warn
 
 from torch import optim
 
-from torchrl.agents.agents import Agent
+from torchrl.agents.agents import Agent, SelectKeys, ReplayBufferAgent, \
+    LogReward, RewardNormalizer, mask_batch, BatchSubSampler, UpdateWeights, \
+    Recorder, CountFramesLog
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import _EnvClass
-from torchrl.modules import TDModule, TDModuleWrapper
+from torchrl.modules import TDModule, TDModuleWrapper, reset_noise
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 
@@ -120,33 +122,85 @@ def make_agent(
 
     if writer is not None:
         # log hyperparams
-        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(args).items())])
+        txt = "\n\t".join(
+            [f"{k}: {val}" for k, val in sorted(vars(args).items())])
         writer.add_text("hparams", txt)
 
-    return Agent(
+    agent = Agent(
         collector=collector,
+        frame_skip=args.frame_skip,
         total_frames=args.total_frames * args.frame_skip,
         loss_module=loss_module,
         optimizer=optimizer,
-        recorder=recorder,
-        optim_scheduler=optim_scheduler,
-        target_net_updater=target_net_updater,
         policy_exploration=policy_exploration,
-        replay_buffer=replay_buffer,
         writer=writer,
-        update_weights_interval=1,
-        frame_skip=args.frame_skip,
         optim_steps_per_batch=args.optim_steps_per_collection,
-        batch_size=args.batch_size,
         clip_grad_norm=args.clip_grad_norm,
         clip_norm=args.clip_norm,
-        record_interval=args.record_interval,
-        record_frames=args.record_frames,
-        normalize_rewards_online=args.normalize_rewards_online,
-        sub_traj_len=args.sub_traj_len,
-        selected_keys=args.selected_keys,
     )
 
+    if args.noisy:
+        agent.register_op(
+            "pre_optim_steps",
+            lambda: loss_module.apply(reset_noise))
+
+    if args.selected_keys:
+        agent.register_op("batch_process", SelectKeys(args.selected_keys))
+
+    if replay_buffer is not None:
+        # replay buffer is used 2 or 3 times: to register data, to sample
+        # data and to update priorities
+        rb_agent = ReplayBufferAgent(replay_buffer, args.batch_size)
+        agent.register_op("batch_process", rb_agent.extend)
+        agent.register_op("process_optim_batch", rb_agent.sample)
+        agent.register_op("post_loss", rb_agent.update_priority)
+    else:
+        agent.register_op("batch_process", mask_batch)
+        agent.register_op(
+            "process_optim_batch",
+            BatchSubSampler(batch_size=args.batch_size,
+                            sub_traj_len=args.args.sub_traj_len)
+        )
+
+    if optim_scheduler is not None:
+        agent.register_op("post_optim", optim_scheduler.step)
+
+    if target_net_updater is not None:
+        agent.register_op("post_optim", target_net_updater.step)
+
+    if args.normalize_rewards_online:
+        # if used the running statistics of the rewards are computed and the
+        # rewards used for training will be normalized based on these.
+        reward_normalizer = RewardNormalizer()
+        agent.register_op(
+            "batch_process",
+            reward_normalizer.update_reward_stats
+        )
+        agent.register_op(
+            "process_optim_batch",
+            reward_normalizer.normalize_reward
+        )
+
+    if policy_exploration is not None and hasattr(policy_exploration, "step"):
+        agent.register_op("post_steps", policy_exploration.step)
+
+    if recorder is not None:
+        agent.register_op(
+            "post_steps_log",
+            Recorder(
+                record_frames=args.record_frames,
+                frame_skip=args.frame_skip,
+                policy_exploration=policy_exploration,
+                recorder=recorder,
+                record_interval=args.record_interval
+            )
+        )
+    agent.register_op("post_steps", UpdateWeights(collector, 1))
+
+    agent.register_op("post_steps_log", LogReward())
+    agent.register_op("pre_steps_log", CountFramesLog(frame_skip=args.frame_skip))
+
+    return agent
 
 def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
     """
@@ -161,8 +215,8 @@ def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=500,
         help="Number of optimization steps in between two collection of data. See frames_per_batch "
-        "below. "
-        "Default=500",
+             "below. "
+             "Default=500",
     )
     parser.add_argument(
         "--optimizer", type=str, default="adam", help="Optimizer to be used."
@@ -172,9 +226,9 @@ def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
         nargs="+",
         default=None,
         help="a list of strings that indicate the data that should be kept from the data collector. Since storing and "
-        "retrieving information from the replay buffer does not come for free, limiting the amount of data "
-        "passed to it can improve the algorithm performance."
-        "Default is None, i.e. all keys are kept.",
+             "retrieving information from the replay buffer does not come for free, limiting the amount of data "
+             "passed to it can improve the algorithm performance."
+             "Default is None, i.e. all keys are kept.",
     )
 
     parser.add_argument(
@@ -211,14 +265,14 @@ def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
         "--clip_grad_norm",
         action="store_true",
         help="if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient "
-        "values will be clipped to the desired threshold.",
+             "values will be clipped to the desired threshold.",
     )
     parser.add_argument(
         "--normalize_rewards_online",
         "--normalize-rewards-online",
         action="store_true",
         help="Computes the running statistics of the rewards and normalizes them before they are "
-        "passed to the loss module.",
+             "passed to the loss module.",
     )
     parser.add_argument(
         "--sub_traj_len",

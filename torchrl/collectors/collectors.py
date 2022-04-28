@@ -713,9 +713,7 @@ class _MultiDataCollector(_DataCollector):
         self.update_at_each_batch = update_at_each_batch
         self.init_with_lag = init_with_lag
         self.exploration_mode = exploration_mode
-        self.frames_per_worker = (
-            -(self.total_frames // -self.num_workers) if total_frames > 0 else np.inf
-        )  # ceil(total_frames/num_workers)
+        self.frames_per_worker = np.inf
         self._run_processes()
         self._exclude_private_keys = True
 
