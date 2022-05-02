@@ -525,14 +525,37 @@ class TestTransforms:
                     assert (observation_spec[key].space.minimum == loc).all()
                     assert (observation_spec[key].space.maximum == scale + loc).all()
 
-    @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
-    @pytest.mark.parametrize(
-        "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
-    )
-    @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("N", [1, 4, 5])
-    def test_catframes(self, batch, keys, device, N):
-        pass
+    def test_catframes_transform_observation_spec(self):
+        N = 4
+        key1 = "first key"
+        key2 = "second key"
+        keys = [key1, key2]
+        cat_frames = CatFrames(N=N, keys=keys)
+        mins = [0, .5]
+        maxes = [.5, 1]
+        observation_spec = CompositeSpec(
+            **{
+                key: NdBoundedTensorSpec(space_min, space_max, (1, 32, 32), dtype=torch.double)
+                for key, space_min, space_max in zip(keys, mins, maxes)
+            }
+        )
+
+        result = cat_frames.transform_observation_spec(observation_spec)
+        observation_spec = CompositeSpec(
+            **{
+                key: NdBoundedTensorSpec(space_min, space_max, (1, 32, 32), dtype=torch.double)
+                for key, space_min, space_max in zip(keys, mins, maxes)
+            }
+        )
+
+        print()
+        final_spec = result[key2]
+        assert final_spec.shape[0] == N
+        for key in keys:
+            for i in range(N):
+                assert torch.equal(result[key].space.maximum[i], observation_spec[key].space.maximum[0])
+                assert torch.equal(result[key].space.minimum[i], observation_spec[key].space.minimum[0])
+
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_finitetensordictcheck(self, device):
