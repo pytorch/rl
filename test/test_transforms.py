@@ -579,6 +579,28 @@ class TestTransforms:
         assert torch.equal(latest_frame[0][N-1], key1_tensor[0][0])
 
     @pytest.mark.parametrize("device", get_available_devices())
+    def test_catframes_reset(self, device):
+        key1 = "first key"
+        key2 = "second key"
+        N = 4
+        keys = [key1, key2]
+        key1_tensor = torch.zeros(1, 1, 32, 32, device=device)
+        key2_tensor = torch.ones(1, 1, 32, 32, device=device)
+        key_tensors = [key1_tensor, key2_tensor]
+        td = TensorDict(
+            dict(zip(keys, key_tensors)), [1]
+        )
+        cat_frames = CatFrames(N=N, keys=keys)
+
+        cat_frames(td)
+        buffer_length1 = len(cat_frames.buffer)
+        passed_back_td = cat_frames.reset(td)
+
+        assert 2 == buffer_length1
+        assert td == passed_back_td
+        assert 0 == len(cat_frames.buffer)
+
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_finitetensordictcheck(self, device):
         ftd = FiniteTensorDictCheck()
         td = TensorDict(
