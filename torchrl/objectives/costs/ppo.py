@@ -113,7 +113,7 @@ class PPOLoss(_LossModule):
 
     def loss_critic(self, tensordict: _TensorDict) -> torch.Tensor:
         if self.advantage_diff_key in tensordict.keys():
-            advantage_diff = tensordict.get("advantage_diff")
+            advantage_diff = tensordict.get(self.advantage_diff_key)
             if not advantage_diff.requires_grad:
                 raise RuntimeError(
                     "value_target retrieved from tensordict does not requires grad."
@@ -138,7 +138,9 @@ class PPOLoss(_LossModule):
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         if self.advantage_module is not None:
-            tensordict = self.advantage_module(tensordict)
+            tensordict = self.advantage_module(
+                tensordict,
+            )
         tensordict = tensordict.clone()
         advantage = tensordict.get(self.advantage_key)
         log_weight, dist = self._log_weight(tensordict)

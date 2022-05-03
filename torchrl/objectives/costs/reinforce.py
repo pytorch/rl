@@ -1,26 +1,24 @@
-from typing import Optional
+from typing import Optional, Callable
 
 import torch
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import step_tensordict
 from torchrl.modules import ProbabilisticTDModule, TDModule
-from torchrl.objectives import GAE, distance_loss
+from torchrl.objectives import distance_loss
 from torchrl.objectives.costs.common import _LossModule
-from torchrl.objectives.returns.a2c import A2C
 
 
 class ReinforceLoss(_LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticTDModule,
-        advantage_module: str,
+        advantage_module: Callable[[_TensorDict], _TensorDict],
         critic: Optional[TDModule] = None,
-        gamma: float = 0.99,
-        lamda: float = 0.95,
         delay_value: bool = False,
+        gamma: float = 0.99,
         advantage_key: str = "advantage",
-        advantage_diff_key: str = "advantage_diff",
+        advantage_diff_key: str = "value_target",
         loss_critic_type: str = "smooth_l1",
     ) -> None:
         super().__init__()
@@ -29,6 +27,15 @@ class ReinforceLoss(_LossModule):
         self.advantage_key = advantage_key
         self.advantage_diff_key = advantage_diff_key
         self.loss_critic_type = loss_critic_type
+        self.gamma = gamma
+
+        if (
+            hasattr(advantage_module, "is_functional")
+            and not advantage_module.is_functional
+        ):
+            raise RuntimeError(
+                "The advantage module must be functional, as it must support params and target params arguments"
+            )
 
         # Actor
         self.convert_to_functional(
@@ -45,16 +52,7 @@ class ReinforceLoss(_LossModule):
                 create_target_params=self.delay_value,
             )
 
-        if advantage_module == "gae":
-            self.advantage_module = GAE(
-                gamma, lamda, value_network=self.critic, gradient_mode=True
-            )
-        elif advantage_module == "a2c":
-            self.advantage_module = A2C(
-                gamma, value_network=self.critic, gradient_mode=True
-            )
-        else:
-            raise NotImplementedError
+        self.advantage_module = advantage_module
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         # get advantage

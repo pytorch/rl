@@ -23,7 +23,6 @@ from torchrl.objectives import (
     DDPGLoss,
     DistributionalDQNLoss,
     DQNLoss,
-    GAE,
     HardUpdate,
     KLPENPPOLoss,
     PPOLoss,
@@ -35,6 +34,7 @@ from torchrl.objectives.costs.redq import REDQLoss
 
 # from torchrl.objectives.costs.redq import REDQLoss
 from torchrl.objectives.costs.utils import _TargetNetUpdate
+from torchrl.objectives.returns.advantages import GAE
 
 
 def make_target_updater(
@@ -162,7 +162,7 @@ def make_ppo_loss(model, args) -> PPOLoss:
         args.lamda,
         value_network=critic_model,
         average_rewards=True,
-        gradient_mode=True,
+        gradient_mode=False,
     )
     loss_module = loss_dict[args.loss](
         actor=actor_model,
