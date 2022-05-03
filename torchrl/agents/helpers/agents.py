@@ -165,7 +165,8 @@ def make_agent(
         agent.register_op(
             "process_optim_batch",
             BatchSubSampler(
-                batch_size=args.batch_size, sub_traj_len=args.args.sub_traj_len
+                batch_size=args.batch_size,
+                sub_traj_len=args.sub_traj_len
             ),
         )
 
