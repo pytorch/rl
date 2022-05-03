@@ -196,7 +196,7 @@ def make_agent(
         )
     agent.register_op("post_steps", UpdateWeights(collector, 1))
 
-    agent.register_op("post_steps_log", LogReward())
+    agent.register_op("pre_steps_log", LogReward())
     agent.register_op("pre_steps_log", CountFramesLog(frame_skip=args.frame_skip))
 
     return agent
