@@ -177,6 +177,13 @@ class TDModule(nn.Module):
         super().__setattr__(key, attribute)
 
     @property
+    def is_functional(self):
+        return isinstance(
+            self.module,
+            (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers),
+        )
+
+    @property
     def spec(self) -> TensorSpec:
         return self._spec
 

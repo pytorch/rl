@@ -34,7 +34,6 @@ from torchrl.objectives import (
     PPOLoss,
     ClipPPOLoss,
     KLPENPPOLoss,
-    GAE,
 )
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.redq import (
@@ -44,7 +43,7 @@ from torchrl.objectives.costs.redq import (
 )
 from torchrl.objectives.costs.reinforce import ReinforceLoss
 from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
-from torchrl.objectives.returns.td import TDEstimate
+from torchrl.objectives.returns.advantages import TDEstimate, GAE
 
 
 class _check_td_steady:
@@ -1182,16 +1181,18 @@ class TestPPO:
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
         if advantage == "gae":
-            gae = GAE(
+            advantage = GAE(
                 gamma=0.9, lamda=0.9, value_network=value, gradient_mode=gradient_mode
             )
-        else:
-            gae = TDEstimate(
+        elif advantage == "td":
+            advantage = TDEstimate(
                 gamma=0.9, value_network=value, gradient_mode=gradient_mode
             )
+        else:
+            raise NotImplementedError
 
         loss_fn = loss_class(
-            actor, value, advantage_module=gae, gamma=0.9, loss_critic_type="l2"
+            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
         )
 
         loss = loss_fn(td)
@@ -1223,11 +1224,13 @@ class TestPPO:
 
 class TestReinforce:
     @pytest.mark.parametrize("delay_value", [True, False])
-    @pytest.mark.parametrize("advantage", ["gae", "a2c"])
-    def test_reinforce_value_net(self, advantage, delay_value):
+    @pytest.mark.parametrize("gradient_mode", [True, False])
+    @pytest.mark.parametrize("advantage", ["gae", "td"])
+    def test_reinforce_value_net(self, advantage, gradient_mode, delay_value):
         n_obs = 3
         n_act = 5
         batch = 4
+        gamma = 0.9
         value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
 
         actor_net = ProbabilisticActor(
@@ -1236,11 +1239,27 @@ class TestReinforce:
             distribution_class=TanhNormal,
             return_log_prob=True,
         )
+        if advantage == "gae":
+            advantage_module = GAE(
+                gamma=gamma,
+                lamda=0.9,
+                value_network=value_net.make_functional_with_buffers(clone=True)[0],
+                gradient_mode=gradient_mode,
+            )
+        elif advantage == "td":
+            advantage_module = TDEstimate(
+                gamma=gamma,
+                value_network=value_net.make_functional_with_buffers(clone=True)[0],
+                gradient_mode=gradient_mode,
+            )
+        else:
+            raise NotImplementedError
 
         loss_fn = ReinforceLoss(
             actor_net,
             critic=value_net,
-            advantage_module=advantage,
+            gamma=gamma,
+            advantage_module=advantage_module,
             delay_value=delay_value,
         )
 
