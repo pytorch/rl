@@ -336,14 +336,16 @@ class Agent:
             result = op(batch)
             if result is not None:
                 key, value = result
-                self._log(key=value)
+                kwargs = {key: value}
+                self._log(**kwargs)
 
     def _post_steps_log_hook(self, batch: _TensorDict) -> None:
         for op in self._post_steps_log_ops:
             result = op(batch)
             if result is not None:
                 key, value = result
-                self._log(key=value)
+                kwargs = {key: value}
+                self._log(**kwargs)
 
     def train(self):
         if self.progress_bar:
