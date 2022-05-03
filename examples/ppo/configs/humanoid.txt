@@ -11,4 +11,3 @@ lr=3e-4
 entropy_factor=1e-4
 frame_skip=4
 tanh_loc
-init_with_lag

@@ -8,18 +8,26 @@ from collections import OrderedDict
 
 import pytest
 import torch
-from torch.optim import Adam
-
 from torchrl.agents import Agent
-from torchrl.agents.agents import SelectKeys, ReplayBufferAgent, LogReward, \
-    RewardNormalizer, mask_batch, BatchSubSampler, UpdateWeights, \
-    CountFramesLog
-from torchrl.data import TensorDict, TensorDictPrioritizedReplayBuffer, \
-    TensorDictReplayBuffer
+from torchrl.agents.agents import (
+    SelectKeys,
+    ReplayBufferAgent,
+    LogReward,
+    RewardNormalizer,
+    mask_batch,
+    BatchSubSampler,
+    UpdateWeights,
+    CountFramesLog,
+)
+from torchrl.data import (
+    TensorDict,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
+)
 
 
 class MockingOptim:
-    param_groups = [{'params': []}]
+    param_groups = [{"params": []}]
 
 
 class MockingCollector:
@@ -33,7 +41,14 @@ class MockingCollector:
 
 
 def mocking_agent() -> Agent:
-    agent = Agent(MockingCollector(), *[None, ] * 3, MockingOptim())
+    agent = Agent(
+        MockingCollector(),
+        *[
+            None,
+        ]
+        * 3,
+        MockingOptim()
+    )
     agent.collected_frames = 0
     agent._pbar_str = OrderedDict()
     return agent
@@ -43,7 +58,13 @@ def test_selectkeys():
     agent = mocking_agent()
     key1 = "first key"
     key2 = "second key"
-    td = TensorDict({key1: torch.randn(3), key2: torch.randn(3), }, [])
+    td = TensorDict(
+        {
+            key1: torch.randn(3),
+            key2: torch.randn(3),
+        },
+        [],
+    )
     agent.register_op("batch_process", SelectKeys([key1]))
     td_out = agent._process_batch_hook(td)
     assert key1 in td_out.keys()
@@ -70,7 +91,12 @@ def test_rb_agent(prioritized):
     key2 = "second key"
     batch = 101
     td = TensorDict(
-        {key1: torch.randn(batch, 3), key2: torch.randn(batch, 3), }, [batch])
+        {
+            key1: torch.randn(batch, 3),
+            key2: torch.randn(batch, 3),
+        },
+        [batch],
+    )
     td_out = agent._process_batch_hook(td)
     assert td_out is td
 
@@ -105,27 +131,13 @@ def test_log_reward(logname):
     assert agent._pbar_str[logname] == 1
 
 
-@pytest.mark.parametrize("logname", ["a", "b"])
-def test_log_reward(logname):
-    agent = mocking_agent()
-    agent.collected_frames = 0
-    agent._pbar_str = OrderedDict()
-
-    log_reward = LogReward(logname)
-    agent.register_op("pre_steps_log", log_reward)
-    td = TensorDict({"reward": torch.ones(3)}, [3])
-    agent._pre_steps_log_hook(td)
-    assert agent._pbar_str[logname] == 1
-
-
 def test_reward_norm():
     torch.manual_seed(0)
     agent = mocking_agent()
 
     reward_normalizer = RewardNormalizer()
     agent.register_op("batch_process", reward_normalizer.update_reward_stats)
-    agent.register_op("process_optim_batch",
-                      reward_normalizer.normalize_reward)
+    agent.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 
     batch = 10
     reward = torch.randn(batch, 1)
@@ -146,8 +158,13 @@ def test_masking():
 
     agent.register_op("batch_process", mask_batch)
     batch = 10
-    td = TensorDict({'mask': torch.zeros(batch, dtype=torch.bool).bernoulli_(),
-                     'tensor': torch.randn(batch, 51)}, [batch])
+    td = TensorDict(
+        {
+            "mask": torch.zeros(batch, dtype=torch.bool).bernoulli_(),
+            "tensor": torch.randn(batch, 51),
+        },
+        [batch],
+    )
     td_out = agent._process_batch_hook(td)
     assert td_out.shape[0] == td.get("mask").sum()
     assert (td["tensor"][td["mask"].squeeze(-1)] == td_out["tensor"]).all()
@@ -165,8 +182,7 @@ def test_subsampler():
 
     agent.register_op(
         "process_optim_batch",
-        BatchSubSampler(batch_size=batch_size,
-                        sub_traj_len=sub_traj_len),
+        BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len),
     )
 
     td = TensorDict(
@@ -174,12 +190,11 @@ def test_subsampler():
             key1: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
             key2: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
         },
-        [2, 10]
+        [2, 10],
     )
 
     td_out = agent._process_optim_batch_hook(td)
-    assert td_out.shape == torch.Size(
-        [batch_size // sub_traj_len, sub_traj_len])
+    assert td_out.shape == torch.Size([batch_size // sub_traj_len, sub_traj_len])
     assert (td_out.get(key1) == td_out.get(key2)).all()
 
 
@@ -199,6 +214,7 @@ def test_updateweights():
         assert agent.collector.called_update_policy_weights_ is (t == T - 1)
     assert agent.collector.called_update_policy_weights_
 
+
 def test_countframes():
     torch.manual_seed(0)
     agent = mocking_agent()
@@ -207,9 +223,12 @@ def test_countframes():
     batch = 10
     count_frames = CountFramesLog(frame_skip=frame_skip)
     agent.register_op("pre_steps_log", count_frames)
-    td = TensorDict({'mask': torch.zeros(batch, dtype=torch.bool).bernoulli_()}, [batch])
+    td = TensorDict(
+        {"mask": torch.zeros(batch, dtype=torch.bool).bernoulli_()}, [batch]
+    )
     agent._pre_steps_log_hook(td)
     assert count_frames.frame_count == td.get("mask").sum() * frame_skip
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

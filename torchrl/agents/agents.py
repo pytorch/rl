@@ -175,8 +175,7 @@ class Agent:
     def save_agent(self) -> None:
         _save = False
         if self.save_agent_file is not None:
-            if (
-                self._collected_frames - self._last_save) > self.save_agent_interval:
+            if (self._collected_frames - self._last_save) > self.save_agent_interval:
                 self._last_save = self._collected_frames
                 _save = True
         if _save:
@@ -243,8 +242,7 @@ class Agent:
 
     def register_op(self, dest: str, op: Callable) -> None:
         if dest == "batch_process":
-            _check_input_output_typehint(op, input=_TensorDict,
-                                         output=_TensorDict)
+            _check_input_output_typehint(op, input=_TensorDict, output=_TensorDict)
             self._batch_process_ops.append(op)
 
         elif dest == "pre_optim_steps":
@@ -252,13 +250,11 @@ class Agent:
             self._pre_optim_ops.append(op)
 
         elif dest == "process_optim_batch":
-            _check_input_output_typehint(op, input=_TensorDict,
-                                         output=_TensorDict)
+            _check_input_output_typehint(op, input=_TensorDict, output=_TensorDict)
             self._process_optim_batch_ops.append(op)
 
         elif dest == "post_loss":
-            _check_input_output_typehint(op, input=_TensorDict,
-                                         output=_TensorDict)
+            _check_input_output_typehint(op, input=_TensorDict, output=_TensorDict)
             self._post_loss_ops.append(op)
 
         elif dest == "post_steps":
@@ -384,8 +380,7 @@ class Agent:
 
     def _optimizer_step(self, losses_td: _TensorDict) -> None:
         # sum all keys that start with 'loss_'
-        loss = sum([item for key, item in losses_td.items() if
-                    key.startswith("loss")])
+        loss = sum([item for key, item in losses_td.items() if key.startswith("loss")])
         loss.backward()
 
         grad_norm = self._grad_clip()
@@ -436,16 +431,14 @@ class Agent:
         for key, item in kwargs.items():
             self._log_dict[key].append(item)
 
-            if (collected_frames - self._last_log.get(key,
-                                                      0)) > self._log_interval:
+            if (collected_frames - self._last_log.get(key, 0)) > self._log_interval:
                 self._last_log[key] = collected_frames
                 _log = True
             else:
                 _log = False
             method = WRITER_METHODS.get(key, "add_scalar")
             if _log and self.writer is not None:
-                getattr(self.writer, method)(key, item,
-                                             global_step=collected_frames)
+                getattr(self.writer, method)(key, item, global_step=collected_frames)
             if method == "add_scalar" and self.progress_bar:
                 self._pbar_str[key] = float(item)
 
@@ -462,8 +455,7 @@ class Agent:
 
     def __repr__(self) -> str:
         loss_str = indent(f"loss={self.loss_module}", 4 * " ")
-        policy_str = indent(f"policy_exploration={self.policy_exploration}",
-                            4 * " ")
+        policy_str = indent(f"policy_exploration={self.policy_exploration}", 4 * " ")
         collector_str = indent(f"collector={self.collector}", 4 * " ")
         optimizer_str = indent(f"optimizer={self.optimizer}", 4 * " ")
         writer = indent(f"writer={self.writer}", 4 * " ")
@@ -485,7 +477,8 @@ class SelectKeys:
     def __init__(self, keys: Sequence[str]):
         if isinstance(keys, str):
             raise RuntimeError(
-                "Expected keys to be an iterable of str, got str instead")
+                "Expected keys to be an iterable of str, got str instead"
+            )
         self.keys = keys
 
     def __call__(self, batch: _TensorDict) -> _TensorDict:
@@ -529,14 +522,12 @@ class LogReward:
         if "mask" in batch.keys():
             return (
                 self.logname,
-                batch.get("reward")[
-                    batch.get("mask").squeeze(-1)].mean().item(),
+                batch.get("reward")[batch.get("mask").squeeze(-1)].mean().item(),
             )
         return self.logname, batch.get("reward").mean().item()
 
 
 class RewardNormalizer:
-
     def __init__(self, decay: float = 0.999):
         self._normalize_has_been_called = False
         self._update_has_been_called = False
@@ -565,7 +556,6 @@ class RewardNormalizer:
             decay * self._reward_stats.get("count", 0.0) + reward.numel()
         )
 
-        mean = self._reward_stats["mean"] = sum / count
         if count > 1:
             var = self._reward_stats["var"] = (ssq - sum.pow(2) / count) / (count - 1)
         else:
@@ -624,8 +614,7 @@ class BatchSubSampler:
         if batch.ndimension() == 1:
             return batch[torch.randperm(batch.shape[0])[: self.batch_size]]
 
-        sub_traj_len = self.sub_traj_len if self.sub_traj_len > 0 else \
-        batch.shape[1]
+        sub_traj_len = self.sub_traj_len if self.sub_traj_len > 0 else batch.shape[1]
         if "mask" in batch.keys():
             # if a valid mask is present, it's important to sample only
             # valid steps
@@ -636,8 +625,7 @@ class BatchSubSampler:
             )
         else:
             traj_len = (
-                torch.ones(batch.shape[0], device=batch.device,
-                           dtype=torch.bool)
+                torch.ones(batch.shape[0], device=batch.device, dtype=torch.bool)
                 * batch.shape[1]
             )
         len_mask = traj_len >= sub_traj_len
@@ -678,8 +666,7 @@ class BatchSubSampler:
         td = td.apply(
             lambda t: t.gather(
                 dim=1,
-                index=expand_right(seq_idx,
-                                   (batch_size, sub_traj_len, *t.shape[2:])),
+                index=expand_right(seq_idx, (batch_size, sub_traj_len, *t.shape[2:])),
             ),
             batch_size=(batch_size, sub_traj_len),
         )
@@ -765,8 +752,7 @@ class Recorder:
 
 
 class UpdateWeights:
-    def __init__(self, collector: _DataCollector,
-                 update_weights_interval: int):
+    def __init__(self, collector: _DataCollector, update_weights_interval: int):
         self.collector = collector
         self.update_weights_interval = update_weights_interval
         self.counter = 0
