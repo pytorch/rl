@@ -548,7 +548,6 @@ class TestTransforms:
             }
         )
 
-        print()
         final_spec = result[key2]
         assert final_spec.shape[0] == N
         for key in keys:
@@ -597,7 +596,7 @@ class TestTransforms:
         passed_back_td = cat_frames.reset(td)
 
         assert buffer_length1 == 2
-        assert td == passed_back_td
+        assert td is passed_back_td
         assert 0 == len(cat_frames.buffer)
 
     @pytest.mark.parametrize("device", get_available_devices())
