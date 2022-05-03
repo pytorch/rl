@@ -830,7 +830,7 @@ class CatFrames(ObservationTransform):
             Default is `4`.
         cat_dim (int, optional): dimension along which concatenate the
             observations. Default is `cat_dim=-3`.
-        keys (list of int, optional): keys pointing to the franes that have
+        keys (list of int, optional): keys pointing to the frames that have
             to be concatenated.
 
     """
