@@ -17,7 +17,8 @@ except ImportError:
 
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
-from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
+from torchrl.envs.transforms import RewardScaling, TransformedEnv
+from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     parser_collector_args_offpolicy,
@@ -39,8 +40,7 @@ from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
     parser_replay_args,
 )
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
+from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
 
 
 def make_args():

@@ -46,7 +46,17 @@ WRITER_METHODS = {
     "loss": "add_scalar",
 }
 
-__all__ = ["Trainer", "BatchSubSampler", "CountFramesLog", "LogReward", "Recorder", "ReplayBuffer", "RewardNormalizer", "SelectKeys", "UpdateWeights"]
+__all__ = [
+    "Trainer",
+    "BatchSubSampler",
+    "CountFramesLog",
+    "LogReward",
+    "Recorder",
+    "ReplayBuffer",
+    "RewardNormalizer",
+    "SelectKeys",
+    "UpdateWeights",
+]
 
 
 class Trainer:

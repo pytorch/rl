@@ -14,6 +14,7 @@ from mocking_classes import (
     DiscreteActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
 )
+from torchrl.envs.libs.gym import _has_gym
 from torchrl.trainers.helpers import parser_env_args, transformed_env_constructor
 from torchrl.trainers.helpers.models import (
     make_dqn_actor,
@@ -24,7 +25,6 @@ from torchrl.trainers.helpers.models import (
     make_sac_model,
     make_redq_model,
 )
-from torchrl.envs.libs.gym import _has_gym
 
 
 ## these tests aren't truly unitary but setting up a fake env for the

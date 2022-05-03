@@ -8,7 +8,6 @@ from typing import Callable, Optional, Union
 
 import torch
 
-from torchrl.trainers.env_creator import env_creator, EnvCreator
 from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.transforms import (
@@ -28,6 +27,7 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.transforms.transforms import gSDENoise
 from torchrl.record.recorder import VideoRecorder
+from torchrl.trainers.env_creator import env_creator, EnvCreator
 
 __all__ = [
     "correct_for_frame_skip",

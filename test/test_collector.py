@@ -16,7 +16,6 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
 )
 from torch import nn
-from torchrl.trainers.env_creator import EnvCreator
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.collectors.collectors import (
     RandomPolicy,
@@ -28,6 +27,7 @@ from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
+from torchrl.trainers.env_creator import EnvCreator
 
 
 def make_make_env(env_name="conv"):

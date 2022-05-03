@@ -10,6 +10,12 @@ from warnings import warn
 
 from torch import optim
 
+from torchrl.collectors.collectors import _DataCollector
+from torchrl.data import ReplayBuffer
+from torchrl.envs.common import _EnvClass
+from torchrl.modules import TDModule, TDModuleWrapper, reset_noise
+from torchrl.objectives.costs.common import _LossModule
+from torchrl.objectives.costs.utils import _TargetNetUpdate
 from torchrl.trainers.trainers import (
     Trainer,
     SelectKeys,
@@ -22,12 +28,6 @@ from torchrl.trainers.trainers import (
     Recorder,
     CountFramesLog,
 )
-from torchrl.collectors.collectors import _DataCollector
-from torchrl.data import ReplayBuffer
-from torchrl.envs.common import _EnvClass
-from torchrl.modules import TDModule, TDModuleWrapper, reset_noise
-from torchrl.objectives.costs.common import _LossModule
-from torchrl.objectives.costs.utils import _TargetNetUpdate
 
 OPTIMIZERS = {
     "adam": optim.Adam,

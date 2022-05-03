@@ -16,7 +16,7 @@ except ImportError:
     _configargparse = False
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
-from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
+from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,
     parser_collector_args_onpolicy,
@@ -34,7 +34,7 @@ from torchrl.trainers.helpers.models import (
     parser_model_args_continuous,
 )
 from torchrl.trainers.helpers.recorder import parser_recorder_args
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
+from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
 
 
 def make_args():

@@ -8,6 +8,11 @@ from collections import OrderedDict
 
 import pytest
 import torch
+from torchrl.data import (
+    TensorDict,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
+)
 from torchrl.trainers import Trainer
 from torchrl.trainers.trainers import (
     SelectKeys,
@@ -18,11 +23,6 @@ from torchrl.trainers.trainers import (
     BatchSubSampler,
     UpdateWeights,
     CountFramesLog,
-)
-from torchrl.data import (
-    TensorDict,
-    TensorDictPrioritizedReplayBuffer,
-    TensorDictReplayBuffer,
 )
 
 
