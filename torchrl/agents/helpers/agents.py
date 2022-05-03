@@ -147,7 +147,7 @@ def make_agent(
         clip_norm=args.clip_norm,
     )
 
-    if args.noisy:
+    if hasattr(args, 'noisy') and args.noisy:
         agent.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
 
     if args.selected_keys:
