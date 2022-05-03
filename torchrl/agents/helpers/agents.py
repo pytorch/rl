@@ -147,7 +147,7 @@ def make_agent(
         clip_norm=args.clip_norm,
     )
 
-    if hasattr(args, 'noisy') and args.noisy:
+    if hasattr(args, "noisy") and args.noisy:
         agent.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
 
     if args.selected_keys:
@@ -164,10 +164,7 @@ def make_agent(
         agent.register_op("batch_process", mask_batch)
         agent.register_op(
             "process_optim_batch",
-            BatchSubSampler(
-                batch_size=args.batch_size,
-                sub_traj_len=args.sub_traj_len
-            ),
+            BatchSubSampler(batch_size=args.batch_size, sub_traj_len=args.sub_traj_len),
         )
 
     if optim_scheduler is not None:
