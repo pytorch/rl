@@ -1384,7 +1384,7 @@ class TensorDict(_TensorDict):
         batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
         device: Optional[DEVICE_TYPING] = None,
         _meta_source: Optional[dict] = None,
-    ):
+    ) -> object:
         self._tensordict: Dict = dict()
         self._tensordict_meta: OrderedDict = OrderedDict()
         if not isinstance(source, (_TensorDict, dict)):
