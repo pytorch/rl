@@ -531,11 +531,13 @@ class TestTransforms:
         key2 = "second key"
         keys = [key1, key2]
         cat_frames = CatFrames(N=N, keys=keys)
-        mins = [0, .5]
-        maxes = [.5, 1]
+        mins = [0, 0.5]
+        maxes = [0.5, 1]
         observation_spec = CompositeSpec(
             **{
-                key: NdBoundedTensorSpec(space_min, space_max, (1, 32, 32), dtype=torch.double)
+                key: NdBoundedTensorSpec(
+                    space_min, space_max, (1, 32, 32), dtype=torch.double
+                )
                 for key, space_min, space_max in zip(keys, mins, maxes)
             }
         )
@@ -543,7 +545,9 @@ class TestTransforms:
         result = cat_frames.transform_observation_spec(observation_spec)
         observation_spec = CompositeSpec(
             **{
-                key: NdBoundedTensorSpec(space_min, space_max, (1, 32, 32), dtype=torch.double)
+                key: NdBoundedTensorSpec(
+                    space_min, space_max, (1, 32, 32), dtype=torch.double
+                )
                 for key, space_min, space_max in zip(keys, mins, maxes)
             }
         )
@@ -552,8 +556,12 @@ class TestTransforms:
         assert final_spec.shape[0] == N
         for key in keys:
             for i in range(N):
-                assert torch.equal(result[key].space.maximum[i], observation_spec[key].space.maximum[0])
-                assert torch.equal(result[key].space.minimum[i], observation_spec[key].space.minimum[0])
+                assert torch.equal(
+                    result[key].space.maximum[i], observation_spec[key].space.maximum[0]
+                )
+                assert torch.equal(
+                    result[key].space.minimum[i], observation_spec[key].space.minimum[0]
+                )
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_catframes_buffer_check_latest_frame(self, device):
@@ -564,18 +572,16 @@ class TestTransforms:
         key1_tensor = torch.zeros(1, 1, 32, 32, device=device)
         key2_tensor = torch.ones(1, 1, 32, 32, device=device)
         key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(
-            dict(zip(keys, key_tensors)), [1]
-        )
+        td = TensorDict(dict(zip(keys, key_tensors)), [1])
         cat_frames = CatFrames(N=N, keys=keys)
 
         cat_frames(td)
         latest_frame = td.get(key2)
 
         assert latest_frame.shape[1] == N
-        for i in range(0, N-1):
+        for i in range(0, N - 1):
             assert torch.equal(latest_frame[0][i], key2_tensor[0][0])
-        assert torch.equal(latest_frame[0][N-1], key1_tensor[0][0])
+        assert torch.equal(latest_frame[0][N - 1], key1_tensor[0][0])
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_catframes_reset(self, device):
@@ -586,9 +592,7 @@ class TestTransforms:
         key1_tensor = torch.zeros(1, 1, 32, 32, device=device)
         key2_tensor = torch.ones(1, 1, 32, 32, device=device)
         key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(
-            dict(zip(keys, key_tensors)), [1]
-        )
+        td = TensorDict(dict(zip(keys, key_tensors)), [1])
         cat_frames = CatFrames(N=N, keys=keys)
 
         cat_frames(td)
