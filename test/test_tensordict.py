@@ -509,6 +509,27 @@ class TestTensorDicts:
             "td_reset_bs",
         ],
     )
+    def test_assert(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        with pytest.raises(
+            ValueError,
+            match="Converting a tensordict to boolean value is not permitted",
+        ):
+            assert td
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
     def test_expand(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)

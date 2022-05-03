@@ -23,7 +23,6 @@ from torchrl.objectives import (
     DDPGLoss,
     DistributionalDQNLoss,
     DQNLoss,
-    GAE,
     HardUpdate,
     KLPENPPOLoss,
     PPOLoss,
@@ -35,6 +34,7 @@ from torchrl.objectives.costs.redq import REDQLoss
 
 # from torchrl.objectives.costs.redq import REDQLoss
 from torchrl.objectives.costs.utils import _TargetNetUpdate
+from torchrl.objectives.returns.advantages import GAE
 
 
 def make_target_updater(
