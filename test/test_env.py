@@ -13,7 +13,7 @@ import torch
 import yaml
 from mocking_classes import DiscreteActionVecMockEnv
 from scipy.stats import chisquare
-from torchrl.agents import EnvCreator
+from torchrl.trainers import EnvCreator
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,

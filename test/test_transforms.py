@@ -10,7 +10,7 @@ from _utils_internal import get_available_devices
 from mocking_classes import ContinuousActionVecMockEnv
 from torch import Tensor
 from torch import multiprocessing as mp
-from torchrl.agents.env_creator import EnvCreator
+from torchrl.trainers.env_creator import EnvCreator
 from torchrl.data import NdBoundedTensorSpec, CompositeSpec
 from torchrl.data import TensorDict
 from torchrl.envs import GymEnv, ParallelEnv

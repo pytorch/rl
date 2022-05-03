@@ -8,10 +8,10 @@ from collections import OrderedDict
 
 import pytest
 import torch
-from torchrl.agents import Agent
-from torchrl.agents.agents import (
+from torchrl.trainers import Trainer
+from torchrl.trainers.trainers import (
     SelectKeys,
-    ReplayBufferAgent,
+    ReplayBufferTrainer,
     LogReward,
     RewardNormalizer,
     mask_batch,
@@ -40,8 +40,8 @@ class MockingCollector:
         self.called_update_policy_weights_ = True
 
 
-def mocking_agent() -> Agent:
-    agent = Agent(
+def mocking_agent() -> Trainer:
+    agent = Trainer(
         MockingCollector(),
         *[
             None,
@@ -81,7 +81,7 @@ def test_rb_agent(prioritized):
         replay_buffer = TensorDictReplayBuffer(S)
 
     N = 9
-    rb_agent = ReplayBufferAgent(replay_buffer=replay_buffer, batch_size=N)
+    rb_agent = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
 
     agent.register_op("batch_process", rb_agent.extend)
     agent.register_op("process_optim_batch", rb_agent.sample)

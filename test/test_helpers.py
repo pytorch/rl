@@ -14,8 +14,8 @@ from mocking_classes import (
     DiscreteActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
 )
-from torchrl.agents.helpers import parser_env_args, transformed_env_constructor
-from torchrl.agents.helpers.models import (
+from torchrl.trainers.helpers import parser_env_args, transformed_env_constructor
+from torchrl.trainers.helpers.models import (
     make_dqn_actor,
     parser_model_args_discrete,
     parser_model_args_continuous,

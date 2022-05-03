@@ -46,10 +46,10 @@ WRITER_METHODS = {
     "loss": "add_scalar",
 }
 
-__all__ = ["Agent"]
+__all__ = ["Trainer", "BatchSubSampler", "CountFramesLog", "LogReward", "Recorder", "ReplayBuffer", "RewardNormalizer", "SelectKeys", "UpdateWeights"]
 
 
-class Agent:
+class Trainer:
     """A generic Agent class.
 
     An agent is responsible of collecting data and training the model.
@@ -181,7 +181,7 @@ class Agent:
         if _save:
             torch.save(self.state_dict(), self.save_agent_file)
 
-    def load_from_file(self, file: Union[str, pathlib.Path]) -> Agent:
+    def load_from_file(self, file: Union[str, pathlib.Path]) -> Trainer:
         loaded_dict: OrderedDict = torch.load(file)
 
         # checks that keys match
@@ -485,7 +485,7 @@ class SelectKeys:
         return batch.select(*self.keys)
 
 
-class ReplayBufferAgent:
+class ReplayBufferTrainer:
     """
     Args:
         replay_buffer (ReplayBuffer): replay buffer to be used.

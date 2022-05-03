@@ -28,7 +28,7 @@ def generalized_advantage_estimate(
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         next_state_value (Tensor): value function result with new_state input.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
-        reward (Tensor): agent reward of taking actions in the environment.
+        reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
     """
@@ -76,7 +76,7 @@ def td_advantage_estimate(
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         next_state_value (Tensor): value function result with new_state input.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
-        reward (Tensor): agent reward of taking actions in the environment.
+        reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
     """

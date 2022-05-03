@@ -10,10 +10,10 @@ from warnings import warn
 
 from torch import optim
 
-from torchrl.agents.agents import (
-    Agent,
+from torchrl.trainers.trainers import (
+    Trainer,
     SelectKeys,
-    ReplayBufferAgent,
+    ReplayBufferTrainer,
     LogReward,
     RewardNormalizer,
     mask_batch,
@@ -36,12 +36,12 @@ OPTIMIZERS = {
 }
 
 __all__ = [
-    "make_agent",
-    "parser_agent_args",
+    "make_trainer",
+    "parser_trainer_args",
 ]
 
 
-def make_agent(
+def make_trainer(
     collector: _DataCollector,
     loss_module: _LossModule,
     recorder: Optional[_EnvClass] = None,
@@ -50,13 +50,13 @@ def make_agent(
     replay_buffer: Optional[ReplayBuffer] = None,
     writer: Optional["SummaryWriter"] = None,
     args: Optional[Namespace] = None,
-) -> Agent:
-    """Creates an Agent instance given its constituents.
+) -> Trainer:
+    """Creates a Trainer instance given its constituents.
 
     Args:
         collector (_DataCollector): A data collector to be used to collect data.
         loss_module (_LossModule): A TorchRL loss module
-        recorder (_EnvClass, optional): a recorder environment. If None, the agent will train the policy without
+        recorder (_EnvClass, optional): a recorder environment. If None, the trainer will train the policy without
             testing it.
         target_net_updater (_TargetNetUpdate, optional): A target network update object.
         policy_exploration (TDModule or TDModuleWrapper, optional): a policy to be used for recording and exploration
@@ -67,13 +67,13 @@ def make_agent(
             arguments are used.
 
     Returns:
-        An agent built with the input objects. The optimizer is built by this helper function using the args provided.
+        A trainer built with the input objects. The optimizer is built by this helper function using the args provided.
 
     Examples:
         >>> import torch
         >>> import tempfile
         >>> from torch.utils.tensorboard import SummaryWriter
-        >>> from torchrl.agents import Agent, EnvCreator
+        >>> from torchrl.trainers import Trainer, EnvCreator
         >>> from torchrl.collectors.collectors import SyncDataCollector
         >>> from torchrl.data import TensorDictReplayBuffer
         >>> from torchrl.envs import GymEnv
@@ -97,16 +97,17 @@ def make_agent(
         >>> replay_buffer = TensorDictReplayBuffer(1000)
         >>> dir = tempfile.gettempdir()
         >>> writer = SummaryWriter(log_dir=dir)
-        >>> agent = make_agent(collector, loss_module, recorder, target_net_updater, policy_exploration,
+        >>> trainer = make_trainer(collector, loss_module, recorder, target_net_updater, policy_exploration,
         ...    replay_buffer, writer)
-        >>> print(agent)
+        >>> print(trainer)
 
     """
     if args is None:
         warn(
-            "Getting default args for the agent. This should be only used for debugging."
+            "Getting default args for the trainer. "
+            "This should be only used for debugging."
         )
-        parser = parser_agent_args(argparse.ArgumentParser())
+        parser = parser_trainer_args(argparse.ArgumentParser())
         parser.add_argument("--frame_skip", default=1)
         parser.add_argument("--total_frames", default=1000)
         parser.add_argument("--record_frames", default=10)
@@ -134,7 +135,7 @@ def make_agent(
         txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(args).items())])
         writer.add_text("hparams", txt)
 
-    agent = Agent(
+    trainer = Trainer(
         collector=collector,
         frame_skip=args.frame_skip,
         total_frames=args.total_frames * args.frame_skip,
@@ -148,43 +149,43 @@ def make_agent(
     )
 
     if hasattr(args, "noisy") and args.noisy:
-        agent.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
+        trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
 
     if args.selected_keys:
-        agent.register_op("batch_process", SelectKeys(args.selected_keys))
+        trainer.register_op("batch_process", SelectKeys(args.selected_keys))
 
     if replay_buffer is not None:
         # replay buffer is used 2 or 3 times: to register data, to sample
         # data and to update priorities
-        rb_agent = ReplayBufferAgent(replay_buffer, args.batch_size)
-        agent.register_op("batch_process", rb_agent.extend)
-        agent.register_op("process_optim_batch", rb_agent.sample)
-        agent.register_op("post_loss", rb_agent.update_priority)
+        rb_trainer = ReplayBufferTrainer(replay_buffer, args.batch_size)
+        trainer.register_op("batch_process", rb_trainer.extend)
+        trainer.register_op("process_optim_batch", rb_trainer.sample)
+        trainer.register_op("post_loss", rb_trainer.update_priority)
     else:
-        agent.register_op("batch_process", mask_batch)
-        agent.register_op(
+        trainer.register_op("batch_process", mask_batch)
+        trainer.register_op(
             "process_optim_batch",
             BatchSubSampler(batch_size=args.batch_size, sub_traj_len=args.sub_traj_len),
         )
 
     if optim_scheduler is not None:
-        agent.register_op("post_optim", optim_scheduler.step)
+        trainer.register_op("post_optim", optim_scheduler.step)
 
     if target_net_updater is not None:
-        agent.register_op("post_optim", target_net_updater.step)
+        trainer.register_op("post_optim", target_net_updater.step)
 
     if args.normalize_rewards_online:
         # if used the running statistics of the rewards are computed and the
         # rewards used for training will be normalized based on these.
         reward_normalizer = RewardNormalizer()
-        agent.register_op("batch_process", reward_normalizer.update_reward_stats)
-        agent.register_op("process_optim_batch", reward_normalizer.normalize_reward)
+        trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
+        trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 
     if policy_exploration is not None and hasattr(policy_exploration, "step"):
-        agent.register_op("post_steps", policy_exploration.step)
+        trainer.register_op("post_steps", policy_exploration.step)
 
     if recorder is not None:
-        agent.register_op(
+        trainer.register_op(
             "post_steps_log",
             Recorder(
                 record_frames=args.record_frames,
@@ -194,17 +195,17 @@ def make_agent(
                 record_interval=args.record_interval,
             ),
         )
-    agent.register_op("post_steps", UpdateWeights(collector, 1))
+    trainer.register_op("post_steps", UpdateWeights(collector, 1))
 
-    agent.register_op("pre_steps_log", LogReward())
-    agent.register_op("pre_steps_log", CountFramesLog(frame_skip=args.frame_skip))
+    trainer.register_op("pre_steps_log", LogReward())
+    trainer.register_op("pre_steps_log", CountFramesLog(frame_skip=args.frame_skip))
 
-    return agent
+    return trainer
 
 
-def parser_agent_args(parser: ArgumentParser) -> ArgumentParser:
+def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
     """
-    Populates the argument parser to build the agent.
+    Populates the argument parser to build the trainer.
 
     Args:
         parser (ArgumentParser): parser to be populated.

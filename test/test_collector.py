@@ -16,7 +16,7 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
 )
 from torch import nn
-from torchrl.agents.env_creator import EnvCreator
+from torchrl.trainers.env_creator import EnvCreator
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.collectors.collectors import (
     RandomPolicy,
