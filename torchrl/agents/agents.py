@@ -556,6 +556,7 @@ class RewardNormalizer:
             decay * self._reward_stats.get("count", 0.0) + reward.numel()
         )
 
+        self._reward_stats["mean"] = sum / count
         if count > 1:
             var = self._reward_stats["var"] = (ssq - sum.pow(2) / count) / (count - 1)
         else:
