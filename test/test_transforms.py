@@ -596,7 +596,7 @@ class TestTransforms:
         buffer_length1 = len(cat_frames.buffer)
         passed_back_td = cat_frames.reset(td)
 
-        assert 2 == buffer_length1
+        assert buffer_length1 == 2
         assert td == passed_back_td
         assert 0 == len(cat_frames.buffer)
 
