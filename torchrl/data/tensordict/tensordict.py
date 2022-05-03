@@ -541,6 +541,9 @@ dtype=torch.float32)},
             batch_size=[*shape, *self.batch_size],
         )
 
+    def __bool__(self) -> bool:
+        raise ValueError("Converting a tensordict to boolean value is not permitted")
+
     def __ne__(self, other: object) -> _TensorDict:
         """XOR operation over two tensordicts, for evey key. The two
         tensordicts must have the same key set.
