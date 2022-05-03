@@ -57,7 +57,7 @@ def generalized_advantage_estimate(
     return advantage[..., :time_steps, :], value_target
 
 
-def a2c_advantage_estimate(
+def td_advantage_estimate(
     gamma: float,
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
