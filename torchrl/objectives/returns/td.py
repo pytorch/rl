@@ -20,14 +20,11 @@ from torch import Tensor
 from torchrl.envs.utils import step_tensordict
 from ...data.tensordict.tensordict import _TensorDict
 from ...modules import TDModule
-from .functional import a2c_advantage_estimate
+from .functional import td_advantage_estimate
 
 
-class A2C:
-    """A2C advantage function.
-
-    Ref: Asynchronous Methods for Deep Reinforcement Learning (https://arxiv.org/pdf/1602.01783.pdf) by
-    Volodymyr Mnih et al.
+class TDEstimate:
+    """Temporal Difference estimate of advantage function.
 
     Args:
         gamma (scalar): exponential mean discount.
@@ -104,7 +101,7 @@ class A2C:
 
         done = tensordict.get("done")
         with torch.set_grad_enabled(self.gradient_mode):
-            adv = a2c_advantage_estimate(gamma, value, next_value, reward, done)
+            adv = td_advantage_estimate(gamma, value, next_value, reward, done)
             tensordict.set("advantage", adv.detach())
             tensordict.set("advantage_diff", adv)
         return tensordict

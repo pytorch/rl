@@ -7,7 +7,7 @@ from torchrl.envs.utils import step_tensordict
 from torchrl.modules import ProbabilisticTDModule, TDModule
 from torchrl.objectives import GAE, distance_loss
 from torchrl.objectives.costs.common import _LossModule
-from torchrl.objectives.returns.a2c import A2C
+from torchrl.objectives.returns.td import A2C
 
 
 class ReinforceLoss(_LossModule):

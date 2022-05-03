@@ -44,6 +44,7 @@ from torchrl.objectives.costs.redq import (
 )
 from torchrl.objectives.costs.reinforce import ReinforceLoss
 from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
+from torchrl.objectives.returns.td import TDEstimate
 
 
 class _check_td_steady:
@@ -1172,16 +1173,23 @@ class TestPPO:
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
+    @pytest.mark.parametrize("advantage", ("gae", "td"))
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_ppo(self, loss_class, device, gradient_mode):
+    def test_ppo(self, loss_class, device, gradient_mode, advantage):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
 
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
-        gae = GAE(
-            gamma=0.9, lamda=0.9, value_network=value, gradient_mode=gradient_mode
-        )
+        if advantage == "gae":
+            gae = GAE(
+                gamma=0.9, lamda=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        else:
+            gae = TDEstimate(
+                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+
         loss_fn = loss_class(
             actor, value, advantage_module=gae, gamma=0.9, loss_critic_type="l2"
         )
