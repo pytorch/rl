@@ -102,6 +102,7 @@ class _BatchedEnv(_EnvClass):
     """
 
     _verbose: bool = False
+    _excluded_wrapped_keys = ["is_closed", "parent_channels", "batch_size"]
 
     def __init__(
         self,
@@ -119,8 +120,8 @@ class _BatchedEnv(_EnvClass):
         shared_memory: bool = True,
         memmap: bool = False,
     ):
-        self.is_closed = True
         super().__init__(device=device)
+        self.is_closed = True
 
         create_env_kwargs = dict() if create_env_kwargs is None else create_env_kwargs
         if callable(create_env_fn):
@@ -394,6 +395,10 @@ class SerialEnv(_BatchedEnv):
                 f"Got attribute {attr}."
             )
         else:
+            if attr in self._excluded_wrapped_keys:
+                raise AttributeError(
+                    f"Getting {attr} resulted in an exception"
+                )
             try:
                 # determine if attr is a callable
                 callable_attr = callable(getattr(self._dummy_env, attr))
@@ -596,6 +601,10 @@ class ParallelEnv(_BatchedEnv):
                 "dispatching built-in private methods is not permitted."
             )
         else:
+            if attr in self._excluded_wrapped_keys:
+                raise AttributeError(
+                    f"Getting {attr} resulted in an exception"
+                )
             try:
                 _ = getattr(self._dummy_env, attr)
                 if self.is_closed:
