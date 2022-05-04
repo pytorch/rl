@@ -117,8 +117,8 @@ class _BatchedEnv(_EnvClass):
         shared_memory: bool = True,
         memmap: bool = False,
     ):
-        super().__init__(device=device)
         self.is_closed = True
+        super().__init__(device=device)
 
         create_env_kwargs = dict() if create_env_kwargs is None else create_env_kwargs
         if callable(create_env_fn):
@@ -131,7 +131,12 @@ class _BatchedEnv(_EnvClass):
                 )
         if isinstance(create_env_kwargs, dict):
             create_env_kwargs = [create_env_kwargs for _ in range(num_workers)]
-        self._dummy_env = create_env_fn[0](**create_env_kwargs[0])
+
+        self._dummy_env_instance = None
+        self._dummy_env_fun = CloudpickleWrapper(
+            create_env_fn[0], **create_env_kwargs[0]
+        )
+        self._dummy_env = self._dummy_env_fun()
         self.num_workers = num_workers
         self.create_env_fn = create_env_fn
         self.create_env_kwargs = create_env_kwargs
@@ -152,6 +157,20 @@ class _BatchedEnv(_EnvClass):
         self._observation_spec = self._dummy_env.observation_spec
         self._reward_spec = self._dummy_env.reward_spec
         self._dummy_env.close()
+        self._dummy_env = None
+
+    @property
+    def _dummy_env(self) -> _EnvClass:
+        if (
+            self._dummy_env_instance is not None
+            and not self._dummy_env_instance.is_closed
+        ):
+            return self._dummy_env_instance
+        self._dummy_env_instance = self._dummy_env_fun()
+
+    @_dummy_env.setter
+    def _dummy_env(self, value: _EnvClass) -> None:
+        self._dummy_env_instance = value
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError

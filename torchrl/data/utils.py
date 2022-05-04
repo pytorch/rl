@@ -31,13 +31,14 @@ INDEX_TYPING = Union[None, int, slice, Tensor, List[Any], Tuple[Any, ...]]
 
 
 class CloudpickleWrapper(object):
-    def __init__(self, fn: Callable):
+    def __init__(self, fn: Callable, **kwargs):
         if fn.__class__.__name__ == "EnvCreator":
             raise RuntimeError(
                 "CloudpickleWrapper usage with EnvCreator class is "
                 "prohibited as it breaks the transmission of shared tensors."
             )
         self.fn = fn
+        self.kwargs = kwargs
 
     def __getstate__(self):
         import cloudpickle
@@ -50,6 +51,7 @@ class CloudpickleWrapper(object):
         self.fn = pickle.loads(ob)
 
     def __call__(self, **kwargs) -> Any:
+        kwargs = {k: item for k, item in kwargs.items()}.update(self.kwargs)
         return self.fn(**kwargs)
 
 
