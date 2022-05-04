@@ -58,7 +58,10 @@ __all__ = [
     "UpdateWeights",
 ]
 
-
+TYPE_DESCR = {
+    float: '4.4f',
+    int: ''
+}
 class Trainer:
     """A generic Agent class.
 
@@ -459,7 +462,7 @@ class Trainer:
             self._pbar.set_description(
                 ", ".join(
                     [
-                        f"{key}: {item:4.4f}"
+                        f"{key}: {item:{TYPE_DESCR.get(type(item), '4.4f')}}"
                         for key, item in self._pbar_str.items()
                     ]
                 )
