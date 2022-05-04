@@ -2,6 +2,16 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from argparse import Namespace
+
+from tensorboard.backend.event_processing import event_accumulator
+from torch.utils.tensorboard import SummaryWriter
+from torchrl.envs.libs.dm_control import _has_dmc
+
+import tempfile
+from torchrl.trainers import Recorder
+from torchrl.trainers.helpers import transformed_env_constructor
+from os import walk, path
 
 import argparse
 from collections import OrderedDict
@@ -198,9 +208,55 @@ def test_subsampler():
     assert (td_out.get(key1) == td_out.get(key2)).all()
 
 
+@pytest.mark.skipif(not _has_dmc, reason="No dm_control library")
 def test_recorder():
-    pass
+    with tempfile.TemporaryDirectory() as folder:
+        writer = SummaryWriter(log_dir=folder)
+        args = Namespace()
+        args.env_name = "humanoid"
+        args.env_task = "walk"
+        args.env_library = "dm_control"
+        args.frame_skip = 1
+        args.from_pixels = False
+        args.vecnorm = False
+        args.norm_rewards = False
+        args.reward_scaling = False
+        args.noops = 0
+        args.record_frames = 24 // args.frame_skip
+        args.record_interval = 2
 
+        N = 8
+
+        recorder = transformed_env_constructor(
+            args,
+            video_tag="tmp",
+            norm_obs_only=True,
+            stats={'loc': 0, 'scale': 1},
+            writer=writer,
+        )()
+
+        recorder = Recorder(
+            record_frames=args.record_frames,
+            frame_skip=args.frame_skip,
+            policy_exploration=None,
+            recorder=recorder,
+            record_interval=args.record_interval,
+        )
+
+        for _ in range(N):
+            recorder(None)
+
+        for (dirpath, dirnames, filenames) in walk(folder):
+            break
+
+        filename = filenames[0]
+        ea = event_accumulator.EventAccumulator(
+            path.join(folder, filename),
+            size_guidance={event_accumulator.IMAGES: 0, })
+        ea.Reload()
+        print(ea.Tags())
+        img = ea.Images('tmp_humanoid_video')
+        assert len(img) == N // args.record_interval
 
 def test_updateweights():
     torch.manual_seed(0)

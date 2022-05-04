@@ -749,15 +749,18 @@ class Recorder:
         out = None
         if self._count % self.record_interval == 0:
             with set_exploration_mode(self.exploration_mode):
-                self.policy_exploration.eval()
+                if isinstance(self.policy_exploration, torch.nn.Module):
+                    self.policy_exploration.eval()
                 self.recorder.eval()
                 if isinstance(self.recorder, TransformedEnv):
                     self.recorder.transform.eval()
                 td_record = self.recorder.rollout(
                     policy=self.policy_exploration,
                     n_steps=self.record_frames,
+                    auto_reset=True,
                 )
-                self.policy_exploration.train()
+                if isinstance(self.policy_exploration, torch.nn.Module):
+                    self.policy_exploration.train()
                 self.recorder.train()
                 reward = td_record.get("reward").mean() / self.frame_skip
                 self.recorder.transform.dump()
