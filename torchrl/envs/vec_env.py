@@ -177,6 +177,7 @@ class _BatchedEnv(_EnvClass):
         ):
             return self._dummy_env_instance
         self._dummy_env_instance = self._dummy_env_fun()
+        return self._dummy_env_instance
 
     @_dummy_env.setter
     def _dummy_env(self, value: _EnvClass) -> None:
