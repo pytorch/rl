@@ -20,6 +20,8 @@ from torchrl.envs.common import _EnvClass, make_tensordict
 
 __all__ = ["SerialEnv", "ParallelEnv"]
 
+from torchrl.trainers import EnvCreator
+
 
 def _check_start(fun):
     def decorated_fun(self: _BatchedEnv, *args, **kwargs):
@@ -133,9 +135,17 @@ class _BatchedEnv(_EnvClass):
             create_env_kwargs = [create_env_kwargs for _ in range(num_workers)]
 
         self._dummy_env_instance = None
-        self._dummy_env_fun = CloudpickleWrapper(
-            create_env_fn[0], **create_env_kwargs[0]
-        )
+        try:
+            self._dummy_env_fun = CloudpickleWrapper(
+                create_env_fn[0], **create_env_kwargs[0]
+            )
+        except RuntimeError as err:
+            if isinstance(create_env_fn[0], EnvCreator):
+                self._dummy_env_fun = create_env_fn[0]
+                self._dummy_env_fun.create_env_kwargs.update(create_env_kwargs[0])
+            else:
+                raise err
+
         self._dummy_env = self._dummy_env_fun()
         self.num_workers = num_workers
         self.create_env_fn = create_env_fn
