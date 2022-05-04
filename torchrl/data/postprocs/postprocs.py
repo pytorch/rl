@@ -24,11 +24,10 @@ def _conv1d_reward(
         raise RuntimeError(
             f"Expected a B x T x 1 reward tensor, got reward.shape = {reward.shape}"
         )
-    reward_pad = F.pad(reward, [0, 0, 0, n_steps_max]).transpose(
-        -1, -2
-    )
-    reward_pad = torch.conv1d(reward_pad, gammas)
-    partial_return = reward_pad.transpose(-1, -2)
+    reward_pad = F.pad(reward, [0, 0, 0, n_steps_max])
+    reward_pad_transpose = reward_pad.transpose(-1, -2)
+    partial_return_transpose = torch.conv1d(reward_pad_transpose, gammas)
+    partial_return = partial_return_transpose.transpose(-1, -2)
     return partial_return
 
 def _get_terminal(
