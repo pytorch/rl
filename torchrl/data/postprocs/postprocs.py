@@ -26,7 +26,8 @@ def _conv1d(
     reward_pad = torch.nn.functional.pad(reward, [0, 0, 0, n_steps_max]).transpose(
         -1, -2
     )
-    reward_pad = torch.conv1d(reward_pad, gammas).transpose(-1, -2)
+    reward_pad = torch.conv1d(reward_pad, gammas)
+    reward_pad = reward_pad.transpose(-1, -2)
     return reward_pad
 
 

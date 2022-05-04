@@ -555,10 +555,12 @@ class RewardNormalizer:
         if "mask" in batch.keys():
             reward = reward[batch.get("mask").squeeze(-1)]
         if self._update_has_been_called and not self._normalize_has_been_called:
-            raise RuntimeError(
-                "There have been two consecutive calls to update_reward_stats without a call to normalize_reward. "
-                "Check that normalize_reward has been registered in the agent."
-            )
+            # We'd like to check that rewards are normalized. Problem is that the trainer can collect data without calling steps...
+            # raise RuntimeError(
+            #     "There have been two consecutive calls to update_reward_stats without a call to normalize_reward. "
+            #     "Check that normalize_reward has been registered in the agent."
+            # )
+            pass
         decay = self._reward_stats.get("decay", 0.999)
         sum = self._reward_stats["sum"] = (
             decay * self._reward_stats.get("sum", 0.0) + reward.sum()
@@ -581,8 +583,8 @@ class RewardNormalizer:
 
     def normalize_reward(self, tensordict: _TensorDict) -> _TensorDict:
         reward = tensordict.get("reward")
-        reward = reward - self._reward_stats["mean"]
-        reward = reward / self._reward_stats["std"]
+        reward = reward - self._reward_stats["mean"].to(tensordict.device)
+        reward = reward / self._reward_stats["std"].to(tensordict.device)
         tensordict.set_("reward", reward)
         self._normalize_has_been_called = True
         return tensordict
