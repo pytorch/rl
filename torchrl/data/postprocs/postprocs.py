@@ -173,6 +173,10 @@ class MultiStep(nn.Module):
         except KeyError:
             mask = done.clone().flip(1).cumsum(1).flip(1).to(torch.bool)
         reward = tensordict.get("reward")
+
+        # Discounted summed reward
+        partial_return = _conv1d_reward(reward, self.gammas, self.n_steps_max)
+
         b, T, *_ = mask.shape
 
         terminal, post_terminal = _get_terminal(done, self.n_steps_max)
@@ -183,9 +187,6 @@ class MultiStep(nn.Module):
         # step_to_next_state
         nonterminal = ~post_terminal[:, :T]
         steps_to_next_obs = _get_steps_to_next_obs(nonterminal, self.n_steps_max)
-
-        # Discounted summed reward
-        partial_return = _conv1d_reward(reward, self.gammas, self.n_steps_max)
 
         selected_td = tensordict.select(
             *[

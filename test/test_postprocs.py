@@ -38,7 +38,8 @@ def test_multistep(n, key, device, T=11):
             key: total_obs[:, :T] * mask.to(torch.float),
             "next_" + key: total_obs[:, 1:] * mask.to(torch.float),
             "done": done,
-            "reward": torch.randn(1, T, 1).expand(b, T, 1) * mask.to(torch.float),
+            "reward": torch.randn(1, T, 1, device=device).expand(b, T, 1)
+            * mask.to(torch.float),
             "mask": mask,
         },
         batch_size=(b, T),
