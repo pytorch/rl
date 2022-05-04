@@ -459,7 +459,7 @@ class Trainer:
             self._pbar.set_description(
                 ", ".join(
                     [
-                        f"{key}: {float(item):4.4f}"
+                        f"{key}: {item:4.4f}"
                         for key, item in self._pbar_str.items()
                     ]
                 )
