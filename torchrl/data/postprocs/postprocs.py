@@ -9,6 +9,7 @@ from typing import Tuple
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.utils import expand_as_right
@@ -16,20 +17,19 @@ from torchrl.data.utils import expand_as_right
 __all__ = ["MultiStep"]
 
 
-def _conv1d(
+def _conv1d_reward(
     reward: torch.Tensor, gammas: torch.Tensor, n_steps_max: int
 ) -> torch.Tensor:
     if not (reward.ndimension() == 3 and reward.shape[-1] == 1):
         raise RuntimeError(
             f"Expected a B x T x 1 reward tensor, got reward.shape = {reward.shape}"
         )
-    reward_pad = torch.nn.functional.pad(reward, [0, 0, 0, n_steps_max]).transpose(
+    reward_pad = F.pad(reward, [0, 0, 0, n_steps_max]).transpose(
         -1, -2
     )
     reward_pad = torch.conv1d(reward_pad, gammas)
-    reward_pad = reward_pad.transpose(-1, -2)
-    return reward_pad
-
+    partial_return = reward_pad.transpose(-1, -2)
+    return partial_return
 
 def _get_terminal(
     done: torch.Tensor, n_steps_max: int
@@ -185,7 +185,7 @@ class MultiStep(nn.Module):
         steps_to_next_obs = _get_steps_to_next_obs(nonterminal, self.n_steps_max)
 
         # Discounted summed reward
-        partial_return = _conv1d(reward, self.gammas, self.n_steps_max)
+        partial_return = _conv1d_reward(reward, self.gammas, self.n_steps_max)
 
         selected_td = tensordict.select(
             *[
