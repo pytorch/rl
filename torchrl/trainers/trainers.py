@@ -58,10 +58,9 @@ __all__ = [
     "UpdateWeights",
 ]
 
-TYPE_DESCR = {
-    float: '4.4f',
-    int: ''
-}
+TYPE_DESCR = {float: "4.4f", int: ""}
+
+
 class Trainer:
     """A generic Agent class.
 

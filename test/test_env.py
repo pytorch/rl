@@ -30,7 +30,7 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.utils import step_tensordict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
-from torchrl.trainers import EnvCreator
+from torchrl.envs import EnvCreator
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
