@@ -450,7 +450,9 @@ class Trainer:
             if _log and self.writer is not None:
                 getattr(self.writer, method)(key, item, global_step=collected_frames)
             if method == "add_scalar" and self.progress_bar:
-                self._pbar_str[key] = float(item)
+                if isinstance(item, torch.Tensor):
+                    item = item.item()
+                self._pbar_str[key] = item
 
     def _pbar_description(self) -> None:
         if self.progress_bar:

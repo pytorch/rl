@@ -22,7 +22,6 @@ from torchrl.envs.env_creator import EnvCreator
 __all__ = ["SerialEnv", "ParallelEnv"]
 
 
-
 def _check_start(fun):
     def decorated_fun(self: _BatchedEnv, *args, **kwargs):
         if self.is_closed:
@@ -396,9 +395,7 @@ class SerialEnv(_BatchedEnv):
             )
         else:
             if attr in self._excluded_wrapped_keys:
-                raise AttributeError(
-                    f"Getting {attr} resulted in an exception"
-                )
+                raise AttributeError(f"Getting {attr} resulted in an exception")
             try:
                 # determine if attr is a callable
                 callable_attr = callable(getattr(self._dummy_env, attr))
@@ -602,9 +599,7 @@ class ParallelEnv(_BatchedEnv):
             )
         else:
             if attr in self._excluded_wrapped_keys:
-                raise AttributeError(
-                    f"Getting {attr} resulted in an exception"
-                )
+                raise AttributeError(f"Getting {attr} resulted in an exception")
             try:
                 _ = getattr(self._dummy_env, attr)
                 if self.is_closed:
