@@ -5,20 +5,22 @@
 
 import pytest
 import torch
+from _utils_internal import get_available_devices
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.data.tensordict.tensordict import TensorDict, assert_allclose_td
 
 
 @pytest.mark.parametrize("n", range(13))
+@pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("key", ["observation", "pixels", "observation_whatever"])
-def test_multistep(n, key, T=11):
+def test_multistep(n, key, device, T=11):
     torch.manual_seed(0)
 
     # mock data
     b = 5
 
-    done = torch.zeros(b, T, 1, dtype=torch.bool)
+    done = torch.zeros(b, T, 1, dtype=torch.bool, device=device)
     done[0, -1] = True
     done[1, -2] = True
     done[2, -3] = True
@@ -30,7 +32,7 @@ def test_multistep(n, key, T=11):
     mask = done.clone().cumsum(1).cumsum(1) >= 2
     mask = ~mask
 
-    total_obs = torch.randn(1, T + 1, 1).expand(b, T + 1, 1)
+    total_obs = torch.randn(1, T + 1, 1, device=device).expand(b, T + 1, 1)
     tensordict = TensorDict(
         source={
             key: total_obs[:, :T] * mask.to(torch.float),
@@ -40,12 +42,12 @@ def test_multistep(n, key, T=11):
             "mask": mask,
         },
         batch_size=(b, T),
-    )
+    ).to(device)
 
     ms = MultiStep(
         0.9,
         n,
-    )
+    ).to(device)
     ms_tensordict = ms(tensordict.clone())
 
     assert ms_tensordict.get("done").max() == 1

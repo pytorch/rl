@@ -30,6 +30,7 @@ def _conv1d_reward(
     partial_return = partial_return_transpose.transpose(-1, -2)
     return partial_return
 
+
 def _get_terminal(
     done: torch.Tensor, n_steps_max: int
 ) -> Tuple[torch.Tensor, torch.Tensor]:
