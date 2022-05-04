@@ -703,7 +703,8 @@ class _MultiDataCollector(_DataCollector):
         self.postprocs = dict()
         if postproc is not None:
             for _device in self.passing_devices:
-                self.postprocs[_device] = deepcopy(postproc).to(_device)
+                if _device not in self.postprocs:
+                    self.postprocs[_device] = deepcopy(postproc).to(_device)
         self.max_frames_per_traj = max_frames_per_traj
         self.frames_per_batch = frames_per_batch
         self.seed = seed
