@@ -23,8 +23,8 @@ from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.envs import ParallelEnv
 from torchrl.envs import EnvCreator
+from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor

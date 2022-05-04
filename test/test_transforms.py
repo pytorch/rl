@@ -12,6 +12,7 @@ from torch import Tensor
 from torch import multiprocessing as mp
 from torchrl.data import NdBoundedTensorSpec, CompositeSpec
 from torchrl.data import TensorDict
+from torchrl.envs import EnvCreator
 from torchrl.envs import GymEnv, ParallelEnv
 from torchrl.envs import (
     Resize,
@@ -24,7 +25,6 @@ from torchrl.envs import (
     DoubleToFloat,
     CatTensors,
 )
-from torchrl.envs import EnvCreator
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import VecNorm, TransformedEnv
 from torchrl.envs.transforms.transforms import (

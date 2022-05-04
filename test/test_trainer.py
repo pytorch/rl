@@ -2,28 +2,25 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from argparse import Namespace
-
-from tensorboard.backend.event_processing import event_accumulator
-from torch.utils.tensorboard import SummaryWriter
-from torchrl.envs.libs.dm_control import _has_dmc
-
-import tempfile
-from torchrl.trainers import Recorder
-from torchrl.trainers.helpers import transformed_env_constructor
-from os import walk, path
-
 import argparse
+import tempfile
+from argparse import Namespace
 from collections import OrderedDict
+from os import walk, path
 
 import pytest
 import torch
+from tensorboard.backend.event_processing import event_accumulator
+from torch.utils.tensorboard import SummaryWriter
 from torchrl.data import (
     TensorDict,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
+from torchrl.envs.libs.dm_control import _has_dmc
+from torchrl.trainers import Recorder
 from torchrl.trainers import Trainer
+from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     SelectKeys,
     ReplayBufferTrainer,
@@ -231,7 +228,7 @@ def test_recorder():
             args,
             video_tag="tmp",
             norm_obs_only=True,
-            stats={'loc': 0, 'scale': 1},
+            stats={"loc": 0, "scale": 1},
             writer=writer,
         )()
 
@@ -252,11 +249,15 @@ def test_recorder():
         filename = filenames[0]
         ea = event_accumulator.EventAccumulator(
             path.join(folder, filename),
-            size_guidance={event_accumulator.IMAGES: 0, })
+            size_guidance={
+                event_accumulator.IMAGES: 0,
+            },
+        )
         ea.Reload()
         print(ea.Tags())
-        img = ea.Images('tmp_humanoid_video')
+        img = ea.Images("tmp_humanoid_video")
         assert len(img) == N // args.record_interval
+
 
 def test_updateweights():
     torch.manual_seed(0)

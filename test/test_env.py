@@ -20,6 +20,7 @@ from torchrl.data.tensor_specs import (
     NdBoundedTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
+from torchrl.envs import EnvCreator
 from torchrl.envs import GymEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import (
@@ -30,7 +31,6 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.utils import step_tensordict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
-from torchrl.envs import EnvCreator
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
