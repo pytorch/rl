@@ -24,6 +24,7 @@ from torchrl.envs import (
     DoubleToFloat,
     CatTensors,
 )
+from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import VecNorm, TransformedEnv
 from torchrl.envs.transforms.transforms import (
@@ -31,7 +32,6 @@ from torchrl.envs.transforms.transforms import (
     NoopResetEnv,
     PinMemoryTransform,
 )
-from torchrl.trainers.env_creator import EnvCreator
 
 TIMEOUT = 10.0
 
