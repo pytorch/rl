@@ -20,7 +20,7 @@ from torchrl.envs.common import _EnvClass, make_tensordict
 
 __all__ = ["SerialEnv", "ParallelEnv"]
 
-from torchrl.trainers import EnvCreator
+from torchrl.envs import EnvCreator
 
 
 def _check_start(fun):
