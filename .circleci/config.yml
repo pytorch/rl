@@ -499,7 +499,7 @@ jobs:
           command: .circleci/unittest/linux/scripts/install.sh
       - run:
           name: Run tests
-          command: MUJOCO_GL=egl .circleci/unittest/linux/scripts/run_test.sh
+          command: .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Post process
           command: .circleci/unittest/linux/scripts/post_process.sh
