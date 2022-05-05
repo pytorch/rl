@@ -173,7 +173,7 @@ class SACLoss(_LossModule):
                 "loss_value": loss_value.mean(),
                 "loss_alpha": loss_alpha.mean(),
                 "alpha": self._alpha,
-                "entropy": td_device.get("_log_prob").mean().detach(),
+                "entropy": - td_device.get("_log_prob").mean().detach(),
             },
             [],
         )
@@ -205,7 +205,7 @@ class SACLoss(_LossModule):
 
         # write log_prob in tensordict for alpha loss
         tensordict.set("_log_prob", log_prob.detach())
-        return self._alpha * log_prob  # - min_q_logprob
+        return self._alpha * log_prob - min_q_logprob
 
     def _loss_qvalue(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
         actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
