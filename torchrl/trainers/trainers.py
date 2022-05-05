@@ -794,7 +794,7 @@ class CountFramesLog:
         else:
             current_frames = batch.numel() * self.frame_skip
         self.frame_count += current_frames
-        return "collected_frames", self.frame_count
+        return "n_frames", self.frame_count
 
 
 def _check_input_output_typehint(func: Callable, input: Type, output: Type):
