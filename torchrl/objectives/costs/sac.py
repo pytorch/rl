@@ -173,7 +173,7 @@ class SACLoss(_LossModule):
                 "loss_value": loss_value.mean(),
                 "loss_alpha": loss_alpha.mean(),
                 "alpha": self._alpha,
-                "entropy": - td_device.get("_log_prob").mean().detach(),
+                "entropy": -td_device.get("_log_prob").mean().detach(),
             },
             [],
         )
