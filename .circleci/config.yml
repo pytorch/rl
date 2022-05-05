@@ -466,6 +466,10 @@ jobs:
     <<: *binary_common
     macos:
       xcode: "12.0"
+
+    environment:
+      MUJOCO_GL: egl
+
     resource_class: large
     steps:
       - checkout
