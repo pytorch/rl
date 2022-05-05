@@ -467,9 +467,6 @@ jobs:
     macos:
       xcode: "12.0"
 
-    environment:
-      MUJOCO_GL: egl
-
     resource_class: large
     steps:
       - checkout
@@ -502,7 +499,7 @@ jobs:
           command: .circleci/unittest/linux/scripts/install.sh
       - run:
           name: Run tests
-          command: .circleci/unittest/linux/scripts/run_test.sh
+          command: MUJOCO_GL=egl .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Post process
           command: .circleci/unittest/linux/scripts/post_process.sh
