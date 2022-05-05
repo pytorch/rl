@@ -68,7 +68,7 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
         raise NotImplementedError
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
-        loss_kwargs.update({"target_entropy": args.target_entropy})
+        loss_kwargs.update({"target_entropy": args.target_entropy if args.target_entropy is not None else "auto"})
         loss_class = SACLoss
         if args.loss == "double":
             loss_kwargs.update(
