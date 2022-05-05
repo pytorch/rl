@@ -362,7 +362,7 @@ class Trainer:
     def train(self):
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames)
-            self._pbar_str = OrderedDict()
+            self._pbar_str = dict()
 
         self.collected_frames = 0
         for i, batch in enumerate(self.collector):
@@ -461,8 +461,8 @@ class Trainer:
             self._pbar.set_description(
                 ", ".join(
                     [
-                        f"{key}: {item:{TYPE_DESCR.get(type(item), '4.4f')}}"
-                        for key, item in self._pbar_str.items()
+                        f"{key}: {self._pbar_str[key] :{TYPE_DESCR.get(type(self._pbar_str[key]), '4.4f')}}"
+                        for key in sorted(self._pbar_str.keys())
                     ]
                 )
             )
@@ -529,7 +529,7 @@ class ReplayBufferTrainer:
 
 
 class LogReward:
-    def __init__(self, logname="reward_training"):
+    def __init__(self, logname="r_training"):
         self.logname = logname
 
     def __call__(self, batch: _TensorDict) -> Tuple[str, torch.Tensor]:
@@ -734,7 +734,7 @@ class Recorder:
         policy_exploration: TDModule,
         recorder: _EnvClass,
         exploration_mode: str = "mode",
-        out_key: str = "reward_evaluation",
+        out_key: str = "r_evaluation",
     ) -> None:
 
         self.policy_exploration = policy_exploration
