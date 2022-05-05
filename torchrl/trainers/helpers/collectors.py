@@ -377,7 +377,7 @@ def _parser_collector_args(parser: ArgumentParser) -> ArgumentParser:
         help="number of steps executed in the environment per collection."
         "This value represents how many steps will the data collector execute and return in *each*"
         "environment that has been created in between two rounds of optimization "
-        "(see the optim_steps_per_collection above). "
+        "(see the optim_steps_per_batch above). "
         "On the one hand, a low value will enhance the data throughput between processes in async "
         "settings, which can make the accessing of data a computational bottleneck. "
         "High values will on the other hand lead to greater tensor sizes in memory and disk to be "

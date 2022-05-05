@@ -143,7 +143,7 @@ def make_trainer(
         optimizer=optimizer,
         policy_exploration=policy_exploration,
         writer=writer,
-        optim_steps_per_batch=args.optim_steps_per_collection,
+        optim_steps_per_batch=args.optim_steps_per_batch,
         clip_grad_norm=args.clip_grad_norm,
         clip_norm=args.clip_norm,
     )
@@ -212,7 +212,7 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
 
     """
     parser.add_argument(
-        "--optim_steps_per_collection",
+        "--optim_steps_per_batch",
         type=int,
         default=500,
         help="Number of optimization steps in between two collection of data. See frames_per_batch "
