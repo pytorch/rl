@@ -68,7 +68,13 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
         raise NotImplementedError
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
-        loss_kwargs.update({"target_entropy": args.target_entropy if args.target_entropy is not None else "auto"})
+        loss_kwargs.update(
+            {
+                "target_entropy": args.target_entropy
+                if args.target_entropy is not None
+                else "auto"
+            }
+        )
         loss_class = SACLoss
         if args.loss == "double":
             loss_kwargs.update(
@@ -227,13 +233,13 @@ def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
             "predicted to predict the state action value. This can be disabled by using this flag."
             "REDQ uses an arbitrary number of Q-value functions to speed up learning in MF contexts.",
         )
-    if algorithm in ("SAC", ):
+    if algorithm in ("SAC",):
         parser.add_argument(
             "--target_entropy",
             default=None,
             type=float,
             help="Target entropy for the policy distribution. Default is None (auto calculated as"
-                 "the `target_entropy = -action_dim`)"
+            "the `target_entropy = -action_dim`)",
         )
 
     return parser

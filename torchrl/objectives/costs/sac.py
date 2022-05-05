@@ -111,13 +111,15 @@ class SACLoss(_LossModule):
         self.gamma = gamma
         self.priority_key = priotity_key
         self.loss_function = loss_function
-        self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
-        self.register_buffer("min_log_alpha", torch.tensor(min_alpha, device=device).log())
-        self.fixed_alpha = fixed_alpha
         try:
             device = next(self.parameters()).device
         except AttributeError:
             device = torch.device("cpu")
+        self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
+        self.register_buffer(
+            "min_log_alpha", torch.tensor(min_alpha, device=device).log()
+        )
+        self.fixed_alpha = fixed_alpha
         if fixed_alpha:
             self.register_buffer(
                 "log_alpha", torch.tensor(math.log(alpha_init), device=device)
