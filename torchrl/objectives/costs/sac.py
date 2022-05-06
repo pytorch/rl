@@ -186,6 +186,8 @@ class SACLoss(_LossModule):
             buffers=list(self.actor_network_buffers),
         )[0]
         a_reparm = dist.rsample()
+        if not self.actor_network.spec.is_in(a_reparm):
+            a_reparm.data.copy_(self.actor_network.spec.project(a_reparm.data))
         log_prob = dist.log_prob(a_reparm)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys)
@@ -278,6 +280,9 @@ class SACLoss(_LossModule):
             0
         ]  # resample an action
         action = action_dist.rsample()
+        if not self.actor_network.spec.is_in(action):
+            action.data.copy_(self.actor_network.spec.project(action.data))
+
         td_copy.set("action", action, inplace=False)
 
         qval_net = self.qvalue_network

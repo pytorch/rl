@@ -126,6 +126,11 @@ class _TargetNetUpdate:
                     "tensors will be lost."
                 )
 
+        if len(_target_names) == 0:
+            raise RuntimeError(
+                "Did not found any target parameters or buffers in the loss module."
+            )
+
         _source_names = ["".join(name.split("_target_")) for name in _target_names]
 
         for _source in _source_names:
