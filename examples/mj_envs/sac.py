@@ -6,7 +6,6 @@
 import uuid
 from datetime import datetime
 
-from mj_envs.envs.relay_kitchen import *
 
 try:
     import configargparse as argparse

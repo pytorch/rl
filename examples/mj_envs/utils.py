@@ -3,6 +3,7 @@ import torch
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs import GymEnv
 from torchrl.envs.libs.gym import _has_gym, _gym_to_torchrl_spec_transform
+from mj_envs.envs.relay_kitchen import *
 
 
 class MJEnv(GymEnv):
@@ -52,16 +53,18 @@ class MJEnv(GymEnv):
 
     def _step(self, td):
         td = super()._step(td)
-        img = self._env.render_camera_offscreen(sim=self._env.sim,
+        if self.from_pixels:
+            img = self._env.render_camera_offscreen(sim=self._env.sim,
                                                 cameras=[None])
-        img = torch.Tensor(img)
-        td.set("next_pixels", img)
+            img = torch.Tensor(img)
+            td.set("next_pixels", img)
         return td
 
     def _reset(self, td=None, **kwargs):
         td = super()._reset(td, **kwargs)
-        img = self._env.render_camera_offscreen(sim=self._env.sim,
+        if self.from_pixels:
+            img = self._env.render_camera_offscreen(sim=self._env.sim,
                                                 cameras=[None])
-        img = torch.Tensor(img)
-        td.set("next_pixels", img)
+            img = torch.Tensor(img)
+            td.set("next_pixels", img)
         return td
