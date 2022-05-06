@@ -272,7 +272,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "--env_library",
         type=str,
         default="gym",
-        choices=["dm_control", "gym"],
+        choices=["dm_control", "gym", "mjenv"],
         help="env_library used for the simulated environment. Default=gym",
     )
     parser.add_argument(
