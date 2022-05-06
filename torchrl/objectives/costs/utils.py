@@ -200,7 +200,7 @@ class SoftUpdate(_TargetNetUpdate):
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "REDQLoss"],
         eps: float = 0.999,
     ):
         if not (eps < 1.0 and eps > 0.0):

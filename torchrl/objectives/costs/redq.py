@@ -111,7 +111,7 @@ class REDQLoss_deprecated(_LossModule):
         self.log_alpha.data.clamp_(-20, 1.0)
 
         with torch.no_grad():
-            alpha = self.log_alpha.detach().exp()
+            alpha = self.log_alpha.exp()
         return alpha
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
@@ -129,7 +129,7 @@ class REDQLoss_deprecated(_LossModule):
                 "loss_qvalue": loss_qval.mean(),
                 "loss_alpha": loss_alpha.mean(),
                 "alpha": self.alpha,
-                "entropy": -action_log_prob.mean(),
+                "entropy": -action_log_prob.mean().detach(),
             },
             [],
         )
@@ -290,7 +290,7 @@ class REDQLoss(_LossModule):
         alpha_init: Number = 1.0,
         fixed_alpha: bool = False,
         target_entropy: Union[str, Number] = "auto",
-        delay_qvalue: bool = False,
+        delay_qvalue: bool = True,
     ):
         super().__init__()
         self.convert_to_functional(

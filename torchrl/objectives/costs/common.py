@@ -181,6 +181,7 @@ class _LossModule(nn.Module):
             if target_params is not None:
                 return tuple(target_params)
             else:
+                # detach params as a surrogate for targets
                 return tuple(p.detach() for p in getattr(self, param_name))
 
         else:
