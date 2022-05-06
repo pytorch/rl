@@ -152,7 +152,7 @@ if __name__ == "__main__":
         if isinstance(t, RewardScaling):
             t.scale.fill_(1.0)
 
-    agent = make_trainer(
+    trainer = make_trainer(
         collector,
         loss_module,
         recorder,
@@ -163,4 +163,4 @@ if __name__ == "__main__":
         args,
     )
 
-    agent.train()
+    trainer.train()

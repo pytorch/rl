@@ -12,3 +12,4 @@ exp_name=humanoid_stats
 tanh_loc
 num_workers=8
 env_per_collector=8
+total_frames=5000000
