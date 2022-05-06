@@ -126,10 +126,10 @@ if __name__ == "__main__":
         if isinstance(t, RewardScaling):
             t.scale.fill_(1.0)
 
-    agent = make_trainer(
+    trainer = make_trainer(
         collector, loss_module, recorder, None, actor_model, None, writer, args
     )
     if args.loss == "kl":
-        agent.register_op("pre_optim_steps", loss_module.reset)
+        trainer.register_op("pre_optim_steps", loss_module.reset)
 
-    agent.train()
+    trainer.train()
