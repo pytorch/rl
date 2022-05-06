@@ -1,7 +1,6 @@
 env_name=kitchen_rdoor_open-v2
 env_library=gym
 async_collection
-record_video
 normalize_rewards_online
 frame_skip=2
 frames_per_batch=320
