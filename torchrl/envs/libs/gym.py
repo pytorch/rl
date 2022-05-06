@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from types import ModuleType
 from typing import List, Optional, Sequence
 
@@ -33,8 +33,8 @@ except ImportError:
 if _has_gym:
     try:
         from gym.wrappers.pixel_observation import PixelObservationWrapper
-    except ImportError:
-        raise ImportWarning(
+    except ModuleNotFoundError:
+        warnings.warn(
             f"gym {gym.__version__} does not provide the PixelObservationWrapper"
             f"used by torchrl, which will be using a patched version. "
             f"Consider updating gym to a newer version."
