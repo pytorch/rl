@@ -73,7 +73,8 @@ def make_trainer(
         >>> import torch
         >>> import tempfile
         >>> from torch.utils.tensorboard import SummaryWriter
-        >>> from torchrl.trainers import Trainer, EnvCreator
+        >>> from torchrl.trainers import Trainer
+        >>> from torchrl.envs import EnvCreator
         >>> from torchrl.collectors.collectors import SyncDataCollector
         >>> from torchrl.data import TensorDictReplayBuffer
         >>> from torchrl.envs import GymEnv

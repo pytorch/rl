@@ -43,6 +43,9 @@ from torchrl.trainers.helpers.replay_buffer import (
 )
 from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
 
+from utils import MJEnv
+from torchrl.trainers.helpers.envs import LIBS
+LIBS["mjenv"] = MJEnv
 
 def make_args():
     parser = argparse.ArgumentParser()
