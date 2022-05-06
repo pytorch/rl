@@ -25,10 +25,23 @@ try:
     import gym
 
     _has_gym = True
-    from gym.wrappers.pixel_observation import PixelObservationWrapper
 
 except ImportError:
     _has_gym = False
+
+
+if _has_gym:
+    try:
+        from gym.wrappers.pixel_observation import PixelObservationWrapper
+    except ImportError:
+        raise ImportWarning(
+            f"gym {gym.__version__} does not provide the PixelObservationWrapper"
+            f"used by torchrl, which will be using a patched version. "
+            f"Consider updating gym to a newer version."
+        )
+        from torchrl.envs.libs.utils import (
+            GymPixelObservationWrapper as PixelObservationWrapper,
+        )
 
 try:
     import retro
