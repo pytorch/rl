@@ -316,5 +316,5 @@ class SACLoss(_LossModule):
     def _alpha(self):
         self.log_alpha.data.clamp_min_(self.min_log_alpha)
         with torch.no_grad():
-            alpha = self.log_alpha.detach().exp()
+            alpha = self.log_alpha.exp()
         return alpha

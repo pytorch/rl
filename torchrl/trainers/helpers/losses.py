@@ -38,8 +38,7 @@ from torchrl.objectives.returns.advantages import GAE
 
 
 def make_target_updater(
-    args: Namespace,
-    loss_module: _LossModule
+    args: Namespace, loss_module: _LossModule
 ) -> Optional[_TargetNetUpdate]:
     """Builds a target network weight update object."""
     if args.loss == "double":
@@ -94,7 +93,9 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
                 }
             )
         else:
-            raise NotImplementedError(f"args.loss {args.loss} unsupported. Consider chosing from 'double' or 'single'")
+            raise NotImplementedError(
+                f"args.loss {args.loss} unsupported. Consider chosing from 'double' or 'single'"
+            )
 
     actor_model, qvalue_model, value_model = model
 
@@ -104,7 +105,7 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
         value_network=value_model,
         num_qvalue_nets=args.num_q_values,
         gamma=args.gamma,
-        **loss_kwargs
+        **loss_kwargs,
     )
     target_net_updater = make_target_updater(args, loss_module)
     return loss_module, target_net_updater
@@ -126,7 +127,7 @@ def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
         qvalue_network=qvalue_model,
         num_qvalue_nets=args.num_q_values,
         gamma=args.gamma,
-        **loss_kwargs
+        **loss_kwargs,
     )
     target_net_updater = make_target_updater(args, loss_module)
     return loss_module, target_net_updater
