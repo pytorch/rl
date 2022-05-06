@@ -56,7 +56,7 @@ class MJEnv(GymEnv):
         if self.from_pixels:
             img = self._env.render_camera_offscreen(sim=self._env.sim,
                                                 cameras=[None])
-            img = torch.Tensor(img)
+            img = torch.Tensor(img).squeeze(0)
             td.set("next_pixels", img)
         return td
 
@@ -65,6 +65,6 @@ class MJEnv(GymEnv):
         if self.from_pixels:
             img = self._env.render_camera_offscreen(sim=self._env.sim,
                                                 cameras=[None])
-            img = torch.Tensor(img)
+            img = torch.Tensor(img).squeeze(0)
             td.set("next_pixels", img)
         return td
