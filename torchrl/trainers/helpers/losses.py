@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from argparse import ArgumentParser, Namespace
+from dataclasses import dataclass
 
 __all__ = [
     "make_sac_loss",
@@ -13,25 +14,16 @@ __all__ = [
     "make_ppo_loss",
     "make_redq_loss",
     "parser_loss_args",
-    "parser_loss_args_ppo",
+#    "parser_loss_args_ppo",
 ]
 
 from typing import Optional, Tuple
 
-from torchrl.objectives import (
-    ClipPPOLoss,
-    DDPGLoss,
-    DistributionalDQNLoss,
-    DQNLoss,
-    HardUpdate,
-    KLPENPPOLoss,
-    PPOLoss,
-    SACLoss,
-    SoftUpdate,
-)
+from torchrl.objectives import (ClipPPOLoss, DDPGLoss, DistributionalDQNLoss,
+                                DQNLoss, HardUpdate, KLPENPPOLoss, PPOLoss,
+                                SACLoss, SoftUpdate)
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.redq import REDQLoss
-
 # from torchrl.objectives.costs.redq import REDQLoss
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 from torchrl.objectives.returns.advantages import GAE
@@ -259,46 +251,20 @@ def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
     return parser
 
 
-def parser_loss_args_ppo(parser: ArgumentParser) -> ArgumentParser:
-    """
-    Populates the argument parser to build the PPO loss function.
+@dataclass
+class PPOLossConfig:
+    loss: str = "clip"
+    # PPO loss class, either clip or kl or base/<empty>
 
-    Args:
-        parser (ArgumentParser): parser to be populated.
+    gamma:float = 0.99
+    # Decay factor for return computation
+    
+    lamda: float = 0.95
+    # lambda factor in GAE (using 'lambda' as attribute is prohibited in python,
+    # hence the misspelling)
 
-    """
-    parser.add_argument(
-        "--loss",
-        type=str,
-        default="clip",
-        choices=["clip", "kl", "base", ""],
-        help="PPO loss class, either clip or kl or base/<empty>. Default=clip",
-    )
-    parser.add_argument(
-        "--gamma",
-        type=float,
-        default=0.99,
-        help="Decay factor for return computation. Default=0.99.",
-    )
-    parser.add_argument(
-        "--lamda",
-        default=0.95,
-        type=float,
-        help="lambda factor in GAE (using 'lambda' as attribute is prohibited in python, "
-        "hence the misspelling)",
-    )
-    parser.add_argument(
-        "--entropy_factor",
-        type=float,
-        default=1e-3,
-        help="Entropy factor for the PPO loss",
-    )
-    parser.add_argument(
-        "--loss_function",
-        type=str,
-        default="smooth_l1",
-        choices=["l1", "l2", "smooth_l1"],
-        help="loss function for the value network. Either one of l1, l2 or smooth_l1 (default).",
-    )
+    entropy_factor: float = 1e-3
+    # Entropy factor for the PPO loss
 
-    return parser
+    loss_function: str = "smooth_l1"
+    # loss function for the value network. Either one of l1, l2 or smooth_l1.

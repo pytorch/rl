@@ -3,66 +3,42 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import dataclasses
 import uuid
 from datetime import datetime
 
-try:
-    import configargparse as argparse
-
-    _configargparse = True
-except ImportError:
-    import argparse
-
-    _configargparse = False
+import hydra
 import torch.cuda
+from hydra.core.config_store import ConfigStore
+from omegaconf import DictConfig
 from torch.utils.tensorboard import SummaryWriter
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.trainers.helpers.collectors import (
-    make_collector_onpolicy,
-    parser_collector_args_onpolicy,
-)
-from torchrl.trainers.helpers.envs import (
-    correct_for_frame_skip,
-    get_stats_random_rollout,
-    parallel_env_constructor,
-    parser_env_args,
-    transformed_env_constructor,
-)
-from torchrl.trainers.helpers.losses import make_ppo_loss, parser_loss_args_ppo
-from torchrl.trainers.helpers.models import (
-    make_ppo_model,
-    parser_model_args_continuous,
-)
-from torchrl.trainers.helpers.recorder import parser_recorder_args
-from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
+from torchrl.trainers.helpers.collectors import (OnPolicyCollectorConfig,
+                                                 make_collector_onpolicy)
+from torchrl.trainers.helpers.envs import (EnvConfig, correct_for_frame_skip,
+                                           get_stats_random_rollout,
+                                           parallel_env_constructor,
+                                           transformed_env_constructor)
+from torchrl.trainers.helpers.losses import PPOLossConfig, make_ppo_loss
+from torchrl.trainers.helpers.models import PPOModelConfig, make_ppo_model
+from torchrl.trainers.helpers.recorder import RecorderConfig
+from torchrl.trainers.helpers.trainers import TrainerConfig, make_trainer
 
+config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
+    (TrainerConfig, OnPolicyCollectorConfig, EnvConfig, RecorderConfig, PPOLossConfig, PPOModelConfig) 
+    for config_field in dataclasses.fields(config_cls) 
+]
 
-def make_args():
-    parser = argparse.ArgumentParser()
-    if _configargparse:
-        parser.add_argument(
-            "-c",
-            "--config",
-            required=True,
-            is_config_file=True,
-            help="config file path",
-        )
-    parser_trainer_args(parser)
-    parser_collector_args_onpolicy(parser)
-    parser_env_args(parser)
-    parser_loss_args_ppo(parser)
-    parser_model_args_continuous(parser, "PPO")
+Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+cs = ConfigStore.instance()
+cs.store(name="config", node=Config)
 
-    parser_recorder_args(parser)
-    return parser
+@hydra.main(config_path=None, config_name="config")
+def main(cfg: DictConfig):
 
+    # args = parser.parse_args()
 
-parser = make_args()
-
-if __name__ == "__main__":
-    args = parser.parse_args()
-
-    args = correct_for_frame_skip(args)
+    args = correct_for_frame_skip(cfg)
 
     if not isinstance(args.reward_scaling, float):
         args.reward_scaling = 1.0
@@ -133,3 +109,8 @@ if __name__ == "__main__":
         trainer.register_op("pre_optim_steps", loss_module.reset)
 
     trainer.train()
+
+
+if __name__ == "__main__":
+    # make_config()
+    main()

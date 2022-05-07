@@ -4,28 +4,19 @@
 # LICENSE file in the root directory of this source tree.
 
 from argparse import ArgumentParser, Namespace
+from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
 import torch
-
+from grpc import stream_stream_rpc_method_handler
 from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
 from torchrl.envs.common import _EnvClass
-from torchrl.envs.env_creator import env_creator, EnvCreator
-from torchrl.envs.transforms import (
-    CatFrames,
-    CatTensors,
-    Compose,
-    DoubleToFloat,
-    FiniteTensorDictCheck,
-    GrayScale,
-    NoopResetEnv,
-    ObservationNorm,
-    Resize,
-    RewardScaling,
-    ToTensorImage,
-    TransformedEnv,
-    VecNorm,
-)
+from torchrl.envs.env_creator import EnvCreator, env_creator
+from torchrl.envs.transforms import (CatFrames, CatTensors, Compose,
+                                     DoubleToFloat, FiniteTensorDictCheck,
+                                     GrayScale, NoopResetEnv, ObservationNorm,
+                                     Resize, RewardScaling, ToTensorImage,
+                                     TransformedEnv, VecNorm)
 from torchrl.envs.transforms.transforms import gSDENoise
 from torchrl.record.recorder import VideoRecorder
 
@@ -34,7 +25,7 @@ __all__ = [
     "transformed_env_constructor",
     "parallel_env_constructor",
     "get_stats_random_rollout",
-    "parser_env_args",
+#    "parser_env_args",
 ]
 
 LIBS = {
@@ -259,79 +250,39 @@ def get_stats_random_rollout(
     return stats
 
 
-def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
-    """
-    Populates the argument parser to build an environment constructor.
+@dataclass
+class EnvConfig:
+    env_library: str="gym"
+    # env_library used for the simulated environment.
 
-    Args:
-        parser (ArgumentParser): parser to be populated.
+    env_name: str="Humanoid-v2"
+    # name of the environment to be created
+    
+    env_task: str=""
+    # task (if any) for the environment
 
-    """
+    from_pixels: bool = False
+    # whether the environment output should be state vector(s) (default) or the pixels.
 
-    parser.add_argument(
-        "--env_library",
-        type=str,
-        default="gym",
-        choices=["dm_control", "gym"],
-        help="env_library used for the simulated environment. Default=gym",
-    )
-    parser.add_argument(
-        "--env_name",
-        type=str,
-        default="Humanoid-v2",
-        help="name of the environment to be created. Default=Humanoid-v2",
-    )
-    parser.add_argument(
-        "--env_task",
-        type=str,
-        default="",
-        help="task (if any) for the environment. Default=run",
-    )
-    parser.add_argument(
-        "--from_pixels",
-        action="store_true",
-        help="whether the environment output should be state vector(s) (default) or the pixels.",
-    )
-    parser.add_argument(
-        "--frame_skip",
-        type=int,
-        default=1,
-        help="frame_skip for the environment. Note that this value does NOT impact the buffer size,"
-        "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
-        "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
-        "the actual number of frames retrieved will be 200e6. Default=1.",
-    )
-    parser.add_argument("--reward_scaling", type=float, help="scale of the reward.")
-    parser.add_argument(
-        "--init_env_steps",
-        type=int,
-        default=1000,
-        help="number of random steps to compute normalizing constants",
-    )
-    parser.add_argument(
-        "--vecnorm",
-        action="store_true",
-        help="Normalizes the environment observation and reward outputs with the running statistics "
-        "obtained across processes.",
-    )
-    parser.add_argument(
-        "--norm_rewards",
-        action="store_true",
-        help="If True, rewards will be normalized on the fly. This may interfere with SAC update rule and "
-        "should be used cautiously.",
-    )
-    parser.add_argument(
-        "--noops",
-        type=int,
-        default=0,
-        help="number of random steps to do after reset. Default is 0",
-    )
-    parser.add_argument(
-        "--max_frames_per_traj",
-        type=int,
-        default=1000,
-        help="Number of steps before a reset of the environment is called (if it has not been flagged as "
-        "done before). ",
-    )
+    frame_skip: int = 1
+    # frame_skip for the environment. Note that this value does NOT impact the buffer size,
+    # maximum steps per trajectory, frames per batch or any other factor in the algorithm,
+    # e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,
+    # the actual number of frames retrieved will be 200e6. Default=1.
 
-    return parser
+    reward_scaling: Optional[float] = None
+    # scale of the reward.
+
+    init_env_steps: int = 1000
+    # number of random steps to compute normalizing constants
+    vecnorm: bool = False
+    # Normalizes the environment observation and reward outputs with the running statistics obtained across processes.
+
+    norm_rewards: bool = False
+    # If True, rewards will be normalized on the fly. This may interfere with SAC update rule and should be used cautiously.
+
+    noops: int = 0
+    # number of random steps to do after reset
+
+    max_frames_per_traj: int = 1000
+    # Number of steps before a reset of the environment is called (if it has not been flagged as done before)

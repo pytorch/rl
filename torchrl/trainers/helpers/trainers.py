@@ -5,29 +5,22 @@
 
 import argparse
 from argparse import ArgumentParser, Namespace
-from typing import Optional, Union
+from dataclasses import dataclass
+from typing import List, Optional, Union
 from warnings import warn
 
 from torch import optim
-
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import _EnvClass
 from torchrl.modules import TDModule, TDModuleWrapper, reset_noise
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
-from torchrl.trainers.trainers import (
-    Trainer,
-    SelectKeys,
-    ReplayBufferTrainer,
-    LogReward,
-    RewardNormalizer,
-    mask_batch,
-    BatchSubSampler,
-    UpdateWeights,
-    Recorder,
-    CountFramesLog,
-)
+from torchrl.trainers.trainers import (BatchSubSampler, CountFramesLog,
+                                       LogReward, Recorder,
+                                       ReplayBufferTrainer, RewardNormalizer,
+                                       SelectKeys, Trainer, UpdateWeights,
+                                       mask_batch)
 
 OPTIMIZERS = {
     "adam": optim.Adam,
@@ -37,7 +30,7 @@ OPTIMIZERS = {
 
 __all__ = [
     "make_trainer",
-    "parser_trainer_args",
+    # "parser_trainer_args",
 ]
 
 
@@ -203,84 +196,45 @@ def make_trainer(
 
     return trainer
 
+@dataclass
+class TrainerConfig:
+    
+    optim_steps_per_batch: int = 500
+    # Number of optimization steps in between two collection of data. See frames_per_batch below.
 
-def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
-    """
-    Populates the argument parser to build the trainer.
+    optimizer: str = "adam"
+    # Optimizer to be used.
 
-    Args:
-        parser (ArgumentParser): parser to be populated.
+    selected_keys: Optional[List] = None
+    # a list of strings that indicate the data that should be kept from the data collector. Since storing and
+    # retrieving information from the replay buffer does not come for free, limiting the amount of data
+    # passed to it can improve the algorithm performance.
+    # Default is None, i.e. all keys are kept.
 
-    """
-    parser.add_argument(
-        "--optim_steps_per_batch",
-        type=int,
-        default=500,
-        help="Number of optimization steps in between two collection of data. See frames_per_batch "
-        "below. "
-        "Default=500",
-    )
-    parser.add_argument(
-        "--optimizer", type=str, default="adam", help="Optimizer to be used."
-    )
-    parser.add_argument(
-        "--selected_keys",
-        nargs="+",
-        default=None,
-        help="a list of strings that indicate the data that should be kept from the data collector. Since storing and "
-        "retrieving information from the replay buffer does not come for free, limiting the amount of data "
-        "passed to it can improve the algorithm performance."
-        "Default is None, i.e. all keys are kept.",
-    )
 
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=256,
-        help="batch size of the TensorDict retrieved from the replay buffer. Default=64.",
-    )
-    parser.add_argument(
-        "--log_interval",
-        type=int,
-        default=10000,
-        help="logging interval, in terms of optimization steps. Default=1000.",
-    )
-    parser.add_argument(
-        "--lr",
-        type=float,
-        default=3e-4,
-        help="Learning rate used for the optimizer. Default=2e-4.",
-    )
-    parser.add_argument(
-        "--weight_decay",
-        type=float,
-        default=2e-5,
-        help="Weight-decay to be used with the optimizer. Default=0.0.",
-    )
-    parser.add_argument(
-        "--clip_norm",
-        type=float,
-        default=1.0,
-        help="value at which the total gradient norm should be clipped. Default=1.0",
-    )
-    parser.add_argument(
-        "--clip_grad_norm",
-        action="store_true",
-        help="if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient "
-        "values will be clipped to the desired threshold.",
-    )
-    parser.add_argument(
-        "--normalize_rewards_online",
-        "--normalize-rewards-online",
-        action="store_true",
-        help="Computes the running statistics of the rewards and normalizes them before they are "
-        "passed to the loss module.",
-    )
-    parser.add_argument(
-        "--sub_traj_len",
-        "--sub-traj-len",
-        type=int,
-        default=-1,
-        help="length of the trajectories that sub-samples must have in online settings.",
-    )
-    return parser
+    batch_size: int = 256
+    # batch size of the TensorDict retrieved from the replay buffer.
+
+    log_interval: int = 10000
+    # logging interval, in terms of optimization steps.
+
+    lr: float = 3e-4
+
+    # Learning rate used for the optimizer.
+
+    weight_decay: float = 2e-5
+
+    # Weight-decay to be used with the optimizer.
+
+    clip_norm: float = 1.0
+    # value at which the total gradient norm should be clipped.
+
+    clip_grad_norm: bool = False
+
+    # if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient values will be clipped to the desired threshold.
+    
+    normalize_rewards_online: bool = False
+    # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
+
+    sub_traj_len: int = -1
+    # length of the trajectories that sub-samples must have in online settings.

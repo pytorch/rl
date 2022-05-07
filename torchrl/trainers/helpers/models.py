@@ -4,49 +4,28 @@
 # LICENSE file in the root directory of this source tree.
 
 from argparse import ArgumentParser, Namespace
+from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import torch
 from torch import nn
-
 from torchrl.data import DEVICE_TYPING
 from torchrl.envs.common import _EnvClass
-from torchrl.modules import (
-    ActorValueOperator,
-    NoisyLinear,
-    TDModule,
-    NormalParamWrapper,
-)
-from torchrl.modules.distributions import (
-    Delta,
-    OneHotCategorical,
-    TanhDelta,
-    TanhNormal,
-    TruncatedNormal,
-)
+from torchrl.modules import (ActorValueOperator, NoisyLinear,
+                             NormalParamWrapper, TDModule)
+from torchrl.modules.distributions import (Delta, OneHotCategorical, TanhDelta,
+                                           TanhNormal, TruncatedNormal)
 from torchrl.modules.distributions.continuous import IndependentNormal
 from torchrl.modules.models.exploration import gSDEWrapper
-from torchrl.modules.models.models import (
-    ConvNet,
-    DdpgCnnActor,
-    DdpgCnnQNet,
-    DdpgMlpActor,
-    DdpgMlpQNet,
-    DuelingCnnDQNet,
-    LSTMNet,
-    MLP,
-    DuelingMlpDQNet,
-)
-from torchrl.modules.td_module import (
-    Actor,
-    DistributionalQValueActor,
-    QValueActor,
-)
-from torchrl.modules.td_module.actors import (
-    ActorCriticWrapper,
-    ProbabilisticActor,
-    ValueOperator,
-)
+from torchrl.modules.models.models import (MLP, ConvNet, DdpgCnnActor,
+                                           DdpgCnnQNet, DdpgMlpActor,
+                                           DdpgMlpQNet, DuelingCnnDQNet,
+                                           DuelingMlpDQNet, LSTMNet)
+from torchrl.modules.td_module import (Actor, DistributionalQValueActor,
+                                       QValueActor)
+from torchrl.modules.td_module.actors import (ActorCriticWrapper,
+                                              ProbabilisticActor,
+                                              ValueOperator)
 
 DISTRIBUTIONS = {
     "delta": Delta,
@@ -947,6 +926,116 @@ def make_redq_model(
         net(td)
     del td
     return model
+
+
+def parser_model_args_continuous(
+    parser: ArgumentParser, algorithm: str
+) -> ArgumentParser:
+    """
+    Populates the argument parser to build a model for continuous actions.
+
+    Args:
+        parser (ArgumentParser): parser to be populated.
+        algorithm (str): one of `"DDPG"`, `"SAC"`, `"REDQ"`, `"PPO"`
+
+    """
+
+    if algorithm not in ("SAC", "DDPG", "PPO", "REDQ"):
+        raise NotImplementedError(f"Unknown algorithm {algorithm}")
+
+    if algorithm in ("SAC", "DDPG", "REDQ"):
+        parser.add_argument(
+            "--annealing_frames",
+            type=int,
+            default=1000000,
+            help="float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.",
+        )
+        parser.add_argument(
+            "--noisy",
+            action="store_true",
+            help="whether to use NoisyLinearLayers in the value network.",
+        )
+        parser.add_argument(
+            "--ou_exploration",
+            action="store_true",
+            help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
+            "efficient entropy-based exploration, this should be left for experimentation only.",
+        )
+        parser.add_argument(
+            "--distributional",
+            action="store_true",
+            help="whether a distributional loss should be used (TODO: not implemented yet).",
+        )
+        parser.add_argument(
+            "--atoms",
+            type=int,
+            default=51,
+            help="number of atoms used for the distributional loss (TODO)",
+        )
+
+    if algorithm in ("SAC", "PPO", "REDQ"):
+        parser.add_argument(
+            "--tanh_loc",
+            "--tanh-loc",
+            action="store_true",
+            help="if True, uses a Tanh-Normal transform for the policy "
+            "location of the form "
+            "`upscale * tanh(loc/upscale)` (only available with "
+            "TanhTransform and TruncatedGaussian distributions)",
+        )
+        parser.add_argument(
+            "--gSDE",
+            action="store_true",
+            help="if True, exploration is achieved using the gSDE technique.",
+        )
+        parser.add_argument(
+            "--default_policy_scale",
+            default=1.0,
+            help="Default policy scale parameter",
+        )
+        parser.add_argument(
+            "--distribution",
+            type=str,
+            default="tanh_normal",
+            help="if True, uses a Tanh-Normal-Tanh distribution for the policy",
+        )
+    if algorithm == "PPO":
+        parser.add_argument(
+            "--lstm",
+            action="store_true",
+            help="if True, uses an LSTM for the policy.",
+        )
+        parser.add_argument(
+            "--shared_mapping",
+            "--shared-mapping",
+            action="store_true",
+            help="if True, the first layers of the actor-critic are shared.",
+        )
+
+    return parser
+
+@dataclass
+class PPOModelConfig:
+    tanh_loc: bool = False
+    # if True, uses a Tanh-Normal transform for the policy
+    # location of the form
+    # `upscale * tanh(loc/upscale)` (only available with
+    # TanhTransform and TruncatedGaussian distributions)
+
+    gSDE: bool = False
+    # if True, exploration is achieved using the gSDE technique.
+
+    default_policy_scale: float = 1.0
+    # Default policy scale parameter
+
+    distribution: str="tanh_normal"
+    # if True, uses a Tanh-Normal-Tanh distribution for the policy
+
+    lstm: bool = False
+    # if True, uses an LSTM for the policy.
+
+    shared_mapping: bool = False
+    # if True, the first layers of the actor-critic are shared.
 
 
 def parser_model_args_continuous(

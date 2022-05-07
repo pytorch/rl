@@ -10,8 +10,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from setuptools import find_packages, setup
+
 from build_tools import setup_helpers
-from setuptools import setup, find_packages
 
 
 def _get_pytorch_version():
@@ -84,7 +85,7 @@ def _main():
             "gym_continuous": ["mujoco-py", "mujoco"],
             "rendering": ["moviepy"],
             "tests": ["pytest"],
-            "utils": ["tqdm", "configargparse"],
+            "utils": ["tqdm", "configargparse", "hydra-core", "hydra-submitit-launcher"],
         },
     )
 

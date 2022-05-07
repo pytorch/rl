@@ -4,15 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 
 from argparse import ArgumentParser, Namespace
+from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Type, Union
 
-from torchrl.collectors.collectors import (
-    _DataCollector,
-    _MultiDataCollector,
-    MultiaSyncDataCollector,
-    MultiSyncDataCollector,
-)
+from torchrl.collectors.collectors import (MultiaSyncDataCollector,
+                                           MultiSyncDataCollector,
+                                           _DataCollector, _MultiDataCollector)
 from torchrl.data import MultiStep
+from torchrl.data.replay_buffers.replay_buffers import stack_tensors
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs import ParallelEnv
 
@@ -314,11 +313,12 @@ def make_collector_onpolicy(
     env_kwargs = {}
     if make_env_kwargs is not None:
         env_kwargs.update(make_env_kwargs)
-    args.collector_devices = (
-        args.collector_devices
-        if len(args.collector_devices) > 1
-        else args.collector_devices[0]
-    )
+    # breakpoint()
+    # args.collector_devices = (
+    #     args.collector_devices
+    #     if len(args.collector_devices) > 1
+    #     else args.collector_devices[0]
+    # )
     collector_helper_kwargs = {
         "env_fns": make_env,
         "env_kwargs": env_kwargs,
@@ -343,94 +343,57 @@ def make_collector_onpolicy(
     collector.set_seed(args.seed)
     return collector
 
+@dataclass
+class OnPolicyCollectorConfig:
+    collector_devices: list = field(default_factory=lambda: ['cpu'])
+    # device on which the data collector should store the trajectories to be passed to this script.
+    # If the collector device differs from the policy device (cuda:0 if available), then the
+    # weights of the collector policy are synchronized with collector.update_policy_weights_().
 
-def _parser_collector_args(parser: ArgumentParser) -> ArgumentParser:
-    parser.add_argument(
-        "--collector_devices",
-        "--collector-devices",
-        nargs="+",
-        default=["cpu"],
-        help="device on which the data collector should store the trajectories to be passed to this script."
-        "If the collector device differs from the policy device (cuda:0 if available), then the "
-        "weights of the collector policy are synchronized with collector.update_policy_weights_().",
-    )
-    parser.add_argument(
-        "--pin_memory",
-        "--pin-memory",
-        action="store_true",
-        help="if True, the data collector will call pin_memory before dispatching tensordicts onto the "
-        "passing device.",
-    )
-    parser.add_argument(
-        "--init_with_lag",
-        "--init-with-lag",
-        action="store_true",
-        help="if True, the first trajectory will be truncated earlier at a random step. This is helpful"
-        " to desynchronize the environments, such that steps do no match in all collected "
-        "rollouts. Especially useful for online training, to prevent cyclic sample indices.",
-    )
-    parser.add_argument(
-        "--frames_per_batch",
-        "--frames-per-batch",
-        type=int,
-        default=1000,
-        help="number of steps executed in the environment per collection."
-        "This value represents how many steps will the data collector execute and return in *each*"
-        "environment that has been created in between two rounds of optimization "
-        "(see the optim_steps_per_batch above). "
-        "On the one hand, a low value will enhance the data throughput between processes in async "
-        "settings, which can make the accessing of data a computational bottleneck. "
-        "High values will on the other hand lead to greater tensor sizes in memory and disk to be "
-        "written and read at each global iteration. One should look at the number of frames per second"
-        "in the log to assess the efficiency of the configuration.",
-    )
-    parser.add_argument(
-        "--total_frames",
-        "--total-frames",
-        type=int,
-        default=50000000,
-        help="total number of frames collected for training. Does account for frame_skip (i.e. will be "
-        "divided by the frame_skip). Default=50e6.",
-    )
-    parser.add_argument(
-        "--num_workers",
-        "--num-workers",
-        type=int,
-        default=32,
-        help="Number of workers used for data collection. ",
-    )
-    parser.add_argument(
-        "--env_per_collector",
-        "--env-per-collector",
-        default=8,
-        type=int,
-        help="Number of environments per collector. If the env_per_collector is in the range: "
-        "1<env_per_collector<=num_workers, then the collector runs"
-        "ceil(num_workers/env_per_collector) in parallel and executes the policy steps synchronously "
-        "for each of these parallel wrappers. If env_per_collector=num_workers, no parallel wrapper is created.",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="seed used for the environment, pytorch and numpy.",
-    )
-    parser.add_argument(
-        "--exploration_mode",
-        type=str,
-        default=None,
-        help="exploration mode of the data collector. If gSDE is being used, this should be set to `'net_output'`.",
-    )
-    parser.add_argument(
-        "--async_collection",
-        "--async-collection",
-        action="store_true",
-        help="whether data collection should be done asynchrously. Asynchrounous data collection means "
-        "that the data collector will keep on running the environment with the previous weights "
-        "configuration while the optimization loop is being done. If the algorithm is trained "
-        "synchronously, data collection and optimization will occur iteratively, not concurrently.",
-    )
-    return parser
+    pin_memory: bool = False
+    # if True, the data collector will call pin_memory before dispatching tensordicts onto the
+    # passing device.
+
+    init_with_lag: bool = False
+    # if True, the first trajectory will be truncated earlier at a random step. This is helpful
+    # to desynchronize the environments, such that steps do no match in all collected
+    # rollouts. Especially useful for online training, to prevent cyclic sample indices.
+
+    frames_per_batch: int = 1000
+    # number of steps executed in the environment per collection.
+    # This value represents how many steps will the data collector execute and return in *each*
+    # environment that has been created in between two rounds of optimization
+    # (see the optim_steps_per_batch above).
+    # On the one hand, a low value will enhance the data throughput between processes in async
+    # settings, which can make the accessing of data a computational bottleneck.
+    # High values will on the other hand lead to greater tensor sizes in memory and disk to be
+    # written and read at each global iteration. One should look at the number of frames per second
+    # in the log to assess the efficiency of the configuration.
+
+    total_frames: int = 50000000
+    # total number of frames collected for training. Does account for frame_skip (i.e. will be
+    # divided by the frame_skip)
+
+    num_workers: int = 32
+    # Number of workers used for data collection.
+
+    env_per_collector: int = 8
+    # Number of environments per collector. If the env_per_collector is in the range:
+    # 1<env_per_collector<=num_workers, then the collector runs
+    # ceil(num_workers/env_per_collector) in parallel and executes the policy steps synchronously
+    # for each of these parallel wrappers. If env_per_collector=num_workers, no parallel wrapper is created.
+
+    seed: int = 42
+    # seed used for the environment, pytorch and numpy.
+
+    exploration_mode: Optional[str] = None
+    # exploration mode of the data collector. If gSDE is being used, this should be set to `'net_output'`.
+
+    async_collection: bool = False
+    # whether data collection should be done asynchrously. Asynchrounous data collection means
+    # that the data collector will keep on running the environment with the previous weights
+    # configuration while the optimization loop is being done. If the algorithm is trained
+    # synchronously, data collection and optimization will occur iteratively, not concurrently.
 
 
 def parser_collector_args_offpolicy(parser: ArgumentParser) -> ArgumentParser:

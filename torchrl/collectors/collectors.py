@@ -17,9 +17,9 @@ import numpy as np
 import torch
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
-
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
 from torchrl.modules import ProbabilisticTDModule
+
 from .utils import split_trajectories
 
 __all__ = [
@@ -30,9 +30,10 @@ __all__ = [
 ]
 
 from torchrl.envs.transforms import TransformedEnv
+
 from ..data import TensorSpec
-from ..data.tensordict.tensordict import _TensorDict, TensorDict
-from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
+from ..data.tensordict.tensordict import TensorDict, _TensorDict
+from ..data.utils import DEVICE_TYPING, CloudpickleWrapper
 from ..envs.common import _EnvClass
 from ..envs.vec_env import _BatchedEnv
 
@@ -655,6 +656,9 @@ class _MultiDataCollector(_DataCollector):
                 f"passing_devices)={len(devices_list)}"
             )
 
+        if isinstance(devices, Sequence) and len(devices) == 1:
+            devices = devices[0]
+        
         if isinstance(devices, (str, int, torch.device)):
             devices = [torch.device(devices) for _ in range(self.num_workers)]
         elif devices is None:
@@ -681,6 +685,9 @@ class _MultiDataCollector(_DataCollector):
                 self._get_weights_fn_dict[_device] = _get_weight_fn
             devices[i] = _device
         self.devices = devices
+
+        if isinstance(passing_devices, Sequence) and len(passing_devices) == 1:
+            passing_devices = passing_devices[0]
 
         if isinstance(passing_devices, (str, int, torch.device)):
             self.passing_devices = [
