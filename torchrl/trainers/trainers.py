@@ -33,7 +33,7 @@ from torchrl.data.utils import expand_right
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import TDModuleWrapper, TDModule
+from torchrl.modules import TDModule
 from torchrl.objectives.costs.common import _LossModule
 
 REPLAY_BUFFER_CLASS = {
