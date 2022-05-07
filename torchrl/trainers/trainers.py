@@ -62,16 +62,15 @@ TYPE_DESCR = {float: "4.4f", int: ""}
 
 
 class Trainer:
-    """A generic Agent class.
+    """A generic Trainer class.
 
-    An agent is responsible of collecting data and training the model.
-    To keep the class as versatile as possible, Agent does not construct any
-    of its components: they all must be provided as argument when
-    initializing the object.
-    To build an Agent, one needs a iterable data source (a `collector`), a
-    loss module, an optimizer. Optionally, a recorder (i.e. an environment
-    instance used for testing purposes) and a policy can be provided for
-    evaluating the training progress.
+    A trainer is responsible for collecting data and training the model.
+    To keep the class as versatile as possible, Trainer does not construct any
+    of its specific operations: they all must be hooked at specific points in
+    the training loop.
+
+    To build a Trainer, one needs an iterable data source (a `collector`), a
+    loss module and an optimizer.
 
     Args:
         collector (Sequence[_TensorDict]): An iterable returning batches of
@@ -83,21 +82,10 @@ class Trainer:
             TensorDict where every key points to a different loss component.
         optimizer (optim.Optimizer): An optimizer that trains the parameters
             of the model.
-        policy_exploration (ProbabilisticTDModule, optional): a policy
-            instance used for
-
-            (1) updating the exploration noise schedule;
-
-            (2) testing the policy on the recorder.
-
-            Given that this instance is supposed to both explore and render
-            the performance of the policy, it should be possible to turn off
-            the explorative behaviour by calling the
-            `set_exploration_mode('mode')` context manager.
         writer (SummaryWriter, optional): a Tensorboard summary writer for
             logging purposes.
         optim_steps_per_batch (int, optional): number of optimization steps
-            per collection of data. An agent works as follows: a main loop
+            per collection of data. An trainer works as follows: a main loop
             collects batches of data (epoch loop), and a sub-loop (training
             loop) performs model updates in between two collections of data.
             Default is 500
@@ -112,9 +100,9 @@ class Trainer:
             won't have any effect. Default is `True`
         seed (int, optional): Seed to be used for the collector, pytorch and
             numpy. Default is 42.
-        save_agent_interval (int, optional): How often the agent should be
+        save_trainer_interval (int, optional): How often the trainer should be
             saved to disk. Default is 10000.
-        save_agent_file (path, optional): path where to save the agent.
+        save_trainer_file (path, optional): path where to save the trainer.
             Default is None (no saving)
     """
 
@@ -133,15 +121,14 @@ class Trainer:
         frame_skip: int,
         loss_module: Union[_LossModule, Callable[[_TensorDict], _TensorDict]],
         optimizer: optim.Optimizer,
-        policy_exploration: Optional[TDModuleWrapper] = None,
         writer: Optional["SummaryWriter"] = None,
         optim_steps_per_batch: int = 500,
         clip_grad_norm: bool = True,
         clip_norm: float = 100.0,
         progress_bar: bool = True,
         seed: int = 42,
-        save_agent_interval: int = 10000,
-        save_agent_file: Optional[Union[str, pathlib.Path]] = None,
+        save_trainer_interval: int = 10000,
+        save_trainer_file: Optional[Union[str, pathlib.Path]] = None,
     ) -> None:
 
         # objects
@@ -149,7 +136,6 @@ class Trainer:
         self.collector = collector
         self.loss_module = loss_module
         self.optimizer = optimizer
-        self.policy_exploration = policy_exploration
         self.writer = writer
         self._params = []
         for p in self.optimizer.param_groups:
@@ -166,11 +152,12 @@ class Trainer:
         self.clip_norm = clip_norm
         if progress_bar and not _has_tqdm:
             warnings.warn(
-                "tqdm library not found. Consider installing tqdm to use the Agent progress bar."
+                "tqdm library not found. "
+                "Consider installing tqdm to use the Trainer progress bar."
             )
         self.progress_bar = progress_bar and _has_tqdm
-        self.save_agent_interval = save_agent_interval
-        self.save_agent_file = save_agent_file
+        self.save_trainer_interval = save_trainer_interval
+        self.save_trainer_file = save_trainer_file
 
         self._log_dict = defaultdict(lambda: [])
 
@@ -184,14 +171,14 @@ class Trainer:
         self._process_optim_batch_ops = []
         self._post_optim_ops = []
 
-    def save_agent(self) -> None:
+    def save_trainer(self) -> None:
         _save = False
-        if self.save_agent_file is not None:
-            if (self._collected_frames - self._last_save) > self.save_agent_interval:
+        if self.save_trainer_file is not None:
+            if (self._collected_frames - self._last_save) > self.save_trainer_interval:
                 self._last_save = self._collected_frames
                 _save = True
         if _save:
-            torch.save(self.state_dict(), self.save_agent_file)
+            torch.save(self.state_dict(), self.save_trainer_file)
 
     def load_from_file(self, file: Union[str, pathlib.Path]) -> Trainer:
         loaded_dict: OrderedDict = torch.load(file)
@@ -469,7 +456,6 @@ class Trainer:
 
     def __repr__(self) -> str:
         loss_str = indent(f"loss={self.loss_module}", 4 * " ")
-        policy_str = indent(f"policy_exploration={self.policy_exploration}", 4 * " ")
         collector_str = indent(f"collector={self.collector}", 4 * " ")
         optimizer_str = indent(f"optimizer={self.optimizer}", 4 * " ")
         writer = indent(f"writer={self.writer}", 4 * " ")
@@ -477,17 +463,39 @@ class Trainer:
         string = "\n".join(
             [
                 loss_str,
-                policy_str,
                 collector_str,
                 optimizer_str,
                 writer,
             ]
         )
-        string = f"Agent(\n{string})"
+        string = f"Trainer(\n{string})"
         return string
 
 
 class SelectKeys:
+    """Selects keys in a TensorDict batch.
+
+    Args:
+        keys (iterable of strings): keys to be selected in the tensordict.
+
+    Examples:
+        >>> trainer = make_trainer()
+        >>> key1 = "first key"
+        >>> key2 = "second key"
+        >>> td = TensorDict(
+        ...     {
+        ...         key1: torch.randn(3),
+        ...         key2: torch.randn(3),
+        ...     },
+        ...     [],
+        ... )
+        >>> trainer.register_op("batch_process", SelectKeys([key1]))
+        >>> td_out = trainer._process_batch_hook(td)
+        >>> assert key1 in td_out.keys()
+        >>> assert key2 not in td_out.keys()
+
+    """
+
     def __init__(self, keys: Sequence[str]):
         if isinstance(keys, str):
             raise RuntimeError(
@@ -500,11 +508,19 @@ class SelectKeys:
 
 
 class ReplayBufferTrainer:
-    """
+    """Replay buffer hook provider.
+
     Args:
         replay_buffer (ReplayBuffer): replay buffer to be used.
         batch_size (int): batch size when sampling data from the
             latest collection or from the replay buffer.
+
+    Examples:
+        >>> rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
+        >>> trainer.register_op("batch_process", rb_trainer.extend)
+        >>> trainer.register_op("process_optim_batch", rb_trainer.sample)
+        >>> trainer.register_op("post_loss", rb_trainer.update_priority)
+
     """
 
     def __init__(self, replay_buffer: ReplayBuffer, batch_size: int) -> None:
@@ -529,6 +545,17 @@ class ReplayBufferTrainer:
 
 
 class LogReward:
+    """Reward logger hook.
+
+    Args:
+        logname (str): name of the rewards to be logged. Default is `"r_training"`.
+
+    Examples:
+        >>> log_reward = LogReward("reward")
+        >>> trainer.register_op("pre_steps_log", log_reward)
+
+    """
+
     def __init__(self, logname="r_training"):
         self.logname = logname
 
@@ -542,6 +569,19 @@ class LogReward:
 
 
 class RewardNormalizer:
+    """Reward normalizer hook.
+
+    Args:
+        decay (float, optional): exponential moving average decay parameter.
+            Default is 0.999
+
+    Examples:
+        >>> reward_normalizer = RewardNormalizer()
+        >>> trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
+        >>> trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
+
+    """
+
     def __init__(self, decay: float = 0.999):
         self._normalize_has_been_called = False
         self._update_has_been_called = False
@@ -558,7 +598,7 @@ class RewardNormalizer:
             # We'd like to check that rewards are normalized. Problem is that the trainer can collect data without calling steps...
             # raise RuntimeError(
             #     "There have been two consecutive calls to update_reward_stats without a call to normalize_reward. "
-            #     "Check that normalize_reward has been registered in the agent."
+            #     "Check that normalize_reward has been registered in the trainer."
             # )
             pass
         decay = self._reward_stats.get("decay", 0.999)
@@ -591,13 +631,31 @@ class RewardNormalizer:
 
 
 def mask_batch(batch: _TensorDict) -> _TensorDict:
+    """Batch masking hook.
+
+    If a tensordict contained padded trajectories but only single events are
+    needed, this hook can be used to select the valid events from the original
+    tensordict.
+
+    Args:
+        batch:
+
+    Examples:
+        >>> trainer = mocking_trainer()
+        >>> trainer.register_op("batch_process", mask_batch)
+
+    """
     if "mask" in batch.keys():
         mask = batch.get("mask")
         return batch[mask.squeeze(-1)]
 
 
 class BatchSubSampler:
-    """
+    """Data subsampler for online RL algorithms.
+
+    This class subsamples a part of a whole batch of data just collected from the
+    environment.
+
     Args:
         batch_size (int): sub-batch size to collect. The provided batch size
             must be equal to the total number of items in the output tensordict,
@@ -608,6 +666,21 @@ class BatchSubSampler:
         min_sub_traj_len (int, optional): minimum value of `sub_traj_len`, in
             case some elements of the batch contain few steps.
             Default is -1 (i.e. no minimum value)
+
+    Examples:
+        >>> td = TensorDict(
+        ...     {
+        ...         key1: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
+        ...         key2: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
+        ...     },
+        ...     [13, 10],
+        ... )
+        >>> trainer.register_op(
+        ...     "process_optim_batch",
+        ...     BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len),
+        ... )
+        >>> td_out = trainer._process_optim_batch_hook(td)
+        >>> assert td_out.shape == torch.Size([batch_size // sub_traj_len, sub_traj_len])
 
     """
 
@@ -693,14 +766,15 @@ class BatchSubSampler:
 
 
 class Recorder:
-    """
+    """Recorder hook for Trainer.
+
     Args:
         record_interval (int): total number of optimisation steps
             between two calls to the recorder for testing.
         record_frames (int): number of frames to be recorded during
             testing.
         frame_skip (int): frame_skip used in the environment. It is
-            important to let the agent know the number of frames skipped at
+            important to let the trainer know the number of frames skipped at
             each iteration, otherwise the frame count can be underestimated.
             For logging, this parameter is important to normalize the reward.
             Finally, to compare different runs with different frame_skip,
@@ -772,6 +846,25 @@ class Recorder:
 
 
 class UpdateWeights:
+    """A collector weights update hook class.
+
+    This hook must be used whenever the collector policy weights sit on a
+    different device than the policy weights being trained by the Trainer.
+    In that case, those weights must be synced across devices at regular
+    intervals. If the devices match, this will result in a no-op.
+
+    Args:
+        collector (_DataCollector): A data collector where the policy weights
+            must be synced.
+        update_weights_interval (int): Interval (in terms of number of batches
+            collected) where the sync must take place.
+
+    Examples:
+        >>> update_weights = UpdateWeights(trainer.collector, T)
+        >>> trainer.register_op("post_steps", update_weights)
+
+    """
+
     def __init__(self, collector: _DataCollector, update_weights_interval: int):
         self.collector = collector
         self.update_weights_interval = update_weights_interval
@@ -784,6 +877,20 @@ class UpdateWeights:
 
 
 class CountFramesLog:
+    """A frame counter hook.
+
+    Args:
+        frame_skip (int): frame skip of the environment. This argument is
+            important to keep track of the total number of frames, not the
+            apparent one.
+
+    Examples:
+        >>> count_frames = CountFramesLog(frame_skip=frame_skip)
+        >>> trainer.register_op("pre_steps_log", count_frames)
+
+
+    """
+
     def __init__(self, frame_skip: int):
         self.frame_count = 0
         self.frame_skip = frame_skip
