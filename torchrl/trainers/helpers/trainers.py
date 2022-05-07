@@ -142,7 +142,6 @@ def make_trainer(
         total_frames=args.total_frames * args.frame_skip,
         loss_module=loss_module,
         optimizer=optimizer,
-        policy_exploration=policy_exploration,
         writer=writer,
         optim_steps_per_batch=args.optim_steps_per_batch,
         clip_grad_norm=args.clip_grad_norm,
