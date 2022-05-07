@@ -126,6 +126,11 @@ class _TargetNetUpdate:
                     "tensors will be lost."
                 )
 
+        if len(_target_names) == 0:
+            raise RuntimeError(
+                "Did not found any target parameters or buffers in the loss module."
+            )
+
         _source_names = ["".join(name.split("_target_")) for name in _target_names]
 
         for _source in _source_names:
@@ -200,7 +205,7 @@ class SoftUpdate(_TargetNetUpdate):
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "REDQLoss"],
         eps: float = 0.999,
     ):
         if not (eps < 1.0 and eps > 0.0):

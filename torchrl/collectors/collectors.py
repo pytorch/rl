@@ -703,7 +703,8 @@ class _MultiDataCollector(_DataCollector):
         self.postprocs = dict()
         if postproc is not None:
             for _device in self.passing_devices:
-                self.postprocs[_device] = deepcopy(postproc).to(_device)
+                if _device not in self.postprocs:
+                    self.postprocs[_device] = deepcopy(postproc).to(_device)
         self.max_frames_per_traj = max_frames_per_traj
         self.frames_per_batch = frames_per_batch
         self.seed = seed
@@ -713,9 +714,7 @@ class _MultiDataCollector(_DataCollector):
         self.update_at_each_batch = update_at_each_batch
         self.init_with_lag = init_with_lag
         self.exploration_mode = exploration_mode
-        self.frames_per_worker = (
-            -(self.total_frames // -self.num_workers) if total_frames > 0 else np.inf
-        )  # ceil(total_frames/num_workers)
+        self.frames_per_worker = np.inf
         self._run_processes()
         self._exclude_private_keys = True
 

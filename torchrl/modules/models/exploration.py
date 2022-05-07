@@ -294,7 +294,7 @@ class gSDEWrapper(nn.Module):
         self.action_dim = action_dim
         self.state_dim = state_dim
         if sigma_init is None:
-            sigma_init = inv_softplus(math.sqrt(1 / state_dim))
+            sigma_init = inv_softplus(math.sqrt(0.05 / state_dim))
         self.register_parameter(
             "log_sigma",
             nn.Parameter(torch.zeros((action_dim, state_dim), requires_grad=True)),

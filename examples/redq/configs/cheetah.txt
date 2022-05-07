@@ -1,9 +1,9 @@
-env_name=humanoid
-env_task=walk
+env_name=cheetah
+env_task=run
 env_library=dm_control
 async_collection
 record_video
-frame_skip=2
+frame_skip=4
 frames_per_batch=320
 optim_steps_per_batch=3200
 prb
