@@ -1,0 +1,13 @@
+env_name=cheetah
+env_task=run
+env_library=dm_control
+async_collection
+record_video
+frame_skip=4
+frames_per_batch=320
+optim_steps_per_batch=160
+prb
+multi_step
+exp_name=cheetah
+tanh_loc
+total_frames=5000000
