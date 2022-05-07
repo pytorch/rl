@@ -2,12 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from packaging import version
 import warnings
 from types import ModuleType
 from typing import List, Optional, Sequence
 
 import torch
+from packaging import version
 
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
@@ -128,7 +128,7 @@ class GymEnv(GymLikeEnv):
         return gym
 
     def _set_seed(self, seed: int) -> int:
-        if version.parse(gym.__version__) < version.parse('0.19.0'):
+        if version.parse(gym.__version__) < version.parse("0.19.0"):
             self._env.seed(seed=seed)
         else:
             self.reset(seed=seed)
