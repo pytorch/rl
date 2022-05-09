@@ -797,6 +797,7 @@ class Recorder:
             "mode". Set to "random" to enable exploration
         out_key (str, optional): reward key to set to the logger. Default is
             `"reward_evaluation"`.
+        suffix (str, optional): suffix of the video to be recorded.
 
     """
 
@@ -809,6 +810,7 @@ class Recorder:
         recorder: _EnvClass,
         exploration_mode: str = "mode",
         out_key: str = "r_evaluation",
+        suffix: Optional[str] = None,
     ) -> None:
 
         self.policy_exploration = policy_exploration
@@ -819,6 +821,7 @@ class Recorder:
         self.record_interval = record_interval
         self.exploration_mode = exploration_mode
         self.out_key = out_key
+        self.suffix = suffix
 
     @torch.no_grad()
     def __call__(self, batch: _TensorDict) -> Tuple[str, torch.Tensor]:
@@ -839,7 +842,7 @@ class Recorder:
                     self.policy_exploration.train()
                 self.recorder.train()
                 reward = td_record.get("reward").mean() / self.frame_skip
-                self.recorder.transform.dump()
+                self.recorder.transform.dump(suffix=self.suffix)
                 out = self.out_key, reward
         self._count += 1
         return out
