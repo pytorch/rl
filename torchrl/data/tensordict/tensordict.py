@@ -1883,6 +1883,11 @@ def masked_select(td: _TensorDict, *args, **kwargs) -> _TensorDict:
     return td.masked_select(*args, **kwargs)
 
 
+@implements_for_td(torch.permute)
+def permute(td: _TensorDict, dims) -> _TensorDict:
+    return td.permute(*dims)
+
+
 @implements_for_td(torch.cat)
 def cat(
     list_of_tensordicts: Sequence[_TensorDict],

@@ -231,22 +231,22 @@ def test_permute(device):
         "c": torch.randn(4, 5, 6, device=device),
     }
     td1 = TensorDict(batch_size=(4, 5, 6), source=d)
-    td2 = td1.permute(2, 1, 0)
+    td2 = torch.permute(td1, dims=(2, 1, 0))
     assert td2.shape == torch.Size((6, 5, 4))
     assert td2["a"].shape == torch.Size((6, 5, 4, 9))
 
-    td2 = td1.permute(-1, -3, -2)
+    td2 = torch.permute(td1, dims=(-1, -3, -2))
     assert td2.shape == torch.Size((6, 4, 5))
     assert td2["c"].shape == torch.Size((6, 4, 5, 1))
 
-    td2 = td1.permute(0, 1, 2)
+    td2 = torch.permute(td1, dims=(0, 1, 2))
     assert td2["a"].shape == torch.Size((4, 5, 6, 9))
 
     t = TensorDict({"a": torch.randn(3, 4, 1)}, [3, 4])
-    t.permute(1, 0).set("b", torch.randn(4, 3))
+    torch.permute(t, dims=(1, 0)).set("b", torch.randn(4, 3))
     assert t["b"].shape == torch.Size((3, 4, 1))
 
-    t.permute(1, 0).fill_("a", 0.0)
+    torch.permute(t, dims=(1, 0)).fill_("a", 0.0)
     assert torch.sum(t["a"]) == torch.Tensor([0])
 
 
