@@ -205,6 +205,7 @@ def make_trainer(
                 record_interval=args.record_interval,
                 exploration_mode="random",
                 suffix="exploration",
+                out_key="r_evaluation_exploration"
             ),
         )
     trainer.register_op("post_steps", UpdateWeights(collector, 1))
