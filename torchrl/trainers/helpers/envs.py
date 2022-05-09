@@ -240,7 +240,14 @@ def get_stats_random_rollout(
     if not hasattr(args, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
-    td_stats = proof_environment.rollout(n_steps=args.init_env_steps)
+    n = 0
+    td_stats = []
+    while n < args.init_env_steps:
+        _td_stats = proof_environment.rollout(n_steps=args.init_env_steps)
+        n += _td_stats.numel()
+        td_stats.append(_td_stats)
+    td_stats = torch.cat(td_stats, 0)
+
     if key is None:
         keys = list(proof_environment.observation_spec.keys())
         key = keys.pop()
