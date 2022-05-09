@@ -78,10 +78,18 @@ class VideoRecorder(ObservationTransform):
             self.obs.append(observation_trsf.cpu().to(torch.uint8))
         return observation
 
-    def dump(self) -> None:
-        """Writes the video to the self.writer attribute."""
+    def dump(self, suffix: Optional[str] = None) -> None:
+        """Writes the video to the self.writer attribute.
+
+        Args:
+            suffix (str, optional): a suffix for the video to be recorded
+        """
+        if suffix is None:
+            tag = self.tag
+        else:
+            tag = "_".join([self.tag, suffix])
         self.writer.add_video(
-            tag=f"{self.tag}",
+            tag=tag,
             vid_tensor=torch.stack(self.obs, 0).unsqueeze(0),
             global_step=self.iter,
             **self.video_kwargs,
@@ -134,13 +142,18 @@ class TensorDictRecorder(Transform):
             self.td.append(_td)
         return td
 
-    def dump(self) -> None:
+    def dump(self, suffix: Optional[str] = None) -> None:
+        if suffix is None:
+            tag = self.tag
+        else:
+            tag = "_".join([self.tag, suffix])
+
         td = self.td
         if self.skip_reset:
             td = td[1:]
         torch.save(
             torch.stack(td, 0).contiguous(),
-            f"{self.out_file_base}_tensordict.t",
+            f"{tag}_tensordict.t",
         )
         self.iter += 1
         self.count = 0

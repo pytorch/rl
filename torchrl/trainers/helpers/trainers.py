@@ -195,6 +195,18 @@ def make_trainer(
                 record_interval=args.record_interval,
             ),
         )
+        trainer.register_op(
+            "post_steps_log",
+            Recorder(
+                record_frames=args.record_frames,
+                frame_skip=args.frame_skip,
+                policy_exploration=policy_exploration,
+                recorder=recorder,
+                record_interval=args.record_interval,
+                exploration_mode="random",
+                suffix="exploration",
+            ),
+        )
     trainer.register_op("post_steps", UpdateWeights(collector, 1))
 
     trainer.register_op("pre_steps_log", LogReward())
