@@ -20,5 +20,4 @@ PYBIND11_MODULE(_torchrl, m) {
 
   torchrl::DefineMinSegmentTree<float>("Fp32", m);
   torchrl::DefineMinSegmentTree<double>("Fp64", m);
-
 }
