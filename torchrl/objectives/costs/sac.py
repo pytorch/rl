@@ -74,6 +74,7 @@ class SACLoss(_LossModule):
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
         min_alpha: float = 0.1,
+        max_alpha: float = 10.0,
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         delay_actor: bool = False,
@@ -118,6 +119,9 @@ class SACLoss(_LossModule):
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
         self.register_buffer(
             "min_log_alpha", torch.tensor(min_alpha, device=device).log()
+        )
+        self.register_buffer(
+            "max_log_alpha", torch.tensor(max_alpha, device=device).log()
         )
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
@@ -319,7 +323,7 @@ class SACLoss(_LossModule):
 
     @property
     def _alpha(self):
-        self.log_alpha.data.clamp_min_(self.min_log_alpha)
+        self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         with torch.no_grad():
             alpha = self.log_alpha.exp()
         return alpha
