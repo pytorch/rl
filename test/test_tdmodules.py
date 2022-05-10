@@ -363,6 +363,11 @@ class TestTDSequence:
         if probabilistic:
             dist, *_ = tdmodule.get_dist(td)
             assert dist.rsample().shape[: td.ndimension()] == td.shape
+        else:
+            with pytest.raises(
+                RuntimeError, match="Cannot call get_dist on a sequence"
+            ):
+                dist, *_ = tdmodule.get_dist(td)
 
         # test bounds
         if not safe and spec_type == "bounded":
@@ -423,6 +428,11 @@ class TestTDSequence:
         if probabilistic:
             dist, *_ = tdmodule.get_dist(td, params=params)
             assert dist.rsample().shape[: td.ndimension()] == td.shape
+        else:
+            with pytest.raises(
+                RuntimeError, match="Cannot call get_dist on a sequence"
+            ):
+                dist, *_ = tdmodule.get_dist(td, params=params)
 
         # test bounds
         if not safe and spec_type == "bounded":
@@ -485,6 +495,11 @@ class TestTDSequence:
         if probabilistic:
             dist, *_ = tdmodule.get_dist(td, params=params, buffers=buffers)
             assert dist.rsample().shape[: td.ndimension()] == td.shape
+        else:
+            with pytest.raises(
+                RuntimeError, match="Cannot call get_dist on a sequence"
+            ):
+                dist, *_ = tdmodule.get_dist(td, params=params, buffers=buffers)
 
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 7])
