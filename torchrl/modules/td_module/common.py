@@ -963,6 +963,68 @@ class TDSequence(TDModule):
             buffers.extend(_buffers)
         return self_copy, (params, buffers)
 
+    def get_dist(
+        self,
+        tensordict: _TensorDict,
+        **kwargs,
+    ) -> Tuple[torch.distributions.Distribution, ...]:
+        L = len(self.module)
+
+        if isinstance(self.module[-1], ProbabilisticTDModule):
+            if "params" in kwargs and "buffers" in kwargs:
+                param_splits = self._split_param(kwargs["params"], "params")
+                buffer_splits = self._split_param(kwargs["buffers"], "buffers")
+                kwargs_pruned = {
+                    key: item
+                    for key, item in kwargs.items()
+                    if key not in ("params", "buffers")
+                }
+                for i, (module, param, buffer) in enumerate(
+                    zip(self.module, param_splits, buffer_splits)
+                ):
+                    if "vmap" in kwargs_pruned and i > 0:
+                        # the tensordict is already expended
+                        kwargs_pruned["vmap"] = (0, 0, *(0,) * len(module.in_keys))
+                    if i < L - 1:
+                        tensordict = module(
+                            tensordict, params=param, buffers=buffer, **kwargs_pruned
+                        )
+                    else:
+                        out = module.get_dist(
+                            tensordict, params=param, buffers=buffer, **kwargs_pruned
+                        )
+
+            elif "params" in kwargs:
+                param_splits = self._split_param(kwargs["params"], "params")
+                kwargs_pruned = {
+                    key: item for key, item in kwargs.items() if key not in ("params",)
+                }
+                for i, (module, param) in enumerate(zip(self.module, param_splits)):
+                    if "vmap" in kwargs_pruned and i > 0:
+                        # the tensordict is already expended
+                        kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
+                    if i < L - 1:
+                        tensordict = module(tensordict, params=param, **kwargs_pruned)
+                    else:
+                        out = module.get_dist(tensordict, params=param, **kwargs_pruned)
+
+            elif not len(kwargs):
+                for i, module in enumerate(self.module):
+                    if i < L - 1:
+                        tensordict = module(tensordict)
+                    else:
+                        out = module.get_dist(tensordict)
+            else:
+                raise RuntimeError(
+                    "TDSequence does not support keyword arguments other than 'params', 'buffers' and 'vmap'"
+                )
+
+            return out
+        else:
+            raise RuntimeError(
+                "Cannot call get_dist on a sequence of tensordicts that does not end with a probabilistic TensorDict"
+            )
+
 
 class TDModuleWrapper(nn.Module):
     """
