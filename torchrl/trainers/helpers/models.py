@@ -921,8 +921,10 @@ def make_redq_model(
             actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len
         )
         in_keys_actor = in_keys + ["_eps_gSDE"]
-        dist_class = IndependentNormal
+        dist_class = TanhNormal
         dist_kwargs = {
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
             "tanh_loc": tanh_loc,
         }
 
