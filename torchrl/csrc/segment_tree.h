@@ -16,8 +16,8 @@
 #include <limits>
 #include <vector>
 
-#include "numpy_utils.h"
-#include "torch_utils.h"
+#include "torchrl/csrc/numpy_utils.h"
+#include "torchrl/csrc/torch_utils.h"
 
 namespace py = pybind11;
 
@@ -306,5 +306,154 @@ class MinSegmentTree final : public SegmentTree<T, MinOp<T>> {
   MinSegmentTree(int64_t size)
       : SegmentTree<T, MinOp<T>>(size, std::numeric_limits<T>::max()) {}
 };
+
+template <typename T>
+void DefineSumSegmentTree(const std::string& type, py::module& m) {
+  const std::string pyclass = "SumSegmentTree" + type;
+  py::class_<SumSegmentTree<T>, std::shared_ptr<SumSegmentTree<T>>>(
+      m, pyclass.c_str())
+      .def(py::init<int64_t>())
+      .def_property_readonly("size", &SumSegmentTree<T>::size)
+      .def_property_readonly("capacity", &SumSegmentTree<T>::capacity)
+      .def_property_readonly("identity_element",
+                             &SumSegmentTree<T>::identity_element)
+      .def("__len__", &SumSegmentTree<T>::size)
+      .def("__getitem__",
+           py::overload_cast<int64_t>(&SumSegmentTree<T>::At, py::const_))
+      .def("__getitem__", py::overload_cast<const py::array_t<int64_t>&>(
+                              &SumSegmentTree<T>::At, py::const_))
+      .def("__getitem__", py::overload_cast<const torch::Tensor&>(
+                              &SumSegmentTree<T>::At, py::const_))
+      .def("at", py::overload_cast<int64_t>(&SumSegmentTree<T>::At, py::const_))
+      .def("at", py::overload_cast<const py::array_t<int64_t>&>(
+                     &SumSegmentTree<T>::At, py::const_))
+      .def("at", py::overload_cast<const torch::Tensor&>(&SumSegmentTree<T>::At,
+                                                         py::const_))
+      .def("__setitem__",
+           py::overload_cast<int64_t, const T&>(&SumSegmentTree<T>::Update))
+      .def("__setitem__",
+           py::overload_cast<const py::array_t<int64_t>&, const T&>(
+               &SumSegmentTree<T>::Update))
+      .def(
+          "__setitem__",
+          py::overload_cast<const py::array_t<int64_t>&, const py::array_t<T>&>(
+              &SumSegmentTree<T>::Update))
+      .def("__setitem__", py::overload_cast<const torch::Tensor&, const T&>(
+                              &SumSegmentTree<T>::Update))
+      .def("__setitem__",
+           py::overload_cast<const torch::Tensor&, const torch::Tensor&>(
+               &SumSegmentTree<T>::Update))
+      .def("update",
+           py::overload_cast<int64_t, const T&>(&SumSegmentTree<T>::Update))
+      .def("update", py::overload_cast<const py::array_t<int64_t>&, const T&>(
+                         &SumSegmentTree<T>::Update))
+      .def(
+          "update",
+          py::overload_cast<const py::array_t<int64_t>&, const py::array_t<T>&>(
+              &SumSegmentTree<T>::Update))
+      .def("update", py::overload_cast<const torch::Tensor&, const T&>(
+                         &SumSegmentTree<T>::Update))
+      .def("update",
+           py::overload_cast<const torch::Tensor&, const torch::Tensor&>(
+               &SumSegmentTree<T>::Update))
+      .def("query", py::overload_cast<int64_t, int64_t>(
+                        &SumSegmentTree<T>::Query, py::const_))
+      .def("query", py::overload_cast<const py::array_t<int64_t>&,
+                                      const py::array_t<int64_t>&>(
+                        &SumSegmentTree<T>::Query, py::const_))
+      .def("query",
+           py::overload_cast<const torch::Tensor&, const torch::Tensor&>(
+               &SumSegmentTree<T>::Query, py::const_))
+      .def("scan_lower_bound",
+           py::overload_cast<const T&>(&SumSegmentTree<T>::ScanLowerBound,
+                                       py::const_))
+      .def("scan_lower_bound",
+           py::overload_cast<const py::array_t<T>&>(
+               &SumSegmentTree<T>::ScanLowerBound, py::const_))
+      .def("scan_lower_bound",
+           py::overload_cast<const torch::Tensor&>(
+               &SumSegmentTree<T>::ScanLowerBound, py::const_))
+      .def(py::pickle(
+          [](const SumSegmentTree<T>& s) {
+            return py::make_tuple(s.DumpValues());
+          },
+          [](const py::tuple& t) {
+            assert(t.size() == 1);
+            const py::array_t<T>& arr = t[0].cast<py::array_t<T>>();
+            SumSegmentTree<T> s(arr.size());
+            s.LoadValues(arr);
+            return s;
+          }));
+}
+
+template <typename T>
+void DefineMinSegmentTree(const std::string& type, py::module& m) {
+  const std::string pyclass = "MinSegmentTree" + type;
+  py::class_<MinSegmentTree<T>, std::shared_ptr<MinSegmentTree<T>>>(
+      m, pyclass.c_str())
+      .def(py::init<int64_t>())
+      .def_property_readonly("size", &MinSegmentTree<T>::size)
+      .def_property_readonly("capacity", &MinSegmentTree<T>::capacity)
+      .def_property_readonly("identity_element",
+                             &MinSegmentTree<T>::identity_element)
+      .def("__len__", &MinSegmentTree<T>::size)
+      .def("__getitem__",
+           py::overload_cast<int64_t>(&MinSegmentTree<T>::At, py::const_))
+      .def("__getitem__", py::overload_cast<const py::array_t<int64_t>&>(
+                              &MinSegmentTree<T>::At, py::const_))
+      .def("__getitem__", py::overload_cast<const torch::Tensor&>(
+                              &MinSegmentTree<T>::At, py::const_))
+      .def("at", py::overload_cast<int64_t>(&MinSegmentTree<T>::At, py::const_))
+      .def("at", py::overload_cast<const py::array_t<int64_t>&>(
+                     &MinSegmentTree<T>::At, py::const_))
+      .def("at", py::overload_cast<const torch::Tensor&>(&MinSegmentTree<T>::At,
+                                                         py::const_))
+      .def("__setitem__",
+           py::overload_cast<int64_t, const T&>(&MinSegmentTree<T>::Update))
+      .def("__setitem__",
+           py::overload_cast<const py::array_t<int64_t>&, const T&>(
+               &MinSegmentTree<T>::Update))
+      .def(
+          "__setitem__",
+          py::overload_cast<const py::array_t<int64_t>&, const py::array_t<T>&>(
+              &MinSegmentTree<T>::Update))
+      .def("__setitem__", py::overload_cast<const torch::Tensor&, const T&>(
+                              &MinSegmentTree<T>::Update))
+      .def("__setitem__",
+           py::overload_cast<const torch::Tensor&, const torch::Tensor&>(
+               &MinSegmentTree<T>::Update))
+      .def("update",
+           py::overload_cast<int64_t, const T&>(&MinSegmentTree<T>::Update))
+      .def("update", py::overload_cast<const py::array_t<int64_t>&, const T&>(
+                         &MinSegmentTree<T>::Update))
+      .def(
+          "update",
+          py::overload_cast<const py::array_t<int64_t>&, const py::array_t<T>&>(
+              &MinSegmentTree<T>::Update))
+      .def("update", py::overload_cast<const torch::Tensor&, const T&>(
+                         &MinSegmentTree<T>::Update))
+      .def("update",
+           py::overload_cast<const torch::Tensor&, const torch::Tensor&>(
+               &MinSegmentTree<T>::Update))
+      .def("query", py::overload_cast<int64_t, int64_t>(
+                        &MinSegmentTree<T>::Query, py::const_))
+      .def("query", py::overload_cast<const py::array_t<int64_t>&,
+                                      const py::array_t<int64_t>&>(
+                        &MinSegmentTree<T>::Query, py::const_))
+      .def("query",
+           py::overload_cast<const torch::Tensor&, const torch::Tensor&>(
+               &MinSegmentTree<T>::Query, py::const_))
+      .def(py::pickle(
+          [](const MinSegmentTree<T>& s) {
+            return py::make_tuple(s.DumpValues());
+          },
+          [](const py::tuple& t) {
+            assert(t.size() == 1);
+            const py::array_t<T>& arr = t[0].cast<py::array_t<T>>();
+            MinSegmentTree<T> s(arr.size());
+            s.LoadValues(arr);
+            return s;
+          }));
+}
 
 }  // namespace torchrl
