@@ -18,20 +18,24 @@ class classproperty(property):
         return classmethod(self.fget).__get__(None, owner)()
 
 
-def step_tensor_dict(
-    tensor_dict: _TensorDict, next_tensor_dict: _TensorDict = None
+def step_tensordict(
+    tensordict: _TensorDict,
+    next_tensordict: _TensorDict = None,
+    keep_other: bool = False,
 ) -> _TensorDict:
     """
-    Given a tensor_dict retrieved after a step, returns another tensordict with all the 'next_' prefixes are removed,
+    Given a tensordict retrieved after a step, returns another tensordict with all the 'next_' prefixes are removed,
     i.e. all the `'next_some_other_string'` keys will be renamed onto `'some_other_string'` keys.
 
 
     Args:
-        tensor_dict (_TensorDict): tensordict with keys to be renamed
-        next_tensor_dict (_TensorDict, optional): destination tensordict
+        tensordict (_TensorDict): tensordict with keys to be renamed
+        next_tensordict (_TensorDict, optional): destination tensordict
+        keep_other (bool, optional): if True, all keys that do not start with `'next_'` will be kept.
+            Default is False.
 
     Returns:
-         A new tensordict (or next_tensor_dict) with the "next_*" keys renamed without the "next_" prefix.
+         A new tensordict (or next_tensordict) with the "next_*" keys renamed without the "next_" prefix.
 
     Examples:
     This funtion allows for this kind of loop to be used:
@@ -41,7 +45,7 @@ def step_tensor_dict(
         >>> td = env.current_tensordict
         >>> for i in range(n_steps):
         >>>     td = env.step(td)
-        >>>     next_td = step_tensor_dict(td)
+        >>>     next_td = step_tensordict(td)
         >>>     assert next_td is not td # make sure that keys are not overwritten
         >>>     td_out.append(td)
         >>>     td = next_td
@@ -49,14 +53,18 @@ def step_tensor_dict(
         >>> print(td_out) # should contain keys 'observation', 'next_observation', 'action', 'reward', 'done' or similar
 
     """
-    keys = [key for key in tensor_dict.keys() if key.rfind("next_") == 0]
-    select_tensor_dict = tensor_dict.select(*keys).clone()
-    for key in keys:
-        select_tensor_dict.rename_key(key, key[5:], safe=True)
-    if next_tensor_dict is not None:
-        return next_tensor_dict.update(select_tensor_dict)
+    other_keys = []
+    keys = [key for key in tensordict.keys() if key.startswith("next_")]
+    new_keys = [key[5:] for key in keys]
+    if keep_other:
+        other_keys = [key for key in tensordict.keys() if key not in new_keys]
+    select_tensordict = tensordict.select(*other_keys, *keys).clone()
+    for new_key, key in zip(new_keys, keys):
+        select_tensordict.rename_key(key, new_key, safe=True)
+    if next_tensordict is not None:
+        return next_tensordict.update(select_tensordict)
     else:
-        return select_tensor_dict
+        return select_tensordict
 
 
 def get_available_libraries():

@@ -20,7 +20,7 @@ from torchrl.modules.td_module.actors import (
 from torchrl.objectives.costs.utils import distance_loss, next_state_value
 from .common import _LossModule
 
-__all__ = ["SACLoss", "DoubleSACLoss"]
+__all__ = ["SACLoss"]
 
 
 class SACLoss(_LossModule):
@@ -52,11 +52,16 @@ class SACLoss(_LossModule):
         target_entropy (float or str, optional): Target entropy for the
             stochastic policy. Default is "auto", where target entropy is
             computed as `-prod(n_actions)`.
+        delay_actor (bool, optional): Whether to separate the target actor
+            networks from the actor networks used for data collection.
+            Default is `False`.
+        delay_qvalue (bool, optional): Whether to separate the target Q value
+            networks from the Q value networks used for data collection.
+            Default is `False`.
+        delay_value (bool, optional): Whether to separate the target value
+            networks from the value networks used for data collection.
+            Default is `False`.
     """
-
-    delay_actor: bool = False
-    delay_qvalue: bool = False
-    delay_value: bool = False
 
     def __init__(
         self,
@@ -68,12 +73,17 @@ class SACLoss(_LossModule):
         priotity_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
+        min_alpha: float = 0.1,
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
+        delay_actor: bool = False,
+        delay_qvalue: bool = False,
+        delay_value: bool = False,
     ) -> None:
         super().__init__()
 
         # Actor
+        self.delay_actor = delay_actor
         self.convert_to_functional(
             actor_network,
             "actor_network",
@@ -81,6 +91,7 @@ class SACLoss(_LossModule):
         )
 
         # Value
+        self.delay_value = delay_value
         self.convert_to_functional(
             value_network,
             "value_network",
@@ -88,6 +99,7 @@ class SACLoss(_LossModule):
         )
 
         # Q value
+        self.delay_qvalue = delay_qvalue
         self.num_qvalue_nets = num_qvalue_nets
         self.convert_to_functional(
             qvalue_network,
@@ -99,12 +111,15 @@ class SACLoss(_LossModule):
         self.gamma = gamma
         self.priority_key = priotity_key
         self.loss_function = loss_function
-        self.register_buffer("alpha_init", torch.tensor(alpha_init))
-        self.fixed_alpha = fixed_alpha
         try:
             device = next(self.parameters()).device
         except AttributeError:
             device = torch.device("cpu")
+        self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
+        self.register_buffer(
+            "min_log_alpha", torch.tensor(min_alpha, device=device).log()
+        )
+        self.fixed_alpha = fixed_alpha
         if fixed_alpha:
             self.register_buffer(
                 "log_alpha", torch.tensor(math.log(alpha_init), device=device)
@@ -158,7 +173,7 @@ class SACLoss(_LossModule):
                 "loss_value": loss_value.mean(),
                 "loss_alpha": loss_alpha.mean(),
                 "alpha": self._alpha,
-                "entropy": td_device.get("_log_prob").mean().detach(),
+                "entropy": -td_device.get("_log_prob").mean().detach(),
             },
             [],
         )
@@ -171,6 +186,8 @@ class SACLoss(_LossModule):
             buffers=list(self.actor_network_buffers),
         )[0]
         a_reparm = dist.rsample()
+        if not self.actor_network.spec.is_in(a_reparm):
+            a_reparm.data.copy_(self.actor_network.spec.project(a_reparm.data))
         log_prob = dist.log_prob(a_reparm)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys)
@@ -190,7 +207,7 @@ class SACLoss(_LossModule):
 
         # write log_prob in tensordict for alpha loss
         tensordict.set("_log_prob", log_prob.detach())
-        return self._alpha * log_prob  # - min_q_logprob
+        return self._alpha * log_prob - min_q_logprob
 
     def _loss_qvalue(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
         actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
@@ -263,6 +280,9 @@ class SACLoss(_LossModule):
             0
         ]  # resample an action
         action = action_dist.rsample()
+        if not self.actor_network.spec.is_in(action):
+            action.data.copy_(self.actor_network.spec.project(action.data))
+
         td_copy.set("action", action, inplace=False)
 
         qval_net = self.qvalue_network
@@ -299,25 +319,7 @@ class SACLoss(_LossModule):
 
     @property
     def _alpha(self):
+        self.log_alpha.data.clamp_min_(self.min_log_alpha)
         with torch.no_grad():
-            alpha = self.log_alpha.detach().exp()
+            alpha = self.log_alpha.exp()
         return alpha
-
-
-class DoubleSACLoss(SACLoss):
-    """
-    A Double SAC loss class.
-    As for Double DDPG/DQN losses, this class separates the target critic/value/actor networks from the
-    critic/value/actor networks used for data collection. Those target networks should be updated from their original
-    counterparts with some delay using dedicated classes (SoftUpdate and HardUpdate in objectives.cost.utils).
-    Note that the original networks will be copied at initialization using the copy.deepcopy method: in some rare cases
-    this may lead to unexpected behaviours (for instance if the networks change in a way that won't be reflected by their
-    state_dict). Please report any such bug if encountered.
-
-    """
-
-    def __init__(self, *args, delay_actor=False, delay_qvalue=False, **kwargs):
-        self.delay_actor = delay_actor
-        self.delay_qvalue = delay_qvalue
-        self.delay_value = True
-        super().__init__(*args, **kwargs)

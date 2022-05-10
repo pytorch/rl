@@ -239,6 +239,8 @@ class QValueHook:
     def __call__(
         self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if isinstance(values, tuple):
+            values = values[0]
         action = self.fun_dict[self.action_space](values)
         chosen_action_value = (action * values).sum(-1, True)
         return action, values, chosen_action_value
@@ -331,6 +333,8 @@ class DistributionalQValueHook(QValueHook):
     def __call__(
         self, net: nn.Module, observation: torch.Tensor, values: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if isinstance(values, tuple):
+            values = values[0]
         action = self.fun_dict[self.action_space](values, self.support)
         return action, values
 

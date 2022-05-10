@@ -5,6 +5,7 @@
 
 import argparse
 import os.path
+import re
 
 import numpy as np
 import pytest
@@ -17,7 +18,7 @@ from torchrl.data.tensordict.utils import _getitem_batch_size
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-def test_tensor_dict_set(device):
+def test_tensordict_set(device):
     torch.manual_seed(1)
     td = TensorDict({}, batch_size=(4, 5))
     td.set("key1", torch.randn(4, 5, device=device))
@@ -56,7 +57,7 @@ def test_tensor_dict_set(device):
         torch.randn(4, 5, 1, 2, dtype=torch.double, device=device),
         inplace=False,
     )
-    assert td._tensor_dict_meta["key1"].shape == td._tensor_dict["key1"].shape
+    assert td._tensordict_meta["key1"].shape == td._tensordict["key1"].shape
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -76,7 +77,7 @@ def test_stack(device):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-def test_tensor_dict_indexing(device):
+def test_tensordict_indexing(device):
     torch.manual_seed(1)
     td = TensorDict({}, batch_size=(4, 5))
     td.set("key1", torch.randn(4, 5, 1, device=device))
@@ -118,14 +119,14 @@ def test_tensor_dict_indexing(device):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-def test_subtensor_dict_construction(device):
+def test_subtensordict_construction(device):
     torch.manual_seed(1)
     td = TensorDict({}, batch_size=(4, 5))
     td.set("key1", torch.randn(4, 5, 1, device=device))
     td.set("key2", torch.randn(4, 5, 6, dtype=torch.double, device=device))
-    std1 = td.get_sub_tensor_dict(2)
-    std2 = std1.get_sub_tensor_dict(2)
-    std_control = td.get_sub_tensor_dict((2, 2))
+    std1 = td.get_sub_tensordict(2)
+    std2 = std1.get_sub_tensordict(2)
+    std_control = td.get_sub_tensordict((2, 2))
     assert (std_control.get("key1") == std2.get("key1")).all()
     assert (std_control.get("key2") == std2.get("key2")).all()
 
@@ -136,10 +137,10 @@ def test_subtensor_dict_construction(device):
     assert (std_control.get("key1") == std2.get("key1")).all()
     assert (std_control.get("key2") == std2.get("key2")).all()
 
-    assert std_control.get_parent_tensor_dict() is td
+    assert std_control.get_parent_tensordict() is td
     assert (
-        std_control.get_parent_tensor_dict()
-        is std2.get_parent_tensor_dict().get_parent_tensor_dict()
+        std_control.get_parent_tensordict()
+        is std2.get_parent_tensordict().get_parent_tensordict()
     )
 
 
@@ -152,7 +153,7 @@ def test_mask_td(device):
     }
     mask = torch.zeros(4, 5, dtype=torch.bool, device=device).bernoulli_()
     td = TensorDict(batch_size=(4, 5), source=d)
-    td_masked = td.masked_select(mask)
+    td_masked = torch.masked_select(td, mask)
     assert len(td_masked.get("key1")) == td_masked.shape[0]
 
 
@@ -164,7 +165,7 @@ def test_unbind_td(device):
         "key2": torch.randn(4, 5, 10, device=device),
     }
     td = TensorDict(batch_size=(4, 5), source=d)
-    td_unbind = td.unbind(1)
+    td_unbind = torch.unbind(td, dim=1)
     assert (
         td_unbind[0].batch_size == td[:, 0].batch_size
     ), f"got {td_unbind[0].batch_size} and {td[:, 0].batch_size}"
@@ -214,17 +215,121 @@ def test_squeeze(device):
         "key2": torch.randn(4, 5, 10, device=device),
     }
     td1 = TensorDict(batch_size=(4, 5), source=d)
-    td2 = td1.unsqueeze(1)
+    td2 = torch.unsqueeze(td1, dim=1)
     assert td2.batch_size == torch.Size([4, 1, 5])
 
-    td1b = td2.squeeze(1)
+    td1b = torch.squeeze(td2, dim=1)
     assert td1b.batch_size == td1.batch_size
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_permute(device):
+    torch.manual_seed(1)
+    d = {
+        "a": torch.randn(4, 5, 6, 9, device=device),
+        "b": torch.randn(4, 5, 6, 7, device=device),
+        "c": torch.randn(4, 5, 6, device=device),
+    }
+    td1 = TensorDict(batch_size=(4, 5, 6), source=d)
+    td2 = torch.permute(td1, dims=(2, 1, 0))
+    assert td2.shape == torch.Size((6, 5, 4))
+    assert td2["a"].shape == torch.Size((6, 5, 4, 9))
+
+    td2 = torch.permute(td1, dims=(-1, -3, -2))
+    assert td2.shape == torch.Size((6, 4, 5))
+    assert td2["c"].shape == torch.Size((6, 4, 5, 1))
+
+    td2 = torch.permute(td1, dims=(0, 1, 2))
+    assert td2["a"].shape == torch.Size((4, 5, 6, 9))
+
+    t = TensorDict({"a": torch.randn(3, 4, 1)}, [3, 4])
+    torch.permute(t, dims=(1, 0)).set("b", torch.randn(4, 3))
+    assert t["b"].shape == torch.Size((3, 4, 1))
+
+    torch.permute(t, dims=(1, 0)).fill_("a", 0.0)
+    assert torch.sum(t["a"]) == torch.Tensor([0])
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_permute_exceptions(device):
+    torch.manual_seed(1)
+    d = {
+        "a": torch.randn(4, 5, 6, 7, device=device),
+        "b": torch.randn(4, 5, 6, 8, 9, device=device),
+    }
+    td1 = TensorDict(batch_size=(4, 5, 6), source=d)
+
+    with pytest.raises(RuntimeError) as e_info:
+        td2 = td1.permute(1, 1, 0)
+        _ = td2.shape
+
+    with pytest.raises(RuntimeError) as e_info:
+        td2 = td1.permute(3, 2, 1, 0)
+        _ = td2.shape
+
+    with pytest.raises(RuntimeError) as e_info:
+        td2 = td1.permute(2, -1, 0)
+        _ = td2.shape
+
+    with pytest.raises(IndexError) as e_info:
+        td2 = td1.permute(2, 3, 0)
+        _ = td2.shape
+
+    with pytest.raises(IndexError) as e_info:
+        td2 = td1.permute(2, -4, 0)
+        _ = td2.shape
+
+    with pytest.raises(RuntimeError) as e_info:
+        td2 = td1.permute(2, 1)
+        _ = td2.shape
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_permute_with_tensordict_operations(device):
+    torch.manual_seed(1)
+    d = {
+        "a": torch.randn(20, 6, 9, device=device),
+        "b": torch.randn(20, 6, 7, device=device),
+        "c": torch.randn(20, 6, device=device),
+    }
+    td1 = TensorDict(batch_size=(20, 6), source=d).view(4, 5, 6).permute(2, 1, 0)
+    assert td1.shape == torch.Size((6, 5, 4))
+
+    d = {
+        "a": torch.randn(4, 5, 6, 9, device=device),
+        "b": torch.randn(4, 5, 6, 7, device=device),
+        "c": torch.randn(4, 5, 6, device=device),
+    }
+    td1 = (
+        TensorDict(batch_size=(4, 5, 6), source=d).to(SavedTensorDict).permute(2, 1, 0)
+    )
+    assert td1.shape == torch.Size((6, 5, 4))
+
+    d = {
+        "a": torch.randn(4, 5, 6, 7, 9, device=device),
+        "b": torch.randn(4, 5, 6, 7, 7, device=device),
+        "c": torch.randn(4, 5, 6, 7, device=device),
+    }
+    td1 = TensorDict(batch_size=(4, 5, 6, 7), source=d)[
+        :, :, :, torch.tensor([1, 2])
+    ].permute(3, 2, 1, 0)
+    assert td1.shape == torch.Size((2, 6, 5, 4))
+
+    d = {
+        "a": torch.randn(4, 5, 9, device=device),
+        "b": torch.randn(4, 5, 7, device=device),
+        "c": torch.randn(4, 5, device=device),
+    }
+    td1 = torch.stack(
+        [TensorDict(batch_size=(4, 5), source=d).clone() for _ in range(6)], 2
+    ).permute(2, 1, 0)
+    assert td1.shape == torch.Size((6, 5, 4))
 
 
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("stack_dim", [0, 1])
 def test_stacked_td(stack_dim, device):
-    tensor_dicts = [
+    tensordicts = [
         TensorDict(
             batch_size=[11, 12],
             source={
@@ -237,17 +342,17 @@ def test_stacked_td(stack_dim, device):
         for _ in range(10)
     ]
 
-    tensor_dicts0 = tensor_dicts[0]
-    tensor_dicts1 = tensor_dicts[1]
-    tensor_dicts2 = tensor_dicts[2]
-    tensor_dicts3 = tensor_dicts[3]
-    sub_td = LazyStackedTensorDict(*tensor_dicts, stack_dim=stack_dim)
+    tensordicts0 = tensordicts[0]
+    tensordicts1 = tensordicts[1]
+    tensordicts2 = tensordicts[2]
+    tensordicts3 = tensordicts[3]
+    sub_td = LazyStackedTensorDict(*tensordicts, stack_dim=stack_dim)
 
-    std_bis = torch.stack(tensor_dicts, dim=stack_dim)
+    std_bis = torch.stack(tensordicts, dim=stack_dim)
     assert (sub_td == std_bis).all()
 
     item = tuple([*[slice(None) for _ in range(stack_dim)], 0])
-    tensor_dicts0.zero_()
+    tensordicts0.zero_()
     assert (sub_td[item].get("key1") == sub_td.get("key1")[item]).all()
     assert (
         sub_td.contiguous()[item].get("key1") == sub_td.contiguous().get("key1")[item]
@@ -256,7 +361,7 @@ def test_stacked_td(stack_dim, device):
 
     item = tuple([*[slice(None) for _ in range(stack_dim)], 1])
     std2 = sub_td[:5]
-    tensor_dicts1.zero_()
+    tensordicts1.zero_()
     assert (std2[item].get("key1") == std2.get("key1")[item]).all()
     assert (
         std2.contiguous()[item].get("key1") == std2.contiguous().get("key1")[item]
@@ -264,7 +369,7 @@ def test_stacked_td(stack_dim, device):
     assert (std2.contiguous().get("key1")[item] == 0).all()
 
     std3 = sub_td[:5, :, :5]
-    tensor_dicts2.zero_()
+    tensordicts2.zero_()
     item = tuple([*[slice(None) for _ in range(stack_dim)], 2])
     assert (std3[item].get("key1") == std3.get("key1")[item]).all()
     assert (
@@ -273,7 +378,7 @@ def test_stacked_td(stack_dim, device):
     assert (std3.contiguous().get("key1")[item] == 0).all()
 
     std4 = sub_td.select("key1")
-    tensor_dicts3.zero_()
+    tensordicts3.zero_()
     item = tuple([*[slice(None) for _ in range(stack_dim)], 3])
     assert (std4[item].get("key1") == std4.get("key1")[item]).all()
     assert (
@@ -329,7 +434,7 @@ class TestTensorDicts:
 
     @property
     def sub_td(self):
-        return self.td.get_sub_tensor_dict(0)
+        return self.td.get_sub_tensordict(0)
 
     @property
     def saved_td(self):
@@ -339,8 +444,24 @@ class TestTensorDicts:
     def unsqueezed_td(self):
         return self.td.unsqueeze(0)
 
+    @property
+    def td_reset_bs(self):
+        td = self.td
+        td = td.unsqueeze(-1).to_tensordict()
+        td.batch_size = torch.Size([3, 1])
+        return td
+
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_select(self, td_name):
         torch.manual_seed(1)
@@ -354,7 +475,60 @@ class TestTensorDicts:
         assert td2 is td
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
+    def test_exclude(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        td2 = td.exclude("a")
+        assert td2 is not td
+        assert len(list(td2.keys())) == 2 and "a" not in td2.keys()
+        assert len(list(td2.clone().keys())) == 2 and "a" not in td2.clone().keys()
+
+        td2 = td.exclude("a", inplace=True)
+        assert td2 is td
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
+    def test_assert(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        with pytest.raises(
+            ValueError,
+            match="Converting a tensordict to boolean value is not permitted",
+        ):
+            assert td
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_expand(self, td_name):
         torch.manual_seed(1)
@@ -365,7 +539,16 @@ class TestTensorDicts:
         assert all((_new_td == td).all() for _new_td in new_td)
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_cast(self, td_name):
         torch.manual_seed(1)
@@ -378,7 +561,16 @@ class TestTensorDicts:
         assert (td == td_saved).all()
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_remove(self, td_name):
         torch.manual_seed(1)
@@ -388,7 +580,16 @@ class TestTensorDicts:
         assert "a" not in td.keys()
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_set_unexisting(self, td_name):
         torch.manual_seed(1)
@@ -397,7 +598,16 @@ class TestTensorDicts:
         assert (td.get("z") == 1).all()
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_fill_(self, td_name):
         torch.manual_seed(1)
@@ -407,7 +617,16 @@ class TestTensorDicts:
         assert new_td is td
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_masked_fill_(self, td_name):
         torch.manual_seed(1)
@@ -419,7 +638,37 @@ class TestTensorDicts:
             assert (item[mask] == -10).all()
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
+    def test_masked_fill(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        mask = torch.zeros(td.shape, dtype=torch.bool).bernoulli_()
+        new_td = td.masked_fill(mask, -10.0)
+        assert new_td is not td
+        for k, item in new_td.items():
+            assert (item[mask] == -10).all()
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_zero_(self, td_name):
         torch.manual_seed(1)
@@ -430,7 +679,16 @@ class TestTensorDicts:
             assert (td.get(k) == 0).all()
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_from_empty(self, td_name):
         torch.manual_seed(1)
@@ -443,14 +701,23 @@ class TestTensorDicts:
         assert td.shape == new_td.shape
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_masking(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
         mask = torch.zeros(td.batch_size, dtype=torch.bool).bernoulli_(0.8)
         td_masked = td[mask]
-        td_masked2 = td.masked_select(mask)
+        td_masked2 = torch.masked_select(td, mask)
         assert_allclose_td(td_masked, td_masked2)
         assert td_masked.batch_size[0] == mask.sum()
         assert td_masked.batch_dims == 1
@@ -459,7 +726,16 @@ class TestTensorDicts:
         torch.cuda.device_count() == 0, reason="No cuda device detected"
     )
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     @pytest.mark.parametrize("device", [0, "cuda:0", "cuda", torch.device("cuda:0")])
     def test_pin_memory(self, td_name, device):
@@ -489,7 +765,16 @@ class TestTensorDicts:
         torch.cuda.device_count() == 0, reason="No cuda device detected"
     )
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     @pytest.mark.parametrize("device", get_available_devices())
     def test_cast_device(self, td_name, device):
@@ -519,7 +804,16 @@ class TestTensorDicts:
         torch.cuda.device_count() == 0, reason="No cuda device detected"
     )
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_cpu_cuda(self, td_name):
         torch.manual_seed(1)
@@ -535,18 +829,27 @@ class TestTensorDicts:
     def test_unbind(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        td_unbind = td.unbind(0)
+        td_unbind = torch.unbind(td, dim=0)
         assert (td == torch.stack(td_unbind, 0)).all()
         assert (td[0] == td_unbind[0]).all()
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     @pytest.mark.parametrize("squeeze_dim", [0, 1])
     def test_unsqueeze(self, td_name, squeeze_dim):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        td_unsqueeze = td.unsqueeze(squeeze_dim)
+        td_unsqueeze = torch.unsqueeze(td, dim=squeeze_dim)
         tensor = torch.ones_like(td.get("a").unsqueeze(squeeze_dim))
         td_unsqueeze.set("a", tensor)
         assert (td_unsqueeze.get("a") == tensor).all()
@@ -556,12 +859,21 @@ class TestTensorDicts:
         assert (td.get("a") == 1).all()
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_squeeze(self, td_name, squeeze_dim=-1):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        td_squeeze = td.squeeze(-1)
+        td_squeeze = torch.squeeze(td, dim=-1)
         tensor_squeeze_dim = td.batch_dims + squeeze_dim
         tensor = torch.ones_like(td.get("a").squeeze(tensor_squeeze_dim))
         td_squeeze.set("a", tensor)
@@ -572,7 +884,16 @@ class TestTensorDicts:
         assert (td.get("a") == 1).all()
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_view(self, td_name):
         torch.manual_seed(1)
@@ -590,13 +911,22 @@ class TestTensorDicts:
         assert (td.get("a") == 1).all()
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_clone_td(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        assert (td.clone() == td).all()
-        assert td.batch_size == td.clone().batch_size
+        assert (torch.clone(td) == td).all()
+        assert td.batch_size == torch.clone(td).batch_size
         if td_name in ("stacked_td", "saved_td", "unsqueezed_td", "sub_td"):
             with pytest.raises(AssertionError):
                 assert td.clone(recursive=False).get("a") is td.get("a")
@@ -604,9 +934,18 @@ class TestTensorDicts:
             assert td.clone(recursive=False).get("a") is td.get("a")
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
-    def test_rename_key(self, td_name):
+    def test_rename_key(self, td_name) -> None:
         torch.manual_seed(1)
         td = getattr(self, td_name)
         with pytest.raises(KeyError, match="already present in TensorDict"):
@@ -629,7 +968,16 @@ class TestTensorDicts:
         torch.testing.assert_allclose(new_z, td.get("z"))
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     def test_set_nontensor(self, td_name):
         torch.manual_seed(1)
@@ -639,7 +987,16 @@ class TestTensorDicts:
         torch.testing.assert_allclose(td.get("numpy"), r)
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     @pytest.mark.parametrize("idx", [slice(1), torch.tensor([0]), torch.tensor([0, 1])])
     def test_setitem(self, td_name, idx):
@@ -658,7 +1015,16 @@ class TestTensorDicts:
             td[idx] = td_clone
 
     @pytest.mark.parametrize(
-        "td_name", ["td", "stacked_td", "sub_td", "idx_td", "saved_td", "unsqueezed_td"]
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
     )
     @pytest.mark.parametrize("dim", [0, 1])
     @pytest.mark.parametrize("chunks", [1, 2])
@@ -675,6 +1041,171 @@ class TestTensorDicts:
         assert sum([_td.shape[dim] for _td in td_chunks]) == td.shape[dim]
         assert (torch.cat(td_chunks, dim) == td).all()
 
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
+    def test_items_values_keys(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        keys = list(td.keys())
+        values = list(td.values())
+        items = list(td.items())
+
+        # Test td.items()
+        constructed_td1 = TensorDict({}, batch_size=td.shape)
+        for key, value in items:
+            constructed_td1.set(key, value)
+
+        assert (td == constructed_td1).all()
+
+        # Test td.keys() and td.values()
+        # items = [key, value] should be verified
+        assert len(values) == len(items)
+        assert len(keys) == len(items)
+        constructed_td2 = TensorDict({}, batch_size=td.shape)
+        for key, value in list(zip(td.keys(), td.values())):
+            constructed_td2.set(key, value)
+
+        assert (td == constructed_td2).all()
+
+        # Test that keys is sorted
+        assert all(keys[i] <= keys[i + 1] for i in range(len(keys) - 1))
+
+        # Add new element to tensor
+        a = td.get("a")
+        td.set("x", torch.randn_like(a))
+        keys = list(td.keys())
+        values = list(td.values())
+        items = list(td.items())
+
+        # Test that keys is still sorted after adding the element
+        assert all(keys[i] <= keys[i + 1] for i in range(len(keys) - 1))
+
+        # Test td.items()
+        # after adding the new element
+        constructed_td1 = TensorDict({}, batch_size=td.shape)
+        for key, value in items:
+            constructed_td1.set(key, value)
+
+        assert (td == constructed_td1).all()
+
+        # Test td.keys() and td.values()
+        # items = [key, value] should be verified
+        # even after adding the new element
+        assert len(values) == len(items)
+        assert len(keys) == len(items)
+
+        constructed_td2 = TensorDict({}, batch_size=td.shape)
+        for key, value in list(zip(td.keys(), td.values())):
+            constructed_td2.set(key, value)
+
+        assert (td == constructed_td2).all()
+
+        # Test the methods values_meta() and items_meta()
+        values_meta = list(td.values_meta())
+        items_meta = list(td.items_meta())
+        assert len(values_meta) == len(items_meta)
+
+
+def test_batchsize_reset():
+    td = TensorDict(
+        {"a": torch.randn(3, 4, 5, 6), "b": torch.randn(3, 4, 5)}, batch_size=[3, 4]
+    )
+    # smoke-test
+    td.batch_size = torch.Size([3])
+
+    # test with list
+    td.batch_size = [3]
+
+    # test with tuple
+    td.batch_size = (3,)
+
+    # incompatible size
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "the tensor a has shape torch.Size([3, 4, 5, "
+            "6]) which is incompatible with the new shape torch.Size([3, 5])"
+        ),
+    ):
+        td.batch_size = [3, 5]
+
+    # test set
+    td.set("c", torch.randn(3))
+
+    # test index
+    subtd = td[torch.tensor([1, 2])]
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "The shape torch.Size([3]) is incompatible with the index (slice(None, None, None), 0)."
+        ),
+    ):
+        td[:, 0]
+
+    # test a greater batch_size
+    td = TensorDict(
+        {"a": torch.randn(3, 4, 5, 6), "b": torch.randn(3, 4, 5)}, batch_size=[3, 4]
+    )
+    td.batch_size = torch.Size([3, 4, 5])
+    td.set("c", torch.randn(3, 4, 5, 6))
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "batch dimension mismatch, "
+            "got self.batch_size=torch.Size([3, 4, 5]) and tensor.shape[:self.batch_dims]=torch.Size([3, 4, 2])"
+        ),
+    ):
+        td.set("d", torch.randn(3, 4, 2))
+
+    # test with saved tensordict
+    td = SavedTensorDict(TensorDict({"a": torch.randn(3, 4)}, [3, 4]))
+    td.batch_size = [3]
+    assert td.to_tensordict().batch_size == torch.Size([3])
+
+    # test that lazy tds return an exception
+    td_stack = torch.stack([TensorDict({"a": torch.randn(3)}, [3]) for _ in range(2)])
+    td_stack.to_tensordict().batch_size = [2]
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "modifying the batch size of a lazy repesentation "
+            "of a tensordict is not permitted. Consider instantiating the tensordict fist by calling `td = td.to_tensordict()` before resetting the batch size."
+        ),
+    ):
+        td_stack.batch_size = [2]
+
+    td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
+    subtd = td[:, torch.tensor([1, 2])]
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "modifying the batch size of a lazy repesentation of a tensordict is not permitted. Consider instantiating the tensordict fist by calling `td = td.to_tensordict()` before resetting the batch size."
+        ),
+    ):
+        subtd.batch_size = [3, 2]
+    subtd.to_tensordict().batch_size = [3, 2]
+
+    td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
+    td_u = td.unsqueeze(0)
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "modifying the batch size of a lazy repesentation of a tensordict is not permitted. Consider instantiating the tensordict fist by calling `td = td.to_tensordict()` before resetting the batch size."
+        ),
+    ):
+        td_u.batch_size = [1]
+    td_u.to_tensordict().batch_size = [1]
+
 
 @pytest.mark.parametrize("index0", [None, slice(None)])
 def test_set_sub_key(index0):
@@ -683,9 +1214,9 @@ def test_set_sub_key(index0):
     source = {"a": torch.randn(10, 10, 10), "b": torch.ones(10, 10, 2)}
     td = TensorDict(source, batch_size=batch_size)
     idx0 = (index0, 0) if index0 is not None else 0
-    td0 = td.get_sub_tensor_dict(idx0)
+    td0 = td.get_sub_tensordict(idx0)
     idx = (index0, slice(2, 4)) if index0 is not None else slice(2, 4)
-    sub_td = td.get_sub_tensor_dict(idx)
+    sub_td = td.get_sub_tensordict(idx)
     if index0 is None:
         c = torch.randn(2, 10, 10)
     else:
@@ -694,7 +1225,7 @@ def test_set_sub_key(index0):
     assert (td.get("c")[idx] == sub_td.get("c")).all()
     assert (sub_td.get("c") == c).all()
     assert (td.get("c")[idx0] == 0).all()
-    assert (td.get_sub_tensor_dict(idx0).get("c") == 0).all()
+    assert (td.get_sub_tensordict(idx0).get("c") == 0).all()
     assert (td0.get("c") == 0).all()
 
 
@@ -741,7 +1272,7 @@ def _remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordi
             break
 
 
-def _driver_func(tensordict, tensor_dict_unbind):
+def _driver_func(tensordict, tensordict_unbind):
     procs = []
     children = []
     parents = []
@@ -750,7 +1281,7 @@ def _driver_func(tensordict, tensor_dict_unbind):
         command_pipe_parent, command_pipe_child = mp.Pipe()
         proc = mp.Process(
             target=_remote_process,
-            args=(i, command_pipe_child, command_pipe_parent, tensor_dict_unbind[i]),
+            args=(i, command_pipe_child, command_pipe_parent, tensordict_unbind[i]),
         )
         proc.start()
         command_pipe_child.close()

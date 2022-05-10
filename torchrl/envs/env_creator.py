@@ -40,8 +40,8 @@ class EnvCreator:
         >>> # both workers, even if one has not executed any step
         >>> import time
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.data import VecNorm, TransformedEnv
-        >>> from torchrl.agents import EnvCreator
+        >>> from torchrl.envs.transforms import VecNorm, TransformedEnv
+        >>> from torchrl.envs import EnvCreator
         >>> from torch import multiprocessing as mp
         >>> env_fn = lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm())
         >>> env_creator = EnvCreator(env_fn)
@@ -125,12 +125,9 @@ class EnvCreator:
         env.load_state_dict(self._transform_state_dict, strict=False)
         return env
 
-    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
+    def state_dict(self) -> OrderedDict:
         if self._transform_state_dict is None:
-            return destination if destination is not None else OrderedDict()
-        if destination is not None:
-            destination.update(self._transform_state_dict)
-            return destination
+            return OrderedDict()
         return self._transform_state_dict
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:

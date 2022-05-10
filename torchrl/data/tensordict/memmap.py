@@ -179,7 +179,7 @@ class MemmapTensor(object):
             memmap_array = self.memmap_array
         if idx is not None:
             memmap_array = memmap_array[idx]
-        return self._np_to_tensor(memmap_array)  # type: ignore
+        return self._np_to_tensor(memmap_array)
 
     def _np_to_tensor(self, memmap_array: np.ndarray) -> torch.Tensor:
         return torch.as_tensor(memmap_array, device=self.device)
@@ -278,7 +278,7 @@ class MemmapTensor(object):
         if hasattr(self, "file"):
             self.file.close()
 
-    def __eq__(self, other: Any) -> torch.Tensor:  # type: ignore
+    def __eq__(self, other: Any) -> torch.Tensor:
         if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
             raise NotImplementedError(f"Unknown type {type(other)}")
         return self._tensor == other
@@ -307,29 +307,29 @@ class MemmapTensor(object):
         return False
 
     def __add__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.add(self, other)  # type: ignore
+        return torch.add(self, other)
 
     def __truediv__(
         self, other: Union[float, MemmapTensor, torch.Tensor]
     ) -> torch.Tensor:
-        return torch.div(self, other)  # type: ignore
+        return torch.div(self, other)
 
     def __neg__(self: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.neg(self)  # type: ignore
+        return torch.neg(self)
 
     def __sub__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.sub(self, other)  # type: ignore
+        return torch.sub(self, other)
 
     def __matmul__(
         self, other: Union[float, MemmapTensor, torch.Tensor]
     ) -> torch.Tensor:
-        return torch.matmul(self, other)  # type: ignore
+        return torch.matmul(self, other)
 
     def __mul__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.mul(self, other)  # type: ignore
+        return torch.mul(self, other)
 
     def __pow__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
-        return torch.pow(self, other)  # type: ignore
+        return torch.pow(self, other)
 
     def __repr__(self) -> str:
         return (

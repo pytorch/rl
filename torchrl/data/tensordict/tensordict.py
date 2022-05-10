@@ -10,6 +10,7 @@ import functools
 import math
 import tempfile
 import textwrap
+import uuid
 from collections import OrderedDict
 from collections.abc import Mapping
 from copy import copy, deepcopy
@@ -42,7 +43,7 @@ from torchrl.data.utils import DEVICE_TYPING, expand_as_right, INDEX_TYPING
 __all__ = [
     "TensorDict",
     "SubTensorDict",
-    "merge_tensor_dicts",
+    "merge_tensordicts",
     "LazyStackedTensorDict",
     "SavedTensorDict",
 ]
@@ -62,6 +63,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
     """
 
     _safe = False
+    _lazy = False
 
     def __init__(
         self,
@@ -90,6 +92,19 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
 
         """
         raise NotImplementedError
+
+    def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
+        if self._lazy:
+            raise RuntimeError(
+                "modifying the batch size of a lazy repesentation of a "
+                "tensordict is not permitted. Consider instantiating the "
+                "tensordict fist by calling `td = td.to_tensordict()` before "
+                "resetting the batch size."
+            )
+        if not isinstance(new_batch_size, torch.Size):
+            new_batch_size = torch.Size(new_batch_size)
+        self._check_new_batch_size(new_batch_size)
+        self._change_batch_size(new_batch_size)
 
     @property
     def batch_dims(self) -> int:
@@ -173,7 +188,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
 
     def set(
         self, key: str, item: COMPATIBLE_TYPES, inplace: bool = False, **kwargs
-    ) -> _TensorDict:  # type: ignore
+    ) -> _TensorDict:
         """Sets a new key-value pair.
 
         Args:
@@ -219,9 +234,9 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
             )
 
     @abc.abstractmethod
-    def get(  # type: ignore
+    def get(
         self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
-    ) -> COMPATIBLE_TYPES:  # type: ignore
+    ) -> COMPATIBLE_TYPES:
         """
         Gets the value stored with the input key.
 
@@ -280,7 +295,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
             td.set(key, item_trsf)
         return td
 
-    def update(  # type: ignore
+    def update(
         self,
         input_dict_or_td: Union[Dict[str, COMPATIBLE_TYPES], _TensorDict],
         clone: bool = False,
@@ -441,7 +456,7 @@ dtype=torch.float32)},
             if self.is_shared():
                 tensor = tensor.share_memory_()
             elif self.is_memmap():
-                tensor = MemmapTensor(tensor)  # type: ignore
+                tensor = MemmapTensor(tensor)
             elif tensor.is_shared() and len(self):
                 tensor = tensor.clone()
 
@@ -468,22 +483,38 @@ dtype=torch.float32)},
     #     """Checks if tensors are pinned."""
     #     raise NotImplementedError(f"{self.__class__.__name__}")
 
-    @abc.abstractmethod
-    def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:  # type: ignore
+    def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:
         """
         Returns a generator of key-value pairs for the tensordict.
 
         """
-        raise NotImplementedError(f"{self.__class__.__name__}")
+        for k in self.keys():
+            yield k, self.get(k)
 
-    @abc.abstractmethod
+    def values(self) -> Iterator[COMPATIBLE_TYPES]:
+        """
+        Returns a generator representing the values for the tensordict.
+
+        """
+        for k in self.keys():
+            yield self.get(k)
+
     def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
         """Returns a generator of key-value pairs for the tensordict, where the
         values are MetaTensor instances corresponding to the stored tensors.
 
         """
+        for k in self.keys():
+            yield k, self._get_meta(k)
 
-        raise NotImplementedError(f"{self.__class__.__name__}")
+    def values_meta(self) -> Iterator[MetaTensor]:
+        """Returns a generator representing the values for the tensordict, those
+        values are MetaTensor instances corresponding to the stored tensors.
+
+        """
+
+        for k in self.keys():
+            yield self._get_meta(k)
 
     @abc.abstractmethod
     def keys(self) -> KeysView:
@@ -510,7 +541,10 @@ dtype=torch.float32)},
             batch_size=[*shape, *self.batch_size],
         )
 
-    def __ne__(self, other: object) -> _TensorDict:  # type: ignore
+    def __bool__(self) -> bool:
+        raise ValueError("Converting a tensordict to boolean value is not permitted")
+
+    def __ne__(self, other: object) -> _TensorDict:
         """XOR operation over two tensordicts, for evey key. The two
         tensordicts must have the same key set.
 
@@ -536,7 +570,7 @@ dtype=torch.float32)},
             d[key] = item1 != other.get(key)
         return TensorDict(batch_size=self.batch_size, source=d)
 
-    def __eq__(self, other: object) -> _TensorDict:  # type: ignore
+    def __eq__(self, other: object) -> _TensorDict:
         """Compares two tensordicts against each other, for evey key. The two
         tensordicts must have the same key set.
 
@@ -594,6 +628,10 @@ dtype=torch.float32)},
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
+    def exclude(self, *keys: str, inplace: bool = False) -> _TensorDict:
+        keys = [key for key in self.keys() if key not in keys]
+        return self.select(*keys, inplace=inplace)
+
     @abc.abstractmethod
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
@@ -611,13 +649,13 @@ dtype=torch.float32)},
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
-    def copy_(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def copy_(self, tensordict: _TensorDict) -> _TensorDict:
         """See `_TensorDict.update_`."""
-        return self.update_(tensor_dict)
+        return self.update_(tensordict)
 
-    def copy_at_(self, tensor_dict: _TensorDict, idx: INDEX_TYPING) -> _TensorDict:
+    def copy_at_(self, tensordict: _TensorDict, idx: INDEX_TYPING) -> _TensorDict:
         """See `_TensorDict.update_at_`."""
-        return self.update_at_(tensor_dict, idx)
+        return self.update_at_(tensordict, idx)
 
     def get_at(
         self, key: str, idx: INDEX_TYPING, default: COMPATIBLE_TYPES = None
@@ -761,8 +799,9 @@ dtype=torch.float32)},
             batch_size=self.batch_size,
         )
 
+    @classmethod
     def __torch_function__(
-        self,
+        cls,
         func: Callable,
         types,
         args: Tuple = (),
@@ -777,21 +816,36 @@ dtype=torch.float32)},
         return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
     @abc.abstractmethod
-    def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs) -> _TensorDict:
+    def to(self, dest: Union[DEVICE_TYPING, Type, torch.Size], **kwargs) -> _TensorDict:
         """Maps a _TensorDict subclass either on a new device or to another
         _TensorDict subclass (if permitted). Casting tensors to a new dtype
         is not allowed, as tensordicts are not bound to contain a single
         tensor dtype.
 
         Args:
-            dest (device or _TensorDict subclass): destination of the
-                tensordict.
+            dest (device, size or _TensorDict subclass): destination of the
+                tensordict. If it is a torch.Size object, the batch_size
+                will be updated provided that it is compatible with the
+                stored tensors.
 
         Returns:
             a new tensordict. If device indicated by dest differs from
             the tensordict device, this is a no-op.
 
         """
+        raise NotImplementedError
+
+    def _check_new_batch_size(self, new_size: torch.Size):
+        n = len(new_size)
+        for key, meta_tensor in self.items_meta():
+            if (meta_tensor.ndimension() < n) or (meta_tensor.shape[:n] != new_size):
+                raise RuntimeError(
+                    f"the tensor {key} has shape {meta_tensor.shape} which "
+                    f"is incompatible with the new shape {new_size}"
+                )
+
+    @abc.abstractmethod
+    def _change_batch_size(self, new_size: torch.Size):
         raise NotImplementedError
 
     def cpu(self) -> _TensorDict:
@@ -822,6 +876,30 @@ dtype=torch.float32)},
             >>> mask = torch.tensor([True, False, False])
             >>> _ = td.masked_fill_(mask, 1.0)
             >>> td.get("a")
+            tensor([[1., 1., 1., 1.],
+                    [0., 0., 0., 0.],
+                    [0., 0., 0., 0.]])
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> _TensorDict:
+        """Out-of-place version of masked_fill
+
+        Args:
+            mask (boolean torch.Tensor): mask of values to be filled. Shape
+                must match tensordict shape.
+            value: value to used to fill the tensors.
+
+        Returns:
+            self
+
+        Examples:
+            >>> td = TensorDict(source={'a': torch.zeros(3, 4)},
+            ...     batch_size=[3])
+            >>> mask = torch.tensor([True, False, False])
+            >>> td1 = td.masked_fill(mask, 1.0)
+            >>> td1.get("a")
             tensor([[1., 1., 1., 1.],
                     [0., 0., 0., 0.],
                     [0., 0., 0., 0.]])
@@ -1014,6 +1092,46 @@ dtype=torch.float32)},
             inv_op_kwargs={"size": self.batch_size},
         )
 
+    def permute(
+        self,
+        *dims: int,
+    ) -> _TensorDict:
+        """Returns a view of a tensordict with the batch dimensions permuted according to dims
+
+        Args:
+            *dims (int): the new ordering of the batch dims of the tensordict.
+
+        Returns:
+            a new tensordict with the batch dimensions in the desired order.
+
+        Examples:
+            >>> TODO
+        """
+
+        if len(dims) != len(self.shape):
+            raise RuntimeError(
+                f"number of dims don't match in permute (got {len(dims)}, expected {len(self.shape)}"
+            )
+
+        min_dim, max_dim = -self.batch_dims, self.batch_dims - 1
+        seen = [False for dim in range(max_dim + 1)]
+        for idx in dims:
+            if idx < min_dim or idx > max_dim:
+                raise IndexError(
+                    f"dimension out of range (expected to be in range of [{min_dim}, {max_dim}], but got {idx})"
+                )
+            if seen[idx]:
+                raise RuntimeError("repeated dim in permute")
+            seen[idx] = True
+
+        return PermutedTensorDict(
+            source=self,
+            custom_op="permute",
+            inv_op="permute",
+            custom_op_kwargs={"dims": dims},
+            inv_op_kwargs={"dims": dims},
+        )
+
     def __repr__(self) -> str:
         fields = _td_fields(self)
         field_str = indent(f"fields={{{fields}}}", 4 * " ")
@@ -1073,7 +1191,7 @@ dtype=torch.float32)},
             )
         return any([value.any() for key, value in self.items()])
 
-    def get_sub_tensor_dict(self, idx: INDEX_TYPING) -> _TensorDict:
+    def get_sub_tensordict(self, idx: INDEX_TYPING) -> _TensorDict:
         """Returns a SubTensorDict with the desired index."""
         sub_td = SubTensorDict(
             source=self,
@@ -1138,7 +1256,7 @@ dtype=torch.float32)},
             )
         # SubTensorDict keeps the same storage as TensorDict
         # in all cases not accounted for above
-        return self.get_sub_tensor_dict(idx)
+        return self.get_sub_tensordict(idx)
 
     def __setitem__(self, index: INDEX_TYPING, value: _TensorDict) -> None:
         indexed_bs = _getitem_batch_size(self.batch_size, index)
@@ -1282,6 +1400,7 @@ class TensorDict(_TensorDict):
 
     #     TODO: split, transpose, permute
     _safe = True
+    _lazy = False
 
     def __init__(
         self,
@@ -1289,9 +1408,9 @@ class TensorDict(_TensorDict):
         batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
         device: Optional[DEVICE_TYPING] = None,
         _meta_source: Optional[dict] = None,
-    ):
-        self._tensor_dict: Dict = dict()
-        self._tensor_dict_meta: OrderedDict = OrderedDict()
+    ) -> object:
+        self._tensordict: Dict = dict()
+        self._tensordict_meta: OrderedDict = OrderedDict()
         if not isinstance(source, (_TensorDict, dict)):
             raise ValueError(
                 "A TensorDict source is expected to be a _TensorDict "
@@ -1310,7 +1429,7 @@ class TensorDict(_TensorDict):
                 else:
                     batch_size = torch.Size(batch_size)
             self._batch_size = batch_size
-            self._batch_dims = len(batch_size)
+
         elif isinstance(source, _TensorDict):
             self._batch_size = source.batch_size
         else:
@@ -1335,7 +1454,7 @@ class TensorDict(_TensorDict):
                         f" {_accepted_classes} but got {type(value)}"
                     )
                 if map_item_to_device:
-                    value = value.to(device)  # type: ignore
+                    value = value.to(device)
                 _meta_val = None if _meta_source is None else _meta_source[key]
                 self.set(key, value, _meta_val=_meta_val, _run_checks=False)
 
@@ -1344,9 +1463,6 @@ class TensorDict(_TensorDict):
 
     @property
     def batch_dims(self) -> int:
-        if self._safe and hasattr(self, "_batch_dims"):
-            if len(self.batch_size) != self._batch_dims:
-                raise RuntimeError("len(self.batch_size) and self._batch_dims mismatch")
         return len(self.batch_size)
 
     @batch_dims.setter
@@ -1375,7 +1491,7 @@ class TensorDict(_TensorDict):
         if (not isinstance(device, torch.device)) and (device is not None):
             device = torch.device(device)
         self._device = device
-        return device  # type: ignore
+        return device
 
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
@@ -1390,11 +1506,15 @@ class TensorDict(_TensorDict):
         return self._batch_size
 
     @batch_size.setter
-    def batch_size(self, value: COMPATIBLE_TYPES) -> None:
-        raise RuntimeError(
-            f"Setting batch size on {self.__class__.__name__} instances is "
-            f"not allowed."
-        )
+    def batch_size(self, new_size: torch.Size):
+        return self._batch_size_setter(new_size)
+
+    def _change_batch_size(self, new_size: torch.Size):
+        if not hasattr(self, "_orig_batch_size"):
+            self._orig_batch_size = self.batch_size
+        elif self._orig_batch_size == new_size:
+            del self._orig_batch_size
+        self._batch_size = new_size
 
     # Checks
     def _check_is_shared(self) -> bool:
@@ -1456,7 +1576,7 @@ class TensorDict(_TensorDict):
         d = {key: value.expand(*shape, *value.shape) for key, value in self.items()}
         return TensorDict(source=d, batch_size=_batch_size)
 
-    def set(  # type: ignore
+    def set(
         self,
         key: str,
         value: COMPATIBLE_TYPES,
@@ -1470,7 +1590,7 @@ class TensorDict(_TensorDict):
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
-        if key in self._tensor_dict and value is self._tensor_dict[key]:
+        if key in self._tensordict and value is self._tensordict[key]:
             return self
 
         proc_value = self._process_tensor(
@@ -1479,17 +1599,17 @@ class TensorDict(_TensorDict):
             check_shared=_run_checks,
             check_device=_run_checks,
         )  # check_tensor_shape=_run_checks
-        if key in self._tensor_dict and inplace:
+        if key in self._tensordict and inplace:
             return self.set_(key, proc_value)
-        self._tensor_dict[key] = proc_value
-        self._tensor_dict_meta[key] = (
+        self._tensordict[key] = proc_value
+        self._tensordict_meta[key] = (
             MetaTensor(proc_value) if _meta_val is None else _meta_val
         )
         return self
 
     def del_(self, key: str) -> _TensorDict:
-        del self._tensor_dict[key]
-        del self._tensor_dict_meta[key]
+        del self._tensordict[key]
+        del self._tensordict_meta[key]
         return self
 
     def rename_key(self, old_key: str, new_key: str, safe: bool = False) -> _TensorDict:
@@ -1523,8 +1643,8 @@ class TensorDict(_TensorDict):
                     f"different shape: got tensor.shape={proc_value.shape} "
                     f'and get("{key}").shape={target_shape}'
                 )
-            if proc_value is not self._tensor_dict[key]:
-                self._tensor_dict[key].copy_(proc_value)
+            if proc_value is not self._tensordict[key]:
+                self._tensordict[key].copy_(proc_value)
         else:
             raise AttributeError(
                 f"key {key} not found in tensordict, "
@@ -1545,7 +1665,7 @@ class TensorDict(_TensorDict):
         # )
         if key not in self.keys():
             raise KeyError(f"did not find key {key} in {self.__class__.__name__}")
-        tensor_in = self._tensor_dict[key]
+        tensor_in = self._tensordict[key]
         if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
             warn(
                 "Multiple indexing can lead to unexpected behaviours when "
@@ -1558,14 +1678,14 @@ class TensorDict(_TensorDict):
             tensor_in[idx] = value
         return self
 
-    def get(  # type: ignore
+    def get(
         self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
-    ) -> COMPATIBLE_TYPES:  # type: ignore
+    ) -> COMPATIBLE_TYPES:
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
         try:
-            return self._tensor_dict[key]
+            return self._tensordict[key]
         except KeyError:
             return self._default_get(key, default)
 
@@ -1574,7 +1694,7 @@ class TensorDict(_TensorDict):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
         try:
-            return self._tensor_dict_meta[key]
+            return self._tensordict_meta[key]
         except KeyError:
             raise KeyError(
                 f"key {key} not found in {self.__class__.__name__} with keys"
@@ -1586,7 +1706,7 @@ class TensorDict(_TensorDict):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
-        if not len(self._tensor_dict):
+        if not len(self._tensordict):
             raise Exception(
                 "share_memory_ must be called when the TensorDict is ("
                 "partially) populated. Set a tensor first."
@@ -1607,22 +1727,22 @@ class TensorDict(_TensorDict):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
-        if not len(self._tensor_dict):
+        if not len(self._tensordict):
             raise Exception(
                 "memmap_() must be called when the TensorDict is (partially) "
                 "populated. Set a tensor first."
             )
         for key, value in self.items():
-            self._tensor_dict[key] = MemmapTensor(value)
+            self._tensordict[key] = MemmapTensor(value)
         for key, value in self.items_meta():
             value.memmap_()
         return self
 
-    def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs) -> _TensorDict:
+    def to(self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs) -> _TensorDict:
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             td = dest(
                 source=self,
-                **kwargs,  # type: ignore
+                **kwargs,
             )
             return td
         elif isinstance(dest, (torch.device, str, int)):
@@ -1641,6 +1761,9 @@ class TensorDict(_TensorDict):
                 self_copy._check_device()
                 self_copy._check_is_shared()
             return self_copy
+        elif isinstance(dest, torch.Size):
+            self.batch_size = dest
+            return self
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "
@@ -1648,12 +1771,16 @@ class TensorDict(_TensorDict):
             )
 
     def masked_fill_(
-        self, mask: torch.Tensor, val: Union[float, int, bool]
+        self, mask: torch.Tensor, value: Union[float, int, bool]
     ) -> _TensorDict:
-        for key, value in self.items():
-            mask_expand = expand_as_right(mask, value)
-            value.masked_fill_(mask_expand, val)
+        for key, item in self.items():
+            mask_expand = expand_as_right(mask, item)
+            item.masked_fill_(mask_expand, value)
         return self
+
+    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> _TensorDict:
+        td_copy = self.clone()
+        return td_copy.masked_fill_(mask, value)
 
     def is_contiguous(self) -> bool:
         return all([value.is_contiguous() for _, value in self.items()])
@@ -1667,8 +1794,8 @@ class TensorDict(_TensorDict):
         d = {key: value for (key, value) in self.items() if key in keys}
         d_meta = {key: value for (key, value) in self.items_meta() if key in keys}
         if inplace:
-            self._tensor_dict = d
-            self._tensor_dict_meta = OrderedDict(
+            self._tensordict = d
+            self._tensordict_meta = OrderedDict(
                 {key: value for (key, value) in self.items_meta() if key in keys}
             )
             return self
@@ -1679,16 +1806,8 @@ class TensorDict(_TensorDict):
             _meta_source=d_meta,
         )
 
-    def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:  # type: ignore
-        for k in self._tensor_dict:
-            yield k, self.get(k)
-
-    def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
-        for k in self._tensor_dict_meta:
-            yield k, self._get_meta(k)
-
     def keys(self) -> KeysView:
-        return self._tensor_dict.keys()
+        return self._tensordict_meta.keys()  # _tensordict_meta is ordered
 
 
 def implements_for_td(torch_function: Callable) -> Callable:
@@ -1749,42 +1868,58 @@ def clone(td: _TensorDict, *args, **kwargs) -> _TensorDict:
     return td.clone(*args, **kwargs)
 
 
+@implements_for_td(torch.squeeze)
+def squeeze(td: _TensorDict, *args, **kwargs) -> _TensorDict:
+    return td.squeeze(*args, **kwargs)
+
+
+@implements_for_td(torch.unsqueeze)
+def unsqueeze(td: _TensorDict, *args, **kwargs) -> _TensorDict:
+    return td.unsqueeze(*args, **kwargs)
+
+
+@implements_for_td(torch.masked_select)
+def masked_select(td: _TensorDict, *args, **kwargs) -> _TensorDict:
+    return td.masked_select(*args, **kwargs)
+
+
+@implements_for_td(torch.permute)
+def permute(td: _TensorDict, dims) -> _TensorDict:
+    return td.permute(*dims)
+
+
 @implements_for_td(torch.cat)
 def cat(
-    list_of_tensor_dicts: Sequence[_TensorDict],
+    list_of_tensordicts: Sequence[_TensorDict],
     dim: int = 0,
     device: DEVICE_TYPING = None,
     out: _TensorDict = None,
 ) -> _TensorDict:
-    if not list_of_tensor_dicts:
-        raise RuntimeError("list_of_tensor_dicts cannot be empty")
+    if not list_of_tensordicts:
+        raise RuntimeError("list_of_tensordicts cannot be empty")
     if not device:
-        device = list_of_tensor_dicts[0].device
+        device = list_of_tensordicts[0].device
     if dim < 0:
         raise RuntimeError(
-            f"negative dim in torch.dim(list_of_tensor_dicts, dim=dim) not "
+            f"negative dim in torch.dim(list_of_tensordicts, dim=dim) not "
             f"allowed, got dim={dim}"
         )
 
-    batch_size = list(list_of_tensor_dicts[0].batch_size)
+    batch_size = list(list_of_tensordicts[0].batch_size)
     if dim >= len(batch_size):
         raise RuntimeError(
             f"dim must be in the range 0 <= dim < len(batch_size), got dim"
             f"={dim} and batch_size={batch_size}"
         )
-    batch_size[dim] = sum([td.batch_size[dim] for td in list_of_tensor_dicts])
+    batch_size[dim] = sum([td.batch_size[dim] for td in list_of_tensordicts])
     batch_size = torch.Size(batch_size)
 
     # check that all tensordict match
-    keys = _check_keys(list_of_tensor_dicts, strict=True)
+    keys = _check_keys(list_of_tensordicts, strict=True)
     if out is None:
         out = TensorDict({}, device=device, batch_size=batch_size)
         for key in keys:
-            out.set(
-                key,
-                torch.cat([td.get(key) for td in list_of_tensor_dicts], dim)
-                # type: ignore
-            )
+            out.set(key, torch.cat([td.get(key) for td in list_of_tensordicts], dim))
         return out
     else:
         if out.batch_size != batch_size:
@@ -1795,44 +1930,40 @@ def cat(
             )
 
         for key in keys:
-            out.set_(
-                key,
-                torch.cat([td.get(key) for td in list_of_tensor_dicts], dim)
-                # type: ignore
-            )
+            out.set_(key, torch.cat([td.get(key) for td in list_of_tensordicts], dim))
         return out
 
 
 @implements_for_td(torch.stack)
 def stack(
-    list_of_tensor_dicts: Sequence[_TensorDict],
+    list_of_tensordicts: Sequence[_TensorDict],
     dim: int = 0,
     out: _TensorDict = None,
     strict=False,
     contiguous=False,
 ) -> _TensorDict:
-    if not list_of_tensor_dicts:
-        raise RuntimeError("list_of_tensor_dicts cannot be empty")
-    batch_size = list_of_tensor_dicts[0].batch_size
+    if not list_of_tensordicts:
+        raise RuntimeError("list_of_tensordicts cannot be empty")
+    batch_size = list_of_tensordicts[0].batch_size
     if dim < 0:
         dim = len(batch_size) + dim + 1
-    if len(list_of_tensor_dicts) > 1:
-        for td in list_of_tensor_dicts[1:]:
-            if td.batch_size != list_of_tensor_dicts[0].batch_size:
+    if len(list_of_tensordicts) > 1:
+        for td in list_of_tensordicts[1:]:
+            if td.batch_size != list_of_tensordicts[0].batch_size:
                 raise RuntimeError(
-                    "stacking tensor_dicts requires them to have congruent "
+                    "stacking tensordicts requires them to have congruent "
                     "batch sizes, got td1.batch_size={td.batch_size} and "
-                    f"td2.batch_size{list_of_tensor_dicts[0].batch_size}"
+                    f"td2.batch_size{list_of_tensordicts[0].batch_size}"
                 )
     # check that all tensordict match
-    keys = _check_keys(list_of_tensor_dicts)
+    keys = _check_keys(list_of_tensordicts)
     batch_size = list(batch_size)
-    batch_size.insert(dim, len(list_of_tensor_dicts))
+    batch_size.insert(dim, len(list_of_tensordicts))
     batch_size = torch.Size(batch_size)
 
     if out is None:
         out = LazyStackedTensorDict(
-            *list_of_tensor_dicts,
+            *list_of_tensordicts,
             stack_dim=dim,
         )
         if contiguous:
@@ -1865,8 +1996,7 @@ def stack(
         for key in keys:
             out.set(
                 key,
-                torch.stack([td.get(key) for td in list_of_tensor_dicts], dim),
-                # type: ignore
+                torch.stack([td.get(key) for td in list_of_tensordicts], dim),
                 inplace=True,
             )
     return out
@@ -1874,24 +2004,23 @@ def stack(
 
 # @implements_for_td(torch.nn.utils.rnn.pad_sequence)
 def pad_sequence_td(
-    list_of_tensor_dicts: Sequence[_TensorDict],
+    list_of_tensordicts: Sequence[_TensorDict],
     batch_first: bool = True,
     padding_value: float = 0.0,
     out: _TensorDict = None,
     device: Optional[DEVICE_TYPING] = None,
 ):
-    if not list_of_tensor_dicts:
-        raise RuntimeError("list_of_tensor_dicts cannot be empty")
+    if not list_of_tensordicts:
+        raise RuntimeError("list_of_tensordicts cannot be empty")
     # check that all tensordict match
-    keys = _check_keys(list_of_tensor_dicts)
+    keys = _check_keys(list_of_tensordicts)
     if out is None:
         out = TensorDict({}, [], device=device)
         for key in keys:
             out.set(
                 key,
                 torch.nn.utils.rnn.pad_sequence(
-                    [td.get(key) for td in list_of_tensor_dicts],
-                    # type: ignore
+                    [td.get(key) for td in list_of_tensordicts],
                     batch_first=batch_first,
                     padding_value=padding_value,
                 ),
@@ -1902,8 +2031,7 @@ def pad_sequence_td(
             out.set_(
                 key,
                 torch.nn.utils.rnn.pad_sequence(
-                    [td.get(key) for td in list_of_tensor_dicts],
-                    # type: ignore
+                    [td.get(key) for td in list_of_tensordicts],
                     batch_first=batch_first,
                     padding_value=padding_value,
                 ),
@@ -1959,6 +2087,7 @@ torch.Size([3, 2])
     """
 
     _safe = False
+    _lazy = True
 
     def __init__(
         self,
@@ -1985,6 +2114,10 @@ torch.Size([3, 2])
     def batch_size(self) -> torch.Size:
         return self._batch_size
 
+    @batch_size.setter
+    def batch_size(self, new_size: torch.Size):
+        return self._batch_size_setter(new_size)
+
     @property
     def device(self) -> torch.device:
         return self._source.device
@@ -1992,20 +2125,20 @@ torch.Size([3, 2])
     def _preallocate(self, key: str, value: COMPATIBLE_TYPES) -> _TensorDict:
         return self._source.set(key, value)
 
-    def set(  # type: ignore
+    def set(
         self,
         key: str,
         tensor: COMPATIBLE_TYPES,
         inplace: bool = False,
         _run_checks: bool = True,
-    ) -> _TensorDict:  # type: ignore
+    ) -> _TensorDict:
         if inplace and key in self.keys():
             return self.set_(key, tensor)
 
         tensor = self._process_tensor(
             tensor, check_device=False, check_tensor_shape=False
         )
-        parent = self.get_parent_tensor_dict()
+        parent = self.get_parent_tensordict()
         tensor_expand = torch.zeros(
             *parent.batch_size,
             *tensor.shape[self.batch_dims :],
@@ -2016,7 +2149,7 @@ torch.Size([3, 2])
         if self.is_shared():
             tensor_expand.share_memory_()
         elif self.is_memmap():
-            tensor_expand = MemmapTensor(tensor_expand)  # type: ignore
+            tensor_expand = MemmapTensor(tensor_expand)
 
         parent.set(key, tensor_expand, _run_checks=_run_checks)
         self.set_(key, tensor)
@@ -2036,7 +2169,7 @@ torch.Size([3, 2])
         self._source.set_at_(key, tensor, self.idx)
         return self
 
-    def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs) -> _TensorDict:
+    def to(self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs) -> _TensorDict:
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             return dest(
                 source=self.clone(),
@@ -2049,15 +2182,25 @@ torch.Size([3, 2])
             td = self.to(TensorDict)
             # must be device
             return td.to(dest, **kwargs)
+        elif isinstance(dest, torch.Size):
+            self.batch_size = dest
+            return self
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "
                 f"instance, {dest} not allowed"
             )
 
-    def get(  # type: ignore
+    def _change_batch_size(self, new_size: torch.Size):
+        if not hasattr(self, "_orig_batch_size"):
+            self._orig_batch_size = self.batch_size
+        elif self._orig_batch_size == new_size:
+            del self._orig_batch_size
+        self._batch_size = new_size
+
+    def get(
         self, key: str, default: Optional[Union[torch.Tensor, str]] = None
-    ) -> COMPATIBLE_TYPES:  # type: ignore
+    ) -> COMPATIBLE_TYPES:
         return self._source.get_at(key, self.idx)
 
     def _get_meta(self, key: str) -> MetaTensor:
@@ -2076,12 +2219,12 @@ torch.Size([3, 2])
             self._source.set_at_(key, value, idx)
         else:
             tensor = self._source.get_at(key, self.idx)
-            tensor[idx] = value  # type: ignore
+            tensor[idx] = value
             self._source.set_at_(key, tensor, self.idx)
             # self._source.set_at_(key, value, (self.idx, idx))
         return self
 
-    def get_at(  # type: ignore
+    def get_at(
         self, key: str, idx: INDEX_TYPING, discard_idx_attr: bool = False
     ) -> COMPATIBLE_TYPES:
         if not isinstance(idx, tuple):
@@ -2091,7 +2234,7 @@ torch.Size([3, 2])
         else:
             return self._source.get_at(key, self.idx)[idx]
 
-    def update_(  # type: ignore
+    def update_(
         self,
         input_dict: Union[Dict[str, COMPATIBLE_TYPES], _TensorDict],
         clone: bool = False,
@@ -2100,7 +2243,7 @@ torch.Size([3, 2])
             input_dict, idx=self.idx, discard_idx_attr=True, clone=clone
         )
 
-    def update_at_(  # type: ignore
+    def update_at_(
         self,
         input_dict: Union[Dict[str, COMPATIBLE_TYPES], _TensorDict],
         idx: INDEX_TYPING,
@@ -2123,7 +2266,7 @@ torch.Size([3, 2])
             )
         return self
 
-    def get_parent_tensor_dict(self) -> _TensorDict:
+    def get_parent_tensordict(self) -> _TensorDict:
         if not isinstance(self._source, _TensorDict):
             raise TypeError(
                 f"SubTensorDict was initialized with a source of type"
@@ -2154,14 +2297,6 @@ torch.Size([3, 2])
             batch_size=self.batch_size,
             source={key: value for key, value in self.items()},
         )
-
-    def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:  # type: ignore
-        for k in self.keys():
-            yield k, self.get(k)
-
-    def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
-        for key, value in self._source.items_meta():
-            yield key, value[self.idx]
 
     def select(self, *keys: str, inplace: bool = False) -> _TensorDict:
         if inplace:
@@ -2203,6 +2338,10 @@ torch.Size([3, 2])
             self.set_(key, torch.full_like(item, value))
         return self
 
+    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> _TensorDict:
+        td_copy = self.clone()
+        return td_copy.masked_fill_(mask, value)
+
     def memmap_(self) -> _TensorDict:
         raise RuntimeError(
             "Converting a sub-tensordict values to memmap cannot be done."
@@ -2214,13 +2353,13 @@ torch.Size([3, 2])
         )
 
 
-def merge_tensor_dicts(*tensor_dicts: _TensorDict) -> _TensorDict:
-    if len(tensor_dicts) < 2:
+def merge_tensordicts(*tensordicts: _TensorDict) -> _TensorDict:
+    if len(tensordicts) < 2:
         raise RuntimeError(
-            f"at least 2 tensor_dicts must be provided, got" f" {len(tensor_dicts)}"
+            f"at least 2 tensordicts must be provided, got" f" {len(tensordicts)}"
         )
-    d = tensor_dicts[0].to_dict()
-    for td in tensor_dicts[1:]:
+    d = tensordicts[0].to_dict()
+    for td in tensordicts[1:]:
         d.update(td.to_dict())
     return TensorDict({}, [], device=td.device).update(d)
 
@@ -2234,7 +2373,7 @@ class LazyStackedTensorDict(_TensorDict):
     that will affect the original tensordicts.
 
     Args:
-         *tensor_dicts (TensorDict instances): a list of tensordict with
+         *tensordicts (TensorDict instances): a list of tensordict with
             same batch size.
          stack_dim (int): a dimension (between `-td.ndimension()` and
             `td.ndimension()-1` along which the stack should be performed.
@@ -2254,19 +2393,20 @@ class LazyStackedTensorDict(_TensorDict):
     """
 
     _safe = False
+    _lazy = True
 
     def __init__(
         self,
-        *tensor_dicts: _TensorDict,
+        *tensordicts: _TensorDict,
         stack_dim: int = 0,
         batch_size: Optional[Sequence[int]] = None,  # TODO: remove
     ):
         # sanity check
-        N = len(tensor_dicts)
-        if not isinstance(tensor_dicts[0], _TensorDict):
+        N = len(tensordicts)
+        if not isinstance(tensordicts[0], _TensorDict):
             raise TypeError(
                 f"Expected input to be _TensorDict instance"
-                f" but got {type(tensor_dicts[0])} instead."
+                f" but got {type(tensordicts[0])} instead."
             )
         if stack_dim < 0:
             raise RuntimeError(
@@ -2277,14 +2417,14 @@ class LazyStackedTensorDict(_TensorDict):
                 "at least one tensordict must be provided to "
                 "StackedTensorDict to be instantiated"
             )
-        _batch_size = tensor_dicts[0].batch_size
-        device = tensor_dicts[0].device
+        _batch_size = tensordicts[0].batch_size
+        device = tensordicts[0].device
 
-        for i, td in enumerate(tensor_dicts[1:]):
+        for i, td in enumerate(tensordicts[1:]):
             if not isinstance(td, _TensorDict):
                 raise TypeError(
                     f"Expected input to be _TensorDict instance"
-                    f" but got {type(tensor_dicts[0])} instead."
+                    f" but got {type(tensordicts[0])} instead."
                 )
             _bs = td.batch_size
             _device = td.device
@@ -2292,14 +2432,13 @@ class LazyStackedTensorDict(_TensorDict):
                 raise RuntimeError(f"devices differ, got {device} and {_device}")
             if _bs != _batch_size:
                 raise RuntimeError(
-                    f"batch sizes in tensor_dicts differs, StackedTensorDict "
+                    f"batch sizes in tensordicts differs, StackedTensorDict "
                     f"cannot be created. Got td[0].batch_size={_batch_size} "
                     f"and td[i].batch_size={_bs} "
                 )
-        self.tensor_dicts: List[_TensorDict] = list(tensor_dicts)
+        self.tensordicts: List[_TensorDict] = list(tensordicts)
         self.stack_dim = stack_dim
         self._batch_size = self._compute_batch_size(_batch_size, stack_dim, N)
-        self._batch_dims = len(self._batch_size)
         self._update_valid_keys()
         self._meta_dict = dict()
         self._meta_dict.update({k: value for k, value in self.items_meta()})
@@ -2308,39 +2447,43 @@ class LazyStackedTensorDict(_TensorDict):
 
     @property
     def device(self) -> torch.device:
-        device_set = {td.device for td in self.tensor_dicts}
+        device_set = {td.device for td in self.tensordicts}
         if len(device_set) != 1:
             raise RuntimeError(
                 f"found multiple devices in {self.__class__.__name__}:" f" {device_set}"
             )
-        return self.tensor_dicts[0].device
+        return self.tensordicts[0].device
 
     @property
     def batch_size(self) -> torch.Size:
         return self._batch_size
 
+    @batch_size.setter
+    def batch_size(self, new_size: torch.Size):
+        return self._batch_size_setter(new_size)
+
     def is_shared(self, no_check: bool = False) -> bool:
-        are_shared = [td.is_shared(no_check=no_check) for td in self.tensor_dicts]
+        are_shared = [td.is_shared(no_check=no_check) for td in self.tensordicts]
         if any(are_shared) and not all(are_shared):
             raise RuntimeError(
-                f"tensor_dicts shared status mismatch, got {sum(are_shared)} "
-                f"shared tensor_dicts and "
+                f"tensordicts shared status mismatch, got {sum(are_shared)} "
+                f"shared tensordicts and "
                 f"{len(are_shared) - sum(are_shared)} non shared tensordict "
             )
         return all(are_shared)
 
     def is_memmap(self, no_check: bool = False) -> bool:
-        are_memmap = [td.is_memmap() for td in self.tensor_dicts]
+        are_memmap = [td.is_memmap() for td in self.tensordicts]
         if any(are_memmap) and not all(are_memmap):
             raise RuntimeError(
-                f"tensor_dicts memmap status mismatch, got {sum(are_memmap)} "
-                f"memmap tensor_dicts and "
+                f"tensordicts memmap status mismatch, got {sum(are_memmap)} "
+                f"memmap tensordicts and "
                 f"{len(are_memmap) - sum(are_memmap)} non memmap tensordict "
             )
         return all(are_memmap)
 
     # def is_memmap(self) -> bool:
-    #     return all(td.is_memmap() for td in self.tensor_dicts)
+    #     return all(td.is_memmap() for td in self.tensordicts)
 
     def get_valid_keys(self) -> Set[str]:
         self._update_valid_keys()
@@ -2363,20 +2506,18 @@ class LazyStackedTensorDict(_TensorDict):
         s.insert(stack_dim, N)
         return torch.Size(s)
 
-    def set(
-        self, key: str, tensor: COMPATIBLE_TYPES, **kwargs
-    ) -> _TensorDict:  # type: ignore
+    def set(self, key: str, tensor: COMPATIBLE_TYPES, **kwargs) -> _TensorDict:
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes "
-                "mismatch: got tensor.shape = {tensor.shape} and "
-                "tensordict.batch_size={self.batch_size}"
+                f"mismatch: got tensor.shape = {tensor.shape} and "
+                f"tensordict.batch_size={self.batch_size}"
             )
         proc_tensor = self._process_tensor(
             tensor, check_device=False, check_tensor_shape=False
         )
         proc_tensor = proc_tensor.unbind(self.stack_dim)
-        for td, _item in zip(self.tensor_dicts, proc_tensor):
+        for td, _item in zip(self.tensordicts, proc_tensor):
             td.set(key, _item, **kwargs)
         return self
 
@@ -2384,8 +2525,8 @@ class LazyStackedTensorDict(_TensorDict):
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes "
-                "mismatch: got tensor.shape = {tensor.shape} and "
-                "tensordict.batch_size={self.batch_size}"
+                f"mismatch: got tensor.shape = {tensor.shape} and "
+                f"tensordict.batch_size={self.batch_size}"
             )
         if key not in self.valid_keys:
             raise KeyError(
@@ -2397,7 +2538,7 @@ class LazyStackedTensorDict(_TensorDict):
             tensor, check_device=False, check_tensor_shape=False
         )
         tensor = tensor.unbind(self.stack_dim)
-        for td, _item in zip(self.tensor_dicts, tensor):
+        for td, _item in zip(self.tensordicts, tensor):
             td.set_(key, _item)
         return self
 
@@ -2408,15 +2549,15 @@ class LazyStackedTensorDict(_TensorDict):
         sub_td.set_(key, value)
         return self
 
-    def get(  # type: ignore
+    def get(
         self,
         key: str,
         default: Union[str, COMPATIBLE_TYPES] = "_no_default_",
-    ) -> COMPATIBLE_TYPES:  # type: ignore
+    ) -> COMPATIBLE_TYPES:
         if not (key in self.valid_keys):
             return self._default_get(key, default)
-        tensors = [td.get(key, default=default) for td in self.tensor_dicts]
-        shapes = set(tensor.shape for tensor in tensors)  # type: ignore
+        tensors = [td.get(key, default=default) for td in self.tensordicts]
+        shapes = set(tensor.shape for tensor in tensors)
         if len(shapes) != 1:
             raise RuntimeError(
                 f"found more than one unique shape in the tensors to be "
@@ -2424,17 +2565,15 @@ class LazyStackedTensorDict(_TensorDict):
                 f"of one of the stacked TensorDicts, where a key has been "
                 f"updated/created with an uncompatible shape."
             )
-        return torch.stack(tensors, self.stack_dim)  # type: ignore
+        return torch.stack(tensors, self.stack_dim)
 
     def _get_meta(self, key: str) -> MetaTensor:
         if key in self._meta_dict:
             return self._meta_dict[key]
         if key not in self.valid_keys:
-            raise KeyError(f"key {key} not found in {list(self._valid_keys)}")
-        return torch.stack(  # type: ignore
-            [td._get_meta(key) for td in self.tensor_dicts],
-            self.stack_dim
-            # type: ignore
+            raise KeyError(f"key {key} not found in {self._valid_keys}")
+        return torch.stack(
+            [td._get_meta(key) for td in self.tensordicts], self.stack_dim
         )
 
     def is_contiguous(self) -> bool:
@@ -2450,65 +2589,73 @@ class LazyStackedTensorDict(_TensorDict):
     def clone(self, recursive: bool = True) -> _TensorDict:
         if recursive:
             return LazyStackedTensorDict(
-                *[td.clone() for td in self.tensor_dicts],
+                *[td.clone() for td in self.tensordicts],
                 stack_dim=self.stack_dim,
             )
         return LazyStackedTensorDict(
-            *[td for td in self.tensor_dicts], stack_dim=self.stack_dim
+            *[td for td in self.tensordicts], stack_dim=self.stack_dim
         )
 
     def pin_memory(self) -> _TensorDict:
-        for td in self.tensor_dicts:
+        for td in self.tensordicts:
             td.pin_memory()
         return self
 
     def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs) -> _TensorDict:
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
-            return dest(source=self, batch_size=self.batch_size)  # type: ignore
+            return dest(source=self, batch_size=self.batch_size)
         elif isinstance(dest, (torch.device, str, int)):
             if not isinstance(dest, torch.device):
                 dest = torch.device(dest)
             if dest == self.device:
                 return self
-            tds = [td.to(dest) for td in self.tensor_dicts]
+            tds = [td.to(dest) for td in self.tensordicts]
             return LazyStackedTensorDict(*tds, stack_dim=self.stack_dim)
+        elif isinstance(dest, torch.Size):
+            self.batch_size = dest
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "
                 f"instance, {dest} not allowed"
             )
 
-    def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:  # type: ignore
-        for key in self.keys():
-            item = self.get(key)
-            yield key, item
+    def _check_new_batch_size(self, new_size: torch.Size):
+        if len(new_size) <= self.stack_dim:
+            raise RuntimeError(
+                "Changing the batch_size of a LazyStackedTensorDicts can only "
+                "be done with sizes that are at least as long as the "
+                "stacking dimension."
+            )
+        super()._check_new_batch_size(new_size)
 
-    def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
-        for key in self.keys():
-            item = self._get_meta(key)
-            yield key, item
+    def _change_batch_size(self, new_size: torch.Size):
+        if not hasattr(self, "_orig_batch_size"):
+            self._orig_batch_size = self.batch_size
+        elif self._orig_batch_size == new_size:
+            del self._orig_batch_size
+        self._batch_size = new_size
 
-    def keys(self) -> Iterator[str]:  # type: ignore
+    def keys(self) -> Iterator[str]:
         for key in self.valid_keys:
             yield key
 
     def _update_valid_keys(self) -> None:
-        valid_keys = set(self.tensor_dicts[0].keys())
-        for td in self.tensor_dicts[1:]:
+        valid_keys = set(self.tensordicts[0].keys())
+        for td in self.tensordicts[1:]:
             valid_keys = valid_keys.intersection(td.keys())
-        self._valid_keys = valid_keys
+        self._valid_keys = sorted(list(valid_keys))
 
     def select(self, *keys: str, inplace: bool = False) -> _TensorDict:
-        if len(self.valid_keys.intersection(keys)) != len(keys):
+        if len(set(self.valid_keys).intersection(keys)) != len(keys):
             raise KeyError(
                 f"Selected and existing keys mismatch, got self.valid_keys"
                 f"={self.valid_keys} and keys={keys}"
             )
-        tensor_dicts = [td.select(*keys, inplace=inplace) for td in self.tensor_dicts]
+        tensordicts = [td.select(*keys, inplace=inplace) for td in self.tensordicts]
         if inplace:
             return self
         return LazyStackedTensorDict(
-            *tensor_dicts,
+            *tensordicts,
             stack_dim=self.stack_dim,
         )
 
@@ -2520,22 +2667,22 @@ class LazyStackedTensorDict(_TensorDict):
             isinstance(item, (Number,))
             or (isinstance(item, torch.Tensor) and item.ndimension() == 0)
         ) and self.stack_dim == 0:
-            return self.tensor_dicts[item]
+            return self.tensordicts[item]
         elif isinstance(item, (torch.Tensor, list)) and self.stack_dim == 0:
             return LazyStackedTensorDict(
-                *[self.tensor_dicts[_item] for _item in item],
+                *[self.tensordicts[_item] for _item in item],
                 stack_dim=self.stack_dim,
             )
         elif isinstance(item, slice) and self.stack_dim == 0:
             return LazyStackedTensorDict(
-                *self.tensor_dicts[item], stack_dim=self.stack_dim
+                *self.tensordicts[item], stack_dim=self.stack_dim
             )
         elif isinstance(item, (slice, Number)):
             new_stack_dim = (
                 self.stack_dim - 1 if isinstance(item, Number) else self.stack_dim
             )
             return LazyStackedTensorDict(
-                *[td[item] for td in self.tensor_dicts],
+                *[td[item] for td in self.tensordicts],
                 stack_dim=new_stack_dim,
             )
         elif isinstance(item, tuple):
@@ -2543,21 +2690,21 @@ class LazyStackedTensorDict(_TensorDict):
                 _item for i, _item in enumerate(item) if i == self.stack_dim
             )
             if len(_sub_item):
-                tensor_dicts = self.tensor_dicts[_sub_item[0]]
-                if isinstance(tensor_dicts, _TensorDict):
-                    return tensor_dicts
+                tensordicts = self.tensordicts[_sub_item[0]]
+                if isinstance(tensordicts, _TensorDict):
+                    return tensordicts
             else:
-                tensor_dicts = self.tensor_dicts
-            # select sub tensor_dicts
+                tensordicts = self.tensordicts
+            # select sub tensordicts
             _sub_item = tuple(
                 _item for i, _item in enumerate(item) if i != self.stack_dim
             )
             if len(_sub_item):
-                tensor_dicts = [td[_sub_item] for td in tensor_dicts]
+                tensordicts = [td[_sub_item] for td in tensordicts]
             new_stack_dim = self.stack_dim - sum(
                 [isinstance(_item, Number) for _item in item[: self.stack_dim]]
             )
-            return torch.stack(list(tensor_dicts), dim=new_stack_dim)  # type: ignore
+            return torch.stack(list(tensordicts), dim=new_stack_dim)
         else:
             raise NotImplementedError(
                 f"selecting StackedTensorDicts with type "
@@ -2565,35 +2712,35 @@ class LazyStackedTensorDict(_TensorDict):
             )
 
     def del_(self, *args, **kwargs) -> _TensorDict:
-        for td in self.tensor_dicts:
+        for td in self.tensordicts:
             td.del_(*args, **kwargs)
         return self
 
     def share_memory_(self) -> _TensorDict:
-        for td in self.tensor_dicts:
+        for td in self.tensordicts:
             td.share_memory_()
         return self
 
     def detach_(self) -> _TensorDict:
-        for td in self.tensor_dicts:
+        for td in self.tensordicts:
             td.detach_()
         return self
 
     def memmap_(self) -> _TensorDict:
-        for td in self.tensor_dicts:
+        for td in self.tensordicts:
             td.memmap_()
         return self
 
     def expand(self, *shape: int, inplace: bool = False) -> _TensorDict:
         stack_dim = self.stack_dim + len(shape)
-        tensor_dicts = [td.expand(*shape) for td in self.tensor_dicts]
+        tensordicts = [td.expand(*shape) for td in self.tensordicts]
         if inplace:
-            self.tensor_dicts = tensor_dicts
+            self.tensordicts = tensordicts
             self.stack_dim = stack_dim
             return self
-        return torch.stack(tensor_dicts, stack_dim)  # type: ignore
+        return torch.stack(tensordicts, stack_dim)
 
-    def update(  # type: ignore
+    def update(
         self, input_dict_or_td: _TensorDict, clone: bool = False, **kwargs
     ) -> _TensorDict:
         if input_dict_or_td is self:
@@ -2631,7 +2778,7 @@ class LazyStackedTensorDict(_TensorDict):
         return self
 
     def rename_key(self, old_key: str, new_key: str, safe: bool = False) -> _TensorDict:
-        for td in self.tensor_dicts:
+        for td in self.tensordicts:
             td.rename_key(old_key, new_key, safe=safe)
         return self
 
@@ -2639,13 +2786,18 @@ class LazyStackedTensorDict(_TensorDict):
         self, mask: torch.Tensor, value: Union[float, bool]
     ) -> _TensorDict:
         mask_unbind = mask.unique(dim=self.stack_dim)
-        for _mask, td in zip(mask_unbind, self.tensor_dicts):
+        for _mask, td in zip(mask_unbind, self.tensordicts):
             td.masked_fill_(_mask, value)
         return self
+
+    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> _TensorDict:
+        td_copy = self.clone()
+        return td_copy.masked_fill_(mask, value)
 
 
 class SavedTensorDict(_TensorDict):
     _safe = False
+    _lazy = False
 
     def __init__(
         self,
@@ -2678,40 +2830,43 @@ class SavedTensorDict(_TensorDict):
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
 
-    def _save(self, tensor_dict: _TensorDict) -> None:
-        self._keys = list(tensor_dict.keys())
-        self._batch_size = tensor_dict.batch_size
-        self._td_fields = _td_fields(tensor_dict)
-        self._tensor_dict_meta = {key: value for key, value in tensor_dict.items_meta()}
-        torch.save(tensor_dict, self.filename)
+    def _save(self, tensordict: _TensorDict) -> None:
+        self._version = uuid.uuid1()
+        self._keys = list(tensordict.keys())
+        self._batch_size = tensordict.batch_size
+        self._td_fields = _td_fields(tensordict)
+        self._tensordict_meta = {key: value for key, value in tensordict.items_meta()}
+        torch.save(tensordict, self.filename)
 
     def _load(self) -> _TensorDict:
         return torch.load(self.filename, self.device)
 
     def _get_meta(self, key: str) -> MetaTensor:
-        return self._tensor_dict_meta.get(key)  # type: ignore
+        return self._tensordict_meta.get(key)
 
     @property
     def batch_size(self) -> torch.Size:
         return self._batch_size
 
+    @batch_size.setter
+    def batch_size(self, new_size: torch.Size):
+        return self._batch_size_setter(new_size)
+
     @property
     def device(self) -> torch.device:
         return self._device
 
-    def keys(self) -> Sequence[str]:  # type: ignore
+    def keys(self) -> Sequence[str]:
         for k in self._keys:
             yield k
 
-    def get(  # type: ignore
+    def get(
         self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
-    ) -> COMPATIBLE_TYPES:  # type: ignore
+    ) -> COMPATIBLE_TYPES:
         td = self._load()
         return td.get(key, default=default)
 
-    def set(
-        self, key: str, value: COMPATIBLE_TYPES, **kwargs
-    ) -> _TensorDict:  # type: ignore
+    def set(self, key: str, value: COMPATIBLE_TYPES, **kwargs) -> _TensorDict:
         td = self._load()
         td.set(key, value, **kwargs)
         self._save(td)
@@ -2737,7 +2892,7 @@ class SavedTensorDict(_TensorDict):
         self._save(td)
         return self
 
-    def update(  # type: ignore
+    def update(
         self,
         input_dict_or_td: Union[Dict[str, COMPATIBLE_TYPES], _TensorDict],
         clone: bool = False,
@@ -2789,11 +2944,25 @@ class SavedTensorDict(_TensorDict):
     def detach_(self) -> _TensorDict:
         raise RuntimeError("SavedTensorDict cannot be put detached.")
 
-    def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:  # type: ignore
-        return self._load().items()
+    def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:
+        version = self._version
+        for v in self._load().items():
+            if version != self._version:
+                raise RuntimeError("The SavedTensorDict changed while querying items.")
+            yield v
+
+    def values(self) -> Iterator[COMPATIBLE_TYPES]:
+        version = self._version
+        for v in self._load().values():
+            if version != self._version:
+                raise RuntimeError("The SavedTensorDict changed while querying values.")
+            yield v
 
     def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
-        return self._tensor_dict_meta.items()  # type: ignore
+        return self._tensordict_meta.items()
+
+    def values_meta(self) -> Iterator[MetaTensor]:
+        return self._tensordict_meta.values()
 
     def is_contiguous(self) -> bool:
         return False
@@ -2841,11 +3010,20 @@ class SavedTensorDict(_TensorDict):
             for k, item in self.items_meta():
                 item.device = dest
             return self_copy
+        if isinstance(dest, torch.Size):
+            self.batch_size = dest
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "
                 f"instance, {dest} not allowed"
             )
+
+    def _change_batch_size(self, new_size: torch.Size):
+        if not hasattr(self, "_orig_batch_size"):
+            self._orig_batch_size = self.batch_size
+        elif self._orig_batch_size == new_size:
+            del self._orig_batch_size
+        self._batch_size = new_size
 
     def del_(self, key: str) -> _TensorDict:
         td = self._load()
@@ -2874,7 +3052,7 @@ class SavedTensorDict(_TensorDict):
             raise IndexError(
                 "indexing a tensordict with td.batch_dims==0 is not permitted"
             )
-        return self.get_sub_tensor_dict(idx)
+        return self.get_sub_tensordict(idx)
 
     def masked_fill_(
         self, mask: torch.Tensor, value: Union[float, bool]
@@ -2884,8 +3062,15 @@ class SavedTensorDict(_TensorDict):
         self._save(td)
         return self
 
+    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> _TensorDict:
+        td_copy = self.clone()
+        return td_copy.masked_fill_(mask, value)
+
 
 class _CustomOpTensorDict(_TensorDict):
+
+    _lazy = True
+
     def __init__(
         self,
         source: _TensorDict,
@@ -2907,6 +3092,7 @@ class _CustomOpTensorDict(_TensorDict):
         self.inv_op = inv_op
         self.custom_op_kwargs = custom_op_kwargs if custom_op_kwargs is not None else {}
         self.inv_op_kwargs = inv_op_kwargs if inv_op_kwargs is not None else {}
+        self._batch_size = None
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
 
@@ -2948,26 +3134,31 @@ class _CustomOpTensorDict(_TensorDict):
         item = self._source._get_meta(key)
         return getattr(item, self.custom_op)(**self._update_custom_op_kwargs(item))
 
-    def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
-        for key, value in self._source.items_meta():
-            yield key, self._get_meta(key)
-
-    def items(self) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:  # type: ignore
-        for key in self._source.keys():
-            yield key, self.get(key)
-
     @property
     def batch_size(self) -> torch.Size:
-        return getattr(MetaTensor(*self._source.batch_size), self.custom_op)(
-            **self.custom_op_kwargs
-        ).shape
+        if self._batch_size is None:
+            self._batch_size = getattr(
+                MetaTensor(*self._source.batch_size), self.custom_op
+            )(**self.custom_op_kwargs).shape
+        return self._batch_size
 
-    def get(  # type: ignore
+    @batch_size.setter
+    def batch_size(self, new_size: torch.Size):
+        return self._batch_size_setter(new_size)
+
+    def _change_batch_size(self, new_size: torch.Size):
+        if not hasattr(self, "_orig_batch_size"):
+            self._orig_batch_size = self.batch_size
+        elif self._orig_batch_size == new_size:
+            del self._orig_batch_size
+        self._batch_size = new_size
+
+    def get(
         self,
         key: str,
         default: Union[str, COMPATIBLE_TYPES] = "_no_default_",
         _return_original_tensor: bool = False,
-    ) -> COMPATIBLE_TYPES:  # type: ignore
+    ) -> COMPATIBLE_TYPES:
         try:
             source_meta_tensor = self._source._get_meta(key)
             item = self._source.get(key)
@@ -2976,7 +3167,7 @@ class _CustomOpTensorDict(_TensorDict):
             )
             if not _return_original_tensor:
                 return transformed_tensor
-            return transformed_tensor, item  # type: ignore
+            return transformed_tensor, item
         except KeyError:
             if _return_original_tensor:
                 raise RuntimeError(
@@ -2985,9 +3176,7 @@ class _CustomOpTensorDict(_TensorDict):
                 )
             return self._default_get(key, default)
 
-    def set(
-        self, key: str, value: COMPATIBLE_TYPES, **kwargs
-    ) -> _TensorDict:  # type: ignore
+    def set(self, key: str, value: COMPATIBLE_TYPES, **kwargs) -> _TensorDict:
         if self.inv_op is None:
             raise Exception(
                 f"{self.__class__.__name__} does not support setting values. "
@@ -3024,7 +3213,7 @@ class _CustomOpTensorDict(_TensorDict):
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> _CustomOpTensorDict:
-        transformed_tensor, original_tensor = self.get(  # type: ignore
+        transformed_tensor, original_tensor = self.get(
             key, _return_original_tensor=True
         )
         if transformed_tensor.data_ptr() != original_tensor.data_ptr():
@@ -3034,7 +3223,7 @@ class _CustomOpTensorDict(_TensorDict):
                 f"supported in this setting, consider calling "
                 f"`td.clone()` before `td.set_at_(...)`"
             )
-        transformed_tensor[idx] = value  # type: ignore
+        transformed_tensor[idx] = value
         return self
 
     def __repr__(self) -> str:
@@ -3076,7 +3265,7 @@ class _CustomOpTensorDict(_TensorDict):
         )
 
     def is_contiguous(self) -> bool:
-        return all([value.is_contiguous() for _, value in self.items()])  # type: ignore
+        return all([value.is_contiguous() for _, value in self.items()])
 
     def contiguous(self) -> _TensorDict:
         if self.is_contiguous():
@@ -3129,6 +3318,10 @@ class _CustomOpTensorDict(_TensorDict):
             self._source.set(key, val)
         return self
 
+    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> _TensorDict:
+        td_copy = self.clone()
+        return td_copy.masked_fill_(mask, value)
+
     def memmap_(self):
         self._source.memmap_()
 
@@ -3180,20 +3373,16 @@ class SqueezedTensorDict(_CustomOpTensorDict):
 
 class ViewedTensorDict(_CustomOpTensorDict):
     def _update_custom_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:
-        new_dim_list = list(self.custom_op_kwargs.get("size"))  # type: ignore
-        new_dim_list += list(
-            source_meta_tensor.shape[self._source.batch_dims :]
-        )  # type: ignore
+        new_dim_list = list(self.custom_op_kwargs.get("size"))
+        new_dim_list += list(source_meta_tensor.shape[self._source.batch_dims :])
         new_dim = torch.Size(new_dim_list)
         new_dict = deepcopy(self.custom_op_kwargs)
         new_dict.update({"size": new_dim})
         return new_dict
 
     def _update_inv_op_kwargs(self, source_meta_tensor: MetaTensor) -> Dict:
-        size = list(self.inv_op_kwargs.get("size"))  # type: ignore
-        size += list(
-            source_meta_tensor.shape[self._source.batch_dims :]
-        )  # type: ignore
+        size = list(self.inv_op_kwargs.get("size"))
+        size += list(source_meta_tensor.shape[self._source.batch_dims :])
         new_dim = torch.Size(size)
         new_dict = deepcopy(self.inv_op_kwargs)
         new_dict.update({"size": new_dim})
@@ -3213,6 +3402,37 @@ class ViewedTensorDict(_CustomOpTensorDict):
         return super().view(*shape)
 
 
+class PermutedTensorDict(_CustomOpTensorDict):
+    """
+    A lazy view on a TensorDict with the batch dimensions permuted.
+    """
+
+    def add_missing_dims(self, num_dims: int, batch_dims: tuple) -> tuple:
+        dim_diff = num_dims - len(batch_dims)
+        all_dims = [i for i in range(num_dims)]
+        for i, x in enumerate(batch_dims):
+            if x < 0:
+                x = x - dim_diff
+            all_dims[i] = x
+        return tuple(all_dims)
+
+    def _update_custom_op_kwargs(self, source_meta_tensor: MetaTensor) -> Dict:
+        new_dims = self.add_missing_dims(
+            len(source_meta_tensor.shape), self.custom_op_kwargs["dims"]
+        )
+        kwargs = deepcopy(self.custom_op_kwargs)
+        kwargs.update({"dims": new_dims})
+        return kwargs
+
+    def _update_inv_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:
+        new_dims = self.add_missing_dims(
+            len(source_meta_tensor.shape), self.custom_op_kwargs["dims"]
+        )
+        kwargs = deepcopy(self.custom_op_kwargs)
+        kwargs.update({"dims": new_dims})
+        return kwargs
+
+
 def _td_fields(td: _TensorDict) -> str:
     return indent(
         "\n"
@@ -3227,10 +3447,10 @@ def _td_fields(td: _TensorDict) -> str:
 
 
 def _check_keys(
-    list_of_tensor_dicts: Sequence[_TensorDict], strict: bool = False
+    list_of_tensordicts: Sequence[_TensorDict], strict: bool = False
 ) -> Set[str]:
     keys: Set[str] = set()
-    for td in list_of_tensor_dicts:
+    for td in list_of_tensordicts:
         if not len(keys):
             keys = set(td.keys())
         else:

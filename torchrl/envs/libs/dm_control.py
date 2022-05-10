@@ -18,8 +18,10 @@ from ...data.utils import numpy_to_torch_dtype_dict
 from ..common import GymLikeEnv
 
 __all__ = ["DMControlEnv"]
+
+import collections
+
 try:
-    import collections
 
     import dm_env
     from dm_control import suite
@@ -36,7 +38,8 @@ def _dmcontrol_to_torchrl_spec_transform(
 ) -> TensorSpec:
     if isinstance(spec, collections.OrderedDict):
         spec = {
-            k: _dmcontrol_to_torchrl_spec_transform(item) for k, item in spec.items()
+            "next_" + k: _dmcontrol_to_torchrl_spec_transform(item)
+            for k, item in spec.items()
         }
         return CompositeSpec(**spec)
     elif isinstance(spec, dm_env.specs.BoundedArray):

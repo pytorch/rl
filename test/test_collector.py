@@ -13,9 +13,9 @@ from mocking_classes import (
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
     DiscreteActionConvPolicy,
+    ContinuousActionVecMockEnv,
 )
 from torch import nn
-from torchrl.agents.env_creator import EnvCreator
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.collectors.collectors import (
     RandomPolicy,
@@ -23,9 +23,11 @@ from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td
+from torchrl.envs import EnvCreator
 from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
+from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
 
 
 def make_make_env(env_name="conv"):
@@ -499,6 +501,44 @@ def test_update_weights(use_async):
 
     collector.shutdown()
     del collector
+
+
+@pytest.mark.parametrize(
+    "collector_class",
+    [MultiSyncDataCollector, MultiaSyncDataCollector, SyncDataCollector],
+)
+@pytest.mark.parametrize("exclude", [True, False])
+def test_excluded_keys(collector_class, exclude):
+    if not exclude and collector_class is not SyncDataCollector:
+        pytest.skip("defining _exclude_private_keys is not possible")
+    make_env = lambda: ContinuousActionVecMockEnv()
+    dummy_env = make_env()
+    obs_spec = dummy_env.observation_spec["next_observation"]
+    policy_module = nn.Linear(obs_spec.shape[-1], dummy_env.action_spec.shape[-1])
+    policy = Actor(policy_module, spec=dummy_env.action_spec)
+    policy_explore = OrnsteinUhlenbeckProcessWrapper(policy)
+
+    collector_kwargs = {
+        "create_env_fn": make_env,
+        "policy": policy_explore,
+        "frames_per_batch": 30,
+    }
+    if collector_class is not SyncDataCollector:
+        collector_kwargs["create_env_fn"] = [
+            collector_kwargs["create_env_fn"] for _ in range(3)
+        ]
+
+    collector = collector_class(**collector_kwargs)
+    collector._exclude_private_keys = exclude
+    for b in collector:
+        keys = b.keys()
+        if exclude:
+            assert not any(key.startswith("_") for key in keys)
+        else:
+            assert any(key.startswith("_") for key in keys)
+        break
+    collector.shutdown()
+    dummy_env.close()
 
 
 def weight_reset(m):

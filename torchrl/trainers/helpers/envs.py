@@ -8,9 +8,9 @@ from typing import Callable, Optional, Union
 
 import torch
 
-from torchrl.agents.env_creator import env_creator, EnvCreator
 from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
 from torchrl.envs.common import _EnvClass
+from torchrl.envs.env_creator import env_creator, EnvCreator
 from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,
@@ -131,7 +131,6 @@ def transformed_env_constructor(
         else:
             env = custom_env_maker()
 
-        keys = env.reset().keys()
         transforms = []
 
         if args.noops:
@@ -141,8 +140,8 @@ def transformed_env_constructor(
                 ToTensorImage(),
                 Resize(84, 84),
                 GrayScale(),
-                CatFrames(keys=["next_observation_pixels"]),
-                ObservationNorm(loc=-1.0, scale=2.0, keys=["next_observation_pixels"]),
+                CatFrames(keys=["next_pixels"]),
+                ObservationNorm(loc=-1.0, scale=2.0, keys=["next_pixels"]),
             ]
         if norm_rewards:
             reward_scaling = 1.0
@@ -159,9 +158,7 @@ def transformed_env_constructor(
             ]  # DMControl requires double-precision
         if not from_pixels:
             selected_keys = [
-                "next_" + key
-                for key in keys
-                if key.startswith("observation") and "pixels" not in key
+                key for key in env.observation_spec.keys() if "pixels" not in key
             ]
 
             # even if there is a single tensor, it'll be renamed in "next_observation_vector"
@@ -237,17 +234,23 @@ def parallel_env_constructor(args: Namespace, **kwargs) -> EnvCreator:
     return env
 
 
-def get_stats_random_rollout(args: Namespace, proof_environment: _EnvClass):
+def get_stats_random_rollout(
+    args: Namespace, proof_environment: _EnvClass, key: Optional[str] = None
+):
     if not hasattr(args, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
     td_stats = proof_environment.rollout(n_steps=args.init_env_steps)
-    if args.from_pixels:
-        m = td_stats.get("observation_pixels").mean(dim=0)
-        s = td_stats.get("observation_pixels").std(dim=0).clamp_min(1e-5)
-    else:
-        m = td_stats.get("observation_vector").mean(dim=0)
-        s = td_stats.get("observation_vector").std(dim=0).clamp_min(1e-5)
+    if key is None:
+        keys = list(proof_environment.observation_spec.keys())
+        key = keys.pop()
+        if len(keys):
+            raise RuntimeError(
+                f"More than one key exists in the observation_specs: {[key] + keys} were found, "
+                "thus get_stats_random_rollout cannot infer which to compute the stats of."
+            )
+    m = td_stats.get(key).mean(dim=0)
+    s = td_stats.get(key).std(dim=0).clamp_min(1e-5)
     if not torch.isfinite(m).all():
         raise RuntimeError("non-finite values found in mean")
     if not torch.isfinite(s).all():

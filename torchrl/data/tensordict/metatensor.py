@@ -168,8 +168,9 @@ class MetaTensor:
             _is_shared=self.is_shared(),
         )
 
+    @classmethod
     def __torch_function__(
-        self,
+        cls,
         func: Callable,
         types,
         args: Tuple = (),
@@ -219,6 +220,12 @@ class MetaTensor:
             else:
                 new_shape.append(shape[0])
             shape = shape[1:]
+        clone.shape = torch.Size(new_shape)
+        return clone
+
+    def permute(self, dims: int) -> MetaTensor:
+        clone = self.clone()
+        new_shape = [self.shape[dim] for dim in dims]
         clone.shape = torch.Size(new_shape)
         return clone
 

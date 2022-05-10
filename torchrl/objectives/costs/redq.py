@@ -12,7 +12,7 @@ import torch
 from torch import Tensor
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.envs.utils import set_exploration_mode, step_tensor_dict
+from torchrl.envs.utils import set_exploration_mode, step_tensordict
 from torchrl.modules import TDModule
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.utils import (
@@ -21,7 +21,7 @@ from torchrl.objectives.costs.utils import (
     next_state_value as get_next_state_value,
 )
 
-__all__ = ["REDQLoss", "DoubleREDQLoss"]
+__all__ = ["REDQLoss"]
 
 
 class REDQLoss_deprecated(_LossModule):
@@ -111,7 +111,7 @@ class REDQLoss_deprecated(_LossModule):
         self.log_alpha.data.clamp_(-20, 1.0)
 
         with torch.no_grad():
-            alpha = self.log_alpha.detach().exp()
+            alpha = self.log_alpha.exp()
         return alpha
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
@@ -129,7 +129,7 @@ class REDQLoss_deprecated(_LossModule):
                 "loss_qvalue": loss_qval.mean(),
                 "loss_alpha": loss_alpha.mean(),
                 "alpha": self.alpha,
-                "entropy": -action_log_prob.mean(),
+                "entropy": -action_log_prob.mean().detach(),
             },
             [],
         )
@@ -149,7 +149,7 @@ class REDQLoss_deprecated(_LossModule):
         with hold_out_params(self.qvalue_network_params) as params:
             tensordict_expand = self.qvalue_network(
                 tensordict_clone.select(*self.qvalue_network.in_keys),
-                tensor_dict_out=TensorDict(
+                tensordict_out=TensorDict(
                     {}, [self.num_qvalue_nets, *tensordict_clone.shape]
                 ),
                 params=params,
@@ -183,7 +183,7 @@ class REDQLoss_deprecated(_LossModule):
                 b[selected_models_idx] for b in self.target_qvalue_network_buffers
             ]
 
-            next_td = step_tensor_dict(tensordict).select(
+            next_td = step_tensordict(tensordict).select(
                 *self.actor_network.in_keys
             )  # next_observation ->
             # observation
@@ -198,7 +198,7 @@ class REDQLoss_deprecated(_LossModule):
             # get q-values
             next_td = self.qvalue_network(
                 next_td,
-                tensor_dict_out=TensorDict({}, [self.sub_sample_len, *next_td.shape]),
+                tensordict_out=TensorDict({}, [self.sub_sample_len, *next_td.shape]),
                 params=selected_q_params,
                 buffers=selected_q_buffers,
                 vmap=True,
@@ -216,7 +216,7 @@ class REDQLoss_deprecated(_LossModule):
         )
         tensordict_expand = self.qvalue_network(
             tensordict.select(*self.qvalue_network.in_keys),
-            tensor_dict_out=TensorDict({}, [self.num_qvalue_nets, *tensordict.shape]),
+            tensordict_out=TensorDict({}, [self.num_qvalue_nets, *tensordict.shape]),
             params=list(self.qvalue_network_params),
             buffers=self.qvalue_network_buffers,
             vmap=True,
@@ -271,11 +271,12 @@ class REDQLoss(_LossModule):
         alpha_init (Number, optional): initial value of the alpha factor. Default is 1.0.
         fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is `False`.
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
+        delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
+            for data collection. Default is `False`.
 
     """
 
     delay_actor: bool = False
-    delay_qvalue: bool = False
 
     def __init__(
         self,
@@ -289,6 +290,7 @@ class REDQLoss(_LossModule):
         alpha_init: Number = 1.0,
         fixed_alpha: bool = False,
         target_entropy: Union[str, Number] = "auto",
+        delay_qvalue: bool = True,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -296,6 +298,7 @@ class REDQLoss(_LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
+        self.delay_qvalue = delay_qvalue
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
@@ -369,7 +372,7 @@ class REDQLoss(_LossModule):
         tensordict_actor_grad = tensordict_select.select(
             *obs_keys
         )  # to avoid overwriting keys
-        next_td_actor = step_tensor_dict(tensordict_select).select(
+        next_td_actor = step_tensordict(tensordict_select).select(
             *self.actor_network.in_keys
         )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
@@ -417,7 +420,7 @@ class REDQLoss(_LossModule):
 
         tensordict_qval = self.qvalue_network(
             tensordict_qval,
-            tensor_dict_out=TensorDict({}, tensordict_qval.shape),
+            tensordict_out=TensorDict({}, tensordict_qval.shape),
             params=qvalue_params,
             buffers=qvalue_buffers,
             vmap=(0, 0, 0, 0),
@@ -492,7 +495,3 @@ class REDQLoss(_LossModule):
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
         return alpha_loss
-
-
-class DoubleREDQLoss(REDQLoss):
-    delay_qvalue: bool = True

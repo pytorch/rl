@@ -32,8 +32,8 @@ def parser_recorder_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--record_interval",
         type=int,
-        default=10000,
-        help="number of optimization steps in between two collections of validation rollouts. "
+        default=50,
+        help="number of batch collections in between two collections of validation rollouts. "
         "Default=10000.",
     )
     parser.add_argument(

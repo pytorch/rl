@@ -14,8 +14,9 @@ from mocking_classes import (
     DiscreteActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
 )
-from torchrl.agents.helpers import parser_env_args, transformed_env_constructor
-from torchrl.agents.helpers.models import (
+from torchrl.envs.libs.gym import _has_gym
+from torchrl.trainers.helpers import parser_env_args, transformed_env_constructor
+from torchrl.trainers.helpers.models import (
     make_dqn_actor,
     parser_model_args_discrete,
     parser_model_args_continuous,
@@ -24,7 +25,6 @@ from torchrl.agents.helpers.models import (
     make_sac_model,
     make_redq_model,
 )
-from torchrl.envs.libs.gym import _has_gym
 
 
 ## these tests aren't truly unitary but setting up a fake env for the
@@ -41,6 +41,7 @@ def _assert_keys_match(td, expeceted_keys):
     assert len(td_keys) == len(expeceted_keys)
 
 
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("noisy", [tuple(), ("--noisy",)])
 @pytest.mark.parametrize("distributional", [tuple(), ("--distributional",)])
@@ -66,7 +67,7 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
 
     expected_keys = ["done", "action", "action_value"]
     if from_pixels:
-        expected_keys += ["observation_pixels"]
+        expected_keys += ["pixels"]
     else:
         expected_keys += ["observation_vector"]
 
@@ -80,6 +81,7 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
     proof_environment.close()
 
 
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
 def test_ddpg_maker(device, from_pixels):
@@ -102,7 +104,7 @@ def test_ddpg_maker(device, from_pixels):
     actor(td)
     expected_keys = ["done", "action"]
     if from_pixels:
-        expected_keys += ["observation_pixels"]
+        expected_keys += ["pixels"]
     else:
         expected_keys += ["observation_vector"]
 
@@ -124,6 +126,7 @@ def test_ddpg_maker(device, from_pixels):
     del proof_environment
 
 
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
 @pytest.mark.parametrize("gsde", [tuple(), ("--gSDE",)])
@@ -153,7 +156,7 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde):
     actor = actor_value.get_policy_operator()
     expected_keys = [
         "done",
-        "observation_pixels" if len(from_pixels) else "observation_vector",
+        "pixels" if len(from_pixels) else "observation_vector",
         "action_dist_param_0",
         "action_dist_param_1",
         "action",
@@ -175,7 +178,7 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde):
     value = actor_value.get_value_operator()
     expected_keys = [
         "done",
-        "observation_pixels" if len(from_pixels) else "observation_vector",
+        "pixels" if len(from_pixels) else "observation_vector",
         "state_value",
     ]
     if shared_mapping:
@@ -229,7 +232,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels):
     actor(td_clone)
     expected_keys = [
         "done",
-        "observation_pixels" if len(from_pixels) else "observation_vector",
+        "pixels" if len(from_pixels) else "observation_vector",
         "action",
     ]
     if len(gsde):

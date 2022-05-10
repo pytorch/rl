@@ -171,16 +171,14 @@ class ImpalaNet(nn.Module):
 
 
 class ImpalaNetTensorDict(ImpalaNet):
-    observation_key = "observation_pixels"
+    observation_key = "pixels"
 
-    def forward(self, tensor_dict: _TensorDict):  # type: ignore
-        x = tensor_dict.get(self.observation_key)
-        done = tensor_dict.get("done").squeeze(-1)
-        reward = tensor_dict.get("reward").squeeze(-1)
-        mask = tensor_dict.get("mask").squeeze(-1)
+    def forward(self, tensordict: _TensorDict):
+        x = tensordict.get(self.observation_key)
+        done = tensordict.get("done").squeeze(-1)
+        reward = tensordict.get("reward").squeeze(-1)
+        mask = tensordict.get("mask").squeeze(-1)
         core_state = (
-            tensor_dict.get("core_state")
-            if "core_state" in tensor_dict.keys()
-            else None
+            tensordict.get("core_state") if "core_state" in tensordict.keys() else None
         )
         return super().forward(x, reward, done, core_state=core_state, mask=mask)

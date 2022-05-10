@@ -9,7 +9,7 @@ from typing import Optional, Sequence
 import torch
 from torch import nn
 
-from torchrl.data import DEVICE_TYPING, CompositeSpec
+from torchrl.data import DEVICE_TYPING
 from torchrl.envs.common import _EnvClass
 from torchrl.modules import (
     ActorValueOperator,
@@ -82,20 +82,23 @@ def make_dqn_actor(
 
     Examples:
         >>> from torchrl.agents.helpers.models import make_dqn_actor, parser_model_args_discrete
+        >>> from torchrl.agents.helpers.envs import parser_env_args
         >>> from torchrl.envs import GymEnv
         >>> from torchrl.envs.transforms import ToTensorImage, TransformedEnv
         >>> import argparse
         >>> proof_environment = TransformedEnv(GymEnv("ALE/Pong-v5",
         ...    pixels_only=True), ToTensorImage())
         >>> device = torch.device("cpu")
-        >>> args = parser_model_args_discrete(argparse.ArgumentParser()).parse_args([])
+        >>> parser = parser_env_args(argparse.ArgumentParser())
+        >>> parser = parser_model_args_discrete(parser)
+        >>> args = parser.parse_args(['--env_name', 'ALE/Pong-v5', '--from_pixels'])
         >>> actor = make_dqn_actor(proof_environment, args, device)
-        >>> td = proof_environment.reset()
+        >>> _ = proof_environment.reset()
+        >>> td = proof_environment.current_tensordict
         >>> print(actor(td))
         TensorDict(
             fields={
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
-                observation_pixels: Tensor(torch.Size([3, 210, 160]), dtype=torch.float32),
+                pixels: Tensor(torch.Size([3, 210, 160]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.int64),
                 action_value: Tensor(torch.Size([6]), dtype=torch.float32),
                 chosen_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
@@ -131,7 +134,7 @@ def make_dqn_actor(
             },
             "mlp_kwargs": {"num_cells": 512, "layer_class": linear_layer_class},
         }
-        in_key = "observation_pixels"
+        in_key = "pixels"
 
     else:
         net_class = DuelingMlpDQNet
@@ -139,7 +142,8 @@ def make_dqn_actor(
             "mlp_kwargs_feature": {},  # see class for details
             "mlp_kwargs_output": {"num_cells": 512, "layer_class": linear_layer_class},
         }
-        in_key = "observation_vector"
+        # automatically infer in key
+        in_key = list(env_specs["observation_spec"].keys())[0].split("next_")[-1]
 
     out_features = env_specs["action_spec"].shape[0]
     actor_class = QValueActor
@@ -173,7 +177,8 @@ def make_dqn_actor(
 
     # init
     with torch.no_grad():
-        td = proof_environment.reset()
+        proof_environment.reset()
+        td = proof_environment.current_tensordict
         model(td.to(device))
     return model
 
@@ -219,11 +224,11 @@ def make_ddpg_actor(
         ...     proof_environment,
         ...     device=device,
         ...     args=args)
-        >>> td = proof_environment.reset()
+        >>> _ = proof_environment.reset()
+        >>> td = proof_environment.current_tensordict
         >>> print(actor(td))
         TensorDict(
             fields={
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32)},
             batch_size=torch.Size([]),
@@ -232,7 +237,6 @@ def make_ddpg_actor(
         >>> print(value(td))
         TensorDict(
             fields={
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
@@ -264,7 +268,7 @@ def make_ddpg_actor(
     }
     actor_net_default_kwargs.update(actor_net_kwargs)
     if from_pixels:
-        in_keys = ["observation_pixels"]
+        in_keys = ["pixels"]
         actor_net = DdpgCnnActor(**actor_net_default_kwargs)
 
     else:
@@ -290,7 +294,7 @@ def make_ddpg_actor(
         }
         value_net_default_kwargs.update(value_net_kwargs)
 
-        in_keys = ["observation_pixels", "action"]
+        in_keys = ["pixels", "action"]
         out_keys = ["state_action_value"]
         q_net = DdpgCnnQNet(**value_net_default_kwargs)
     else:
@@ -327,7 +331,8 @@ def make_ddpg_actor(
 
     # init
     with torch.no_grad():
-        td = proof_environment.reset().to(device)
+        proof_environment.reset()
+        td = proof_environment.current_tensordict.to(device)
         module[0](td)
         module[1](td)
 
@@ -339,6 +344,7 @@ def make_ppo_model(
     args: Namespace,
     device: DEVICE_TYPING,
     in_keys_actor: Optional[Sequence[str]] = None,
+    observation_key=None,
     **kwargs,
 ) -> ActorValueOperator:
     """
@@ -352,7 +358,7 @@ def make_ppo_model(
         args (argparse.Namespace): arguments of the PPO script
         device (torch.device): device on which the model must be cast.
         in_keys_actor (iterable of strings, optional): observation key to be read by the actor, usually one of
-            `'observation_vector'` or `'observation_pixels'`. If none is provided, one of these two keys is chosen based on
+            `'observation_vector'` or `'pixels'`. If none is provided, one of these two keys is chosen based on
             the `args.from_pixels` argument.
 
     Returns:
@@ -377,11 +383,11 @@ def make_ppo_model(
         ...     )
         >>> actor = actor_value.get_policy_operator()
         >>> value = actor_value.get_value_operator()
-        >>> td = proof_environment.reset()
+        >>> _ = proof_environment.reset()
+        >>> td = proof_environment.current_tensordict
         >>> print(actor(td.clone()))
         TensorDict(
             fields={
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 hidden: Tensor(torch.Size([300]), dtype=torch.float32),
                 action_dist_param_0: Tensor(torch.Size([6]), dtype=torch.float32),
@@ -394,7 +400,6 @@ def make_ppo_model(
         >>> print(value(td.clone()))
         TensorDict(
             fields={
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 hidden: Tensor(torch.Size([300]), dtype=torch.float32),
                 state_value: Tensor(torch.Size([1]), dtype=torch.float32)},
@@ -408,9 +413,23 @@ def make_ppo_model(
     action_spec = specs["action_spec"]
     obs_spec = specs["observation_spec"]
 
+    if observation_key is not None:
+        obs_spec = obs_spec[observation_key]
+    else:
+        obs_spec_values = list(obs_spec.values())
+        if len(obs_spec_values) > 1:
+            raise RuntimeError(
+                "There is more than one observation in the spec, PPO helper "
+                "cannot infer automatically which to pick. "
+                "Please indicate which key to read via the `observation_key` "
+                "keyword in this helper."
+            )
+        else:
+            obs_spec = obs_spec_values[0]
+
     if in_keys_actor is None and proof_environment.from_pixels:
-        in_keys_actor = ["observation_pixels"]
-        in_keys_critic = ["observation_pixels"]
+        in_keys_actor = ["pixels"]
+        in_keys_critic = ["pixels"]
     elif in_keys_actor is None:
         in_keys_actor = ["observation_vector"]
         in_keys_critic = ["observation_vector"]
@@ -450,7 +469,7 @@ def make_ppo_model(
         hidden_features = 300
         if proof_environment.from_pixels:
             if in_keys_actor is None:
-                in_keys_actor = ["observation_pixels"]
+                in_keys_actor = ["pixels"]
             common_module = ConvNet(
                 bias_last_layer=True,
                 depth=None,
@@ -565,7 +584,8 @@ def make_ppo_model(
         actor_value = ActorCriticWrapper(policy_po, value_po).to(device)
 
     with torch.no_grad():
-        td = proof_environment.reset()
+        proof_environment.reset()
+        td = proof_environment.current_tensordict
         td_device = td.to(device)
         td_device = td_device.unsqueeze(0)
         td_device = actor_value(td_device)  # for init
@@ -580,6 +600,7 @@ def make_sac_model(
     actor_net_kwargs=None,
     qvalue_net_kwargs=None,
     value_net_kwargs=None,
+    observation_key=None,
     **kwargs,
 ) -> nn.ModuleList:
     """
@@ -593,7 +614,7 @@ def make_sac_model(
         args (argparse.Namespace): arguments of the SAC script
         device (torch.device, optional): device on which the model must be cast. Default is "cpu".
         in_keys (iterable of strings, optional): observation key to be read by the actor, usually one of
-            `'observation_vector'` or `'observation_pixels'`. If none is provided, one of these two keys is chosen
+            `'observation_vector'` or `'pixels'`. If none is provided, one of these two keys is chosen
              based on the `args.from_pixels` argument.
         actor_net_kwargs (dict, optional): kwargs of the actor MLP.
         qvalue_net_kwargs (dict, optional): kwargs of the qvalue MLP.
@@ -621,11 +642,11 @@ def make_sac_model(
         ...     args=args,
         ...     )
         >>> actor, qvalue, value = model
-        >>> td = proof_environment.reset()
+        >>> _ = proof_environment.reset()
+        >>> td = proof_environment.current_tensordict
         >>> print(actor(td))
         TensorDict(
             fields={
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32)},
             batch_size=torch.Size([]),
@@ -634,7 +655,6 @@ def make_sac_model(
         >>> print(qvalue(td.clone()))
         TensorDict(
             fields={
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
@@ -644,7 +664,6 @@ def make_sac_model(
         >>> print(value(td.clone()))
         TensorDict(
             fields={
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 state_value: Tensor(torch.Size([1]), dtype=torch.float32)},
@@ -657,9 +676,25 @@ def make_sac_model(
     default_policy_scale = args.default_policy_scale
     gSDE = args.gSDE
 
-    td = proof_environment.reset()
+    proof_environment.reset()
+    td = proof_environment.current_tensordict
     action_spec = proof_environment.action_spec
     obs_spec = proof_environment.observation_spec
+
+    if observation_key is not None:
+        obs_spec = obs_spec[observation_key]
+    else:
+        obs_spec_values = list(obs_spec.values())
+        if len(obs_spec_values) > 1:
+            raise RuntimeError(
+                "There is more than one observation in the spec, SAC helper "
+                "cannot infer automatically which to pick. "
+                "Please indicate which key to read via the `observation_key` "
+                "keyword in this helper."
+            )
+        else:
+            obs_spec = obs_spec_values[0]
+
     if actor_net_kwargs is None:
         actor_net_kwargs = {}
     if value_net_kwargs is None:
@@ -710,14 +745,12 @@ def make_sac_model(
             "tanh_loc": tanh_loc,
         }
     else:
-        if isinstance(obs_spec, CompositeSpec):
-            obs_spec = obs_spec["vector"]
         obs_spec_len = obs_spec.shape[0]
         actor_net = gSDEWrapper(
             actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len
         )
         in_keys_actor = in_keys + ["_eps_gSDE"]
-        dist_class = IndependentNormal
+        dist_class = TanhNormal  # IndependentNormal
         dist_kwargs = {
             "tanh_loc": tanh_loc,
         }
@@ -757,6 +790,7 @@ def make_redq_model(
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
     qvalue_net_kwargs=None,
+    observation_key=None,
     **kwargs,
 ) -> nn.ModuleList:
     """
@@ -770,7 +804,7 @@ def make_redq_model(
         args (argparse.Namespace): arguments of the REDQ script
         device (torch.device, optional): device on which the model must be cast. Default is "cpu".
         in_keys (iterable of strings, optional): observation key to be read by the actor, usually one of
-            `'observation_vector'` or `'observation_pixels'`. If none is provided, one of these two keys is chosen
+            `'observation_vector'` or `'pixels'`. If none is provided, one of these two keys is chosen
              based on the `args.from_pixels` argument.
         actor_net_kwargs (dict, optional): kwargs of the actor MLP.
         qvalue_net_kwargs (dict, optional): kwargs of the qvalue MLP.
@@ -797,11 +831,11 @@ def make_redq_model(
         ...     args=args,
         ...     )
         >>> actor, qvalue = model
-        >>> td = proof_environment.reset()
+        >>> _ = proof_environment.reset()
+        >>> td = proof_environment.current_tensordict
         >>> print(actor(td))
         TensorDict(
             fields={
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 action_log_prob: Tensor(torch.Size([1]), dtype=torch.float32)},
@@ -811,7 +845,6 @@ def make_redq_model(
         >>> print(qvalue(td.clone()))
         TensorDict(
             fields={
-                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 action_log_prob: Tensor(torch.Size([1]), dtype=torch.float32),
@@ -826,9 +859,24 @@ def make_redq_model(
     default_policy_scale = args.default_policy_scale
     gSDE = args.gSDE
 
-    td = proof_environment.reset()
+    proof_environment.reset()
+    td = proof_environment.current_tensordict
     action_spec = proof_environment.action_spec
     obs_spec = proof_environment.observation_spec
+
+    if observation_key is not None:
+        obs_spec = obs_spec[observation_key]
+    else:
+        obs_spec_values = list(obs_spec.values())
+        if len(obs_spec_values) > 1:
+            raise RuntimeError(
+                "There is more than one observation in the spec, REDQ helper "
+                "cannot infer automatically which to pick. "
+                "Please indicate which key to read via the `observation_key` "
+                "keyword in this helper."
+            )
+        else:
+            obs_spec = obs_spec_values[0]
 
     if actor_net_kwargs is None:
         actor_net_kwargs = {}
@@ -868,8 +916,6 @@ def make_redq_model(
             "tanh_loc": tanh_loc,
         }
     else:
-        if isinstance(obs_spec, CompositeSpec):
-            obs_spec = obs_spec["vector"]
         obs_spec_len = obs_spec.shape[0]
         actor_net = gSDEWrapper(
             actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len

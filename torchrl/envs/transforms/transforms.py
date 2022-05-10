@@ -1,4 +1,4 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
+# Copyright (c) Meta Plobs_dictnc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
@@ -7,12 +7,18 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, List, Optional, OrderedDict, Sequence, Union
+from warnings import warn
 
 import torch
 from torch import nn
-from torchvision.transforms.functional_tensor import (
-    resize,
-)  # as of now resize is imported from torchvision
+
+try:
+    _has_tv = True
+    from torchvision.transforms.functional_tensor import (
+        resize,
+    )  # as of now resize is imported from torchvision
+except ImportError:
+    _has_tv = False
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
@@ -21,12 +27,13 @@ from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
+    BinaryDiscreteTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.envs.common import _EnvClass, make_tensor_dict
+from torchrl.envs.common import _EnvClass, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import FiniteTensor
-from torchrl.envs.utils import step_tensor_dict
+from torchrl.envs.utils import step_tensordict
 
 __all__ = [
     "Transform",
@@ -44,13 +51,13 @@ __all__ = [
     "DoubleToFloat",
     "CatTensors",
     "NoopResetEnv",
-    "BinerizeReward",
+    "BinarizeReward",
     "PinMemoryTransform",
     "VecNorm",
     "gSDENoise",
 ]
 
-IMAGE_KEYS = ["next_observation", "next_observation_pixels"]
+IMAGE_KEYS = ["next_observation", "next_pixels"]
 _MAX_NOOPS_TRIALS = 10
 
 
@@ -85,9 +92,9 @@ class Transform(nn.Module):
         super().__init__()
         self.keys = keys
 
-    def reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def reset(self, tensordict: _TensorDict) -> _TensorDict:
         """Resets a tranform if it is stateful."""
-        return tensor_dict
+        return tensordict
 
     def _check_inplace(self) -> None:
         if not hasattr(self, "inplace"):
@@ -96,7 +103,7 @@ class Transform(nn.Module):
                 f"attribute inplace, consider implementing it."
             )
 
-    def init(self, tensor_dict) -> None:
+    def init(self, tensordict) -> None:
         pass
 
     def _apply(self, obs: torch.Tensor) -> None:
@@ -107,21 +114,21 @@ class Transform(nn.Module):
         """
         raise NotImplementedError
 
-    def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _call(self, tensordict: _TensorDict) -> _TensorDict:
         """Reads the input tensordict, and for the selected keys, applies the
         transform.
 
         """
         self._check_inplace()
-        for _obs_key in tensor_dict.keys():
+        for _obs_key in tensordict.keys():
             if _obs_key in self.keys:
-                observation = self._apply(tensor_dict.get(_obs_key))
-                tensor_dict.set(_obs_key, observation, inplace=self.inplace)
-        return tensor_dict
+                observation = self._apply(tensordict.get(_obs_key))
+                tensordict.set(_obs_key, observation, inplace=self.inplace)
+        return tensordict
 
-    def forward(self, tensor_dict: _TensorDict) -> _TensorDict:
-        self._call(tensor_dict)
-        return tensor_dict
+    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+        self._call(tensordict)
+        return tensordict
 
     def _inv_apply(self, obs: torch.Tensor) -> torch.Tensor:
         if self.invertible:
@@ -129,17 +136,17 @@ class Transform(nn.Module):
         else:
             return obs
 
-    def _inv_call(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _inv_call(self, tensordict: _TensorDict) -> _TensorDict:
         self._check_inplace()
-        for _obs_key in tensor_dict.keys():
+        for _obs_key in tensordict.keys():
             if _obs_key in self.keys:
-                observation = self._inv_apply(tensor_dict.get(_obs_key))
-                tensor_dict.set(_obs_key, observation, inplace=self.inplace)
-        return tensor_dict
+                observation = self._inv_apply(tensordict.get(_obs_key))
+                tensordict.set(_obs_key, observation, inplace=self.inplace)
+        return tensordict
 
-    def inv(self, tensor_dict: _TensorDict) -> _TensorDict:
-        self._inv_call(tensor_dict)
-        return tensor_dict
+    def inv(self, tensordict: _TensorDict) -> _TensorDict:
+        self._inv_call(tensordict)
+        return tensordict
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
         """Transforms the action spec such that the resulting spec matches
@@ -181,7 +188,7 @@ class Transform(nn.Module):
 
         return reward_spec
 
-    def dump(self) -> None:
+    def dump(self, **kwargs) -> None:
         pass
 
     def __repr__(self) -> str:
@@ -289,41 +296,28 @@ class TransformedEnv(_EnvClass):
             reward_spec = self._reward_spec
         return reward_spec
 
-    def _step(self, tensor_dict: _TensorDict) -> _TensorDict:
-        selected_keys = [key for key in tensor_dict.keys() if "action" in key]
-        tensor_dict_in = tensor_dict.select(*selected_keys).clone()
-        tensor_dict_in = self.transform.inv(tensor_dict_in)
-        tensor_dict_out = self.env._step(tensor_dict_in).to(self.device)
-        # tensor_dict should already have been processed by the transforms
+    def _step(self, tensordict: _TensorDict) -> _TensorDict:
+        selected_keys = [key for key in tensordict.keys() if "action" in key]
+        tensordict_in = tensordict.select(*selected_keys).clone()
+        tensordict_in = self.transform.inv(tensordict_in)
+        tensordict_out = self.env._step(tensordict_in).to(self.device)
+        # tensordict should already have been processed by the transforms
         # for logging purposes
-        tensor_dict_out = self.transform(tensor_dict_out)
-        return tensor_dict_out
+        tensordict_out = self.transform(tensordict_out)
+        return tensordict_out
 
     def set_seed(self, seed: int) -> int:
         """Set the seeds of the environment"""
         return self.env.set_seed(seed)
 
-    def _reset(self, tensor_dict: Optional[_TensorDict] = None, **kwargs):
-        out_tensor_dict = self.env.reset(**kwargs).to(self.device)
-        out_tensor_dict = self.transform.reset(out_tensor_dict)
+    def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs):
+        out_tensordict = self.env.reset(execute_step=False, **kwargs).to(self.device)
+        out_tensordict = self.transform.reset(out_tensordict)
+        out_tensordict = self.transform(out_tensordict)
+        return out_tensordict
 
-        # Transforms are made for "next_observations" and alike. We convert
-        # all the observations in next_observations, then map them back to
-        # their original key name
-        keys = list(out_tensor_dict.keys())
-        for key in keys:
-            if key.startswith("observation"):
-                out_tensor_dict.rename_key(key, "next_" + key, safe=True)
-
-        out_tensor_dict = self.transform(out_tensor_dict)
-        keys = list(out_tensor_dict.keys())
-        for key in keys:
-            if key.startswith("next_observation"):
-                out_tensor_dict.rename_key(key, key[5:], safe=True)
-        return out_tensor_dict
-
-    def state_dict(self, destination: Optional[OrderedDict] = None) -> OrderedDict:
-        state_dict = self.transform.state_dict(destination)
+    def state_dict(self) -> OrderedDict:
+        state_dict = self.transform.state_dict()
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
@@ -376,7 +370,7 @@ class ObservationTransform(Transform):
         if keys is None:
             keys = [
                 "next_observation",
-                "next_observation_pixels",
+                "next_pixels",
                 "next_observation_state",
             ]
         super(ObservationTransform, self).__init__(keys=keys)
@@ -402,10 +396,10 @@ class Compose(Transform):
         for t in self.transforms:
             t.set_parent(self)
 
-    def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _call(self, tensordict: _TensorDict) -> _TensorDict:
         for t in self.transforms:
-            tensor_dict = t(tensor_dict)
-        return tensor_dict
+            tensordict = t(tensordict)
+        return tensordict
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms:
@@ -429,18 +423,18 @@ class Compose(Transform):
             return Compose(*self.transforms[item])
         return transform
 
-    def dump(self) -> None:
+    def dump(self, **kwargs) -> None:
         for t in self:
-            t.dump()
+            t.dump(**kwargs)
 
-    def reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def reset(self, tensordict: _TensorDict) -> _TensorDict:
         for t in self.transforms:
-            tensor_dict = t.reset(tensor_dict)
-        return tensor_dict
+            tensordict = t.reset(tensordict)
+        return tensordict
 
-    def init(self, tensor_dict: _TensorDict) -> None:
+    def init(self, tensordict: _TensorDict) -> None:
         for t in self.transforms:
-            t.init(tensor_dict)
+            t.init(tensordict)
 
     def __repr__(self) -> str:
         layers_str = ", \n\t".join([str(trsf) for trsf in self.transforms])
@@ -462,13 +456,13 @@ class ToTensorImage(ObservationTransform):
             observations.
 
     Examples:
-        >>> transform = ToTensorImage(keys=["next_observation_pixels"])
+        >>> transform = ToTensorImage(keys=["next_pixels"])
         >>> ri = torch.randint(0, 255, (1,1,10,11,3), dtype=torch.uint8)
         >>> td = TensorDict(
-        ...     {"next_observation_pixels": ri},
+        ...     {"next_pixels": ri},
         ...     [1, 1])
         >>> _ = transform(td)
-        >>> obs = td.get("next_observation_pixels")
+        >>> obs = td.get("next_pixels")
         >>> print(obs.shape, obs.dtype)
         torch.Size([1, 1, 3, 10, 11]) torch.float32
     """
@@ -498,7 +492,14 @@ class ToTensorImage(ObservationTransform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):
-            _observation_spec = observation_spec["pixels"]
+            return CompositeSpec(
+                **{
+                    key: self.transform_observation_spec(_obs_spec)
+                    if key in self.keys
+                    else _obs_spec
+                    for key, _obs_spec in observation_spec._specs.items()
+                }
+            )
         else:
             _observation_spec = observation_spec
         self._pixel_observation(_observation_spec)
@@ -511,10 +512,7 @@ class ToTensorImage(ObservationTransform):
             ]
         )
         _observation_spec.dtype = self.dtype
-        if isinstance(observation_spec, CompositeSpec):
-            observation_spec["pixels"] = _observation_spec
-        else:
-            observation_spec = _observation_spec
+        observation_spec = _observation_spec
         return observation_spec
 
     def _pixel_observation(self, spec: TensorSpec) -> None:
@@ -579,7 +577,7 @@ class RewardClipping(Transform):
         )
 
 
-class BinerizeReward(Transform):
+class BinarizeReward(Transform):
     """
     Maps the reward to a binary value (0 or 1) if the reward is null or
     non-null, respectively.
@@ -594,19 +592,14 @@ class BinerizeReward(Transform):
         super().__init__(keys=keys)
 
     def _apply(self, reward: torch.Tensor) -> torch.Tensor:
-        return (reward != 0.0).to(reward.dtype)
+        if not reward.shape or reward.shape[-1] != 1:
+            raise RuntimeError(
+                f"Reward shape last dimension must be singleton, got reward of shape {reward.shape}"
+            )
+        return (reward > 0.0).to(torch.long)
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        if isinstance(reward_spec, UnboundedContinuousTensorSpec):
-            return BoundedTensorSpec(
-                0.0, 1.0, device=reward_spec.device, dtype=reward_spec.dtype
-            )
-        else:
-            raise NotImplementedError(
-                f"{self.__class__.__name__}.transform_reward_spec not "
-                f"implemented for tensor spec of type "
-                f"{type(reward_spec).__name__}"
-            )
+        return BinaryDiscreteTensorSpec(n=1, device=reward_spec.device)
 
 
 class Resize(ObservationTransform):
@@ -628,6 +621,12 @@ class Resize(ObservationTransform):
         interpolation: str = "bilinear",
         keys: Optional[Sequence[str]] = None,
     ):
+        if not _has_tv:
+            raise ImportError(
+                "Torchvision not found. The Resize transform relies on "
+                "torchvision implementation. "
+                "Consider installing this dependency."
+            )
         if keys is None:
             keys = IMAGE_KEYS  # default
         super().__init__(keys=keys)
@@ -644,7 +643,14 @@ class Resize(ObservationTransform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):
-            _observation_spec = observation_spec["pixels"]
+            return CompositeSpec(
+                **{
+                    key: self.transform_observation_spec(_obs_spec)
+                    if key in self.keys
+                    else _obs_spec
+                    for key, _obs_spec in observation_spec._specs.items()
+                }
+            )
         else:
             _observation_spec = observation_spec
         space = _observation_spec.space
@@ -657,10 +663,7 @@ class Resize(ObservationTransform):
                 torch.zeros(_observation_spec.shape)
             ).shape
 
-        if isinstance(observation_spec, CompositeSpec):
-            observation_spec["pixels"] = _observation_spec
-        else:
-            observation_spec = _observation_spec
+        observation_spec = _observation_spec
         return observation_spec
 
     def __repr__(self) -> str:
@@ -690,7 +693,14 @@ class GrayScale(ObservationTransform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):
-            _observation_spec = observation_spec["pixels"]
+            return CompositeSpec(
+                **{
+                    key: self.transform_observation_spec(_obs_spec)
+                    if key in self.keys
+                    else _obs_spec
+                    for key, _obs_spec in observation_spec._specs.items()
+                }
+            )
         else:
             _observation_spec = observation_spec
         space = _observation_spec.space
@@ -702,10 +712,7 @@ class GrayScale(ObservationTransform):
             _observation_spec.shape = self._apply(
                 torch.zeros(_observation_spec.shape)
             ).shape
-        if isinstance(observation_spec, CompositeSpec):
-            observation_spec["pixels"] = _observation_spec
-        else:
-            observation_spec = _observation_spec
+        observation_spec = _observation_spec
         return observation_spec
 
 
@@ -758,7 +765,7 @@ class ObservationNorm(ObservationTransform):
         if keys is None:
             keys = [
                 "next_observation",
-                "next_observation_pixels",
+                "next_pixels",
                 "next_observation_state",
             ]
         super().__init__(keys=keys)
@@ -785,14 +792,13 @@ class ObservationNorm(ObservationTransform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):
-            key = [key.split("observation_")[-1] for key in self.keys]
-            if len(set(key)) != 1:
-                raise RuntimeError(f"Too many compatible observation keys: {key}")
-            key = key[0]
-            _observation_spec = observation_spec[key]
-        else:
-            _observation_spec = observation_spec
-        space = _observation_spec.space
+            keys = [key for key in observation_spec.keys() if key in self.keys]
+            for key in keys:
+                observation_spec[key] = self.transform_observation_spec(
+                    observation_spec[key]
+                )
+            return observation_spec
+        space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply(space.minimum)
             space.maximum = self._apply(space.maximum)
@@ -824,7 +830,7 @@ class CatFrames(ObservationTransform):
             Default is `4`.
         cat_dim (int, optional): dimension along which concatenate the
             observations. Default is `cat_dim=-3`.
-        keys (list of int, optional): keys pointing to the franes that have
+        keys (list of int, optional): keys pointing to the frames that have
             to be concatenated.
 
     """
@@ -844,13 +850,18 @@ class CatFrames(ObservationTransform):
         self.cat_dim = cat_dim
         self.buffer = []
 
-    def reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def reset(self, tensordict: _TensorDict) -> _TensorDict:
         self.buffer = []
-        return tensor_dict
+        return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):
-            _observation_spec = observation_spec["pixels"]
+            keys = [key for key in observation_spec.keys() if key in self.keys]
+            for key in keys:
+                observation_spec[key] = self.transform_observation_spec(
+                    observation_spec[key]
+                )
+            return observation_spec
         else:
             _observation_spec = observation_spec
         space = _observation_spec.space
@@ -860,10 +871,7 @@ class CatFrames(ObservationTransform):
             _observation_spec.shape = space.minimum.shape
         else:
             _observation_spec.shape = torch.Size([self.N, *_observation_spec.shape])
-        if isinstance(observation_spec, CompositeSpec):
-            observation_spec["pixels"] = _observation_spec
-        else:
-            observation_spec = _observation_spec
+        observation_spec = _observation_spec
         return observation_spec
 
     def _apply(self, obs: torch.Tensor) -> torch.Tensor:
@@ -949,21 +957,19 @@ class FiniteTensorDictCheck(Transform):
     def __init__(self):
         super().__init__(keys=[])
 
-    def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def _call(self, tensordict: _TensorDict) -> _TensorDict:
         source = {}
-        for key, item in tensor_dict.items():
+        for key, item in tensordict.items():
             try:
                 source[key] = FiniteTensor(item)
             except RuntimeError as err:
                 if str(err).rfind("FiniteTensor encountered") > -1:
-                    raise Exception(f"Found non-finite elements in {key}")
+                    raise ValueError(f"Found non-finite elements in {key}")
                 else:
                     raise RuntimeError(str(err))
 
-        finite_tensor_dict = TensorDict(
-            batch_size=tensor_dict.batch_size, source=source
-        )
-        return finite_tensor_dict
+        finite_tensordict = TensorDict(batch_size=tensordict.batch_size, source=source)
+        return finite_tensordict
 
 
 class DoubleToFloat(Transform):
@@ -1021,21 +1027,14 @@ class DoubleToFloat(Transform):
         return reward_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        keys = [key for key in self.keys if "observation" in key]
-        if keys:
-            keys = [key.split("observation_")[-1] for key in keys]
-        if len(keys) > 1 or isinstance(observation_spec, CompositeSpec):
-            if not isinstance(observation_spec, CompositeSpec):
-                raise TypeError(
-                    f"observation_spec was found to be of type"
-                    f" {type(observation_spec)} when CompositeSpec "
-                    f"was expected (as more than one observation key has to "
-                    f"be converted to float)."
-                )
+        if isinstance(observation_spec, CompositeSpec):
+            keys = [key for key in self.keys if key in observation_spec.keys()]
             for key in keys:
-                self._transform_spec(observation_spec[key])
-        elif len(keys):
-            self._transform_spec(observation_spec)
+                observation_spec[key] = self.transform_observation_spec(
+                    observation_spec[key]
+                )
+            return observation_spec
+        self._transform_spec(observation_spec)
         return observation_spec
 
 
@@ -1049,6 +1048,10 @@ class CatTensors(Transform):
     Args:
         keys (Sequence of str): keys to be concatenated
         out_key: key of the resulting tensor.
+        dim (int, optional): dimension along which the contenation will occur.
+            Default is -1.
+        del_keys (bool, optional): if True, the input values will be deleted after
+            concatenation. Default is True.
 
     Examples:
         >>> transform = CatTensors(keys=["key1", "key2"])
@@ -1067,12 +1070,19 @@ class CatTensors(Transform):
         self,
         keys: Optional[Sequence[str]] = None,
         out_key: str = "observation_vector",
+        dim: int = -1,
+        del_keys: bool = True,
     ):
         if keys is None:
             raise Exception("CatTensors requires keys to be non-empty")
         super().__init__(keys=keys)
-        if "observation_" not in out_key:
-            raise KeyError("CatTensors is currently restricted to observation_* keys")
+        if not out_key.startswith("next_") and all(
+            key.startswith("next_") for key in keys
+        ):
+            warn(
+                f"It seems that 'next_'-like keys are being concatenated to a non 'next_' key {out_key}. This may result in unwanted behaviours, and the 'next_' flag is missing from the output key."
+                f"Consider renaming the out_key to 'next_{out_key}'"
+            )
         self.out_key = out_key
         self.keys = sorted(list(self.keys))
         if (
@@ -1084,45 +1094,52 @@ class CatTensors(Transform):
                 "Concatenating observations and reward / action / done state "
                 "is not allowed."
             )
+        self.dim = dim
+        self.del_keys = del_keys
 
-    def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
-        if all([key in tensor_dict.keys() for key in self.keys]):
-            out_tensor = torch.cat([tensor_dict.get(key) for key in self.keys], -1)
-            tensor_dict.set(self.out_key, out_tensor)
-            for key in self.keys:
-                tensor_dict.del_(key)
+    def _call(self, tensordict: _TensorDict) -> _TensorDict:
+        if all([key in tensordict.keys() for key in self.keys]):
+            out_tensor = torch.cat(
+                [tensordict.get(key) for key in self.keys], dim=self.dim
+            )
+            tensordict.set(self.out_key, out_tensor)
+            if self.del_keys:
+                tensordict.exclude(*self.keys, inplace=True)
         else:
             raise Exception(
                 f"CatTensor failed, as it expected input keys ="
                 f" {sorted(list(self.keys))} but got a TensorDict with keys"
-                f" {sorted(list(tensor_dict.keys()))}"
+                f" {sorted(list(tensordict.keys()))}"
             )
-        return tensor_dict
+        return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if not isinstance(observation_spec, CompositeSpec):
             # then there is a single tensor to be concatenated
             return observation_spec
 
-        keys = [key.split("observation_")[-1] for key in self.keys]
+        keys = [key for key in observation_spec._specs.keys() if key in self.keys]
 
-        if all([key in observation_spec for key in keys]):
-            sum_shape = sum(
-                [
-                    observation_spec[key].shape[-1]
-                    if observation_spec[key].shape
-                    else 1
-                    for key in keys
-                ]
-            )
-            spec0 = observation_spec[keys[0]]
-            out_key = self.out_key.split("observation_")[-1]
-            observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
-                shape=torch.Size([*spec0.shape[:-1], sum_shape]),
-                dtype=spec0.dtype,
-            )
-            for key in keys:
-                observation_spec.del_(key)
+        sum_shape = sum(
+            [
+                observation_spec[key].shape[self.dim]
+                if observation_spec[key].shape
+                else 1
+                for key in keys
+            ]
+        )
+        spec0 = observation_spec[keys[0]]
+        out_key = self.out_key
+        shape = list(spec0.shape)
+        shape[self.dim] = sum_shape
+        shape = torch.Size(shape)
+        observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
+            shape=shape,
+            dtype=spec0.dtype,
+        )
+        if self.del_keys:
+            for key in self.keys:
+                del observation_spec._specs[key]
         return observation_spec
 
     def __repr__(self) -> str:
@@ -1224,9 +1241,9 @@ class NoopResetEnv(Transform):
         self.noops = noops
         self.random = random
 
-    def reset(self, tensor_dict: _TensorDict) -> _TensorDict:
+    def reset(self, tensordict: _TensorDict) -> _TensorDict:
         """Do no-op action for a number of steps in [1, noop_max]."""
-        keys = tensor_dict.keys()
+        keys = tensordict.keys()
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
@@ -1234,21 +1251,21 @@ class NoopResetEnv(Transform):
         trial = 0
         while i < noops:
             i += 1
-            tensor_dict = self.env.rand_step()
+            tensordict = self.env.rand_step()
             if self.env.is_done:
                 self.env.reset()
                 i = 0
                 trial += 1
                 if trial > _MAX_NOOPS_TRIALS:
                     self.env.reset()
-                    tensor_dict = self.env.rand_step()
+                    tensordict = self.env.rand_step()
                     break
         if self.env.is_done:
             raise RuntimeError("NoopResetEnv concluded with done environment")
-        td = step_tensor_dict(tensor_dict).select(*keys)
+        td = step_tensordict(tensordict).select(*keys)
         for k in keys:
             if k not in td.keys():
-                td.set(k, tensor_dict.get(k))
+                td.set(k, tensordict.get(k))
         return td
 
     def __repr__(self) -> str:
@@ -1267,8 +1284,8 @@ class PinMemoryTransform(Transform):
     def __init__(self):
         super().__init__([])
 
-    def _call(self, tensor_dict: _TensorDict) -> _TensorDict:
-        return tensor_dict.pin_memory()
+    def _call(self, tensordict: _TensorDict) -> _TensorDict:
+        return tensordict.pin_memory()
 
 
 def _sum_left(val, dest):
@@ -1280,31 +1297,36 @@ def _sum_left(val, dest):
 class gSDENoise(Transform):
     inplace = False
 
-    def __init__(self, action_dim: int, state_dim: Optional[int] = None) -> None:
+    def __init__(
+        self,
+        action_dim: int,
+        state_dim: Optional[int] = None,
+        observation_key="next_observation_vector",
+    ) -> None:
         super().__init__(keys=[])
         self.action_dim = action_dim
         self.state_dim = state_dim
+        self.observation_key = observation_key
 
-    def reset(self, tensor_dict: _TensorDict) -> _TensorDict:
-        tensor_dict = super().reset(tensor_dict=tensor_dict)
+    def reset(self, tensordict: _TensorDict) -> _TensorDict:
+        tensordict = super().reset(tensordict=tensordict)
         if self.state_dim is None:
             obs_spec = self.parent.observation_spec
-            if isinstance(obs_spec, CompositeSpec):
-                obs_spec = obs_spec["vector"]
+            obs_spec = obs_spec[self.observation_key]
             state_dim = obs_spec.shape[-1]
         else:
             state_dim = self.state_dim
 
-        tensor_dict.set(
+        tensordict.set(
             "_eps_gSDE",
             torch.randn(
-                *tensor_dict.batch_size,
+                *tensordict.batch_size,
                 self.action_dim,
                 state_dim,
-                device=tensor_dict.device,
+                device=tensordict.device,
             ),
         )
-        return tensor_dict
+        return tensordict
 
 
 class VecNorm(Transform):
@@ -1473,7 +1495,7 @@ class VecNorm(Transform):
         """
         if keys_prefix is None:
             keys_prefix = ["next_", "reward"]
-        td = make_tensor_dict(env)
+        td = make_tensordict(env)
         keys = set(
             key
             for key in td.keys()
