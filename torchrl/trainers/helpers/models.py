@@ -741,7 +741,9 @@ def make_sac_model(
 
     if not gSDE:
         actor_net = NormalParamWrapper(
-            actor_net, scale_mapping=f"biased_softplus_{default_policy_scale}"
+            actor_net,
+            scale_mapping=f"biased_softplus_{default_policy_scale}",
+            scale_lb=args.scale_lb,
         )
         in_keys_actor = in_keys
         dist_class = TanhNormal
