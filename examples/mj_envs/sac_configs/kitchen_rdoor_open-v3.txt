@@ -14,4 +14,4 @@ num_workers=8
 env_per_collector=8
 collector_devices=cuda:0
 gSDE
-loc=2.0
+reward_loc=2.0
