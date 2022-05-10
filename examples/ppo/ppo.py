@@ -16,25 +16,25 @@ except ImportError:
     _configargparse = False
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
-from torchrl.agents.helpers.agents import make_agent, parser_agent_args
-from torchrl.agents.helpers.collectors import (
+from torchrl.envs.transforms import RewardScaling, TransformedEnv
+from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,
     parser_collector_args_onpolicy,
 )
-from torchrl.agents.helpers.envs import (
+from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     get_stats_random_rollout,
     parallel_env_constructor,
     parser_env_args,
     transformed_env_constructor,
 )
-from torchrl.agents.helpers.losses import make_ppo_loss, parser_loss_args_ppo
-from torchrl.agents.helpers.models import (
+from torchrl.trainers.helpers.losses import make_ppo_loss, parser_loss_args_ppo
+from torchrl.trainers.helpers.models import (
     make_ppo_model,
     parser_model_args_continuous,
 )
-from torchrl.agents.helpers.recorder import parser_recorder_args
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
+from torchrl.trainers.helpers.recorder import parser_recorder_args
+from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
 
 
 def make_args():
@@ -47,7 +47,7 @@ def make_args():
             is_config_file=True,
             help="config file path",
         )
-    parser_agent_args(parser)
+    parser_trainer_args(parser)
     parser_collector_args_onpolicy(parser)
     parser_env_args(parser)
     parser_loss_args_ppo(parser)
@@ -126,8 +126,10 @@ if __name__ == "__main__":
         if isinstance(t, RewardScaling):
             t.scale.fill_(1.0)
 
-    agent = make_agent(
+    trainer = make_trainer(
         collector, loss_module, recorder, None, actor_model, None, writer, args
     )
+    if args.loss == "kl":
+        trainer.register_op("pre_optim_steps", loss_module.reset)
 
-    agent.train()
+    trainer.train()

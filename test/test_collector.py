@@ -16,7 +16,6 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
 )
 from torch import nn
-from torchrl.agents.env_creator import EnvCreator
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.collectors.collectors import (
     RandomPolicy,
@@ -24,6 +23,7 @@ from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td
+from torchrl.envs import EnvCreator
 from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm

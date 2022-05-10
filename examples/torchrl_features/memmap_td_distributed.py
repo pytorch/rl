@@ -76,7 +76,7 @@ if __name__ == "__main__":
     )
 
     if rank == 0:
-        # rank0 is the agent
+        # rank0 is the trainer
         rpc.init_rpc(
             AGENT_NAME,
             rank=rank,

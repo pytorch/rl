@@ -13,7 +13,6 @@ import torch
 import yaml
 from mocking_classes import DiscreteActionVecMockEnv
 from scipy.stats import chisquare
-from torchrl.agents import EnvCreator
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
@@ -21,6 +20,7 @@ from torchrl.data.tensor_specs import (
     NdBoundedTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
+from torchrl.envs import EnvCreator
 from torchrl.envs import GymEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import (

@@ -17,6 +17,7 @@ from torchrl.data import TensorDict, TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvClass, make_tensordict
+from torchrl.envs.env_creator import EnvCreator
 
 __all__ = ["SerialEnv", "ParallelEnv"]
 
@@ -100,6 +101,7 @@ class _BatchedEnv(_EnvClass):
     """
 
     _verbose: bool = False
+    _excluded_wrapped_keys = ["is_closed", "parent_channels", "batch_size"]
 
     def __init__(
         self,
@@ -131,7 +133,20 @@ class _BatchedEnv(_EnvClass):
                 )
         if isinstance(create_env_kwargs, dict):
             create_env_kwargs = [create_env_kwargs for _ in range(num_workers)]
-        self._dummy_env = create_env_fn[0](**create_env_kwargs[0])
+
+        self._dummy_env_instance = None
+        try:
+            self._dummy_env_fun = CloudpickleWrapper(
+                create_env_fn[0], **create_env_kwargs[0]
+            )
+        except RuntimeError as err:
+            if isinstance(create_env_fn[0], EnvCreator):
+                self._dummy_env_fun = create_env_fn[0]
+                self._dummy_env_fun.create_env_kwargs.update(create_env_kwargs[0])
+            else:
+                raise err
+
+        self._dummy_env = self._dummy_env_fun()
         self.num_workers = num_workers
         self.create_env_fn = create_env_fn
         self.create_env_kwargs = create_env_kwargs
@@ -152,6 +167,21 @@ class _BatchedEnv(_EnvClass):
         self._observation_spec = self._dummy_env.observation_spec
         self._reward_spec = self._dummy_env.reward_spec
         self._dummy_env.close()
+        self._dummy_env = None
+
+    @property
+    def _dummy_env(self) -> _EnvClass:
+        if (
+            self._dummy_env_instance is not None
+            and not self._dummy_env_instance.is_closed
+        ):
+            return self._dummy_env_instance
+        self._dummy_env_instance = self._dummy_env_fun()
+        return self._dummy_env_instance
+
+    @_dummy_env.setter
+    def _dummy_env(self, value: _EnvClass) -> None:
+        self._dummy_env_instance = value
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
@@ -364,6 +394,8 @@ class SerialEnv(_BatchedEnv):
                 f"Got attribute {attr}."
             )
         else:
+            if attr in self._excluded_wrapped_keys:
+                raise AttributeError(f"Getting {attr} resulted in an exception")
             try:
                 # determine if attr is a callable
                 callable_attr = callable(getattr(self._dummy_env, attr))
@@ -566,6 +598,8 @@ class ParallelEnv(_BatchedEnv):
                 "dispatching built-in private methods is not permitted."
             )
         else:
+            if attr in self._excluded_wrapped_keys:
+                raise AttributeError(f"Getting {attr} resulted in an exception")
             try:
                 _ = getattr(self._dummy_env, attr)
                 if self.is_closed:

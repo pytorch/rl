@@ -68,15 +68,35 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
         raise NotImplementedError
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
+        loss_kwargs.update(
+            {
+                "target_entropy": args.target_entropy
+                if args.target_entropy is not None
+                else "auto"
+            }
+        )
         loss_class = SACLoss
         if args.loss == "double":
             loss_kwargs.update(
                 {
                     "delay_actor": False,
-                    "delay_qvalue": False,
+                    "delay_qvalue": True,
                     "delay_value": True,
                 }
             )
+        elif args.loss == "single":
+            loss_kwargs.update(
+                {
+                    "delay_actor": False,
+                    "delay_qvalue": False,
+                    "delay_value": False,
+                }
+            )
+        else:
+            raise NotImplementedError(
+                f"args.loss {args.loss} unsupported. Consider chosing from 'double' or 'single'"
+            )
+
     actor_model, qvalue_model, value_model = model
 
     loss_module = loss_class(
@@ -85,7 +105,7 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
         value_network=value_model,
         num_qvalue_nets=args.num_q_values,
         gamma=args.gamma,
-        **loss_kwargs
+        **loss_kwargs,
     )
     target_net_updater = make_target_updater(args, loss_module)
     return loss_module, target_net_updater
@@ -98,6 +118,7 @@ def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
         raise NotImplementedError
     else:
         loss_kwargs.update({"loss_function": args.loss_function})
+        loss_kwargs.update({"delay_qvalue": args.loss == "double"})
         loss_class = REDQLoss
     actor_model, qvalue_model = model
 
@@ -106,7 +127,7 @@ def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
         qvalue_network=qvalue_model,
         num_qvalue_nets=args.num_q_values,
         gamma=args.gamma,
-        **loss_kwargs
+        **loss_kwargs,
     )
     target_net_updater = make_target_updater(args, loss_module)
     return loss_module, target_net_updater
@@ -225,6 +246,14 @@ def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
             "use two (or more!) different qvalue networks trained independently and choose the lowest value "
             "predicted to predict the state action value. This can be disabled by using this flag."
             "REDQ uses an arbitrary number of Q-value functions to speed up learning in MF contexts.",
+        )
+    if algorithm in ("SAC",):
+        parser.add_argument(
+            "--target_entropy",
+            default=None,
+            type=float,
+            help="Target entropy for the policy distribution. Default is None (auto calculated as"
+            "the `target_entropy = -action_dim`)",
         )
 
     return parser

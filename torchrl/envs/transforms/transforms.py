@@ -188,7 +188,7 @@ class Transform(nn.Module):
 
         return reward_spec
 
-    def dump(self) -> None:
+    def dump(self, **kwargs) -> None:
         pass
 
     def __repr__(self) -> str:
@@ -423,9 +423,9 @@ class Compose(Transform):
             return Compose(*self.transforms[item])
         return transform
 
-    def dump(self) -> None:
+    def dump(self, **kwargs) -> None:
         for t in self:
-            t.dump()
+            t.dump(**kwargs)
 
     def reset(self, tensordict: _TensorDict) -> _TensorDict:
         for t in self.transforms:

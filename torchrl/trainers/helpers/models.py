@@ -750,7 +750,7 @@ def make_sac_model(
             actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len
         )
         in_keys_actor = in_keys + ["_eps_gSDE"]
-        dist_class = IndependentNormal
+        dist_class = TanhNormal  # IndependentNormal
         dist_kwargs = {
             "tanh_loc": tanh_loc,
         }

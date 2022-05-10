@@ -153,7 +153,7 @@ def test_mask_td(device):
     }
     mask = torch.zeros(4, 5, dtype=torch.bool, device=device).bernoulli_()
     td = TensorDict(batch_size=(4, 5), source=d)
-    td_masked = td.masked_select(mask)
+    td_masked = torch.masked_select(td, mask)
     assert len(td_masked.get("key1")) == td_masked.shape[0]
 
 
@@ -165,7 +165,7 @@ def test_unbind_td(device):
         "key2": torch.randn(4, 5, 10, device=device),
     }
     td = TensorDict(batch_size=(4, 5), source=d)
-    td_unbind = td.unbind(1)
+    td_unbind = torch.unbind(td, dim=1)
     assert (
         td_unbind[0].batch_size == td[:, 0].batch_size
     ), f"got {td_unbind[0].batch_size} and {td[:, 0].batch_size}"
@@ -215,10 +215,10 @@ def test_squeeze(device):
         "key2": torch.randn(4, 5, 10, device=device),
     }
     td1 = TensorDict(batch_size=(4, 5), source=d)
-    td2 = td1.unsqueeze(1)
+    td2 = torch.unsqueeze(td1, dim=1)
     assert td2.batch_size == torch.Size([4, 1, 5])
 
-    td1b = td2.squeeze(1)
+    td1b = torch.squeeze(td2, dim=1)
     assert td1b.batch_size == td1.batch_size
 
 
@@ -231,22 +231,22 @@ def test_permute(device):
         "c": torch.randn(4, 5, 6, device=device),
     }
     td1 = TensorDict(batch_size=(4, 5, 6), source=d)
-    td2 = td1.permute(2, 1, 0)
+    td2 = torch.permute(td1, dims=(2, 1, 0))
     assert td2.shape == torch.Size((6, 5, 4))
     assert td2["a"].shape == torch.Size((6, 5, 4, 9))
 
-    td2 = td1.permute(-1, -3, -2)
+    td2 = torch.permute(td1, dims=(-1, -3, -2))
     assert td2.shape == torch.Size((6, 4, 5))
     assert td2["c"].shape == torch.Size((6, 4, 5, 1))
 
-    td2 = td1.permute(0, 1, 2)
+    td2 = torch.permute(td1, dims=(0, 1, 2))
     assert td2["a"].shape == torch.Size((4, 5, 6, 9))
 
     t = TensorDict({"a": torch.randn(3, 4, 1)}, [3, 4])
-    t.permute(1, 0).set("b", torch.randn(4, 3))
+    torch.permute(t, dims=(1, 0)).set("b", torch.randn(4, 3))
     assert t["b"].shape == torch.Size((3, 4, 1))
 
-    t.permute(1, 0).fill_("a", 0.0)
+    torch.permute(t, dims=(1, 0)).fill_("a", 0.0)
     assert torch.sum(t["a"]) == torch.Tensor([0])
 
 
@@ -649,6 +649,27 @@ class TestTensorDicts:
             "td_reset_bs",
         ],
     )
+    def test_masked_fill(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        mask = torch.zeros(td.shape, dtype=torch.bool).bernoulli_()
+        new_td = td.masked_fill(mask, -10.0)
+        assert new_td is not td
+        for k, item in new_td.items():
+            assert (item[mask] == -10).all()
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
     def test_zero_(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
@@ -696,7 +717,7 @@ class TestTensorDicts:
         td = getattr(self, td_name)
         mask = torch.zeros(td.batch_size, dtype=torch.bool).bernoulli_(0.8)
         td_masked = td[mask]
-        td_masked2 = td.masked_select(mask)
+        td_masked2 = torch.masked_select(td, mask)
         assert_allclose_td(td_masked, td_masked2)
         assert td_masked.batch_size[0] == mask.sum()
         assert td_masked.batch_dims == 1
@@ -808,7 +829,7 @@ class TestTensorDicts:
     def test_unbind(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        td_unbind = td.unbind(0)
+        td_unbind = torch.unbind(td, dim=0)
         assert (td == torch.stack(td_unbind, 0)).all()
         assert (td[0] == td_unbind[0]).all()
 
@@ -828,7 +849,7 @@ class TestTensorDicts:
     def test_unsqueeze(self, td_name, squeeze_dim):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        td_unsqueeze = td.unsqueeze(squeeze_dim)
+        td_unsqueeze = torch.unsqueeze(td, dim=squeeze_dim)
         tensor = torch.ones_like(td.get("a").unsqueeze(squeeze_dim))
         td_unsqueeze.set("a", tensor)
         assert (td_unsqueeze.get("a") == tensor).all()
@@ -852,7 +873,7 @@ class TestTensorDicts:
     def test_squeeze(self, td_name, squeeze_dim=-1):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        td_squeeze = td.squeeze(-1)
+        td_squeeze = torch.squeeze(td, dim=-1)
         tensor_squeeze_dim = td.batch_dims + squeeze_dim
         tensor = torch.ones_like(td.get("a").squeeze(tensor_squeeze_dim))
         td_squeeze.set("a", tensor)
@@ -904,8 +925,8 @@ class TestTensorDicts:
     def test_clone_td(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        assert (td.clone() == td).all()
-        assert td.batch_size == td.clone().batch_size
+        assert (torch.clone(td) == td).all()
+        assert td.batch_size == torch.clone(td).batch_size
         if td_name in ("stacked_td", "saved_td", "unsqueezed_td", "sub_td"):
             with pytest.raises(AssertionError):
                 assert td.clone(recursive=False).get("a") is td.get("a")

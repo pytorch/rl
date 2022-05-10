@@ -73,6 +73,7 @@ class SACLoss(_LossModule):
         priotity_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
+        min_alpha: float = 0.1,
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         delay_actor: bool = False,
@@ -110,12 +111,15 @@ class SACLoss(_LossModule):
         self.gamma = gamma
         self.priority_key = priotity_key
         self.loss_function = loss_function
-        self.register_buffer("alpha_init", torch.tensor(alpha_init))
-        self.fixed_alpha = fixed_alpha
         try:
             device = next(self.parameters()).device
         except AttributeError:
             device = torch.device("cpu")
+        self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
+        self.register_buffer(
+            "min_log_alpha", torch.tensor(min_alpha, device=device).log()
+        )
+        self.fixed_alpha = fixed_alpha
         if fixed_alpha:
             self.register_buffer(
                 "log_alpha", torch.tensor(math.log(alpha_init), device=device)
@@ -169,7 +173,7 @@ class SACLoss(_LossModule):
                 "loss_value": loss_value.mean(),
                 "loss_alpha": loss_alpha.mean(),
                 "alpha": self._alpha,
-                "entropy": td_device.get("_log_prob").mean().detach(),
+                "entropy": -td_device.get("_log_prob").mean().detach(),
             },
             [],
         )
@@ -182,6 +186,8 @@ class SACLoss(_LossModule):
             buffers=list(self.actor_network_buffers),
         )[0]
         a_reparm = dist.rsample()
+        if not self.actor_network.spec.is_in(a_reparm):
+            a_reparm.data.copy_(self.actor_network.spec.project(a_reparm.data))
         log_prob = dist.log_prob(a_reparm)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys)
@@ -201,7 +207,7 @@ class SACLoss(_LossModule):
 
         # write log_prob in tensordict for alpha loss
         tensordict.set("_log_prob", log_prob.detach())
-        return self._alpha * log_prob  # - min_q_logprob
+        return self._alpha * log_prob - min_q_logprob
 
     def _loss_qvalue(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
         actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
@@ -274,6 +280,9 @@ class SACLoss(_LossModule):
             0
         ]  # resample an action
         action = action_dist.rsample()
+        if not self.actor_network.spec.is_in(action):
+            action.data.copy_(self.actor_network.spec.project(action.data))
+
         td_copy.set("action", action, inplace=False)
 
         qval_net = self.qvalue_network
@@ -310,6 +319,7 @@ class SACLoss(_LossModule):
 
     @property
     def _alpha(self):
+        self.log_alpha.data.clamp_min_(self.min_log_alpha)
         with torch.no_grad():
-            alpha = self.log_alpha.detach().exp()
+            alpha = self.log_alpha.exp()
         return alpha

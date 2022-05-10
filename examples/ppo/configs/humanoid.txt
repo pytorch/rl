@@ -1,7 +1,7 @@
 env_name=humanoid
 env_task=walk
 env_library=dm_control
-optim_steps_per_collection=10
+optim_steps_per_batch=10
 lamda=0.95
 normalize_rewards_online
 record_video
@@ -11,4 +11,3 @@ lr=3e-4
 entropy_factor=1e-4
 frame_skip=4
 tanh_loc
-init_with_lag

@@ -536,7 +536,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         super().__init__(size, collate_fn, pin_memory, prefetch)
 
     def sample(self, size: int) -> Any:
-        return super(TensorDictReplayBuffer, self).sample(size)[0]
+        return super(TensorDictReplayBuffer, self).sample(size)
 
 
 class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):

@@ -8,9 +8,9 @@ from typing import Callable, Optional, Union
 
 import torch
 
-from torchrl.agents.env_creator import env_creator, EnvCreator
 from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
 from torchrl.envs.common import _EnvClass
+from torchrl.envs.env_creator import env_creator, EnvCreator
 from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,

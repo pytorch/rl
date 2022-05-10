@@ -882,6 +882,30 @@ dtype=torch.float32)},
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> _TensorDict:
+        """Out-of-place version of masked_fill
+
+        Args:
+            mask (boolean torch.Tensor): mask of values to be filled. Shape
+                must match tensordict shape.
+            value: value to used to fill the tensors.
+
+        Returns:
+            self
+
+        Examples:
+            >>> td = TensorDict(source={'a': torch.zeros(3, 4)},
+            ...     batch_size=[3])
+            >>> mask = torch.tensor([True, False, False])
+            >>> td1 = td.masked_fill(mask, 1.0)
+            >>> td1.get("a")
+            tensor([[1., 1., 1., 1.],
+                    [0., 0., 0., 0.],
+                    [0., 0., 0., 0.]])
+        """
+        raise NotImplementedError
+
     def masked_select(self, mask: torch.Tensor) -> _TensorDict:
         """Masks all tensors of the TensorDict and return a new TensorDict
         instance with similar keys pointing to masked values.
@@ -1384,7 +1408,7 @@ class TensorDict(_TensorDict):
         batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
         device: Optional[DEVICE_TYPING] = None,
         _meta_source: Optional[dict] = None,
-    ):
+    ) -> object:
         self._tensordict: Dict = dict()
         self._tensordict_meta: OrderedDict = OrderedDict()
         if not isinstance(source, (_TensorDict, dict)):
@@ -1747,12 +1771,16 @@ class TensorDict(_TensorDict):
             )
 
     def masked_fill_(
-        self, mask: torch.Tensor, val: Union[float, int, bool]
+        self, mask: torch.Tensor, value: Union[float, int, bool]
     ) -> _TensorDict:
-        for key, value in self.items():
-            mask_expand = expand_as_right(mask, value)
-            value.masked_fill_(mask_expand, val)
+        for key, item in self.items():
+            mask_expand = expand_as_right(mask, item)
+            item.masked_fill_(mask_expand, value)
         return self
+
+    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> _TensorDict:
+        td_copy = self.clone()
+        return td_copy.masked_fill_(mask, value)
 
     def is_contiguous(self) -> bool:
         return all([value.is_contiguous() for _, value in self.items()])
@@ -1838,6 +1866,26 @@ def unbind(td: _TensorDict, *args, **kwargs) -> Tuple[_TensorDict, ...]:
 @implements_for_td(torch.clone)
 def clone(td: _TensorDict, *args, **kwargs) -> _TensorDict:
     return td.clone(*args, **kwargs)
+
+
+@implements_for_td(torch.squeeze)
+def squeeze(td: _TensorDict, *args, **kwargs) -> _TensorDict:
+    return td.squeeze(*args, **kwargs)
+
+
+@implements_for_td(torch.unsqueeze)
+def unsqueeze(td: _TensorDict, *args, **kwargs) -> _TensorDict:
+    return td.unsqueeze(*args, **kwargs)
+
+
+@implements_for_td(torch.masked_select)
+def masked_select(td: _TensorDict, *args, **kwargs) -> _TensorDict:
+    return td.masked_select(*args, **kwargs)
+
+
+@implements_for_td(torch.permute)
+def permute(td: _TensorDict, dims) -> _TensorDict:
+    return td.permute(*dims)
 
 
 @implements_for_td(torch.cat)
@@ -2290,6 +2338,10 @@ torch.Size([3, 2])
             self.set_(key, torch.full_like(item, value))
         return self
 
+    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> _TensorDict:
+        td_copy = self.clone()
+        return td_copy.masked_fill_(mask, value)
+
     def memmap_(self) -> _TensorDict:
         raise RuntimeError(
             "Converting a sub-tensordict values to memmap cannot be done."
@@ -2738,6 +2790,10 @@ class LazyStackedTensorDict(_TensorDict):
             td.masked_fill_(_mask, value)
         return self
 
+    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> _TensorDict:
+        td_copy = self.clone()
+        return td_copy.masked_fill_(mask, value)
+
 
 class SavedTensorDict(_TensorDict):
     _safe = False
@@ -3006,6 +3062,10 @@ class SavedTensorDict(_TensorDict):
         self._save(td)
         return self
 
+    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> _TensorDict:
+        td_copy = self.clone()
+        return td_copy.masked_fill_(mask, value)
+
 
 class _CustomOpTensorDict(_TensorDict):
 
@@ -3257,6 +3317,10 @@ class _CustomOpTensorDict(_TensorDict):
             val[mask_proc_inv] = value
             self._source.set(key, val)
         return self
+
+    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> _TensorDict:
+        td_copy = self.clone()
+        return td_copy.masked_fill_(mask, value)
 
     def memmap_(self):
         self._source.memmap_()
