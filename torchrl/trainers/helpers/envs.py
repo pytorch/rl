@@ -116,6 +116,7 @@ def transformed_env_constructor(
         norm_rewards = vecnorm and args.norm_rewards
         _norm_obs_only = norm_obs_only or not norm_rewards
         reward_scaling = args.reward_scaling
+        reward_loc = args.reward_loc
 
         if custom_env_maker is None:
             env_kwargs = {
@@ -145,10 +146,12 @@ def transformed_env_constructor(
             ]
         if norm_rewards:
             reward_scaling = 1.0
+            reward_loc = 0.0
         if norm_obs_only:
             reward_scaling = 1.0
+            reward_loc = 0.0
         if reward_scaling is not None:
-            transforms.append(RewardScaling(0.0, reward_scaling))
+            transforms.append(RewardScaling(reward_loc, reward_scaling))
 
         double_to_float_list = []
         if env_library is DMControlEnv:
@@ -309,6 +312,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "the actual number of frames retrieved will be 200e6. Default=1.",
     )
     parser.add_argument("--reward_scaling", type=float, help="scale of the reward.")
+    parser.add_argument("--reward_loc", type=float, help="location of the reward.", default=0.0)
     parser.add_argument(
         "--init_env_steps",
         type=int,

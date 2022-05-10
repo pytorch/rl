@@ -1,4 +1,4 @@
-env_name=kitchen_rdoor_open-v3
+env_name=kitchen_light_on-v3
 env_library=mjenv
 async_collection
 frame_skip=1
@@ -14,4 +14,4 @@ num_workers=8
 env_per_collector=8
 collector_devices=cuda:0
 gSDE
-loc=-2.0
+reward_loc=-1.0
