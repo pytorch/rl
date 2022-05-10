@@ -1069,6 +1069,12 @@ def parser_model_args_continuous(
             default="tanh",
             help="activation function",
         )
+        parser.add_argument(
+            "--scale_lb",
+            type=float,
+            default=0.1,
+            help="min value of scale",
+        )
 
     return parser
 
