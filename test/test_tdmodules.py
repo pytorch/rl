@@ -360,6 +360,10 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
+        if probabilistic:
+            dist, *_ = tdmodule.get_dist(td)
+            assert dist.rsample().shape[: td.ndimension()] == td.shape
+
         # test bounds
         if not safe and spec_type == "bounded":
             assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
@@ -415,6 +419,10 @@ class TestTDSequence:
         tdmodule(td, params=params)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
+
+        if probabilistic:
+            dist, *_ = tdmodule.get_dist(td, params=params)
+            assert dist.rsample().shape[: td.ndimension()] == td.shape
 
         # test bounds
         if not safe and spec_type == "bounded":
@@ -473,6 +481,11 @@ class TestTDSequence:
 
         td = TensorDict({"in": torch.randn(3, 7)}, [3])
         tdmodule(td, params=params, buffers=buffers)
+
+        if probabilistic:
+            dist, *_ = tdmodule.get_dist(td, params=params, buffers=buffers)
+            assert dist.rsample().shape[: td.ndimension()] == td.shape
+
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 7])
 
