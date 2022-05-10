@@ -55,6 +55,12 @@ DISTRIBUTIONS = {
     "tanh-delta": TanhDelta,
 }
 
+ACTIVATIONS = {
+    "elu": nn.ELU,
+    "tanh": nn.Tanh,
+    "relu": nn.ReLU,
+}
+
 __all__ = [
     "make_dqn_actor",
     "make_ddpg_actor",
@@ -706,17 +712,17 @@ def make_sac_model(
         in_keys = ["observation_vector"]
 
     actor_net_kwargs_default = {
-        "num_cells": [256, 256],
+        "num_cells": [args.actor_cells, args.actor_cells],
         "out_features": (2 - gSDE) * action_spec.shape[-1],
-        "activation_class": nn.ELU,
+        "activation_class": ACTIVATIONS[args.activation],
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = MLP(**actor_net_kwargs_default)
 
     qvalue_net_kwargs_default = {
-        "num_cells": [256, 256],
+        "num_cells": [args.qvalue_cells, args.qvalue_cells],
         "out_features": 1,
-        "activation_class": nn.ELU,
+        "activation_class": ACTIVATIONS[args.activation],
     }
     qvalue_net_kwargs_default.update(qvalue_net_kwargs)
     qvalue_net = MLP(
@@ -724,9 +730,9 @@ def make_sac_model(
     )
 
     value_net_kwargs_default = {
-        "num_cells": [256, 256],
+        "num_cells": [args.value_cells, args.value_cells],
         "out_features": 1,
-        "activation_class": nn.ELU,
+        "activation_class": ACTIVATIONS[args.activation],
     }
     value_net_kwargs_default.update(value_net_kwargs)
     value_net = MLP(
@@ -1033,6 +1039,33 @@ def parser_model_args_continuous(
             "--shared-mapping",
             action="store_true",
             help="if True, the first layers of the actor-critic are shared.",
+        )
+
+    if algorithm in ("SAC"):
+        parser.add_argument(
+            "--actor_cells",
+            type=int,
+            default=256,
+            help="cells of the actor",
+        )
+        parser.add_argument(
+            "--qvalue_cells",
+            type=int,
+            default=256,
+            help="cells of the qvalue net",
+        )
+        parser.add_argument(
+            "--value_cells",
+            type=int,
+            default=256,
+            help="cells of the value net",
+        )
+        parser.add_argument(
+            "--activation",
+            type=str,
+            choices=["relu", "elu", "tanh"],
+            default="tanh",
+            help="activation function",
         )
 
     return parser

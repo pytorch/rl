@@ -15,3 +15,7 @@ collector_devices=cuda:0
 gSDE
 reward_scaling=5.0
 reward_loc=11.3
+activation=tanh
+actor_cells=64
+qvalue_cells=128
+value_cells=128
