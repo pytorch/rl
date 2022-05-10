@@ -312,7 +312,9 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "the actual number of frames retrieved will be 200e6. Default=1.",
     )
     parser.add_argument("--reward_scaling", type=float, help="scale of the reward.")
-    parser.add_argument("--reward_loc", type=float, help="location of the reward.", default=0.0)
+    parser.add_argument(
+        "--reward_loc", type=float, help="location of the reward.", default=0.0
+    )
     parser.add_argument(
         "--init_env_steps",
         type=int,
