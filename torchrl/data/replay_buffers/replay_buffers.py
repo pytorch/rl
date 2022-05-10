@@ -13,7 +13,12 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from torchrl._torchrl import MinSegmentTree, SumSegmentTree
+from torchrl._torchrl import (
+    MinSegmentTreeFp32,
+    MinSegmentTreeFp64,
+    SumSegmentTreeFp32,
+    SumSegmentTreeFp64,
+)
 from torchrl.data.replay_buffers.utils import (
     cat_fields_to_device,
     to_numpy,
@@ -302,6 +307,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         alpha: float,
         beta: float,
         eps: float = 1e-8,
+        dtype: torch.dtype = torch.float,
         collate_fn=None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
@@ -319,8 +325,16 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         self._alpha = alpha
         self._beta = beta
         self._eps = eps
-        self._sum_tree = SumSegmentTree(size)
-        self._min_tree = MinSegmentTree(size)
+        if dtype in (torch.float, torch.FloatType, torch.float32):
+            self._sum_tree = SumSegmentTreeFp32(size)
+            self._min_tree = MinSegmentTreeFp32(size)
+        elif dtype in (torch.double, torch.DoubleTensor, torch.float64):
+            self._sum_tree = SumSegmentTreeFp64(size)
+            self._min_tree = MinSegmentTreeFp64(size)
+        else:
+            raise NotImplementedError(
+                f"dtype {dtype} not supported by PrioritizedReplayBuffer"
+            )
         self._max_priority = 1.0
 
     @pin_memory_output
