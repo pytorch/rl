@@ -5,7 +5,7 @@ frame_skip=1
 frames_per_batch=400
 optim_steps_per_batch=400
 prb
-exp_name=kitchen_rdoor_open
+exp_name=kitchen_light_on-v3
 tanh_loc
 total_frames=5000000
 reward_scaling=1.0
