@@ -154,10 +154,11 @@ if __name__ == "__main__":
     recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
     create_env_fn.close()
 
-    # reset reward scaling
+    # reset reward scaling, as it was just overwritten by state_dict load
     for t in recorder.transform:
         if isinstance(t, RewardScaling):
             t.scale.fill_(1.0)
+            t.loc.fill_(0.0)
 
     agent = make_trainer(
         collector,
