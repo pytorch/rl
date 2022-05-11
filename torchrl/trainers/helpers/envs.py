@@ -187,6 +187,9 @@ def transformed_env_constructor(
             double_to_float_list.append(out_key)
             transforms.append(DoubleToFloat(keys=double_to_float_list))
 
+            if hasattr(args, 'catframes') and args.catframes:
+                transforms.append(CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1))
+
             if hasattr(args, "gSDE") and args.gSDE:
                 transforms.append(
                     gSDENoise(
@@ -350,6 +353,12 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=0,
         help="number of random steps to do after reset. Default is 0",
+    )
+    parser.add_argument(
+        "--catfranes",
+        type=int,
+        default=0,
+        help="Number of frames to concatenate through time. Default is 0 (do not use CatFrames).",
     )
     parser.add_argument(
         "--max_frames_per_traj",
