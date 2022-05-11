@@ -240,6 +240,7 @@ def parallel_env_constructor(args: Namespace, **kwargs) -> EnvCreator:
 def get_stats_random_rollout(
     args: Namespace, proof_environment: _EnvClass, key: Optional[str] = None
 ):
+    print("computing state stats")
     if not hasattr(args, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
@@ -261,6 +262,11 @@ def get_stats_random_rollout(
             )
     m = td_stats.get(key).mean(dim=0)
     s = td_stats.get(key).std(dim=0).clamp_min(1e-5)
+    print(
+        f"stats computed for {td_stats.numel()} steps. Got: \n"
+        f"loc = {m}, \n"
+        f"scale: {s}"
+    )
     if not torch.isfinite(m).all():
         raise RuntimeError("non-finite values found in mean")
     if not torch.isfinite(s).all():
