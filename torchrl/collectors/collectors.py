@@ -355,7 +355,7 @@ class SyncDataCollector(_DataCollector):
                     key for key in tensordict_out.keys() if key.startswith("_")
                 ]
                 tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
-            yield tensordict_out
+            yield tensordict_out.clone()
 
             del tensordict_out
             if self._frames >= self.total_frames:
@@ -959,7 +959,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 out = out.exclude(*excluded_keys)
-            yield out
+            yield out.clone()
 
         del out_tensordicts_shared
         self._shutdown_main()
@@ -1040,7 +1040,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 out = out.exclude(*excluded_keys)
-            yield out
+            yield out.clone()
 
         self._shutdown_main()
         self.running = False
