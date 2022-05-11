@@ -280,7 +280,12 @@ class REDQLoss(_LossModule):
             `"td_error"`.
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
             "l1", Default is "smooth_l1".
-        alpha_init (Number, optional): initial value of the alpha factor. Default is 1.0.
+        alpha_init (float, optional): initial entropy multiplier.
+            Default is 1.0.
+        min_alpha (float, optional): min value of alpha.
+            Default is 0.1.
+        max_alpha (float, optional): max value of alpha.
+            Default is 10.0.
         fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is `False`.
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
         delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
@@ -299,7 +304,9 @@ class REDQLoss(_LossModule):
         gamma: Number = 0.99,
         priotity_key: str = "td_error",
         loss_function: str = "smooth_l1",
-        alpha_init: Number = 1.0,
+        alpha_init: float = 1.0,
+        min_alpha: float = 0.1,
+        max_alpha: float = 10.0,
         fixed_alpha: bool = False,
         target_entropy: Union[str, Number] = "auto",
         delay_qvalue: bool = True,
@@ -329,6 +336,12 @@ class REDQLoss(_LossModule):
             device = torch.device("cpu")
 
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
+        self.register_buffer(
+            "min_log_alpha", torch.tensor(min_alpha, device=device).log()
+        )
+        self.register_buffer(
+            "max_log_alpha", torch.tensor(max_alpha, device=device).log()
+        )
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
             self.register_buffer(
@@ -348,8 +361,9 @@ class REDQLoss(_LossModule):
 
     @property
     def alpha(self):
+        self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         with torch.no_grad():
-            alpha = self.log_alpha.detach().exp()
+            alpha = self.log_alpha.exp()
         return alpha
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
