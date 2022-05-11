@@ -338,7 +338,7 @@ class ConvNet(nn.Sequential):
         num_cells: Union[Sequence, int] = [32, 32, 32],
         kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 3,
         strides: Union[Sequence, int] = 1,
-        actionvation_class: Type = nn.ELU,
+        activation_class: Type = nn.ELU,
         activation_kwargs: Optional[dict] = None,
         norm_class: Type = None,
         norm_kwargs: Optional[dict] = None,
@@ -349,7 +349,7 @@ class ConvNet(nn.Sequential):
     ):
 
         self.in_features = in_features
-        self.activation_class = actionvation_class
+        self.activation_class = activation_class
         self.activation_kwargs = (
             activation_kwargs if activation_kwargs is not None else dict()
         )
@@ -641,8 +641,7 @@ class DdpgCnnActor(nn.Module):
             'num_cells': [32, 64, 64],
             'kernel_sizes': [8, 4, 3],
             'strides': [4, 2, 1],
-            'actionvation_class': nn.ELU,
-            'activation_kwargs': {'inplace': True},
+            'activation_class': nn.ELU,
             'norm_class': None,
             'aggregator_class': SquashDims,
             'aggregator_kwargs': {"ndims_in": 3},
@@ -655,7 +654,6 @@ class DdpgCnnActor(nn.Module):
             'depth': 2,
             'num_cells': 200,
             'activation_class': nn.ELU,
-            'activation_kwargs': {'inplace': True},
             'bias_last_layer': True,
         }
     """
@@ -672,8 +670,7 @@ class DdpgCnnActor(nn.Module):
             "num_cells": [32, 64, 64],
             "kernel_sizes": [8, 4, 3],
             "strides": [4, 2, 1],
-            "actionvation_class": nn.ELU,
-            "activation_kwargs": {"inplace": True},
+            "activation_class": nn.ELU,
             "norm_class": None,
             "aggregator_class": SquashDims,
             "aggregator_kwargs": {"ndims_in": 3},
@@ -687,7 +684,6 @@ class DdpgCnnActor(nn.Module):
             "depth": 2,
             "num_cells": 200,
             "activation_class": nn.ELU,
-            "activation_kwargs": {"inplace": True},
             "bias_last_layer": True,
         }
         mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
@@ -718,7 +714,6 @@ class DdpgMlpActor(nn.Module):
             'depth': 2,
             'num_cells': [400, 300],
             'activation_class': nn.ELU,
-            'activation_kwargs': {'inplace': True},
             'bias_last_layer': True,
         }
     """
@@ -731,7 +726,6 @@ class DdpgMlpActor(nn.Module):
             "depth": 2,
             "num_cells": [400, 300],
             "activation_class": nn.ELU,
-            "activation_kwargs": {"inplace": True},
             "bias_last_layer": True,
         }
         mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
@@ -758,8 +752,7 @@ class DdpgCnnQNet(nn.Module):
             'num_cells': [32, 32, 32],
             'kernel_sizes': 3,
             'strides': 1,
-            'actionvation_class': nn.ELU,
-            'activation_kwargs': {'inplace': True},
+            'activation_class': nn.ELU,
             'norm_class': None,
             'aggregator_class': SquashDims,
             'aggregator_kwargs': {"ndims_in": 3},
@@ -772,7 +765,6 @@ class DdpgCnnQNet(nn.Module):
             'depth': 2,
             'num_cells': 200,
             'activation_class': nn.ELU,
-            'activation_kwargs': {'inplace': True},
             'bias_last_layer': True,
         }
     """
@@ -788,8 +780,7 @@ class DdpgCnnQNet(nn.Module):
             "num_cells": [32, 32, 32],
             "kernel_sizes": 3,
             "strides": 1,
-            "actionvation_class": nn.ELU,
-            "activation_kwargs": {"inplace": True},
+            "activation_class": nn.ELU,
             "norm_class": None,
             "aggregator_class": SquashDims,
             "aggregator_kwargs": {"ndims_in": 3},
@@ -803,7 +794,6 @@ class DdpgCnnQNet(nn.Module):
             "depth": 2,
             "num_cells": 200,
             "activation_class": nn.ELU,
-            "activation_kwargs": {"inplace": True},
             "bias_last_layer": True,
         }
         mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
@@ -833,7 +823,6 @@ class DdpgMlpQNet(nn.Module):
             'depth': 0,
             'num_cells': [],
             'activation_class': nn.ELU,
-            'activation_kwargs': {'inplace': True},
             'bias_last_layer': True,
             'activate_last_layer': True,
         }
@@ -844,7 +833,6 @@ class DdpgMlpQNet(nn.Module):
             'depth': 1,
             'num_cells': [300, ],
             'activation_class': nn.ELU,
-            'activation_kwargs': {'inplace': True},
             'bias_last_layer': True,
         }
     """
@@ -861,7 +849,6 @@ class DdpgMlpQNet(nn.Module):
             "depth": 0,
             "num_cells": [],
             "activation_class": nn.ELU,
-            "activation_kwargs": {"inplace": True},
             "bias_last_layer": True,
             "activate_last_layer": True,
         }
@@ -874,12 +861,10 @@ class DdpgMlpQNet(nn.Module):
         mlp2_net_default_kwargs = {
             "in_features": None,
             "out_features": 1,
-            "depth": 1,
             "num_cells": [
                 300,
             ],
             "activation_class": nn.ELU,
-            "activation_kwargs": {"inplace": True},
             "bias_last_layer": True,
         }
         mlp_net_kwargs_net2 = (

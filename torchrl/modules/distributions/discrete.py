@@ -39,6 +39,8 @@ class OneHotCategorical(D.Categorical):
 
     """
 
+    num_params: int = 1
+
     def __init__(
         self,
         logits: Optional[torch.Tensor] = None,

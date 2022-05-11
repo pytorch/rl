@@ -25,6 +25,7 @@ from torchrl.modules.distributions import (
     TruncatedNormal,
 )
 from torchrl.modules.distributions.continuous import IndependentNormal
+from torchrl.modules.distributions.utils import _cast_device
 from torchrl.modules.models.exploration import gSDEWrapper
 from torchrl.modules.models.models import (
     ConvNet,
@@ -55,6 +56,12 @@ DISTRIBUTIONS = {
     "tanh-delta": TanhDelta,
 }
 
+ACTIVATIONS = {
+    "elu": nn.ELU,
+    "tanh": nn.Tanh,
+    "relu": nn.ReLU,
+}
+
 __all__ = [
     "make_dqn_actor",
     "make_ddpg_actor",
@@ -81,8 +88,8 @@ def make_dqn_actor(
          A DQN policy operator.
 
     Examples:
-        >>> from torchrl.agents.helpers.models import make_dqn_actor, parser_model_args_discrete
-        >>> from torchrl.agents.helpers.envs import parser_env_args
+        >>> from torchrl.trainers.helpers.models import make_dqn_actor, parser_model_args_discrete
+        >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.envs import GymEnv
         >>> from torchrl.envs.transforms import ToTensorImage, TransformedEnv
         >>> import argparse
@@ -209,8 +216,8 @@ def make_ddpg_actor(
     https://arxiv.org/pdf/1509.02971.pdf.
 
     Examples:
-        >>> from torchrl.agents.helpers.envs import parser_env_args
-        >>> from torchrl.agents.helpers.models import make_ddpg_actor, parser_model_args_continuous
+        >>> from torchrl.trainers.helpers.envs import parser_env_args
+        >>> from torchrl.trainers.helpers.models import make_ddpg_actor, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import argparse
@@ -264,11 +271,17 @@ def make_ddpg_actor(
 
     actor_net_default_kwargs = {
         "action_dim": out_features,
-        "mlp_net_kwargs": {"layer_class": linear_layer_class},
+        "mlp_net_kwargs": {
+            "layer_class": linear_layer_class,
+            "activation_class": ACTIVATIONS[args.activation],
+        },
     }
     actor_net_default_kwargs.update(actor_net_kwargs)
     if from_pixels:
         in_keys = ["pixels"]
+        actor_net_default_kwargs["conv_net_kwargs"] = {
+            "activation_class": ACTIVATIONS[args.activation]
+        }
         actor_net = DdpgCnnActor(**actor_net_default_kwargs)
 
     else:
@@ -282,15 +295,18 @@ def make_ddpg_actor(
         safe=True,
         distribution_class=TanhDelta,
         distribution_kwargs={
-            "min": env_specs["action_spec"].space.minimum,
-            "max": env_specs["action_spec"].space.maximum,
+            "min": _cast_device(env_specs["action_spec"].space.minimum, device),
+            "max": _cast_device(env_specs["action_spec"].space.maximum, device),
         },
     )
 
     state_class = ValueOperator
     if from_pixels:
         value_net_default_kwargs = {
-            "mlp_net_kwargs": {"layer_class": linear_layer_class}
+            "mlp_net_kwargs": {
+                "layer_class": linear_layer_class,
+                "activation_class": ACTIVATIONS[args.activation],
+            }
         }
         value_net_default_kwargs.update(value_net_kwargs)
 
@@ -298,20 +314,28 @@ def make_ddpg_actor(
         out_keys = ["state_action_value"]
         q_net = DdpgCnnQNet(**value_net_default_kwargs)
     else:
-        value_net_default_kwargs1 = {"activation_class": torch.nn.ELU}
+        value_net_default_kwargs1 = {"activation_class": ACTIVATIONS[args.activation]}
         value_net_default_kwargs1.update(
             value_net_kwargs.get(
-                "mlp_net_kwargs_net1", {"layer_class": linear_layer_class}
+                "mlp_net_kwargs_net1",
+                {
+                    "layer_class": linear_layer_class,
+                    "activation_class": ACTIVATIONS[args.activation],
+                    "bias_last_layer": True,
+                },
             )
         )
         value_net_default_kwargs2 = {
             "num_cells": [400, 300],
-            "depth": 2,
-            "activation_class": torch.nn.ELU,
+            "activation_class": ACTIVATIONS[args.activation],
+            "bias_last_layer": True,
         }
         value_net_default_kwargs2.update(
             value_net_kwargs.get(
-                "mlp_net_kwargs_net2", {"layer_class": linear_layer_class}
+                "mlp_net_kwargs_net2",
+                {
+                    "layer_class": linear_layer_class,
+                },
             )
         )
         in_keys = ["observation_vector", "action"]
@@ -365,8 +389,8 @@ def make_ppo_model(
          A joined ActorCriticOperator.
 
     Examples:
-        >>> from torchrl.agents.helpers.envs import parser_env_args
-        >>> from torchrl.agents.helpers.models import make_ppo_model, parser_model_args_continuous
+        >>> from torchrl.trainers.helpers.envs import parser_env_args
+        >>> from torchrl.trainers.helpers.models import make_ppo_model, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import argparse
@@ -624,8 +648,8 @@ def make_sac_model(
          A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
 
     Examples:
-        >>> from torchrl.agents.helpers.envs import parser_env_args
-        >>> from torchrl.agents.helpers.models import make_sac_model, parser_model_args_continuous
+        >>> from torchrl.trainers.helpers.envs import parser_env_args
+        >>> from torchrl.trainers.helpers.models import make_sac_model, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import argparse
@@ -706,17 +730,17 @@ def make_sac_model(
         in_keys = ["observation_vector"]
 
     actor_net_kwargs_default = {
-        "num_cells": [256, 256],
+        "num_cells": [args.actor_cells, args.actor_cells],
         "out_features": (2 - gSDE) * action_spec.shape[-1],
-        "activation_class": nn.ELU,
+        "activation_class": ACTIVATIONS[args.activation],
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = MLP(**actor_net_kwargs_default)
 
     qvalue_net_kwargs_default = {
-        "num_cells": [256, 256],
+        "num_cells": [args.qvalue_cells, args.qvalue_cells],
         "out_features": 1,
-        "activation_class": nn.ELU,
+        "activation_class": ACTIVATIONS[args.activation],
     }
     qvalue_net_kwargs_default.update(qvalue_net_kwargs)
     qvalue_net = MLP(
@@ -724,9 +748,9 @@ def make_sac_model(
     )
 
     value_net_kwargs_default = {
-        "num_cells": [256, 256],
+        "num_cells": [args.value_cells, args.value_cells],
         "out_features": 1,
-        "activation_class": nn.ELU,
+        "activation_class": ACTIVATIONS[args.activation],
     }
     value_net_kwargs_default.update(value_net_kwargs)
     value_net = MLP(
@@ -735,7 +759,9 @@ def make_sac_model(
 
     if not gSDE:
         actor_net = NormalParamWrapper(
-            actor_net, scale_mapping=f"biased_softplus_{default_policy_scale}"
+            actor_net,
+            scale_mapping=f"biased_softplus_{default_policy_scale}",
+            scale_lb=args.scale_lb,
         )
         in_keys_actor = in_keys
         dist_class = TanhNormal
@@ -813,8 +839,8 @@ def make_redq_model(
          A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
 
     Examples:
-        >>> from torchrl.agents.helpers.envs import parser_env_args
-        >>> from torchrl.agents.helpers.models import make_redq_model, parser_model_args_continuous
+        >>> from torchrl.trainers.helpers.envs import parser_env_args
+        >>> from torchrl.trainers.helpers.models import make_redq_model, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import argparse
@@ -887,17 +913,17 @@ def make_redq_model(
         in_keys = ["observation_vector"]
 
     actor_net_kwargs_default = {
-        "num_cells": [256, 256],
+        "num_cells": [args.actor_cells, args.actor_cells],
         "out_features": (2 - gSDE) * action_spec.shape[-1],
-        "activation_class": nn.ELU,
+        "activation_class": ACTIVATIONS[args.activation],
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = MLP(**actor_net_kwargs_default)
 
     qvalue_net_kwargs_default = {
-        "num_cells": [256, 256],
+        "num_cells": [args.qvalue_cells, args.qvalue_cells],
         "out_features": 1,
-        "activation_class": nn.ELU,
+        "activation_class": ACTIVATIONS[args.activation],
     }
     qvalue_net_kwargs_default.update(qvalue_net_kwargs)
     qvalue_net = MLP(
@@ -906,7 +932,9 @@ def make_redq_model(
 
     if not gSDE:
         actor_net = NormalParamWrapper(
-            actor_net, scale_mapping=f"biased_softplus_{default_policy_scale}"
+            actor_net,
+            scale_mapping=f"biased_softplus_{default_policy_scale}",
+            scale_lb=args.scale_lb,
         )
         in_keys_actor = in_keys
         dist_class = TanhNormal
@@ -921,8 +949,10 @@ def make_redq_model(
             actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len
         )
         in_keys_actor = in_keys + ["_eps_gSDE"]
-        dist_class = IndependentNormal
+        dist_class = TanhNormal
         dist_kwargs = {
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
             "tanh_loc": tanh_loc,
         }
 
@@ -1031,6 +1061,43 @@ def parser_model_args_continuous(
             "--shared-mapping",
             action="store_true",
             help="if True, the first layers of the actor-critic are shared.",
+        )
+
+    if algorithm in ("SAC", "REDQ"):
+        parser.add_argument(
+            "--actor_cells",
+            type=int,
+            default=256,
+            help="cells of the actor",
+        )
+        parser.add_argument(
+            "--qvalue_cells",
+            type=int,
+            default=256,
+            help="cells of the qvalue net",
+        )
+        parser.add_argument(
+            "--scale_lb",
+            type=float,
+            default=0.1,
+            help="min value of scale",
+        )
+
+    if algorithm in ("SAC", "REDQ"):
+        parser.add_argument(
+            "--value_cells",
+            type=int,
+            default=256,
+            help="cells of the value net",
+        )
+
+    if algorithm in ("SAC", "DDPG", "REDQ"):
+        parser.add_argument(
+            "--activation",
+            type=str,
+            choices=["relu", "elu", "tanh"],
+            default="tanh",
+            help="activation function",
         )
 
     return parser

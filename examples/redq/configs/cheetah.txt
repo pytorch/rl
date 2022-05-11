@@ -4,12 +4,12 @@ env_library=dm_control
 async_collection
 record_video
 frame_skip=4
-frames_per_batch=320
-optim_steps_per_batch=3200
+frames_per_batch=32
+optim_steps_per_batch=640
 prb
-multi_step
-exp_name=humanoid_stats
+exp_name=cheetah
 tanh_loc
+total_frames=5000000
 num_workers=8
 env_per_collector=8
-total_frames=5000000
+collector_devices=cuda:0

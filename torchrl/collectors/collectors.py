@@ -219,7 +219,10 @@ class SyncDataCollector(_DataCollector):
         init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
             This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
             default = True
-
+        return_same_td (bool, optional): if True, the same TensorDict will be returned at each iteration, with its values
+            updated. This feature should be used cautiously: if the same tensordict is added to a replay buffer for instance,
+            the whole content of the buffer will be identical.
+            Default is False.
     """
 
     def __init__(
@@ -245,6 +248,7 @@ class SyncDataCollector(_DataCollector):
         return_in_place: bool = False,
         exploration_mode: str = "random",
         init_with_lag: bool = False,
+        return_same_td: bool = False,
     ):
         self.closed = True
         if seed is not None:
@@ -283,6 +287,7 @@ class SyncDataCollector(_DataCollector):
         self.pin_memory = pin_memory
         self.exploration_mode = exploration_mode
         self.init_with_lag = init_with_lag and max_frames_per_traj > 0
+        self.return_same_td = return_same_td
 
         self.passing_device = torch.device(passing_device)
 
@@ -355,7 +360,10 @@ class SyncDataCollector(_DataCollector):
                     key for key in tensordict_out.keys() if key.startswith("_")
                 ]
                 tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
-            yield tensordict_out
+            if self.return_same_td:
+                yield tensordict_out
+            else:
+                yield tensordict_out.clone()
 
             del tensordict_out
             if self._frames >= self.total_frames:
@@ -959,7 +967,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 out = out.exclude(*excluded_keys)
-            yield out
+            yield out.clone()
 
         del out_tensordicts_shared
         self._shutdown_main()
@@ -1040,7 +1048,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 out = out.exclude(*excluded_keys)
-            yield out
+            yield out.clone()
 
         self._shutdown_main()
         self.running = False
@@ -1204,6 +1212,7 @@ def _main_async_collector(
         return_in_place=True,
         init_with_lag=init_with_lag,
         exploration_mode=exploration_mode,
+        return_same_td=True,
     )
     if verbose:
         print("Sync data collector created")
