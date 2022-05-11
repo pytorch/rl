@@ -338,7 +338,7 @@ class ConvNet(nn.Sequential):
         num_cells: Union[Sequence, int] = [32, 32, 32],
         kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 3,
         strides: Union[Sequence, int] = 1,
-        actionvation_class: Type = nn.ELU,
+        activation_class: Type = nn.ELU,
         activation_kwargs: Optional[dict] = None,
         norm_class: Type = None,
         norm_kwargs: Optional[dict] = None,
@@ -349,7 +349,7 @@ class ConvNet(nn.Sequential):
     ):
 
         self.in_features = in_features
-        self.activation_class = actionvation_class
+        self.activation_class = activation_class
         self.activation_kwargs = (
             activation_kwargs if activation_kwargs is not None else dict()
         )
