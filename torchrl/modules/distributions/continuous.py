@@ -537,9 +537,8 @@ class TanhDelta(D.TransformedDistribution):
     def update(self, net_output: torch.Tensor) -> Optional[torch.Tensor]:
         loc = net_output
         device = loc.device
-        self.to(device)
-        shift = self.max - self.min
-        loc = loc + shift / 2 + self.min
+        shift = _cast_device(self.max - self.min, device)
+        loc = loc + shift / 2 + _cast_device(self.min, device)
         if hasattr(self, "base_dist"):
             self.base_dist.update(loc)
         else:

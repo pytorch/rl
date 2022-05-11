@@ -24,7 +24,8 @@ from torchrl.modules.distributions import (
     TanhNormal,
     TruncatedNormal,
 )
-from torchrl.modules.distributions.continuous import IndependentNormal
+from torchrl.modules.distributions.continuous import IndependentNormal, \
+    _cast_device
 from torchrl.modules.models.exploration import gSDEWrapper
 from torchrl.modules.models.models import (
     ConvNet,
@@ -294,8 +295,8 @@ def make_ddpg_actor(
         safe=True,
         distribution_class=TanhDelta,
         distribution_kwargs={
-            "min": env_specs["action_spec"].space.minimum,
-            "max": env_specs["action_spec"].space.maximum,
+            "min": _cast_device(env_specs["action_spec"].space.minimum, device),
+            "max": _cast_device(env_specs["action_spec"].space.maximum, device),
         },
     )
 
