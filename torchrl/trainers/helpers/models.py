@@ -24,7 +24,8 @@ from torchrl.modules.distributions import (
     TanhNormal,
     TruncatedNormal,
 )
-from torchrl.modules.distributions.continuous import IndependentNormal, _cast_device
+from torchrl.modules.distributions.continuous import IndependentNormal
+from torchrl.modules.distributions.utils import _cast_device
 from torchrl.modules.models.exploration import gSDEWrapper
 from torchrl.modules.models.models import (
     ConvNet,

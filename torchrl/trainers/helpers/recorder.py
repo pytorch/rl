@@ -25,7 +25,7 @@ def parser_recorder_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--no_video",
         action="store_false",
-        dest='record_video',
+        dest="record_video",
         help="whether a video of the task should be rendered during logging.",
     )
     parser.add_argument(

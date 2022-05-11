@@ -117,15 +117,16 @@ class DDPGLoss(_LossModule):
             params=self.actor_network_params,
             buffers=self.actor_network_buffers,
         )
-        # with hold_out_params(self.value_network_params) as params:
-        #     td_copy = self.value_network(
-        #         td_copy, params=params, buffers=self.value_network_buffers
-        #     )
-        td_copy = self.value_network(
-            td_copy,
-            params=self.target_value_network_params,
-            buffers=self.value_network_buffers,
-        )
+        with hold_out_params(self.value_network_params) as params:
+            td_copy = self.value_network(
+                td_copy, params=params, buffers=self.value_network_buffers
+            )
+        # TODO: validate this experimentally
+        # td_copy = self.value_network(
+        #     td_copy,
+        #     params=self.target_value_network_params,
+        #     buffers=self.value_network_buffers,
+        # )
         return -td_copy.get("state_action_value")
 
     def _loss_value(

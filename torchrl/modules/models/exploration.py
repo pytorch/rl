@@ -268,6 +268,8 @@ class gSDEWrapper(nn.Module):
         sigma_init (float): the initial value of the standard deviation. The
             softplus non-linearity is used to map the log_sigma parameter to a
             positive value.
+        scale_min (float, optional): min value of the scale.
+        scale_max (float, optional): max value of the scale.
 
     Examples:
         >>> batch, state_dim, action_dim = 3, 7, 5
