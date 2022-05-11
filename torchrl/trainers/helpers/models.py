@@ -912,17 +912,17 @@ def make_redq_model(
         in_keys = ["observation_vector"]
 
     actor_net_kwargs_default = {
-        "num_cells": [256, 256],
+        "num_cells": [args.actor_cells, args.actor_cells],
         "out_features": (2 - gSDE) * action_spec.shape[-1],
-        "activation_class": nn.ELU,
+        "activation_class": ACTIVATIONS[args.activation],
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = MLP(**actor_net_kwargs_default)
 
     qvalue_net_kwargs_default = {
-        "num_cells": [256, 256],
+        "num_cells": [args.qvalue_cells, args.qvalue_cells],
         "out_features": 1,
-        "activation_class": nn.ELU,
+        "activation_class": ACTIVATIONS[args.activation],
     }
     qvalue_net_kwargs_default.update(qvalue_net_kwargs)
     qvalue_net = MLP(
@@ -931,7 +931,9 @@ def make_redq_model(
 
     if not gSDE:
         actor_net = NormalParamWrapper(
-            actor_net, scale_mapping=f"biased_softplus_{default_policy_scale}"
+            actor_net,
+            scale_mapping=f"biased_softplus_{default_policy_scale}",
+            scale_lb=args.scale_lb,
         )
         in_keys_actor = in_keys
         dist_class = TanhNormal
@@ -1060,7 +1062,7 @@ def parser_model_args_continuous(
             help="if True, the first layers of the actor-critic are shared.",
         )
 
-    if algorithm in ("SAC",):
+    if algorithm in ("SAC", "REDQ"):
         parser.add_argument(
             "--actor_cells",
             type=int,
@@ -1074,19 +1076,21 @@ def parser_model_args_continuous(
             help="cells of the qvalue net",
         )
         parser.add_argument(
-            "--value_cells",
-            type=int,
-            default=256,
-            help="cells of the value net",
-        )
-        parser.add_argument(
             "--scale_lb",
             type=float,
             default=0.1,
             help="min value of scale",
         )
 
-    if algorithm in ("SAC", "DDPG"):
+    if algorithm in ("SAC", "REDQ"):
+        parser.add_argument(
+            "--value_cells",
+            type=int,
+            default=256,
+            help="cells of the value net",
+        )
+
+    if algorithm in ("SAC", "DDPG", "REDQ"):
         parser.add_argument(
             "--activation",
             type=str,
