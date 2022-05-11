@@ -187,8 +187,10 @@ def transformed_env_constructor(
             double_to_float_list.append(out_key)
             transforms.append(DoubleToFloat(keys=double_to_float_list))
 
-            if hasattr(args, 'catframes') and args.catframes:
-                transforms.append(CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1))
+            if hasattr(args, "catframes") and args.catframes:
+                transforms.append(
+                    CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1)
+                )
 
             if hasattr(args, "gSDE") and args.gSDE:
                 transforms.append(

@@ -14,3 +14,4 @@ collector_devices=cuda:0
 reward_scaling=5.0
 reward_loc=11.3
 activation=tanh
+no_norm_stats

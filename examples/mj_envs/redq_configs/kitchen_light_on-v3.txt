@@ -12,3 +12,4 @@ num_workers=8
 env_per_collector=8
 collector_devices=cuda:0
 gSDE
+no_norm_stats

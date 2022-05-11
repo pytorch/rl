@@ -19,3 +19,4 @@ activation=tanh
 actor_cells=64
 qvalue_cells=128
 value_cells=128
+no_norm_stats
