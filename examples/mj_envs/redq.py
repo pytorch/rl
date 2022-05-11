@@ -158,7 +158,7 @@ if __name__ == "__main__":
     for t in recorder.transform:
         if isinstance(t, RewardScaling):
             t.scale.fill_(1.0)
-            t.loc.fill_(1.0)
+            t.loc.fill_(0.0)
 
     trainer = make_trainer(
         collector,
