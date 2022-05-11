@@ -182,7 +182,9 @@ def make_trainer(
         trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 
     if policy_exploration is not None and hasattr(policy_exploration, "step"):
-        trainer.register_op("post_steps", policy_exploration.step)
+        trainer.register_op(
+            "post_steps", policy_exploration.step, frames=args.frames_per_batch
+        )
 
     if recorder is not None:
         trainer.register_op(
