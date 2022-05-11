@@ -340,7 +340,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "should be used cautiously.",
     )
     parser.add_argument(
-        "--nonorm_stats",
+        "--no_norm_stats",
         action="store_false",
         dest='norm_stats',
         help="Deactivates the normalization based on random collection of data."
