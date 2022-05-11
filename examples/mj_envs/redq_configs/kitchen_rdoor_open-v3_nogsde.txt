@@ -1,0 +1,14 @@
+env_name=kitchen_rdoor_open-v3
+env_library=mjenv
+frame_skip=1
+frames_per_batch=8
+optim_steps_per_batch=160
+prb
+exp_name=kitchen_rdoor_open
+tanh_loc
+total_frames=5000000
+record_video
+num_workers=8
+env_per_collector=8
+collector_devices=cuda:0
+no_norm_stats
