@@ -357,7 +357,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         help="number of random steps to do after reset. Default is 0",
     )
     parser.add_argument(
-        "--catfranes",
+        "--catframes",
         type=int,
         default=0,
         help="Number of frames to concatenate through time. Default is 0 (do not use CatFrames).",
