@@ -115,7 +115,7 @@ def make_trainer(
         parser.add_argument("--record_interval", default=10)
         args = parser.parse_args([])
 
-    optimizer_kwargs = {} if args.optimizer is not "adam" else {"betas": (0.0, 0.9)}
+    optimizer_kwargs = {} if args.optimizer != "adam" else {"betas": (0.0, 0.9)}
     optimizer = OPTIMIZERS[args.optimizer](
         loss_module.parameters(),
         lr=args.lr,
