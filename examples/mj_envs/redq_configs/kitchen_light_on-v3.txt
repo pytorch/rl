@@ -1,8 +1,9 @@
 env_name=kitchen_light_on-v3
 env_library=mjenv
 frame_skip=1
-frames_per_batch=8
-optim_steps_per_batch=160
+async_collection
+frames_per_batch=80
+optim_steps_per_batch=1600
 prb
 exp_name=kitchen_light_on-v3
 tanh_loc
