@@ -327,8 +327,8 @@ class Trainer:
         return batch
 
     def _post_optim_hook(self):
-        for op in self._post_optim_ops:
-            op()
+        for op, kwargs in self._post_optim_ops:
+            op(**kwargs)
 
     def _pre_steps_log_hook(self, batch: _TensorDict) -> None:
         for op, kwargs in self._pre_steps_log_ops:
