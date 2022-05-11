@@ -115,8 +115,12 @@ def make_trainer(
         parser.add_argument("--record_interval", default=10)
         args = parser.parse_args([])
 
+    optimizer_kwargs = {} if args.optimizer is not "adam" else {"betas": (0.0, 0.9)}
     optimizer = OPTIMIZERS[args.optimizer](
-        loss_module.parameters(), lr=args.lr, weight_decay=args.weight_decay
+        loss_module.parameters(),
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+        **optimizer_kwargs,
     )
     optim_scheduler = None
 
@@ -274,8 +278,8 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--clip_norm",
         type=float,
-        default=1.0,
-        help="value at which the total gradient norm should be clipped. Default=1.0",
+        default=0.1,
+        help="value at which the total gradient norm / single derivative should be clipped. Default=0.1",
     )
     parser.add_argument(
         "--clip_grad_norm",

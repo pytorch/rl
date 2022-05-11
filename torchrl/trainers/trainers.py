@@ -377,7 +377,7 @@ class Trainer:
         print("shutting down collector")
         self.collector.shutdown()
 
-    def _optimizer_step(self, losses_td: _TensorDict) -> None:
+    def _optimizer_step(self, losses_td: _TensorDict) -> _TensorDict:
         # sum all keys that start with 'loss_'
         loss = sum([item for key, item in losses_td.items() if key.startswith("loss")])
         loss.backward()

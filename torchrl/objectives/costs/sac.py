@@ -45,6 +45,10 @@ class SACLoss(_LossModule):
             the value function loss. Default is `"smooth_l1"`.
         alpha_init (float, optional): initial entropy multiplier.
             Default is 1.0.
+        min_alpha (float, optional): min value of alpha.
+            Default is 0.1.
+        max_alpha (float, optional): max value of alpha.
+            Default is 10.0.
         fixed_alpha (bool, optional): if True, alpha will be fixed to its
             initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
