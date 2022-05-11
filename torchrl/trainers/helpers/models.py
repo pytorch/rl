@@ -24,8 +24,7 @@ from torchrl.modules.distributions import (
     TanhNormal,
     TruncatedNormal,
 )
-from torchrl.modules.distributions.continuous import IndependentNormal, \
-    _cast_device
+from torchrl.modules.distributions.continuous import IndependentNormal, _cast_device
 from torchrl.modules.models.exploration import gSDEWrapper
 from torchrl.modules.models.models import (
     ConvNet,
@@ -273,8 +272,8 @@ def make_ddpg_actor(
         "action_dim": out_features,
         "mlp_net_kwargs": {
             "layer_class": linear_layer_class,
-                           "activation_class": ACTIVATIONS[args.activation]
-                           },
+            "activation_class": ACTIVATIONS[args.activation],
+        },
     }
     actor_net_default_kwargs.update(actor_net_kwargs)
     if from_pixels:
@@ -305,8 +304,8 @@ def make_ddpg_actor(
         value_net_default_kwargs = {
             "mlp_net_kwargs": {
                 "layer_class": linear_layer_class,
-                               "activation_class": ACTIVATIONS[args.activation]
-                               }
+                "activation_class": ACTIVATIONS[args.activation],
+            }
         }
         value_net_default_kwargs.update(value_net_kwargs)
 
@@ -314,14 +313,14 @@ def make_ddpg_actor(
         out_keys = ["state_action_value"]
         q_net = DdpgCnnQNet(**value_net_default_kwargs)
     else:
-        value_net_default_kwargs1 = {
-            "activation_class": ACTIVATIONS[args.activation]
-        }
+        value_net_default_kwargs1 = {"activation_class": ACTIVATIONS[args.activation]}
         value_net_default_kwargs1.update(
             value_net_kwargs.get(
-                "mlp_net_kwargs_net1", {
+                "mlp_net_kwargs_net1",
+                {
                     "layer_class": linear_layer_class,
-                                        "activation_class": ACTIVATIONS[args.activation]}
+                    "activation_class": ACTIVATIONS[args.activation],
+                },
             )
         )
         value_net_default_kwargs2 = {
@@ -331,9 +330,11 @@ def make_ddpg_actor(
         }
         value_net_default_kwargs2.update(
             value_net_kwargs.get(
-                "mlp_net_kwargs_net2", {
+                "mlp_net_kwargs_net2",
+                {
                     "layer_class": linear_layer_class,
-                                        "activation_class": ACTIVATIONS[args.activation]}
+                    "activation_class": ACTIVATIONS[args.activation],
+                },
             )
         )
         in_keys = ["observation_vector", "action"]
@@ -1059,7 +1060,7 @@ def parser_model_args_continuous(
             help="if True, the first layers of the actor-critic are shared.",
         )
 
-    if algorithm in ("SAC", ):
+    if algorithm in ("SAC",):
         parser.add_argument(
             "--actor_cells",
             type=int,

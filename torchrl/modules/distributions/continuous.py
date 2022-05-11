@@ -18,10 +18,12 @@ __all__ = ["NormalParamWrapper", "TanhNormal", "Delta", "TanhDelta", "TruncatedN
 
 D.Distribution.set_default_validate_args(False)
 
+
 def _cast_device(elt: Union[torch.Tensor, float], device) -> Union[torch.Tensor, float]:
     if isinstance(elt, torch.Tensor):
         return elt.to(device)
     return elt
+
 
 class IndependentNormal(D.Independent):
     """Implements a Normal distribution with location scaling.

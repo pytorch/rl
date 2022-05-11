@@ -342,8 +342,8 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--no_norm_stats",
         action="store_false",
-        dest='norm_stats',
-        help="Deactivates the normalization based on random collection of data."
+        dest="norm_stats",
+        help="Deactivates the normalization based on random collection of data.",
     )
     parser.add_argument(
         "--noops",
