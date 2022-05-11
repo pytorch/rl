@@ -320,20 +320,20 @@ def make_ddpg_actor(
                 {
                     "layer_class": linear_layer_class,
                     "activation_class": ACTIVATIONS[args.activation],
+                    "bias_last_layer": True,
                 },
             )
         )
         value_net_default_kwargs2 = {
             "num_cells": [400, 300],
-            "depth": 2,
             "activation_class": ACTIVATIONS[args.activation],
+            "bias_last_layer": True,
         }
         value_net_default_kwargs2.update(
             value_net_kwargs.get(
                 "mlp_net_kwargs_net2",
                 {
                     "layer_class": linear_layer_class,
-                    "activation_class": ACTIVATIONS[args.activation],
                 },
             )
         )

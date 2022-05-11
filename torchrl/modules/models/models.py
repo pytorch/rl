@@ -861,7 +861,6 @@ class DdpgMlpQNet(nn.Module):
         mlp2_net_default_kwargs = {
             "in_features": None,
             "out_features": 1,
-            "depth": 1,
             "num_cells": [
                 300,
             ],
