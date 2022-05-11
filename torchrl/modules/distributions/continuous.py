@@ -18,6 +18,10 @@ __all__ = ["NormalParamWrapper", "TanhNormal", "Delta", "TanhDelta", "TruncatedN
 
 D.Distribution.set_default_validate_args(False)
 
+def _cast_device(elt: Union[torch.Tensor, float], device) -> Union[torch.Tensor, float]:
+    if isinstance(elt, torch.Tensor):
+        return elt.to(device)
+    return elt
 
 class IndependentNormal(D.Independent):
     """Implements a Normal distribution with location scaling.
@@ -523,7 +527,9 @@ class TanhDelta(D.TransformedDistribution):
 
     def update(self, net_output: torch.Tensor) -> Optional[torch.Tensor]:
         loc = net_output
-        loc = loc + (self.max - self.min) / 2 + self.min
+        device = loc.device
+        shift = _cast_device(self.max - self.min, device)
+        loc = loc + shift / 2 + _cast_device(self.min, device)
         if hasattr(self, "base_dist"):
             self.base_dist.update(loc)
         else:
