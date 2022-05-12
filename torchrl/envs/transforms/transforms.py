@@ -346,6 +346,7 @@ class TransformedEnv(_EnvClass):
             )
         if not isinstance(self.transform, Compose):
             self.transform = Compose(self.transform)
+            self.transform.set_parent(self)
         self.transform.append(transform)
 
     def __getattr__(self, attr: str) -> Any:
@@ -456,6 +457,7 @@ class Compose(Transform):
                 f"type {type(transform)} instead."
             )
         self.transforms.append(transform)
+        transform.set_parent(self)
 
     def __len__(self):
         return len(self.transforms)
