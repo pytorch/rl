@@ -141,10 +141,13 @@ def td_lambda_advantage_estimate(
 
 
 def _custom_conv1d(val, w):
-    val_pad = torch.cat([
-        val,
-        torch.zeros_like(w[1:]),
-    ], 0)
+    val_pad = torch.cat(
+        [
+            val,
+            torch.zeros_like(w[1:]),
+        ],
+        0,
+    )
 
     shape = val.shape
     w = w.squeeze(-1).unsqueeze(0).unsqueeze(0)
@@ -154,11 +157,10 @@ def _custom_conv1d(val, w):
     return out
 
 
-def vec_td_lambda_advantage_estimate(gamma, lamda, state_value,
-                                     next_state_value, reward, done):
-    """Vectorized version of td_lambda_advantage_estimate
-
-    """
+def vec_td_lambda_advantage_estimate(
+    gamma, lamda, state_value, next_state_value, reward, done
+):
+    """Vectorized version of td_lambda_advantage_estimate"""
     device = reward.device
     not_done = 1 - done.to(next_state_value.dtype)
     next_state_value = not_done * next_state_value
@@ -180,8 +182,7 @@ def vec_td_lambda_advantage_estimate(gamma, lamda, state_value,
         first_below_thr_gamma = first_below_thr.nonzero()[0, 0]
     first_below_thr = lambdas < 1e-7
     if first_below_thr.any() and first_below_thr_gamma is not None:
-        first_below_thr = max(first_below_thr_gamma,
-                              first_below_thr.nonzero()[0, 0])
+        first_below_thr = max(first_below_thr_gamma, first_below_thr.nonzero()[0, 0])
         gammas = gammas[:first_below_thr]
         lambdas = lambdas[:first_below_thr]
 
@@ -194,8 +195,7 @@ def vec_td_lambda_advantage_estimate(gamma, lamda, state_value,
     mask = whatever.flip(-2)
     if mask.shape[-2] < next_state_value.shape[-2]:
         mask = torch.cat(
-            [torch.zeros_like(next_state_value[..., :-mask.shape[-2], :]),
-             mask], -2)
-    vs2 = _custom_conv1d(next_state_value, whatever) - mask * next_state_value[
-        -1]
+            [torch.zeros_like(next_state_value[..., : -mask.shape[-2], :]), mask], -2
+        )
+    vs2 = _custom_conv1d(next_state_value, whatever) - mask * next_state_value[-1]
     return rs + vs - vs2 - state_value
