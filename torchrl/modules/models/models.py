@@ -338,7 +338,7 @@ class ConvNet(nn.Sequential):
         num_cells: Union[Sequence, int] = [32, 32, 32],
         kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 3,
         strides: Union[Sequence, int] = 1,
-        actionvation_class: Type = nn.ELU,
+        activation_class: Type = nn.ELU,
         activation_kwargs: Optional[dict] = None,
         norm_class: Type = None,
         norm_kwargs: Optional[dict] = None,
@@ -349,7 +349,7 @@ class ConvNet(nn.Sequential):
     ):
 
         self.in_features = in_features
-        self.activation_class = actionvation_class
+        self.activation_class = activation_class
         self.activation_kwargs = (
             activation_kwargs if activation_kwargs is not None else dict()
         )
@@ -641,7 +641,7 @@ class DdpgCnnActor(nn.Module):
             'num_cells': [32, 64, 64],
             'kernel_sizes': [8, 4, 3],
             'strides': [4, 2, 1],
-            'actionvation_class': nn.ELU,
+            'activation_class': nn.ELU,
             'norm_class': None,
             'aggregator_class': SquashDims,
             'aggregator_kwargs': {"ndims_in": 3},
@@ -670,7 +670,7 @@ class DdpgCnnActor(nn.Module):
             "num_cells": [32, 64, 64],
             "kernel_sizes": [8, 4, 3],
             "strides": [4, 2, 1],
-            "actionvation_class": nn.ELU,
+            "activation_class": nn.ELU,
             "norm_class": None,
             "aggregator_class": SquashDims,
             "aggregator_kwargs": {"ndims_in": 3},
@@ -752,7 +752,7 @@ class DdpgCnnQNet(nn.Module):
             'num_cells': [32, 32, 32],
             'kernel_sizes': 3,
             'strides': 1,
-            'actionvation_class': nn.ELU,
+            'activation_class': nn.ELU,
             'norm_class': None,
             'aggregator_class': SquashDims,
             'aggregator_kwargs': {"ndims_in": 3},
@@ -780,7 +780,7 @@ class DdpgCnnQNet(nn.Module):
             "num_cells": [32, 32, 32],
             "kernel_sizes": 3,
             "strides": 1,
-            "actionvation_class": nn.ELU,
+            "activation_class": nn.ELU,
             "norm_class": None,
             "aggregator_class": SquashDims,
             "aggregator_kwargs": {"ndims_in": 3},

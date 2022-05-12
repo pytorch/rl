@@ -5,7 +5,7 @@ async_collection
 record_video
 frame_skip=4
 frames_per_batch=32
-optim_steps_per_batch=16
+optim_steps_per_batch=32
 prb
 exp_name=cheetah
 tanh_loc
