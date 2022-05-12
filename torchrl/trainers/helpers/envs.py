@@ -14,7 +14,6 @@ from torchrl.envs.env_creator import env_creator, EnvCreator
 from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,
-    Compose,
     DoubleToFloat,
     FiniteTensorDictCheck,
     GrayScale,
