@@ -116,6 +116,7 @@ def transformed_env_constructor(
         norm_rewards = vecnorm and args.norm_rewards
         _norm_obs_only = norm_obs_only or not norm_rewards
         reward_scaling = args.reward_scaling
+        reward_loc = args.reward_loc
 
         if custom_env_maker is None:
             env_kwargs = {
@@ -153,10 +154,12 @@ def transformed_env_constructor(
             )
         if norm_rewards:
             reward_scaling = 1.0
+            reward_loc = 0.0
         if norm_obs_only:
             reward_scaling = 1.0
+            reward_loc = 0.0
         if reward_scaling is not None:
-            env.append_transform(RewardScaling(0.0, reward_scaling))
+            transforms.append(RewardScaling(reward_loc, reward_scaling))
 
         double_to_float_list = []
         if env_library is DMControlEnv:
@@ -191,6 +194,11 @@ def transformed_env_constructor(
 
             double_to_float_list.append(out_key)
             env.append_transform(DoubleToFloat(keys=double_to_float_list))
+
+            if hasattr(args, "catframes") and args.catframes:
+                env.append_transform(
+                    CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1)
+                )
 
             if hasattr(args, "gSDE") and args.gSDE:
                 env.append_transform(gSDENoise(action_dim=env.action_spec.shape[-1]))
@@ -229,10 +237,18 @@ def parallel_env_constructor(args: Namespace, **kwargs) -> EnvCreator:
 def get_stats_random_rollout(
     args: Namespace, proof_environment: _EnvClass, key: Optional[str] = None
 ):
+    print("computing state stats")
     if not hasattr(args, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
-    td_stats = proof_environment.rollout(n_steps=args.init_env_steps)
+    n = 0
+    td_stats = []
+    while n < args.init_env_steps:
+        _td_stats = proof_environment.rollout(n_steps=args.init_env_steps)
+        n += _td_stats.numel()
+        td_stats.append(_td_stats)
+    td_stats = torch.cat(td_stats, 0)
+
     if key is None:
         keys = list(proof_environment.observation_spec.keys())
         key = keys.pop()
@@ -243,6 +259,11 @@ def get_stats_random_rollout(
             )
     m = td_stats.get(key).mean(dim=0)
     s = td_stats.get(key).std(dim=0).clamp_min(1e-5)
+    print(
+        f"stats computed for {td_stats.numel()} steps. Got: \n"
+        f"loc = {m}, \n"
+        f"scale: {s}"
+    )
     if not torch.isfinite(m).all():
         raise RuntimeError("non-finite values found in mean")
     if not torch.isfinite(s).all():
@@ -264,7 +285,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "--env_library",
         type=str,
         default="gym",
-        choices=["dm_control", "gym"],
+        choices=list(LIBS.keys()),
         help="env_library used for the simulated environment. Default=gym",
     )
     parser.add_argument(
@@ -295,6 +316,9 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
     )
     parser.add_argument("--reward_scaling", type=float, help="scale of the reward.")
     parser.add_argument(
+        "--reward_loc", type=float, help="location of the reward.", default=0.0
+    )
+    parser.add_argument(
         "--init_env_steps",
         type=int,
         default=1000,
@@ -313,10 +337,22 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "should be used cautiously.",
     )
     parser.add_argument(
+        "--no_norm_stats",
+        action="store_false",
+        dest="norm_stats",
+        help="Deactivates the normalization based on random collection of data.",
+    )
+    parser.add_argument(
         "--noops",
         type=int,
         default=0,
         help="number of random steps to do after reset. Default is 0",
+    )
+    parser.add_argument(
+        "--catframes",
+        type=int,
+        default=0,
+        help="Number of frames to concatenate through time. Default is 0 (do not use CatFrames).",
     )
     parser.add_argument(
         "--max_frames_per_traj",

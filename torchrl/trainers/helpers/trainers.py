@@ -115,8 +115,12 @@ def make_trainer(
         parser.add_argument("--record_interval", default=10)
         args = parser.parse_args([])
 
+    optimizer_kwargs = {} if args.optimizer != "adam" else {"betas": (0.0, 0.9)}
     optimizer = OPTIMIZERS[args.optimizer](
-        loss_module.parameters(), lr=args.lr, weight_decay=args.weight_decay
+        loss_module.parameters(),
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+        **optimizer_kwargs,
     )
     optim_scheduler = None
 
@@ -182,7 +186,9 @@ def make_trainer(
         trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 
     if policy_exploration is not None and hasattr(policy_exploration, "step"):
-        trainer.register_op("post_steps", policy_exploration.step)
+        trainer.register_op(
+            "post_steps", policy_exploration.step, frames=args.frames_per_batch
+        )
 
     if recorder is not None:
         trainer.register_op(
@@ -272,8 +278,8 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--clip_norm",
         type=float,
-        default=1.0,
-        help="value at which the total gradient norm should be clipped. Default=1.0",
+        default=0.1,
+        help="value at which the total gradient norm / single derivative should be clipped. Default=0.1",
     )
     parser.add_argument(
         "--clip_grad_norm",

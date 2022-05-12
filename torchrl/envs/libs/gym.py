@@ -2,11 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from types import ModuleType
 from typing import List, Optional, Sequence
 
 import torch
+from packaging import version
 
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
@@ -25,10 +26,23 @@ try:
     import gym
 
     _has_gym = True
-    from gym.wrappers.pixel_observation import PixelObservationWrapper
 
 except ImportError:
     _has_gym = False
+
+
+if _has_gym:
+    try:
+        from gym.wrappers.pixel_observation import PixelObservationWrapper
+    except ModuleNotFoundError:
+        warnings.warn(
+            f"gym {gym.__version__} does not provide the PixelObservationWrapper"
+            f"used by torchrl, which will be using a patched version. "
+            f"Consider updating gym to a newer version."
+        )
+        from torchrl.envs.libs.utils import (
+            GymPixelObservationWrapper as PixelObservationWrapper,
+        )
 
 try:
     import retro
@@ -114,7 +128,10 @@ class GymEnv(GymLikeEnv):
         return gym
 
     def _set_seed(self, seed: int) -> int:
-        self.reset(seed=seed)
+        if version.parse(gym.__version__) < version.parse("0.19.0"):
+            self._env.seed(seed=seed)
+        else:
+            self.reset(seed=seed)
         return seed
 
     def _build_env(

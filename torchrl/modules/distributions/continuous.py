@@ -16,6 +16,8 @@ from .truncated_normal import TruncatedNormal as _TruncatedNormal
 
 __all__ = ["NormalParamWrapper", "TanhNormal", "Delta", "TanhDelta", "TruncatedNormal"]
 
+from .utils import _cast_device
+
 D.Distribution.set_default_validate_args(False)
 
 
@@ -494,7 +496,7 @@ class TanhDelta(D.TransformedDistribution):
         self.max = max
         loc = self.update(net_output)
 
-        t = D.TanhTransform()
+        t = SafeTanhTransform()
         non_trivial_min = (isinstance(min, torch.Tensor) and (min != 1.0).any()) or (
             not isinstance(min, torch.Tensor) and min != 1.0
         )
@@ -521,9 +523,20 @@ class TanhDelta(D.TransformedDistribution):
 
         super().__init__(base, t)
 
+    def to(self, device: torch.device):
+        self.min = _cast_device(self.min, device)
+        self.max = _cast_device(self.max, device)
+        if isinstance(self.transforms, D.ComposeTransform):
+            for t in self.transforms.parts:
+                if isinstance(t, D.AffineTransform):
+                    t.loc = _cast_device(t.loc, device)
+                    t.scale = _cast_device(t.scale, device)
+
     def update(self, net_output: torch.Tensor) -> Optional[torch.Tensor]:
         loc = net_output
-        loc = loc + (self.max - self.min) / 2 + self.min
+        device = loc.device
+        shift = _cast_device(self.max - self.min, device)
+        loc = loc + shift / 2 + _cast_device(self.min, device)
         if hasattr(self, "base_dist"):
             self.base_dist.update(loc)
         else:

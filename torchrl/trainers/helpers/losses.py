@@ -247,7 +247,7 @@ def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
             "predicted to predict the state action value. This can be disabled by using this flag."
             "REDQ uses an arbitrary number of Q-value functions to speed up learning in MF contexts.",
         )
-    if algorithm in ("SAC",):
+
         parser.add_argument(
             "--target_entropy",
             default=None,

@@ -268,6 +268,8 @@ class gSDEWrapper(nn.Module):
         sigma_init (float): the initial value of the standard deviation. The
             softplus non-linearity is used to map the log_sigma parameter to a
             positive value.
+        scale_min (float, optional): min value of the scale.
+        scale_max (float, optional): max value of the scale.
 
     Examples:
         >>> batch, state_dim, action_dim = 3, 7, 5
@@ -288,13 +290,17 @@ class gSDEWrapper(nn.Module):
         action_dim: int,
         state_dim: int,
         sigma_init: float = None,
+        scale_min: float = 0.1,
+        scale_max: float = 10.0,
     ) -> None:
         super().__init__()
         self.policy_model = policy_model
         self.action_dim = action_dim
         self.state_dim = state_dim
+        self.scale_min = scale_min
+        self.scale_max = scale_max
         if sigma_init is None:
-            sigma_init = inv_softplus(math.sqrt(0.05 / state_dim))
+            sigma_init = inv_softplus(math.sqrt((1.0 - scale_min) / state_dim))
         self.register_parameter(
             "log_sigma",
             nn.Parameter(torch.zeros((action_dim, state_dim), requires_grad=True)),
@@ -303,7 +309,11 @@ class gSDEWrapper(nn.Module):
 
     def forward(self, state, *tensors):
         *tensors, gSDE_noise = tensors
-        sigma = torch.nn.functional.softplus(self.log_sigma + self.sigma_init)
+        sigma = (
+            torch.nn.functional.softplus(self.log_sigma + self.sigma_init)
+            + self.scale_min
+        )
+        sigma = sigma.clamp_max(self.scale_max)
         if gSDE_noise is None:
             gSDE_noise = torch.randn_like(sigma)
         gSDE_noise = sigma * gSDE_noise

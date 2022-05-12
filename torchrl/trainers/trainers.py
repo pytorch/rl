@@ -239,48 +239,48 @@ class Trainer:
     def collector(self, collector: _DataCollector) -> None:
         self._collector = collector
 
-    def register_op(self, dest: str, op: Callable) -> None:
+    def register_op(self, dest: str, op: Callable, **kwargs) -> None:
         if dest == "batch_process":
             _check_input_output_typehint(op, input=_TensorDict, output=_TensorDict)
-            self._batch_process_ops.append(op)
+            self._batch_process_ops.append((op, kwargs))
 
         elif dest == "pre_optim_steps":
             _check_input_output_typehint(op, input=None, output=None)
-            self._pre_optim_ops.append(op)
+            self._pre_optim_ops.append((op, kwargs))
 
         elif dest == "process_optim_batch":
             _check_input_output_typehint(op, input=_TensorDict, output=_TensorDict)
-            self._process_optim_batch_ops.append(op)
+            self._process_optim_batch_ops.append((op, kwargs))
 
         elif dest == "post_loss":
             _check_input_output_typehint(op, input=_TensorDict, output=_TensorDict)
-            self._post_loss_ops.append(op)
+            self._post_loss_ops.append((op, kwargs))
 
         elif dest == "post_steps":
             _check_input_output_typehint(op, input=None, output=None)
-            self._post_steps_ops.append(op)
+            self._post_steps_ops.append((op, kwargs))
 
         elif dest == "post_optim":
             _check_input_output_typehint(op, input=None, output=None)
-            self._post_optim_ops.append(op)
+            self._post_optim_ops.append((op, kwargs))
 
         elif dest == "pre_steps_log":
             _check_input_output_typehint(
                 op, input=_TensorDict, output=Tuple[str, float]
             )
-            self._pre_steps_log_ops.append(op)
+            self._pre_steps_log_ops.append((op, kwargs))
 
         elif dest == "post_steps_log":
             _check_input_output_typehint(
                 op, input=_TensorDict, output=Tuple[str, float]
             )
-            self._post_steps_log_ops.append(op)
+            self._post_steps_log_ops.append((op, kwargs))
 
         elif dest == "post_optim_log":
             _check_input_output_typehint(
                 op, input=_TensorDict, output=Tuple[str, float]
             )
-            self._post_optim_log_ops.append(op)
+            self._post_optim_log_ops.append((op, kwargs))
 
         else:
             raise RuntimeError(
@@ -291,56 +291,56 @@ class Trainer:
 
     # Process batch
     def _process_batch_hook(self, batch: _TensorDict) -> _TensorDict:
-        for op in self._batch_process_ops:
-            out = op(batch)
+        for op, kwargs in self._batch_process_ops:
+            out = op(batch, **kwargs)
             if isinstance(out, _TensorDict):
                 batch = out
         return batch
 
     def _post_steps_hook(self) -> None:
-        for op in self._post_steps_ops:
-            op()
+        for op, kwargs in self._post_steps_ops:
+            op(**kwargs)
 
     def _post_optim_log(self, batch: _TensorDict) -> None:
-        for op in self._post_optim_log_ops:
-            result = op(batch)
+        for op, kwargs in self._post_optim_log_ops:
+            result = op(batch, **kwargs)
             if result is not None:
                 key, value = result
                 self._log(key=value)
 
     def _pre_optim_hook(self):
-        for op in self._pre_optim_ops:
-            op()
+        for op, kwargs in self._pre_optim_ops:
+            op(**kwargs)
 
     def _process_optim_batch_hook(self, batch):
-        for op in self._process_optim_batch_ops:
-            out = op(batch)
+        for op, kwargs in self._process_optim_batch_ops:
+            out = op(batch, **kwargs)
             if isinstance(out, _TensorDict):
                 batch = out
         return batch
 
     def _post_loss_hook(self, batch):
-        for op in self._post_loss_ops:
-            out = op(batch)
+        for op, kwargs in self._post_loss_ops:
+            out = op(batch, **kwargs)
             if isinstance(out, _TensorDict):
                 batch = out
         return batch
 
     def _post_optim_hook(self):
-        for op in self._post_optim_ops:
-            op()
+        for op, kwargs in self._post_optim_ops:
+            op(**kwargs)
 
     def _pre_steps_log_hook(self, batch: _TensorDict) -> None:
-        for op in self._pre_steps_log_ops:
-            result = op(batch)
+        for op, kwargs in self._pre_steps_log_ops:
+            result = op(batch, **kwargs)
             if result is not None:
                 key, value = result
                 kwargs = {key: value}
                 self._log(**kwargs)
 
     def _post_steps_log_hook(self, batch: _TensorDict) -> None:
-        for op in self._post_steps_log_ops:
-            result = op(batch)
+        for op, kwargs in self._post_steps_log_ops:
+            result = op(batch, **kwargs)
             if result is not None:
                 key, value = result
                 kwargs = {key: value}
@@ -377,7 +377,7 @@ class Trainer:
         print("shutting down collector")
         self.collector.shutdown()
 
-    def _optimizer_step(self, losses_td: _TensorDict) -> None:
+    def _optimizer_step(self, losses_td: _TensorDict) -> _TensorDict:
         # sum all keys that start with 'loss_'
         loss = sum([item for key, item in losses_td.items() if key.startswith("loss")])
         loss.backward()

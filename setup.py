@@ -77,7 +77,7 @@ def _main():
             "build_ext": setup_helpers.CMakeBuild,
             "clean": clean,
         },
-        install_requires=[pytorch_package_dep, "numpy", "tensorboard"],
+        install_requires=[pytorch_package_dep, "numpy", "tensorboard", "packaging"],
         extras_require={
             "atari": ["gym", "atari-py", "ale-py", "gym[accept-rom-license]", "pygame"],
             "dm_control": ["dm_control"],
