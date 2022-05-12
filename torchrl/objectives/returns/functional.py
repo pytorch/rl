@@ -40,21 +40,21 @@ def generalized_advantage_estimate(
     not_done = 1 - done.to(next_state_value.dtype)
     *batch_size, time_steps = not_done.shape[:-1]
     device = state_value.device
-    advantage = torch.zeros(*batch_size, time_steps + 1, 1, device=device)
-
+    advantage = torch.empty(*batch_size, time_steps, 1, device=device)
+    prev_advantage = 0
     for t in reversed(range(time_steps)):
         delta = (
             reward[..., t, :]
             + (gamma * next_state_value[..., t, :] * not_done[..., t, :])
             - state_value[..., t, :]
         )
-        advantage[..., t, :] = delta + (
-            gamma * lamda * advantage[..., t + 1, :] * not_done[..., t, :]
+        prev_advantage = advantage[..., t, :] = delta + (
+            gamma * lamda * prev_advantage * not_done[..., t, :]
         )
 
-    value_target = advantage[..., :time_steps, :] + state_value
+    value_target = advantage + state_value
 
-    return advantage[..., :time_steps, :], value_target
+    return advantage, value_target
 
 
 def td_advantage_estimate(

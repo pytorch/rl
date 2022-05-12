@@ -18,7 +18,7 @@ class ReinforceLoss(_LossModule):
         delay_value: bool = False,
         gamma: float = 0.99,
         advantage_key: str = "advantage",
-        advantage_diff_key: str = "value_target",
+        advantage_diff_key: str = "value_error",
         loss_critic_type: str = "smooth_l1",
     ) -> None:
         super().__init__()

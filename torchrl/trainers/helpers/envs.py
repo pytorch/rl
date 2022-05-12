@@ -14,7 +14,6 @@ from torchrl.envs.env_creator import env_creator, EnvCreator
 from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,
-    Compose,
     DoubleToFloat,
     FiniteTensorDictCheck,
     GrayScale,
@@ -159,7 +158,7 @@ def transformed_env_constructor(
             reward_scaling = 1.0
             reward_loc = 0.0
         if reward_scaling is not None:
-            transforms.append(RewardScaling(reward_loc, reward_scaling))
+            env.append_transform(RewardScaling(reward_loc, reward_scaling))
 
         double_to_float_list = []
         if env_library is DMControlEnv:
@@ -201,7 +200,14 @@ def transformed_env_constructor(
                 )
 
             if hasattr(args, "gSDE") and args.gSDE:
-                env.append_transform(gSDENoise(action_dim=env.action_spec.shape[-1]))
+                state_dim = env.observation_spec[out_key].shape[-1]
+                env.append_transform(
+                    gSDENoise(
+                        action_dim=env.action_spec.shape[-1],
+                        observation_key=out_key,
+                        state_dim=state_dim,
+                    )
+                )
 
         else:
             env.append_transform(DoubleToFloat(keys=double_to_float_list))

@@ -58,7 +58,7 @@ class PPOLoss(_LossModule):
         actor: ProbabilisticTDModule,
         critic: TDModule,
         advantage_key: str = "advantage",
-        advantage_diff_key: str = "value_target",
+        advantage_diff_key: str = "value_error",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_factor: float = 0.01,

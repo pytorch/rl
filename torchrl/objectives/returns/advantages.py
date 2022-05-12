@@ -70,7 +70,7 @@ class TDEstimate:
                 necessary to compute the value estimates and the GAE.
 
         Returns:
-            An updated TensorDict with an "advantage" and a "value_target" keys
+            An updated TensorDict with an "advantage" and a "value_error" keys
 
         """
         with torch.set_grad_enabled(self.gradient_mode):
@@ -114,7 +114,7 @@ class TDEstimate:
             adv = td_advantage_estimate(gamma, value, next_value, reward, done)
             tensordict.set("advantage", adv.detach())
             if self.gradient_mode:
-                tensordict.set("value_target", adv)
+                tensordict.set("value_error", adv)
         return tensordict
 
 
@@ -165,7 +165,7 @@ class GAE:
                 necessary to compute the value estimates and the GAE.
 
         Returns:
-            An updated TensorDict with an "advantage" and a "value_target" keys
+            An updated TensorDict with an "advantage" and a "value_error" keys
 
         """
         with torch.set_grad_enabled(self.gradient_mode):
@@ -203,13 +203,13 @@ class GAE:
                 kwargs["buffers"] = target_buffers
             self.value_network(step_td, **kwargs)
             next_value = step_td.get("state_value")
-
-        done = tensordict.get("done")
-        with torch.set_grad_enabled(self.gradient_mode):
+            done = tensordict.get("done")
             adv, value_target = generalized_advantage_estimate(
                 gamma, lamda, value, next_value, reward, done
             )
-            tensordict.set("advantage", adv.detach())
-            if self.gradient_mode:
-                tensordict.set("value_target", adv)
+
+        tensordict.set("advantage", adv.detach())
+        if self.gradient_mode:
+            tensordict.set("value_error", value_target - value)
+
         return tensordict
