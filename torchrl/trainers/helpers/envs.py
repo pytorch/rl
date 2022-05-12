@@ -132,18 +132,26 @@ def transformed_env_constructor(
         else:
             env = custom_env_maker()
 
-        transforms = []
+        env = TransformedEnv(env)
+
+        if len(video_tag):
+            env.append_transform(
+                VideoRecorder(
+                    writer=writer,
+                    tag=f"{video_tag}_{env_name}_video",
+                ),
+            )
 
         if args.noops:
-            transforms += [NoopResetEnv(env, args.noops)]
+            env.append_transform(NoopResetEnv(env, args.noops))
         if from_pixels:
-            transforms += [
-                ToTensorImage(),
-                Resize(84, 84),
-                GrayScale(),
-                CatFrames(keys=["next_pixels"]),
-                ObservationNorm(loc=-1.0, scale=2.0, keys=["next_pixels"]),
-            ]
+            env.append_transform(ToTensorImage())
+            env.append_transform(Resize(84, 84))
+            env.append_transform(GrayScale())
+            env.append_transform(CatFrames(keys=["next_pixels"]))
+            env.append_transform(
+                ObservationNorm(loc=-1.0, scale=2.0, keys=["next_pixels"])
+            )
         if norm_rewards:
             reward_scaling = 1.0
             reward_loc = 0.0
@@ -166,18 +174,18 @@ def transformed_env_constructor(
 
             # even if there is a single tensor, it'll be renamed in "next_observation_vector"
             out_key = "next_observation_vector"
-            transforms.append(CatTensors(keys=selected_keys, out_key=out_key))
+            env.append_transform(CatTensors(keys=selected_keys, out_key=out_key))
 
             if not vecnorm:
                 if stats is None:
                     _stats = {"loc": 0.0, "scale": 1.0}
                 else:
                     _stats = stats
-                transforms.append(
+                env.append_transform(
                     ObservationNorm(**_stats, keys=[out_key], standard_normal=True)
                 )
             else:
-                transforms.append(
+                env.append_transform(
                     VecNorm(
                         keys=[out_key, "reward"] if not _norm_obs_only else [out_key],
                         decay=0.9999,
@@ -185,38 +193,22 @@ def transformed_env_constructor(
                 )
 
             double_to_float_list.append(out_key)
-            transforms.append(DoubleToFloat(keys=double_to_float_list))
+            env.append_transform(DoubleToFloat(keys=double_to_float_list))
 
             if hasattr(args, "catframes") and args.catframes:
-                transforms.append(
+                env.append_transform(
                     CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1)
                 )
 
             if hasattr(args, "gSDE") and args.gSDE:
-                transforms.append(
-                    gSDENoise(
-                        action_dim=env.action_spec.shape[-1],
-                    )
-                )
+                env.append_transform(gSDENoise(action_dim=env.action_spec.shape[-1]))
 
         else:
-            transforms.append(DoubleToFloat(keys=double_to_float_list))
+            env.append_transform(DoubleToFloat(keys=double_to_float_list))
             if hasattr(args, "gSDE") and args.gSDE:
                 raise RuntimeError("gSDE not compatible with from_pixels=True")
 
-        if len(video_tag):
-            transforms = [
-                VideoRecorder(
-                    writer=writer,
-                    tag=f"{video_tag}_{env_name}_video",
-                ),
-                *transforms,
-            ]
-        transforms.append(FiniteTensorDictCheck())
-        env = TransformedEnv(
-            env,
-            Compose(*transforms),
-        )
+        env.append_transform(FiniteTensorDictCheck())
         return env
 
     if use_env_creator:

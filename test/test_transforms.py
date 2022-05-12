@@ -745,6 +745,19 @@ class TestTransforms:
         for key, item in td.items():
             assert item.is_pinned
 
+    def test_append(self):
+        env = ContinuousActionVecMockEnv()
+        obs_spec = env.observation_spec
+        key = list(obs_spec.keys())[0]
+
+        env = TransformedEnv(env)
+        env.append_transform(CatFrames(N=4, cat_dim=-1, keys=[key]))
+        assert isinstance(env.transform, Compose)
+        assert len(env.transform) == 1
+        obs_spec = env.observation_spec
+        obs_spec = obs_spec[key]
+        assert obs_spec.shape[-1] == 4 * env.env.observation_spec[key].shape[-1]
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
