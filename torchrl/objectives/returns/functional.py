@@ -144,28 +144,39 @@ def _custom_conv1d(val, w):
     val_pad = torch.cat(
         [
             val,
-            torch.zeros_like(w[1:]),
+            torch.zeros(val.shape[0], 1, w.shape[-2] - 1, device=val.device),
         ],
-        0,
+        -1,
     )
 
-    shape = val.shape
-    w = w.squeeze(-1).unsqueeze(0).unsqueeze(0)
-    val_pad = val_pad.squeeze(-1).unsqueeze(0).unsqueeze(0)
+    # shape = val.shape
+    w = w.squeeze(-1).unsqueeze(0).unsqueeze(0)  # 1 x 1 x T
     out = torch.conv1d(val_pad, w)
-    out = out.view(shape)
+    # out = out.view(shape)
+    if not out.shape == val.shape:
+        raise RuntimeError("wrong output shape")
     return out
 
 
 def vec_td_lambda_advantage_estimate(
     gamma, lamda, state_value, next_state_value, reward, done
 ):
+
+    shape = state_value.shape
+    if not shape[-1] == 1:
+        raise RuntimeError("last dimension of inputs shape must be singleton")
+
+    state_value = state_value.view(-1, 1, shape[-2])
+    next_state_value = next_state_value.view(-1, 1, shape[-2])
+    reward = reward.view(-1, 1, shape[-2])
+    done = done.view(-1, 1, shape[-2])
+
     """Vectorized version of td_lambda_advantage_estimate"""
     device = reward.device
     not_done = 1 - done.to(next_state_value.dtype)
     next_state_value = not_done * next_state_value
 
-    T = reward.shape[-2]
+    T = shape[-2]
 
     first_below_thr_gamma = None
 
@@ -191,11 +202,21 @@ def vec_td_lambda_advantage_estimate(
 
     rs = _custom_conv1d(reward, gammas * lambdas)
     vs = _custom_conv1d(next_state_value, gammas_prime * lambdas)
-    whatever = gammas_prime * lambdas_prime
-    mask = whatever.flip(-2)
-    if mask.shape[-2] < next_state_value.shape[-2]:
+    gam_lam = gammas_prime * lambdas_prime
+    mask = gam_lam.flip(-2)
+    if mask.shape[-2] < next_state_value.shape[-1]:
         mask = torch.cat(
-            [torch.zeros_like(next_state_value[..., : -mask.shape[-2], :]), mask], -2
+            # [torch.zeros_like(next_state_value[..., : -mask.shape[-2], :]), mask], -2
+            [
+                torch.zeros(
+                    next_state_value.shape[-1] - mask.shape[-2], 1, device=device
+                ),
+                mask,
+            ],
+            -2,
         )
-    vs2 = _custom_conv1d(next_state_value, whatever) - mask * next_state_value[-1]
-    return rs + vs - vs2 - state_value
+    vs2 = (
+        _custom_conv1d(next_state_value, gam_lam)
+        - mask.squeeze(-1) * next_state_value[..., -1:]
+    )
+    return (rs + vs - vs2 - state_value).view(shape)

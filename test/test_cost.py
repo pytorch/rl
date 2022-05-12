@@ -44,6 +44,10 @@ from torchrl.objectives.costs.redq import (
 from torchrl.objectives.costs.reinforce import ReinforceLoss
 from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
 from torchrl.objectives.returns.advantages import TDEstimate, GAE, TDLambdaEstimate
+from torchrl.objectives.returns.functional import (
+    vec_td_lambda_advantage_estimate,
+    td_lambda_advantage_estimate,
+)
 
 
 class _check_td_steady:
@@ -1461,6 +1465,28 @@ def test_updater(mode, value_network_update_interval, device):
         ]
     )
     assert d2 < 1e-6
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
+@pytest.mark.parametrize("lamda", [0.1, 0.5, 0.99])
+@pytest.mark.parametrize("N", [(3,), (7, 3)])
+@pytest.mark.parametrize("T", [3, 5, 200])
+def test_tdlambda(device, gamma, lamda, N, T):
+    torch.manual_seed(0)
+
+    done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool).bernoulli_(0.1)
+    reward = torch.randn(*N, T, 1, device=device)
+    state_value = torch.randn(*N, T, 1, device=device)
+    next_state_value = torch.randn(*N, T, 1, device=device)
+
+    r1 = vec_td_lambda_advantage_estimate(
+        gamma, lamda, state_value, next_state_value, reward, done
+    )
+    r2 = td_lambda_advantage_estimate(
+        gamma, lamda, state_value, next_state_value, reward, done
+    )
+    torch.testing.assert_close(r1, r2)
 
 
 if __name__ == "__main__":
