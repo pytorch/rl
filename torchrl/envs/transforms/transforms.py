@@ -237,7 +237,7 @@ class TransformedEnv(_EnvClass):
     def __init__(
         self,
         env: _EnvClass,
-        transform: Optional[Transform]=None,
+        transform: Optional[Transform] = None,
         cache_specs: bool = True,
         **kwargs,
     ):
@@ -456,6 +456,9 @@ class Compose(Transform):
                 f"type {type(transform)} instead."
             )
         self.transforms.append(transform)
+
+    def __len__(self):
+        return len(self.transforms)
 
     def __repr__(self) -> str:
         layers_str = ", \n\t".join([str(trsf) for trsf in self.transforms])
@@ -887,11 +890,13 @@ class CatFrames(ObservationTransform):
             _observation_spec = observation_spec
         space = _observation_spec.space
         if isinstance(space, ContinuousBox):
-            space.minimum = torch.cat([space.minimum] * self.N, 0)
-            space.maximum = torch.cat([space.maximum] * self.N, 0)
+            space.minimum = torch.cat([space.minimum] * self.N, self.cat_dim)
+            space.maximum = torch.cat([space.maximum] * self.N, self.cat_dim)
             _observation_spec.shape = space.minimum.shape
         else:
-            _observation_spec.shape = torch.Size([self.N, *_observation_spec.shape])
+            shape = list(_observation_spec.shape)
+            shape[self.cat_dim] = self.N * shape[self.cat_dim]
+            _observation_spec.shape = torch.Size(shape)
         observation_spec = _observation_spec
         return observation_spec
 
