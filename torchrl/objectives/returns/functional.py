@@ -125,6 +125,7 @@ def td_lambda_advantage_estimate(
                 "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
             )
     not_done = 1 - done.to(next_state_value.dtype)
+    next_state_value = not_done * next_state_value
 
     returns = torch.empty_like(state_value)
 
@@ -133,7 +134,68 @@ def td_lambda_advantage_estimate(
 
     for i in reversed(range(T)):
         g = returns[..., i, :] = reward[..., i, :] + gamma * (
-            (1 - lamda) * not_done[..., i, :] * next_state_value[..., i, :] + lamda * g
+            (1 - lamda) * next_state_value[..., i, :] + lamda * g
         )
     advantage = returns - state_value
     return advantage
+
+
+def _custom_conv1d(val, w):
+    val_pad = torch.cat([
+        val,
+        torch.zeros_like(w[1:]),
+    ], 0)
+
+    shape = val.shape
+    w = w.squeeze(-1).unsqueeze(0).unsqueeze(0)
+    val_pad = val_pad.squeeze(-1).unsqueeze(0).unsqueeze(0)
+    out = torch.conv1d(val_pad, w)
+    out = out.view(shape)
+    return out
+
+
+def vec_td_lambda_advantage_estimate(gamma, lamda, state_value,
+                                     next_state_value, reward, done):
+    """Vectorized version of td_lambda_advantage_estimate
+
+    """
+    device = reward.device
+    not_done = 1 - done.to(next_state_value.dtype)
+    next_state_value = not_done * next_state_value
+
+    T = reward.shape[-2]
+
+    first_below_thr_gamma = None
+
+    gammas = torch.ones(T + 1, 1, device=device)
+    gammas[1:] = gamma
+    gammas = torch.cumprod(gammas, -2)
+
+    lambdas = torch.ones(T + 1, 1, device=device)
+    lambdas[1:] = lamda
+    lambdas = torch.cumprod(lambdas, -2)
+
+    first_below_thr = gammas < 1e-7
+    if first_below_thr.any():
+        first_below_thr_gamma = first_below_thr.nonzero()[0, 0]
+    first_below_thr = lambdas < 1e-7
+    if first_below_thr.any() and first_below_thr_gamma is not None:
+        first_below_thr = max(first_below_thr_gamma,
+                              first_below_thr.nonzero()[0, 0])
+        gammas = gammas[:first_below_thr]
+        lambdas = lambdas[:first_below_thr]
+
+    gammas, gammas_prime = gammas[:-1], gammas[1:]
+    lambdas, lambdas_prime = lambdas[:-1], lambdas[1:]
+
+    rs = _custom_conv1d(reward, gammas * lambdas)
+    vs = _custom_conv1d(next_state_value, gammas_prime * lambdas)
+    whatever = gammas_prime * lambdas_prime
+    mask = whatever.flip(-2)
+    if mask.shape[-2] < next_state_value.shape[-2]:
+        mask = torch.cat(
+            [torch.zeros_like(next_state_value[..., :-mask.shape[-2], :]),
+             mask], -2)
+    vs2 = _custom_conv1d(next_state_value, whatever) - mask * next_state_value[
+        -1]
+    return rs + vs - vs2 - state_value
