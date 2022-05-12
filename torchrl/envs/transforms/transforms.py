@@ -210,6 +210,10 @@ class Transform(nn.Module):
             parent = parent.parent
         return parent
 
+    def empty_cache(self):
+        if self.parent is not None:
+            self.parent.empty_cache()
+
 
 class TransformedEnv(_EnvClass):
     """
@@ -338,6 +342,11 @@ class TransformedEnv(_EnvClass):
         self.is_closed = True
         self.env.close()
 
+    def empty_cache(self):
+        self._observation_spec = None
+        self._action_spec = None
+        self._reward_spec = None
+
     def append_transform(self, transform: Transform) -> None:
         if not isinstance(transform, Transform):
             raise ValueError(
@@ -451,6 +460,7 @@ class Compose(Transform):
             t.init(tensordict)
 
     def append(self, transform):
+        self.empty_cache()
         if not isinstance(transform, Transform):
             raise ValueError(
                 "Compose.append expected a transform but received an object of "
@@ -1339,9 +1349,7 @@ class gSDENoise(Transform):
     def reset(self, tensordict: _TensorDict) -> _TensorDict:
         tensordict = super().reset(tensordict=tensordict)
         if self.state_dim is None:
-            obs_spec = self.parent.observation_spec
-            obs_spec = obs_spec[self.observation_key]
-            state_dim = obs_spec.shape[-1]
+            raise RuntimeError("state_dim must be provided to gSDENoise transform")
         else:
             state_dim = self.state_dim
 
