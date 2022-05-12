@@ -217,8 +217,9 @@ class TransformedEnv(_EnvClass):
 
     Args:
         env (_EnvClass): original environment to be transformed.
-        transform (Transform): transform to apply to the tensordict resulting
-            from env.step(td)
+        transform (Transform, optional): transform to apply to the tensordict resulting
+            from `env.step(td)`. If none is provided, an empty Compose placeholder is
+            used.
         cache_specs (bool, optional): if True, the specs will be cached once
             and for all after the first call (i.e. the specs will be
             transformed only once). If the transform changes during
@@ -236,11 +237,13 @@ class TransformedEnv(_EnvClass):
     def __init__(
         self,
         env: _EnvClass,
-        transform: Transform,
+        transform: Optional[Transform]=None,
         cache_specs: bool = True,
         **kwargs,
     ):
         self.env = env
+        if transform is None:
+            transform = Compose()
         self.transform = transform
         transform.set_parent(self)  # allows to find env specs from the transform
 
@@ -331,6 +334,20 @@ class TransformedEnv(_EnvClass):
         self.transform.train(mode)
         return self
 
+    def close(self):
+        self.is_closed = True
+        self.env.close()
+
+    def append_transform(self, transform: Transform) -> None:
+        if not isinstance(transform, Transform):
+            raise ValueError(
+                "TransformedEnv.append_transform expected a transform but received an object of "
+                f"type {type(transform)} instead."
+            )
+        if not isinstance(self.transform, Compose):
+            self.transform = Compose(self.transform)
+        self.transform.append(transform)
+
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
             return self.__getattribute__(
@@ -352,10 +369,6 @@ class TransformedEnv(_EnvClass):
 
     def __repr__(self) -> str:
         return f"TransformedEnv(env={self.env}, transform={self.transform})"
-
-    def close(self):
-        self.is_closed = True
-        self.env.close()
 
 
 class ObservationTransform(Transform):
@@ -435,6 +448,14 @@ class Compose(Transform):
     def init(self, tensordict: _TensorDict) -> None:
         for t in self.transforms:
             t.init(tensordict)
+
+    def append(self, transform):
+        if not isinstance(transform, Transform):
+            raise ValueError(
+                "Compose.append expected a transform but received an object of "
+                f"type {type(transform)} instead."
+            )
+        self.transforms.append(transform)
 
     def __repr__(self) -> str:
         layers_str = ", \n\t".join([str(trsf) for trsf in self.transforms])
