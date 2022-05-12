@@ -43,7 +43,7 @@ from torchrl.objectives.costs.redq import (
 )
 from torchrl.objectives.costs.reinforce import ReinforceLoss
 from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
-from torchrl.objectives.returns.advantages import TDEstimate, GAE
+from torchrl.objectives.returns.advantages import TDEstimate, GAE, TDLambdaEstimate
 
 
 class _check_td_steady:
@@ -1172,7 +1172,7 @@ class TestPPO:
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
-    @pytest.mark.parametrize("advantage", ("gae", "td"))
+    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_ppo(self, loss_class, device, gradient_mode, advantage):
         torch.manual_seed(self.seed)
@@ -1187,6 +1187,10 @@ class TestPPO:
         elif advantage == "td":
             advantage = TDEstimate(
                 gamma=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        elif advantage == "td_lambda":
+            advantage = TDLambdaEstimate(
+                gamma=0.9, lamda=0.9, value_network=value, gradient_mode=gradient_mode
             )
         else:
             raise NotImplementedError
@@ -1225,7 +1229,7 @@ class TestPPO:
 class TestReinforce:
     @pytest.mark.parametrize("delay_value", [True, False])
     @pytest.mark.parametrize("gradient_mode", [True, False])
-    @pytest.mark.parametrize("advantage", ["gae", "td"])
+    @pytest.mark.parametrize("advantage", ["gae", "td", "td_lambda"])
     def test_reinforce_value_net(self, advantage, gradient_mode, delay_value):
         n_obs = 3
         n_act = 5
@@ -1249,6 +1253,13 @@ class TestReinforce:
         elif advantage == "td":
             advantage_module = TDEstimate(
                 gamma=gamma,
+                value_network=value_net.make_functional_with_buffers(clone=True)[0],
+                gradient_mode=gradient_mode,
+            )
+        elif advantage == "td_lambda":
+            advantage_module = TDLambdaEstimate(
+                gamma=0.9,
+                lamda=0.9,
                 value_network=value_net.make_functional_with_buffers(clone=True)[0],
                 gradient_mode=gradient_mode,
             )

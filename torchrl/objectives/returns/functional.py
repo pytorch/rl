@@ -7,6 +7,12 @@ from typing import Tuple
 
 import torch
 
+__all__ = [
+    "generalized_advantage_estimate",
+    "td_lambda_advantage_estimate",
+    "td_advantage_estimate",
+]
+
 
 def generalized_advantage_estimate(
     gamma: float,
@@ -71,7 +77,6 @@ def td_advantage_estimate(
 
     Args:
         gamma (scalar): exponential mean discount.
-        lamda (scalar): trajectory discount.
         state_value (Tensor): value function result with old_state input.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         next_state_value (Tensor): value function result with new_state input.
@@ -87,4 +92,48 @@ def td_advantage_estimate(
             )
     not_done = 1 - done.to(next_state_value.dtype)
     advantage = reward + gamma * not_done * next_state_value - state_value
+    return advantage
+
+
+def td_lambda_advantage_estimate(
+    gamma: float,
+    lamda: float,
+    state_value: torch.Tensor,
+    next_state_value: torch.Tensor,
+    reward: torch.Tensor,
+    done: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Get generalized advantage estimate of a trajectory
+    Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
+    https://arxiv.org/pdf/1506.02438.pdf for more context.
+
+    Args:
+        gamma (scalar): exponential mean discount.
+        lamda (scalar): trajectory discount.
+        state_value (Tensor): value function result with old_state input.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        next_state_value (Tensor): value function result with new_state input.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        reward (Tensor): reward of taking actions in the environment.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        done (Tensor): boolean flag for end of episode.
+    """
+    for tensor in (next_state_value, state_value, reward, done):
+        if tensor.shape[-1] != 1:
+            raise RuntimeError(
+                "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
+            )
+    not_done = 1 - done.to(next_state_value.dtype)
+
+    returns = torch.empty_like(state_value)
+
+    g = next_state_value[..., -1, :]
+    T = returns.shape[-2]
+
+    for i in reversed(range(T)):
+        g = returns[..., i, :] = reward[..., i, :] + gamma * (
+            (1 - lamda) * not_done[..., i, :] * next_state_value[..., i, :] + lamda * g
+        )
+    advantage = returns - state_value
     return advantage
