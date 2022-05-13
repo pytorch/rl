@@ -1486,7 +1486,7 @@ def test_tdlambda(device, gamma, lamda, N, T):
     r2 = td_lambda_advantage_estimate(
         gamma, lamda, state_value, next_state_value, reward, done
     )
-    torch.testing.assert_close(r1, r2)
+    torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
 
 if __name__ == "__main__":
