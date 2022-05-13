@@ -136,6 +136,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError
 
+    @timeit("td.is_shared")
     def is_shared(self, no_check=True) -> bool:
         """Checks if tensordict is in shared memory.
 
@@ -154,6 +155,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
             )
         return all([item.is_shared() for key, item in self.items_meta()])
 
+    @timeit("td.is_memmap")
     def is_memmap(self) -> bool:
         """Checks if tensordict is stored with MemmapTensors."""
 
@@ -1617,7 +1619,10 @@ class TensorDict(_TensorDict):
         self._tensordict[key] = proc_value
         with timeit("set - MetaTensor"):
             self._tensordict_meta[key] = (
-                MetaTensor(proc_value) if _meta_val is None else _meta_val
+                MetaTensor(
+                    proc_value,
+                    _is_memmap=self.is_memmap(),
+                    _is_shared=self.is_shared()) if _meta_val is None else _meta_val
             )
         return self
 

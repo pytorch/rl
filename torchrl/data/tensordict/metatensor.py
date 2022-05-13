@@ -67,31 +67,21 @@ class MetaTensor:
         *shape: Union[int, torch.Tensor, "MemmapTensor"],
         device: Optional[DEVICE_TYPING] = "cpu",
         dtype: torch.dtype = torch.get_default_dtype(),
-        _is_shared: bool = False,
-        _is_memmap: bool = False,
+        _is_shared: Optional[bool] = None,
+        _is_memmap: Optional[bool] = None,
     ):
 
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
             shape = tensor.shape
-            tensor_device = tensor.device
             with timeit("meta - is_shared"):
-                try:
-                    _is_shared = (
-                        tensor.is_shared()
-                        if tensor.device != torch.device("meta")
-                        else _is_shared
-                    )
-                except:  # noqa
-                    _is_shared = False
+                if _is_shared is None:
+                    _is_shared = tensor.is_shared()
             with timeit("meta - _is_memmap"):
-                _is_memmap = (
-                    isinstance(tensor, MemmapTensor)
-                        if tensor_device != torch.device("meta")
-                    else _is_memmap
-                )
+                if _is_memmap is None:
+                    _is_memmap = isinstance(tensor, MemmapTensor)
             with timeit("meta - device"):
-                device = tensor.device if tensor_device != torch.device("meta") else device
+                device = tensor.device if not tensor.is_meta else device
             with timeit("meta - dtype"):
                 dtype = tensor.dtype
         if not isinstance(shape, torch.Size):
@@ -102,8 +92,8 @@ class MetaTensor:
             self.dtype = dtype
             self._ndim = len(shape)
             self._numel = math.prod(shape)
-            self._is_shared = _is_shared
-            self._is_memmap = _is_memmap
+            self._is_shared = bool(_is_shared)
+            self._is_memmap = bool(_is_memmap)
             if _is_memmap:
                 name = "MemmapTensor"
             elif _is_shared:
