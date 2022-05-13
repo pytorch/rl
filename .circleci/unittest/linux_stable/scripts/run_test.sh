@@ -6,7 +6,7 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 #if [[ $OSTYPE == 'darwin'* ]]; then
-PRIVATE_MUJOCO_GL=glfw
+PRIVATE_MUJOCO_GL=osmesa
 #else
 #  PRIVATE_MUJOCO_GL=glfw
 #fi

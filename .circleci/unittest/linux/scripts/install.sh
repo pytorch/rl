@@ -58,5 +58,8 @@ python -c "import functorch"
 printf "* Installing torchrl\n"
 python setup.py develop
 
+conda install -c anaconda mesa-libegl-cos6-x86_64
+
 # smoke test
 python -c "import torchrl"
+
