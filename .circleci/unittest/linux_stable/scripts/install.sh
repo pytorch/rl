@@ -52,6 +52,3 @@ printf "g++ version: "
 gcc --version
 
 python setup.py install
-
-# smoke test
-python -c "import torchrl;from torchrl.data import ReplayBuffer"

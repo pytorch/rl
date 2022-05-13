@@ -19,5 +19,6 @@ export MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210
 export DISPLAY=unix:0.0
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/project/.mujoco/mujoco210/bin
 
+pytest test/smoke_test.py -v --durations 20
 pytest test/smoke_test_deps.py -v --durations 20
 pytest -v --durations 20

@@ -20,5 +20,6 @@ export DISPLAY=unix:0.0
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/project/.mujoco/mujoco210/bin
 #MUJOCO_GL=glfw pytest --cov=torchrl --junitxml=test-results/junit.xml -v --durations 20
 
+pytest test/smoke_test.py -v --durations 20
 pytest test/smoke_test_deps.py -v --durations 20
 pytest -v --durations 20

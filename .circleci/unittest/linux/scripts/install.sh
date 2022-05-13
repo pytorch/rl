@@ -57,6 +57,3 @@ python -c "import functorch"
 
 printf "* Installing torchrl\n"
 python setup.py develop
-
-# smoke test
-python -c "import torchrl;from torchrl.data import ReplayBuffer"
