@@ -3,6 +3,7 @@ channels:
   - defaults
 dependencies:
   - pip
+  - glfw
   - cmake >= 3.18
   - pip:
     - hypothesis

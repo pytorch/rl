@@ -3,6 +3,7 @@ channels:
   - defaults
 dependencies:
   - pip
+  - glfw
   - ninja
   - cmake >= 3.18
   - pip:
