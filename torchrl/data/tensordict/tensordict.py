@@ -225,7 +225,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
             return default
         if default == "_no_default_":
             raise KeyError(
-                f"key {key} not found in {self.__class__.__name__} with "
+                f'key "{key}" not found in {self.__class__.__name__} with '
                 f"keys {sorted(list(self.keys()))}"
             )
         else:
@@ -1647,8 +1647,8 @@ class TensorDict(_TensorDict):
                 self._tensordict[key].copy_(proc_value)
         else:
             raise AttributeError(
-                f"key {key} not found in tensordict, "
-                f"call td.set({key}, value) for populating tensordict with "
+                f'key "{key}" not found in tensordict, '
+                f'call td.set("{key}", value) for populating tensordict with '
                 f"new key-value pair"
             )
         return self
