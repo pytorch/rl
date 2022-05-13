@@ -13,7 +13,6 @@ from typing import Callable, Optional, Sequence, Union, Any, List
 import torch
 from torch import multiprocessing as mp
 
-from torchrl import timeit
 from torchrl.data import TensorDict, TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -270,6 +269,16 @@ class _BatchedEnv(_EnvClass):
                     raise RuntimeError("memmap_() failed")
 
             self.shared_tensordicts = self.shared_tensordict_parent.unbind(0)
+            assert self.shared_tensordict_parent._is_shared
+            assert self.shared_tensordicts[0].keys()
+            assert all(
+                value.is_shared() for value in self.shared_tensordicts[0].values_meta()
+            )
+            assert self.shared_tensordicts[0]._is_shared, (
+                self.shared_tensordicts[0],
+                self.shared_tensordicts[0]["done"].is_shared(),
+                self.shared_tensordicts[0]._is_shared,
+            )
         if self.pin_memory:
             self.shared_tensordict_parent.pin_memory()
 
@@ -351,11 +360,9 @@ class SerialEnv(_BatchedEnv):
     ) -> TensorDict:
         self._assert_tensordict_shape(tensordict)
 
-        with timeit("serial -- select action keys"):
-            self.shared_tensordict_parent.update_(tensordict.select(*self.action_keys))
-        with timeit("serial -- loop"):
-            for i in range(self.num_workers):
-                self._envs[i].step(self.shared_tensordicts[i])
+        self.shared_tensordict_parent.update_(tensordict.select(*self.action_keys))
+        for i in range(self.num_workers):
+            self._envs[i].step(self.shared_tensordicts[i])
 
         return self.shared_tensordict_parent
 
@@ -474,6 +481,8 @@ class ParallelEnv(_BatchedEnv):
         for channel, shared_tensordict in zip(
             self.parent_channels, self.shared_tensordicts
         ):
+            assert shared_tensordict._is_shared
+            assert shared_tensordict.is_shared()
             channel.send(("init", shared_tensordict))
         self.is_closed = False
 
@@ -676,6 +685,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("worker already initialized")
             i = 0
             tensordict = data
+            assert tensordict._is_shared or tensordict._is_memmap, tensordict._is_shared
             if not (tensordict.is_shared() or tensordict.is_memmap()):
                 raise RuntimeError(
                     "tensordict must be placed in shared memory (share_memory_() or memmap_())"
