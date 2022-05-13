@@ -350,13 +350,14 @@ class SerialEnv(_BatchedEnv):
     ) -> TensorDict:
         self._assert_tensordict_shape(tensordict)
 
-        self.shared_tensordict_parent.update_(
-            tensordict.select(*self.shared_tensordict_parent.keys())
-        )
+        tensordict_in = tensordict.select(*self.action_keys)
+        tensordict_out = []
         for i in range(self.num_workers):
-            self._envs[i].step(self.shared_tensordicts[i])
-
-        return self.shared_tensordict_parent
+            _tensordict_out = self._envs[i].step(tensordict_in[i])
+            tensordict_out.append(_tensordict_out)
+        # We must pass a clone of the tensordict, as the values of this tensordict
+        # will be modified in-place at further steps
+        return torch.stack(tensordict_out, 0).clone()
 
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
@@ -520,7 +521,9 @@ class ParallelEnv(_BatchedEnv):
                     )
             # data is the set of updated keys
             keys = keys.union(data)
-        return self.shared_tensordict_parent.select(*keys)
+        # We must pass a clone of the tensordict, as the values of this tensordict
+        # will be modified in-place at further steps
+        return self.shared_tensordict_parent.select(*keys).clone()
 
     @_check_start
     def _shutdown_workers(self) -> None:

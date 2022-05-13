@@ -65,11 +65,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
     _safe = False
     _lazy = False
 
-    def __init__(
-        self,
-        source: Union[Dict[str, COMPATIBLE_TYPES], _TensorDict],
-        batch_size: Optional[Sequence[int]] = None,
-    ):
+    def __init__(self):
         raise NotImplementedError
 
     @property
@@ -135,28 +131,44 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError
 
-    def is_shared(self, no_check=True) -> bool:
+    def is_shared(self, no_check: bool = True) -> bool:
         """Checks if tensordict is in shared memory.
 
         This is always True for CUDA tensordicts, except when stored as
         MemmapTensors.
 
         Args:
-            no_check (bool, optional): checks if all tensors are in shared
-                memory or not
+            no_check (bool, optional): whether to use cached value or not
+                Default is True
 
         """
-        if not no_check:
-            raise RuntimeError(
-                f"no_check=False is not compatible with TensorDict of type"
-                f" {self.__class__.__name__}."
-            )
-        return all([item.is_shared() for key, item in self.items_meta()])
+        if no_check:
+            if self._is_shared is None:
+                if self.keys():
+                    _is_shared = all(value.is_shared() for value in self.values_meta())
+                else:
+                    _is_shared = None
+                self._is_shared = _is_shared
+            return self._is_shared
+        return all(item.is_shared() for item in self.values_meta())
 
-    def is_memmap(self) -> bool:
-        """Checks if tensordict is stored with MemmapTensors."""
+    def is_memmap(self, no_check: bool = True) -> bool:
+        """Checks if tensordict is stored with MemmapTensors.
 
-        return all([item.is_memmap() for key, item in self.items_meta()])
+        Args:
+            no_check (bool, optional): whether to use cached value or not
+                Default is True
+
+        """
+        if no_check:
+            if self._is_memmap is None:
+                if self.keys():
+                    _is_memmap = all(value.is_memmap() for value in self.values_meta())
+                else:
+                    _is_memmap = None
+                self._is_memmap = _is_memmap
+            return self._is_memmap
+        return all(item.is_memmap() for item in self.values_meta())
 
     def numel(self) -> int:
         """Total number of elements in the batch."""
@@ -436,7 +448,7 @@ dtype=torch.float32)},
         input: Union[COMPATIBLE_TYPES, np.ndarray],
         check_device: bool = True,
         check_tensor_shape: bool = True,
-        check_shared: bool = True,
+        check_shared: bool = False,
     ) -> Union[torch.Tensor, MemmapTensor]:
 
         # TODO: move to _TensorDict?
@@ -453,12 +465,16 @@ dtype=torch.float32)},
             tensor = tensor.to(self.device)
 
         if check_shared:
-            if self.is_shared():
-                tensor = tensor.share_memory_()
-            elif self.is_memmap():
-                tensor = MemmapTensor(tensor)
-            elif tensor.is_shared() and len(self):
-                tensor = tensor.clone()
+            raise DeprecationWarning("check_shared is not authorized anymore")
+        # if check_shared:
+        #     if (self.is_shared() and self.device == "cpu"   :
+        #         raise RuntimeError(
+        #             "cannot set a new shared tensor in a "
+        #             "tensordict that is already shared, as "
+        #             "the new key won't be passed across processes"
+        #         )
+        #     elif :
+        #         tensor = MemmapTensor(tensor)
 
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
             raise RuntimeError(
@@ -1314,6 +1330,16 @@ dtype=torch.float32)},
             return False
         return True
 
+    @property
+    def is_locked(self):
+        if not hasattr(self, "_is_locked"):
+            self._is_locked = False
+        return self._is_locked
+
+    @is_locked.setter
+    def is_locked(self, value: bool):
+        self._is_locked = value
+
 
 class TensorDict(_TensorDict):
     """A batched dictionary of tensors.
@@ -1411,6 +1437,10 @@ class TensorDict(_TensorDict):
     ) -> object:
         self._tensordict: Dict = dict()
         self._tensordict_meta: OrderedDict = OrderedDict()
+
+        self._is_shared = None
+        self._is_memmap = None
+
         if not isinstance(source, (_TensorDict, dict)):
             raise ValueError(
                 "A TensorDict source is expected to be a _TensorDict "
@@ -1471,15 +1501,6 @@ class TensorDict(_TensorDict):
             f"Setting batch dims on {self.__class__.__name__} instances is "
             f"not allowed."
         )
-
-    def is_shared(self, no_check: bool = False) -> bool:
-        if no_check:
-            for key, item in self.items_meta():
-                return item.is_shared()
-        return self._check_is_shared()
-
-    def is_memmap(self) -> bool:
-        return self._check_is_memmap()
 
     @property
     def device(self) -> torch.device:
@@ -1587,23 +1608,31 @@ class TensorDict(_TensorDict):
         """Sets a value in the TensorDict. If inplace=True (default is False),
         and if the key already exists, set will call set_ (in place setting).
         """
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
         if key in self._tensordict and value is self._tensordict[key]:
             return self
 
+        if key in self._tensordict and inplace:
+            return self.set_(key, value)
         proc_value = self._process_tensor(
             value,
             check_tensor_shape=_run_checks,
-            check_shared=_run_checks,
+            check_shared=False,
             check_device=_run_checks,
         )  # check_tensor_shape=_run_checks
-        if key in self._tensordict and inplace:
-            return self.set_(key, proc_value)
         self._tensordict[key] = proc_value
         self._tensordict_meta[key] = (
-            MetaTensor(proc_value) if _meta_val is None else _meta_val
+            MetaTensor(
+                proc_value,
+                _is_memmap=self.is_memmap(),
+                _is_shared=self.is_shared(),
+            )
+            if _meta_val is None
+            else _meta_val
         )
         return self
 
@@ -1629,6 +1658,8 @@ class TensorDict(_TensorDict):
         return self
 
     def set_(self, key: str, value: COMPATIBLE_TYPES) -> _TensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
@@ -1656,6 +1687,8 @@ class TensorDict(_TensorDict):
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> _TensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
@@ -1715,6 +1748,7 @@ class TensorDict(_TensorDict):
             value.share_memory_()
         for key, value in self.items_meta():
             value.share_memory_()
+        self._is_shared = True
         return self
 
     def detach_(self) -> _TensorDict:
@@ -1723,7 +1757,7 @@ class TensorDict(_TensorDict):
         return self
 
     def memmap_(self) -> _TensorDict:
-        if self.is_memmap():
+        if self.is_shared():
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
@@ -1736,6 +1770,7 @@ class TensorDict(_TensorDict):
             self._tensordict[key] = MemmapTensor(value)
         for key, value in self.items_meta():
             value.memmap_()
+        self._is_memmap = True
         return self
 
     def to(self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs) -> _TensorDict:
@@ -2095,6 +2130,9 @@ torch.Size([3, 2])
         idx: INDEX_TYPING,
         batch_size: Optional[Sequence[int]] = None,
     ):
+        self._is_shared = None
+        self._is_memmap = None
+
         if not isinstance(source, _TensorDict):
             raise TypeError(
                 f"Expected source to be a subclass of _TensorDict, "
@@ -2132,6 +2170,8 @@ torch.Size([3, 2])
         inplace: bool = False,
         _run_checks: bool = True,
     ) -> _TensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         if inplace and key in self.keys():
             return self.set_(key, tensor)
 
@@ -2159,6 +2199,8 @@ torch.Size([3, 2])
         return self._source.keys()
 
     def set_(self, key: str, tensor: COMPATIBLE_TYPES) -> SubTensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         if key not in self.keys():
             raise KeyError(f"key {key} not found in {self.keys()}")
         if tensor.shape[: self.batch_dims] != self.batch_size:
@@ -2213,6 +2255,8 @@ torch.Size([3, 2])
         idx: INDEX_TYPING,
         discard_idx_attr: bool = False,
     ) -> SubTensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         if not isinstance(idx, tuple):
             idx = (idx,)
         if discard_idx_attr:
@@ -2315,8 +2359,8 @@ torch.Size([3, 2])
     def is_shared(self, no_check: bool = True) -> bool:
         return self._source.is_shared(no_check=no_check)
 
-    def is_memmap(self) -> bool:
-        return self._source.is_memmap()
+    def is_memmap(self, no_check: bool = True) -> bool:
+        return self._source.is_memmap(no_check=no_check)
 
     def rename_key(
         self, old_key: str, new_key: str, safe: bool = False
@@ -2401,6 +2445,10 @@ class LazyStackedTensorDict(_TensorDict):
         stack_dim: int = 0,
         batch_size: Optional[Sequence[int]] = None,  # TODO: remove
     ):
+
+        self._is_shared = None
+        self._is_memmap = None
+
         # sanity check
         N = len(tensordicts)
         if not isinstance(tensordicts[0], _TensorDict):
@@ -2462,7 +2510,7 @@ class LazyStackedTensorDict(_TensorDict):
     def batch_size(self, new_size: torch.Size):
         return self._batch_size_setter(new_size)
 
-    def is_shared(self, no_check: bool = False) -> bool:
+    def is_shared(self, no_check: bool = True) -> bool:
         are_shared = [td.is_shared(no_check=no_check) for td in self.tensordicts]
         if any(are_shared) and not all(are_shared):
             raise RuntimeError(
@@ -2472,7 +2520,7 @@ class LazyStackedTensorDict(_TensorDict):
             )
         return all(are_shared)
 
-    def is_memmap(self, no_check: bool = False) -> bool:
+    def is_memmap(self, no_check: bool = True) -> bool:
         are_memmap = [td.is_memmap() for td in self.tensordicts]
         if any(are_memmap) and not all(are_memmap):
             raise RuntimeError(
@@ -2481,9 +2529,6 @@ class LazyStackedTensorDict(_TensorDict):
                 f"{len(are_memmap) - sum(are_memmap)} non memmap tensordict "
             )
         return all(are_memmap)
-
-    # def is_memmap(self) -> bool:
-    #     return all(td.is_memmap() for td in self.tensordicts)
 
     def get_valid_keys(self) -> Set[str]:
         self._update_valid_keys()
@@ -2507,6 +2552,8 @@ class LazyStackedTensorDict(_TensorDict):
         return torch.Size(s)
 
     def set(self, key: str, tensor: COMPATIBLE_TYPES, **kwargs) -> _TensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes "
@@ -2522,6 +2569,8 @@ class LazyStackedTensorDict(_TensorDict):
         return self
 
     def set_(self, key: str, tensor: COMPATIBLE_TYPES) -> _TensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes "
@@ -2535,7 +2584,10 @@ class LazyStackedTensorDict(_TensorDict):
                 "their register."
             )
         tensor = self._process_tensor(
-            tensor, check_device=False, check_tensor_shape=False
+            tensor,
+            check_device=False,
+            check_tensor_shape=False,
+            check_shared=False,
         )
         tensor = tensor.unbind(self.stack_dim)
         for td, _item in zip(self.tensordicts, tensor):
@@ -2545,6 +2597,8 @@ class LazyStackedTensorDict(_TensorDict):
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> _TensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         sub_td = self[idx]
         sub_td.set_(key, value)
         return self
@@ -2719,6 +2773,7 @@ class LazyStackedTensorDict(_TensorDict):
     def share_memory_(self) -> _TensorDict:
         for td in self.tensordicts:
             td.share_memory_()
+        self._is_shared = True
         return self
 
     def detach_(self) -> _TensorDict:
@@ -2729,6 +2784,7 @@ class LazyStackedTensorDict(_TensorDict):
     def memmap_(self) -> _TensorDict:
         for td in self.tensordicts:
             td.memmap_()
+        self._is_memmap = True
         return self
 
     def expand(self, *shape: int, inplace: bool = False) -> _TensorDict:
@@ -2805,6 +2861,7 @@ class SavedTensorDict(_TensorDict):
         device: Optional[torch.device] = None,
         batch_size: Optional[Sequence[int]] = None,
     ):
+
         if not isinstance(source, _TensorDict):
             raise TypeError(
                 f"Expected source to be a _TensorDict instance, but got {type(source)} instead."
@@ -2867,6 +2924,8 @@ class SavedTensorDict(_TensorDict):
         return td.get(key, default=default)
 
     def set(self, key: str, value: COMPATIBLE_TYPES, **kwargs) -> _TensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         td = self._load()
         td.set(key, value, **kwargs)
         self._save(td)
@@ -2881,12 +2940,16 @@ class SavedTensorDict(_TensorDict):
         return td.to(SavedTensorDict)
 
     def set_(self, key: str, value: COMPATIBLE_TYPES) -> _TensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         self.set(key, value)
         return self
 
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> _TensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         td = self._load()
         td.set_at_(key, value, idx)
         self._save(td)
@@ -3068,7 +3131,6 @@ class SavedTensorDict(_TensorDict):
 
 
 class _CustomOpTensorDict(_TensorDict):
-
     _lazy = True
 
     def __init__(
@@ -3081,6 +3143,9 @@ class _CustomOpTensorDict(_TensorDict):
         batch_size: Optional[Sequence[int]] = None,
     ):
         """Encodes lazy operations on tensors contained in a TensorDict."""
+
+        self._is_shared = None
+        self._is_memmap = None
 
         if not isinstance(source, _TensorDict):
             raise TypeError(
@@ -3182,6 +3247,8 @@ class _CustomOpTensorDict(_TensorDict):
                 f"{self.__class__.__name__} does not support setting values. "
                 f"Consider calling .contiguous() before calling this method."
             )
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         proc_value = self._process_tensor(
             value, check_device=False, check_tensor_shape=False
         )
@@ -3189,9 +3256,11 @@ class _CustomOpTensorDict(_TensorDict):
             source_meta_tensor = self._source._get_meta(key)
         else:
             source_meta_tensor = MetaTensor(
-                *proc_value.shape,
+                proc_value,
                 device=proc_value.device,
                 dtype=proc_value.dtype,
+                _is_memmap=self.is_memmap(),
+                _is_shared=self.is_shared(),
             )
         proc_value = getattr(proc_value, self.inv_op)(
             **self._update_inv_op_kwargs(source_meta_tensor)
@@ -3200,6 +3269,8 @@ class _CustomOpTensorDict(_TensorDict):
         return self
 
     def set_(self, key: str, value: COMPATIBLE_TYPES) -> _CustomOpTensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         if self.inv_op is None:
             raise Exception(
                 f"{self.__class__.__name__} does not support setting values. "
@@ -3213,6 +3284,8 @@ class _CustomOpTensorDict(_TensorDict):
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> _CustomOpTensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
         transformed_tensor, original_tensor = self.get(
             key, _return_original_tensor=True
         )
@@ -3324,9 +3397,11 @@ class _CustomOpTensorDict(_TensorDict):
 
     def memmap_(self):
         self._source.memmap_()
+        self._is_memmap = True
 
     def share_memory_(self):
         self._source.share_memory_()
+        self._is_shared = True
 
 
 class UnsqueezedTensorDict(_CustomOpTensorDict):

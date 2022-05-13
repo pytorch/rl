@@ -165,7 +165,9 @@ class _EnvClass:
                 f"but got {tensordict.get('action').dtype}"
             )
 
+        tensordict.is_locked = True  # make sure _step does not modify the tensordict
         tensordict_out = self._step(tensordict)
+        tensordict.is_locked = False
 
         if tensordict_out is tensordict:
             raise RuntimeError(
@@ -342,7 +344,7 @@ class _EnvClass:
 
         """
         if tensordict is None:
-            tensordict = self.current_tensordict
+            tensordict = self.current_tensordict.clone()
         action = self.action_spec.rand(self.batch_size)
         tensordict.set("action", action)
         return self.step(tensordict)
