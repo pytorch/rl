@@ -365,7 +365,8 @@ class ConvNet(nn.Sequential):
 
         depth = _find_depth(depth, num_cells, kernel_sizes, strides)
         self.depth = depth
-        assert depth > 0, "Null depth is not permitted with ConvNet."
+        if depth == 0:
+            raise ValueError("Null depth is not permitted with ConvNet.")
 
         for _field, _value in zip(
             ["num_cells", "kernel_sizes", "strides"],

@@ -269,16 +269,6 @@ class _BatchedEnv(_EnvClass):
                     raise RuntimeError("memmap_() failed")
 
             self.shared_tensordicts = self.shared_tensordict_parent.unbind(0)
-            assert self.shared_tensordict_parent._is_shared
-            assert self.shared_tensordicts[0].keys()
-            assert all(
-                value.is_shared() for value in self.shared_tensordicts[0].values_meta()
-            )
-            assert self.shared_tensordicts[0]._is_shared, (
-                self.shared_tensordicts[0],
-                self.shared_tensordicts[0]["done"].is_shared(),
-                self.shared_tensordicts[0]._is_shared,
-            )
         if self.pin_memory:
             self.shared_tensordict_parent.pin_memory()
 
@@ -365,7 +355,9 @@ class SerialEnv(_BatchedEnv):
         for i in range(self.num_workers):
             _tensordict_out = self._envs[i].step(tensordict_in[i])
             tensordict_out.append(_tensordict_out)
-        return torch.stack(tensordict_out, 0)
+        # We must pass a clone of the tensordict, as the values of this tensordict
+        # will be modified in-place at further steps
+        return torch.stack(tensordict_out, 0).clone()
 
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
@@ -482,8 +474,6 @@ class ParallelEnv(_BatchedEnv):
         for channel, shared_tensordict in zip(
             self.parent_channels, self.shared_tensordicts
         ):
-            assert shared_tensordict._is_shared
-            assert shared_tensordict.is_shared()
             channel.send(("init", shared_tensordict))
         self.is_closed = False
 
@@ -531,7 +521,9 @@ class ParallelEnv(_BatchedEnv):
                     )
             # data is the set of updated keys
             keys = keys.union(data)
-        return self.shared_tensordict_parent.select(*keys)
+        # We must pass a clone of the tensordict, as the values of this tensordict
+        # will be modified in-place at further steps
+        return self.shared_tensordict_parent.select(*keys).clone()
 
     @_check_start
     def _shutdown_workers(self) -> None:
@@ -686,7 +678,6 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("worker already initialized")
             i = 0
             tensordict = data
-            assert tensordict._is_shared or tensordict._is_memmap, tensordict._is_shared
             if not (tensordict.is_shared() or tensordict.is_memmap()):
                 raise RuntimeError(
                     "tensordict must be placed in shared memory (share_memory_() or memmap_())"
