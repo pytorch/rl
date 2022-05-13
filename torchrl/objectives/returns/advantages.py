@@ -23,6 +23,7 @@ from torchrl.modules import TDModule
 from torchrl.objectives.returns.functional import (
     generalized_advantage_estimate,
     td_lambda_advantage_estimate,
+    vec_td_lambda_advantage_estimate,
 )
 from .functional import td_advantage_estimate
 
@@ -136,6 +137,8 @@ class TDLambdaEstimate:
             the computation of the value function. Default is `False`.
         value_key (str, optional): key pointing to the state value. Default is
             `"state_value"`.
+        vectorized (bool, optional): whether to use the vectorized version of the
+            lambda return. Default is `True`.
     """
 
     def __init__(
@@ -146,11 +149,13 @@ class TDLambdaEstimate:
         average_rewards: bool = False,
         gradient_mode: bool = False,
         value_key: str = "state_value",
+        vectorized: bool = True,
     ):
         self.gamma = gamma
         self.lamda = lamda
         self.value_network = value_network
         self.is_functional = value_network.is_functional
+        self.vectorized = vectorized
 
         self.average_rewards = average_rewards
         self.gradient_mode = gradient_mode
@@ -215,9 +220,15 @@ class TDLambdaEstimate:
 
         done = tensordict.get("done")
         with torch.set_grad_enabled(self.gradient_mode):
-            adv = td_lambda_advantage_estimate(
-                gamma, lamda, value, next_value, reward, done
-            )
+            if self.vectorized:
+                adv = vec_td_lambda_advantage_estimate(
+                    gamma, lamda, value, next_value, reward, done
+                )
+            else:
+                adv = td_lambda_advantage_estimate(
+                    gamma, lamda, value, next_value, reward, done
+                )
+
             tensordict.set("advantage", adv.detach())
             if self.gradient_mode:
                 tensordict.set("value_error", adv)

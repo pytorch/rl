@@ -140,20 +140,42 @@ def td_lambda_advantage_estimate(
     return advantage
 
 
-def _custom_conv1d(val, w):
+def _custom_conv1d(tensor, filter):
+    """Computes a conv1d filter over a value.
+    This is usually used to compute a discounted return:
+
+    Tensor:                         Filter                      Result (discounted return)
+    [ r_0,                          [ 1.0,                      [ r_0 + g r_1 + g^2 r_2 + r^3 r_3,
+      r_1,                            g,                          r_1 + g r_2 + g^2 r_3,
+      r_2,                            g^2,                        r_2 + g r_3,
+      r_3,                            g^3 ]                       r_3 ]
+      0,      |                        |
+      0,      |  zero padding          | direction of filter
+      0 ]     |                        v
+
+    This function takes care of applying the one-sided zero padding. In this example,
+    `Filter_dim` = `Time` = 4, but in practice Filter_dim can be <= to `Time`.
+
+    Args:
+        tensor (torch.Tensor): a [ Batch x 1 x Time ] floating-point tensor
+        filter (torch.Tensor): a [ Filter_dim x 1 ] floating-point filter
+
+    Returns: a filtered tensor of the same shape as the input tensor.
+
+    """
     val_pad = torch.cat(
         [
-            val,
-            torch.zeros(val.shape[0], 1, w.shape[-2] - 1, device=val.device),
+            tensor,
+            torch.zeros(tensor.shape[0], 1, filter.shape[-2] - 1, device=tensor.device),
         ],
         -1,
     )
 
     # shape = val.shape
-    w = w.squeeze(-1).unsqueeze(0).unsqueeze(0)  # 1 x 1 x T
-    out = torch.conv1d(val_pad, w)
+    filter = filter.squeeze(-1).unsqueeze(0).unsqueeze(0)  # 1 x 1 x T
+    out = torch.conv1d(val_pad, filter)
     # out = out.view(shape)
-    if not out.shape == val.shape:
+    if not out.shape == tensor.shape:
         raise RuntimeError("wrong output shape")
     return out
 
