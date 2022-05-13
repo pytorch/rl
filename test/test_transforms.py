@@ -12,7 +12,7 @@ from torch import Tensor
 from torch import multiprocessing as mp
 from torchrl.data import NdBoundedTensorSpec, CompositeSpec
 from torchrl.data import TensorDict
-from torchrl.envs import EnvCreator
+from torchrl.envs import EnvCreator, SerialEnv
 from torchrl.envs import GymEnv, ParallelEnv
 from torchrl.envs import (
     Resize,
@@ -278,14 +278,16 @@ def test_parallelenv_vecnorm():
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
-@pytest.mark.parametrize("parallel", [False, True])
+@pytest.mark.parametrize("parallel", [None, False, True])
 def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     torch.manual_seed(0)
 
-    if parallel:
+    if parallel is None:
+        env = GymEnv("Pendulum-v1")
+    elif parallel:
         env = ParallelEnv(num_workers=5, create_env_fn=lambda: GymEnv("Pendulum-v1"))
     else:
-        env = GymEnv("Pendulum-v1")
+        env = SerialEnv(num_workers=5, create_env_fn=lambda: GymEnv("Pendulum-v1"))
 
     env.set_seed(0)
     t = VecNorm()

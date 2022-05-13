@@ -360,11 +360,12 @@ class SerialEnv(_BatchedEnv):
     ) -> TensorDict:
         self._assert_tensordict_shape(tensordict)
 
-        self.shared_tensordict_parent.update_(tensordict.select(*self.action_keys))
+        tensordict_in = tensordict.select(*self.action_keys)
+        tensordict_out = []
         for i in range(self.num_workers):
-            self._envs[i].step(self.shared_tensordicts[i])
-
-        return self.shared_tensordict_parent
+            _tensordict_out = self._envs[i].step(tensordict_in[i])
+            tensordict_out.append(_tensordict_out)
+        return torch.stack(tensordict_out, 0)
 
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
