@@ -51,7 +51,6 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 conda env update --file "${this_dir}/environment.yml" --prune
 
-conda install -c menpo osmesa
 conda install -c conda-forge mesalib
 
 #yum makecache
