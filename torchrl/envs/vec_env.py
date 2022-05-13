@@ -13,6 +13,7 @@ from typing import Callable, Optional, Sequence, Union, Any, List
 import torch
 from torch import multiprocessing as mp
 
+from torchrl import timeit
 from torchrl.data import TensorDict, TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -350,11 +351,11 @@ class SerialEnv(_BatchedEnv):
     ) -> TensorDict:
         self._assert_tensordict_shape(tensordict)
 
-        self.shared_tensordict_parent.update_(
-            tensordict.select(*self.shared_tensordict_parent.keys())
-        )
-        for i in range(self.num_workers):
-            self._envs[i].step(self.shared_tensordicts[i])
+        with timeit("serial -- select action keys"):
+            self.shared_tensordict_parent.update_(tensordict.select(*self.action_keys))
+        with timeit("serial -- loop"):
+            for i in range(self.num_workers):
+                self._envs[i].step(self.shared_tensordicts[i])
 
         return self.shared_tensordict_parent
 

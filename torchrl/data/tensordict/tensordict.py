@@ -35,6 +35,7 @@ from warnings import warn
 import numpy as np
 import torch
 
+from torchrl import timeit
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.metatensor import MetaTensor
 from torchrl.data.tensordict.utils import _getitem_batch_size, _sub_index
@@ -295,6 +296,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
             td.set(key, item_trsf)
         return td
 
+    @timeit("update")
     def update(
         self,
         input_dict_or_td: Union[Dict[str, COMPATIBLE_TYPES], _TensorDict],
@@ -334,6 +336,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
             self.set(key, value, inplace=inplace, **kwargs)
         return self
 
+    @timeit("update_")
     def update_(
         self,
         input_dict_or_td: Union[Dict[str, COMPATIBLE_TYPES], _TensorDict],
@@ -431,6 +434,7 @@ dtype=torch.float32)},
     ) -> Union[torch.Tensor, MemmapTensor]:
         return torch.tensor(array, device=self.device)
 
+    @timeit("_process_tensor")
     def _process_tensor(
         self,
         input: Union[COMPATIBLE_TYPES, np.ndarray],
@@ -1576,6 +1580,7 @@ class TensorDict(_TensorDict):
         d = {key: value.expand(*shape, *value.shape) for key, value in self.items()}
         return TensorDict(source=d, batch_size=_batch_size)
 
+    @timeit("set")
     def set(
         self,
         key: str,
