@@ -278,7 +278,7 @@ def test_parallelenv_vecnorm():
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
-@pytest.mark.parametrize("parallel", [None, False, True])
+@pytest.mark.parametrize("parallel", [True, None, False, ])
 def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     torch.manual_seed(0)
 

@@ -342,7 +342,7 @@ class _EnvClass:
 
         """
         if tensordict is None:
-            tensordict = self.current_tensordict
+            tensordict = self.current_tensordict.clone()
         action = self.action_spec.rand(self.batch_size)
         tensordict.set("action", action)
         return self.step(tensordict)
