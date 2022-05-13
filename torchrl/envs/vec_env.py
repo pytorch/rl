@@ -97,6 +97,8 @@ class _BatchedEnv(_EnvClass):
             default = False;
         shared_memory (bool): whether or not the returned tensordict will be placed in shared memory;
         memmap (bool): whether or not the returned tensordict will be placed in memory map.
+        policy_proof (callable, optional): if provided, it'll be used to get the list of
+            tensors to return through the `step()` and `reset()` methods, such as `"hidden"` etc.
 
     """
 
@@ -118,6 +120,7 @@ class _BatchedEnv(_EnvClass):
         share_individual_td: bool = False,
         shared_memory: bool = True,
         memmap: bool = False,
+        policy_proof: Optional[Callable] = None,
     ):
         super().__init__(device=device)
         self.is_closed = True
@@ -146,6 +149,7 @@ class _BatchedEnv(_EnvClass):
             else:
                 raise err
 
+        self.policy_proof = policy_proof
         self._dummy_env = self._dummy_env_fun()
         self.num_workers = num_workers
         self.create_env_fn = create_env_fn
@@ -208,7 +212,7 @@ class _BatchedEnv(_EnvClass):
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
         shared_tensordict_parent = make_tensordict(
             self._dummy_env,
-            None,
+            self.policy_proof,
         )
 
         shared_tensordict_parent = shared_tensordict_parent.expand(
@@ -219,25 +223,27 @@ class _BatchedEnv(_EnvClass):
         if self.selected_keys is None:
             self.selected_keys = list(shared_tensordict_parent.keys())
             if self.excluded_keys is not None:
-                self.selected_keys = set(self.selected_keys) - set(self.excluded_keys)
+                self.selected_keys = set(self.selected_keys).difference(
+                    self.excluded_keys
+                )
             else:
                 raise_no_selected_keys = True
-            if self.action_keys is not None:
-                if not all(
-                    action_key in self.selected_keys for action_key in self.action_keys
-                ):
-                    raise KeyError(
-                        "One of the action keys is not part of the selected keys or is part of the excluded keys. Action "
-                        "keys need to be part of the selected keys for env.step() to be called."
-                    )
-            else:
-                self.action_keys = [
-                    key for key in self.selected_keys if key.startswith("action")
-                ]
-                if not len(self.action_keys):
-                    raise RuntimeError(
-                        f"found 0 action keys in {sorted(list(self.selected_keys))}"
-                    )
+        if self.action_keys is not None:
+            if not all(
+                action_key in self.selected_keys for action_key in self.action_keys
+            ):
+                raise KeyError(
+                    "One of the action keys is not part of the selected keys or is part of the excluded keys. Action "
+                    "keys need to be part of the selected keys for env.step() to be called."
+                )
+        else:
+            self.action_keys = [
+                key for key in self.selected_keys if key.startswith("action")
+            ]
+            if not len(self.action_keys):
+                raise RuntimeError(
+                    f"found 0 action keys in {sorted(list(self.selected_keys))}"
+                )
         shared_tensordict_parent = shared_tensordict_parent.select(*self.selected_keys)
         self.shared_tensordict_parent = shared_tensordict_parent.to(self.device)
 
@@ -344,7 +350,9 @@ class SerialEnv(_BatchedEnv):
     ) -> TensorDict:
         self._assert_tensordict_shape(tensordict)
 
-        self.shared_tensordict_parent.update_(tensordict)
+        self.shared_tensordict_parent.update_(
+            tensordict.select(*self.shared_tensordict_parent.keys())
+        )
         for i in range(self.num_workers):
             self._envs[i].step(self.shared_tensordicts[i])
 
