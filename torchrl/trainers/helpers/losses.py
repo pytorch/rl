@@ -53,10 +53,11 @@ def make_target_updater(
         # assert len(target_net_updater.net_pairs) == 3, "length of target_net_updater nets should be 3"
         target_net_updater.init_()
     else:
-        assert not args.hard_update, (
-            "hard/soft-update are supposed to be used with double SAC loss. "
-            "Consider using --loss=double or discarding the hard_update flag."
-        )
+        if args.hard_update:
+            raise RuntimeError(
+                "hard/soft-update are supposed to be used with double SAC loss. "
+                "Consider using --loss=double or discarding the hard_update flag."
+            )
         target_net_updater = None
     return target_net_updater
 
