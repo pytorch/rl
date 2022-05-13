@@ -54,4 +54,4 @@ gcc --version
 python setup.py install
 
 # smoke test
-python -c "import torchrl;from tochrl.data import ReplayBuffer"
+python -c "import torchrl;from torchrl.data import ReplayBuffer"
