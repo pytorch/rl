@@ -6,7 +6,7 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 #if [[ $OSTYPE == 'darwin'* ]]; then
-PRIVATE_MUJOCO_GL=osmesa
+#PRIVATE_MUJOCO_GL=osmesa
 #else
 #  PRIVATE_MUJOCO_GL=glfw
 #fi
@@ -20,5 +20,5 @@ export DISPLAY=unix:0.0
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/project/.mujoco/mujoco210/bin
 #MUJOCO_GL=glfw pytest --cov=torchrl --junitxml=test-results/junit.xml -v --durations 20
 
-MUJOCO_GL=$PRIVATE_MUJOCO_GL pytest test/smoke_test_deps.py -v --durations 20
-MUJOCO_GL=$PRIVATE_MUJOCO_GL pytest -v --durations 20
+pytest test/smoke_test_deps.py -v --durations 20
+pytest -v --durations 20

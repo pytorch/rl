@@ -53,7 +53,5 @@ gcc --version
 
 python setup.py install
 
-conda install -c anaconda mesa-libegl-cos6-x86_64
-
 # smoke test
-python -c "import torchrl"
+python -c "import torchrl;from tochrl.data import ReplayBuffer"
