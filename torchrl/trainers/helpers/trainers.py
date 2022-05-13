@@ -9,6 +9,7 @@ from typing import Optional, Union
 from warnings import warn
 
 from torch import optim
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
@@ -122,7 +123,9 @@ def make_trainer(
         weight_decay=args.weight_decay,
         **optimizer_kwargs,
     )
-    optim_scheduler = None
+    optim_scheduler = CosineAnnealingLR(
+        optimizer,
+        T_max=int(args.total_frames / args.frames_per_batch * args.optim_steps_per_batch))
 
     print(
         f"collector = {collector}; \n"
@@ -189,6 +192,11 @@ def make_trainer(
         trainer.register_op(
             "post_steps", policy_exploration.step, frames=args.frames_per_batch
         )
+
+    trainer.register_op(
+        "post_steps_log",
+        lambda *args: ("lr", optimizer.param_groups[0]["lr"])
+    )
 
     if recorder is not None:
         trainer.register_op(
