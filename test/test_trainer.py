@@ -217,7 +217,8 @@ def test_recorder():
         args.from_pixels = False
         args.vecnorm = False
         args.norm_rewards = False
-        args.reward_scaling = False
+        args.reward_scaling = 1.0
+        args.reward_loc = 0.0
         args.noops = 0
         args.record_frames = 24 // args.frame_skip
         args.record_interval = 2
