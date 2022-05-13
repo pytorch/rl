@@ -444,25 +444,30 @@ dtype=torch.float32)},
     ) -> Union[torch.Tensor, MemmapTensor]:
 
         # TODO: move to _TensorDict?
-        if not isinstance(input, _accepted_classes):
-            tensor = self._convert_to_tensor(input)
-        else:
-            tensor = input
+        with timeit("_process_tensor: convert"):
+            if not isinstance(input, _accepted_classes):
+                tensor = self._convert_to_tensor(input)
+            else:
+                tensor = input
 
-        if (
-            check_device
-            and (self.device is not None)
-            and (tensor.device is not self.device)
-        ):
-            tensor = tensor.to(self.device)
+        with timeit("_process_tensor: device"):
+            if (
+                check_device
+                and (self.device is not None)
+                and (tensor.device is not self.device)
+            ):
+                tensor = tensor.to(self.device)
 
-        if check_shared:
-            if self.is_shared():
-                tensor = tensor.share_memory_()
-            elif self.is_memmap():
-                tensor = MemmapTensor(tensor)
-            elif tensor.is_shared() and len(self):
-                tensor = tensor.clone()
+        with timeit("_process_tensor: shared"):
+            if check_shared:
+                if self.is_shared():
+                    raise RuntimeError("cannot set a new shared tensor in a tensordict that is already shared, as the new key won't be passed across processes")
+                    # with timeit("_process_tensor: sharing"):
+                    #     tensor = tensor.share_memory_()
+                elif self.is_memmap():
+                    tensor = MemmapTensor(tensor)
+                elif tensor.is_shared() and len(self):
+                    tensor = tensor.clone()
 
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
             raise RuntimeError(
@@ -471,9 +476,10 @@ dtype=torch.float32)},
                 f"={tensor.shape[: self.batch_dims]}"
             )
 
-        # minimum ndimension is 1
-        if tensor.ndimension() - self.ndimension() == 0:
-            tensor = tensor.unsqueeze(-1)
+        with timeit("_process_tensor: squeeze"):
+            # minimum ndimension is 1
+            if tensor.ndimension() - self.ndimension() == 0:
+                tensor = tensor.unsqueeze(-1)
 
         return tensor
 
@@ -1598,18 +1604,21 @@ class TensorDict(_TensorDict):
         if key in self._tensordict and value is self._tensordict[key]:
             return self
 
-        proc_value = self._process_tensor(
-            value,
-            check_tensor_shape=_run_checks,
-            check_shared=_run_checks,
-            check_device=_run_checks,
-        )  # check_tensor_shape=_run_checks
         if key in self._tensordict and inplace:
-            return self.set_(key, proc_value)
+            with timeit("set - set_"):
+                return self.set_(key, value)
+        with timeit("set - _process_tensor"):
+            proc_value = self._process_tensor(
+                value,
+                check_tensor_shape=_run_checks,
+                check_shared=_run_checks,
+                check_device=_run_checks,
+            )  # check_tensor_shape=_run_checks
         self._tensordict[key] = proc_value
-        self._tensordict_meta[key] = (
-            MetaTensor(proc_value) if _meta_val is None else _meta_val
-        )
+        with timeit("set - MetaTensor"):
+            self._tensordict_meta[key] = (
+                MetaTensor(proc_value) if _meta_val is None else _meta_val
+            )
         return self
 
     def del_(self, key: str) -> _TensorDict:

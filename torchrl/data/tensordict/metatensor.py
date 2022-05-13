@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import functools
+import math
 from numbers import Number
 from typing import Callable, List, Optional, Sequence, Tuple, Union
 
@@ -15,6 +16,7 @@ import torch
 from torchrl.data.utils import DEVICE_TYPING, INDEX_TYPING
 from .memmap import MemmapTensor
 from .utils import _getitem_batch_size
+from ... import timeit
 
 META_HANDLED_FUNCTIONS = dict()
 
@@ -72,39 +74,43 @@ class MetaTensor:
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
             shape = tensor.shape
-            try:
-                _is_shared = (
-                    tensor.is_shared()
-                    if tensor.device != torch.device("meta")
-                    else _is_shared
+            tensor_device = tensor.device
+            with timeit("meta - is_shared"):
+                try:
+                    _is_shared = (
+                        tensor.is_shared()
+                        if tensor.device != torch.device("meta")
+                        else _is_shared
+                    )
+                except:  # noqa
+                    _is_shared = False
+            with timeit("meta - _is_memmap"):
+                _is_memmap = (
+                    isinstance(tensor, MemmapTensor)
+                        if tensor_device != torch.device("meta")
+                    else _is_memmap
                 )
-            except:  # noqa
-                _is_shared = False
-            _is_memmap = (
-                isinstance(tensor, MemmapTensor)
-                if tensor.device != torch.device("meta")
-                else _is_memmap
-            )
-            device = tensor.device if tensor.device != torch.device("meta") else device
-            dtype = tensor.dtype
+            with timeit("meta - device"):
+                device = tensor.device if tensor_device != torch.device("meta") else device
+            with timeit("meta - dtype"):
+                dtype = tensor.dtype
         if not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
-        self.shape = shape
-        self.device = (
-            torch.device(device) if not isinstance(device, torch.device) else device
-        )
-        self.dtype = dtype
-        self._ndim = len(shape)
-        self._numel = np.prod(shape)
-        self._is_shared = _is_shared
-        self._is_memmap = _is_memmap
-        if _is_memmap:
-            name = "MemmapTensor"
-        elif _is_shared:
-            name = "SharedTensor"
-        else:
-            name = "Tensor"
-        self.class_name = name
+        with timeit("meta - other"):
+            self.shape = shape
+            self.device = torch.device(device)
+            self.dtype = dtype
+            self._ndim = len(shape)
+            self._numel = math.prod(shape)
+            self._is_shared = _is_shared
+            self._is_memmap = _is_memmap
+            if _is_memmap:
+                name = "MemmapTensor"
+            elif _is_shared:
+                name = "SharedTensor"
+            else:
+                name = "Tensor"
+            self.class_name = name
 
     def memmap_(self) -> MetaTensor:
         """Changes the storage of the MetaTensor to memmap.
