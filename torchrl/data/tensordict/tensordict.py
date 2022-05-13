@@ -136,8 +136,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError
 
-    @timeit("td.is_shared")
-    def is_shared(self, no_check=True) -> bool:
+    def is_shared(self, no_check=False) -> bool:
         """Checks if tensordict is in shared memory.
 
         This is always True for CUDA tensordicts, except when stored as
@@ -148,17 +147,16 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
                 memory or not
 
         """
-        if not no_check:
-            raise RuntimeError(
-                f"no_check=False is not compatible with TensorDict of type"
-                f" {self.__class__.__name__}."
-            )
+        if no_check:
+            for value in self.values_meta():
+                return value.is_shared()
         return all([item.is_shared() for key, item in self.items_meta()])
 
-    @timeit("td.is_memmap")
-    def is_memmap(self) -> bool:
+    def is_memmap(self, no_check=False) -> bool:
         """Checks if tensordict is stored with MemmapTensors."""
-
+        if no_check:
+            for value in self.values_meta():
+                return value.is_memmap()
         return all([item.is_memmap() for key, item in self.items_meta()])
 
     def numel(self) -> int:
@@ -1484,13 +1482,18 @@ class TensorDict(_TensorDict):
             f"not allowed."
         )
 
+    @timeit("td.is_shared")
     def is_shared(self, no_check: bool = False) -> bool:
         if no_check:
             for key, item in self.items_meta():
                 return item.is_shared()
         return self._check_is_shared()
 
-    def is_memmap(self) -> bool:
+    @timeit("td.is_memmap")
+    def is_memmap(self, no_check: bool = False) -> bool:
+        if no_check:
+            for key, item in self.items_meta():
+                return item.is_memmap()
         return self._check_is_memmap()
 
     @property
@@ -1621,8 +1624,8 @@ class TensorDict(_TensorDict):
             self._tensordict_meta[key] = (
                 MetaTensor(
                     proc_value,
-                    _is_memmap=self.is_memmap(),
-                    _is_shared=self.is_shared()) if _meta_val is None else _meta_val
+                    _is_memmap=self.is_memmap(no_check=True),
+                    _is_shared=self.is_shared(no_check=True)) if _meta_val is None else _meta_val
             )
         return self
 
@@ -2334,8 +2337,8 @@ torch.Size([3, 2])
     def is_shared(self, no_check: bool = True) -> bool:
         return self._source.is_shared(no_check=no_check)
 
-    def is_memmap(self) -> bool:
-        return self._source.is_memmap()
+    def is_memmap(self, no_check: bool = True) -> bool:
+        return self._source.is_memmap(no_check=no_check)
 
     def rename_key(
         self, old_key: str, new_key: str, safe: bool = False
@@ -2500,9 +2503,6 @@ class LazyStackedTensorDict(_TensorDict):
                 f"{len(are_memmap) - sum(are_memmap)} non memmap tensordict "
             )
         return all(are_memmap)
-
-    # def is_memmap(self) -> bool:
-    #     return all(td.is_memmap() for td in self.tensordicts)
 
     def get_valid_keys(self) -> Set[str]:
         self._update_valid_keys()
