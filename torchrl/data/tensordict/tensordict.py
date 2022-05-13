@@ -448,7 +448,7 @@ dtype=torch.float32)},
         input: Union[COMPATIBLE_TYPES, np.ndarray],
         check_device: bool = True,
         check_tensor_shape: bool = True,
-        check_shared: bool = True,
+        check_shared: bool = False,
     ) -> Union[torch.Tensor, MemmapTensor]:
 
         # TODO: move to _TensorDict?
@@ -465,14 +465,16 @@ dtype=torch.float32)},
             tensor = tensor.to(self.device)
 
         if check_shared:
-            if self.is_shared():
-                raise RuntimeError(
-                    "cannot set a new shared tensor in a "
-                    "tensordict that is already shared, as "
-                    "the new key won't be passed across processes"
-                )
-            elif self.is_memmap():
-                tensor = MemmapTensor(tensor)
+            raise DeprecationWarning("check_shared is not authorized anymore")
+        # if check_shared:
+        #     if (self.is_shared() and self.device == "cpu"   :
+        #         raise RuntimeError(
+        #             "cannot set a new shared tensor in a "
+        #             "tensordict that is already shared, as "
+        #             "the new key won't be passed across processes"
+        #         )
+        #     elif :
+        #         tensor = MemmapTensor(tensor)
 
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
             raise RuntimeError(
@@ -1619,7 +1621,7 @@ class TensorDict(_TensorDict):
         proc_value = self._process_tensor(
             value,
             check_tensor_shape=_run_checks,
-            check_shared=_run_checks,
+            check_shared=False,
             check_device=_run_checks,
         )  # check_tensor_shape=_run_checks
         self._tensordict[key] = proc_value
