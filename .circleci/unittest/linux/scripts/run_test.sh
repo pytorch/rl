@@ -6,10 +6,12 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 #if [[ $OSTYPE == 'darwin'* ]]; then
-PRIVATE_MUJOCO_GL=egl
+PRIVATE_MUJOCO_GL=osmesa
 #else
 #  PRIVATE_MUJOCO_GL=glfw
 #fi
+
+EXPORT PYOPENGL_PLATFORM=osmesa
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
