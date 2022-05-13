@@ -51,7 +51,8 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 conda env update --file "${this_dir}/environment.yml" --prune
 
-yum -y install mesa-libOSMesa-devel
+conda install -y -c conda-forge glfw
+conda install -y -c conda-forge glew
 
 #yum makecache
 #yum -y install glfw-devel
