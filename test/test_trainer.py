@@ -17,7 +17,7 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.envs.libs.dm_control import _has_dmc
+from torchrl.envs.libs.gym import _has_gym
 from torchrl.trainers import Recorder
 from torchrl.trainers import Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
@@ -205,19 +205,20 @@ def test_subsampler():
     assert (td_out.get(key1) == td_out.get(key2)).all()
 
 
-@pytest.mark.skipif(not _has_dmc, reason="No dm_control library")
+@pytest.mark.skipif(not _has_gym, reason="No gym library")
 def test_recorder():
     with tempfile.TemporaryDirectory() as folder:
         writer = SummaryWriter(log_dir=folder)
         args = Namespace()
-        args.env_name = "humanoid"
-        args.env_task = "walk"
-        args.env_library = "dm_control"
+        args.env_name = "ALE/Pong-v5"
+        args.env_task = ""
+        args.env_library = "gym"
         args.frame_skip = 1
         args.from_pixels = False
         args.vecnorm = False
         args.norm_rewards = False
-        args.reward_scaling = False
+        args.reward_scaling = 1.0
+        args.reward_loc = 0.0
         args.noops = 0
         args.record_frames = 24 // args.frame_skip
         args.record_interval = 2
@@ -255,7 +256,7 @@ def test_recorder():
         )
         ea.Reload()
         print(ea.Tags())
-        img = ea.Images("tmp_humanoid_video")
+        img = ea.Images("tmp_ALE/Pong-v5_video")
         assert len(img) == N // args.record_interval
 
 

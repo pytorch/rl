@@ -13,6 +13,7 @@ import torch
 import yaml
 from mocking_classes import DiscreteActionVecMockEnv
 from scipy.stats import chisquare
+from torch import nn
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
@@ -31,6 +32,7 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.utils import step_tensordict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
+from torchrl.modules import ActorCriticOperator, TDModule, ValueOperator
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -148,7 +150,7 @@ def test_rollout(env_name, frame_skip, seed=0):
     env.close()
 
 
-def _make_envs(env_name, frame_skip, transformed, N):
+def _make_envs(env_name, frame_skip, transformed, N, selected_keys=None):
     torch.manual_seed(0)
     if not transformed:
         create_env_fn = lambda: GymEnv(env_name, frame_skip=frame_skip)
@@ -164,8 +166,8 @@ def _make_envs(env_name, frame_skip, transformed, N):
                 Compose(*[RewardClipping(0, 0.1)]),
             )
     env0 = create_env_fn()
-    env_parallel = ParallelEnv(N, create_env_fn)
-    env_serial = SerialEnv(N, create_env_fn)
+    env_parallel = ParallelEnv(N, create_env_fn, selected_keys=selected_keys)
+    env_serial = SerialEnv(N, create_env_fn, selected_keys=selected_keys)
     return env_parallel, env_serial, env0
 
 
@@ -206,6 +208,75 @@ def test_parallel_env(env_name, frame_skip, transformed, T=10, N=5):
     assert (
         td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
     ), f"{td.shape}, {td.get('done').sum(1)}"
+    env_parallel.close()
+
+
+@pytest.mark.skipif(not _has_gym, reason="no gym")
+@pytest.mark.parametrize("env_name", ["Pendulum-v1"])
+@pytest.mark.parametrize("frame_skip", [4, 1])
+@pytest.mark.parametrize("transformed", [True, False])
+@pytest.mark.parametrize(
+    "selected_keys",
+    [
+        ["action", "observation", "next_observation", "done", "reward"],
+        ["hidden", "action", "observation", "next_observation", "done", "reward"],
+        None,
+    ],
+)
+def test_parallel_env_with_policy(
+    env_name, frame_skip, transformed, selected_keys, T=10, N=5
+):
+    env_parallel, env_serial, env0 = _make_envs(
+        env_name, frame_skip, transformed, N, selected_keys
+    )
+
+    policy = ActorCriticOperator(
+        TDModule(
+            spec=None,
+            module=nn.LazyLinear(12),
+            in_keys=["observation"],
+            out_keys=["hidden"],
+        ),
+        TDModule(
+            spec=None,
+            module=nn.LazyLinear(env0.action_spec.shape[-1]),
+            in_keys=["hidden"],
+            out_keys=["action"],
+        ),
+        ValueOperator(module=nn.LazyLinear(1), in_keys=["hidden"]),
+    )
+
+    td = TensorDict(
+        source={"action": env0.action_spec.rand((N,))},
+        batch_size=[
+            N,
+        ],
+    )
+    td1 = env_parallel.step(td)
+    assert not td1.is_shared()
+    assert "done" in td1.keys()
+    assert "reward" in td1.keys()
+
+    with pytest.raises(RuntimeError):
+        # number of actions does not match number of workers
+        td = TensorDict(
+            source={"action": env0.action_spec.rand((N - 1,))}, batch_size=[N - 1]
+        )
+        td1 = env_parallel.step(td)
+
+    td_reset = TensorDict(
+        source={"reset_workers": torch.zeros(N, 1, dtype=torch.bool).bernoulli_()},
+        batch_size=[
+            N,
+        ],
+    )
+    env_parallel.reset(tensordict=td_reset)
+
+    td = env_parallel.rollout(policy=policy, n_steps=T)
+    assert (
+        td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
+    ), f"{td.shape}, {td.get('done').sum(1)}"
+    env_parallel.close()
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
