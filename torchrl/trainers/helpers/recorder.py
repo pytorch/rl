@@ -35,18 +35,18 @@ def parser_recorder_args(parser: ArgumentParser) -> ArgumentParser:
         help="experiment name. Used for logging directory. "
         "A date and uuid will be joined to account for multiple experiments with the same name.",
     )
-    parser.add_argument(
-        "--prefix",
-        type=str,
-        default="",
-        help="Prefix of exp_name.",
-    )
-    parser.add_argument(
-        "--suffix",
-        type=str,
-        default="",
-        help="Prefix of exp_name.",
-    )
+    # parser.add_argument(
+    #     "--prefix",
+    #     type=str,
+    #     default="",
+    #     help="Prefix of exp_name.",
+    # )
+    # parser.add_argument(
+    #     "--suffix",
+    #     type=str,
+    #     default="",
+    #     help="Prefix of exp_name.",
+    # )
     parser.add_argument(
         "--record_interval",
         type=int,
