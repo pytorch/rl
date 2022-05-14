@@ -49,11 +49,9 @@ class timeit:
         return decorated_fn
 
     def __enter__(self):
-        return
         self.t0 = time.time()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        return
         t = time.time() - self.t0
         self._REG.setdefault(self.name, [0.0, 0.0, 0])
 
@@ -64,7 +62,6 @@ class timeit:
 
     @staticmethod
     def print():
-        return
         keys = list(timeit._REG)
         keys.sort()
         for name in keys:
