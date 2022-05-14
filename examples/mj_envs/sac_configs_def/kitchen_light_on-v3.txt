@@ -20,3 +20,5 @@ qvalue_cells=128
 value_cells=128
 no_norm_stats
 lr=0.001
+normalize_rewards_online
+catframes=4
