@@ -626,7 +626,7 @@ class RewardNormalizer:
         reward = tensordict.get("reward")
         reward = reward - self._reward_stats["mean"].to(tensordict.device)
         reward = reward / self._reward_stats["std"].to(tensordict.device)
-        tensordict.set_("reward", reward * self.scale)
+        tensordict.set("reward", reward * self.scale)
         self._normalize_has_been_called = True
         return tensordict
 
