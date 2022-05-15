@@ -307,7 +307,8 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--normalize_rewards_online_scale",
         "--normalize-rewards-online-scale",
-        value=1.0,
+        default=1.0,
+        type=float,
         help="Final value of the normalized rewards.",
     )
     parser.add_argument(
