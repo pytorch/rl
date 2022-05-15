@@ -1,11 +1,12 @@
-env_name=kitchen_knob1_on-v3
+env_name=franka_micro_random-v3
 env_library=mjenv
 async_collection
 frame_skip=1
-frames_per_batch=400
-optim_steps_per_batch=400
+frames_per_batch=256
+optim_steps_per_batch=20
+batch_size=32
 prb
-exp_name=kitchen_knob1_on-v3
+exp_name=franka_micro_random-v3
 tanh_loc
 total_frames=5000000
 record_video
@@ -17,7 +18,6 @@ reward_loc=2.0
 activation=tanh
 actor_cells=64
 qvalue_cells=128
-value_cells=128
 no_norm_stats
 lr=0.001
 normalize_rewards_online
