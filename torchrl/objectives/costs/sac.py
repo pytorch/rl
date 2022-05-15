@@ -77,7 +77,7 @@ class SACLoss(_LossModule):
         priotity_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
-        min_alpha: float = 0.01,
+        min_alpha: float = 0.1,
         max_alpha: float = 10.0,
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
