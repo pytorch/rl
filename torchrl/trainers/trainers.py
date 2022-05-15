@@ -582,11 +582,12 @@ class RewardNormalizer:
 
     """
 
-    def __init__(self, decay: float = 0.999):
+    def __init__(self, decay: float = 0.999, scale: float = 1.0):
         self._normalize_has_been_called = False
         self._update_has_been_called = False
         self._reward_stats = OrderedDict()
         self._reward_stats["decay"] = decay
+        self.scale = scale
         pass
 
     @torch.no_grad()
@@ -625,7 +626,7 @@ class RewardNormalizer:
         reward = tensordict.get("reward")
         reward = reward - self._reward_stats["mean"].to(tensordict.device)
         reward = reward / self._reward_stats["std"].to(tensordict.device)
-        tensordict.set_("reward", reward)
+        tensordict.set_("reward", reward * self.scale)
         self._normalize_has_been_called = True
         return tensordict
 
