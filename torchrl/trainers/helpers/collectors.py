@@ -417,6 +417,7 @@ def _parser_collector_args(parser: ArgumentParser) -> ArgumentParser:
     )
     parser.add_argument(
         "--exploration_mode",
+        "--exploration-mode",
         type=str,
         default=None,
         help="exploration mode of the data collector. If gSDE is being used, this should be set to `'net_output'`.",

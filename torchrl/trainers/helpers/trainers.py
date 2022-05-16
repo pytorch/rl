@@ -9,6 +9,7 @@ from typing import Optional, Union
 from warnings import warn
 
 from torch import optim
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
@@ -122,7 +123,17 @@ def make_trainer(
         weight_decay=args.weight_decay,
         **optimizer_kwargs,
     )
-    optim_scheduler = None
+    if args.lr_scheduler == "cosine":
+        optim_scheduler = CosineAnnealingLR(
+            optimizer,
+            T_max=int(
+                args.total_frames / args.frames_per_batch * args.optim_steps_per_batch
+            ),
+        )
+    elif args.lr_scheduler == "":
+        optim_scheduler = None
+    else:
+        raise NotImplementedError(f"lr scheduler {args.lr_scheduler}")
 
     print(
         f"collector = {collector}; \n"
@@ -181,7 +192,7 @@ def make_trainer(
     if args.normalize_rewards_online:
         # if used the running statistics of the rewards are computed and the
         # rewards used for training will be normalized based on these.
-        reward_normalizer = RewardNormalizer()
+        reward_normalizer = RewardNormalizer(scale=args.normalize_rewards_online_scale)
         trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
         trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 
@@ -189,6 +200,10 @@ def make_trainer(
         trainer.register_op(
             "post_steps", policy_exploration.step, frames=args.frames_per_batch
         )
+
+    trainer.register_op(
+        "post_steps_log", lambda *args: ("lr", optimizer.param_groups[0]["lr"])
+    )
 
     if recorder is not None:
         trainer.register_op(
@@ -232,17 +247,27 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
     """
     parser.add_argument(
         "--optim_steps_per_batch",
+        "--optim-steps-per-batch",
         type=int,
-        default=500,
+        default=1,
         help="Number of optimization steps in between two collection of data. See frames_per_batch "
         "below. "
-        "Default=500",
+        "Default=1",
     )
     parser.add_argument(
         "--optimizer", type=str, default="adam", help="Optimizer to be used."
     )
     parser.add_argument(
+        "--lr_scheduler",
+        "--lr-scheduler",
+        type=str,
+        default="cosine",
+        choices=["cosine", ""],
+        help="LR scheduler.",
+    )
+    parser.add_argument(
         "--selected_keys",
+        "--selected-keys",
         nargs="+",
         default=None,
         help="a list of strings that indicate the data that should be kept from the data collector. Since storing and "
@@ -253,12 +278,14 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
 
     parser.add_argument(
         "--batch_size",
+        "--batch-size",
         type=int,
         default=256,
         help="batch size of the TensorDict retrieved from the replay buffer. Default=64.",
     )
     parser.add_argument(
         "--log_interval",
+        "--log-interval",
         type=int,
         default=10000,
         help="logging interval, in terms of optimization steps. Default=1000.",
@@ -271,12 +298,14 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
     )
     parser.add_argument(
         "--weight_decay",
+        "--weight-decay",
         type=float,
         default=2e-5,
         help="Weight-decay to be used with the optimizer. Default=0.0.",
     )
     parser.add_argument(
         "--clip_norm",
+        "--clip-norm",
         type=float,
         default=0.1,
         help="value at which the total gradient norm / single derivative should be clipped. Default=0.1",
@@ -293,6 +322,13 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
         action="store_true",
         help="Computes the running statistics of the rewards and normalizes them before they are "
         "passed to the loss module.",
+    )
+    parser.add_argument(
+        "--normalize_rewards_online_scale",
+        "--normalize-rewards-online-scale",
+        default=1.0,
+        type=float,
+        help="Final value of the normalized rewards.",
     )
     parser.add_argument(
         "--sub_traj_len",
