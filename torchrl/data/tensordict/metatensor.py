@@ -13,7 +13,6 @@ from typing import Callable, List, Optional, Sequence, Tuple, Union
 import torch
 
 from torchrl.data.utils import DEVICE_TYPING, INDEX_TYPING
-
 from .memmap import MemmapTensor
 from .utils import _getitem_batch_size
 

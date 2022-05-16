@@ -1458,7 +1458,7 @@ def test_requires_grad(device):
     ]
     sub_td = LazyStackedTensorDict(*tensordicts, stack_dim=0)
     # First stacked tensor has requires_grad == True
-    assert list(sub_td.values_meta())[0].requires_grad == True
+    assert list(sub_td.values_meta())[0].requires_grad is True
     td0 = SavedTensorDict(tensordicts[0])
     with pytest.raises(
         Exception,
