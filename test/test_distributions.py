@@ -21,21 +21,29 @@ from torchrl.modules.distributions.continuous import SafeTanhTransform
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-def test_delta(device):
+@pytest.mark.parametrize("div_up", [1, 2])
+@pytest.mark.parametrize("div_down", [1, 2])
+def test_delta(device, div_up, div_down):
     x = torch.randn(1000000, 4, device=device)
     d = Delta(x)
     assert d.log_prob(d.mode).shape == x.shape[:-1]
     assert (d.log_prob(d.mode) == float("inf")).all()
 
     x = torch.randn(1000000, 4, device=device)
-    d = TanhDelta(x, -1, 1.0, atol=1e-4, rtol=1e-4)
+    d = TanhDelta(x, -1 / div_down, 1.0 / div_up, atol=1e-4, rtol=1e-4)
     xinv = d.transforms[0].inv(d.mode)
     assert d.base_dist._is_equal(xinv).all()
     assert d.log_prob(d.mode).shape == x.shape[:-1]
     assert (d.log_prob(d.mode) == float("inf")).all()
 
     x = torch.randn(1000000, 4, device=device)
-    d = TanhDelta(x, -torch.ones_like(x), torch.ones_like(x), atol=1e-4, rtol=1e-4)
+    d = TanhDelta(
+        x,
+        -torch.ones_like(x) / div_down,
+        torch.ones_like(x) / div_up,
+        atol=1e-4,
+        rtol=1e-4,
+    )
     xinv = d.transforms[0].inv(d.mode)
     assert d.base_dist._is_equal(xinv).all()
     assert d.log_prob(d.mode).shape == x.shape[:-1]
