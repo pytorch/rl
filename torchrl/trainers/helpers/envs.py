@@ -289,6 +289,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
 
     parser.add_argument(
         "--env_library",
+        "--env-library",
         type=str,
         default="gym",
         choices=list(LIBS.keys()),
@@ -296,23 +297,27 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
     )
     parser.add_argument(
         "--env_name",
+        "--env-name",
         type=str,
         default="Humanoid-v2",
         help="name of the environment to be created. Default=Humanoid-v2",
     )
     parser.add_argument(
         "--env_task",
+        "--env-task",
         type=str,
         default="",
         help="task (if any) for the environment. Default=run",
     )
     parser.add_argument(
         "--from_pixels",
+        "--from-pixels",
         action="store_true",
         help="whether the environment output should be state vector(s) (default) or the pixels.",
     )
     parser.add_argument(
         "--frame_skip",
+        "--frame-skip",
         type=int,
         default=1,
         help="frame_skip for the environment. Note that this value does NOT impact the buffer size,"
@@ -320,12 +325,19 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
         "the actual number of frames retrieved will be 200e6. Default=1.",
     )
-    parser.add_argument("--reward_scaling", type=float, help="scale of the reward.")
     parser.add_argument(
-        "--reward_loc", type=float, help="location of the reward.", default=0.0
+        "--reward_scaling", "--reward-scaling", type=float, help="scale of the reward."
+    )
+    parser.add_argument(
+        "--reward_loc",
+        "--reward-loc",
+        type=float,
+        help="location of the reward.",
+        default=0.0,
     )
     parser.add_argument(
         "--init_env_steps",
+        "--init-env-steps",
         type=int,
         default=1000,
         help="number of random steps to compute normalizing constants",
@@ -338,12 +350,14 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
     )
     parser.add_argument(
         "--norm_rewards",
+        "--norm-rewards",
         action="store_true",
         help="If True, rewards will be normalized on the fly. This may interfere with SAC update rule and "
         "should be used cautiously.",
     )
     parser.add_argument(
         "--no_norm_stats",
+        "--no-norm-stats",
         action="store_false",
         dest="norm_stats",
         help="Deactivates the normalization based on random collection of data.",
@@ -362,6 +376,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
     )
     parser.add_argument(
         "--max_frames_per_traj",
+        "--max-frames-per-traj",
         type=int,
         default=1000,
         help="Number of steps before a reset of the environment is called (if it has not been flagged as "
