@@ -50,6 +50,7 @@ def parser_replay_args(parser: ArgumentParser) -> ArgumentParser:
 
     parser.add_argument(
         "--buffer_size",
+        "--buffer-size",
         type=int,
         default=1000000,
         help="buffer size, in number of frames stored. Default=1e6",

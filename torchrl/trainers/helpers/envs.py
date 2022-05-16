@@ -289,6 +289,7 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
 
     parser.add_argument(
         "--env_library",
+        "--env-library",
         type=str,
         default="gym",
         choices=list(LIBS.keys()),
@@ -296,23 +297,27 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
     )
     parser.add_argument(
         "--env_name",
+        "--env-name",
         type=str,
         default="Humanoid-v2",
         help="name of the environment to be created. Default=Humanoid-v2",
     )
     parser.add_argument(
         "--env_task",
+        "--env-task",
         type=str,
         default="",
         help="task (if any) for the environment. Default=run",
     )
     parser.add_argument(
         "--from_pixels",
+        "--from-pixels",
         action="store_true",
         help="whether the environment output should be state vector(s) (default) or the pixels.",
     )
     parser.add_argument(
         "--frame_skip",
+        "--frame-skip",
         type=int,
         default=1,
         help="frame_skip for the environment. Note that this value does NOT impact the buffer size,"

@@ -247,17 +247,19 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
     """
     parser.add_argument(
         "--optim_steps_per_batch",
+        "--optim-steps-per-batch",
         type=int,
-        default=500,
+        default=1,
         help="Number of optimization steps in between two collection of data. See frames_per_batch "
         "below. "
-        "Default=500",
+        "Default=1",
     )
     parser.add_argument(
         "--optimizer", type=str, default="adam", help="Optimizer to be used."
     )
     parser.add_argument(
         "--lr_scheduler",
+        "--lr-scheduler",
         type=str,
         default="cosine",
         choices=["cosine", ""],
@@ -265,6 +267,7 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
     )
     parser.add_argument(
         "--selected_keys",
+        "--selected-keys",
         nargs="+",
         default=None,
         help="a list of strings that indicate the data that should be kept from the data collector. Since storing and "
@@ -275,12 +278,14 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
 
     parser.add_argument(
         "--batch_size",
+        "--batch-size",
         type=int,
         default=256,
         help="batch size of the TensorDict retrieved from the replay buffer. Default=64.",
     )
     parser.add_argument(
         "--log_interval",
+        "--log-interval",
         type=int,
         default=10000,
         help="logging interval, in terms of optimization steps. Default=1000.",
@@ -293,12 +298,14 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
     )
     parser.add_argument(
         "--weight_decay",
+        "--weight-decay",
         type=float,
         default=2e-5,
         help="Weight-decay to be used with the optimizer. Default=0.0.",
     )
     parser.add_argument(
         "--clip_norm",
+        "--clip-norm",
         type=float,
         default=0.1,
         help="value at which the total gradient norm / single derivative should be clipped. Default=0.1",

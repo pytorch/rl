@@ -997,6 +997,7 @@ def parser_model_args_continuous(
     if algorithm in ("SAC", "DDPG", "REDQ"):
         parser.add_argument(
             "--annealing_frames",
+            "--annealing-frames",
             type=int,
             default=1000000,
             help="float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.",
@@ -1008,6 +1009,7 @@ def parser_model_args_continuous(
         )
         parser.add_argument(
             "--ou_exploration",
+            "--ou-exploration",
             action="store_true",
             help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
             "efficient entropy-based exploration, this should be left for experimentation only.",
@@ -1041,6 +1043,7 @@ def parser_model_args_continuous(
         )
         parser.add_argument(
             "--default_policy_scale",
+            "--default-policy-scale",
             default=1.0,
             help="Default policy scale parameter",
         )
@@ -1066,18 +1069,21 @@ def parser_model_args_continuous(
     if algorithm in ("SAC", "REDQ"):
         parser.add_argument(
             "--actor_cells",
+            "--actor-cells",
             type=int,
             default=256,
             help="cells of the actor",
         )
         parser.add_argument(
             "--qvalue_cells",
+            "--qvalue-cells",
             type=int,
             default=256,
             help="cells of the qvalue net",
         )
         parser.add_argument(
             "--scale_lb",
+            "--scale-lb",
             type=float,
             default=0.1,
             help="min value of scale",
