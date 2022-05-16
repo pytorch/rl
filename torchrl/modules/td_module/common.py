@@ -1039,7 +1039,8 @@ class TDModuleWrapper(nn.Module):
         >>> #     This class can be used for exploration wrappers
         >>> import functorch
         >>> from torchrl.modules import TDModuleWrapper, TDModule
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, expand_as_right
+        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
+        >>> from torchrl.data.utils import expand_as_right
         >>> import torch
         >>>
         >>> class EpsilonGreedyExploration(TDModuleWrapper):
@@ -1077,7 +1078,7 @@ class TDModuleWrapper(nn.Module):
         try:
             return super().__getattr__(name)
         except AttributeError:
-            if name not in self.__dict__:
+            if name not in self.__dict__ and not name.startswith("__"):
                 return getattr(self._modules["td_module"], name)
             else:
                 raise AttributeError(
