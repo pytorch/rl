@@ -68,8 +68,8 @@ class MetaTensor:
         device: Optional[DEVICE_TYPING] = "cpu",
         dtype: torch.dtype = torch.get_default_dtype(),
         requires_grad: bool = False,
-        _is_shared: Optional[bool] = False,
-        _is_memmap: Optional[bool] = False,
+        _is_shared: Optional[bool] = None,
+        _is_memmap: Optional[bool] = None,
     ):
 
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
