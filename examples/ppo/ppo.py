@@ -133,6 +133,7 @@ def main(args):
         trainer.register_op("pre_optim_steps", loss_module.reset)
 
     trainer.train()
+    return (writer.log_dir, trainer._log_dict, trainer.state_dict())
 
 
 if __name__ == "__main__":

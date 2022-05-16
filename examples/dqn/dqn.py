@@ -150,6 +150,7 @@ def main(args):
     )
 
     trainer.train()
+    return (writer.log_dir, trainer._log_dict, trainer.state_dict())
 
 
 if __name__ == "__main__":
