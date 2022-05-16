@@ -123,12 +123,17 @@ def make_trainer(
         weight_decay=args.weight_decay,
         **optimizer_kwargs,
     )
-    optim_scheduler = CosineAnnealingLR(
-        optimizer,
-        T_max=int(
-            args.total_frames / args.frames_per_batch * args.optim_steps_per_batch
-        ),
-    )
+    if args.lr_scheduler == "cosine":
+        optim_scheduler = CosineAnnealingLR(
+            optimizer,
+            T_max=int(
+                args.total_frames / args.frames_per_batch * args.optim_steps_per_batch
+            ),
+        )
+    elif args.lr_scheduler == "":
+        optim_scheduler = None
+    else:
+        raise NotImplementedError(f"lr scheduler {args.lr_scheduler}")
 
     print(
         f"collector = {collector}; \n"
@@ -250,6 +255,13 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
     )
     parser.add_argument(
         "--optimizer", type=str, default="adam", help="Optimizer to be used."
+    )
+    parser.add_argument(
+        "--lr_scheduler",
+        type=str,
+        default="cosine",
+        choices=["cosine", ""],
+        help="LR scheduler.",
     )
     parser.add_argument(
         "--selected_keys",
