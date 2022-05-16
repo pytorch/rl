@@ -117,7 +117,7 @@ def main(args):
         actor_model_explore.share_memory()
 
     stats = None
-    if not args.vecnorm:
+    if not args.vecnorm and args.norm_stats:
         stats = get_stats_random_rollout(args, proof_env)
     # make sure proof_env is closed
     proof_env.close()

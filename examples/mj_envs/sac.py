@@ -79,9 +79,8 @@ DEFAULT_REWARD_SCALING = {
     "humanoid": 100,
 }
 
-if __name__ == "__main__":
-    args = parser.parse_args()
 
+def main(args):
     args = correct_for_frame_skip(args)
 
     if not isinstance(args.reward_scaling, float):
@@ -160,7 +159,7 @@ if __name__ == "__main__":
             t.scale.fill_(1.0)
             t.loc.fill_(0.0)
 
-    agent = make_trainer(
+    trainer = make_trainer(
         collector,
         loss_module,
         recorder,
@@ -171,4 +170,10 @@ if __name__ == "__main__":
         args,
     )
 
-    agent.train()
+    trainer.train()
+    return (writer.log_dir, trainer._log_dict, trainer.state_dict())
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    main(args)
