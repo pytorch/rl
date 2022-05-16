@@ -130,6 +130,8 @@ class MemmapTensor(object):
             if self.memmap_array is elem.memmap_array:
                 raise RuntimeError
         else:
+            if elem.requires_grad:
+                raise Exception("memmap is not compatible with gradients, Tensor has requires_grad equals True")
             self._save_item(elem)
 
     def _get_memmap_array(self) -> np.memmap:

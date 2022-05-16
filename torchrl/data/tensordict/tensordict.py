@@ -1766,6 +1766,10 @@ class TensorDict(_TensorDict):
                 "memmap_() must be called when the TensorDict is (partially) "
                 "populated. Set a tensor first."
             )
+        if any(val.requires_grad for val in self._tensordict_meta.values()):
+            raise Exception(
+                "memmap is not compatible with gradients, one of Tensors has requires_grad equals True"
+            )
         for key, value in self.items():
             self._tensordict[key] = MemmapTensor(value)
         for key, value in self.items_meta():
@@ -2868,7 +2872,10 @@ class SavedTensorDict(_TensorDict):
             )
         elif isinstance(source, SavedTensorDict):
             source = source._load()
-
+        if any(val.requires_grad for val in source.values_meta()):
+            raise Exception(
+                "SavedTensorDicts is not compatible with gradients, one of Tensors has requires_grad equals True"
+            )
         self.file = tempfile.NamedTemporaryFile()
         self.filename = self.file.name
         if source.is_memmap():

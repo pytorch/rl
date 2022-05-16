@@ -13,6 +13,7 @@ from typing import Callable, List, Optional, Sequence, Tuple, Union
 import torch
 
 from torchrl.data.utils import DEVICE_TYPING, INDEX_TYPING
+
 from .memmap import MemmapTensor
 from .utils import _getitem_batch_size
 
@@ -48,6 +49,7 @@ class MetaTensor:
         device (int, str or torch.device): device on which the tensor is
             stored.
         dtype (torch.dtype): tensor dtype.
+        requires_grad (bool): tensor requires_grad.
 
     Examples:
         >>> meta1 = MetaTensor(3,4, device=torch.device("cpu"))
@@ -65,8 +67,9 @@ class MetaTensor:
         *shape: Union[int, torch.Tensor, "MemmapTensor"],
         device: Optional[DEVICE_TYPING] = "cpu",
         dtype: torch.dtype = torch.get_default_dtype(),
-        _is_shared: Optional[bool] = None,
-        _is_memmap: Optional[bool] = None,
+        requires_grad: bool = False,
+        _is_shared: Optional[bool] = False,
+        _is_memmap: Optional[bool] = False,
     ):
 
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
@@ -78,11 +81,17 @@ class MetaTensor:
                 _is_memmap = isinstance(tensor, MemmapTensor)
             device = tensor.device if not tensor.is_meta else device
             dtype = tensor.dtype
+            requires_grad = (
+                tensor.requires_grad
+                if isinstance(tensor, torch.Tensor)
+                else requires_grad
+            )
         if not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
         self.shape = shape
         self.device = torch.device(device)
         self.dtype = dtype
+        self.requires_grad = requires_grad
         self._ndim = len(shape)
         self._numel = math.prod(shape)
         self._is_shared = bool(_is_shared)
@@ -141,6 +150,7 @@ class MetaTensor:
             *self.shape,
             device=self.device,
             dtype=self.dtype,
+            requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
         )
@@ -154,6 +164,7 @@ class MetaTensor:
             *shape,
             dtype=self.dtype,
             device=self.device,
+            requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
         )
 
@@ -175,7 +186,12 @@ class MetaTensor:
 
     def expand(self, *shape: int) -> MetaTensor:
         shape = torch.Size([*shape, *self.shape])
-        return MetaTensor(*shape, device=self.device, dtype=self.dtype)
+        return MetaTensor(
+            *shape,
+            device=self.device,
+            dtype=self.dtype,
+            requires_grad=self.requires_grad,
+        )
 
     def __repr__(self) -> str:
         return (
@@ -234,6 +250,7 @@ class MetaTensor:
             new_shape,
             device=self.device,
             dtype=self.dtype,
+            requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
         )
@@ -244,6 +261,7 @@ def _stack_meta(
     dim: int = 0,
     dtype: torch.dtype = torch.float,
     device: DEVICE_TYPING = "cpu",
+    requires_grad: bool = False,
     safe: bool = False,
 ) -> MetaTensor:
     if not len(list_of_meta_tensors):
@@ -263,7 +281,7 @@ def _stack_meta(
                 )
     shape = [s for s in shape]
     shape.insert(dim, len(list_of_meta_tensors))
-    return MetaTensor(*shape, dtype=dtype, device=device)
+    return MetaTensor(*shape, dtype=dtype, device=device, requires_grad=requires_grad)
 
 
 @implements_for_meta(torch.stack)
@@ -282,6 +300,12 @@ def stack_meta(
         if len(list_of_meta_tensors)
         else torch.device("cpu")
     )
+    requires_grad = any(tensor.requires_grad for tensor in list_of_meta_tensors)
     return _stack_meta(
-        list_of_meta_tensors, dim=dim, dtype=dtype, device=device, safe=safe
+        list_of_meta_tensors,
+        dim=dim,
+        dtype=dtype,
+        device=device,
+        requires_grad=requires_grad,
+        safe=safe,
     )

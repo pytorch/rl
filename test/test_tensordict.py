@@ -12,8 +12,8 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from torch import multiprocessing as mp
-from torchrl.data import TensorDict, SavedTensorDict
-from torchrl.data.tensordict.tensordict import LazyStackedTensorDict, assert_allclose_td
+from torchrl.data import SavedTensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import assert_allclose_td, LazyStackedTensorDict
 from torchrl.data.tensordict.utils import _getitem_batch_size
 
 
@@ -1436,6 +1436,37 @@ def test_getitem_batch_size():
         expected_shape = mocking_tensor[idx].shape
         resulting_shape = _getitem_batch_size(shape, idx)
         assert expected_shape == resulting_shape, idx
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_requires_grad(device):
+    torch.manual_seed(1)
+    # Just one of the tensors have requires_grad
+    tensordicts = [
+        TensorDict(
+            batch_size=[11, 12],
+            source={
+                "key1": torch.randn(
+                    11, 12, 5, device=device, requires_grad=True if i == 5 else False
+                ),
+                "key2": torch.zeros(
+                    11, 12, 50, device=device, dtype=torch.bool
+                ).bernoulli_(),
+            },
+        )
+        for i in range(10)
+    ]
+    sub_td = LazyStackedTensorDict(*tensordicts, stack_dim=0)
+    # First stacked tensor has requires_grad == True
+    assert list(sub_td.values_meta())[0].requires_grad == True
+    td0 = SavedTensorDict(tensordicts[0])
+    with pytest.raises(
+        Exception,
+        match=re.escape(
+            "SavedTensorDicts is not compatible with gradients, one of Tensors has requires_grad equals True"
+        ),
+    ):
+        td5 = SavedTensorDict(tensordicts[5])
 
 
 if __name__ == "__main__":
