@@ -497,8 +497,8 @@ class TanhDelta(D.TransformedDistribution):
         loc = self.update(net_output)
 
         t = SafeTanhTransform()
-        non_trivial_min = (isinstance(min, torch.Tensor) and (min != 1.0).any()) or (
-            not isinstance(min, torch.Tensor) and min != 1.0
+        non_trivial_min = (isinstance(min, torch.Tensor) and (min != -1.0).any()) or (
+            not isinstance(min, torch.Tensor) and min != -1.0
         )
         non_trivial_max = (isinstance(max, torch.Tensor) and (max != 1.0).any()) or (
             not isinstance(max, torch.Tensor) and max != 1.0
@@ -507,7 +507,9 @@ class TanhDelta(D.TransformedDistribution):
             t = D.ComposeTransform(
                 [
                     t,
-                    D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                    D.AffineTransform(
+                        loc=(self.max + self.min) / 2, scale=(self.max - self.min) / 2
+                    ),
                 ]
             )
         event_shape = net_output.shape[-event_dims:]
