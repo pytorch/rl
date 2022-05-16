@@ -2,7 +2,7 @@ env_name=cheetah
 env_task=run
 env_library=dm_control
 optim_steps_per_batch=3
-lamda=0.95
+lmbda=0.95
 normalize_rewards_online
 record_video
 max_frames_per_traj=100

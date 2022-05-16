@@ -1186,7 +1186,7 @@ class TestPPO:
         value = self._create_mock_value(device=device)
         if advantage == "gae":
             advantage = GAE(
-                gamma=0.9, lamda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
             )
         elif advantage == "td":
             advantage = TDEstimate(
@@ -1194,7 +1194,7 @@ class TestPPO:
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimate(
-                gamma=0.9, lamda=0.9, value_network=value, gradient_mode=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
             )
         else:
             raise NotImplementedError
@@ -1250,7 +1250,7 @@ class TestReinforce:
         if advantage == "gae":
             advantage_module = GAE(
                 gamma=gamma,
-                lamda=0.9,
+                lmbda=0.9,
                 value_network=value_net.make_functional_with_buffers(clone=True)[0],
                 gradient_mode=gradient_mode,
             )
@@ -1263,7 +1263,7 @@ class TestReinforce:
         elif advantage == "td_lambda":
             advantage_module = TDLambdaEstimate(
                 gamma=0.9,
-                lamda=0.9,
+                lmbda=0.9,
                 value_network=value_net.make_functional_with_buffers(clone=True)[0],
                 gradient_mode=gradient_mode,
             )
@@ -1469,10 +1469,10 @@ def test_updater(mode, value_network_update_interval, device):
 
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
-@pytest.mark.parametrize("lamda", [0.1, 0.5, 0.99])
+@pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
 @pytest.mark.parametrize("N", [(3,), (7, 3)])
 @pytest.mark.parametrize("T", [3, 5, 200])
-def test_tdlambda(device, gamma, lamda, N, T):
+def test_tdlambda(device, gamma, lmbda, N, T):
     torch.manual_seed(0)
 
     done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool).bernoulli_(0.1)
@@ -1481,10 +1481,10 @@ def test_tdlambda(device, gamma, lamda, N, T):
     next_state_value = torch.randn(*N, T, 1, device=device)
 
     r1 = vec_td_lambda_advantage_estimate(
-        gamma, lamda, state_value, next_state_value, reward, done
+        gamma, lmbda, state_value, next_state_value, reward, done
     )
     r2 = td_lambda_advantage_estimate(
-        gamma, lamda, state_value, next_state_value, reward, done
+        gamma, lmbda, state_value, next_state_value, reward, done
     )
     torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
