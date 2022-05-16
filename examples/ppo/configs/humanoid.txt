@@ -8,6 +8,6 @@ record_video
 max_frames_per_traj=1000
 record_interval=200
 lr=3e-4
-entropy_factor=1e-4
+entropy_coef=1e-4
 frame_skip=4
 tanh_loc

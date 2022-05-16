@@ -191,7 +191,7 @@ def make_ppo_loss(model, args) -> PPOLoss:
         critic=critic_model,
         advantage_module=advantage,
         loss_critic_type=args.loss_function,
-        entropy_factor=args.entropy_factor,
+        entropy_coef=args.entropy_coef,
     )
     return loss_module
 
@@ -214,11 +214,13 @@ def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
     )
     parser.add_argument(
         "--hard_update",
+        "--hard-update",
         action="store_true",
         help="whether soft-update should be used with double SAC loss (default) or hard updates.",
     )
     parser.add_argument(
         "--loss_function",
+        "--loss-function",
         type=str,
         default="smooth_l1",
         choices=["l1", "l2", "smooth_l1"],
@@ -226,6 +228,7 @@ def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
     )
     parser.add_argument(
         "--value_network_update_interval",
+        "--value-network-update-interval",
         type=int,
         default=1000,
         help="how often the target value network weights are updated (in number of updates)."
@@ -241,6 +244,7 @@ def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
     if algorithm in ("SAC", "REDQ"):
         parser.add_argument(
             "--num_q_values",
+            "--num-q-values",
             default=2,
             type=int,
             help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
@@ -251,6 +255,7 @@ def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
 
         parser.add_argument(
             "--target_entropy",
+            "--target-entropy",
             default=None,
             type=float,
             help="Target entropy for the policy distribution. Default is None (auto calculated as"
@@ -289,7 +294,8 @@ def parser_loss_args_ppo(parser: ArgumentParser) -> ArgumentParser:
         "hence the misspelling)",
     )
     parser.add_argument(
-        "--entropy_factor",
+        "--entropy_coef",
+        "--entropy-coef",
         type=float,
         default=1e-3,
         help="Entropy factor for the PPO loss",

@@ -9,6 +9,7 @@ from typing import Optional, Union
 from warnings import warn
 
 from torch import optim
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
@@ -122,7 +123,12 @@ def make_trainer(
         weight_decay=args.weight_decay,
         **optimizer_kwargs,
     )
-    optim_scheduler = None
+    optim_scheduler = CosineAnnealingLR(
+        optimizer,
+        T_max=int(
+            args.total_frames / args.frames_per_batch * args.optim_steps_per_batch
+        ),
+    )
 
     print(
         f"collector = {collector}; \n"
@@ -181,7 +187,7 @@ def make_trainer(
     if args.normalize_rewards_online:
         # if used the running statistics of the rewards are computed and the
         # rewards used for training will be normalized based on these.
-        reward_normalizer = RewardNormalizer()
+        reward_normalizer = RewardNormalizer(scale=args.normalize_rewards_online_scale)
         trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
         trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 
@@ -189,6 +195,10 @@ def make_trainer(
         trainer.register_op(
             "post_steps", policy_exploration.step, frames=args.frames_per_batch
         )
+
+    trainer.register_op(
+        "post_steps_log", lambda *args: ("lr", optimizer.param_groups[0]["lr"])
+    )
 
     if recorder is not None:
         trainer.register_op(
@@ -293,6 +303,13 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
         action="store_true",
         help="Computes the running statistics of the rewards and normalizes them before they are "
         "passed to the loss module.",
+    )
+    parser.add_argument(
+        "--normalize_rewards_online_scale",
+        "--normalize-rewards-online-scale",
+        default=1.0,
+        type=float,
+        help="Final value of the normalized rewards.",
     )
     parser.add_argument(
         "--sub_traj_len",

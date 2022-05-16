@@ -1113,6 +1113,7 @@ def parser_model_args_discrete(parser: ArgumentParser) -> ArgumentParser:
     """
     parser.add_argument(
         "--annealing_frames",
+        "--annealing-frames",
         type=int,
         default=1000000,
         help="Number of frames used for annealing of the EGreedy exploration. Default=1e6.",

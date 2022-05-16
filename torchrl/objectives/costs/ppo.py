@@ -44,9 +44,9 @@ class PPOLoss(_LossModule):
             formula for the entropy, a Monte-Carlo estimate will be used. samples_mc_entropy will control how many
             samples will be used to compute this estimate.
             default: 1
-        entropy_factor (scalar): entropy multiplier when computing the total loss.
+        entropy_coef (scalar): entropy multiplier when computing the total loss.
             default: 0.01
-        critic_factor (scalar): critic loss multiplier when computing the total loss.
+        critic_coef (scalar): critic loss multiplier when computing the total loss.
             default: 1.0
         gamma (scalar): a discount factor for return computation.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
@@ -61,8 +61,8 @@ class PPOLoss(_LossModule):
         advantage_diff_key: str = "value_error",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_factor: float = 0.01,
-        critic_factor: float = 1.0,
+        entropy_coef: float = 0.01,
+        critic_coef: float = 1.0,
         gamma: float = 0.99,
         loss_critic_type: str = "smooth_l1",
         advantage_module: Optional[Callable[[_TensorDict], _TensorDict]] = None,
@@ -73,9 +73,9 @@ class PPOLoss(_LossModule):
         self.advantage_key = advantage_key
         self.advantage_diff_key = advantage_diff_key
         self.samples_mc_entropy = samples_mc_entropy
-        self.entropy_bonus = entropy_bonus and entropy_factor
-        self.entropy_factor = entropy_factor
-        self.critic_factor = critic_factor
+        self.entropy_bonus = entropy_bonus and entropy_coef
+        self.entropy_coef = entropy_coef
+        self.critic_coef = critic_coef
         self.gamma = gamma
         self.loss_critic_type = loss_critic_type
         self.advantage_module = advantage_module
@@ -134,7 +134,7 @@ class PPOLoss(_LossModule):
             loss_value = distance_loss(
                 value, value_target, loss_function=self.loss_critic_type
             )
-        return self.critic_factor * loss_value
+        return self.critic_coef * loss_value
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         if self.advantage_module is not None:
@@ -149,8 +149,8 @@ class PPOLoss(_LossModule):
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.mean().detach())  # for logging
-            td_out.set("loss_entropy", -self.entropy_factor * entropy.mean())
-        if self.critic_factor:
+            td_out.set("loss_entropy", -self.entropy_coef * entropy.mean())
+        if self.critic_coef:
             loss_critic = self.loss_critic(tensordict).mean()
             td_out.set("loss_critic", loss_critic.mean())
         return td_out
@@ -175,9 +175,9 @@ class ClipPPOLoss(PPOLoss):
             formula for the entropy, a Monte-Carlo estimate will be used. samples_mc_entropy will control how many
             samples will be used to compute this estimate.
             default: 1
-        entropy_factor (scalar): entropy multiplier when computing the total loss.
+        entropy_coef (scalar): entropy multiplier when computing the total loss.
             default: 0.01
-        critic_factor (scalar): critic loss multiplier when computing the total loss.
+        critic_coef (scalar): critic loss multiplier when computing the total loss.
             default: 1.0
         gamma (scalar): a discount factor for return computation.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
@@ -192,8 +192,8 @@ class ClipPPOLoss(PPOLoss):
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_factor: float = 0.01,
-        critic_factor: float = 1.0,
+        entropy_coef: float = 0.01,
+        critic_coef: float = 1.0,
         gamma: float = 0.99,
         loss_critic_type: str = "l2",
         **kwargs,
@@ -204,8 +204,8 @@ class ClipPPOLoss(PPOLoss):
             advantage_key,
             entropy_bonus=entropy_bonus,
             samples_mc_entropy=samples_mc_entropy,
-            entropy_factor=entropy_factor,
-            critic_factor=critic_factor,
+            entropy_coef=entropy_coef,
+            critic_coef=critic_coef,
             gamma=gamma,
             loss_critic_type=loss_critic_type,
             **kwargs,
@@ -250,8 +250,8 @@ class ClipPPOLoss(PPOLoss):
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.mean().detach())  # for logging
-            td_out.set("loss_entropy", -self.entropy_factor * entropy.mean())
-        if self.critic_factor:
+            td_out.set("loss_entropy", -self.entropy_coef * entropy.mean())
+        if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic.mean())
         td_out.set("ESS", ess.mean() / batch)
@@ -284,9 +284,9 @@ class KLPENPPOLoss(PPOLoss):
             formula for the entropy, a Monte-Carlo estimate will be used. samples_mc_entropy will control how many
             samples will be used to compute this estimate.
             default: 1
-        entropy_factor (scalar): entropy multiplier when computing the total loss.
+        entropy_coef (scalar): entropy multiplier when computing the total loss.
             default: 0.01
-        critic_factor (scalar): critic loss multiplier when computing the total loss.
+        critic_coef (scalar): critic loss multiplier when computing the total loss.
             default: 1.0
         gamma (scalar): a discount factor for return computation.
         loss_critic_type (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
@@ -305,8 +305,8 @@ class KLPENPPOLoss(PPOLoss):
         samples_mc_kl: int = 1,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_factor: float = 0.01,
-        critic_factor: float = 1.0,
+        entropy_coef: float = 0.01,
+        critic_coef: float = 1.0,
         gamma: float = 0.99,
         loss_critic_type: str = "l2",
         **kwargs,
@@ -317,8 +317,8 @@ class KLPENPPOLoss(PPOLoss):
             advantage_key,
             entropy_bonus=entropy_bonus,
             samples_mc_entropy=samples_mc_entropy,
-            entropy_factor=entropy_factor,
-            critic_factor=critic_factor,
+            entropy_coef=entropy_coef,
+            critic_coef=critic_coef,
             gamma=gamma,
             loss_critic_type=loss_critic_type,
             **kwargs,
@@ -388,9 +388,9 @@ class KLPENPPOLoss(PPOLoss):
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.mean().detach())  # for logging
-            td_out.set("loss_entropy", -self.entropy_factor * entropy.mean())
+            td_out.set("loss_entropy", -self.entropy_coef * entropy.mean())
 
-        if self.critic_factor:
+        if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic.mean())
 
