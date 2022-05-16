@@ -34,6 +34,13 @@ def test_delta(device):
     assert d.log_prob(d.mode).shape == x.shape[:-1]
     assert (d.log_prob(d.mode) == float("inf")).all()
 
+    x = torch.randn(1000000, 4, device=device)
+    d = TanhDelta(x, -torch.ones_like(x), torch.ones_like(x), atol=1e-4, rtol=1e-4)
+    xinv = d.transforms[0].inv(d.mode)
+    assert d.base_dist._is_equal(xinv).all()
+    assert d.log_prob(d.mode).shape == x.shape[:-1]
+    assert (d.log_prob(d.mode) == float("inf")).all()
+
 
 def _map_all(*tensors_or_other, device):
     for t in tensors_or_other:
