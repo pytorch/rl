@@ -181,7 +181,7 @@ def make_ppo_loss(model, args) -> PPOLoss:
 
     advantage = GAE(
         args.gamma,
-        args.lamda,
+        args.lmbda,
         value_network=critic_model,
         average_rewards=True,
         gradient_mode=False,
@@ -282,7 +282,7 @@ def parser_loss_args_ppo(parser: ArgumentParser) -> ArgumentParser:
         help="Decay factor for return computation. Default=0.99.",
     )
     parser.add_argument(
-        "--lamda",
+        "--lmbda",
         default=0.95,
         type=float,
         help="lambda factor in GAE (using 'lambda' as attribute is prohibited in python, "
