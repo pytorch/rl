@@ -9,6 +9,9 @@ import torch
 
 __all__ = [
     "generalized_advantage_estimate",
+    "vec_td_lambda_return_estimate",
+    "vec_td_lambda_advantage_estimate",
+    "td_lambda_return_estimate",
     "td_lambda_advantage_estimate",
     "td_advantage_estimate",
 ]
@@ -156,9 +159,7 @@ def td_lambda_advantage_estimate(
     """
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
-    returns = td_lambda_return_estimate(
-        gamma, lmbda, state_value, next_state_value, reward, done
-    )
+    returns = td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done)
     advantage = returns - state_value
     return advantage
 
