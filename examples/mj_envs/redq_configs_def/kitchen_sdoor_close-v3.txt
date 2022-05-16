@@ -1,4 +1,4 @@
-env_name=franka_micro_random-v3
+env_name=kitchen_sdoor_close-v3
 env_library=mjenv
 async_collection
 frame_skip=1
@@ -6,7 +6,7 @@ frames_per_batch=256
 optim_steps_per_batch=60
 batch_size=64
 prb
-exp_name=franka_micro_random-v3
+exp_name=kitchen_sdoor_close-v3
 tanh_loc
 total_frames=5000000
 record_video
@@ -22,4 +22,3 @@ normalize_rewards_online
 normalize_rewards_online_scale=10
 catframes=4
 weight_decay=0.0
-multi_step

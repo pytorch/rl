@@ -300,7 +300,7 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
         "--weight_decay",
         "--weight-decay",
         type=float,
-        default=2e-5,
+        default=0.0,
         help="Weight-decay to be used with the optimizer. Default=0.0.",
     )
     parser.add_argument(
