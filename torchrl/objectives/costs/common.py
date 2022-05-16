@@ -229,10 +229,3 @@ class _LossModule(nn.Module):
     def reset(self) -> None:
         # mainly used for PPO with KL target
         pass
-
-    def get_discount(
-        self, tensordict: _TensorDict, discount_factor: str = "gamma"
-    ) -> Union[float, torch.Tensor]:
-        steps_to_next_obs = tensordict.get("steps_to_next_obs", 1)
-        discount = getattr(self, discount_factor) ** steps_to_next_obs
-        return discount

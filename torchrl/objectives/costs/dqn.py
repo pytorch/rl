@@ -107,7 +107,7 @@ class DQNLoss(_LossModule):
             target_value = next_state_value(
                 tensordict,
                 self.value_network,
-                gamma=self.get_discount(tensordict, "gamma"),
+                gamma=self.gamma,
                 params=self.target_value_network_params,
                 buffers=self.target_value_network_buffers,
                 next_val_key="chosen_action_value",
