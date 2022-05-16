@@ -4,8 +4,9 @@ env_library=dm_control
 async_collection
 record_video
 frame_skip=2
-frames_per_batch=32
-optim_steps_per_batch=640
+frames_per_batch=256
+optim_steps_per_batch=10
+batch_size=128
 prb
 exp_name=humanoid
 tanh_loc

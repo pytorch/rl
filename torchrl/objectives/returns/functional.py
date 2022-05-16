@@ -9,6 +9,9 @@ import torch
 
 __all__ = [
     "generalized_advantage_estimate",
+    "vec_td_lambda_return_estimate",
+    "vec_td_lambda_advantage_estimate",
+    "td_lambda_return_estimate",
     "td_lambda_advantage_estimate",
     "td_advantage_estimate",
 ]
@@ -16,7 +19,7 @@ __all__ = [
 
 def generalized_advantage_estimate(
     gamma: float,
-    lamda: float,
+    lmbda: float,
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
@@ -29,7 +32,7 @@ def generalized_advantage_estimate(
 
     Args:
         gamma (scalar): exponential mean discount.
-        lamda (scalar): trajectory discount.
+        lmbda (scalar): trajectory discount.
         state_value (Tensor): value function result with old_state input.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         next_state_value (Tensor): value function result with new_state input.
@@ -55,7 +58,7 @@ def generalized_advantage_estimate(
             - state_value[..., t, :]
         )
         prev_advantage = advantage[..., t, :] = delta + (
-            gamma * lamda * prev_advantage * not_done[..., t, :]
+            gamma * lmbda * prev_advantage * not_done[..., t, :]
         )
 
     value_target = advantage + state_value
@@ -95,22 +98,57 @@ def td_advantage_estimate(
     return advantage
 
 
+def td_lambda_return_estimate(
+    gamma: float,
+    lmbda: float,
+    next_state_value: torch.Tensor,
+    reward: torch.Tensor,
+    done: torch.Tensor,
+) -> torch.Tensor:
+    """TD(lambda) return estimate.
+
+    Args:
+        gamma (scalar): exponential mean discount.
+        lmbda (scalar): trajectory discount.
+        next_state_value (Tensor): value function result with new_state input.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        reward (Tensor): reward of taking actions in the environment.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        done (Tensor): boolean flag for end of episode.
+    """
+    for tensor in (next_state_value, reward, done):
+        if tensor.shape[-1] != 1:
+            raise RuntimeError(
+                "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
+            )
+    not_done = 1 - done.to(next_state_value.dtype)
+    next_state_value = not_done * next_state_value
+
+    returns = torch.empty_like(next_state_value)
+
+    g = next_state_value[..., -1, :]
+    T = returns.shape[-2]
+
+    for i in reversed(range(T)):
+        g = returns[..., i, :] = reward[..., i, :] + gamma * (
+            (1 - lmbda) * next_state_value[..., i, :] + lmbda * g
+        )
+    return returns
+
+
 def td_lambda_advantage_estimate(
     gamma: float,
-    lamda: float,
+    lmbda: float,
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Get generalized advantage estimate of a trajectory
-    Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
-    https://arxiv.org/pdf/1506.02438.pdf for more context.
+) -> torch.Tensor:
+    """TD(lambda) advantage estimate.
 
     Args:
         gamma (scalar): exponential mean discount.
-        lamda (scalar): trajectory discount.
+        lmbda (scalar): trajectory discount.
         state_value (Tensor): value function result with old_state input.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         next_state_value (Tensor): value function result with new_state input.
@@ -119,23 +157,9 @@ def td_lambda_advantage_estimate(
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
     """
-    for tensor in (next_state_value, state_value, reward, done):
-        if tensor.shape[-1] != 1:
-            raise RuntimeError(
-                "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
-            )
-    not_done = 1 - done.to(next_state_value.dtype)
-    next_state_value = not_done * next_state_value
-
-    returns = torch.empty_like(state_value)
-
-    g = next_state_value[..., -1, :]
-    T = returns.shape[-2]
-
-    for i in reversed(range(T)):
-        g = returns[..., i, :] = reward[..., i, :] + gamma * (
-            (1 - lamda) * next_state_value[..., i, :] + lamda * g
-        )
+    if not state_value.shape == next_state_value.shape:
+        raise RuntimeError("shape of state_value and next_state_value must match")
+    returns = td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done)
     advantage = returns - state_value
     return advantage
 
@@ -181,14 +205,44 @@ def _custom_conv1d(tensor, filter):
 
 
 def vec_td_lambda_advantage_estimate(
-    gamma, lamda, state_value, next_state_value, reward, done
+    gamma, lmbda, state_value, next_state_value, reward, done
 ):
+    """Vectorized TD(lambda) advantage estimate.
 
-    shape = state_value.shape
+    Args:
+        gamma (scalar): exponential mean discount.
+        lmbda (scalar): trajectory discount.
+        state_value (Tensor): value function result with old_state input.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        next_state_value (Tensor): value function result with new_state input.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        reward (Tensor): reward of taking actions in the environment.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        done (Tensor): boolean flag for end of episode.
+    """
+    return (
+        vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done)
+        - state_value
+    )
+
+
+def vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done):
+    """Vectorized TD(lambda) return estimate.
+
+    Args:
+        gamma (scalar): exponential mean discount.
+        lmbda (scalar): trajectory discount.
+        next_state_value (Tensor): value function result with new_state input.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        reward (Tensor): reward of taking actions in the environment.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        done (Tensor): boolean flag for end of episode.
+    """
+
+    shape = next_state_value.shape
     if not shape[-1] == 1:
         raise RuntimeError("last dimension of inputs shape must be singleton")
 
-    state_value = state_value.view(-1, 1, shape[-2])
     next_state_value = next_state_value.view(-1, 1, shape[-2])
     reward = reward.view(-1, 1, shape[-2])
     done = done.view(-1, 1, shape[-2])
@@ -207,7 +261,7 @@ def vec_td_lambda_advantage_estimate(
     gammas = torch.cumprod(gammas, -2)
 
     lambdas = torch.ones(T + 1, 1, device=device)
-    lambdas[1:] = lamda
+    lambdas[1:] = lmbda
     lambdas = torch.cumprod(lambdas, -2)
 
     first_below_thr = gammas < 1e-7
@@ -241,4 +295,4 @@ def vec_td_lambda_advantage_estimate(
         _custom_conv1d(next_state_value, gam_lam)
         - mask.squeeze(-1) * next_state_value[..., -1:]
     )
-    return (rs + vs - vs2 - state_value).view(shape)
+    return (rs + vs - vs2).view(shape)

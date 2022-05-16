@@ -59,9 +59,8 @@ def make_args():
 
 parser = make_args()
 
-if __name__ == "__main__":
-    args = parser.parse_args()
 
+def main(args):
     args = correct_for_frame_skip(args)
 
     if not isinstance(args.reward_scaling, float):
@@ -125,6 +124,7 @@ if __name__ == "__main__":
     for t in recorder.transform:
         if isinstance(t, RewardScaling):
             t.scale.fill_(1.0)
+            t.loc.fill_(0.0)
 
     trainer = make_trainer(
         collector, loss_module, recorder, None, actor_model, None, writer, args
@@ -133,3 +133,9 @@ if __name__ == "__main__":
         trainer.register_op("pre_optim_steps", loss_module.reset)
 
     trainer.train()
+    return (writer.log_dir, trainer._log_dict, trainer.state_dict())
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    main(args)

@@ -2,6 +2,7 @@ env_name=cheetah
 env_task=run
 env_library=dm_control
 optim_steps_per_batch=3
+frames_per_batch=500
 lamda=0.95
 normalize_rewards_online
 record_video
@@ -13,3 +14,4 @@ init_with_lag
 frame_skip=4
 num_workers=4
 env_per_collector=2
+total_frames=5000
