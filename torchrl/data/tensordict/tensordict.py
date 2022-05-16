@@ -1723,7 +1723,7 @@ class TensorDict(_TensorDict):
         return self
 
     def memmap_(self) -> _TensorDict:
-        if self.is_memmap():
+        if self.is_shared():
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
