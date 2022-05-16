@@ -374,6 +374,10 @@ class Trainer:
             if self.collected_frames > self.total_frames:
                 break
 
+    def __del__(self):
+        self.collector.shutdown()
+
+    def shutdown(self):
         print("shutting down collector")
         self.collector.shutdown()
 
