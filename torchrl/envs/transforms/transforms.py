@@ -57,7 +57,7 @@ __all__ = [
     "gSDENoise",
 ]
 
-IMAGE_KEYS = ["next_observation", "next_pixels"]
+IMAGE_KEYS = ["next_pixels"]
 _MAX_NOOPS_TRIALS = 10
 
 
