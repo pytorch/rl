@@ -228,7 +228,7 @@ class SACLoss(_LossModule):
         target_value = next_state_value(
             tensordict,
             actor_critic,
-            gamma=self.gamma,
+            gamma=self.get_discount(tensordict, "gamma"),
             next_val_key="state_value",
             params=params,
             buffers=buffers,

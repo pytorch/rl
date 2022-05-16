@@ -107,7 +107,7 @@ class DQNLoss(_LossModule):
             target_value = next_state_value(
                 tensordict,
                 self.value_network,
-                gamma=self.gamma,
+                gamma=self.get_discount(tensordict, "gamma"),
                 params=self.target_value_network_params,
                 buffers=self.target_value_network_buffers,
                 next_val_key="chosen_action_value",
@@ -190,8 +190,7 @@ class DistributionalDQNLoss(_LossModule):
         reward = tensordict.get("reward")
         done = tensordict.get("done")
 
-        steps_to_next_obs = tensordict.get("steps_to_next_obs", 1)
-        discount = self.gamma ** steps_to_next_obs
+        discount = (self.get_discount(tensordict, "gamma"),)
 
         # Calculate current state probabilities (online network noise already
         # sampled)

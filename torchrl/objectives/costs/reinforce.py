@@ -102,7 +102,8 @@ class ReinforceLoss(_LossModule):
                     params=self.critic_params,
                     buffers=self.critic_buffers,
                 ).get("state_value")
-                value_target = reward + next_value * self.gamma
+                gamma = self.get_discount(tensordict, "gamma")
+                value_target = reward + next_value * gamma
             tensordict_select = tensordict.select(*self.critic.in_keys).clone()
             value = self.critic(
                 tensordict_select,

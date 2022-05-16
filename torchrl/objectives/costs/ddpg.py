@@ -152,7 +152,7 @@ class DDPGLoss(_LossModule):
         target_value = next_state_value(
             tensordict,
             actor_critic,
-            gamma=self.gamma,
+            gamma=self.get_discount(tensordict, "gamma"),
             params=target_params,
             buffers=target_buffers,
         )
