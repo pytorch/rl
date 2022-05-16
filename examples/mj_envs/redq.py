@@ -42,7 +42,7 @@ from torchrl.trainers.helpers.replay_buffer import (
     parser_replay_args,
 )
 from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
-from utils import MJEnv
+from .utils import MJEnv
 
 LIBS["mjenv"] = MJEnv
 
