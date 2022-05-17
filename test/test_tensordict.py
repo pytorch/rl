@@ -1130,7 +1130,10 @@ class TestTensorDicts:
     def test_set_requires_grad(self, td_name):
         td = getattr(self, td_name)
         assert not td._get_meta("a").requires_grad
-        td.set("a", torch.randn_like(td.get("a")).requires_grad_())
+        if td_name == "sub_td":
+            td.set_("a", torch.randn_like(td.get("a")).requires_grad_())
+        else:
+            td.set("a", torch.randn_like(td.get("a")).requires_grad_())
         assert td._get_meta("a").requires_grad
 
 
