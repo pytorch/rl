@@ -178,16 +178,32 @@ class _BatchedEnv(_EnvClass):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
+        self._batch_size = None
+        self._action_spec = None
+        self._observation_spec = None
+        self._reward_spec = None
 
-        with self._dummy_env as dummy_env:
-            self.batch_size = torch.Size([self.num_workers, *dummy_env.batch_size])
+    def _set_properties(self):
+        with self._dummy_env_context as dummy_env:
+            self._batch_size = torch.Size([self.num_workers, *dummy_env.batch_size])
             self._action_spec = dummy_env.action_spec
             self._observation_spec = dummy_env.observation_spec
             self._reward_spec = dummy_env.reward_spec
 
     @property
-    def _dummy_env(self) -> _EnvClass:
+    def _dummy_env_context(self) -> _dummy_env_context:
+        """Returns a context manager that will create a dummy env and delete it afterwards"""
         return _dummy_env_context(self._dummy_env_fun, self.create_env_kwargs[0])
+
+    @property
+    def _dummy_env(self) -> _EnvClass:
+        """Returns a closed dummy environment. This is used to check the type of attributes that will
+        be gathered on remote processed.
+        """
+        if self._dummy_env_instance is None:
+            self._dummy_env_instance = self._dummy_env_fun(**self.create_env_kwargs[0])
+            self._dummy_env_instance.close()
+        return self._dummy_env_instance
 
     @_dummy_env.setter
     def _dummy_env(self, value: _EnvClass) -> None:
@@ -201,14 +217,26 @@ class _BatchedEnv(_EnvClass):
 
     @property
     def action_spec(self) -> TensorSpec:
+        if self._action_spec is None:
+            self._set_properties()
         return self._action_spec
 
     @property
+    def batch_size(self) -> TensorSpec:
+        if self._batch_size is None:
+            self._set_properties()
+        return self._batch_size
+
+    @property
     def observation_spec(self) -> TensorSpec:
+        if self._observation_spec is None:
+            self._set_properties()
         return self._observation_spec
 
     @property
     def reward_spec(self) -> TensorSpec:
+        if self._reward_spec is None:
+            self._set_properties()
         return self._reward_spec
 
     def is_done_set_fn(self, value: bool) -> None:
@@ -216,7 +244,7 @@ class _BatchedEnv(_EnvClass):
 
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
-        with self._dummy_env as dummy_env:
+        with self._dummy_env_context as dummy_env:
             shared_tensordict_parent = make_tensordict(
                 dummy_env,
                 self.policy_proof,
