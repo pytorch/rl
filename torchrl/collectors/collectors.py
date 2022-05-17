@@ -261,6 +261,13 @@ class SyncDataCollector(_DataCollector):
             env = create_env_fn(**create_env_kwargs)
         else:
             env = create_env_fn
+            if create_env_kwargs:
+                if not hasattr(env, "update_kwargs"):
+                    raise RuntimeError(
+                        "kwargs were passed to SyncDataCollector but they can't be set "
+                        f"on environment of type {type(create_env_fn)}."
+                    )
+                env.update_kwargs(create_env_kwargs)
 
         self.env: _EnvClass = env
         self.closed = False
