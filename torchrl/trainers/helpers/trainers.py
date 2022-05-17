@@ -166,6 +166,7 @@ def make_trainer(
     if hasattr(args, "noisy") and args.noisy:
         trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
 
+    trainer.register_op("batch_process", lambda batch: batch.cpu())
     if args.selected_keys:
         trainer.register_op("batch_process", SelectKeys(args.selected_keys))
 
