@@ -64,6 +64,13 @@ def make_args():
     parser_model_args_continuous(parser, "DDPG")
     parser_recorder_args(parser)
     parser_replay_args(parser)
+    parser.add_argument(
+        "env_rendering_device",
+        "env-rendering-device",
+        type=int,
+        nargs="+",
+        default=[0],
+    )
     return parser
 
 
@@ -131,6 +138,7 @@ def main(args):
         make_env=create_env_fn,
         actor_model_explore=actor_model_explore,
         args=args,
+        make_env_kwargs=[{"render_device": device} for device in args.env_rendering_device]
     )
 
     replay_buffer = make_replay_buffer(device, args)

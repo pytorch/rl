@@ -268,8 +268,10 @@ def make_collector_offpolicy(
         ms = None
 
     env_kwargs = {}
-    if make_env_kwargs is not None:
+    if make_env_kwargs is not None and isinstance(make_env_kwargs, dict):
         env_kwargs.update(make_env_kwargs)
+    elif make_env_kwargs is not None:
+        env_kwargs = make_env_kwargs
     args.collector_devices = (
         args.collector_devices
         if len(args.collector_devices) > 1

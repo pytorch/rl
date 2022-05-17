@@ -14,6 +14,7 @@ class MJEnv(GymEnv):
         taskname: str,
         from_pixels: bool = False,
         pixels_only: bool = False,
+        render_device: int=0,
         **kwargs,
     ) -> "gym.core.Env":
         self.pixels_only = pixels_only
@@ -38,6 +39,7 @@ class MJEnv(GymEnv):
         self._env = env
 
         self.from_pixels = from_pixels
+        self.render_device = render_device
 
         self.action_spec = _gym_to_torchrl_spec_transform(self._env.action_space)
         self.observation_spec = _gym_to_torchrl_spec_transform(
@@ -54,7 +56,7 @@ class MJEnv(GymEnv):
     def _step(self, td):
         td = super()._step(td)
         if self.from_pixels:
-            img = self._env.render_camera_offscreen(sim=self._env.sim, cameras=[None])
+            img = self._env.render_camera_offscreen(sim=self._env.sim, cameras=[None], device_id=self.render_device)
             img = torch.Tensor(img).squeeze(0)
             td.set("next_pixels", img)
         return td
