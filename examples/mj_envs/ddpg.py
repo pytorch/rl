@@ -65,8 +65,8 @@ def make_args():
     parser_recorder_args(parser)
     parser_replay_args(parser)
     parser.add_argument(
-        "env_rendering_device",
-        "env-rendering-device",
+        "--env_rendering_device",
+        "--env-rendering-device",
         type=int,
         nargs="+",
         default=[0],
