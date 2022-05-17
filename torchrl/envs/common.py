@@ -594,7 +594,8 @@ class GymLikeEnv(_EnvWrapper):
     info_keys = []
 
     """
-    A gym-like env is an environment.
+    A gym-like env is an environment whose behaviour is similar to gym environments in what
+    common methods (specifically reset and step) are expected to do.
 
 
     A `GymLikeEnv` has a `.step()` method with the following signature:

@@ -199,7 +199,7 @@ def test_memmap(idx, dtype, large_scale=False):
 
     td_to_copy = td[idx].contiguous()
     for k in td_to_copy.keys():
-        td_to_copy.set(k, torch.ones_like(td_to_copy.get(k)))
+        td_to_copy.set_(k, torch.ones_like(td_to_copy.get(k)))
 
     print("\nTesting writing to TD")
     for i in range(2):
