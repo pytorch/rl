@@ -6,6 +6,7 @@
 import uuid
 from datetime import datetime
 
+from torchrl.envs import ParallelEnv
 from torchrl.trainers.helpers.envs import LIBS
 from utils import MJEnv
 
@@ -159,7 +160,11 @@ def main(args):
         recorder_rm = TransformedEnv(recorder.env, recorder.transform[1:])
     else:
         recorder_rm = recorder
-    recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
+    if isinstance(create_env_fn, ParallelEnv):
+        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
+    else:
+        recorder_rm.load_state_dict(create_env_fn.state_dict())
+
     create_env_fn.close()
     # reset reward scaling
     for t in recorder.transform:
