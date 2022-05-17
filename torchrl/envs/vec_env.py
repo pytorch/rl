@@ -151,6 +151,7 @@ class _BatchedEnv(_EnvClass):
 
         self.policy_proof = policy_proof
         self._dummy_env = self._dummy_env_fun()
+        self._dummy_env_str = str(self._dummy_env)
         self.num_workers = num_workers
         self.create_env_fn = create_env_fn
         self.create_env_kwargs = create_env_kwargs
@@ -172,6 +173,20 @@ class _BatchedEnv(_EnvClass):
         self._reward_spec = self._dummy_env.reward_spec
         self._dummy_env.close()
         self._dummy_env = None
+
+    def update_kwargs(self, kwargs: Union[dict, List[dict]]):
+        """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
+
+        Args:
+            kwargs (dict or list of dict): new kwargs to use with the environments
+
+        """
+        if not isinstance(kwargs, dict):
+            for _kwargs, _kwargs_new in zip(self.create_env_kwargs, kwargs):
+                _kwargs.update(_kwargs_new)
+        else:
+            for _kwargs in self.create_env_kwargs:
+                _kwargs.update(kwargs)
 
     @property
     def _dummy_env(self) -> _EnvClass:
@@ -285,7 +300,11 @@ class _BatchedEnv(_EnvClass):
         raise NotImplementedError
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(\n\tenv={self._dummy_env}, \n\tbatch_size={self.batch_size})"
+        return (
+            f"{self.__class__.__name__}("
+            f"\n\tenv={self._dummy_env_str}, "
+            f"\n\tbatch_size={self.batch_size})"
+        )
 
     def __del__(self) -> None:
         if not self.is_closed:
