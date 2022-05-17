@@ -105,7 +105,7 @@ def transformed_env_constructor(
             constructor retrieved from `args`.
     """
 
-    def make_transformed_env() -> TransformedEnv:
+    def make_transformed_env(**kwargs) -> TransformedEnv:
         env_name = args.env_name
         env_task = args.env_task
         env_library = LIBS[args.env_library]
@@ -127,9 +127,10 @@ def transformed_env_constructor(
             }
             if env_library is DMControlEnv:
                 env_kwargs.update({"taskname": env_task})
+            env_kwargs.update(kwargs)
             env = env_library(**env_kwargs)
         else:
-            env = custom_env_maker()
+            env = custom_env_maker(**kwargs)
 
         env = TransformedEnv(env)
 

@@ -116,12 +116,15 @@ class EnvCreator:
         if self._share_memory:
             self.share_memory(self._transform_state_dict)
         self.initialized = True
+        shadow_env.close()
+        del shadow_env
         return self
 
-    def __call__(self) -> _EnvClass:
+    def __call__(self, **kwargs) -> _EnvClass:
         if not self.initialized:
             raise RuntimeError("EnvCreator must be initialized before being called.")
-        env = self.create_env_fn(**self.create_env_kwargs)
+        kwargs.update(self.create_env_kwargs)  # create_env_kwargs precedes
+        env = self.create_env_fn(**kwargs)
         env.load_state_dict(self._transform_state_dict, strict=False)
         return env
 

@@ -63,6 +63,20 @@ class _dispatch_caller_serial:
         return [_callable(*args, **kwargs) for _callable in self.list_callable]
 
 
+class _dummy_env_context:
+    def __init__(self, fun, kwargs):
+        self.fun = fun
+        self.kwargs = kwargs
+
+    def __enter__(self):
+        self.dummy_env = self.fun(**self.kwargs)
+        return self.dummy_env
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.dummy_env.close()
+        del self.dummy_env
+
+
 class _BatchedEnv(_EnvClass):
     """
 
@@ -150,7 +164,6 @@ class _BatchedEnv(_EnvClass):
                 raise err
 
         self.policy_proof = policy_proof
-        self._dummy_env = self._dummy_env_fun()
         self.num_workers = num_workers
         self.create_env_fn = create_env_fn
         self.create_env_kwargs = create_env_kwargs
@@ -165,22 +178,46 @@ class _BatchedEnv(_EnvClass):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
+        self._batch_size = None
+        self._action_spec = None
+        self._observation_spec = None
+        self._reward_spec = None
 
-        self.batch_size = torch.Size([self.num_workers, *self._dummy_env.batch_size])
-        self._action_spec = self._dummy_env.action_spec
-        self._observation_spec = self._dummy_env.observation_spec
-        self._reward_spec = self._dummy_env.reward_spec
-        self._dummy_env.close()
-        self._dummy_env = None
+    def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
+        """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
+
+        Args:
+            kwargs (dict or list of dict): new kwargs to use with the environments
+
+        """
+        if isinstance(kwargs, dict):
+            for _kwargs in self.create_env_kwargs:
+                _kwargs.update(kwargs)
+        else:
+            for _kwargs, _new_kwargs in zip(self.create_env_kwargs, kwargs):
+                _kwargs.update(_new_kwargs)
+
+    def _set_properties(self):
+        with self._dummy_env_context as dummy_env:
+            self._batch_size = torch.Size([self.num_workers, *dummy_env.batch_size])
+            self._action_spec = dummy_env.action_spec
+            self._observation_spec = dummy_env.observation_spec
+            self._reward_spec = dummy_env.reward_spec
+            self._dummy_env_str = str(dummy_env)
+
+    @property
+    def _dummy_env_context(self) -> _dummy_env_context:
+        """Returns a context manager that will create a dummy env and delete it afterwards"""
+        return _dummy_env_context(self._dummy_env_fun, self.create_env_kwargs[0])
 
     @property
     def _dummy_env(self) -> _EnvClass:
-        if (
-            self._dummy_env_instance is not None
-            and not self._dummy_env_instance.is_closed
-        ):
-            return self._dummy_env_instance
-        self._dummy_env_instance = self._dummy_env_fun()
+        """Returns a closed dummy environment. This is used to check the type of attributes that will
+        be gathered on remote processed.
+        """
+        if self._dummy_env_instance is None:
+            self._dummy_env_instance = self._dummy_env_fun(**self.create_env_kwargs[0])
+            self._dummy_env_instance.close()
         return self._dummy_env_instance
 
     @_dummy_env.setter
@@ -195,14 +232,26 @@ class _BatchedEnv(_EnvClass):
 
     @property
     def action_spec(self) -> TensorSpec:
+        if self._action_spec is None:
+            self._set_properties()
         return self._action_spec
 
     @property
+    def batch_size(self) -> TensorSpec:
+        if self._batch_size is None:
+            self._set_properties()
+        return self._batch_size
+
+    @property
     def observation_spec(self) -> TensorSpec:
+        if self._observation_spec is None:
+            self._set_properties()
         return self._observation_spec
 
     @property
     def reward_spec(self) -> TensorSpec:
+        if self._reward_spec is None:
+            self._set_properties()
         return self._reward_spec
 
     def is_done_set_fn(self, value: bool) -> None:
@@ -210,10 +259,11 @@ class _BatchedEnv(_EnvClass):
 
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
-        shared_tensordict_parent = make_tensordict(
-            self._dummy_env,
-            self.policy_proof,
-        )
+        with self._dummy_env_context as dummy_env:
+            shared_tensordict_parent = make_tensordict(
+                dummy_env,
+                self.policy_proof,
+            )
 
         shared_tensordict_parent = shared_tensordict_parent.expand(
             self.num_workers
@@ -285,7 +335,13 @@ class _BatchedEnv(_EnvClass):
         raise NotImplementedError
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(\n\tenv={self._dummy_env}, \n\tbatch_size={self.batch_size})"
+        if self._dummy_env_str is None:
+            self._dummy_env_str = self._set_properties()
+        return (
+            f"{self.__class__.__name__}("
+            f"\n\tenv={self._dummy_env_str}, "
+            f"\n\tbatch_size={self.batch_size})"
+        )
 
     def __del__(self) -> None:
         if not self.is_closed:
