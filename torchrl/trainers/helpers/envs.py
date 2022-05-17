@@ -229,6 +229,10 @@ def parallel_env_constructor(args: Namespace, **kwargs) -> EnvCreator:
         args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
         kwargs: keyword arguments for the `transformed_env_constructor` method.
     """
+    if args.env_per_collector == 1:
+        kwargs.update({"args": args, "use_env_creator": True})
+        make_transformed_env = transformed_env_constructor(**kwargs)
+        return make_transformed_env
     kwargs.update({"args": args, "use_env_creator": True})
     make_transformed_env = transformed_env_constructor(**kwargs)
     env = ParallelEnv(
