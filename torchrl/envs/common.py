@@ -591,6 +591,8 @@ class _EnvWrapper(_EnvClass):
 
 
 class GymLikeEnv(_EnvWrapper):
+    info_keys = []
+
     """
     A gym-like env is an environment.
 
@@ -624,6 +626,7 @@ class GymLikeEnv(_EnvWrapper):
             if done:
                 break
 
+
         obs_dict = self._read_obs(obs)
 
         if reward is None:
@@ -636,6 +639,10 @@ class GymLikeEnv(_EnvWrapper):
         tensordict_out.update(obs_dict)
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
+        for key in self.info_keys:
+            data = info[0][key]
+            tensordict_out.set("done", data)
+
         self.current_tensordict = step_tensordict(tensordict_out)
         return tensordict_out
 

@@ -168,6 +168,11 @@ def main(args):
         args,
     )
 
+    trainer.register_op("pre_steps_log", lambda batch: ("time", batch["time"].mean()))
+    trainer.register_op("pre_steps_log", lambda batch: ("solved", batch["solved"].sum()/batch["solved"].numel()))
+    trainer.register_op("pre_steps_log", lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean()))
+    trainer.register_op("pre_steps_log", lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean()))
+
     trainer.train()
     return (writer.log_dir, trainer._log_dict, trainer.state_dict())
 

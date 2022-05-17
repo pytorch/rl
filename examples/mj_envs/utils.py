@@ -6,6 +6,8 @@ from mj_envs.envs.relay_kitchen import *
 
 
 class MJEnv(GymEnv):
+    info_keys = ["time", "rwd_dense", "rwd_sparse", "solved"]
+
     def _build_env(
         self,
         envname: str,
