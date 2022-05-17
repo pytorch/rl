@@ -324,11 +324,11 @@ class _EnvClass:
             )
 
     def is_done_get_fn(self) -> bool:
+        if self._is_done is None:
+            self._is_done = torch.zeros(self.batch_size, device=self.device)
         return self._is_done.all()
 
     def is_done_set_fn(self, val: bool) -> None:
-        if self._is_done is None:
-            self._is_done = torch.zeros(self.batch_size, device=self.device)
         self._is_done = val
 
     is_done = property(is_done_get_fn, is_done_set_fn)

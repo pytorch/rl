@@ -184,6 +184,12 @@ class _BatchedEnv(_EnvClass):
         self._reward_spec = None
 
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
+        """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
+
+        Args:
+            kwargs (dict or list of dict): new kwargs to use with the environments
+
+        """
         if isinstance(kwargs, dict):
             for _kwargs in self.create_env_kwargs:
                 _kwargs.update(kwargs)
@@ -329,6 +335,8 @@ class _BatchedEnv(_EnvClass):
         raise NotImplementedError
 
     def __repr__(self) -> str:
+        if self._dummy_env_str is None:
+            self._dummy_env_str = self._set_properties()
         return (
             f"{self.__class__.__name__}("
             f"\n\tenv={self._dummy_env_str}, "
