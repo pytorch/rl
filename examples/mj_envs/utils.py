@@ -29,8 +29,9 @@ class MJEnv(GymEnv):
                 f"gym does not support taskname, received {taskname} instead."
             )
         try:
-            env = self.lib.make(envname, frameskip=self.frame_skip,
-                                device_id=render_device, **kwargs)
+            env = self.lib.make(
+                envname, frameskip=self.frame_skip, device_id=render_device, **kwargs
+            )
             self.wrapper_frame_skip = 1
         except TypeError as err:
             if "unexpected keyword argument 'frameskip" not in str(err):
@@ -42,8 +43,7 @@ class MJEnv(GymEnv):
         self.from_pixels = from_pixels
         self.render_device = render_device
 
-        self.action_spec = _gym_to_torchrl_spec_transform(
-            self._env.action_space)
+        self.action_spec = _gym_to_torchrl_spec_transform(self._env.action_space)
         self.observation_spec = _gym_to_torchrl_spec_transform(
             self._env.observation_space
         )
@@ -58,9 +58,9 @@ class MJEnv(GymEnv):
     def _step(self, td):
         td = super()._step(td)
         if self.from_pixels:
-            img = self._env.render_camera_offscreen(sim=self._env.sim,
-                                                    cameras=[None],
-                                                    device_id=self.render_device)
+            img = self._env.render_camera_offscreen(
+                sim=self._env.sim, cameras=[None], device_id=self.render_device
+            )
             img = torch.Tensor(img).squeeze(0)
             td.set("next_pixels", img)
         return td
@@ -68,9 +68,9 @@ class MJEnv(GymEnv):
     def _reset(self, td=None, **kwargs):
         td = super()._reset(td, **kwargs)
         if self.from_pixels:
-            img = self._env.render_camera_offscreen(sim=self._env.sim,
-                                                    cameras=[None],
-                                                    device_id=self.render_device)
+            img = self._env.render_camera_offscreen(
+                sim=self._env.sim, cameras=[None], device_id=self.render_device
+            )
             img = torch.Tensor(img).squeeze(0)
             td.set("next_pixels", img)
         return td

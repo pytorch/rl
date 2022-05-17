@@ -262,7 +262,7 @@ class SyncDataCollector(_DataCollector):
         else:
             env = create_env_fn
             if create_env_kwargs:
-                if not hasattr(env, "update_kwargs"):
+                if not isinstance(env, _BatchedEnv):
                     raise RuntimeError(
                         "kwargs were passed to SyncDataCollector but they can't be set "
                         f"on environment of type {type(create_env_fn)}."

@@ -138,7 +138,9 @@ def main(args):
         make_env=create_env_fn,
         actor_model_explore=actor_model_explore,
         args=args,
-        make_env_kwargs=[{"render_device": device} for device in args.env_rendering_device]
+        make_env_kwargs=[
+            {"render_device": device} for device in args.env_rendering_device
+        ],
     )
 
     replay_buffer = make_replay_buffer(device, args)
@@ -177,9 +179,16 @@ def main(args):
     )
 
     trainer.register_op("pre_steps_log", lambda batch: ("time", batch["time"].mean()))
-    trainer.register_op("pre_steps_log", lambda batch: ("solved", batch["solved"].sum()/batch["solved"].numel()))
-    trainer.register_op("pre_steps_log", lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean()))
-    trainer.register_op("pre_steps_log", lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean()))
+    trainer.register_op(
+        "pre_steps_log",
+        lambda batch: ("solved", batch["solved"].sum() / batch["solved"].numel()),
+    )
+    trainer.register_op(
+        "pre_steps_log", lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean())
+    )
+    trainer.register_op(
+        "pre_steps_log", lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean())
+    )
 
     trainer.train()
     return (writer.log_dir, trainer._log_dict, trainer.state_dict())

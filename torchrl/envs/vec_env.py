@@ -183,6 +183,14 @@ class _BatchedEnv(_EnvClass):
         self._observation_spec = None
         self._reward_spec = None
 
+    def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
+        if isinstance(kwargs, dict):
+            for _kwargs in self.create_env_kwargs:
+                _kwargs.update(kwargs)
+        else:
+            for _kwargs, _new_kwargs in zip(self.create_env_kwargs, kwargs):
+                _kwargs.update(_new_kwargs)
+
     def _set_properties(self):
         with self._dummy_env_context as dummy_env:
             self._batch_size = torch.Size([self.num_workers, *dummy_env.batch_size])

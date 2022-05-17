@@ -628,7 +628,6 @@ class GymLikeEnv(_EnvWrapper):
             if done:
                 break
 
-
         obs_dict = self._read_obs(obs)
 
         if reward is None:
