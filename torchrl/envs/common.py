@@ -138,9 +138,8 @@ class _EnvClass:
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
     ):
         self.device = device
+        self._is_done = None
         self.dtype = dtype_map.get(dtype, dtype)
-        self._is_done = torch.zeros(self.batch_size, device=device)
-        self._cache = dict()
         self.is_closed = False
 
     def step(self, tensordict: _TensorDict) -> _TensorDict:
@@ -328,6 +327,8 @@ class _EnvClass:
         return self._is_done.all()
 
     def is_done_set_fn(self, val: bool) -> None:
+        if self._is_done is None:
+            self._is_done = torch.zeros(self.batch_size, device=self.device)
         self._is_done = val
 
     is_done = property(is_done_get_fn, is_done_set_fn)
@@ -634,7 +635,7 @@ class GymLikeEnv(_EnvWrapper):
             reward = np.nan
         reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
         done = self._to_tensor(done, dtype=torch.bool)
-        self._is_done = done
+        self.is_done = done
 
         tensordict_out = TensorDict({}, batch_size=tensordict.batch_size)
         tensordict_out.update(obs_dict)
