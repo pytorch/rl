@@ -1709,6 +1709,12 @@ class TensorDict(_TensorDict):
             tensor_in.copy_(value)
         else:
             tensor_in[idx] = value
+        # Recreate Meta in case of require_grad coming in value
+        self._tensordict_meta[key] = MetaTensor(
+            tensor_in,
+            _is_memmap=self.is_memmap(),
+            _is_shared=self.is_shared(),
+        )
         return self
 
     def get(
@@ -1765,6 +1771,10 @@ class TensorDict(_TensorDict):
             raise Exception(
                 "memmap_() must be called when the TensorDict is (partially) "
                 "populated. Set a tensor first."
+            )
+        if any(val.requires_grad for val in self._tensordict_meta.values()):
+            raise Exception(
+                "memmap is not compatible with gradients, one of Tensors has requires_grad equals True"
             )
         for key, value in self.items():
             self._tensordict[key] = MemmapTensor(value)
@@ -2571,6 +2581,7 @@ class LazyStackedTensorDict(_TensorDict):
         proc_tensor = proc_tensor.unbind(self.stack_dim)
         for td, _item in zip(self.tensordicts, proc_tensor):
             td.set(key, _item, **kwargs)
+        self._meta_dict.update({key: self._deduce_meta(key)})
         return self
 
     def set_(self, key: str, tensor: COMPATIBLE_TYPES) -> _TensorDict:
@@ -2631,6 +2642,9 @@ class LazyStackedTensorDict(_TensorDict):
             return self._meta_dict[key]
         if key not in self.valid_keys:
             raise KeyError(f"key {key} not found in {self._valid_keys}")
+        return self._deduce_meta(key)
+
+    def _deduce_meta(self, key: str) -> MetaTensor:
         return torch.stack(
             [td._get_meta(key) for td in self.tensordicts], self.stack_dim
         )
@@ -2873,7 +2887,10 @@ class SavedTensorDict(_TensorDict):
             )
         elif isinstance(source, SavedTensorDict):
             source = source._load()
-
+        if any(val.requires_grad for val in source.values_meta()):
+            raise Exception(
+                "SavedTensorDicts is not compatible with gradients, one of Tensors has requires_grad equals True"
+            )
         self.file = tempfile.NamedTemporaryFile()
         self.filename = self.file.name
         if source.is_memmap():
