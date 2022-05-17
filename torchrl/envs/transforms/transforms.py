@@ -260,6 +260,7 @@ class TransformedEnv(_EnvClass):
         self.batch_size = self.env.batch_size
         self.is_closed = False
 
+        kwargs['device'] = env.device
         super().__init__(**kwargs)
 
     @property

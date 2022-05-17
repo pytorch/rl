@@ -139,7 +139,7 @@ def main(args):
         actor_model_explore=actor_model_explore,
         args=args,
         make_env_kwargs=[
-            {"render_device": device} for device in args.env_rendering_device
+            {"render_device": device, 'device': device} for device in args.env_rendering_device
         ],
     )
 
