@@ -2174,6 +2174,11 @@ torch.Size([3, 2])
             raise RuntimeError("Cannot modify immutable TensorDict")
         if inplace and key in self.keys():
             return self.set_(key, tensor)
+        elif key in self.keys():
+            raise RuntimeError(
+                "Calling `SubTensorDict.set(key, value, inplace=False)` is prohibited for existing tensors. "
+                "Consider calling `SubTensorDict.set_(...)` or cloning your tensordict first."
+            )
 
         tensor = self._process_tensor(
             tensor, check_device=False, check_tensor_shape=False
