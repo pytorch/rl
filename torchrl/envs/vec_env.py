@@ -63,6 +63,20 @@ class _dispatch_caller_serial:
         return [_callable(*args, **kwargs) for _callable in self.list_callable]
 
 
+class _dummy_env_context:
+    def __init__(self, fun, kwargs):
+        self.fun = fun
+        self.kwargs = kwargs
+
+    def __enter__(self):
+        self.dummy_env = self.fun(**self.kwargs)
+        return self.dummy_env
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.dummy_env.close()
+        del self.dummy_env
+
+
 class _BatchedEnv(_EnvClass):
     """
 
@@ -150,7 +164,6 @@ class _BatchedEnv(_EnvClass):
                 raise err
 
         self.policy_proof = policy_proof
-        self._dummy_env = self._dummy_env_fun()
         self.num_workers = num_workers
         self.create_env_fn = create_env_fn
         self.create_env_kwargs = create_env_kwargs
@@ -166,22 +179,15 @@ class _BatchedEnv(_EnvClass):
                 "memmap and shared memory are mutually exclusive features."
             )
 
-        self.batch_size = torch.Size([self.num_workers, *self._dummy_env.batch_size])
-        self._action_spec = self._dummy_env.action_spec
-        self._observation_spec = self._dummy_env.observation_spec
-        self._reward_spec = self._dummy_env.reward_spec
-        self._dummy_env.close()
-        self._dummy_env = None
+        with self._dummy_env as dummy_env:
+            self.batch_size = torch.Size([self.num_workers, *dummy_env.batch_size])
+            self._action_spec = dummy_env.action_spec
+            self._observation_spec = dummy_env.observation_spec
+            self._reward_spec = dummy_env.reward_spec
 
     @property
     def _dummy_env(self) -> _EnvClass:
-        if (
-            self._dummy_env_instance is not None
-            and not self._dummy_env_instance.is_closed
-        ):
-            return self._dummy_env_instance
-        self._dummy_env_instance = self._dummy_env_fun()
-        return self._dummy_env_instance
+        return _dummy_env_context(self._dummy_env_fun, self.create_env_kwargs[0])
 
     @_dummy_env.setter
     def _dummy_env(self, value: _EnvClass) -> None:
@@ -210,10 +216,11 @@ class _BatchedEnv(_EnvClass):
 
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
-        shared_tensordict_parent = make_tensordict(
-            self._dummy_env,
-            self.policy_proof,
-        )
+        with self._dummy_env as dummy_env:
+            shared_tensordict_parent = make_tensordict(
+                dummy_env,
+                self.policy_proof,
+            )
 
         shared_tensordict_parent = shared_tensordict_parent.expand(
             self.num_workers
