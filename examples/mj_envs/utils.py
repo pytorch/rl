@@ -64,7 +64,7 @@ class MJEnv(GymEnv):
     def _reset(self, td=None, **kwargs):
         td = super()._reset(td, **kwargs)
         if self.from_pixels:
-            img = self._env.render_camera_offscreen(sim=self._env.sim, cameras=[None])
+            img = self._env.render_camera_offscreen(sim=self._env.sim, cameras=[None], device_id=self.render_device)
             img = torch.Tensor(img).squeeze(0)
             td.set("next_pixels", img)
         return td
