@@ -14,8 +14,7 @@ env_per_collector=2
 collector_devices=cuda:0
 reward_scaling=1.0
 reward_loc=2.0
-no_norm_stats
-lr=0.001
+lr=0.0002
 normalize_rewards_online
 catframes=4
 ou_exploration

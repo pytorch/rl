@@ -641,7 +641,7 @@ class GymLikeEnv(_EnvWrapper):
         tensordict_out.set("done", done)
         for key in self.info_keys:
             data = info[0][key]
-            tensordict_out.set("done", data)
+            tensordict_out.set(key, data)
 
         self.current_tensordict = step_tensordict(tensordict_out)
         return tensordict_out
