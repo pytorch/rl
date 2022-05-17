@@ -9,7 +9,6 @@ dependencies:
     - protobuf
     - future
     - cloudpickle
-    - tqdm
     - pytest
     - pytest-cov
     - pytest-mock
