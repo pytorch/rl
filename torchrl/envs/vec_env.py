@@ -181,8 +181,12 @@ class _BatchedEnv(_EnvClass):
             kwargs (dict or list of dict): new kwargs to use with the environments
 
         """
-        for _kwargs in self.create_env_kwargs:
-            _kwargs.update(kwargs)
+        if not isinstance(kwargs, dict):
+            for _kwargs, _kwargs_new in zip(self.create_env_kwargs, kwargs):
+                _kwargs.update(_kwargs_new)
+        else:
+            for _kwargs in self.create_env_kwargs:
+                _kwargs.update(kwargs)
 
     @property
     def _dummy_env(self) -> _EnvClass:
