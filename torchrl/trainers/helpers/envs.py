@@ -223,7 +223,9 @@ def transformed_env_constructor(
     return make_transformed_env
 
 
-def parallel_env_constructor(args: Namespace, **kwargs) -> Union[ParallelEnv, EnvCreator]:
+def parallel_env_constructor(
+    args: Namespace, **kwargs
+) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:

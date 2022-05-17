@@ -117,6 +117,7 @@ class EnvCreator:
             self.share_memory(self._transform_state_dict)
         self.initialized = True
         shadow_env.close()
+        del shadow_env
         return self
 
     def __call__(self, **kwargs) -> _EnvClass:
