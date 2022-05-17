@@ -492,13 +492,13 @@ class TanhDelta(D.TransformedDistribution):
             if not all(max > min):
                 raise ValueError(minmax_msg)
 
-        self.min = min
-        self.max = max
+        self.min = _cast_device(min, net_output.device)
+        self.max = _cast_device(max, net_output.device)
         loc = self.update(net_output)
 
         t = SafeTanhTransform()
-        non_trivial_min = (isinstance(min, torch.Tensor) and (min != 1.0).any()) or (
-            not isinstance(min, torch.Tensor) and min != 1.0
+        non_trivial_min = (isinstance(min, torch.Tensor) and (min != -1.0).any()) or (
+            not isinstance(min, torch.Tensor) and min != -1.0
         )
         non_trivial_max = (isinstance(max, torch.Tensor) and (max != 1.0).any()) or (
             not isinstance(max, torch.Tensor) and max != 1.0
@@ -507,7 +507,9 @@ class TanhDelta(D.TransformedDistribution):
             t = D.ComposeTransform(
                 [
                     t,
-                    D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                    D.AffineTransform(
+                        loc=(self.max + self.min) / 2, scale=(self.max - self.min) / 2
+                    ),
                 ]
             )
         event_shape = net_output.shape[-event_dims:]
@@ -522,15 +524,6 @@ class TanhDelta(D.TransformedDistribution):
         )
 
         super().__init__(base, t)
-
-    def to(self, device: torch.device):
-        self.min = _cast_device(self.min, device)
-        self.max = _cast_device(self.max, device)
-        if isinstance(self.transforms, D.ComposeTransform):
-            for t in self.transforms.parts:
-                if isinstance(t, D.AffineTransform):
-                    t.loc = _cast_device(t.loc, device)
-                    t.scale = _cast_device(t.scale, device)
 
     def update(self, net_output: torch.Tensor) -> Optional[torch.Tensor]:
         loc = net_output

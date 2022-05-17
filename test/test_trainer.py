@@ -46,6 +46,9 @@ class MockingCollector:
     def update_policy_weights_(self):
         self.called_update_policy_weights_ = True
 
+    def shutdown(self):
+        pass
+
 
 def mocking_trainer() -> Trainer:
     trainer = Trainer(
