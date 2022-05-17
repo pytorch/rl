@@ -6,6 +6,8 @@
 import uuid
 from datetime import datetime
 
+from torchrl.envs import ParallelEnv
+
 try:
     import configargparse as argparse
 
@@ -146,8 +148,11 @@ def main(args):
     else:
         recorder_rm = recorder
 
-    recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
-    create_env_fn.close()
+    if isinstance(create_env_fn, ParallelEnv):
+        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
+        create_env_fn.close()
+    else:
+        recorder_rm.load_state_dict(create_env_fn.state_dict())
 
     # reset reward scaling
     for t in recorder.transform:
