@@ -244,7 +244,9 @@ class MetaTensor:
             return self.view(*shape[0])
         elif not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
-        new_shape = torch.zeros(self.shape, device="meta").view(*shape)
+        new_shape = torch.zeros(
+            self.shape, device="meta", requires_grad=self.requires_grad
+        ).view(*shape)
         return MetaTensor(
             new_shape,
             device=self.device,

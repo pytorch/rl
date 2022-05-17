@@ -1115,6 +1115,159 @@ class TestTensorDicts:
         items_meta = list(td.items_meta())
         assert len(values_meta) == len(items_meta)
 
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "saved_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
+    def test_set_requires_grad(self, td_name):
+        td = getattr(self, td_name)
+        assert not td._get_meta("a").requires_grad
+        td.set("a", torch.randn_like(td.get("a")).requires_grad_())
+        assert td._get_meta("a").requires_grad
+
+
+class TestTensorDictsRequiresGrad:
+    @property
+    def td(self):
+        return TensorDict(
+            source={
+                "a": torch.randn(3, 1, 5),
+                "b": torch.randn(3, 1, 10, requires_grad=True),
+                "c": torch.randint(10, (3, 1, 3)),
+            },
+            batch_size=[3, 1],
+        )
+
+    @property
+    def stacked_td(self):
+        return torch.stack([self.td for _ in range(2)], 0)
+
+    @property
+    def idx_td(self):
+        return self.td[0]
+
+    @property
+    def sub_td(self):
+        return self.td.get_sub_tensordict(0)
+
+    @property
+    def unsqueezed_td(self):
+        return self.td.unsqueeze(0)
+
+    @property
+    def td_reset_bs(self):
+        td = self.td
+        td = td.unsqueeze(-1).to_tensordict()
+        td.batch_size = torch.Size([3, 1])
+        return td
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
+    def test_init_requires_grad(self, td_name):
+        td = getattr(self, td_name)
+        assert td._get_meta("b").requires_grad
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
+    def test_view(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        td_view = td.view(-1)
+        assert td_view._get_meta("b").requires_grad
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
+    def test_expand(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        batch_size = td.batch_size
+        new_td = td.expand(3)
+        assert new_td._get_meta("b").requires_grad
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
+    def test_cast(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        td_td = td.to(TensorDict)
+        assert td_td._get_meta("b").requires_grad
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
+    def test_clone_td(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        assert torch.clone(td)._get_meta("b").requires_grad
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "idx_td",
+            "unsqueezed_td",
+            "td_reset_bs",
+        ],
+    )
+    def test_squeeze(self, td_name, squeeze_dim=-1):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        assert torch.squeeze(td, dim=-1)._get_meta("b").requires_grad
+
 
 def test_batchsize_reset():
     td = TensorDict(
@@ -1456,9 +1609,9 @@ def test_requires_grad(device):
         )
         for i in range(10)
     ]
-    sub_td = LazyStackedTensorDict(*tensordicts, stack_dim=0)
+    stacked_td = LazyStackedTensorDict(*tensordicts, stack_dim=0)
     # First stacked tensor has requires_grad == True
-    assert list(sub_td.values_meta())[0].requires_grad is True
+    assert list(stacked_td.values_meta())[0].requires_grad is True
     td0 = SavedTensorDict(tensordicts[0])
     with pytest.raises(
         Exception,
