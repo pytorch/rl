@@ -220,6 +220,10 @@ class TDModule(nn.Module):
             )
         elif tensordict_out is None:
             tensordict_out = tensordict
+        if len(out_keys) != len(tensors):
+            raise RuntimeError(
+                f"Got a different number of tensors and keys: {len(tensors)} vs {len(out_keys)}"
+            )
         for _out_key, _tensor in zip(out_keys, tensors):
             tensordict_out.set(_out_key, _tensor)
         return tensordict_out
@@ -617,7 +621,7 @@ class ProbabilisticTDModule(TDModule):
 
         dist, *tensors = self.get_dist(tensordict, **kwargs)
         sampled_tensor = self._dist_sample(
-            dist, *tensors, interaction_mode=exploration_mode()
+            dist, *tensors[:1], interaction_mode=exploration_mode()
         )
         tensordict_out = self._write_to_tensordict(
             tensordict,
@@ -697,7 +701,10 @@ class ProbabilisticTDModule(TDModule):
                     "tensor."
                 )
             if isinstance(dist, TransformedDistribution):
-                return dist.transforms(tensors[0])
+                out = tensors[0]
+                for t in dist.transforms:
+                    out = t(out)
+                return out
             else:
                 return tensors[0]
         else:

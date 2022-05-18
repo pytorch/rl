@@ -260,7 +260,7 @@ class TransformedEnv(_EnvClass):
         self.batch_size = self.env.batch_size
         self.is_closed = False
 
-        kwargs['device'] = env.device
+        kwargs["device"] = env.device
         super().__init__(**kwargs)
 
     @property
@@ -1338,28 +1338,17 @@ class gSDENoise(Transform):
 
     def __init__(
         self,
-        action_dim: int,
-        state_dim: Optional[int] = None,
-        observation_key="next_observation_vector",
     ) -> None:
         super().__init__(keys=[])
-        self.action_dim = action_dim
-        self.state_dim = state_dim
-        self.observation_key = observation_key
 
     def reset(self, tensordict: _TensorDict) -> _TensorDict:
         tensordict = super().reset(tensordict=tensordict)
-        if self.state_dim is None:
-            raise RuntimeError("state_dim must be provided to gSDENoise transform")
-        else:
-            state_dim = self.state_dim
 
         tensordict.set(
             "_eps_gSDE",
-            torch.randn(
+            torch.zeros(
                 *tensordict.batch_size,
-                self.action_dim,
-                state_dim,
+                1,
                 device=tensordict.device,
             ),
         )

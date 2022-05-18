@@ -4,8 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
-from warnings import warn
 from typing import Optional, Sequence, Union
+from warnings import warn
 
 import torch
 from torch import nn
@@ -292,8 +292,10 @@ class gSDEWrapper(nn.Module):
         action_dim: int,
         state_dim: int,
         sigma_init: float = None,
-        scale_min: float = 0.1,
+        scale_min: float = 0.01,
         scale_max: float = 10.0,
+        learn_scale: bool = True,
+        total_steps: Optional[int] = None,
     ) -> None:
         super().__init__()
         self.policy_model = policy_model
@@ -301,25 +303,48 @@ class gSDEWrapper(nn.Module):
         self.state_dim = state_dim
         self.scale_min = scale_min
         self.scale_max = scale_max
-        if sigma_init is None:
-            sigma_init = inv_softplus(math.sqrt((1.0 - scale_min) / state_dim))
-        self.register_parameter(
-            "log_sigma",
-            nn.Parameter(torch.zeros((action_dim, state_dim), requires_grad=True)),
-        )
-        self.register_buffer("sigma_init", torch.tensor(sigma_init))
+        self.learn_scale = learn_scale
+        if self.learn_scale:
+            if sigma_init is None:
+                sigma_init = inv_softplus(math.sqrt((1.0 - scale_min) / state_dim))
+            self.register_parameter(
+                "log_sigma",
+                nn.Parameter(torch.zeros((action_dim, state_dim), requires_grad=True)),
+            )
+            self.register_buffer("sigma_init", torch.tensor(sigma_init))
+        else:
+            if sigma_init is None:
+                sigma_init = math.sqrt((1.0 - scale_min) / state_dim)
+            self.register_buffer("sigma_init", torch.tensor(sigma_init))
+            self.register_buffer(
+                "sigma", torch.full((action_dim, state_dim), sigma_init)
+            )
+            if total_steps:
+                self._update_step = (sigma_init - scale_min) / total_steps
 
     def forward(self, state, *tensors):
         *tensors, gSDE_noise = tensors
-        sigma = (
-            torch.nn.functional.softplus(self.log_sigma + self.sigma_init)
-            + self.scale_min
-        )
+        if self.learn_scale:
+            sigma = (
+                torch.nn.functional.softplus(self.log_sigma + self.sigma_init)
+                + self.scale_min
+            )
+        else:
+            sigma = self.sigma
         sigma = sigma.clamp_max(self.scale_max)
         if gSDE_noise is None:
-            warn("gSDE noise is None, using zero noise instead")
-            gSDE_noise = torch.zeros_like(sigma)
-
+            # if exploration_mode() in ("random", "net_output", None):
+            #     raise RuntimeError(
+            #         "No noise was provided to gSDE wrapper but the exploration "
+            #         "mode suggests that actions should be sampled randomly.")
+            gSDE_noise = torch.randn(
+                *state.shape[:-1], *sigma.shape, device=state.device, dtype=state.dtype
+            )
+        elif gSDE_noise.numel() == state[..., 0].numel() and (gSDE_noise == 0).all():
+            # this is the reset signal
+            gSDE_noise = torch.randn(
+                *state.shape[:-1], *sigma.shape, device=state.device, dtype=state.dtype
+            )
         gSDE_noise = sigma * gSDE_noise
         mu = self.policy_model(state, *tensors)
         if isinstance(mu, tuple):
@@ -329,7 +354,7 @@ class gSDEWrapper(nn.Module):
         eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
         if exploration_mode() in ("random", "net_output", None):
             action = mu + eps
-        elif exploration_mode() in ("mode", ):
+        elif exploration_mode() in ("mode",):
             action = mu
         else:
             raise RuntimeError(
@@ -338,4 +363,10 @@ class gSDEWrapper(nn.Module):
         sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(1e-5).sqrt()
         if not torch.isfinite(sigma).all():
             print("inf sigma")
-        return action, mu, sigma
+        return action, gSDE_noise, mu, sigma
+
+    def sigma_step(self, frames: int = 1):
+        if self.learn_scale:
+            raise RuntimeError("gSDE sigma_step is prohibited when sigma is learnt")
+        self.sigma.data -= self._update_step * frames
+        self.sigma.data.clamp_min_(self.scale_min)

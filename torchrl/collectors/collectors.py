@@ -385,7 +385,7 @@ class SyncDataCollector(_DataCollector):
         else:
             if td.device == torch.device("cpu") and self.pin_memory:
                 td.pin_memory()
-            self._td_policy.update(td, inplace=True)
+            self._td_policy.update(td, inplace=False)
         return self._td_policy
 
     def _cast_to_env(
@@ -396,10 +396,10 @@ class SyncDataCollector(_DataCollector):
             if self._td_env is None:
                 self._td_env = td.to(env_device)
             else:
-                self._td_env.update(td, inplace=True)
+                self._td_env.update(td, inplace=False)
             return self._td_env
         else:
-            return dest.update(td, inplace=True)
+            return dest.update(td, inplace=False)
 
     def _reset_if_necessary(self) -> None:
         done = self._tensordict.get("done")
@@ -470,7 +470,11 @@ class SyncDataCollector(_DataCollector):
                 tensordict_out.append(self._tensordict.clone())
 
                 self._reset_if_necessary()
-                self._tensordict.update(step_tensordict(self._tensordict))
+                self._tensordict.update(
+                    step_tensordict(
+                        self._tensordict.exclude("reward", "done"), keep_other=True
+                    )
+                )
             if self.return_in_place and len(self._tensordict_out.keys()) > 0:
                 tensordict_out = torch.stack(tensordict_out, len(self.env.batch_size))
                 tensordict_out = tensordict_out.select(*self._tensordict_out.keys())

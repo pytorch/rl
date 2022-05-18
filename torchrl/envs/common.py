@@ -413,7 +413,9 @@ class _EnvClass:
                 tensordicts.append(tensordict.clone())
                 if tensordict.get("done").all() or i == n_steps - 1:
                     break
-                tensordict = step_tensordict(tensordict)
+                tensordict = step_tensordict(
+                    tensordict.exclude("reward", "done"), keep_other=True
+                )
 
                 if callback is not None:
                     callback(self, tensordict)

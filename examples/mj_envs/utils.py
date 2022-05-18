@@ -1,6 +1,9 @@
 import torch
-from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec, \
-    NdBoundedTensorSpec
+from torchrl.data import (
+    CompositeSpec,
+    UnboundedContinuousTensorSpec,
+    NdBoundedTensorSpec,
+)
 from torchrl.envs import GymEnv
 from torchrl.envs.libs.gym import _has_gym, _gym_to_torchrl_spec_transform
 from mj_envs.envs.relay_kitchen import *
@@ -31,8 +34,7 @@ class MJEnv(GymEnv):
             )
         try:
             env = self.lib.make(
-                envname, frameskip=self.frame_skip, device_id=render_device,
-                **kwargs
+                envname, frameskip=self.frame_skip, device_id=render_device, **kwargs
             )
             self.wrapper_frame_skip = 1
         except TypeError as err:
@@ -45,8 +47,7 @@ class MJEnv(GymEnv):
         self.from_pixels = from_pixels
         self.render_device = render_device
 
-        self.action_spec = _gym_to_torchrl_spec_transform(
-            self._env.action_space)
+        self.action_spec = _gym_to_torchrl_spec_transform(self._env.action_space)
         self.observation_spec = _gym_to_torchrl_spec_transform(
             self._env.observation_space
         )

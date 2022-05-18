@@ -120,9 +120,13 @@ def main(args):
     loss_module, target_net_updater = make_ddpg_loss(model, args)
     actor_model_explore = model[0]
     if args.ou_exploration:
+        if args.gSDE:
+            raise RuntimeError("cannot use gSDE with ou_exploration")
         actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-            actor_model_explore, annealing_num_steps=args.annealing_frames,
-            sigma=args.ou_sigma, theta=args.ou_theta,
+            actor_model_explore,
+            annealing_num_steps=args.annealing_frames,
+            sigma=args.ou_sigma,
+            theta=args.ou_theta,
         ).to(device)
     if device == torch.device("cpu"):
         # mostly for debugging
@@ -141,9 +145,8 @@ def main(args):
         actor_model_explore=actor_model_explore,
         args=args,
         make_env_kwargs=[
-            {"render_device": device,
-             'device': device} if device >= 0 else {} for device in
-            args.env_rendering_device
+            {"render_device": device, "device": device} if device >= 0 else {}
+            for device in args.env_rendering_device
         ],
     )
 
@@ -186,21 +189,27 @@ def main(args):
         args,
     )
 
-    trainer.register_op("pre_steps_log",
-                        lambda batch: ("time", batch["time"].mean()))
+    trainer.register_op("pre_steps_log", lambda batch: ("time", batch["time"].mean()))
     trainer.register_op(
         "pre_steps_log",
-        lambda batch: (
-        "solved", batch["solved"].sum() / batch["solved"].numel()),
+        lambda batch: ("solved", batch["solved"].sum() / batch["solved"].numel()),
     )
     trainer.register_op(
-        "pre_steps_log",
-        lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean())
+        "pre_steps_log", lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean())
     )
     trainer.register_op(
-        "pre_steps_log",
-        lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean())
+        "pre_steps_log", lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean())
     )
+    if args.gSDE:
+        trainer.register_op(
+            "pre_steps_log",
+            lambda batch: ("gSDE sigma", actor_model_explore.module.sigma.mean()),
+        )
+        trainer.register_op(
+            "post_steps",
+            actor_model_explore.module.sigma_step,
+            frames=args.frames_per_batch,
+        )
 
     trainer._post_steps_log_ops[0][0](None)
     trainer._post_steps_log_ops[-1][0](None)

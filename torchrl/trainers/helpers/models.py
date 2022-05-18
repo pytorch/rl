@@ -140,8 +140,7 @@ def make_dqn_actor(
                 "kernel_sizes": [8, 4, 3],
                 "strides": [4, 2, 1],
             },
-            "mlp_kwargs": {"num_cells": 512,
-                           "layer_class": linear_layer_class},
+            "mlp_kwargs": {"num_cells": 512, "layer_class": linear_layer_class},
         }
         in_key = "pixels"
 
@@ -149,12 +148,10 @@ def make_dqn_actor(
         net_class = DuelingMlpDQNet
         default_net_kwargs = {
             "mlp_kwargs_feature": {},  # see class for details
-            "mlp_kwargs_output": {"num_cells": 512,
-                                  "layer_class": linear_layer_class},
+            "mlp_kwargs_output": {"num_cells": 512, "layer_class": linear_layer_class},
         }
         # automatically infer in key
-        in_key = list(env_specs["observation_spec"].keys())[0].split("next_")[
-            -1]
+        in_key = list(env_specs["observation_spec"].keys())[0].split("next_")[-1]
 
     out_features = env_specs["action_spec"].shape[0]
     actor_class = QValueActor
@@ -299,16 +296,25 @@ def make_ddpg_actor(
         hidden_features = obs_spec.shape[-1]
         actor_net = DdpgMlpActor(**actor_net_default_kwargs)
 
+    distribution_kwargs = {
+        "min": _cast_device(env_specs["action_spec"].space.minimum, device),
+        "max": _cast_device(env_specs["action_spec"].space.maximum, device),
+    }
     if not args.gSDE:
-        pass
+        distribution_class = TanhDelta
+        interaction = "random"
     else:
+        distribution_class = TanhNormal
         actor_net = gSDEWrapper(
             actor_net,
             action_dim=env_specs["action_spec"].shape[0],
-            state_dim=hidden_features
+            state_dim=hidden_features,
+            learn_scale=False,
+            total_steps=args.total_frames,
         )
         in_keys += ["_eps_gSDE"]
-        out_keys = ["mu", "sigma", "action"]
+        out_keys = ["action", "action_copy", "_eps_gSDE"]
+        interaction = "net_output"
 
     actor = actor_class(
         in_keys=in_keys,
@@ -316,30 +322,34 @@ def make_ddpg_actor(
         spec=env_specs["action_spec"],
         module=actor_net,
         safe=True,
-        distribution_class=TanhDelta,
-        distribution_kwargs={
-            "min": _cast_device(env_specs["action_spec"].space.minimum,
-                                device),
-            "max": _cast_device(env_specs["action_spec"].space.maximum,
-                                device),
-        },
+        distribution_class=distribution_class,
+        distribution_kwargs=distribution_kwargs,
+        default_interaction_mode=interaction,
     )
-    with set_exploration_mode("random"):
+    with set_exploration_mode("net_output"):
         if from_pixels:
-            td = actor(TensorDict({"pixels": torch.randn(4, 84, 84),
-                                   "_eps_gSDE": torch.randn(
-                                       env_specs["action_spec"].shape[0],
-                                       hidden_features)}, []))
+            td = actor(
+                TensorDict(
+                    {"pixels": torch.randn(4, 84, 84), "_eps_gSDE": torch.zeros(1)}, []
+                )
+            )
         else:
-            td = actor(TensorDict({"observation_vector": torch.randn(hidden_features),
-                           "_eps_gSDE": torch.randn(
-                               env_specs["action_spec"].shape[0],
-                               hidden_features)}, []))
+            td = actor(
+                TensorDict(
+                    {
+                        "observation_vector": torch.randn(hidden_features),
+                        "_eps_gSDE": torch.zeros(1),
+                    },
+                    [],
+                )
+            )
     with set_exploration_mode("mode"):
         if from_pixels:
             td = actor(TensorDict({"pixels": torch.randn(4, 84, 84)}, []))
         else:
-            td = actor(TensorDict({"observation_vector": torch.randn(hidden_features)}, []))
+            td = actor(
+                TensorDict({"observation_vector": torch.randn(hidden_features)}, [])
+            )
 
     state_class = ValueOperator
     if from_pixels:
@@ -350,7 +360,7 @@ def make_ddpg_actor(
             },
             "conv_net_kwargs": {
                 "activation_class": ACTIVATIONS[args.activation],
-            }
+            },
         }
         value_net_default_kwargs.update(value_net_kwargs)
 
@@ -358,8 +368,7 @@ def make_ddpg_actor(
         out_keys = ["state_action_value"]
         q_net = DdpgCnnQNet(**value_net_default_kwargs)
     else:
-        value_net_default_kwargs1 = {
-            "activation_class": ACTIVATIONS[args.activation]}
+        value_net_default_kwargs1 = {"activation_class": ACTIVATIONS[args.activation]}
         value_net_default_kwargs1.update(
             value_net_kwargs.get(
                 "mlp_net_kwargs_net1",
@@ -399,7 +408,7 @@ def make_ddpg_actor(
     module = torch.nn.ModuleList([actor, value]).to(device)
 
     # init
-    with torch.no_grad():
+    with torch.no_grad(), set_exploration_mode("mode"):
         proof_environment.reset()
         td = proof_environment.current_tensordict.to(device)
         module[0](td)
@@ -547,8 +556,7 @@ def make_ppo_model(
                 strides=[4, 2, 1],
             )
             if args.gSDE:
-                raise NotImplementedError(
-                    "must define the hidden_features accordingly")
+                raise NotImplementedError("must define the hidden_features accordingly")
         else:
             if args.lstm:
                 raise NotImplementedError(
@@ -574,14 +582,12 @@ def make_ppo_model(
         )
         if not args.gSDE:
             actor_net = NormalParamWrapper(
-                policy_net,
-                scale_mapping=f"biased_softplus_{args.default_policy_scale}"
+                policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
             )
             in_keys = ["hidden"]
         else:
             actor_net = gSDEWrapper(
-                policy_net, action_dim=action_spec.shape[0],
-                state_dim=hidden_features
+                policy_net, action_dim=action_spec.shape[0], state_dim=hidden_features
             )
             in_keys = ["hidden", "gSDE_noise"]
             out_keys += ["_action_duplicate"]
@@ -624,13 +630,11 @@ def make_ppo_model(
 
         if not args.gSDE:
             actor_net = NormalParamWrapper(
-                policy_net,
-                scale_mapping=f"biased_softplus_{args.default_policy_scale}"
+                policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
             )
         else:
             actor_net = gSDEWrapper(
-                policy_net, action_dim=action_spec.shape[0],
-                state_dim=obs_spec.shape[0]
+                policy_net, action_dim=action_spec.shape[0], state_dim=obs_spec.shape[0]
             )
             in_keys_actor += ["_eps_gSDE"]
             out_keys += ["_action_duplicate"]
@@ -1071,21 +1075,28 @@ def parser_model_args_continuous(
             "--ou-exploration",
             action="store_true",
             help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
-                 "efficient entropy-based exploration, this should be left for experimentation only.",
+            "efficient entropy-based exploration, this should be left for experimentation only.",
+        )
+        parser.add_argument(
+            "--no_ou_exploration",
+            "--no-ou-exploration",
+            action="store_false",
+            dest="ou_exploration",
+            help="see `'--ou_exploration'`.",
         )
         parser.add_argument(
             "--ou_sigma",
             "--ou-sigma",
             type=float,
             default=0.2,
-            help="sigma of OU exploration method"
+            help="sigma of OU exploration method",
         )
         parser.add_argument(
             "--ou_theta",
             "--ou-theta",
             type=float,
             default=0.2,
-            help="theta of OU exploration method"
+            help="theta of OU exploration method",
         )
         parser.add_argument(
             "--distributional",
@@ -1105,9 +1116,9 @@ def parser_model_args_continuous(
             "--tanh-loc",
             action="store_true",
             help="if True, uses a Tanh-Normal transform for the policy "
-                 "location of the form "
-                 "`upscale * tanh(loc/upscale)` (only available with "
-                 "TanhTransform and TruncatedGaussian distributions)",
+            "location of the form "
+            "`upscale * tanh(loc/upscale)` (only available with "
+            "TanhTransform and TruncatedGaussian distributions)",
         )
         parser.add_argument(
             "--gSDE",

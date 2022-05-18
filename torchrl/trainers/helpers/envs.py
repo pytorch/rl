@@ -200,20 +200,13 @@ def transformed_env_constructor(
                     CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1)
                 )
 
-            if hasattr(args, "gSDE") and args.gSDE:
-                state_dim = env.observation_spec[out_key].shape[-1]
-                env.append_transform(
-                    gSDENoise(
-                        action_dim=env.action_spec.shape[-1],
-                        observation_key=out_key,
-                        state_dim=state_dim,
-                    )
-                )
-
         else:
             env.append_transform(DoubleToFloat(keys=double_to_float_list))
             # if hasattr(args, "gSDE") and args.gSDE:
             #     raise RuntimeError("gSDE not compatible with from_pixels=True")
+
+        if hasattr(args, "gSDE") and args.gSDE:
+            env.append_transform(gSDENoise())
 
         env.append_transform(FiniteTensorDictCheck())
         return env
