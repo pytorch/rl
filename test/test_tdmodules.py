@@ -314,9 +314,11 @@ class TestTDSequence:
         param_multiplier = 2 if probabilistic else 1
         if lazy:
             net1 = nn.LazyLinear(4)
+            dummy_net = nn.LazyLinear(4)
             net2 = nn.LazyLinear(4 * param_multiplier)
         else:
             net1 = nn.Linear(3, 4)
+            dummy_net = nn.Linear(4, 4)
             net2 = nn.Linear(4, 4 * param_multiplier)
         if probabilistic:
             net2 = NormalParamWrapper(net2)
@@ -345,6 +347,13 @@ class TestTDSequence:
                 out_keys=["hidden"],
                 safe=False,
             )
+            dummy_tdmodule = TDModule(
+                dummy_net,
+                None,
+                in_keys=["hidden"],
+                out_keys=["hidden"],
+                safe=False,
+            )
             tdmodule2 = tdclass(
                 spec=spec,
                 module=net2,
@@ -353,7 +362,21 @@ class TestTDSequence:
                 safe=False,
                 **kwargs
             )
-            tdmodule = TDSequence(tdmodule1, tdmodule2)
+            tdmodule = TDSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+
+        assert hasattr(tdmodule, "__setitem__")
+        assert len(tdmodule) == 3
+        tdmodule[1] = tdmodule2
+        assert len(tdmodule) == 3
+
+        assert hasattr(tdmodule, "__delitem__")
+        assert len(tdmodule) == 3
+        del tdmodule[2]
+        assert len(tdmodule) == 2
+
+        assert hasattr(tdmodule, "__getitem__")
+        assert tdmodule[0] is tdmodule1
+        assert tdmodule[1] is tdmodule2
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tdmodule(td)
@@ -383,11 +406,13 @@ class TestTDSequence:
         param_multiplier = 2 if probabilistic else 1
 
         net1 = nn.Linear(3, 4)
+        dummy_net = nn.Linear(4, 4)
         net2 = nn.Linear(4, 4 * param_multiplier)
         if probabilistic:
             net2 = NormalParamWrapper(net2)
 
         fnet1, params1 = make_functional(net1)
+        fdummy_net, _ = make_functional(dummy_net)
         fnet2, params2 = make_functional(net2)
         params = list(params1) + list(params2)
 
@@ -409,16 +434,29 @@ class TestTDSequence:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
             tdmodule1 = TDModule(
-                fnet1,
-                None,
-                in_keys=["in"],
-                out_keys=["hidden"],
-                safe=False,
+                fnet1, None, in_keys=["in"], out_keys=["hidden"], safe=False
+            )
+            dummy_tdmodule = TDModule(
+                fdummy_net, None, in_keys=["hidden"], out_keys=["hidden"], safe=False
             )
             tdmodule2 = tdclass(
                 fnet2, spec, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
             )
-            tdmodule = TDSequence(tdmodule1, tdmodule2)
+            tdmodule = TDSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+
+        assert hasattr(tdmodule, "__setitem__")
+        assert len(tdmodule) == 3
+        tdmodule[1] = tdmodule2
+        assert len(tdmodule) == 3
+
+        assert hasattr(tdmodule, "__delitem__")
+        assert len(tdmodule) == 3
+        del tdmodule[2]
+        assert len(tdmodule) == 2
+
+        assert hasattr(tdmodule, "__getitem__")
+        assert tdmodule[0] is tdmodule1
+        assert tdmodule[1] is tdmodule2
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tdmodule(td, params=params)
@@ -448,6 +486,7 @@ class TestTDSequence:
         param_multiplier = 2 if probabilistic else 1
 
         net1 = nn.Sequential(nn.Linear(7, 7), nn.BatchNorm1d(7))
+        dummy_net = nn.Sequential(nn.Linear(7, 7), nn.BatchNorm1d(7))
         net2 = nn.Sequential(
             nn.Linear(7, 7 * param_multiplier), nn.BatchNorm1d(7 * param_multiplier)
         )
@@ -455,6 +494,7 @@ class TestTDSequence:
             net2 = NormalParamWrapper(net2)
 
         fnet1, params1, buffers1 = make_functional_with_buffers(net1)
+        fdummy_net, _, _ = make_functional_with_buffers(dummy_net)
         fnet2, params2, buffers2 = make_functional_with_buffers(net2)
 
         params = list(params1) + list(params2)
@@ -478,16 +518,29 @@ class TestTDSequence:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
             tdmodule1 = TDModule(
-                fnet1,
-                None,
-                in_keys=["in"],
-                out_keys=["hidden"],
-                safe=False,
+                fnet1, None, in_keys=["in"], out_keys=["hidden"], safe=False
+            )
+            dummy_tdmodule = TDModule(
+                fdummy_net, None, in_keys=["hidden"], out_keys=["hidden"], safe=False
             )
             tdmodule2 = tdclass(
                 fnet2, spec, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
             )
-            tdmodule = TDSequence(tdmodule1, tdmodule2)
+            tdmodule = TDSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+
+        assert hasattr(tdmodule, "__setitem__")
+        assert len(tdmodule) == 3
+        tdmodule[1] = tdmodule2
+        assert len(tdmodule) == 3
+
+        assert hasattr(tdmodule, "__delitem__")
+        assert len(tdmodule) == 3
+        del tdmodule[2]
+        assert len(tdmodule) == 2
+
+        assert hasattr(tdmodule, "__getitem__")
+        assert tdmodule[0] is tdmodule1
+        assert tdmodule[1] is tdmodule2
 
         td = TensorDict({"in": torch.randn(3, 7)}, [3])
         tdmodule(td, params=params, buffers=buffers)
@@ -518,11 +571,13 @@ class TestTDSequence:
         param_multiplier = 2 if probabilistic else 1
 
         net1 = nn.Linear(3, 4)
+        dummy_net = nn.Linear(4, 4)
         net2 = nn.Linear(4, 4 * param_multiplier)
         if probabilistic:
             net2 = NormalParamWrapper(net2)
 
         fnet1, params1 = make_functional(net1)
+        fdummy_net, _ = make_functional(dummy_net)
         fnet2, params2 = make_functional(net2)
         params = params1 + params2
 
@@ -550,10 +605,31 @@ class TestTDSequence:
                 out_keys=["hidden"],
                 safe=False,
             )
+            dummy_tdmodule = TDModule(
+                fdummy_net,
+                None,
+                in_keys=["hidden"],
+                out_keys=["hidden"],
+                safe=False,
+            )
             tdmodule2 = tdclass(
                 fnet2, spec, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
             )
-            tdmodule = TDSequence(tdmodule1, tdmodule2)
+            tdmodule = TDSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+
+        assert hasattr(tdmodule, "__setitem__")
+        assert len(tdmodule) == 3
+        tdmodule[1] = tdmodule2
+        assert len(tdmodule) == 3
+
+        assert hasattr(tdmodule, "__delitem__")
+        assert len(tdmodule) == 3
+        del tdmodule[2]
+        assert len(tdmodule) == 2
+
+        assert hasattr(tdmodule, "__getitem__")
+        assert tdmodule[0] is tdmodule1
+        assert tdmodule[1] is tdmodule2
 
         # vmap = True
         params = [p.repeat(10, *[1 for _ in p.shape]) for p in params]
