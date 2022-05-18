@@ -18,3 +18,4 @@ reward_loc=5.8
 actor_cells=64
 qvalue_cells=128
 no_norm_stats
+activation=elu

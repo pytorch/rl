@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
+from warnings import warn
 from typing import Optional, Sequence, Union
 
 import torch
@@ -14,6 +15,7 @@ from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
 __all__ = ["NoisyLinear", "NoisyLazyLinear", "reset_noise"]
 
 from torchrl.data.utils import DEVICE_TYPING
+from torchrl.envs.utils import exploration_mode
 from torchrl.modules.utils import inv_softplus
 
 
@@ -315,11 +317,24 @@ class gSDEWrapper(nn.Module):
         )
         sigma = sigma.clamp_max(self.scale_max)
         if gSDE_noise is None:
-            gSDE_noise = torch.randn_like(sigma)
+            warn("gSDE noise is None, using zero noise instead")
+            gSDE_noise = torch.zeros_like(sigma)
+
         gSDE_noise = sigma * gSDE_noise
-        eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
         mu = self.policy_model(state, *tensors)
-        action = mu + eps
+        if isinstance(mu, tuple):
+            # if mu is a tuple, it is assumed that the second output is a hidden state
+            # this allows us to use gSDE for pixel-based experiments
+            mu, state = mu
+        eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
+        if exploration_mode() in ("random", "net_output", None):
+            action = mu + eps
+        elif exploration_mode() in ("mode", ):
+            action = mu
+        else:
+            raise RuntimeError(
+                f"exploration mode {exploration_mode()} is not known to gSDE"
+            )
         sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(1e-5).sqrt()
         if not torch.isfinite(sigma).all():
             print("inf sigma")

@@ -212,8 +212,8 @@ def transformed_env_constructor(
 
         else:
             env.append_transform(DoubleToFloat(keys=double_to_float_list))
-            if hasattr(args, "gSDE") and args.gSDE:
-                raise RuntimeError("gSDE not compatible with from_pixels=True")
+            # if hasattr(args, "gSDE") and args.gSDE:
+            #     raise RuntimeError("gSDE not compatible with from_pixels=True")
 
         env.append_transform(FiniteTensorDictCheck())
         return env
