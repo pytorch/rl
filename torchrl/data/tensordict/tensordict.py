@@ -1275,15 +1275,23 @@ dtype=torch.float32)},
         return self.get_sub_tensordict(idx)
 
     def __setitem__(self, index: INDEX_TYPING, value: _TensorDict) -> None:
-        indexed_bs = _getitem_batch_size(self.batch_size, index)
-        if value.batch_size != indexed_bs:
-            raise RuntimeError(
-                f"indexed destination TensorDict batch size is {indexed_bs} "
-                f"(batch_size = {self.batch_size}, index={index}), "
-                f"which differs from the source batch size {value.batch_size}"
-            )
-        for key, item in value.items():
-            self.set_at_(key, item, index)
+        if isinstance(index, str):
+            self.set(index, value, inplace=False)
+        else:
+            indexed_bs = _getitem_batch_size(self.batch_size, index)
+            if value.batch_size != indexed_bs:
+                raise RuntimeError(
+                    f"indexed destination TensorDict batch size is {indexed_bs} "
+                    f"(batch_size = {self.batch_size}, index={index}), "
+                    f"which differs from the source batch size {value.batch_size}"
+                )
+            for key, item in value.items():
+                self.set_at_(key, item, index)
+
+    def __delitem__(self, index: INDEX_TYPING) -> _TensorDict:
+        if isinstance(index, str):
+            return self.del_(index)
+        raise IndexError(f"Index has to a string but received {index}.")
 
     @abc.abstractmethod
     def rename_key(self, old_key: str, new_key: str, safe: bool = False) -> _TensorDict:
@@ -2733,8 +2741,9 @@ class LazyStackedTensorDict(_TensorDict):
         )
 
     def __getitem__(self, item: INDEX_TYPING) -> _TensorDict:
-
-        if isinstance(item, torch.Tensor) and item.dtype == torch.bool:
+        if isinstance(item, str):
+            return self.get(item)
+        elif isinstance(item, torch.Tensor) and item.dtype == torch.bool:
             return self.masked_select(item)
         elif (
             isinstance(item, (Number,))
@@ -3129,7 +3138,9 @@ class SavedTensorDict(_TensorDict):
         return super().__reduce__(*args, **kwargs)
 
     def __getitem__(self, idx: INDEX_TYPING) -> _TensorDict:
-        if isinstance(idx, Number):
+        if isinstance(idx, str):
+            return self.get(idx)
+        elif isinstance(idx, Number):
             idx = (idx,)
         elif isinstance(idx, torch.Tensor) and idx.dtype == torch.bool:
             return self.masked_select(idx)
