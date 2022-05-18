@@ -1015,6 +1015,20 @@ def parser_model_args_continuous(
             "efficient entropy-based exploration, this should be left for experimentation only.",
         )
         parser.add_argument(
+            "--ou_sigma",
+            "--ou-sigma",
+            type=float,
+            default=0.2,
+            help="sigma of OU exploration method"
+        )
+        parser.add_argument(
+            "--ou_theta",
+            "--ou-theta",
+            type=float,
+            default=0.2,
+            help="theta of OU exploration method"
+        )
+        parser.add_argument(
             "--distributional",
             action="store_true",
             help="whether a distributional loss should be used (TODO: not implemented yet).",
