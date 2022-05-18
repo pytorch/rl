@@ -896,6 +896,9 @@ class TDSequence(TDModule):
     def __len__(self):
         return len(self.module)
 
+    def __getitem__(self, index: int) -> TDModule:
+        return self.module.__getitem__(index)
+
     @property
     def spec(self):
         kwargs = {}

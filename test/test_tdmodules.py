@@ -355,6 +355,10 @@ class TestTDSequence:
             )
             tdmodule = TDSequence(tdmodule1, tdmodule2)
 
+        assert hasattr(tdmodule, "__getitem__")
+        assert tdmodule[0] == tdmodule1
+        assert tdmodule[1] == tdmodule2
+
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tdmodule(td)
         assert td.shape == torch.Size([3])
@@ -420,6 +424,10 @@ class TestTDSequence:
             )
             tdmodule = TDSequence(tdmodule1, tdmodule2)
 
+        assert hasattr(tdmodule, "__getitem__")
+        assert tdmodule[0] == tdmodule1
+        assert tdmodule[1] == tdmodule2
+
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tdmodule(td, params=params)
         assert td.shape == torch.Size([3])
@@ -478,16 +486,16 @@ class TestTDSequence:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
             tdmodule1 = TDModule(
-                fnet1,
-                None,
-                in_keys=["in"],
-                out_keys=["hidden"],
-                safe=False,
+                fnet1, None, in_keys=["in"], out_keys=["hidden"], safe=False
             )
             tdmodule2 = tdclass(
                 fnet2, spec, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
             )
             tdmodule = TDSequence(tdmodule1, tdmodule2)
+
+        assert hasattr(tdmodule, "__getitem__")
+        assert tdmodule[0] == tdmodule1
+        assert tdmodule[1] == tdmodule2
 
         td = TensorDict({"in": torch.randn(3, 7)}, [3])
         tdmodule(td, params=params, buffers=buffers)
@@ -554,6 +562,10 @@ class TestTDSequence:
                 fnet2, spec, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
             )
             tdmodule = TDSequence(tdmodule1, tdmodule2)
+
+        assert hasattr(tdmodule, "__getitem__")
+        assert tdmodule[0] == tdmodule1
+        assert tdmodule[1] == tdmodule2
 
         # vmap = True
         params = [p.repeat(10, *[1 for _ in p.shape]) for p in params]
