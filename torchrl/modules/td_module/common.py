@@ -791,6 +791,8 @@ class TDSequence(TDModule):
 
     """
 
+    module: nn.ModuleList
+
     def __init__(
         self,
         *modules: TDModule,
@@ -895,6 +897,15 @@ class TDSequence(TDModule):
 
     def __len__(self):
         return len(self.module)
+
+    def __getitem__(self, index: Union[int, slice]) -> TDModule:
+        return self.module.__getitem__(index)
+
+    def __setitem__(self, index: int, tdmodule: TDModule) -> None:
+        return self.module.__setitem__(idx=index, module=tdmodule)
+
+    def __delitem__(self, index: Union[int, slice]) -> None:
+        self.module.__delitem__(idx=index)
 
     @property
     def spec(self):
