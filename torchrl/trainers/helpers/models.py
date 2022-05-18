@@ -324,10 +324,22 @@ def make_ddpg_actor(
                                 device),
         },
     )
-    # with set_exploration_mode("random"):
-    #     td = actor(TensorDict({"pixels": torch.randn(4, 84, 84), "_eps_gSDE": torch.randn(env_specs["action_spec"].shape[0], hidden_features)}, []))
-    # with set_exploration_mode("mode"):
-    #     td = actor(TensorDict({"pixels": torch.randn(4, 84, 84)}, []))
+    with set_exploration_mode("random"):
+        if from_pixels:
+            td = actor(TensorDict({"pixels": torch.randn(4, 84, 84),
+                                   "_eps_gSDE": torch.randn(
+                                       env_specs["action_spec"].shape[0],
+                                       hidden_features)}, []))
+        else:
+            td = actor(TensorDict({"observation_vector": torch.randn(hidden_features),
+                           "_eps_gSDE": torch.randn(
+                               env_specs["action_spec"].shape[0],
+                               hidden_features)}, []))
+    with set_exploration_mode("mode"):
+        if from_pixels:
+            td = actor(TensorDict({"pixels": torch.randn(4, 84, 84)}, []))
+        else:
+            td = actor(TensorDict({"observation_vector": torch.randn(hidden_features)}, []))
 
     state_class = ValueOperator
     if from_pixels:

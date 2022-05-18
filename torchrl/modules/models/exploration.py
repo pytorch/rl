@@ -338,4 +338,4 @@ class gSDEWrapper(nn.Module):
         sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(1e-5).sqrt()
         if not torch.isfinite(sigma).all():
             print("inf sigma")
-        return mu, sigma, action
+        return action, mu, sigma

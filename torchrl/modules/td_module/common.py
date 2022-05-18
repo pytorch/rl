@@ -24,6 +24,7 @@ import torch
 from functorch import FunctionalModule, FunctionalModuleWithBuffers, vmap
 from functorch._src.make_functional import _swap_state
 from torch import distributions as d, nn, Tensor
+from torch.distributions import TransformedDistribution
 
 from torchrl.data import (
     CompositeSpec,
@@ -44,16 +45,16 @@ __all__ = [
 
 
 def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
-    if not module.spec.is_in(tensordict_out.get(module.out_keys[0])):
+    if not module.spec.is_in(tensordict_out.get("action")):
         try:
             tensordict_out.set_(
                 module.out_keys[0],
-                module.spec.project(tensordict_out.get(module.out_keys[0])),
+                module.spec.project(tensordict_out.get("action")),
             )
         except RuntimeError:
             tensordict_out.set(
                 module.out_keys[0],
-                module.spec.project(tensordict_out.get(module.out_keys[0])),
+                module.spec.project(tensordict_out.get("action")),
             )
 
 
@@ -452,8 +453,7 @@ class ProbabilisticTDModule(TDModule):
             occur because of exploration policies or numerical under/overflow issues. As for the `spec` argument,
             this check will only occur for the distribution sample, but not the other tensors returned by the input
             module. If the sample is out of bounds, it is projected back onto the desired space using the
-            `TensorSpec.project`
-            method.
+            `TensorSpec.project` method.
             Default is `False`.
         save_dist_params (bool, optional): if True, the parameters of the distribution (i.e. the output of the module)
             will be written to the tensordict along with the sample. Those parameters can be used to
@@ -574,7 +574,7 @@ class ProbabilisticTDModule(TDModule):
             for i, _tensor in enumerate(out_tensors):
                 tensordict.set(f"{self.out_keys[0]}_dist_param_{i}", _tensor)
         dist, num_params = self.build_dist_from_params(out_tensors)
-        tensors = out_tensors[num_params:]
+        tensors = out_tensors[:-num_params]
 
         return (dist, *tensors)
 
@@ -585,6 +585,8 @@ class ProbabilisticTDModule(TDModule):
 
         Args:
             params (Tuple[Tensor, ...]): tensors to be used for the distribution construction.
+                if there are more elements in params than needed by the distribution, it is assumed that the
+                LAST elements will be the parameters.
 
         Returns:
             a distribution object and the number of parameters used for its construction.
@@ -596,11 +598,11 @@ class ProbabilisticTDModule(TDModule):
             else 1
         )
         if self.cache_dist and self._dist is not None:
-            self._dist.update(*params[:num_params])
+            self._dist.update(*params[-num_params:])
             dist = self._dist
         else:
             dist = self.distribution_class(
-                *params[:num_params], **self.distribution_kwargs
+                *params[-num_params:], **self.distribution_kwargs
             )
             if self.cache_dist:
                 self._dist = dist
@@ -614,17 +616,17 @@ class ProbabilisticTDModule(TDModule):
     ) -> _TensorDict:
 
         dist, *tensors = self.get_dist(tensordict, **kwargs)
-        out_tensor = self._dist_sample(
+        sampled_tensor = self._dist_sample(
             dist, *tensors, interaction_mode=exploration_mode()
         )
         tensordict_out = self._write_to_tensordict(
             tensordict,
-            [out_tensor] + list(tensors),
+            [sampled_tensor] + list(tensors),
             tensordict_out,
             vmap=kwargs.get("vmap", 0),
         )
         if self.return_log_prob:
-            log_prob = dist.log_prob(out_tensor)
+            log_prob = dist.log_prob(sampled_tensor)
             tensordict_out.set("_".join([self.out_keys[0], "log_prob"]), log_prob)
         return tensordict_out
 
@@ -694,7 +696,10 @@ class ProbabilisticTDModule(TDModule):
                     "Multiple values passed to _dist_sample when trying to return a single action "
                     "tensor."
                 )
-            return tensors[0]
+            if isinstance(dist, TransformedDistribution):
+                return dist.transforms(tensors[0])
+            else:
+                return tensors[0]
         else:
             raise NotImplementedError(f"unknown interaction_mode {interaction_mode}")
 
