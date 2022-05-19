@@ -21,7 +21,8 @@ class classproperty(property):
 def step_tensordict(
     tensordict: _TensorDict,
     next_tensordict: _TensorDict = None,
-    keep_other: bool = False,
+    keep_other: bool = True,
+    exclude_reward_done_action: bool = True,
 ) -> _TensorDict:
     """
     Given a tensordict retrieved after a step, returns another tensordict with all the 'next_' prefixes are removed,
@@ -32,7 +33,10 @@ def step_tensordict(
         tensordict (_TensorDict): tensordict with keys to be renamed
         next_tensordict (_TensorDict, optional): destination tensordict
         keep_other (bool, optional): if True, all keys that do not start with `'next_'` will be kept.
-            Default is False.
+            Default is True.
+        exclude_reward_done_action (bool, optional): if True, `"reward"` and `"done"` keys will be discarded
+            from the resulting tensordict ast they are considered to be time-sensitive.
+            Default is True.
 
     Returns:
          A new tensordict (or next_tensordict) with the "next_*" keys renamed without the "next_" prefix.
@@ -54,6 +58,9 @@ def step_tensordict(
 
     """
     other_keys = []
+    if exclude_reward_done_action:
+        # we exclude those keys to make sure we aren't reporting time-specific values at the next step.
+        tensordict = tensordict.exclude("reward", "done", "action")
     keys = [key for key in tensordict.keys() if key.startswith("next_")]
     new_keys = [key[5:] for key in keys]
     if keep_other:

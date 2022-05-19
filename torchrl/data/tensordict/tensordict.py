@@ -3208,14 +3208,14 @@ class _CustomOpTensorDict(_TensorDict):
         """
         return self.custom_op_kwargs
 
-    def _update_inv_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:
+    def _update_inv_op_kwargs(self, source_tensor: torch.Tensor) -> dict:
         """Allows for an inverse transformation to be customized for a
         certain shape, device or dtype.
 
         By default, this is a no-op on self.inv_op_kwargs
 
         Args:
-            source_meta_tensor: corresponding MetaTensor
+            source_tensor: corresponding tensor
 
         Returns:
             a dictionary with the kwargs of the operation to execute for
@@ -3285,18 +3285,18 @@ class _CustomOpTensorDict(_TensorDict):
         proc_value = self._process_tensor(
             value, check_device=False, check_tensor_shape=False
         )
-        if key in self.keys():
-            source_meta_tensor = self._source._get_meta(key)
-        else:
-            source_meta_tensor = MetaTensor(
-                proc_value,
-                device=proc_value.device,
-                dtype=proc_value.dtype,
-                _is_memmap=self.is_memmap(),
-                _is_shared=self.is_shared(),
-            )
+        # if key in self.keys():
+        #     source_meta_tensor = self._source._get_meta(key)
+        # else:
+        #     source_meta_tensor = MetaTensor(
+        #         proc_value,
+        #         device=proc_value.device,
+        #         dtype=proc_value.dtype,
+        #         _is_memmap=self.is_memmap(),
+        #         _is_shared=self.is_shared(),
+        #     )
         proc_value = getattr(proc_value, self.inv_op)(
-            **self._update_inv_op_kwargs(source_meta_tensor)
+            **self._update_inv_op_kwargs(proc_value)
         )
         self._source.set(key, proc_value, **kwargs)
         return self
@@ -3309,8 +3309,8 @@ class _CustomOpTensorDict(_TensorDict):
                 f"{self.__class__.__name__} does not support setting values. "
                 f"Consider calling .contiguous() before calling this method."
             )
-        meta_tensor = self._source._get_meta(key)
-        value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(meta_tensor))
+        # meta_tensor = self._source._get_meta(key)
+        value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(value))
         self._source.set_(key, value)
         return self
 
@@ -3415,9 +3415,9 @@ class _CustomOpTensorDict(_TensorDict):
         self, mask: torch.Tensor, value: Union[float, bool]
     ) -> _TensorDict:
         for key, item in self.items():
-            source_meta_tensor = self._get_meta(key)
+            # source_meta_tensor = self._get_meta(key)
             mask_proc_inv = getattr(mask, self.inv_op)(
-                **self._update_inv_op_kwargs(source_meta_tensor)
+                **self._update_inv_op_kwargs(item)
             )
             val = self._source.get(key)
             val[mask_proc_inv] = value
@@ -3488,9 +3488,9 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dict.update({"size": new_dim})
         return new_dict
 
-    def _update_inv_op_kwargs(self, source_meta_tensor: MetaTensor) -> Dict:
+    def _update_inv_op_kwargs(self, tensor: torch.Tensor) -> Dict:
         size = list(self.inv_op_kwargs.get("size"))
-        size += list(source_meta_tensor.shape[self._source.batch_dims :])
+        size += list(tensor.shape[self.batch_dims :])
         new_dim = torch.Size(size)
         new_dict = deepcopy(self.inv_op_kwargs)
         new_dict.update({"size": new_dim})
@@ -3532,9 +3532,10 @@ class PermutedTensorDict(_CustomOpTensorDict):
         kwargs.update({"dims": new_dims})
         return kwargs
 
-    def _update_inv_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:
+    def _update_inv_op_kwargs(self, tensor: torch.Tensor) -> dict:
         new_dims = self.add_missing_dims(
-            len(source_meta_tensor.shape), self.custom_op_kwargs["dims"]
+            self._source.batch_dims + len(tensor.shape[self.batch_dims :]),
+            self.custom_op_kwargs["dims"],
         )
         kwargs = deepcopy(self.custom_op_kwargs)
         kwargs.update({"dims": new_dims})

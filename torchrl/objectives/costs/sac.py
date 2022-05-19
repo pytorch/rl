@@ -15,9 +15,9 @@ from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.modules import TDModule
 from torchrl.modules.td_module.actors import (
     ActorCriticWrapper,
-    ProbabilisticActor,
 )
 from torchrl.objectives.costs.utils import distance_loss, next_state_value
+from ...modules.td_module.deprec import ProbabilisticActor_deprecated
 from .common import _LossModule
 
 __all__ = ["SACLoss"]
@@ -29,7 +29,7 @@ class SACLoss(_LossModule):
     Reinforcement Learning with a Stochastic Actor" https://arxiv.org/pdf/1801.01290.pdf
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
+        actor_network (ProbabilisticActor_deprecated): stochastic actor
         qvalue_network (TDModule): Q(s, a) parametric model
         value_network (TDModule): V(s) parametric model\
         qvalue_network_bis (ProbabilisticTDModule, optional): if required, the
@@ -69,7 +69,7 @@ class SACLoss(_LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticActor_deprecated,
         qvalue_network: TDModule,
         value_network: TDModule,
         num_qvalue_nets: int = 2,

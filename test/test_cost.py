@@ -22,7 +22,7 @@ from torchrl.data.postprocs.postprocs import MultiStep
 # from torchrl.data.postprocs.utils import expand_as_right
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.data.utils import expand_as_right
-from torchrl.modules import DistributionalQValueActor, QValueActor
+from torchrl.modules import DistributionalQValueActor, QValueActor, TDModule
 from torchrl.modules.distributions.continuous import TanhNormal, NormalParamWrapper
 from torchrl.modules.models.models import MLP
 from torchrl.modules.td_module.actors import ValueOperator, Actor, ProbabilisticActor
@@ -496,11 +496,13 @@ class TestSAC:
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        module = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
             spec=action_spec,
             module=module,
             distribution_class=TanhNormal,
+            dist_param_keys=["loc", "scale"],
         )
         return actor.to(device)
 
@@ -806,12 +808,14 @@ class TestREDQ:
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        module = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
             spec=action_spec,
             module=module,
             distribution_class=TanhNormal,
             return_log_prob=True,
+            dist_param_keys=["loc", "scale"],
         )
         return actor.to(device)
 
@@ -1091,12 +1095,13 @@ class TestPPO:
         action_spec = NdBoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
-        module = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
             spec=action_spec,
             module=module,
             distribution_class=TanhNormal,
-            save_dist_params=True,
+            dist_param_keys=["loc", "scale"],
         )
         return actor.to(device)
 
@@ -1133,7 +1138,7 @@ class TestPPO:
                 "done": done,
                 "reward": reward,
                 "action": action,
-                "action_log_prob": torch.randn_like(action[..., :1]) / 10,
+                "sample_log_prob": torch.randn_like(action[..., :1]) / 10,
             },
         )
         return td
@@ -1165,11 +1170,11 @@ class TestPPO:
                 "mask": mask,
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
-                "action_log_prob": torch.randn_like(action[..., :1])
+                "sample_log_prob": torch.randn_like(action[..., :1])
                 / 10
                 * mask.to(obs.dtype),
-                "action_dist_param_0": params_mean * mask.to(obs.dtype),
-                "action_dist_param_1": params_scale * mask.to(obs.dtype),
+                "loc": params_mean * mask.to(obs.dtype),
+                "scale": params_scale * mask.to(obs.dtype),
             },
         )
         return td
@@ -1240,12 +1245,14 @@ class TestReinforce:
         batch = 4
         gamma = 0.9
         value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
-
+        net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor_net = ProbabilisticActor(
-            NormalParamWrapper(nn.Linear(n_obs, 2 * n_act)),
+            module,
             spec=NdUnboundedContinuousTensorSpec(n_act),
             distribution_class=TanhNormal,
             return_log_prob=True,
+            dist_param_keys=["loc", "scale"],
         )
         if advantage == "gae":
             advantage_module = GAE(

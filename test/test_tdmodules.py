@@ -14,30 +14,27 @@ from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
     NdBoundedTensorSpec,
 )
+from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     TDModule,
-    ProbabilisticTDModule,
     TanhNormal,
-    TDSequence,
     NormalParamWrapper,
 )
+from torchrl.modules.td_module.probabilistic import ProbabilisticTensorDictModule
+from torchrl.modules.td_module.sequence import TDSequence
 
 
 class TestTDModule:
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    @pytest.mark.parametrize("probabilistic", [True, False])
     @pytest.mark.parametrize("lazy", [True, False])
-    def test_stateful(self, safe, spec_type, probabilistic, lazy):
+    def test_stateful(self, safe, spec_type, lazy):
         torch.manual_seed(0)
-        param_multiplier = 2 if probabilistic else 1
+        param_multiplier = 1
         if lazy:
             net = nn.LazyLinear(4 * param_multiplier)
         else:
             net = nn.Linear(3, 4 * param_multiplier)
-
-        if probabilistic:
-            net = NormalParamWrapper(net)
 
         if spec_type is None:
             spec = None
@@ -46,36 +43,27 @@ class TestTDModule:
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
 
-        if probabilistic:
-            tdclass = ProbabilisticTDModule
-            kwargs = {"distribution_class": TanhNormal}
-        else:
-            tdclass = TDModule
-            kwargs = {}
-
         if safe and spec is None:
             with pytest.raises(
                 RuntimeError,
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tdmodule = tdclass(
+                tdmodule = TDModule(
                     module=net,
                     spec=spec,
                     in_keys=["in"],
                     out_keys=["out"],
                     safe=safe,
-                    **kwargs
                 )
             return
         else:
-            tdmodule = tdclass(
+            tdmodule = TDModule(
                 module=net,
                 spec=spec,
                 in_keys=["in"],
                 out_keys=["out"],
                 safe=safe,
-                **kwargs
             )
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -91,14 +79,77 @@ class TestTDModule:
 
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    @pytest.mark.parametrize("probabilistic", [True, False])
-    def test_functional(self, safe, spec_type, probabilistic):
+    @pytest.mark.parametrize("lazy", [True, False])
+    @pytest.mark.parametrize("exp_mode", ["mode", "random", None])
+    def test_stateful_probabilistic(self, safe, spec_type, lazy, exp_mode):
         torch.manual_seed(0)
-        param_multiplier = 2 if probabilistic else 1
+        param_multiplier = 2
+        if lazy:
+            net = nn.LazyLinear(4 * param_multiplier)
+        else:
+            net = nn.Linear(3, 4 * param_multiplier)
+
+        in_keys = ["in"]
+        net = TDModule(
+            module=NormalParamWrapper(net),
+            spec=None,
+            in_keys=in_keys,
+            out_keys=["loc", "scale"],
+        )
+
+        if spec_type is None:
+            spec = None
+        elif spec_type == "bounded":
+            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+        elif spec_type == "unbounded":
+            spec = NdUnboundedContinuousTensorSpec(4)
+
+        kwargs = {"distribution_class": TanhNormal}
+
+        if safe and spec is None:
+            with pytest.raises(
+                RuntimeError,
+                match="is not a valid configuration as the tensor specs are not "
+                "specified",
+            ):
+                tdmodule = ProbabilisticTensorDictModule(
+                    module=net,
+                    spec=spec,
+                    dist_param_keys=["loc", "scale"],
+                    out_key_sample=["out"],
+                    safe=safe,
+                    **kwargs
+                )
+            return
+        else:
+            tdmodule = ProbabilisticTensorDictModule(
+                module=net,
+                spec=spec,
+                dist_param_keys=["loc", "scale"],
+                out_key_sample=["out"],
+                safe=safe,
+                **kwargs
+            )
+
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+        with set_exploration_mode(exp_mode):
+            tdmodule(td)
+        assert td.shape == torch.Size([3])
+        assert td.get("out").shape == torch.Size([3, 4])
+
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
+
+    @pytest.mark.parametrize("safe", [True, False])
+    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
+    def test_functional(self, safe, spec_type):
+        torch.manual_seed(0)
+        param_multiplier = 1
 
         net = nn.Linear(3, 4 * param_multiplier)
-        if probabilistic:
-            net = NormalParamWrapper(net)
 
         fnet, params = make_functional(net)
 
@@ -109,12 +160,62 @@ class TestTDModule:
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
 
-        if probabilistic:
-            tdclass = ProbabilisticTDModule
-            kwargs = {"distribution_class": TanhNormal}
+        if safe and spec is None:
+            with pytest.raises(
+                RuntimeError,
+                match="is not a valid configuration as the tensor specs are not "
+                "specified",
+            ):
+                tdmodule = TDModule(
+                    spec=spec,
+                    module=fnet,
+                    in_keys=["in"],
+                    out_keys=["out"],
+                    safe=safe,
+                )
+            return
         else:
-            tdclass = TDModule
-            kwargs = {}
+            tdmodule = TDModule(
+                spec=spec,
+                module=fnet,
+                in_keys=["in"],
+                out_keys=["out"],
+                safe=safe,
+            )
+
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+        tdmodule(td, params=params)
+        assert td.shape == torch.Size([3])
+        assert td.get("out").shape == torch.Size([3, 4])
+
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
+
+    @pytest.mark.parametrize("safe", [True, False])
+    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
+    def test_functional_probabilistic(self, safe, spec_type):
+        torch.manual_seed(0)
+        param_multiplier = 2
+
+        net = nn.Linear(3, 4 * param_multiplier)
+        in_keys = ["in"]
+        net = NormalParamWrapper(net)
+        fnet, params = make_functional(net)
+        tdnet = TDModule(
+            module=fnet, spec=None, in_keys=in_keys, out_keys=["loc", "scale"]
+        )
+
+        if spec_type is None:
+            spec = None
+        elif spec_type == "bounded":
+            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+        elif spec_type == "unbounded":
+            spec = NdUnboundedContinuousTensorSpec(4)
+
+        kwargs = {"distribution_class": TanhNormal}
 
         if safe and spec is None:
             with pytest.raises(
@@ -122,21 +223,21 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tdmodule = tdclass(
+                tdmodule = ProbabilisticTensorDictModule(
+                    module=tdnet,
                     spec=spec,
-                    module=fnet,
-                    in_keys=["in"],
-                    out_keys=["out"],
+                    dist_param_keys=["loc", "scale"],
+                    out_key_sample=["out"],
                     safe=safe,
                     **kwargs
                 )
             return
         else:
-            tdmodule = tdclass(
+            tdmodule = ProbabilisticTensorDictModule(
+                module=tdnet,
                 spec=spec,
-                module=fnet,
-                in_keys=["in"],
-                out_keys=["out"],
+                dist_param_keys=["loc", "scale"],
+                out_key_sample=["out"],
                 safe=safe,
                 **kwargs
             )
@@ -154,14 +255,70 @@ class TestTDModule:
 
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    @pytest.mark.parametrize("probabilistic", [True, False])
-    def test_functional_with_buffer(self, safe, spec_type, probabilistic):
+    def test_functional_probabilistic_laterconstruct(self, safe, spec_type):
         torch.manual_seed(0)
-        param_multiplier = 2 if probabilistic else 1
+        param_multiplier = 2
+
+        net = nn.Linear(3, 4 * param_multiplier)
+        in_keys = ["in"]
+        net = NormalParamWrapper(net)
+        tdnet = TDModule(
+            module=net, spec=None, in_keys=in_keys, out_keys=["loc", "scale"]
+        )
+
+        if spec_type is None:
+            spec = None
+        elif spec_type == "bounded":
+            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+        elif spec_type == "unbounded":
+            spec = NdUnboundedContinuousTensorSpec(4)
+
+        kwargs = {"distribution_class": TanhNormal}
+
+        if safe and spec is None:
+            with pytest.raises(
+                RuntimeError,
+                match="is not a valid configuration as the tensor specs are not "
+                "specified",
+            ):
+                tdmodule = ProbabilisticTensorDictModule(
+                    module=tdnet,
+                    spec=spec,
+                    dist_param_keys=["loc", "scale"],
+                    out_key_sample=["out"],
+                    safe=safe,
+                    **kwargs
+                )
+            return
+        else:
+            tdmodule = ProbabilisticTensorDictModule(
+                module=tdnet,
+                spec=spec,
+                dist_param_keys=["loc", "scale"],
+                out_key_sample=["out"],
+                safe=safe,
+                **kwargs
+            )
+        tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers()
+
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+        td = tdmodule(td, params=params, buffers=buffers)
+        assert td.shape == torch.Size([3])
+        assert td.get("out").shape == torch.Size([3, 4])
+
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
+
+    @pytest.mark.parametrize("safe", [True, False])
+    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
+    def test_functional_with_buffer(self, safe, spec_type):
+        torch.manual_seed(0)
+        param_multiplier = 1
 
         net = nn.BatchNorm1d(32 * param_multiplier)
-        if probabilistic:
-            net = NormalParamWrapper(net)
 
         fnet, params, buffers = make_functional_with_buffers(net)
 
@@ -172,12 +329,62 @@ class TestTDModule:
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(32)
 
-        if probabilistic:
-            tdclass = ProbabilisticTDModule
-            kwargs = {"distribution_class": TanhNormal}
+        if safe and spec is None:
+            with pytest.raises(
+                RuntimeError,
+                match="is not a valid configuration as the tensor specs are not "
+                "specified",
+            ):
+                tdmodule = TDModule(
+                    spec=spec,
+                    module=fnet,
+                    in_keys=["in"],
+                    out_keys=["out"],
+                    safe=safe,
+                )
+            return
         else:
-            tdclass = TDModule
-            kwargs = {}
+            tdmodule = TDModule(
+                spec=spec,
+                module=fnet,
+                in_keys=["in"],
+                out_keys=["out"],
+                safe=safe,
+            )
+
+        td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
+        tdmodule(td, params=params, buffers=buffers)
+        assert td.shape == torch.Size([3])
+        assert td.get("out").shape == torch.Size([3, 32])
+
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
+
+    @pytest.mark.parametrize("safe", [True, False])
+    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
+    def test_functional_with_buffer_probabilistic(self, safe, spec_type):
+        torch.manual_seed(0)
+        param_multiplier = 2
+
+        net = nn.BatchNorm1d(32 * param_multiplier)
+        in_keys = ["in"]
+        net = NormalParamWrapper(net)
+        fnet, params, buffers = make_functional_with_buffers(net)
+        tdnet = TDModule(
+            module=fnet, spec=None, in_keys=in_keys, out_keys=["loc", "scale"]
+        )
+
+        if spec_type is None:
+            spec = None
+        elif spec_type == "bounded":
+            spec = NdBoundedTensorSpec(-0.1, 0.1, 32)
+        elif spec_type == "unbounded":
+            spec = NdUnboundedContinuousTensorSpec(32)
+
+        kwargs = {"distribution_class": TanhNormal}
 
         if safe and spec is None:
             with pytest.raises(
@@ -185,21 +392,21 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tdmodule = tdclass(
+                tdmodule = ProbabilisticTensorDictModule(
+                    module=tdnet,
                     spec=spec,
-                    module=fnet,
-                    in_keys=["in"],
-                    out_keys=["out"],
+                    dist_param_keys=["loc", "scale"],
+                    out_key_sample=["out"],
                     safe=safe,
                     **kwargs
                 )
             return
         else:
-            tdmodule = tdclass(
+            tdmodule = ProbabilisticTensorDictModule(
+                module=tdnet,
                 spec=spec,
-                module=fnet,
-                in_keys=["in"],
-                out_keys=["out"],
+                dist_param_keys=["loc", "scale"],
+                out_key_sample=["out"],
                 safe=safe,
                 **kwargs
             )
@@ -217,14 +424,70 @@ class TestTDModule:
 
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    @pytest.mark.parametrize("probabilistic", [True, False])
-    def test_vmap(self, safe, spec_type, probabilistic):
+    def test_functional_with_buffer_probabilistic_laterconstruct(self, safe, spec_type):
         torch.manual_seed(0)
-        param_multiplier = 2 if probabilistic else 1
+        param_multiplier = 2
+
+        net = nn.BatchNorm1d(32 * param_multiplier)
+        in_keys = ["in"]
+        net = NormalParamWrapper(net)
+        tdnet = TDModule(
+            module=net, spec=None, in_keys=in_keys, out_keys=["loc", "scale"]
+        )
+
+        if spec_type is None:
+            spec = None
+        elif spec_type == "bounded":
+            spec = NdBoundedTensorSpec(-0.1, 0.1, 32)
+        elif spec_type == "unbounded":
+            spec = NdUnboundedContinuousTensorSpec(32)
+
+        kwargs = {"distribution_class": TanhNormal}
+
+        if safe and spec is None:
+            with pytest.raises(
+                RuntimeError,
+                match="is not a valid configuration as the tensor specs are not "
+                "specified",
+            ):
+                tdmodule = ProbabilisticTensorDictModule(
+                    module=tdnet,
+                    spec=spec,
+                    dist_param_keys=["loc", "scale"],
+                    out_key_sample=["out"],
+                    safe=safe,
+                    **kwargs
+                )
+            return
+        else:
+            tdmodule = ProbabilisticTensorDictModule(
+                module=tdnet,
+                spec=spec,
+                dist_param_keys=["loc", "scale"],
+                out_key_sample=["out"],
+                safe=safe,
+                **kwargs
+            )
+        tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers()
+
+        td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
+        tdmodule(td, params=params, buffers=buffers)
+        assert td.shape == torch.Size([3])
+        assert td.get("out").shape == torch.Size([3, 32])
+
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
+
+    @pytest.mark.parametrize("safe", [True, False])
+    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
+    def test_vmap(self, safe, spec_type):
+        torch.manual_seed(0)
+        param_multiplier = 1
 
         net = nn.Linear(3, 4 * param_multiplier)
-        if probabilistic:
-            net = NormalParamWrapper(net)
 
         fnet, params = make_functional(net)
 
@@ -235,12 +498,87 @@ class TestTDModule:
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
 
-        if probabilistic:
-            tdclass = ProbabilisticTDModule
-            kwargs = {"distribution_class": TanhNormal}
+        if safe and spec is None:
+            with pytest.raises(
+                RuntimeError,
+                match="is not a valid configuration as the tensor specs are not "
+                "specified",
+            ):
+                tdmodule = TDModule(
+                    spec=spec,
+                    module=fnet,
+                    in_keys=["in"],
+                    out_keys=["out"],
+                    safe=safe,
+                )
+            return
         else:
-            tdclass = TDModule
-            kwargs = {}
+            tdmodule = TDModule(
+                spec=spec,
+                module=fnet,
+                in_keys=["in"],
+                out_keys=["out"],
+                safe=safe,
+            )
+
+        # vmap = True
+        params = [p.repeat(10, *[1 for _ in p.shape]) for p in params]
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+        td_out = tdmodule(td, params=params, vmap=True)
+        assert td_out is not td
+        assert td_out.shape == torch.Size([10, 3])
+        assert td_out.get("out").shape == torch.Size([10, 3, 4])
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
+
+        # vmap = (0, None)
+        td_out = tdmodule(td, params=params, vmap=(0, None))
+        assert td_out is not td
+        assert td_out.shape == torch.Size([10, 3])
+        assert td_out.get("out").shape == torch.Size([10, 3, 4])
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
+
+        # vmap = (0, 0)
+        td_repeat = td.expand(10).clone()
+        td_out = tdmodule(td_repeat, params=params, vmap=(0, 0))
+        assert td_out is not td
+        assert td_out.shape == torch.Size([10, 3])
+        assert td_out.get("out").shape == torch.Size([10, 3, 4])
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
+
+    @pytest.mark.parametrize("safe", [True, False])
+    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
+    def test_vmap_probabilistic(self, safe, spec_type):
+        torch.manual_seed(0)
+        param_multiplier = 2
+
+        net = nn.Linear(3, 4 * param_multiplier)
+        net = NormalParamWrapper(net)
+        in_keys = ["in"]
+        fnet, params = make_functional(net)
+        tdnet = TDModule(
+            module=fnet, spec=None, in_keys=in_keys, out_keys=["loc", "scale"]
+        )
+
+        if spec_type is None:
+            spec = None
+        elif spec_type == "bounded":
+            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+        elif spec_type == "unbounded":
+            spec = NdUnboundedContinuousTensorSpec(4)
+
+        kwargs = {"distribution_class": TanhNormal}
 
         if safe and spec is None:
             with pytest.raises(
@@ -248,21 +586,21 @@ class TestTDModule:
                 match="is not a valid configuration as the tensor specs are not "
                 "specified",
             ):
-                tdmodule = tdclass(
+                tdmodule = ProbabilisticTensorDictModule(
+                    module=tdnet,
                     spec=spec,
-                    module=fnet,
-                    in_keys=["in"],
-                    out_keys=["out"],
+                    dist_param_keys=["loc", "scale"],
+                    out_key_sample=["out"],
                     safe=safe,
                     **kwargs
                 )
             return
         else:
-            tdmodule = tdclass(
+            tdmodule = ProbabilisticTensorDictModule(
+                module=tdnet,
                 spec=spec,
-                module=fnet,
-                in_keys=["in"],
-                out_keys=["out"],
+                dist_param_keys=["loc", "scale"],
+                out_key_sample=["out"],
                 safe=safe,
                 **kwargs
             )
@@ -303,25 +641,18 @@ class TestTDModule:
         elif safe and spec_type == "bounded":
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
-
-class TestTDSequence:
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    @pytest.mark.parametrize("probabilistic", [True, False])
-    @pytest.mark.parametrize("lazy", [True, False])
-    def test_stateful(self, safe, spec_type, probabilistic, lazy):
+    def test_vmap_probabilistic_laterconstruct(self, safe, spec_type):
         torch.manual_seed(0)
-        param_multiplier = 2 if probabilistic else 1
-        if lazy:
-            net1 = nn.LazyLinear(4)
-            dummy_net = nn.LazyLinear(4)
-            net2 = nn.LazyLinear(4 * param_multiplier)
-        else:
-            net1 = nn.Linear(3, 4)
-            dummy_net = nn.Linear(4, 4)
-            net2 = nn.Linear(4, 4 * param_multiplier)
-        if probabilistic:
-            net2 = NormalParamWrapper(net2)
+        param_multiplier = 2
+
+        net = nn.Linear(3, 4 * param_multiplier)
+        net = NormalParamWrapper(net)
+        in_keys = ["in"]
+        tdnet = TDModule(
+            module=net, spec=None, in_keys=in_keys, out_keys=["loc", "scale"]
+        )
 
         if spec_type is None:
             spec = None
@@ -330,31 +661,114 @@ class TestTDSequence:
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
 
-        if probabilistic:
-            tdclass = ProbabilisticTDModule
-            kwargs = {"distribution_class": TanhNormal}
+        kwargs = {"distribution_class": TanhNormal}
+
+        if safe and spec is None:
+            with pytest.raises(
+                RuntimeError,
+                match="is not a valid configuration as the tensor specs are not "
+                "specified",
+            ):
+                tdmodule = ProbabilisticTensorDictModule(
+                    module=tdnet,
+                    spec=spec,
+                    dist_param_keys=["loc", "scale"],
+                    out_key_sample=["out"],
+                    safe=safe,
+                    **kwargs
+                )
+            return
         else:
-            tdclass = TDModule
-            kwargs = {}
+            tdmodule = ProbabilisticTensorDictModule(
+                module=tdnet,
+                spec=spec,
+                dist_param_keys=["loc", "scale"],
+                out_key_sample=["out"],
+                safe=safe,
+                **kwargs
+            )
+        tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers()
+
+        # vmap = True
+        params = [p.repeat(10, *[1 for _ in p.shape]) for p in params]
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+        td_out = tdmodule(td, params=params, buffers=buffers, vmap=True)
+        assert td_out is not td
+        assert td_out.shape == torch.Size([10, 3])
+        assert td_out.get("out").shape == torch.Size([10, 3, 4])
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
+
+        # vmap = (0, 0, None)
+        td_out = tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, None))
+        assert td_out is not td
+        assert td_out.shape == torch.Size([10, 3])
+        assert td_out.get("out").shape == torch.Size([10, 3, 4])
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
+
+        # vmap = (0, 0, 0)
+        td_repeat = td.expand(10).clone()
+        td_out = tdmodule(td_repeat, params=params, buffers=buffers, vmap=(0, 0, 0))
+        assert td_out is not td
+        assert td_out.shape == torch.Size([10, 3])
+        assert td_out.get("out").shape == torch.Size([10, 3, 4])
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
+
+
+class TestTDSequence:
+    @pytest.mark.parametrize("safe", [True, False])
+    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
+    @pytest.mark.parametrize("lazy", [True, False])
+    def test_stateful(self, safe, spec_type, lazy):
+        torch.manual_seed(0)
+        param_multiplier = 1
+        if lazy:
+            net1 = nn.LazyLinear(4)
+            dummy_net = nn.LazyLinear(4)
+            net2 = nn.LazyLinear(4 * param_multiplier)
+        else:
+            net1 = nn.Linear(3, 4)
+            dummy_net = nn.Linear(4, 4)
+            net2 = nn.Linear(4, 4 * param_multiplier)
+
+        if spec_type is None:
+            spec = None
+        elif spec_type == "bounded":
+            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+        elif spec_type == "unbounded":
+            spec = NdUnboundedContinuousTensorSpec(4)
+
+        kwargs = {}
 
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
             tdmodule1 = TDModule(
                 net1,
-                None,
+                spec=None,
                 in_keys=["in"],
                 out_keys=["hidden"],
                 safe=False,
             )
             dummy_tdmodule = TDModule(
                 dummy_net,
-                None,
+                spec=None,
                 in_keys=["hidden"],
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = tdclass(
+            tdmodule2 = TDModule(
                 spec=spec,
                 module=net2,
                 in_keys=["hidden"],
@@ -383,14 +797,8 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-        if probabilistic:
+        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
             dist, *_ = tdmodule.get_dist(td)
-            assert dist.rsample().shape[: td.ndimension()] == td.shape
-        else:
-            with pytest.raises(
-                RuntimeError, match="Cannot call get_dist on a sequence"
-            ):
-                dist, *_ = tdmodule.get_dist(td)
 
         # test bounds
         if not safe and spec_type == "bounded":
@@ -400,16 +808,94 @@ class TestTDSequence:
 
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    @pytest.mark.parametrize("probabilistic", [True, False])
-    def test_functional(self, safe, spec_type, probabilistic):
+    @pytest.mark.parametrize("lazy", [True, False])
+    def test_stateful_probabilistic(self, safe, spec_type, lazy):
         torch.manual_seed(0)
-        param_multiplier = 2 if probabilistic else 1
+        param_multiplier = 2
+        if lazy:
+            net1 = nn.LazyLinear(4)
+            dummy_net = nn.LazyLinear(4)
+            net2 = nn.LazyLinear(4 * param_multiplier)
+        else:
+            net1 = nn.Linear(3, 4)
+            dummy_net = nn.Linear(4, 4)
+            net2 = nn.Linear(4, 4 * param_multiplier)
+        net2 = NormalParamWrapper(net2)
+        net2 = TDModule(module=net2, in_keys=["hidden"], out_keys=["loc", "scale"])
+
+        if spec_type is None:
+            spec = None
+        elif spec_type == "bounded":
+            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+        elif spec_type == "unbounded":
+            spec = NdUnboundedContinuousTensorSpec(4)
+
+        kwargs = {"distribution_class": TanhNormal}
+
+        if safe and spec is None:
+            pytest.skip("safe and spec is None is checked elsewhere")
+        else:
+            tdmodule1 = TDModule(
+                net1,
+                spec=None,
+                in_keys=["in"],
+                out_keys=["hidden"],
+                safe=False,
+            )
+            dummy_tdmodule = TDModule(
+                dummy_net,
+                spec=None,
+                in_keys=["hidden"],
+                out_keys=["hidden"],
+                safe=False,
+            )
+            tdmodule2 = ProbabilisticTensorDictModule(
+                spec=spec,
+                module=net2,
+                dist_param_keys=["loc", "scale"],
+                out_key_sample=["out"],
+                safe=False,
+                **kwargs
+            )
+            tdmodule = TDSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+
+        assert hasattr(tdmodule, "__setitem__")
+        assert len(tdmodule) == 3
+        tdmodule[1] = tdmodule2
+        assert len(tdmodule) == 3
+
+        assert hasattr(tdmodule, "__delitem__")
+        assert len(tdmodule) == 3
+        del tdmodule[2]
+        assert len(tdmodule) == 2
+
+        assert hasattr(tdmodule, "__getitem__")
+        assert tdmodule[0] is tdmodule1
+        assert tdmodule[1] is tdmodule2
+
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+        tdmodule(td)
+        assert td.shape == torch.Size([3])
+        assert td.get("out").shape == torch.Size([3, 4])
+
+        dist, *_ = tdmodule.get_dist(td)
+        assert dist.rsample().shape[: td.ndimension()] == td.shape
+
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
+
+    @pytest.mark.parametrize("safe", [True, False])
+    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
+    def test_functional(self, safe, spec_type):
+        torch.manual_seed(0)
+        param_multiplier = 1
 
         net1 = nn.Linear(3, 4)
         dummy_net = nn.Linear(4, 4)
         net2 = nn.Linear(4, 4 * param_multiplier)
-        if probabilistic:
-            net2 = NormalParamWrapper(net2)
 
         fnet1, params1 = make_functional(net1)
         fdummy_net, _ = make_functional(dummy_net)
@@ -423,24 +909,25 @@ class TestTDSequence:
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
 
-        if probabilistic:
-            tdclass = ProbabilisticTDModule
-            kwargs = {"distribution_class": TanhNormal}
-        else:
-            tdclass = TDModule
-            kwargs = {}
-
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
             tdmodule1 = TDModule(
-                fnet1, None, in_keys=["in"], out_keys=["hidden"], safe=False
+                fnet1, spec=None, in_keys=["in"], out_keys=["hidden"], safe=False
             )
             dummy_tdmodule = TDModule(
-                fdummy_net, None, in_keys=["hidden"], out_keys=["hidden"], safe=False
+                fdummy_net,
+                spec=None,
+                in_keys=["hidden"],
+                out_keys=["hidden"],
+                safe=False,
             )
-            tdmodule2 = tdclass(
-                fnet2, spec, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
+            tdmodule2 = TDModule(
+                fnet2,
+                spec=spec,
+                in_keys=["hidden"],
+                out_keys=["out"],
+                safe=safe,
             )
             tdmodule = TDSequence(tdmodule1, dummy_tdmodule, tdmodule2)
 
@@ -463,14 +950,8 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-        if probabilistic:
+        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
             dist, *_ = tdmodule.get_dist(td, params=params)
-            assert dist.rsample().shape[: td.ndimension()] == td.shape
-        else:
-            with pytest.raises(
-                RuntimeError, match="Cannot call get_dist on a sequence"
-            ):
-                dist, *_ = tdmodule.get_dist(td, params=params)
 
         # test bounds
         if not safe and spec_type == "bounded":
@@ -480,18 +961,96 @@ class TestTDSequence:
 
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    @pytest.mark.parametrize("probabilistic", [True, False])
-    def test_functional_with_buffer(self, safe, spec_type, probabilistic):
+    def test_functional_probabilistic(self, safe, spec_type):
         torch.manual_seed(0)
-        param_multiplier = 2 if probabilistic else 1
+        param_multiplier = 2
+
+        net1 = nn.Linear(3, 4)
+        dummy_net = nn.Linear(4, 4)
+        net2 = nn.Linear(4, 4 * param_multiplier)
+        net2 = NormalParamWrapper(net2)
+
+        fnet1, params1 = make_functional(net1)
+        fdummy_net, _ = make_functional(dummy_net)
+        fnet2, params2 = make_functional(net2)
+        fnet2 = TDModule(module=fnet2, in_keys=["hidden"], out_keys=["loc", "scale"])
+        params = list(params1) + list(params2)
+
+        if spec_type is None:
+            spec = None
+        elif spec_type == "bounded":
+            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+        elif spec_type == "unbounded":
+            spec = NdUnboundedContinuousTensorSpec(4)
+
+        kwargs = {"distribution_class": TanhNormal}
+
+        if safe and spec is None:
+            pytest.skip("safe and spec is None is checked elsewhere")
+        else:
+            tdmodule1 = TDModule(
+                fnet1, spec=None, in_keys=["in"], out_keys=["hidden"], safe=False
+            )
+            dummy_tdmodule = TDModule(
+                fdummy_net,
+                spec=None,
+                in_keys=["hidden"],
+                out_keys=["hidden"],
+                safe=False,
+            )
+            tdmodule2 = ProbabilisticTensorDictModule(
+                fnet2,
+                spec=spec,
+                dist_param_keys=["loc", "scale"],
+                out_key_sample=["out"],
+                safe=safe,
+                **kwargs
+            )
+            tdmodule = TDSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+
+        assert hasattr(tdmodule, "__setitem__")
+        assert len(tdmodule) == 3
+        tdmodule[1] = tdmodule2
+        assert len(tdmodule) == 3
+
+        assert hasattr(tdmodule, "__delitem__")
+        assert len(tdmodule) == 3
+        del tdmodule[2]
+        assert len(tdmodule) == 2
+
+        assert hasattr(tdmodule, "__getitem__")
+        assert tdmodule[0] is tdmodule1
+        assert tdmodule[1] is tdmodule2
+
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+        tdmodule(td, params=params)
+        assert td.shape == torch.Size([3])
+        assert td.get("out").shape == torch.Size([3, 4])
+
+        dist, *_ = tdmodule.get_dist(td, params=params)
+        assert dist.rsample().shape[: td.ndimension()] == td.shape
+
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
+
+    @pytest.mark.parametrize("safe", [True, False])
+    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
+    def test_functional_with_buffer(
+        self,
+        safe,
+        spec_type,
+    ):
+        torch.manual_seed(0)
+        param_multiplier = 1
 
         net1 = nn.Sequential(nn.Linear(7, 7), nn.BatchNorm1d(7))
         dummy_net = nn.Sequential(nn.Linear(7, 7), nn.BatchNorm1d(7))
         net2 = nn.Sequential(
             nn.Linear(7, 7 * param_multiplier), nn.BatchNorm1d(7 * param_multiplier)
         )
-        if probabilistic:
-            net2 = NormalParamWrapper(net2)
 
         fnet1, params1, buffers1 = make_functional_with_buffers(net1)
         fdummy_net, _, _ = make_functional_with_buffers(dummy_net)
@@ -507,24 +1066,25 @@ class TestTDSequence:
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(7)
 
-        if probabilistic:
-            tdclass = ProbabilisticTDModule
-            kwargs = {"distribution_class": TanhNormal}
-        else:
-            tdclass = TDModule
-            kwargs = {}
-
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
             tdmodule1 = TDModule(
-                fnet1, None, in_keys=["in"], out_keys=["hidden"], safe=False
+                fnet1, spec=None, in_keys=["in"], out_keys=["hidden"], safe=False
             )
             dummy_tdmodule = TDModule(
-                fdummy_net, None, in_keys=["hidden"], out_keys=["hidden"], safe=False
+                fdummy_net,
+                spec=None,
+                in_keys=["hidden"],
+                out_keys=["hidden"],
+                safe=False,
             )
-            tdmodule2 = tdclass(
-                fnet2, spec, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
+            tdmodule2 = TDModule(
+                fnet2,
+                spec=spec,
+                in_keys=["hidden"],
+                out_keys=["out"],
+                safe=safe,
             )
             tdmodule = TDSequence(tdmodule1, dummy_tdmodule, tdmodule2)
 
@@ -545,14 +1105,8 @@ class TestTDSequence:
         td = TensorDict({"in": torch.randn(3, 7)}, [3])
         tdmodule(td, params=params, buffers=buffers)
 
-        if probabilistic:
+        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
             dist, *_ = tdmodule.get_dist(td, params=params, buffers=buffers)
-            assert dist.rsample().shape[: td.ndimension()] == td.shape
-        else:
-            with pytest.raises(
-                RuntimeError, match="Cannot call get_dist on a sequence"
-            ):
-                dist, *_ = tdmodule.get_dist(td, params=params, buffers=buffers)
 
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 7])
@@ -565,55 +1119,60 @@ class TestTDSequence:
 
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    @pytest.mark.parametrize("probabilistic", [True, False])
-    def test_vmap(self, safe, spec_type, probabilistic):
+    def test_functional_with_buffer_probabilistic(
+        self,
+        safe,
+        spec_type,
+    ):
         torch.manual_seed(0)
-        param_multiplier = 2 if probabilistic else 1
+        param_multiplier = 2
 
-        net1 = nn.Linear(3, 4)
-        dummy_net = nn.Linear(4, 4)
-        net2 = nn.Linear(4, 4 * param_multiplier)
-        if probabilistic:
-            net2 = NormalParamWrapper(net2)
+        net1 = nn.Sequential(nn.Linear(7, 7), nn.BatchNorm1d(7))
+        dummy_net = nn.Sequential(nn.Linear(7, 7), nn.BatchNorm1d(7))
+        net2 = nn.Sequential(
+            nn.Linear(7, 7 * param_multiplier), nn.BatchNorm1d(7 * param_multiplier)
+        )
+        net2 = NormalParamWrapper(net2)
 
-        fnet1, params1 = make_functional(net1)
-        fdummy_net, _ = make_functional(dummy_net)
-        fnet2, params2 = make_functional(net2)
-        params = params1 + params2
+        fnet1, params1, buffers1 = make_functional_with_buffers(net1)
+        fdummy_net, _, _ = make_functional_with_buffers(dummy_net)
+        # fnet2, params2, buffers2 = make_functional_with_buffers(net2)
+        # fnet2 = TDModule(fnet2, in_keys=["hidden"], out_keys=["loc", "scale"])
+        net2 = TDModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
+        fnet2, (params2, buffers2) = net2.make_functional_with_buffers()
+
+        params = list(params1) + list(params2)
+        buffers = list(buffers1) + list(buffers2)
 
         if spec_type is None:
             spec = None
         elif spec_type == "bounded":
-            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+            spec = NdBoundedTensorSpec(-0.1, 0.1, 7)
         elif spec_type == "unbounded":
-            spec = NdUnboundedContinuousTensorSpec(4)
+            spec = NdUnboundedContinuousTensorSpec(7)
 
-        if probabilistic:
-            tdclass = ProbabilisticTDModule
-            kwargs = {"distribution_class": TanhNormal}
-        else:
-            tdclass = TDModule
-            kwargs = {}
+        kwargs = {"distribution_class": TanhNormal}
 
         if safe and spec is None:
             pytest.skip("safe and spec is None is checked elsewhere")
         else:
             tdmodule1 = TDModule(
-                fnet1,
-                None,
-                in_keys=["in"],
-                out_keys=["hidden"],
-                safe=False,
+                fnet1, spec=None, in_keys=["in"], out_keys=["hidden"], safe=False
             )
             dummy_tdmodule = TDModule(
                 fdummy_net,
-                None,
+                spec=None,
                 in_keys=["hidden"],
                 out_keys=["hidden"],
                 safe=False,
             )
-            tdmodule2 = tdclass(
-                fnet2, spec, in_keys=["hidden"], out_keys=["out"], safe=safe, **kwargs
+            tdmodule2 = ProbabilisticTensorDictModule(
+                fnet2,
+                spec=spec,
+                dist_param_keys=["loc", "scale"],
+                out_key_sample=["out"],
+                safe=safe,
+                **kwargs
             )
             tdmodule = TDSequence(tdmodule1, dummy_tdmodule, tdmodule2)
 
@@ -630,6 +1189,223 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__getitem__")
         assert tdmodule[0] is tdmodule1
         assert tdmodule[1] is tdmodule2
+
+        td = TensorDict({"in": torch.randn(3, 7)}, [3])
+        tdmodule(td, params=params, buffers=buffers)
+
+        dist, *_ = tdmodule.get_dist(td, params=params, buffers=buffers)
+        assert dist.rsample().shape[: td.ndimension()] == td.shape
+
+        assert td.shape == torch.Size([3])
+        assert td.get("out").shape == torch.Size([3, 7])
+
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
+
+    @pytest.mark.parametrize("safe", [True, False])
+    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
+    def test_functional_with_buffer_probabilistic_laterconstruct(
+        self,
+        safe,
+        spec_type,
+    ):
+        torch.manual_seed(0)
+        param_multiplier = 2
+
+        net1 = nn.Sequential(nn.Linear(7, 7), nn.BatchNorm1d(7))
+        net2 = nn.Sequential(
+            nn.Linear(7, 7 * param_multiplier), nn.BatchNorm1d(7 * param_multiplier)
+        )
+        net2 = NormalParamWrapper(net2)
+        net2 = TDModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
+
+        if spec_type is None:
+            spec = None
+        elif spec_type == "bounded":
+            spec = NdBoundedTensorSpec(-0.1, 0.1, 7)
+        elif spec_type == "unbounded":
+            spec = NdUnboundedContinuousTensorSpec(7)
+
+        kwargs = {"distribution_class": TanhNormal}
+
+        if safe and spec is None:
+            pytest.skip("safe and spec is None is checked elsewhere")
+        else:
+            tdmodule1 = TDModule(
+                net1, spec=None, in_keys=["in"], out_keys=["hidden"], safe=False
+            )
+            tdmodule2 = ProbabilisticTensorDictModule(
+                net2,
+                spec=spec,
+                dist_param_keys=["loc", "scale"],
+                out_key_sample=["out"],
+                safe=safe,
+                **kwargs
+            )
+            tdmodule = TDSequence(tdmodule1, tdmodule2)
+
+        tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers()
+
+        td = TensorDict({"in": torch.randn(3, 7)}, [3])
+        tdmodule(td, params=params, buffers=buffers)
+
+        dist, *_ = tdmodule.get_dist(td, params=params, buffers=buffers)
+        assert dist.rsample().shape[: td.ndimension()] == td.shape
+
+        assert td.shape == torch.Size([3])
+        assert td.get("out").shape == torch.Size([3, 7])
+
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
+
+    @pytest.mark.parametrize("safe", [True, False])
+    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
+    def test_vmap(self, safe, spec_type):
+        torch.manual_seed(0)
+        param_multiplier = 1
+
+        net1 = nn.Linear(3, 4)
+        dummy_net = nn.Linear(4, 4)
+        net2 = nn.Linear(4, 4 * param_multiplier)
+
+        fnet1, params1 = make_functional(net1)
+        fdummy_net, _ = make_functional(dummy_net)
+        fnet2, params2 = make_functional(net2)
+        params = params1 + params2
+
+        if spec_type is None:
+            spec = None
+        elif spec_type == "bounded":
+            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+        elif spec_type == "unbounded":
+            spec = NdUnboundedContinuousTensorSpec(4)
+
+        if safe and spec is None:
+            pytest.skip("safe and spec is None is checked elsewhere")
+        else:
+            tdmodule1 = TDModule(
+                fnet1,
+                spec=None,
+                in_keys=["in"],
+                out_keys=["hidden"],
+                safe=False,
+            )
+            dummy_tdmodule = TDModule(
+                fdummy_net,
+                spec=None,
+                in_keys=["hidden"],
+                out_keys=["hidden"],
+                safe=False,
+            )
+            tdmodule2 = TDModule(
+                fnet2,
+                spec=spec,
+                in_keys=["hidden"],
+                out_keys=["out"],
+                safe=safe,
+            )
+            tdmodule = TDSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+
+        assert hasattr(tdmodule, "__setitem__")
+        assert len(tdmodule) == 3
+        tdmodule[1] = tdmodule2
+        assert len(tdmodule) == 3
+
+        assert hasattr(tdmodule, "__delitem__")
+        assert len(tdmodule) == 3
+        del tdmodule[2]
+        assert len(tdmodule) == 2
+
+        assert hasattr(tdmodule, "__getitem__")
+        assert tdmodule[0] is tdmodule1
+        assert tdmodule[1] is tdmodule2
+
+        # vmap = True
+        params = [p.repeat(10, *[1 for _ in p.shape]) for p in params]
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+        td_out = tdmodule(td, params=params, vmap=True)
+        assert td_out is not td
+        assert td_out.shape == torch.Size([10, 3])
+        assert td_out.get("out").shape == torch.Size([10, 3, 4])
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
+
+        # vmap = (0, None)
+        td_out = tdmodule(td, params=params, vmap=(0, None))
+        assert td_out is not td
+        assert td_out.shape == torch.Size([10, 3])
+        assert td_out.get("out").shape == torch.Size([10, 3, 4])
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
+
+        # vmap = (0, 0)
+        td_repeat = td.expand(10).clone()
+        td_out = tdmodule(td_repeat, params=params, vmap=(0, 0))
+        assert td_out is not td
+        assert td_out.shape == torch.Size([10, 3])
+        assert td_out.get("out").shape == torch.Size([10, 3, 4])
+        # test bounds
+        if not safe and spec_type == "bounded":
+            assert ((td_out.get("out") > 0.1) | (td_out.get("out") < -0.1)).any()
+        elif safe and spec_type == "bounded":
+            assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
+
+    @pytest.mark.parametrize("safe", [True, False])
+    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
+    def test_vmap_probabilistic(self, safe, spec_type):
+        torch.manual_seed(0)
+        param_multiplier = 2
+
+        net1 = nn.Linear(3, 4)
+        fnet1, params1 = make_functional(net1)
+
+        net2 = nn.Linear(4, 4 * param_multiplier)
+        net2 = NormalParamWrapper(net2)
+        fnet2, params2 = make_functional(net2)
+        fnet2 = TDModule(fnet2, in_keys=["hidden"], out_keys=["loc", "scale"])
+
+        params = params1 + params2
+
+        if spec_type is None:
+            spec = None
+        elif spec_type == "bounded":
+            spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+        elif spec_type == "unbounded":
+            spec = NdUnboundedContinuousTensorSpec(4)
+
+        kwargs = {"distribution_class": TanhNormal}
+
+        if safe and spec is None:
+            pytest.skip("safe and spec is None is checked elsewhere")
+        else:
+            tdmodule1 = TDModule(
+                fnet1,
+                spec=None,
+                in_keys=["in"],
+                out_keys=["hidden"],
+                safe=False,
+            )
+            tdmodule2 = ProbabilisticTensorDictModule(
+                fnet2,
+                spec=spec,
+                out_key_sample=["out"],
+                dist_param_keys=["loc", "scale"],
+                safe=safe,
+                **kwargs
+            )
+            tdmodule = TDSequence(tdmodule1, tdmodule2)
 
         # vmap = True
         params = [p.repeat(10, *[1 for _ in p.shape]) for p in params]

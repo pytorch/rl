@@ -253,7 +253,7 @@ class gSDEWrapper(nn.Module):
     range) and its input keys should include `"_eps_gSDE"` which is the
     default gSDE noise key:
 
-        >>> actor = ProbabilisticActor(
+        >>> actor = ProbabilisticActor_deprecated(
         ...     wrapped_module,
         ...     in_keys=["observation", "_eps_gSDE"]
         ...     spec,
@@ -307,20 +307,23 @@ class gSDEWrapper(nn.Module):
         )
         self.register_buffer("sigma_init", torch.tensor(sigma_init))
 
-    def forward(self, state, *tensors):
-        *tensors, gSDE_noise = tensors
+    def forward(self, state, _eps_gSDE, *tensors):
         sigma = (
             torch.nn.functional.softplus(self.log_sigma + self.sigma_init)
             + self.scale_min
         )
         sigma = sigma.clamp_max(self.scale_max)
-        if gSDE_noise is None:
-            gSDE_noise = torch.randn_like(sigma)
-        gSDE_noise = sigma * gSDE_noise
+        if _eps_gSDE.numel() == math.prod(state.shape[:-1]) and (_eps_gSDE == 0).all():
+            _eps_gSDE = torch.randn(
+                *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
+            )
+        elif _eps_gSDE is None:
+            raise RuntimeError
+        gSDE_noise = sigma * _eps_gSDE
         eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
         mu = self.policy_model(state, *tensors)
         action = mu + eps
         sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(1e-5).sqrt()
         if not torch.isfinite(sigma).all():
             print("inf sigma")
-        return mu, sigma, action
+        return mu, sigma, action, _eps_gSDE

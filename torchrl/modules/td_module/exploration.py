@@ -40,7 +40,7 @@ class EGreedyWrapper(TDModuleWrapper):
         >>> torch.manual_seed(0)
         >>> spec = NdBoundedTensorSpec(-1, 1, torch.Size([4]))
         >>> module = torch.nn.Linear(4, 4, bias=False)
-        >>> policy = Actor(spec, module=module)
+        >>> policy = Actor(spec=spec, module=module)
         >>> explorative_policy = EGreedyWrapper(policy, eps_init=0.2)
         >>> td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
         >>> print(explorative_policy(td).get("action"))

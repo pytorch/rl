@@ -45,8 +45,8 @@ from torchrl.modules.td_module import (
 )
 from torchrl.modules.td_module.actors import (
     ActorCriticWrapper,
-    ProbabilisticActor,
     ValueOperator,
+    ProbabilisticActor,
 )
 
 DISTRIBUTIONS = {
@@ -105,6 +105,7 @@ def make_dqn_actor(
         >>> print(actor(td))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 pixels: Tensor(torch.Size([3, 210, 160]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.int64),
                 action_value: Tensor(torch.Size([6]), dtype=torch.float32),
@@ -236,7 +237,9 @@ def make_ddpg_actor(
         >>> print(actor(td))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                net_output: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32)},
             batch_size=torch.Size([]),
             device=cpu,
@@ -244,7 +247,9 @@ def make_ddpg_actor(
         >>> print(value(td))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                net_output: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
@@ -265,10 +270,6 @@ def make_ddpg_actor(
     env_specs = proof_environment.specs
     out_features = env_specs["action_spec"].shape[0]
 
-    # We use a ProbabilisticActor to make sure that we map the network output to the right space using a TanhDelta
-    # distribution.
-    actor_class = ProbabilisticActor
-
     actor_net_default_kwargs = {
         "action_dim": out_features,
         "mlp_net_kwargs": {
@@ -283,15 +284,17 @@ def make_ddpg_actor(
             "activation_class": ACTIVATIONS[args.activation]
         }
         actor_net = DdpgCnnActor(**actor_net_default_kwargs)
-
     else:
         in_keys = ["observation_vector"]
         actor_net = DdpgMlpActor(**actor_net_default_kwargs)
+    actor_module = TDModule(actor_net, in_keys=in_keys, out_keys=["net_output"])
 
-    actor = actor_class(
-        in_keys=in_keys,
+    # We use a ProbabilisticActor to make sure that we map the network output to the right space using a TanhDelta
+    # distribution.
+    actor = ProbabilisticActor(
+        actor_module,
+        dist_param_keys=["net_output"],
         spec=env_specs["action_spec"],
-        module=actor_net,
         safe=True,
         distribution_class=TanhDelta,
         distribution_kwargs={
@@ -412,18 +415,20 @@ def make_ppo_model(
         >>> print(actor(td.clone()))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 hidden: Tensor(torch.Size([300]), dtype=torch.float32),
-                action_dist_param_0: Tensor(torch.Size([6]), dtype=torch.float32),
-                action_dist_param_1: Tensor(torch.Size([6]), dtype=torch.float32),
+                loc: Tensor(torch.Size([6]), dtype=torch.float32),
+                scale: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
-                action_log_prob: Tensor(torch.Size([1]), dtype=torch.float32)},
+                sample_log_prob: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
             device=cpu,
             is_shared=False)
         >>> print(value(td.clone()))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 hidden: Tensor(torch.Size([300]), dtype=torch.float32),
                 state_value: Tensor(torch.Size([1]), dtype=torch.float32)},
@@ -531,23 +536,28 @@ def make_ppo_model(
                 policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
             )
             in_keys = ["hidden"]
+            actor_module = TDModule(
+                actor_net, in_keys=in_keys, out_keys=["loc", "scale"]
+            )
         else:
             actor_net = gSDEWrapper(
                 policy_net, action_dim=action_spec.shape[0], state_dim=hidden_features
             )
-            in_keys = ["hidden", "gSDE_noise"]
-            out_keys += ["_action_duplicate"]
+            in_keys = ["hidden", "_eps_gSDE"]
+            actor_module = TDModule(
+                actor_net,
+                in_keys=in_keys,
+                out_keys=["loc", "scale", "action", "_eps_gSDE"],
+            )
 
         policy_operator = ProbabilisticActor(
             spec=action_spec,
-            module=actor_net,
-            in_keys=in_keys,
-            out_keys=out_keys,
-            default_interaction_mode="random" if not args.gSDE else "net_output",
+            module=actor_module,
+            dist_param_keys=["loc", "scale"],
+            default_interaction_mode="random",
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             return_log_prob=True,
-            save_dist_params=True,
         )
         value_net = MLP(
             num_cells=[200],
@@ -578,23 +588,28 @@ def make_ppo_model(
             actor_net = NormalParamWrapper(
                 policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
             )
+            actor_module = TDModule(
+                actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale"]
+            )
         else:
             actor_net = gSDEWrapper(
-                policy_net, action_dim=action_spec.shape[0], state_dim=obs_spec.shape[0]
+                policy_net,
+                action_dim=action_spec.shape[0],
+                state_dim=obs_spec.shape[0],
             )
             in_keys_actor += ["_eps_gSDE"]
-            out_keys += ["_action_duplicate"]
+            actor_module = TDModule(
+                actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale", "action"]
+            )
 
         policy_po = ProbabilisticActor(
-            actor_net,
-            action_spec,
+            actor_module,
+            spec=action_spec,
+            dist_param_keys=["loc", "scale"],
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
-            in_keys=in_keys_actor,
-            out_keys=out_keys,
             return_log_prob=True,
-            save_dist_params=True,
-            default_interaction_mode="random" if not args.gSDE else "net_output",
+            default_interaction_mode="random",
         )
 
         value_net = MLP(
@@ -671,7 +686,10 @@ def make_sac_model(
         >>> print(actor(td))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                loc: Tensor(torch.Size([6]), dtype=torch.float32),
+                scale: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32)},
             batch_size=torch.Size([]),
             device=cpu,
@@ -679,7 +697,10 @@ def make_sac_model(
         >>> print(qvalue(td.clone()))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                loc: Tensor(torch.Size([6]), dtype=torch.float32),
+                scale: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
@@ -688,7 +709,10 @@ def make_sac_model(
         >>> print(value(td.clone()))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                loc: Tensor(torch.Size([6]), dtype=torch.float32),
+                scale: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 state_value: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
@@ -770,6 +794,15 @@ def make_sac_model(
             "max": action_spec.space.maximum,
             "tanh_loc": tanh_loc,
         }
+        actor_module = TDModule(
+            actor_net,
+            in_keys=in_keys_actor,
+            out_keys=[
+                "loc",
+                "scale",
+            ],
+        )
+
     else:
         obs_spec_len = obs_spec.shape[0]
         actor_net = gSDEWrapper(
@@ -780,16 +813,20 @@ def make_sac_model(
         dist_kwargs = {
             "tanh_loc": tanh_loc,
         }
+        actor_module = TDModule(
+            actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale", "action"]
+        )
 
     actor = ProbabilisticActor(
         spec=action_spec,
-        in_keys=in_keys_actor,
-        module=actor_net,
+        dist_param_keys=["loc", "scale"],
+        module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
-        default_interaction_mode="random" if not gSDE else "net_output",
-        safe=True,
+        default_interaction_mode="random",
+        return_log_prob=False,
     )
+
     qvalue = ValueOperator(
         in_keys=["action"] + in_keys,
         module=qvalue_net,
@@ -862,18 +899,24 @@ def make_redq_model(
         >>> print(actor(td))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                loc: Tensor(torch.Size([6]), dtype=torch.float32),
+                scale: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
-                action_log_prob: Tensor(torch.Size([1]), dtype=torch.float32)},
+                sample_log_prob: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
             device=cpu,
             is_shared=False)
         >>> print(qvalue(td.clone()))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                loc: Tensor(torch.Size([6]), dtype=torch.float32),
+                scale: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
-                action_log_prob: Tensor(torch.Size([1]), dtype=torch.float32),
+                sample_log_prob: Tensor(torch.Size([1]), dtype=torch.float32),
                 state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
             device=cpu,
@@ -943,6 +986,10 @@ def make_redq_model(
             "max": action_spec.space.maximum,
             "tanh_loc": tanh_loc,
         }
+        actor_module = TDModule(
+            actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale"]
+        )
+
     else:
         obs_spec_len = obs_spec.shape[0]
         actor_net = gSDEWrapper(
@@ -955,14 +1002,17 @@ def make_redq_model(
             "max": action_spec.space.maximum,
             "tanh_loc": tanh_loc,
         }
+        actor_module = TDModule(
+            actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale", "action"]
+        )
 
     actor = ProbabilisticActor(
         spec=action_spec,
-        in_keys=in_keys_actor,
-        module=actor_net,
+        dist_param_keys=["loc", "scale"],
+        module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
-        default_interaction_mode="random" if not args.gSDE else "net_output",
+        default_interaction_mode="random",
         return_log_prob=True,
     )
     qvalue = ValueOperator(

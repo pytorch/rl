@@ -253,7 +253,9 @@ class _EnvClass:
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
 
-        self.current_tensordict = step_tensordict(tensordict_reset, keep_other=True)
+        self.current_tensordict = step_tensordict(
+            tensordict_reset, exclude_reward_done_action=False
+        )
         self.is_done = tensordict_reset.get(
             "done",
             torch.zeros(self.batch_size, dtype=torch.bool, device=self.device),

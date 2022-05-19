@@ -127,10 +127,10 @@ class REDQLoss_deprecated(_LossModule):
         return alpha
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
-        loss_actor, action_log_prob = self._actor_loss(tensordict)
+        loss_actor, sample_log_prob = self._actor_loss(tensordict)
 
         loss_qval = self._qvalue_loss(tensordict)
-        loss_alpha = self._loss_alpha(action_log_prob)
+        loss_alpha = self._loss_alpha(sample_log_prob)
         if not loss_qval.shape == loss_actor.shape:
             raise RuntimeError(
                 f"QVal and actor loss have different shape: {loss_qval.shape} and {loss_actor.shape}"
@@ -141,7 +141,7 @@ class REDQLoss_deprecated(_LossModule):
                 "loss_qvalue": loss_qval.mean(),
                 "loss_alpha": loss_alpha.mean(),
                 "alpha": self.alpha,
-                "entropy": -action_log_prob.mean().detach(),
+                "entropy": -sample_log_prob.mean().detach(),
             },
             [],
         )
@@ -171,9 +171,9 @@ class REDQLoss_deprecated(_LossModule):
             state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
         loss_actor = -(
             state_action_value
-            - self.alpha * tensordict_clone.get("action_log_prob").squeeze(-1)
+            - self.alpha * tensordict_clone.get("sample_log_prob").squeeze(-1)
         ).mean(0)
-        return loss_actor, tensordict_clone.get("action_log_prob")
+        return loss_actor, tensordict_clone.get("sample_log_prob")
 
     def _qvalue_loss(self, tensordict: _TensorDict) -> Tensor:
         tensordict_save = tensordict
@@ -206,7 +206,7 @@ class REDQLoss_deprecated(_LossModule):
                     params=list(self.target_actor_network_params),
                     buffers=self.target_actor_network_buffers,
                 )
-            action_log_prob = next_td.get("action_log_prob")
+            sample_log_prob = next_td.get("sample_log_prob")
             # get q-values
             next_td = self.qvalue_network(
                 next_td,
@@ -216,7 +216,7 @@ class REDQLoss_deprecated(_LossModule):
                 vmap=True,
             )
             state_value = (
-                next_td.get("state_action_value") - self.alpha * action_log_prob
+                next_td.get("state_action_value") - self.alpha * sample_log_prob
             )
             state_value = state_value.min(0)[0]
 
@@ -461,11 +461,11 @@ class REDQLoss(_LossModule):
             [self.num_qvalue_nets, self.sub_sample_len, self.num_qvalue_nets],
             dim=0,
         )
-        action_log_prob = tensordict_actor.get("action_log_prob").squeeze(-1)
+        sample_log_prob = tensordict_actor.get("sample_log_prob").squeeze(-1)
         (
             action_log_prob_actor,
             next_action_log_prob_qvalue,
-        ) = action_log_prob.unbind(0)
+        ) = sample_log_prob.unbind(0)
 
         loss_actor = -(
             state_action_value_actor - self.alpha * action_log_prob_actor
@@ -491,7 +491,7 @@ class REDQLoss(_LossModule):
 
         tensordict.set("td_error", td_error.detach().max(0)[0])
 
-        loss_alpha = self._loss_alpha(action_log_prob)
+        loss_alpha = self._loss_alpha(sample_log_prob)
         if not loss_qval.shape == loss_actor.shape:
             raise RuntimeError(
                 f"QVal and actor loss have different shape: {loss_qval.shape} and {loss_actor.shape}"
@@ -502,7 +502,7 @@ class REDQLoss(_LossModule):
                 "loss_qvalue": loss_qval.mean(),
                 "loss_alpha": loss_alpha.mean(),
                 "alpha": self.alpha,
-                "entropy": -action_log_prob.mean(),
+                "entropy": -sample_log_prob.mean(),
             },
             [],
         )

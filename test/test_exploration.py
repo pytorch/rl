@@ -13,13 +13,13 @@ from torch import nn
 from torchrl.data import NdBoundedTensorSpec
 from torchrl.data.tensordict.tensordict import TensorDict
 from torchrl.envs.transforms.transforms import gSDENoise
-from torchrl.modules import ProbabilisticActor
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import (
     IndependentNormal,
     NormalParamWrapper,
 )
 from torchrl.modules.models.exploration import gSDEWrapper
+from torchrl.modules.td_module.deprec import ProbabilisticActor_deprecated
 from torchrl.modules.td_module.exploration import (
     _OrnsteinUhlenbeckProcess,
     OrnsteinUhlenbeckProcessWrapper,
@@ -58,7 +58,7 @@ def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     torch.manual_seed(seed)
     module = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
     action_spec = NdBoundedTensorSpec(-torch.ones(d_act), torch.ones(d_act), (d_act,))
-    policy = ProbabilisticActor(
+    policy = ProbabilisticActor_deprecated(
         spec=action_spec,
         module=module,
         distribution_class=TanhNormal,
@@ -110,7 +110,7 @@ def test_gsde(state_dim, action_dim, gSDE, device, safe, batch=16, bound=0.1):
     spec = NdBoundedTensorSpec(
         -torch.ones(action_dim) * bound, torch.ones(action_dim) * bound, (action_dim,)
     ).to(device)
-    actor = ProbabilisticActor(
+    actor = ProbabilisticActor_deprecated(
         module=wrapper,
         spec=spec,
         in_keys=in_keys,
@@ -127,7 +127,7 @@ def test_gsde(state_dim, action_dim, gSDE, device, safe, batch=16, bound=0.1):
         ],
     )
     if gSDE:
-        gSDENoise(action_dim, state_dim).reset(td)
+        gSDENoise().reset(td)
         assert "_eps_gSDE" in td.keys()
         assert td.get("_eps_gSDE").device == device
     actor(td)
