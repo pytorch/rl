@@ -35,16 +35,16 @@ __all__ = [
 
 
 def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
-    if not module.spec.is_in(tensordict_out.get(module.out_keys[0])):
+    if not module.spec.is_in(tensordict_out.get("action")):
         try:
             tensordict_out.set_(
-                module.out_keys[0],
-                module.spec.project(tensordict_out.get(module.out_keys[0])),
+                "action",
+                module.spec.project(tensordict_out.get("action")),
             )
         except RuntimeError:
             tensordict_out.set(
-                module.out_keys[0],
-                module.spec.project(tensordict_out.get(module.out_keys[0])),
+                "action",
+                module.spec.project(tensordict_out.get("action")),
             )
 
 

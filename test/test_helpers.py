@@ -102,7 +102,7 @@ def test_ddpg_maker(device, from_pixels):
     actor, value = make_ddpg_actor(proof_environment, device=device, args=args)
     td = proof_environment.reset().to(device)
     actor(td)
-    expected_keys = ["done", "action", "net_output"]
+    expected_keys = ["done", "action", "param"]
     if from_pixels:
         expected_keys += ["pixels"]
     else:

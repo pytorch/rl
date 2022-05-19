@@ -20,6 +20,7 @@ __all__ = [
     "Actor",
     "ActorValueOperator",
     "ValueOperator",
+    "ProbabilisticActor",
     "QValueActor",
     "ActorCriticOperator",
     "ActorCriticWrapper",

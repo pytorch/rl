@@ -216,7 +216,7 @@ class SyncDataCollector(_DataCollector):
             at each iteration.
             default = False
         exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
-            "mode", "mean" or "net_output".
+            "mode", "mean" or "param".
             default = "random"
         init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
             This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
@@ -387,7 +387,7 @@ class SyncDataCollector(_DataCollector):
         else:
             if td.device == torch.device("cpu") and self.pin_memory:
                 td.pin_memory()
-            self._td_policy.update(td, inplace=True)
+            self._td_policy.update(td, inplace=False)
         return self._td_policy
 
     def _cast_to_env(
@@ -398,10 +398,10 @@ class SyncDataCollector(_DataCollector):
             if self._td_env is None:
                 self._td_env = td.to(env_device)
             else:
-                self._td_env.update(td, inplace=True)
+                self._td_env.update(td, inplace=False)
             return self._td_env
         else:
-            return dest.update(td, inplace=True)
+            return dest.update(td, inplace=False)
 
     def _reset_if_necessary(self) -> None:
         done = self._tensordict.get("done")
@@ -618,7 +618,7 @@ class _MultiDataCollector(_DataCollector):
             This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
             default = True
        exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
-            "mode", "mean" or "net_output".
+            "mode", "mean" or "param".
             default = "random"
 
     """

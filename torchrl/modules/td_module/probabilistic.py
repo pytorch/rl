@@ -60,18 +60,6 @@ class ProbabilisticTensorDictModule(TDModule):
             the sampling step will be skipped.
         spec (TensorSpec): specs of the first output tensor. Used when calling td_module.random() to generate random
             values in the target space.
-        distribution_class (Type, optional): a torch.distributions.Distribution class to be used for sampling.
-            Default is Delta.
-        distribution_kwargs (dict, optional): kwargs to be passed to the distribution.
-        default_interaction_mode (str, optional): default method to be used to retrieve the output value. Should be one of:
-            'mode', 'median', 'mean' or 'random' (in which case the value is sampled randomly from the distribution).
-            Default is 'mode'.
-            Note: When a sample is drawn, the `ProbabilisticTDModule` instance will fist look for the interaction mode
-            dictated by the `exploration_mode()` global function. If this returns `None` (its default value),
-            then the `default_interaction_mode` of the `ProbabilisticTDModule` instance will be used.
-            Note that DataCollector instances will use `set_exploration_mode` to `"random"` by default.
-        return_log_prob (bool, optional): if True, the log-probability of the distribution sample will be written in the
-            tensordict with the key `f'{in_keys[0]}_log_prob'`. Default is `False`.
         safe (bool, optional): if True, the value of the sample is checked against the input spec. Out-of-domain sampling can
             occur because of exploration policies or numerical under/overflow issues. As for the `spec` argument,
             this check will only occur for the distribution sample, but not the other tensors returned by the input
@@ -79,16 +67,25 @@ class ProbabilisticTensorDictModule(TDModule):
             `TensorSpec.project`
             method.
             Default is `False`.
-        save_dist_params (bool, optional): if True, the parameters of the distribution (i.e. the output of the module)
+        default_interaction_mode (str, optional): default method to be used to retrieve the output value. Should be one of:
+            'mode', 'median', 'mean' or 'random' (in which case the value is sampled randomly from the distribution).
+            Default is 'mode'.
+            Note: When a sample is drawn, the `ProbabilisticTDModule` instance will fist look for the interaction mode
+            dictated by the `exploration_mode()` global function. If this returns `None` (its default value),
+            then the `default_interaction_mode` of the `ProbabilisticTDModule` instance will be used.
+            Note that DataCollector instances will use `set_exploration_mode` to `"random"` by default.
+        distribution_class (Type, optional): a torch.distributions.Distribution class to be used for sampling.
+            Default is Delta.
+        distribution_kwargs (dict, optional): kwargs to be passed to the distribution.
+        return_log_prob (bool, optional): if True, the log-probability of the distribution sample will be written in the
+            tensordict with the key `f'{in_keys[0]}_log_prob'`. Default is `False`.
+        cache_dist (bool, optional): EXPERIMENTAL: if True, the parameters of the distribution (i.e. the output of the module)
             will be written to the tensordict along with the sample. Those parameters can be used to
             re-compute the original distribution later on (e.g. to compute the divergence between the distribution
             used to sample the action and the updated distribution in PPO).
             Default is `False`.
-        cache_dist (bool, optional): if True, the parameters of the distribution (i.e. the output of the module)
-            will be written to the tensordict along with the sample. Those parameters can be used to
-            re-compute the original distribution later on (e.g. to compute the divergence between the distribution
-            used to sample the action and the updated distribution in PPO).
-            Default is `False`.
+        n_empirical_estimate (int, optional): number of samples to compute the empirical mean when it is not available.
+            Default is 1000
 
     Examples:
         >>> from torchrl.modules.td_module import ProbabilisticTensorDictModule
@@ -153,7 +150,7 @@ class ProbabilisticTensorDictModule(TDModule):
         distribution_kwargs: Optional[dict] = None,
         return_log_prob: bool = False,
         cache_dist: bool = False,
-        _n_empirical_est: int = 1000,
+        n_empirical_estimate: int = 1000,
     ):
         in_keys = module.in_keys
 
@@ -185,7 +182,7 @@ class ProbabilisticTensorDictModule(TDModule):
         self.distribution_kwargs = (
             distribution_kwargs if distribution_kwargs is not None else dict()
         )
-        self._n_empirical_est = _n_empirical_est
+        self.n_empirical_estimate = n_empirical_estimate
         self._dist = None
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
@@ -304,9 +301,9 @@ class ProbabilisticTensorDictModule(TDModule):
                 return dist.mean
             except AttributeError:
                 if dist.has_rsample:
-                    return dist.rsample((self._n_empirical_est,)).mean(0)
+                    return dist.rsample((self.n_empirical_estimate,)).mean(0)
                 else:
-                    return dist.sample((self._n_empirical_est,)).mean(0)
+                    return dist.sample((self.n_empirical_estimate,)).mean(0)
 
         elif interaction_mode == "random":
             if dist.has_rsample:

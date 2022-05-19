@@ -239,7 +239,7 @@ def make_ddpg_actor(
             fields={
                 done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
-                net_output: Tensor(torch.Size([6]), dtype=torch.float32),
+                param: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32)},
             batch_size=torch.Size([]),
             device=cpu,
@@ -249,7 +249,7 @@ def make_ddpg_actor(
             fields={
                 done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
-                net_output: Tensor(torch.Size([6]), dtype=torch.float32),
+                param: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
@@ -287,13 +287,13 @@ def make_ddpg_actor(
     else:
         in_keys = ["observation_vector"]
         actor_net = DdpgMlpActor(**actor_net_default_kwargs)
-    actor_module = TDModule(actor_net, in_keys=in_keys, out_keys=["net_output"])
+    actor_module = TDModule(actor_net, in_keys=in_keys, out_keys=["param"])
 
     # We use a ProbabilisticActor to make sure that we map the network output to the right space using a TanhDelta
     # distribution.
     actor = ProbabilisticActor(
         actor_module,
-        dist_param_keys=["net_output"],
+        dist_param_keys=["param"],
         spec=env_specs["action_spec"],
         safe=True,
         distribution_class=TanhDelta,

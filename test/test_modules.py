@@ -16,9 +16,9 @@ from torchrl.modules import (
     ActorValueOperator,
     TDModule,
     ValueOperator,
+    ProbabilisticActor,
 )
 from torchrl.modules.models import NoisyLinear, MLP, NoisyLazyLinear
-from torchrl.modules.td_module.deprec import ProbabilisticActor_deprecated
 
 
 @pytest.mark.parametrize("in_features", [3, 10, None])
@@ -130,8 +130,9 @@ def test_actorcritic(device):
     common_module = TDModule(
         spec=None, module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"]
     ).to(device)
-    policy_operator = ProbabilisticActor_deprecated(
-        spec=None, module=nn.Linear(4, 5), in_keys=["hidden"], return_log_prob=True
+    module = TDModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
+    policy_operator = ProbabilisticActor(
+        spec=None, module=module, dist_param_keys=["param"], return_log_prob=True
     ).to(device)
     value_operator = ValueOperator(nn.Linear(4, 1), in_keys=["hidden"]).to(device)
     op = ActorValueOperator(

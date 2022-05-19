@@ -240,24 +240,20 @@ class gSDEWrapper(nn.Module):
     For now, only vector states are considered, but the distribution can
     read other inputs (e.g. hidden states etc.)
 
-    When used, the gSDEWrapper should also be accompanied by a few
-    configuration changes: the exploration mode of the policy should be set
-    to "net_output", meaning that the action from the ProbabilisticTDModule
-    will be retrieved directly from the network output and not simulated
-    from the constructed distribution. Second, the noise input should be
-    created through a `torchrl.envs.transforms.gSDENoise` instance,
-    which will reset this noise parameter each time the environment is reset.
+    The noise input should be reset through a `torchrl.envs.transforms.gSDENoise`
+    instance: each time the environment is reset, the gSDENoise will be erased
+    and resampled inside this wrapper.
     Finally, a regular normal distribution should be used to sample the
-    actions, the `ProbabilisticTDModule` should be created
+    actions, the `ProbabilisticTensorDictModule` should be created
     in safe mode (in order for the action to be clipped in the desired
     range) and its input keys should include `"_eps_gSDE"` which is the
     default gSDE noise key:
 
-        >>> actor = ProbabilisticActor_deprecated(
-        ...     wrapped_module,
-        ...     in_keys=["observation", "_eps_gSDE"]
-        ...     spec,
-        ...     distribution_class=IndependentNormal,
+        >>> actor = ProbabilisticActor(
+        ...     TDModule(wrapped_module, in_keys=["observation"], out_keys=["loc", "scale", "action", "_eps_gSDE"]),
+        ...     dist_param_keys=["loc", "scale"],
+        ...     spec=spec,
+        ...     distribution_class=IndependentNormal,  # or TanhNormal, etc.
         ...     safe=True)
 
     Args:
@@ -279,7 +275,7 @@ class gSDEWrapper(nn.Module):
         >>> state = torch.randn(batch, state_dim)
         >>> eps_gSDE = torch.randn(batch, action_dim, state_dim)
         >>> # the module takes inputs (state, *additional_vectors, noise_param)
-        >>> mu, sigma, action = wrapped_model(state, eps_gSDE)
+        >>> mu, sigma, action, noise = wrapped_model(state, eps_gSDE)
         >>> print(mu.shape, sigma.shape, action.shape)
         torch.Size([3, 5]) torch.Size([3, 5]) torch.Size([3, 5])
     """
