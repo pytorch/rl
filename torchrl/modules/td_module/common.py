@@ -25,6 +25,7 @@ from torch import nn, Tensor
 from torchrl.data import (
     DEVICE_TYPING,
     TensorSpec,
+    CompositeSpec,
 )
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 
@@ -35,17 +36,33 @@ __all__ = [
 
 
 def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
-    if not module.spec.is_in(tensordict_out.get("action")):
-        try:
-            tensordict_out.set_(
-                "action",
-                module.spec.project(tensordict_out.get("action")),
-            )
-        except RuntimeError:
-            tensordict_out.set(
-                "action",
-                module.spec.project(tensordict_out.get("action")),
-            )
+    spec = module.spec
+    if len(module.out_keys) > 1 and not isinstance(spec, CompositeSpec):
+        raise RuntimeError(
+            "safe TDModules with multiple out_keys require a CompositeSpec with matching keys. Got "
+            f"keys {module.out_keys}."
+        )
+    elif not isinstance(spec, CompositeSpec):
+        out_key = module.out_keys[0]
+        keys = [out_key]
+        values = [spec]
+    else:
+        keys = list(spec.keys())
+        values = [spec[key] for key in keys]
+    for _spec, _key in zip(values, keys):
+        if _spec is None:
+            continue
+        if not _spec.is_in(tensordict_out.get(_key)):
+            try:
+                tensordict_out.set_(
+                    _key,
+                    _spec.project(tensordict_out.get(_key)),
+                )
+            except RuntimeError:
+                tensordict_out.set(
+                    _key,
+                    _spec.project(tensordict_out.get(_key)),
+                )
 
 
 class TDModule(nn.Module):
@@ -154,7 +171,10 @@ class TDModule(nn.Module):
             raise TypeError("spec must be a TensorSpec subclass")
         self.safe = safe
         if safe:
-            if spec is None:
+            if spec is None or (
+                isinstance(spec, CompositeSpec)
+                and all(_spec is None for _spec in spec.values())
+            ):
                 raise RuntimeError(
                     "`TDModule(spec=None, safe=True)` is not a valid configuration as the tensor "
                     "specs are not specified"

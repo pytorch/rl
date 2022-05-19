@@ -13,6 +13,7 @@ from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
     NdBoundedTensorSpec,
+    CompositeSpec,
 )
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
@@ -114,7 +115,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=net,
-                    spec=spec,
+                    spec=CompositeSpec(out=spec, loc=None, scale=None),
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -124,7 +125,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=net,
-                spec=spec,
+                spec=CompositeSpec(out=spec, loc=None, scale=None),
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -225,7 +226,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
-                    spec=spec,
+                    spec=CompositeSpec(out=spec, loc=None, scale=None),
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -235,7 +236,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
-                spec=spec,
+                spec=CompositeSpec(out=spec, loc=None, scale=None),
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -283,7 +284,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
-                    spec=spec,
+                    spec=CompositeSpec(out=spec, loc=None, scale=None),
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -293,7 +294,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
-                spec=spec,
+                spec=CompositeSpec(out=spec, loc=None, scale=None),
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -394,7 +395,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
-                    spec=spec,
+                    spec=CompositeSpec(out=spec, loc=None, scale=None),
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -404,7 +405,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
-                spec=spec,
+                spec=CompositeSpec(out=spec, loc=None, scale=None),
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -452,7 +453,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
-                    spec=spec,
+                    spec=CompositeSpec(out=spec, loc=None, scale=None),
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -462,7 +463,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
-                spec=spec,
+                spec=CompositeSpec(out=spec, loc=None, scale=None),
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -588,7 +589,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
-                    spec=spec,
+                    spec=CompositeSpec(out=spec, loc=None, scale=None),
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -598,7 +599,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
-                spec=spec,
+                spec=CompositeSpec(out=spec, loc=None, scale=None),
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -671,7 +672,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
-                    spec=spec,
+                    spec=CompositeSpec(out=spec, loc=None, scale=None),
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -681,7 +682,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
-                spec=spec,
+                spec=CompositeSpec(out=spec, loc=None, scale=None),
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -850,7 +851,7 @@ class TestTDSequence:
                 safe=False,
             )
             tdmodule2 = ProbabilisticTensorDictModule(
-                spec=spec,
+                spec=CompositeSpec(out=spec, loc=None, scale=None),
                 module=net2,
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
@@ -1000,7 +1001,7 @@ class TestTDSequence:
             )
             tdmodule2 = ProbabilisticTensorDictModule(
                 fnet2,
-                spec=spec,
+                spec=CompositeSpec(out=spec, loc=None, scale=None),
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -1168,7 +1169,7 @@ class TestTDSequence:
             )
             tdmodule2 = ProbabilisticTensorDictModule(
                 fnet2,
-                spec=spec,
+                spec=CompositeSpec(out=spec, loc=None, scale=None),
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -1239,7 +1240,7 @@ class TestTDSequence:
             )
             tdmodule2 = ProbabilisticTensorDictModule(
                 net2,
-                spec=spec,
+                spec=CompositeSpec(out=spec, loc=None, scale=None),
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -1399,7 +1400,7 @@ class TestTDSequence:
             )
             tdmodule2 = ProbabilisticTensorDictModule(
                 fnet2,
-                spec=spec,
+                spec=CompositeSpec(out=spec, loc=None, scale=None),
                 out_key_sample=["out"],
                 dist_param_keys=["loc", "scale"],
                 safe=safe,
