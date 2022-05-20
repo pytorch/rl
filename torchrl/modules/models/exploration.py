@@ -345,9 +345,8 @@ class gSDEModule(nn.Module):
             _eps_gSDE = torch.zeros(
                 *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
             )
-        elif (_eps_gSDE is None and exploration_mode() == "mode") or (
-            _eps_gSDE.numel() == math.prod(state.shape[:-1]) and (_eps_gSDE == 0).all()
-        ):
+        elif (_eps_gSDE is None and exploration_mode() == "random") or \
+            (_eps_gSDE is not None and _eps_gSDE.numel() == math.prod(state.shape[:-1]) and (_eps_gSDE == 0).all()):
             _eps_gSDE = torch.randn(
                 *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
             )
