@@ -7,13 +7,15 @@ import math
 from typing import Optional, Sequence, Union
 
 import torch
-from torch import nn
+from torch import nn, distributions as d
 from torch.nn.modules.lazy import LazyModuleMixin
 from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
 
 __all__ = ["NoisyLinear", "NoisyLazyLinear", "reset_noise"]
 
 from torchrl.data.utils import DEVICE_TYPING
+from torchrl.envs.utils import exploration_mode
+from torchrl.modules.distributions.utils import _cast_transform_device
 from torchrl.modules.utils import inv_softplus
 
 
@@ -227,7 +229,7 @@ def reset_noise(layer: nn.Module) -> None:
         layer.reset_noise()
 
 
-class gSDEWrapper(nn.Module):
+class gSDEModule(nn.Module):
     """A gSDE exploration wrapper as presented in "Smooth Exploration for
     Robotic Reinforcement Learning" by Antonin Raffin, Jens Kober,
     Freek Stulp (https://arxiv.org/abs/2005.05719)
@@ -266,6 +268,8 @@ class gSDEWrapper(nn.Module):
             positive value.
         scale_min (float, optional): min value of the scale.
         scale_max (float, optional): max value of the scale.
+        transform (torch.distribution.Transform, optional): a transform to apply
+            to the sampled action.
 
     Examples:
         >>> batch, state_dim, action_dim = 3, 7, 5
@@ -282,33 +286,58 @@ class gSDEWrapper(nn.Module):
 
     def __init__(
         self,
-        policy_model: nn.Module,
         action_dim: int,
         state_dim: int,
         sigma_init: float = None,
         scale_min: float = 0.1,
         scale_max: float = 10.0,
+        learn_sigma: bool = True,
+        transform: Optional[d.Transform] = None,
     ) -> None:
         super().__init__()
-        self.policy_model = policy_model
         self.action_dim = action_dim
         self.state_dim = state_dim
         self.scale_min = scale_min
         self.scale_max = scale_max
-        if sigma_init is None:
-            sigma_init = inv_softplus(math.sqrt((1.0 - scale_min) / state_dim))
-        self.register_parameter(
-            "log_sigma",
-            nn.Parameter(torch.zeros((action_dim, state_dim), requires_grad=True)),
-        )
+        self.transform = transform
+        self.learn_sigma = learn_sigma
+        if learn_sigma:
+            if sigma_init is None:
+                sigma_init = inv_softplus(math.sqrt((1.0 - scale_min) / state_dim))
+            self.register_parameter(
+                "log_sigma",
+                nn.Parameter(torch.zeros((action_dim, state_dim), requires_grad=True)),
+            )
+        else:
+            if sigma_init is None:
+                sigma_init = math.sqrt((1.0 - scale_min) / state_dim)
+            self.register_buffer(
+                "_sigma",
+                torch.full((action_dim, state_dim), sigma_init),
+            )
+
         self.register_buffer("sigma_init", torch.tensor(sigma_init))
 
-    def forward(self, state, _eps_gSDE, *tensors):
-        sigma = (
-            torch.nn.functional.softplus(self.log_sigma + self.sigma_init)
-            + self.scale_min
-        )
-        sigma = sigma.clamp_max(self.scale_max)
+    @property
+    def sigma(self):
+        if self.learn_sigma:
+            sigma = (
+                torch.nn.functional.softplus(self.log_sigma + self.sigma_init)
+                + self.scale_min
+            )
+            return sigma
+        else:
+            return self._sigma
+
+    def forward(self, mu, state, _eps_gSDE):
+        sigma = self.sigma.clamp_max(self.scale_max)
+        if (
+            state.shape[:-1] != mu.shape[:-1]
+            or _eps_gSDE.shape[:-1] != state.shape[:-1]
+        ):
+            raise RuntimeError(
+                f"mu, noise and state are expected to have matching batch size, got shapes {mu.shape}, {_eps_gSDE.shape} and {state.shape}"
+            )
         if _eps_gSDE.numel() == math.prod(state.shape[:-1]) and (_eps_gSDE == 0).all():
             _eps_gSDE = torch.randn(
                 *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
@@ -317,9 +346,86 @@ class gSDEWrapper(nn.Module):
             raise RuntimeError
         gSDE_noise = sigma * _eps_gSDE
         eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
-        mu = self.policy_model(state, *tensors)
-        action = mu + eps
+
+        if exploration_mode() in ("random",):
+            action = mu + eps
+        elif exploration_mode() in ("mode",):
+            action = mu
+        else:
+            raise RuntimeError(
+                f"gSDE behaviour for exploration mode {exploration_mode()} is not defined. Choose from 'random' or 'mode'."
+            )
+
         sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(1e-5).sqrt()
         if not torch.isfinite(sigma).all():
             print("inf sigma")
+
+        if self.transform is not None:
+            action = self.transform(action)
         return mu, sigma, action, _eps_gSDE
+
+    def to(self, device_or_dtype: Union[torch.dtype, DEVICE_TYPING]):
+        if isinstance(device_or_dtype, DEVICE_TYPING):
+            self.transform = _cast_transform_device(self.transform, device_or_dtype)
+        return self.to(device_or_dtype)
+
+
+class LazygSDEModule(LazyModuleMixin, gSDEModule):
+    cls_to_become = gSDEModule
+    log_sigma: UninitializedParameter
+    _sigma: UninitializedBuffer
+    sigma_init: UninitializedBuffer
+
+    def __init__(
+        self,
+        sigma_init: float = None,
+        scale_min: float = 0.1,
+        scale_max: float = 10.0,
+        learn_sigma: bool = True,
+        transform: Optional[d.Transform] = None,
+    ) -> None:
+        factory_kwargs = {
+            "device": torch.device("cpu"),
+            "dtype": torch.get_default_dtype(),
+        }
+        super().__init__(
+            0,
+            0,
+            sigma_init=0.0,
+            scale_min=scale_min,
+            scale_max=scale_max,
+            learn_sigma=learn_sigma,
+            transform=transform,
+        )
+        if learn_sigma:
+            self.log_sigma = UninitializedParameter(**factory_kwargs)
+        else:
+            self._sigma = UninitializedBuffer(**factory_kwargs)
+
+    def reset_parameters(self) -> None:
+        pass
+
+    def initialize_parameters(self, mu, state, _eps_gSDE) -> None:
+        if self.has_uninitialized_params():
+            action_dim = mu.shape[-1]
+            state_dim = state.shape[-1]
+            with torch.no_grad():
+                if self.learn_sigma:
+                    self.log_sigma.materialize((action_dim, state_dim))
+                    self.log_sigma.data.zero_()
+                    if self.sigma_init == 0:
+                        self.sigma_init.data += inv_softplus(
+                            math.sqrt((1.0 - self.scale_min) / state_dim)
+                        )
+                    else:
+                        self.sigma_init.data += inv_softplus(self.sigma_init)
+
+                else:
+                    self._sigma.materialize((action_dim, state_dim))
+                    self._sigma.data.fill_(self.sigma_init)
+                    if self.sigma_init == 0:
+                        self.sigma_init.data += math.sqrt(
+                            (1.0 - self.scale_min) / state_dim
+                        )
+                    else:
+                        self.sigma_init.data += self.sigma_init

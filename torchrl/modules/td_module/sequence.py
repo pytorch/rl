@@ -189,7 +189,9 @@ class TDSequence(TDModule):
             out.append(param_list[a:b])
         return out
 
-    def forward(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
+    def forward(
+        self, tensordict: _TensorDict, tensordict_out=None, **kwargs
+    ) -> _TensorDict:
         if "params" in kwargs and "buffers" in kwargs:
             param_splits = self._split_param(kwargs["params"], "params")
             buffer_splits = self._split_param(kwargs["buffers"], "buffers")
@@ -224,9 +226,11 @@ class TDSequence(TDModule):
                 tensordict = module(tensordict)
         else:
             raise RuntimeError(
-                "TDSequence does not support keyword arguments other than 'params', 'buffers' and 'vmap'"
+                "TDSequence does not support keyword arguments other than 'tensordict_out', 'params', 'buffers' and 'vmap'"
             )
-
+        if tensordict_out is not None:
+            tensordict_out.update(tensordict, inplace=True)
+            return tensordict_out
         return tensordict
 
     def __len__(self):
