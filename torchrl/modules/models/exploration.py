@@ -424,21 +424,22 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
             state_dim = state.shape[-1]
             with torch.no_grad():
                 if self.learn_sigma:
-                    self.log_sigma.materialize((action_dim, state_dim))
-                    self.log_sigma.data.zero_()
-                    if self.sigma_init == 0:
+                    if self._sigma_init is None:
                         self.sigma_init.data += inv_softplus(
                             math.sqrt((1.0 - self.scale_min) / state_dim)
                         )
                     else:
                         self.sigma_init.data += inv_softplus(self._sigma_init)
 
+                    self.log_sigma.materialize((action_dim, state_dim))
+                    self.log_sigma.data.fill_(self.sigma_init)
+
                 else:
                     self._sigma.materialize((action_dim, state_dim))
-                    self._sigma.data.fill_(self.sigma_init)
-                    if self.sigma_init == 0:
+                    if self._sigma_init is None:
                         self.sigma_init.data += math.sqrt(
                             (1.0 - self.scale_min) / state_dim
                         )
                     else:
                         self.sigma_init.data += self._sigma_init
+                    self._sigma.data.fill_(self.sigma_init)

@@ -248,12 +248,17 @@ class TDModule(nn.Module):
             and vmap
             and (isinstance(vmap, bool) or vmap[-1] is None)
         ):
+            #
             dim = tensors[0].shape[0]
             shape = [dim, *tensordict.shape]
+            # tensordict_out = TensorDict(
+            #     {key: val.expand(dim, *val.shape) for key, val in tensordict.items()},
+            #     shape,
+            # )
             tensordict_out = TensorDict(
                 {key: val.expand(dim, *val.shape) for key, val in tensordict.items()},
                 shape,
-            )
+            ).expand(dim)
         elif tensordict_out is None:
             tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):
@@ -267,13 +272,37 @@ class TDModule(nn.Module):
                     "vmap argument must be a boolean or a tuple of dim expensions."
                 )
             _buffers = "buffers" in kwargs
-            _vmap = (
-                kwargs["vmap"]
-                if isinstance(kwargs["vmap"], tuple)
-                else (0, 0, *(None,) * n_input)
-                if _buffers
-                else (0, *(None,) * n_input)
-            )
+            # if vmap is a tuple, we make sure the number of inputs after params and buffers match
+            err_msg = f"the vmap argument had {len(kwargs['vmap'])} elements, but the module has {len(self.in_keys)} inputs"
+            if isinstance(kwargs["vmap"], (tuple, list)):
+                if isinstance(self.module, FunctionalModuleWithBuffers):
+                    if len(kwargs["vmap"]) == 3:
+                        _vmap = (
+                            *kwargs["vmap"][:2],
+                            *[kwargs["vmap"][2]] * len(self.in_keys),
+                        )
+                    elif len(kwargs["vmap"]) == 2 + len(self.in_keys):
+                        _vmap = kwargs["vmap"]
+                    else:
+                        raise RuntimeError(err_msg)
+                elif isinstance(self.module, FunctionalModule):
+                    if len(kwargs["vmap"]) == 2:
+                        _vmap = (
+                            *kwargs["vmap"][:1],
+                            *[kwargs["vmap"][1]] * len(self.in_keys),
+                        )
+                    elif len(kwargs["vmap"]) == 1 + len(self.in_keys):
+                        _vmap = kwargs["vmap"]
+                    else:
+                        raise RuntimeError(err_msg)
+                else:
+                    raise TypeError(
+                        f"vmap not compatible with modules of type {type(self.module)}"
+                    )
+            else:
+                _vmap = (
+                    (0, 0, *(None,) * n_input) if _buffers else (0, *(None,) * n_input)
+                )
             return _vmap
 
     def _call_module(
