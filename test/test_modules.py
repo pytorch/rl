@@ -130,8 +130,9 @@ def test_actorcritic(device):
     common_module = TDModule(
         spec=None, module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"]
     ).to(device)
+    module = TDModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
     policy_operator = ProbabilisticActor(
-        spec=None, module=nn.Linear(4, 5), in_keys=["hidden"], return_log_prob=True
+        spec=None, module=module, dist_param_keys=["param"], return_log_prob=True
     ).to(device)
     value_operator = ValueOperator(nn.Linear(4, 1), in_keys=["hidden"]).to(device)
     op = ActorValueOperator(
@@ -152,7 +153,7 @@ def test_actorcritic(device):
     td_value = value_op(td)
     torch.testing.assert_allclose(td_total.get("action"), td_policy.get("action"))
     torch.testing.assert_allclose(
-        td_total.get("action_log_prob"), td_policy.get("action_log_prob")
+        td_total.get("sample_log_prob"), td_policy.get("sample_log_prob")
     )
     torch.testing.assert_allclose(
         td_total.get("state_value"), td_value.get("state_value")

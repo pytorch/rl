@@ -12,10 +12,10 @@ import torch
 from torch import Tensor
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.modules import ProbabilisticActor
 from torchrl.modules import TDModule
 from torchrl.modules.td_module.actors import (
     ActorCriticWrapper,
-    ProbabilisticActor,
 )
 from torchrl.objectives.costs.utils import distance_loss, next_state_value
 from .common import _LossModule
@@ -139,7 +139,13 @@ class SACLoss(_LossModule):
             )
 
         if target_entropy == "auto":
-            target_entropy = -float(np.prod(actor_network.spec.shape))
+            if actor_network.spec is None:
+                raise RuntimeError(
+                    "Cannot infer the dimensionality of the action. Consider providing "
+                    "the target entropy explicitely or provide the spec of the "
+                    "action tensor in the actor network."
+                )
+            target_entropy = -float(np.prod(actor_network.spec["action"].shape))
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )

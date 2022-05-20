@@ -4,15 +4,21 @@ import torch
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import step_tensordict
-from torchrl.modules import ProbabilisticTDModule, TDModule
+from torchrl.modules import TDModule, ProbabilisticTensorDictModule
 from torchrl.objectives import distance_loss
 from torchrl.objectives.costs.common import _LossModule
 
 
 class ReinforceLoss(_LossModule):
+    """Reinforce loss module, as presented in
+    "Simple statistical gradient-following algorithms for connectionist reinforcement learning", Williams, 1992
+    https://doi.org/10.1007/BF00992696
+
+    """
+
     def __init__(
         self,
-        actor_network: ProbabilisticTDModule,
+        actor_network: ProbabilisticTensorDictModule,
         advantage_module: Callable[[_TensorDict], _TensorDict],
         critic: Optional[TDModule] = None,
         delay_value: bool = False,
@@ -72,7 +78,7 @@ class ReinforceLoss(_LossModule):
             buffers=self.actor_network_buffers,
         )
 
-        log_prob = tensordict.get("action_log_prob")
+        log_prob = tensordict.get("sample_log_prob")
         loss_actor = -log_prob * advantage.detach()
         loss_actor = loss_actor.mean()
         td_out = TensorDict({"loss_actor": loss_actor}, [])

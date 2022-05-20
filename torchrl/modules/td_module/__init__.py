@@ -6,3 +6,5 @@
 from .actors import *
 from .common import *
 from .exploration import *
+from .sequence import *
+from .probabilistic import *

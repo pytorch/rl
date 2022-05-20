@@ -19,7 +19,7 @@ from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
-from torchrl.modules import ProbabilisticTDModule
+from ..modules.td_module import ProbabilisticTensorDictModule
 from .utils import split_trajectories
 
 __all__ = [
@@ -83,10 +83,12 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         ] = None,
         create_env_kwargs: Optional[dict] = None,
         policy: Optional[
-            Union[ProbabilisticTDModule, Callable[[_TensorDict], _TensorDict]]
+            Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
         ] = None,
         device: Optional[DEVICE_TYPING] = None,
-    ) -> Tuple[ProbabilisticTDModule, torch.device, Union[None, Callable[[], dict]]]:
+    ) -> Tuple[
+        ProbabilisticTensorDictModule, torch.device, Union[None, Callable[[], dict]]
+    ]:
         """From a policy and a device, assigns the self.device attribute to
         the desired device and maps the policy onto it or (if the device is
         ommitted) assigns the self.device attribute to the policy device.
@@ -95,7 +97,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             create_env_fn (Callable or list of callables): an env creator
                 function (or a list of creators)
             create_env_kwargs (dictionary): kwargs for the env creator
-            policy (ProbabilisticTDModule, optional): a policy to be used
+            policy (ProbabilisticTensorDictModule, optional): a policy to be used
             device (int, str or torch.device, optional): device where to place
                 the policy
 
@@ -214,7 +216,7 @@ class SyncDataCollector(_DataCollector):
             at each iteration.
             default = False
         exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
-            "mode", "mean" or "net_output".
+            "mode", "mean" or "param".
             default = "random"
         init_with_lag (bool, optional): if True, the first trajectory will be truncated earlier at a random step.
             This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
@@ -231,7 +233,7 @@ class SyncDataCollector(_DataCollector):
             _EnvClass, "EnvCreator", Sequence[Callable[[], _EnvClass]]
         ],
         policy: Optional[
-            Union[ProbabilisticTDModule, Callable[[_TensorDict], _TensorDict]]
+            Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[dict] = None,
@@ -385,7 +387,7 @@ class SyncDataCollector(_DataCollector):
         else:
             if td.device == torch.device("cpu") and self.pin_memory:
                 td.pin_memory()
-            self._td_policy.update(td, inplace=True)
+            self._td_policy.update(td, inplace=False)
         return self._td_policy
 
     def _cast_to_env(
@@ -396,10 +398,10 @@ class SyncDataCollector(_DataCollector):
             if self._td_env is None:
                 self._td_env = td.to(env_device)
             else:
-                self._td_env.update(td, inplace=True)
+                self._td_env.update(td, inplace=False)
             return self._td_env
         else:
-            return dest.update(td, inplace=True)
+            return dest.update(td, inplace=False)
 
     def _reset_if_necessary(self) -> None:
         done = self._tensordict.get("done")
@@ -574,7 +576,8 @@ class _MultiDataCollector(_DataCollector):
 
     Args:
         create_env_fn (list of Callabled): list of Callables, each returning an instance of _EnvClass
-        policy (Callable, optional): Instance of ProbabilisticTDModule class. Must accept _TensorDict object as input.
+        policy (Callable, optional): Instance of ProbabilisticTensorDictModule class.
+            Must accept _TensorDict object as input.
         total_frames (int): lower bound of the total number of frames returned by the collector. In parallel settings,
             the actual number of frames may well be greater than this as the closing signals are sent to the
             workers only once the total number of frames has been collected on the server.
@@ -615,7 +618,7 @@ class _MultiDataCollector(_DataCollector):
             This is helpful to desynchronize the environments, such that steps do no match in all collected rollouts.
             default = True
        exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
-            "mode", "mean" or "net_output".
+            "mode", "mean" or "param".
             default = "random"
 
     """
@@ -624,7 +627,7 @@ class _MultiDataCollector(_DataCollector):
         self,
         create_env_fn: Sequence[Callable[[], _EnvClass]],
         policy: Optional[
-            Union[ProbabilisticTDModule, Callable[[_TensorDict], _TensorDict]]
+            Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[Sequence[dict]] = None,
@@ -1091,7 +1094,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
 
     Args:
         create_env_fn (Callabled): Callable returning an instance of _EnvClass
-        policy (Callable, optional): Instance of ProbabilisticTDModule class.
+        policy (Callable, optional): Instance of ProbabilisticTensorDictModule class.
             Must accept _TensorDict object as input.
         total_frames (int): lower bound of the total number of frames returned
             by the collector. In parallel settings, the actual number of
@@ -1145,7 +1148,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         self,
         create_env_fn: Callable[[], _EnvClass],
         policy: Optional[
-            Union[ProbabilisticTDModule, Callable[[_TensorDict], _TensorDict]]
+            Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[dict] = None,
