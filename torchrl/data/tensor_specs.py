@@ -866,11 +866,17 @@ dtype=torch.float32)},
         return f"CompositeSpec(\n{sub_str})"
 
     def type_check(
-        self, value: _TensorDict, selected_keys: Optional[Sequence[str]] = None
+        self,
+        value: Union[torch.Tensor, _TensorDict],
+        selected_keys: Union[str, Optional[Sequence[str]]] = None,
     ):
+        if isinstance(value, torch.Tensor) and isinstance(selected_keys, str):
+            value = {selected_keys: value}
+            selected_keys = [selected_keys]
+
         for _key in self:
             if selected_keys is None or _key in selected_keys:
-                self._specs[_key].type_check(value[key], _key)
+                self._specs[_key].type_check(value[_key], _key)
 
     def is_in(self, val: Union[dict, _TensorDict]) -> bool:
         return all(
@@ -904,3 +910,6 @@ dtype=torch.float32)},
 
     def values(self) -> ValuesView:
         return self._specs.values()
+
+    def __len__(self):
+        return len(self.keys())

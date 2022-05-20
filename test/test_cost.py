@@ -16,6 +16,7 @@ from torchrl.data import (
     NdBoundedTensorSpec,
     MultOneHotDiscreteTensorSpec,
     NdUnboundedContinuousTensorSpec,
+    CompositeSpec,
 )
 from torchrl.data.postprocs.postprocs import MultiStep
 
@@ -79,7 +80,9 @@ class TestDQN:
         )
         module = nn.Linear(obs_dim, action_dim)
         actor = QValueActor(
-            spec=action_spec,
+            spec=CompositeSpec(
+                action=action_spec, action_value=None, chosen_action_value=None
+            ),
             module=module,
         ).to(device)
         return actor
@@ -92,7 +95,7 @@ class TestDQN:
         support = torch.linspace(vmin, vmax, atoms, dtype=torch.float)
         module = MLP(obs_dim, (atoms, action_dim))
         actor = DistributionalQValueActor(
-            spec=action_spec,
+            spec=CompositeSpec(action=action_spec, action_value=None),
             module=module,
             support=support,
         )
@@ -499,7 +502,7 @@ class TestSAC:
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
         module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
-            spec=action_spec,
+            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
             module=module,
             distribution_class=TanhNormal,
             dist_param_keys=["loc", "scale"],
@@ -811,11 +814,11 @@ class TestREDQ:
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
         module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
-            spec=action_spec,
             module=module,
             distribution_class=TanhNormal,
             return_log_prob=True,
             dist_param_keys=["loc", "scale"],
+            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
         )
         return actor.to(device)
 
@@ -1098,10 +1101,10 @@ class TestPPO:
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
         module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
-            spec=action_spec,
             module=module,
             distribution_class=TanhNormal,
             dist_param_keys=["loc", "scale"],
+            spec=CompositeSpec(action=action_spec, loc=None, scale=None),
         )
         return actor.to(device)
 
@@ -1249,10 +1252,12 @@ class TestReinforce:
         module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor_net = ProbabilisticActor(
             module,
-            spec=NdUnboundedContinuousTensorSpec(n_act),
             distribution_class=TanhNormal,
             return_log_prob=True,
             dist_param_keys=["loc", "scale"],
+            spec=CompositeSpec(
+                action=NdUnboundedContinuousTensorSpec(n_act), loc=None, scale=None
+            ),
         )
         if advantage == "gae":
             advantage_module = GAE(

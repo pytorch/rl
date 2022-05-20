@@ -15,7 +15,7 @@ from torchrl.data import TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.distributions import distributions_maps, Delta
-from torchrl.modules.td_module.common import TDModule
+from torchrl.modules.td_module.common import TDModule, _check_all_str
 
 __all__ = ["ProbabilisticTensorDictModule"]
 
@@ -167,6 +167,7 @@ class ProbabilisticTensorDictModule(TDModule):
                 )
         module_out_keys = module.out_keys
         self.out_key_sample = out_key_sample
+        _check_all_str(self.out_key_sample)
         out_key_sample = [key for key in out_key_sample if key not in module_out_keys]
         self._requires_sample = bool(len(out_key_sample))
         out_keys = out_key_sample + module_out_keys
@@ -174,6 +175,7 @@ class ProbabilisticTensorDictModule(TDModule):
             module=module, spec=spec, in_keys=in_keys, out_keys=out_keys, safe=safe
         )
         self.dist_param_keys = dist_param_keys
+        _check_all_str(self.dist_param_keys)
 
         self.default_interaction_mode = default_interaction_mode
         if isinstance(distribution_class, str):

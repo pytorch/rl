@@ -9,7 +9,7 @@ from typing import Optional, Sequence
 import torch
 from torch import nn
 
-from torchrl.data import DEVICE_TYPING
+from torchrl.data import DEVICE_TYPING, CompositeSpec
 from torchrl.envs.common import _EnvClass
 from torchrl.modules import (
     ActorValueOperator,
@@ -177,7 +177,7 @@ def make_dqn_actor(
 
     model = actor_class(
         module=net,
-        spec=action_spec,
+        spec=CompositeSpec(action=action_spec),
         in_keys=[in_key],
         safe=True,
         **actor_kwargs,
@@ -292,9 +292,9 @@ def make_ddpg_actor(
     # We use a ProbabilisticActor to make sure that we map the network output to the right space using a TanhDelta
     # distribution.
     actor = ProbabilisticActor(
-        actor_module,
+        module=actor_module,
         dist_param_keys=["param"],
-        spec=env_specs["action_spec"],
+        spec=CompositeSpec(action=env_specs["action_spec"]),
         safe=True,
         distribution_class=TanhDelta,
         distribution_kwargs={
@@ -551,7 +551,7 @@ def make_ppo_model(
             )
 
         policy_operator = ProbabilisticActor(
-            spec=action_spec,
+            spec=CompositeSpec(action=action_spec),
             module=actor_module,
             dist_param_keys=["loc", "scale"],
             default_interaction_mode="random",

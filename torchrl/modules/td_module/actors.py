@@ -27,14 +27,15 @@ __all__ = [
     "DistributionalQValueActor",
 ]
 
-from torchrl.data import UnboundedContinuousTensorSpec
+from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, TensorSpec
 
 
 class Actor(TDModule):
     """General class for deterministic actors in RL.
 
-    The Actor class comes with default values for the in_keys and out_keys
-    arguments (["observation"] and ["action"], respectively).
+    The Actor class comes with default values for the out_keys (["action"])
+    and if the spec is provided but not as a CompositeSpec object, it will be
+    automatically translated into `spec = CompositeSpec(action=spec)`
 
     Examples:
         >>> from torchrl.data import TensorDict,
@@ -58,17 +59,25 @@ class Actor(TDModule):
         *args,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
+        spec: Optional[TensorSpec] = None,
         **kwargs,
     ):
         if in_keys is None:
             in_keys = ["observation"]
         if out_keys is None:
             out_keys = ["action"]
+        if (
+            "action" in out_keys
+            and spec is not None
+            and not isinstance(spec, CompositeSpec)
+        ):
+            spec = CompositeSpec(action=spec)
 
         super().__init__(
             *args,
             in_keys=in_keys,
             out_keys=out_keys,
+            spec=spec,
             **kwargs,
         )
 
@@ -76,8 +85,9 @@ class Actor(TDModule):
 class ProbabilisticActor(ProbabilisticTensorDictModule):
     """
     General class for probabilistic actors in RL.
-    The Actor class comes with default values for the in_keys and out_keys
-    arguments (["observation"] and ["action"], respectively).
+    The Actor class comes with default values for the out_keys (["action"])
+    and if the spec is provided but not as a CompositeSpec object, it will be
+    automatically translated into `spec = CompositeSpec(action=spec)`
 
     Examples:
         >>> from torchrl.data import TensorDict, NdBoundedTensorSpec
@@ -115,15 +125,23 @@ class ProbabilisticActor(ProbabilisticTensorDictModule):
         module: TDModule,
         dist_param_keys: Union[str, Sequence[str]],
         out_key_sample: Optional[Sequence[str]] = None,
+        spec: Optional[TensorSpec] = None,
         **kwargs,
     ):
         if out_key_sample is None:
             out_key_sample = ["action"]
+        if (
+            "action" in out_key_sample
+            and spec is not None
+            and not isinstance(spec, CompositeSpec)
+        ):
+            spec = CompositeSpec(action=spec)
 
         super().__init__(
             module=module,
             dist_param_keys=dist_param_keys,
             out_key_sample=out_key_sample,
+            spec=spec,
             **kwargs,
         )
 

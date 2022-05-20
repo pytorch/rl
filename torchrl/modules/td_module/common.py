@@ -35,6 +35,15 @@ __all__ = [
 ]
 
 
+def _check_all_str(list_of_str):
+    if isinstance(list_of_str, str):
+        raise RuntimeError(
+            f"Expected a list of strings but got a string: {list_of_str}"
+        )
+    if any(not isinstance(key, str) for key in list_of_str):
+        raise TypeError(f"Expected a list of strings but got: {list_of_str}")
+
+
 def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
     spec = module.spec
     if len(module.out_keys) > 1 and not isinstance(spec, CompositeSpec):
@@ -164,17 +173,25 @@ class TDModule(nn.Module):
         if not in_keys:
             raise RuntimeError(f"in_keys were not passed to {self.__class__.__name__}")
         self.out_keys = out_keys
+        _check_all_str(self.out_keys)
         self.in_keys = in_keys
+        _check_all_str(self.in_keys)
 
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):
             if len(self.out_keys) > 1:
                 raise RuntimeError(
-                    "got mode than one out_key for the TDModule but only one spec. "
+                    f"got mode than one out_key for the TDModule: {self.out_keys},\nbut only one spec. "
                     "Consider using a CompositeSpec object or no spec at all."
                 )
             spec = CompositeSpec(**{self.out_keys[0]: spec})
+        if spec and len(spec) < len(self.out_keys):
+            # then assume that all the non indicated specs are None
+            for key in self.out_keys:
+                if key not in spec:
+                    spec[key] = None
+
         self._spec = spec
         self.safe = safe
         if safe:

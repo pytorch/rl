@@ -113,7 +113,13 @@ class REDQLoss_deprecated(_LossModule):
             )
 
         if target_entropy == "auto":
-            target_entropy = -float(np.prod(actor_network.spec.shape))
+            if actor_network.spec is None:
+                raise RuntimeError(
+                    "Cannot infer the dimensionality of the action. Consider providing "
+                    "the target entropy explicitely or provide the spec of the "
+                    "action tensor in the actor network."
+                )
+            target_entropy = -float(np.prod(actor_network.spec["action"].shape))
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
@@ -354,7 +360,13 @@ class REDQLoss(_LossModule):
             )
 
         if target_entropy == "auto":
-            target_entropy = -float(np.prod(actor_network.spec.shape))
+            if actor_network.spec is None:
+                raise RuntimeError(
+                    "Cannot infer the dimensionality of the action. Consider providing "
+                    "the target entropy explicitely or provide the spec of the "
+                    "action tensor in the actor network."
+                )
+            target_entropy = -float(np.prod(actor_network.spec["action"].shape))
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
