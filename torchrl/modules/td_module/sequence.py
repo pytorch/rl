@@ -114,20 +114,20 @@ class TDSequence(TDModule):
         self,
         *modules: TDModule,
     ):
-        in_keys_tmp = []
+        in_keys = []
         out_keys = []
         for module in modules:
-            in_keys_tmp += module.in_keys
+            in_keys += module.in_keys
             out_keys += module.out_keys
-        in_keys = []
-        for in_key in in_keys_tmp:
-            if (in_key not in in_keys) and (in_key not in out_keys):
-                in_keys.append(in_key)
-        if not len(in_keys):
-            raise RuntimeError(
-                "in_keys empty. Please ensure that there is at least one input "
-                "key that is not part of the output key set."
-            )
+        # in_keys = []
+        # for in_key in in_keys_tmp:
+        #     if (in_key not in in_keys) and (in_key not in out_keys):
+        #         in_keys.append(in_key)
+        # if not len(in_keys):
+        #     raise RuntimeError(
+        #         "in_keys empty. Please ensure that there is at least one input "
+        #         "key that is not part of the output key set."
+        #     )
         out_keys = [
             out_key
             for i, out_key in enumerate(out_keys)
