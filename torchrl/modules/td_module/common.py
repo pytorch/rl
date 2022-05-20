@@ -273,8 +273,8 @@ class TDModule(nn.Module):
                 )
             _buffers = "buffers" in kwargs
             # if vmap is a tuple, we make sure the number of inputs after params and buffers match
-            err_msg = f"the vmap argument had {len(kwargs['vmap'])} elements, but the module has {len(self.in_keys)} inputs"
             if isinstance(kwargs["vmap"], (tuple, list)):
+                err_msg = f"the vmap argument had {len(kwargs['vmap'])} elements, but the module has {len(self.in_keys)} inputs"
                 if isinstance(self.module, FunctionalModuleWithBuffers):
                     if len(kwargs["vmap"]) == 3:
                         _vmap = (
