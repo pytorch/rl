@@ -19,8 +19,6 @@ from torchrl.modules.td_module.common import TDModule, _check_all_str
 
 __all__ = ["ProbabilisticTensorDictModule"]
 
-from torchrl.modules.utils import functorch
-
 
 class ProbabilisticTensorDictModule(TDModule):
     """
