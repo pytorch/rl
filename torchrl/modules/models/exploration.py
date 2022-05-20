@@ -331,6 +331,8 @@ class gSDEModule(nn.Module):
 
     def forward(self, mu, state, _eps_gSDE):
         sigma = self.sigma.clamp_max(self.scale_max)
+        _err_explo = f"gSDE behaviour for exploration mode {exploration_mode()} is not defined. Choose from 'random' or 'mode'."
+
         if state.shape[:-1] != mu.shape[:-1]:
             _err_msg = f"mu and state are expected to have matching batch size, got shapes {mu.shape} and {state.shape}"
             raise RuntimeError(_err_msg)
@@ -345,11 +347,16 @@ class gSDEModule(nn.Module):
             _eps_gSDE = torch.zeros(
                 *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
             )
-        elif (_eps_gSDE is None and exploration_mode() == "random") or \
-            (_eps_gSDE is not None and _eps_gSDE.numel() == math.prod(state.shape[:-1]) and (_eps_gSDE == 0).all()):
+        elif (_eps_gSDE is None and exploration_mode() == "random") or (
+            _eps_gSDE is not None
+            and _eps_gSDE.numel() == math.prod(state.shape[:-1])
+            and (_eps_gSDE == 0).all()
+        ):
             _eps_gSDE = torch.randn(
                 *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
             )
+        elif _eps_gSDE is None:
+            raise RuntimeError(_err_explo)
 
         gSDE_noise = sigma * _eps_gSDE
         eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
@@ -359,9 +366,7 @@ class gSDEModule(nn.Module):
         elif exploration_mode() in ("mode",):
             action = mu
         else:
-            raise RuntimeError(
-                f"gSDE behaviour for exploration mode {exploration_mode()} is not defined. Choose from 'random' or 'mode'."
-            )
+            raise RuntimeError(_err_explo)
 
         sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(1e-5).sqrt()
         if not torch.isfinite(sigma).all():
