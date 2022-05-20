@@ -307,7 +307,7 @@ def make_ddpg_actor(
         actor_module = TDSequence(
             actor_module,
             TDModule(
-                LazygSDEModule(transform=transform),
+                LazygSDEModule(transform=transform, learn_sigma=False),
                 in_keys=["param", gSDE_state_key, "_eps_gSDE"],
                 out_keys=["loc", "scale", "action", "_eps_gSDE"],
             ),
@@ -1154,6 +1154,13 @@ def parser_model_args_continuous(
             action="store_true",
             help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
             "efficient entropy-based exploration, this should be left for experimentation only.",
+        )
+        parser.add_argument(
+            "--no_ou_exploration",
+            "--no-ou-exploration",
+            action="store_false",
+            dest="ou_exploration",
+            help="Aimed at superseeding --ou_exploration.",
         )
         parser.add_argument(
             "--distributional",

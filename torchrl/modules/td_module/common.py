@@ -321,7 +321,7 @@ class TDModule(nn.Module):
         tensordict_out: Optional[_TensorDict] = None,
         **kwargs,
     ) -> _TensorDict:
-        tensors = tuple(tensordict.get(in_key) for in_key in self.in_keys)
+        tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
         tensors = self._call_module(tensors, **kwargs)
         if not isinstance(tensors, tuple):
             tensors = (tensors,)
@@ -444,6 +444,23 @@ class TDModule(nn.Module):
             break
 
         return self_copy, (params, buffers)
+
+    @property
+    def num_params(self):
+        if isinstance(
+            self.module,
+            (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers),
+        ):
+            return len(self.module.param_names)
+        else:
+            return 0
+
+    @property
+    def num_buffers(self):
+        if isinstance(self.module, (functorch.FunctionalModuleWithBuffers,)):
+            return len(self.module.buffer_names)
+        else:
+            return 0
 
 
 class TDModuleWrapper(nn.Module):

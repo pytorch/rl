@@ -156,13 +156,19 @@ class TDSequence(TDModule):
         return fmodule
 
     @property
+    def num_params(self):
+        return self.param_len[-1]
+
+    @property
+    def num_buffers(self):
+        return self.buffer_len[-1]
+
+    @property
     def param_len(self) -> List[int]:
         param_list = []
         prev = 0
         for module in self.module:
-            # look for functional module
-            fmodule = self._find_functional_module(module)
-            param_list.append(len(fmodule.param_names) + prev)
+            param_list.append(module.num_params + prev)
             prev = param_list[-1]
         return param_list
 
@@ -171,8 +177,7 @@ class TDSequence(TDModule):
         buffer_list = []
         prev = 0
         for module in self.module:
-            fmodule = self._find_functional_module(module)
-            buffer_list.append(len(fmodule.buffer_names) + prev)
+            buffer_list.append(module.num_buffers + prev)
             prev = buffer_list[-1]
         return buffer_list
 

@@ -19,6 +19,8 @@ from torchrl.modules.td_module.common import TDModule, _check_all_str
 
 __all__ = ["ProbabilisticTensorDictModule"]
 
+from torchrl.modules.utils import functorch
+
 
 class ProbabilisticTensorDictModule(TDModule):
     """
@@ -318,3 +320,11 @@ class ProbabilisticTensorDictModule(TDModule):
                 return dist.sample()
         else:
             raise NotImplementedError(f"unknown interaction_mode {interaction_mode}")
+
+    @property
+    def num_params(self):
+        return self.module.num_params
+
+    @property
+    def num_buffers(self):
+        return self.module.num_buffers
