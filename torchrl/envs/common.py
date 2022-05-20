@@ -409,9 +409,7 @@ class _EnvClass:
                 td = tensordict.to(policy_device)
                 td = policy(td)
                 tensordict = td.to("cpu")
-
-                tensordict = self.step(tensordict.clone())
-
+                tensordict = self.step(tensordict)
                 tensordicts.append(tensordict.clone())
                 if tensordict.get("done").all() or i == n_steps - 1:
                     break
