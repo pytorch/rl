@@ -345,14 +345,17 @@ class gSDEModule(nn.Module):
             _eps_gSDE = torch.zeros(
                 *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
             )
-        elif _eps_gSDE.numel() == math.prod(state.shape[:-1]) and (_eps_gSDE == 0).all():
-            _eps_gSDE = torch.randn(
-                *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
-            )
         elif _eps_gSDE is None:
             raise RuntimeError(
                 "_eps_gSDE being None requires exploration_mode() to be set to 'mode'"
             )
+        elif (
+            _eps_gSDE.numel() == math.prod(state.shape[:-1]) and (_eps_gSDE == 0).all()
+        ):
+            _eps_gSDE = torch.randn(
+                *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
+            )
+
         gSDE_noise = sigma * _eps_gSDE
         eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
 
