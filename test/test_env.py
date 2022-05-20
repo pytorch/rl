@@ -11,7 +11,8 @@ import numpy as np
 import pytest
 import torch
 import yaml
-from mocking_classes import DiscreteActionVecMockEnv
+from mocking_classes import DiscreteActionVecMockEnv, MockSerialEnv
+from _utils_internal import get_available_devices
 from scipy.stats import chisquare
 from torch import nn
 from torchrl.data.tensor_specs import (
@@ -32,7 +33,7 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.utils import step_tensordict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
-from torchrl.modules import ActorCriticOperator, TDModule, ValueOperator
+from torchrl.modules import ActorCriticOperator, TDModule, ValueOperator, Actor
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -149,6 +150,15 @@ def test_rollout(env_name, frame_skip, seed=0):
         assert_allclose_td(rollout1, rollout3)
     env.close()
 
+@pytest.mark.parametrize("device", get_available_devices())
+def test_rollout_predictability(device):
+    env = MockSerialEnv(device=device)
+    env.set_seed(100)
+    policy = Actor(torch.nn.Linear(1, 1, bias=False))
+    for p in policy.parameters():
+        p.data.fill_(1.0)
+    td_out = env.rollout(policy=policy, n_steps=200)
+    print(td_out.get("observation"))
 
 def _make_envs(env_name, frame_skip, transformed, N, selected_keys=None):
     torch.manual_seed(0)

@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from typing import Optional
 
 import torch
 from torchrl.data.tensor_specs import (
@@ -14,7 +15,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.common import _EnvClass
 
 spec_dict = {
@@ -75,6 +76,35 @@ class _MockEnv(_EnvClass):
     def custom_prop(self):
         return 2
 
+class MockSerialEnv(_EnvClass):
+    def __init__(self, device):
+        super(MockSerialEnv, self).__init__(device=device)
+        self.action_spec = NdUnboundedContinuousTensorSpec((1,))
+        self.observation_spec = NdUnboundedContinuousTensorSpec((1,))
+        self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+
+    def set_seed(self, seed: int) -> int:
+        assert seed >= 1
+        self.seed = seed
+        self.counter = seed
+        self.max_val = self.seed * 2
+        return seed
+
+    def _step(self, tensordict):
+        n = torch.tensor([self.counter]).to(self.device)
+        self.counter += 1
+        done = self.counter >= self.max_val
+        done = torch.tensor([done], dtype=torch.bool, device=self.device)
+        return TensorDict({"reward": n, "done": done, "observation": n}, [])
+
+    def _reset(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
+        n = torch.tensor([self.counter]).to(self.device)
+        done = self.counter >= self.max_val
+        done = torch.tensor([done], dtype=torch.bool, device=self.device)
+        return TensorDict({"done": done, "observation": n}, [])
+
+    def rand_step(self, tensordict: Optional[_TensorDict] = None) -> _TensorDict:
+        return self.step(tensordict)
 
 class DiscreteActionVecMockEnv(_MockEnv):
     size = 7
