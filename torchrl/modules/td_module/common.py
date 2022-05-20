@@ -250,15 +250,7 @@ class TDModule(nn.Module):
         ):
             #
             dim = tensors[0].shape[0]
-            shape = [dim, *tensordict.shape]
-            # tensordict_out = TensorDict(
-            #     {key: val.expand(dim, *val.shape) for key, val in tensordict.items()},
-            #     shape,
-            # )
-            tensordict_out = TensorDict(
-                {key: val.expand(dim, *val.shape) for key, val in tensordict.items()},
-                shape,
-            ).expand(dim)
+            tensordict_out = tensordict.expand(dim).contiguous()
         elif tensordict_out is None:
             tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):
