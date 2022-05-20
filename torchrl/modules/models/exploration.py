@@ -333,7 +333,7 @@ class gSDEModule(nn.Module):
         sigma = self.sigma.clamp_max(self.scale_max)
         if (
             state.shape[:-1] != mu.shape[:-1]
-            or _eps_gSDE.shape[:-1] != state.shape[:-1]
+            or _eps_gSDE.shape[: state.ndimension() - 1] != state.shape[:-1]
         ):
             raise RuntimeError(
                 f"mu, noise and state are expected to have matching batch size, got shapes {mu.shape}, {_eps_gSDE.shape} and {state.shape}"
@@ -397,6 +397,7 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
             learn_sigma=learn_sigma,
             transform=transform,
         )
+        self._sigma_init = sigma_init
         if learn_sigma:
             self.log_sigma = UninitializedParameter(**factory_kwargs)
         else:
@@ -418,7 +419,7 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
                             math.sqrt((1.0 - self.scale_min) / state_dim)
                         )
                     else:
-                        self.sigma_init.data += inv_softplus(self.sigma_init)
+                        self.sigma_init.data += inv_softplus(self._sigma_init)
 
                 else:
                     self._sigma.materialize((action_dim, state_dim))
@@ -428,4 +429,4 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
                             (1.0 - self.scale_min) / state_dim
                         )
                     else:
-                        self.sigma_init.data += self.sigma_init
+                        self.sigma_init.data += self._sigma_init

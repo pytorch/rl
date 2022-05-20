@@ -13,7 +13,7 @@ from torch import distributions as d
 
 from torchrl.data import TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.envs.utils import exploration_mode
+from torchrl.envs.utils import exploration_mode, set_exploration_mode
 from torchrl.modules.distributions import distributions_maps, Delta
 from torchrl.modules.td_module.common import TDModule, _check_all_str
 
@@ -214,9 +214,13 @@ class ProbabilisticTensorDictModule(TDModule):
         tensordict_out: Optional[_TensorDict] = None,
         **kwargs,
     ) -> Tuple[d.Distribution, _TensorDict]:
-        tensordict_out = self._call_module(
-            tensordict, tensordict_out=tensordict_out, **kwargs
-        )
+        interaction_mode = exploration_mode()
+        if interaction_mode is None:
+            interaction_mode = self.default_interaction_mode
+        with set_exploration_mode(interaction_mode):
+            tensordict_out = self._call_module(
+                tensordict, tensordict_out=tensordict_out, **kwargs
+            )
         dist = self.build_dist_from_params(tensordict_out)
         return dist, tensordict_out
 
