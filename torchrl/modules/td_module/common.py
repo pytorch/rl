@@ -166,9 +166,16 @@ class TDModule(nn.Module):
         self.out_keys = out_keys
         self.in_keys = in_keys
 
-        self._spec = spec
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
+        elif spec is not None and not isinstance(spec, CompositeSpec):
+            if len(self.out_keys) > 1:
+                raise RuntimeError(
+                    "got mode than one out_key for the TDModule but only one spec. "
+                    "Consider using a CompositeSpec object or no spec at all."
+                )
+            spec = CompositeSpec(**{self.out_keys[0]: spec})
+        self._spec = spec
         self.safe = safe
         if safe:
             if spec is None or (
@@ -429,7 +436,7 @@ class TDModuleWrapper(nn.Module):
     overwritten.
 
     Args:
-        probabilistic_operator (TDModule): operator to be wrapped.
+        td_module (TDModule): operator to be wrapped.
 
     Examples:
         >>> #     This class can be used for exploration wrappers
@@ -463,9 +470,9 @@ class TDModuleWrapper(nn.Module):
         >>> print(td.get("output"))
     """
 
-    def __init__(self, probabilistic_operator: TDModule):
+    def __init__(self, td_module: TDModule):
         super().__init__()
-        self.td_module = probabilistic_operator
+        self.td_module = td_module
         if len(self.td_module._forward_hooks):
             for pre_hook in self.td_module._forward_hooks:
                 self.register_forward_hook(self.td_module._forward_hooks[pre_hook])

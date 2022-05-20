@@ -8,6 +8,7 @@ from typing import Optional, Union
 import numpy as np
 import torch
 
+from torchrl.data import CompositeSpec
 from torchrl.data.utils import expand_as_right
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.td_module.common import (
@@ -201,7 +202,12 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
             )
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
-        self.out_keys = list(self.td_module.out_keys) + [self.ou.out_keys]
+        self.out_keys = list(self.td_module.out_keys) + self.ou.out_keys
+        self._spec = CompositeSpec(
+            **self.td_module._spec, **{key: None for key in self.ou.out_keys}
+        )
+        if len(set(self.out_keys)) != len(self.out_keys):
+            raise RuntimeError(f"Got multiple identical output keys: {self.out_keys}")
         self.safe = safe
         if self.safe:
             self.register_forward_hook(_forward_hook_safe_action)
@@ -268,7 +274,7 @@ class _OrnsteinUhlenbeckProcess:
         self.key = key
         self._noise_key = "_ou_prev_noise"
         self._steps_key = "_ou_steps"
-        self.out_keys = [self.key, self.noise_key, self.steps_key]
+        self.out_keys = [self.noise_key, self.steps_key]
 
     @property
     def noise_key(self):

@@ -786,7 +786,9 @@ class CompositeSpec(TensorSpec):
 
     Args:
         **kwargs (key (str): value (TensorSpec)): dictionary of tensorspecs
-        to be stored
+            to be stored. Values can be None, in which case is_in will be assumed
+            to be `True` for the corresponding tensors, and `project()` will have no
+            effect. `spec.encode` cannot be used with missing values.
 
     Examples:
         >>> pixels_spec = NdBoundedTensorSpec(
@@ -849,6 +851,10 @@ dtype=torch.float32)},
     def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
         out = {}
         for key, item in vals.items():
+            if item is None:
+                raise RuntimeError(
+                    "CompositeSpec.encode cannot be used with missing values."
+                )
             out[key] = self[key].encode(item)
         return out
 
@@ -859,16 +865,26 @@ dtype=torch.float32)},
         sub_str = ",\n".join(sub_str)
         return f"CompositeSpec(\n{sub_str})"
 
-    def type_check(self, value, key):
+    def type_check(
+        self, value: _TensorDict, selected_keys: Optional[Sequence[str]] = None
+    ):
         for _key in self:
-            if _key in key:
-                self._specs[_key].type_check(value, _key)
+            if selected_keys is None or _key in selected_keys:
+                self._specs[_key].type_check(value[key], _key)
 
     def is_in(self, val: Union[dict, _TensorDict]) -> bool:
-        return all([self[key].is_in(val.get(key)) for key in self._specs])
+        return all(
+            [
+                item.is_in(val.get(key))
+                for (key, item) in self._specs.items()
+                if item is not None
+            ]
+        )
 
     def project(self, val: _TensorDict) -> _TensorDict:
-        for key in self._specs:
+        for key, item in self.items():
+            if item is None:
+                continue
             _val = val.get(key)
             if not self._specs[key].is_in(_val):
                 val.set(key, self._specs[key].project(_val))
