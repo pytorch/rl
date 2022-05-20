@@ -27,7 +27,7 @@ from torchrl.data import (
     TensorSpec,
     CompositeSpec,
 )
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import _TensorDict
 
 __all__ = [
     "TDModule",
