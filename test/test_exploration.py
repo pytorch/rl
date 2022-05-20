@@ -20,7 +20,7 @@ from torchrl.modules.distributions.continuous import (
     IndependentNormal,
     NormalParamWrapper,
 )
-from torchrl.modules.models.exploration import gSDEModule, LazygSDEModule
+from torchrl.modules.models.exploration import LazygSDEModule
 from torchrl.modules.td_module.actors import ProbabilisticActor
 from torchrl.modules.td_module.exploration import (
     _OrnsteinUhlenbeckProcess,
