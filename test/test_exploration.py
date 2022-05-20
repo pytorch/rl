@@ -13,13 +13,14 @@ from torch import nn
 from torchrl.data import NdBoundedTensorSpec
 from torchrl.data.tensordict.tensordict import TensorDict
 from torchrl.envs.transforms.transforms import gSDENoise
-from torchrl.modules import TDModule
+from torchrl.envs.utils import set_exploration_mode
+from torchrl.modules import TDModule, TDSequence
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import (
     IndependentNormal,
     NormalParamWrapper,
 )
-from torchrl.modules.models.exploration import gSDEWrapper
+from torchrl.modules.models.exploration import LazygSDEModule
 from torchrl.modules.td_module.actors import ProbabilisticActor
 from torchrl.modules.td_module.exploration import (
     _OrnsteinUhlenbeckProcess,
@@ -94,15 +95,21 @@ def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
 @pytest.mark.parametrize("gSDE", [True, False])
 @pytest.mark.parametrize("safe", [True, False])
 @pytest.mark.parametrize("device", get_available_devices())
-def test_gsde(state_dim, action_dim, gSDE, device, safe, batch=16, bound=0.1):
+@pytest.mark.parametrize("exploration_mode", ["random", "mode"])
+def test_gsde(
+    state_dim, action_dim, gSDE, device, safe, exploration_mode, batch=16, bound=0.1
+):
     torch.manual_seed(0)
-    exploration_mode = "random"
     if gSDE:
         model = torch.nn.LazyLinear(action_dim)
-        wrapper = gSDEWrapper(model, action_dim, state_dim).to(device)
-        in_keys = ["observation", "_eps_gSDE"]
-        module = TDModule(
-            wrapper, in_keys=in_keys, out_keys=["loc", "scale", "action", "_eps_gSDE"]
+        in_keys = ["observation"]
+        module = TDSequence(
+            TDModule(model, in_keys=in_keys, out_keys=["action"]),
+            TDModule(
+                LazygSDEModule(),
+                in_keys=["action", "observation", "_eps_gSDE"],
+                out_keys=["loc", "scale", "action", "_eps_gSDE"],
+            ),
         ).to(device)
         distribution_class = IndependentNormal
         distribution_kwargs = {}
@@ -148,9 +155,10 @@ def test_gsde(state_dim, action_dim, gSDE, device, safe, batch=16, bound=0.1):
         assert spec.is_in(td.get("action"))
 
     if not safe:
-        action1 = module(td).get("action")
+        with set_exploration_mode(exploration_mode):
+            action1 = module(td).get("action")
         action2 = actor(td).get("action")
-        if gSDE:
+        if gSDE or exploration_mode == "mode":
             torch.testing.assert_allclose(action1, action2)
         else:
             with pytest.raises(AssertionError):

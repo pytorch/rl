@@ -109,6 +109,8 @@ def main(args):
     loss_module, target_net_updater = make_ddpg_loss(model, args)
     actor_model_explore = model[0]
     if args.ou_exploration:
+        if args.gSDE:
+            raise RuntimeError("gSDE and ou_exploration are incompatible")
         actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
             actor_model_explore, annealing_num_steps=args.annealing_frames
         ).to(device)

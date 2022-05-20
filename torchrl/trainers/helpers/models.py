@@ -7,15 +7,17 @@ from argparse import ArgumentParser, Namespace
 from typing import Optional, Sequence
 
 import torch
-from torch import nn
+from torch import nn, distributions as d
 
 from torchrl.data import DEVICE_TYPING, CompositeSpec
 from torchrl.envs.common import _EnvClass
+from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     ActorValueOperator,
     NoisyLinear,
     TDModule,
     NormalParamWrapper,
+    TDSequence,
 )
 from torchrl.modules.distributions import (
     Delta,
@@ -24,9 +26,10 @@ from torchrl.modules.distributions import (
     TanhNormal,
     TruncatedNormal,
 )
-from torchrl.modules.distributions.continuous import IndependentNormal
-from torchrl.modules.distributions.utils import _cast_device
-from torchrl.modules.models.exploration import gSDEWrapper
+from torchrl.modules.distributions.continuous import (
+    SafeTanhTransform,
+)
+from torchrl.modules.models.exploration import LazygSDEModule
 from torchrl.modules.models.models import (
     ConvNet,
     DdpgCnnActor,
@@ -284,10 +287,31 @@ def make_ddpg_actor(
             "activation_class": ACTIVATIONS[args.activation]
         }
         actor_net = DdpgCnnActor(**actor_net_default_kwargs)
+        gSDE_state_key = "hidden"
+        out_keys = ["param", "hidden"]
     else:
         in_keys = ["observation_vector"]
         actor_net = DdpgMlpActor(**actor_net_default_kwargs)
-    actor_module = TDModule(actor_net, in_keys=in_keys, out_keys=["param"])
+        gSDE_state_key = "observation_vector"
+        out_keys = ["param"]
+    actor_module = TDModule(actor_net, in_keys=in_keys, out_keys=out_keys)
+
+    if args.gSDE:
+        min = env_specs["action_spec"].space.minimum
+        max = env_specs["action_spec"].space.maximum
+        transform = SafeTanhTransform()
+        if (min != -1).any() or (max != 1).any():
+            transform = d.ComposeTransform(
+                transform, d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)
+            )
+        actor_module = TDSequence(
+            actor_module,
+            TDModule(
+                LazygSDEModule(transform=transform, learn_sigma=False),
+                in_keys=["param", gSDE_state_key, "_eps_gSDE"],
+                out_keys=["loc", "scale", "action", "_eps_gSDE"],
+            ),
+        )
 
     # We use a ProbabilisticActor to make sure that we map the network output to the right space using a TanhDelta
     # distribution.
@@ -298,8 +322,8 @@ def make_ddpg_actor(
         safe=True,
         distribution_class=TanhDelta,
         distribution_kwargs={
-            "min": _cast_device(env_specs["action_spec"].space.minimum, device),
-            "max": _cast_device(env_specs["action_spec"].space.maximum, device),
+            "min": env_specs["action_spec"].space.minimum,
+            "max": env_specs["action_spec"].space.maximum,
         },
     )
 
@@ -357,7 +381,7 @@ def make_ddpg_actor(
     module = torch.nn.ModuleList([actor, value]).to(device)
 
     # init
-    with torch.no_grad():
+    with torch.no_grad(), set_exploration_mode("random"):
         proof_environment.reset()
         td = proof_environment.current_tensordict.to(device)
         module[0](td)
@@ -466,12 +490,7 @@ def make_ppo_model(
 
     if action_spec.domain == "continuous":
         out_features = (2 - args.gSDE) * action_spec.shape[-1]
-        if args.gSDE:
-            policy_distribution_kwargs = {
-                "tanh_loc": args.tanh_loc,
-            }
-            policy_distribution_class = IndependentNormal
-        elif args.distribution == "tanh_normal":
+        if args.distribution == "tanh_normal":
             policy_distribution_kwargs = {
                 "min": action_spec.space.minimum,
                 "max": action_spec.space.maximum,
@@ -506,8 +525,6 @@ def make_ppo_model(
                 kernel_sizes=[8, 4, 3],
                 strides=[4, 2, 1],
             )
-            if args.gSDE:
-                raise NotImplementedError("must define the hidden_features accordingly")
         else:
             if args.lstm:
                 raise NotImplementedError(
@@ -540,14 +557,33 @@ def make_ppo_model(
                 actor_net, in_keys=in_keys, out_keys=["loc", "scale"]
             )
         else:
-            actor_net = gSDEWrapper(
-                policy_net, action_dim=action_spec.shape[0], state_dim=hidden_features
-            )
-            in_keys = ["hidden", "_eps_gSDE"]
+            in_keys = ["hidden"]
+            gSDE_state_key = "hidden"
             actor_module = TDModule(
-                actor_net,
+                policy_net,
                 in_keys=in_keys,
-                out_keys=["loc", "scale", "action", "_eps_gSDE"],
+                out_keys=["action"],  # will be overwritten
+            )
+
+            if action_spec.domain == "continuous":
+                min = action_spec.space.minimum
+                max = action_spec.space.maximum
+                transform = SafeTanhTransform()
+                if (min != -1).any() or (max != 1).any():
+                    transform = d.ComposeTransform(
+                        transform,
+                        d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                    )
+            else:
+                raise RuntimeError("cannot use gSDE with discrete actions")
+
+            actor_module = TDSequence(
+                actor_module,
+                TDModule(
+                    LazygSDEModule(transform=transform),
+                    in_keys=["action", gSDE_state_key, "_eps_gSDE"],
+                    out_keys=["loc", "scale", "action", "_eps_gSDE"],
+                ),
             )
 
         policy_operator = ProbabilisticActor(
@@ -570,6 +606,10 @@ def make_ppo_model(
             value_operator=value_operator,
         ).to(device)
     else:
+        if args.from_pixels:
+            raise RuntimeError(
+                "PPO learnt from pixels require the shared_mapping to be set to True."
+            )
         if args.lstm:
             policy_net = LSTMNet(
                 out_features=out_features,
@@ -592,14 +632,33 @@ def make_ppo_model(
                 actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale"]
             )
         else:
-            actor_net = gSDEWrapper(
-                policy_net,
-                action_dim=action_spec.shape[0],
-                state_dim=obs_spec.shape[0],
-            )
-            in_keys_actor += ["_eps_gSDE"]
+            in_keys = in_keys_actor
+            gSDE_state_key = in_keys_actor[0]
             actor_module = TDModule(
-                actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale", "action"]
+                policy_net,
+                in_keys=in_keys,
+                out_keys=["action"],  # will be overwritten
+            )
+
+            if action_spec.domain == "continuous":
+                min = action_spec.space.minimum
+                max = action_spec.space.maximum
+                transform = SafeTanhTransform()
+                if (min != -1).any() or (max != 1).any():
+                    transform = d.ComposeTransform(
+                        transform,
+                        d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                    )
+            else:
+                raise RuntimeError("cannot use gSDE with discrete actions")
+
+            actor_module = TDSequence(
+                actor_module,
+                TDModule(
+                    LazygSDEModule(transform=transform),
+                    in_keys=["action", gSDE_state_key, "_eps_gSDE"],
+                    out_keys=["loc", "scale", "action", "_eps_gSDE"],
+                ),
             )
 
         policy_po = ProbabilisticActor(
@@ -622,7 +681,7 @@ def make_ppo_model(
         )
         actor_value = ActorCriticWrapper(policy_po, value_po).to(device)
 
-    with torch.no_grad():
+    with torch.no_grad(), set_exploration_mode("random"):
         proof_environment.reset()
         td = proof_environment.current_tensordict
         td_device = td.to(device)
@@ -781,6 +840,13 @@ def make_sac_model(
         **value_net_kwargs_default,
     )
 
+    dist_class = TanhNormal
+    dist_kwargs = {
+        "min": action_spec.space.minimum,
+        "max": action_spec.space.maximum,
+        "tanh_loc": tanh_loc,
+    }
+
     if not gSDE:
         actor_net = NormalParamWrapper(
             actor_net,
@@ -788,12 +854,6 @@ def make_sac_model(
             scale_lb=args.scale_lb,
         )
         in_keys_actor = in_keys
-        dist_class = TanhNormal
-        dist_kwargs = {
-            "min": action_spec.space.minimum,
-            "max": action_spec.space.maximum,
-            "tanh_loc": tanh_loc,
-        }
         actor_module = TDModule(
             actor_net,
             in_keys=in_keys_actor,
@@ -804,17 +864,32 @@ def make_sac_model(
         )
 
     else:
-        obs_spec_len = obs_spec.shape[0]
-        actor_net = gSDEWrapper(
-            actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len
-        )
-        in_keys_actor = in_keys + ["_eps_gSDE"]
-        dist_class = TanhNormal  # IndependentNormal
-        dist_kwargs = {
-            "tanh_loc": tanh_loc,
-        }
+        gSDE_state_key = in_keys[0]
         actor_module = TDModule(
-            actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale", "action"]
+            actor_net,
+            in_keys=in_keys,
+            out_keys=["action"],  # will be overwritten
+        )
+
+        if action_spec.domain == "continuous":
+            min = action_spec.space.minimum
+            max = action_spec.space.maximum
+            transform = SafeTanhTransform()
+            if (min != -1).any() or (max != 1).any():
+                transform = d.ComposeTransform(
+                    transform,
+                    d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                )
+        else:
+            raise RuntimeError("cannot use gSDE with discrete actions")
+
+        actor_module = TDSequence(
+            actor_module,
+            TDModule(
+                LazygSDEModule(transform=transform),
+                in_keys=["action", gSDE_state_key, "_eps_gSDE"],
+                out_keys=["loc", "scale", "action", "_eps_gSDE"],
+            ),
         )
 
     actor = ProbabilisticActor(
@@ -838,9 +913,10 @@ def make_sac_model(
     model = nn.ModuleList([actor, qvalue, value]).to(device)
 
     # init nets
-    td = td.to(device)
-    for net in model:
-        net(td)
+    with torch.no_grad(), set_exploration_mode("random"):
+        td = td.to(device)
+        for net in model:
+            net(td)
     del td
 
     return model
@@ -973,6 +1049,13 @@ def make_redq_model(
         **qvalue_net_kwargs_default,
     )
 
+    dist_class = TanhNormal
+    dist_kwargs = {
+        "min": action_spec.space.minimum,
+        "max": action_spec.space.maximum,
+        "tanh_loc": tanh_loc,
+    }
+
     if not gSDE:
         actor_net = NormalParamWrapper(
             actor_net,
@@ -980,30 +1063,37 @@ def make_redq_model(
             scale_lb=args.scale_lb,
         )
         in_keys_actor = in_keys
-        dist_class = TanhNormal
-        dist_kwargs = {
-            "min": action_spec.space.minimum,
-            "max": action_spec.space.maximum,
-            "tanh_loc": tanh_loc,
-        }
         actor_module = TDModule(
             actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale"]
         )
 
     else:
-        obs_spec_len = obs_spec.shape[0]
-        actor_net = gSDEWrapper(
-            actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len
-        )
-        in_keys_actor = in_keys + ["_eps_gSDE"]
-        dist_class = TanhNormal
-        dist_kwargs = {
-            "min": action_spec.space.minimum,
-            "max": action_spec.space.maximum,
-            "tanh_loc": tanh_loc,
-        }
+        gSDE_state_key = in_keys[0]
         actor_module = TDModule(
-            actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale", "action"]
+            actor_net,
+            in_keys=in_keys,
+            out_keys=["action"],  # will be overwritten
+        )
+
+        if action_spec.domain == "continuous":
+            min = action_spec.space.minimum
+            max = action_spec.space.maximum
+            transform = SafeTanhTransform()
+            if (min != -1).any() or (max != 1).any():
+                transform = d.ComposeTransform(
+                    transform,
+                    d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                )
+        else:
+            raise RuntimeError("cannot use gSDE with discrete actions")
+
+        actor_module = TDSequence(
+            actor_module,
+            TDModule(
+                LazygSDEModule(transform=transform),
+                in_keys=["action", gSDE_state_key, "_eps_gSDE"],
+                out_keys=["loc", "scale", "action", "_eps_gSDE"],
+            ),
         )
 
     actor = ProbabilisticActor(
@@ -1022,9 +1112,10 @@ def make_redq_model(
     model = nn.ModuleList([actor, qvalue]).to(device)
 
     # init nets
-    td = td.to(device)
-    for net in model:
-        net(td)
+    with torch.no_grad(), set_exploration_mode("random"):
+        td = td.to(device)
+        for net in model:
+            net(td)
     del td
     return model
 
@@ -1065,6 +1156,13 @@ def parser_model_args_continuous(
             "efficient entropy-based exploration, this should be left for experimentation only.",
         )
         parser.add_argument(
+            "--no_ou_exploration",
+            "--no-ou-exploration",
+            action="store_false",
+            dest="ou_exploration",
+            help="Aimed at superseeding --ou_exploration.",
+        )
+        parser.add_argument(
             "--distributional",
             action="store_true",
             help="whether a distributional loss should be used (TODO: not implemented yet).",
@@ -1076,6 +1174,11 @@ def parser_model_args_continuous(
             help="number of atoms used for the distributional loss (TODO)",
         )
 
+    parser.add_argument(
+        "--gSDE",
+        action="store_true",
+        help="if True, exploration is achieved using the gSDE technique.",
+    )
     if algorithm in ("SAC", "PPO", "REDQ"):
         parser.add_argument(
             "--tanh_loc",
@@ -1085,11 +1188,6 @@ def parser_model_args_continuous(
             "location of the form "
             "`upscale * tanh(loc/upscale)` (only available with "
             "TanhTransform and TruncatedGaussian distributions)",
-        )
-        parser.add_argument(
-            "--gSDE",
-            action="store_true",
-            help="if True, exploration is achieved using the gSDE technique.",
         )
         parser.add_argument(
             "--default_policy_scale",
