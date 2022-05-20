@@ -76,6 +76,7 @@ class _MockEnv(_EnvClass):
     def custom_prop(self):
         return 2
 
+
 class MockSerialEnv(_EnvClass):
     def __init__(self, device):
         super(MockSerialEnv, self).__init__(device=device)
@@ -91,20 +92,21 @@ class MockSerialEnv(_EnvClass):
         return seed
 
     def _step(self, tensordict):
-        n = torch.tensor([self.counter]).to(self.device)
         self.counter += 1
+        n = torch.tensor([self.counter]).to(self.device).to(torch.float)
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
-        return TensorDict({"reward": n, "done": done, "observation": n}, [])
+        return TensorDict({"reward": n, "done": done, "next_observation": n}, [])
 
     def _reset(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
-        n = torch.tensor([self.counter]).to(self.device)
+        n = torch.tensor([self.counter]).to(self.device).to(torch.float)
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict({"done": done, "observation": n}, [])
 
     def rand_step(self, tensordict: Optional[_TensorDict] = None) -> _TensorDict:
         return self.step(tensordict)
+
 
 class DiscreteActionVecMockEnv(_MockEnv):
     size = 7

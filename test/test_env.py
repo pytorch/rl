@@ -11,8 +11,8 @@ import numpy as np
 import pytest
 import torch
 import yaml
-from mocking_classes import DiscreteActionVecMockEnv, MockSerialEnv
 from _utils_internal import get_available_devices
+from mocking_classes import DiscreteActionVecMockEnv, MockSerialEnv
 from scipy.stats import chisquare
 from torch import nn
 from torchrl.data.tensor_specs import (
@@ -150,6 +150,7 @@ def test_rollout(env_name, frame_skip, seed=0):
         assert_allclose_td(rollout1, rollout3)
     env.close()
 
+
 @pytest.mark.parametrize("device", get_available_devices())
 def test_rollout_predictability(device):
     env = MockSerialEnv(device=device)
@@ -158,7 +159,11 @@ def test_rollout_predictability(device):
     for p in policy.parameters():
         p.data.fill_(1.0)
     td_out = env.rollout(policy=policy, n_steps=200)
-    print(td_out.get("observation"))
+    assert (torch.arange(100, 200) == td_out.get("observation").squeeze()).all()
+    assert (torch.arange(101, 201) == td_out.get("next_observation").squeeze()).all()
+    assert (torch.arange(101, 201) == td_out.get("reward").squeeze()).all()
+    assert (torch.arange(100, 200) == td_out.get("action").squeeze()).all()
+
 
 def _make_envs(env_name, frame_skip, transformed, N, selected_keys=None):
     torch.manual_seed(0)
