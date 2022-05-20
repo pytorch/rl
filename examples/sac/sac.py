@@ -151,7 +151,7 @@ def main(args):
         recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
         create_env_fn.close()
     else:
-        recorder_rm.load_state_dict(create_env_fn.state_dict())
+        recorder_rm.load_state_dict(create_env_fn().state_dict())
 
     # reset reward scaling, as it was just overwritten by state_dict load
     for t in recorder.transform:
