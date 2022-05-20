@@ -13,13 +13,14 @@ from torch import nn
 from torchrl.data import NdBoundedTensorSpec
 from torchrl.data.tensordict.tensordict import TensorDict
 from torchrl.envs.transforms.transforms import gSDENoise
-from torchrl.modules import ProbabilisticActor
+from torchrl.modules import TDModule
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import (
     IndependentNormal,
     NormalParamWrapper,
 )
 from torchrl.modules.models.exploration import gSDEWrapper
+from torchrl.modules.td_module.actors import ProbabilisticActor
 from torchrl.modules.td_module.exploration import (
     _OrnsteinUhlenbeckProcess,
     OrnsteinUhlenbeckProcessWrapper,
@@ -56,11 +57,13 @@ def test_ou(device, seed=0):
 @pytest.mark.parametrize("device", get_available_devices())
 def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     torch.manual_seed(seed)
-    module = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
+    net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
+    module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
     action_spec = NdBoundedTensorSpec(-torch.ones(d_act), torch.ones(d_act), (d_act,))
     policy = ProbabilisticActor(
         spec=action_spec,
         module=module,
+        dist_param_keys=["loc", "scale"],
         distribution_class=TanhNormal,
         default_interaction_mode="random",
     ).to(device)
@@ -93,27 +96,34 @@ def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
 @pytest.mark.parametrize("device", get_available_devices())
 def test_gsde(state_dim, action_dim, gSDE, device, safe, batch=16, bound=0.1):
     torch.manual_seed(0)
+    exploration_mode = "random"
     if gSDE:
         model = torch.nn.LazyLinear(action_dim)
         wrapper = gSDEWrapper(model, action_dim, state_dim).to(device)
-        exploration_mode = "net_output"
+        in_keys = ["observation", "_eps_gSDE"]
+        module = TDModule(
+            wrapper, in_keys=in_keys, out_keys=["loc", "scale", "action", "_eps_gSDE"]
+        ).to(device)
         distribution_class = IndependentNormal
         distribution_kwargs = {}
-        in_keys = ["observation", "_eps_gSDE"]
     else:
+        in_keys = ["observation"]
         model = torch.nn.LazyLinear(action_dim * 2)
-        wrapper = NormalParamWrapper(model).to(device)
-        exploration_mode = "random"
+        wrapper = NormalParamWrapper(model)
+        module = TDModule(wrapper, in_keys=in_keys, out_keys=["loc", "scale"]).to(
+            device
+        )
         distribution_class = TanhNormal
         distribution_kwargs = {"min": -bound, "max": bound}
-        in_keys = ["observation"]
     spec = NdBoundedTensorSpec(
         -torch.ones(action_dim) * bound, torch.ones(action_dim) * bound, (action_dim,)
     ).to(device)
+
     actor = ProbabilisticActor(
-        module=wrapper,
+        module=module,
         spec=spec,
-        in_keys=in_keys,
+        dist_param_keys=["loc", "scale"],
+        out_key_sample=["action"],
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         default_interaction_mode=exploration_mode,
@@ -127,7 +137,7 @@ def test_gsde(state_dim, action_dim, gSDE, device, safe, batch=16, bound=0.1):
         ],
     )
     if gSDE:
-        gSDENoise(action_dim, state_dim).reset(td)
+        gSDENoise().reset(td)
         assert "_eps_gSDE" in td.keys()
         assert td.get("_eps_gSDE").device == device
     actor(td)
@@ -136,6 +146,15 @@ def test_gsde(state_dim, action_dim, gSDE, device, safe, batch=16, bound=0.1):
         assert not spec.is_in(td.get("action"))
     elif safe and gSDE:
         assert spec.is_in(td.get("action"))
+
+    if not safe:
+        action1 = module(td).get("action")
+        action2 = actor(td).get("action")
+        if gSDE:
+            torch.testing.assert_allclose(action1, action2)
+        else:
+            with pytest.raises(AssertionError):
+                torch.testing.assert_allclose(action1, action2)
 
 
 if __name__ == "__main__":

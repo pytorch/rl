@@ -452,7 +452,7 @@ class TanhDelta(D.TransformedDistribution):
     Implements a Tanh transformed Delta distribution.
 
     Args:
-        net_output (torch.Tensor): parameter of the delta distribution;
+        param (torch.Tensor): parameter of the delta distribution;
                 min (torch.Tensor or number): minimum value of the distribution. Default is -1.0;
         min (torch.Tensor or number, optional): minimum value of the distribution. Default is 1.0;
         max (torch.Tensor or number, optional): maximum value of the distribution. Default is 1.0;
@@ -473,7 +473,7 @@ class TanhDelta(D.TransformedDistribution):
 
     def __init__(
         self,
-        net_output: torch.Tensor,
+        param: torch.Tensor,
         min: Union[torch.Tensor, float] = -1.0,
         max: Union[torch.Tensor, float] = 1.0,
         event_dims: int = 1,
@@ -492,9 +492,9 @@ class TanhDelta(D.TransformedDistribution):
             if not all(max > min):
                 raise ValueError(minmax_msg)
 
-        self.min = _cast_device(min, net_output.device)
-        self.max = _cast_device(max, net_output.device)
-        loc = self.update(net_output)
+        self.min = _cast_device(min, param.device)
+        self.max = _cast_device(max, param.device)
+        loc = self.update(param)
 
         t = SafeTanhTransform()
         non_trivial_min = (isinstance(min, torch.Tensor) and (min != -1.0).any()) or (
@@ -512,8 +512,8 @@ class TanhDelta(D.TransformedDistribution):
                     ),
                 ]
             )
-        event_shape = net_output.shape[-event_dims:]
-        batch_shape = net_output.shape[:-event_dims]
+        event_shape = param.shape[-event_dims:]
+        batch_shape = param.shape[:-event_dims]
         base = Delta(
             loc,
             atol=atol,

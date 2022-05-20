@@ -26,7 +26,7 @@ __all__ = [
 ]
 
 from torchrl.envs.common import _EnvClass
-from torchrl.modules import ProbabilisticTDModule, TDModuleWrapper
+from torchrl.modules import TDModuleWrapper, ProbabilisticTensorDictModule
 
 
 def sync_async_collector(
@@ -240,7 +240,7 @@ def _make_collector(
 
 def make_collector_offpolicy(
     make_env: Callable[[], _EnvClass],
-    actor_model_explore: Union[TDModuleWrapper, ProbabilisticTDModule],
+    actor_model_explore: Union[TDModuleWrapper, ProbabilisticTensorDictModule],
     args: Namespace,
     make_env_kwargs=None,
 ) -> _DataCollector:
@@ -303,7 +303,7 @@ def make_collector_offpolicy(
 
 def make_collector_onpolicy(
     make_env: Callable[[], _EnvClass],
-    actor_model_explore: Union[TDModuleWrapper, ProbabilisticTDModule],
+    actor_model_explore: Union[TDModuleWrapper, ProbabilisticTensorDictModule],
     args: Namespace,
     make_env_kwargs=None,
 ) -> _DataCollector:
@@ -420,7 +420,7 @@ def _parser_collector_args(parser: ArgumentParser) -> ArgumentParser:
         "--exploration-mode",
         type=str,
         default=None,
-        help="exploration mode of the data collector. If gSDE is being used, this should be set to `'net_output'`.",
+        help="exploration mode of the data collector.",
     )
     parser.add_argument(
         "--async_collection",

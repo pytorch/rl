@@ -102,7 +102,7 @@ def test_ddpg_maker(device, from_pixels):
     actor, value = make_ddpg_actor(proof_environment, device=device, args=args)
     td = proof_environment.reset().to(device)
     actor(td)
-    expected_keys = ["done", "action"]
+    expected_keys = ["done", "action", "param"]
     if from_pixels:
         expected_keys += ["pixels"]
     else:
@@ -157,15 +157,15 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde):
     expected_keys = [
         "done",
         "pixels" if len(from_pixels) else "observation_vector",
-        "action_dist_param_0",
-        "action_dist_param_1",
         "action",
-        "action_log_prob",
+        "sample_log_prob",
+        "loc",
+        "scale",
     ]
     if shared_mapping:
         expected_keys += ["hidden"]
     if len(gsde):
-        expected_keys += ["_eps_gSDE", "_action_duplicate", "action_dist_param_2"]
+        expected_keys += ["_eps_gSDE"]
     td = proof_environment.reset().to(device)
     td_clone = td.clone()
     actor(td_clone)
@@ -234,6 +234,8 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels):
         "done",
         "pixels" if len(from_pixels) else "observation_vector",
         "action",
+        "loc",
+        "scale",
     ]
     if len(gsde):
         expected_keys += ["_eps_gSDE"]
@@ -245,7 +247,14 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels):
         raise
 
     qvalue(td_clone)
-    expected_keys = ["done", "observation_vector", "action", "state_action_value"]
+    expected_keys = [
+        "done",
+        "observation_vector",
+        "action",
+        "state_action_value",
+        "loc",
+        "scale",
+    ]
     if len(gsde):
         expected_keys += ["_eps_gSDE"]
 
@@ -299,7 +308,14 @@ def test_redq_make(device, from_pixels, gsde):
     actor, qvalue = model
     td = proof_environment.reset().to(device)
     actor(td)
-    expected_keys = ["done", "observation_vector", "action", "action_log_prob"]
+    expected_keys = [
+        "done",
+        "observation_vector",
+        "action",
+        "sample_log_prob",
+        "loc",
+        "scale",
+    ]
     if len(gsde):
         expected_keys += ["_eps_gSDE"]
     try:
@@ -313,8 +329,10 @@ def test_redq_make(device, from_pixels, gsde):
         "done",
         "observation_vector",
         "action",
-        "action_log_prob",
+        "sample_log_prob",
         "state_action_value",
+        "loc",
+        "scale",
     ]
     if len(gsde):
         expected_keys += ["_eps_gSDE"]

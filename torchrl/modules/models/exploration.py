@@ -240,24 +240,20 @@ class gSDEWrapper(nn.Module):
     For now, only vector states are considered, but the distribution can
     read other inputs (e.g. hidden states etc.)
 
-    When used, the gSDEWrapper should also be accompanied by a few
-    configuration changes: the exploration mode of the policy should be set
-    to "net_output", meaning that the action from the ProbabilisticTDModule
-    will be retrieved directly from the network output and not simulated
-    from the constructed distribution. Second, the noise input should be
-    created through a `torchrl.envs.transforms.gSDENoise` instance,
-    which will reset this noise parameter each time the environment is reset.
+    The noise input should be reset through a `torchrl.envs.transforms.gSDENoise`
+    instance: each time the environment is reset, the gSDENoise will be erased
+    and resampled inside this wrapper.
     Finally, a regular normal distribution should be used to sample the
-    actions, the `ProbabilisticTDModule` should be created
+    actions, the `ProbabilisticTensorDictModule` should be created
     in safe mode (in order for the action to be clipped in the desired
     range) and its input keys should include `"_eps_gSDE"` which is the
     default gSDE noise key:
 
         >>> actor = ProbabilisticActor(
-        ...     wrapped_module,
-        ...     in_keys=["observation", "_eps_gSDE"]
-        ...     spec,
-        ...     distribution_class=IndependentNormal,
+        ...     TDModule(wrapped_module, in_keys=["observation"], out_keys=["loc", "scale", "action", "_eps_gSDE"]),
+        ...     dist_param_keys=["loc", "scale"],
+        ...     spec=spec,
+        ...     distribution_class=IndependentNormal,  # or TanhNormal, etc.
         ...     safe=True)
 
     Args:
@@ -279,7 +275,7 @@ class gSDEWrapper(nn.Module):
         >>> state = torch.randn(batch, state_dim)
         >>> eps_gSDE = torch.randn(batch, action_dim, state_dim)
         >>> # the module takes inputs (state, *additional_vectors, noise_param)
-        >>> mu, sigma, action = wrapped_model(state, eps_gSDE)
+        >>> mu, sigma, action, noise = wrapped_model(state, eps_gSDE)
         >>> print(mu.shape, sigma.shape, action.shape)
         torch.Size([3, 5]) torch.Size([3, 5]) torch.Size([3, 5])
     """
@@ -307,20 +303,23 @@ class gSDEWrapper(nn.Module):
         )
         self.register_buffer("sigma_init", torch.tensor(sigma_init))
 
-    def forward(self, state, *tensors):
-        *tensors, gSDE_noise = tensors
+    def forward(self, state, _eps_gSDE, *tensors):
         sigma = (
             torch.nn.functional.softplus(self.log_sigma + self.sigma_init)
             + self.scale_min
         )
         sigma = sigma.clamp_max(self.scale_max)
-        if gSDE_noise is None:
-            gSDE_noise = torch.randn_like(sigma)
-        gSDE_noise = sigma * gSDE_noise
+        if _eps_gSDE.numel() == math.prod(state.shape[:-1]) and (_eps_gSDE == 0).all():
+            _eps_gSDE = torch.randn(
+                *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
+            )
+        elif _eps_gSDE is None:
+            raise RuntimeError
+        gSDE_noise = sigma * _eps_gSDE
         eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
         mu = self.policy_model(state, *tensors)
         action = mu + eps
         sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(1e-5).sqrt()
         if not torch.isfinite(sigma).all():
             print("inf sigma")
-        return mu, sigma, action
+        return mu, sigma, action, _eps_gSDE
