@@ -16,7 +16,7 @@ from ...modules.td_module import ProbabilisticTensorDictModule
 
 __all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
 
-from torchrl.objectives.costs.utils import distance_loss
+from torchrl.objectives.loss.utils import distance_loss
 from .common import _LossModule
 
 

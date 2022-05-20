@@ -17,7 +17,7 @@ from torchrl.modules import TDModule
 from torchrl.modules.td_module.actors import (
     ActorCriticWrapper,
 )
-from torchrl.objectives.costs.utils import distance_loss, next_state_value
+from torchrl.objectives.loss.utils import distance_loss, next_state_value
 from .common import _LossModule
 
 __all__ = ["SACLoss"]

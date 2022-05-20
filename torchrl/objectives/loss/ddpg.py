@@ -12,7 +12,7 @@ import torch
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.modules import TDModule
 from torchrl.modules.td_module.actors import ActorCriticWrapper
-from torchrl.objectives.costs.utils import (
+from torchrl.objectives.loss.utils import (
     distance_loss,
     hold_out_params,
     next_state_value,

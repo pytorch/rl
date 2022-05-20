@@ -8,4 +8,4 @@ def test_imports():
     from torchrl.envs import GymLikeEnv
     from torchrl.envs import TransformedEnv, Transform
     from torchrl.modules import TDModule
-    from torchrl.objectives.costs.common import _LossModule
+    from torchrl.objectives.loss.common import _LossModule
