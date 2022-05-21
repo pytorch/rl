@@ -426,7 +426,10 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
             state_dim = state.shape[-1]
             with torch.no_grad():
                 if self._sigma_init is None:
-                    state_flatten = state.flatten(0, -2)
+                    if state.ndimension() > 2:
+                        state_flatten = state.flatten(0, -2)
+                    else:
+                        state_flatten = state
                     state_flatten_var = state_flatten.var(dim=0)
                 if self.learn_sigma:
                     if self._sigma_init is None:
