@@ -7,7 +7,6 @@ prb
 normalize_rewards_online
 normalize_rewards_online_scale=10
 exp_name=humanoid
-tanh_loc
 
 num_workers=8
 env_per_collector=2
@@ -18,3 +17,6 @@ frames_per_batch=500
 optim_steps_per_batch=80
 batch_size=128
 total_frames=5000000
+
+from_pixels
+no_norm_stats

@@ -418,15 +418,20 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
     def reset_parameters(self) -> None:
         pass
 
-    def initialize_parameters(self, mu, state, _eps_gSDE) -> None:
+    def initialize_parameters(
+        self, mu: torch.Tensor, state: torch.Tensor, _eps_gSDE: torch.Tensor
+    ) -> None:
         if self.has_uninitialized_params():
             action_dim = mu.shape[-1]
             state_dim = state.shape[-1]
             with torch.no_grad():
+                if self._sigma_init is None:
+                    state_flatten = state.flatten(0, -2)
+                    state_flatten_var = state_flatten.var(dim=0)
                 if self.learn_sigma:
                     if self._sigma_init is None:
                         self.sigma_init.data += inv_softplus(
-                            math.sqrt((1.0 - self.scale_min) / state_dim)
+                            ((state_flatten_var - self.scale_min) / state_dim).sqrt()
                         )
                     else:
                         self.sigma_init.data += inv_softplus(self._sigma_init)
@@ -437,9 +442,9 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
                 else:
                     self._sigma.materialize((action_dim, state_dim))
                     if self._sigma_init is None:
-                        self.sigma_init.data += math.sqrt(
-                            (1.0 - self.scale_min) / state_dim
-                        )
+                        self.sigma_init.data += (
+                            (state_flatten_var - self.scale_min) / state_dim
+                        ).sqrt()
                     else:
                         self.sigma_init.data += self._sigma_init
                     self._sigma.data.fill_(self.sigma_init)
