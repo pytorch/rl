@@ -289,7 +289,7 @@ class gSDEModule(nn.Module):
         action_dim: int,
         state_dim: int,
         sigma_init: float = None,
-        scale_min: float = 0.1,
+        scale_min: float = 0.01,
         scale_max: float = 10.0,
         learn_sigma: bool = True,
         transform: Optional[d.Transform] = None,
@@ -316,7 +316,8 @@ class gSDEModule(nn.Module):
                 torch.full((action_dim, state_dim), sigma_init),
             )
 
-        self.register_buffer("sigma_init", torch.tensor(sigma_init))
+        if sigma_init != 0.0:
+            self.register_buffer("sigma_init", torch.tensor(sigma_init))
 
     @property
     def sigma(self):
@@ -327,7 +328,7 @@ class gSDEModule(nn.Module):
             )
             return sigma
         else:
-            return self._sigma
+            return self._sigma.clamp_min(self.scale_min)
 
     def forward(self, mu, state, _eps_gSDE):
         sigma = self.sigma.clamp_max(self.scale_max)
@@ -410,6 +411,7 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
             transform=transform,
         )
         self._sigma_init = sigma_init
+        self.sigma_init = UninitializedBuffer(**factory_kwargs)
         if learn_sigma:
             self.log_sigma = UninitializedParameter(**factory_kwargs)
         else:
@@ -428,26 +430,39 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
                 if self._sigma_init is None:
                     if state.ndimension() > 2:
                         state_flatten = state.flatten(0, -2)
+                        state_flatten_var = state_flatten.std(dim=0)
+                    elif state.ndimension() == 1:
+                        state_flatten_var = torch.ones(1).to(state.device)
                     else:
-                        state_flatten = state
-                    state_flatten_var = state_flatten.var(dim=0)
+                        state_flatten_var = state.std(dim=0)
+                else:
+                    state_flatten_var = torch.tensor(
+                        self._sigma_init, device=state.device
+                    )
+
+                self.sigma_init.materialize(state_flatten_var.shape)
                 if self.learn_sigma:
                     if self._sigma_init is None:
-                        self.sigma_init.data += inv_softplus(
-                            ((state_flatten_var - self.scale_min) / state_dim).sqrt()
+                        state_flatten_var.clamp_min_(self.scale_min)
+                        self.sigma_init.data.copy_(
+                            inv_softplus(
+                                (
+                                    (state_flatten_var - self.scale_min) / state_dim
+                                ).sqrt()
+                            )
                         )
                     else:
-                        self.sigma_init.data += inv_softplus(self._sigma_init)
+                        self.sigma_init.data.fill_(inv_softplus(self._sigma_init))
 
                     self.log_sigma.materialize((action_dim, state_dim))
-                    self.log_sigma.data.fill_(self.sigma_init)
+                    self.log_sigma.data.copy_(self.sigma_init.expand_as(self._sigma))
 
                 else:
-                    self._sigma.materialize((action_dim, state_dim))
                     if self._sigma_init is None:
-                        self.sigma_init.data += (
-                            (state_flatten_var - self.scale_min) / state_dim
-                        ).sqrt()
+                        self.sigma_init.data.copy_(
+                            (state_flatten_var / state_dim).sqrt()
+                        )
                     else:
-                        self.sigma_init.data += self._sigma_init
-                    self._sigma.data.fill_(self.sigma_init)
+                        self.sigma_init.data.fill_(self._sigma_init)
+                    self._sigma.materialize((action_dim, state_dim))
+                    self._sigma.data.copy_(self.sigma_init.expand_as(self._sigma))

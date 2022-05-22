@@ -19,4 +19,3 @@ batch_size=128
 total_frames=5000000
 
 from_pixels
-no_norm_stats

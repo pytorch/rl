@@ -149,9 +149,12 @@ def transformed_env_constructor(
             env.append_transform(Resize(84, 84))
             env.append_transform(GrayScale())
             env.append_transform(CatFrames(keys=["next_pixels"]))
-            env.append_transform(
-                ObservationNorm(loc=-1.0, scale=2.0, keys=["next_pixels"])
-            )
+            if stats is None:
+                obs_stats = {"loc": 0.0, "scale": 1.0}
+            else:
+                obs_stats = stats
+            obs_stats["standard_normal"] = True
+            env.append_transform(ObservationNorm(**obs_stats, keys=["next_pixels"]))
         if norm_rewards:
             reward_scaling = 1.0
             reward_loc = 0.0

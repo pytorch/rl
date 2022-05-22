@@ -818,13 +818,13 @@ class ObservationNorm(ObservationTransform):
 
     def _apply(self, obs: torch.Tensor) -> torch.Tensor:
         if self.standard_normal:
-            # converts the transform (x-m)/sqrt(v) to x * s + loc
-            scale = self.scale.reciprocal()
-            loc = -self.loc * scale
+            loc = self.loc
+            scale = self.scale
+            return (obs - loc) / scale
         else:
             scale = self.scale
             loc = self.loc
-        return obs * scale + loc
+            return obs * scale + loc
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if isinstance(observation_spec, CompositeSpec):

@@ -188,8 +188,7 @@ def make_dqn_actor(
 
     # init
     with torch.no_grad():
-        proof_environment.reset()
-        td = proof_environment.current_tensordict
+        td = proof_environment.rollout(n_steps=1000)
         model(td.to(device))
     return model
 
@@ -382,8 +381,8 @@ def make_ddpg_actor(
 
     # init
     with torch.no_grad(), set_exploration_mode("random"):
-        proof_environment.reset()
-        td = proof_environment.current_tensordict.to(device)
+        td = proof_environment.rollout(n_steps=1000)
+        td = td.to(device)
         module[0](td)
         module[1](td)
 
@@ -682,8 +681,7 @@ def make_ppo_model(
         actor_value = ActorCriticWrapper(policy_po, value_po).to(device)
 
     with torch.no_grad(), set_exploration_mode("random"):
-        proof_environment.reset()
-        td = proof_environment.current_tensordict
+        td = proof_environment.rollout(n_steps=1000)
         td_device = td.to(device)
         td_device = td_device.unsqueeze(0)
         td_device = actor_value(td_device)  # for init
