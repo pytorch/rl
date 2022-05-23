@@ -22,7 +22,6 @@ On the low-level end, torchrl comes with a set of highly re-usable functionals f
 
 On the high-level end, torchrl provides:
 - multiprocess [data collectors](torchrl/collectors/collectors.py);
-- a generic [agent class](torchrl/trainers/trainers.py);
 - efficient and generic [replay buffers](torchrl/data/replay_buffers/replay_buffers.py);
 - [TensorDict](torchrl/data/tensordict/tensordict.py), a convenient data structure to pass data from one object to another without friction;
 - An associated [`TDModule` class](torchrl/modules/td_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible! 
@@ -30,8 +29,9 @@ On the high-level end, torchrl provides:
 - [environment transforms](torchrl/envs/transforms/transforms.py), which process and prepare the data coming out of the environments to be used by the agent;
 - various tools for distributed learning (e.g. [memory mapped tensors](torchrl/data/tensordict/memmap.py));
 - various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/td_module/actors.py));
-- [exploration wrappers](torchrl/modules/td_module/exploration.py);
-- various [recipes](torchrl/trainers/helpers/models.py) to build models that correspond to the environment being deployed.
+- [exploration wrappers](torchrl/modules/td_module/exploration.py) and [modules](torchrl/modules/models/exploration.py);
+- various [recipes](torchrl/trainers/helpers/models.py) to build models that correspond to the environment being deployed;
+- a generic [trainer class](torchrl/trainers/trainers.py).
 
 A series of [examples](examples/) are provided with an illustrative purpose:
 - [DQN (and add-ons up to Rainbow)](examples/dqn/dqn.py)
