@@ -8,9 +8,8 @@ normalize_rewards_online
 normalize_rewards_online_scale=10
 exp_name=humanoid
 
-num_workers=8
-env_per_collector=2
-collector_devices=cuda:1 cuda:2 cuda:3 cuda:4
+num_workers=32
+env_per_collector=8
 
 frame_skip=2
 frames_per_batch=500
