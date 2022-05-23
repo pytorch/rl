@@ -305,8 +305,7 @@ class Trainer:
         for op, kwargs in self._post_optim_log_ops:
             result = op(batch, **kwargs)
             if result is not None:
-                key, value = result
-                self._log(key=value)
+                self._log(**result)
 
     def _pre_optim_hook(self):
         for op, kwargs in self._pre_optim_ops:
@@ -334,17 +333,13 @@ class Trainer:
         for op, kwargs in self._pre_steps_log_ops:
             result = op(batch, **kwargs)
             if result is not None:
-                key, value = result
-                kwargs = {key: value}
-                self._log(**kwargs)
+                self._log(**result)
 
     def _post_steps_log_hook(self, batch: _TensorDict) -> None:
         for op, kwargs in self._post_steps_log_ops:
             result = op(batch, **kwargs)
             if result is not None:
-                key, value = result
-                kwargs = {key: value}
-                self._log(**kwargs)
+                self._log(**result)
 
     def train(self):
         if self.progress_bar:
@@ -429,7 +424,7 @@ class Trainer:
             nn.utils.clip_grad_value_(self._params, self.clip_norm)
         return float(gn)
 
-    def _log(self, **kwargs) -> None:
+    def _log(self, pbar_log=False, **kwargs) -> None:
         collected_frames = self.collected_frames
         for key, item in kwargs.items():
             self._log_dict[key].append(item)
@@ -442,7 +437,7 @@ class Trainer:
             method = WRITER_METHODS.get(key, "add_scalar")
             if _log and self.writer is not None:
                 getattr(self.writer, method)(key, item, global_step=collected_frames)
-            if method == "add_scalar" and self.progress_bar:
+            if method == "add_scalar" and self.progress_bar and pbar_log:
                 if isinstance(item, torch.Tensor):
                     item = item.item()
                 self._pbar_str[key] = item
@@ -563,13 +558,14 @@ class LogReward:
     def __init__(self, logname="r_training"):
         self.logname = logname
 
-    def __call__(self, batch: _TensorDict) -> Tuple[str, torch.Tensor]:
+    def __call__(self, batch: _TensorDict) -> Dict:
         if "mask" in batch.keys():
-            return (
-                self.logname,
-                batch.get("reward")[batch.get("mask").squeeze(-1)].mean().item(),
-            )
-        return self.logname, batch.get("reward").mean().item()
+            return {
+                self.logname: batch.get("reward")[batch.get("mask").squeeze(-1)]
+                .mean()
+                .item(),
+            }
+        return {self.logname: batch.get("reward").mean().item()}
 
 
 class RewardNormalizer:
@@ -829,7 +825,7 @@ class Recorder:
         self.suffix = suffix
 
     @torch.no_grad()
-    def __call__(self, batch: _TensorDict) -> Tuple[str, torch.Tensor]:
+    def __call__(self, batch: _TensorDict) -> Dict:
         out = None
         if self._count % self.record_interval == 0:
             with set_exploration_mode(self.exploration_mode):
@@ -848,7 +844,7 @@ class Recorder:
                 self.recorder.train()
                 reward = td_record.get("reward").mean() / self.frame_skip
                 self.recorder.transform.dump(suffix=self.suffix)
-                out = self.out_key, reward
+                out = {self.out_key: reward}
         self._count += 1
         return out
 
@@ -903,13 +899,13 @@ class CountFramesLog:
         self.frame_count = 0
         self.frame_skip = frame_skip
 
-    def __call__(self, batch: _TensorDict) -> Tuple[str, int]:
+    def __call__(self, batch: _TensorDict) -> Dict:
         if "mask" in batch.keys():
             current_frames = batch.get("mask").sum().item() * self.frame_skip
         else:
             current_frames = batch.numel() * self.frame_skip
         self.frame_count += current_frames
-        return "n_frames", self.frame_count
+        return {"n_frames": self.frame_count}
 
 
 def _check_input_output_typehint(func: Callable, input: Type, output: Type):

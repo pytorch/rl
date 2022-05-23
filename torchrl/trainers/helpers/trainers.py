@@ -203,7 +203,7 @@ def make_trainer(
         )
 
     trainer.register_op(
-        "post_steps_log", lambda *args: ("lr", optimizer.param_groups[0]["lr"])
+        "post_steps_log", lambda *args: {"lr": optimizer.param_groups[0]["lr"]}
     )
 
     if recorder is not None:
