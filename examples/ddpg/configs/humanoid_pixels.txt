@@ -19,3 +19,5 @@ from_pixels
 activation=elu
 lr=0.001
 weight_decay=2e-5
+
+catframes=4
