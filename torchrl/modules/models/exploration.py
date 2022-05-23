@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
-from typing import Optional, Sequence, Union
+from typing import Optional, Sequence, Union, get_args
 
 import torch
 from torch import nn, distributions as d
@@ -389,7 +389,7 @@ class gSDEModule(nn.Module):
         return mu, sigma, action, _eps_gSDE
 
     def to(self, device_or_dtype: Union[torch.dtype, DEVICE_TYPING]):
-        if isinstance(device_or_dtype, DEVICE_TYPING):
+        if isinstance(device_or_dtype, get_args(DEVICE_TYPING)):
             self.transform = _cast_transform_device(self.transform, device_or_dtype)
         return self.to(device_or_dtype)
 
