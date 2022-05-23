@@ -683,7 +683,6 @@ def make_ppo_model(
     with torch.no_grad(), set_exploration_mode("random"):
         td = proof_environment.rollout(n_steps=1000)
         td_device = td.to(device)
-        td_device = td_device.unsqueeze(0)
         td_device = actor_value(td_device)  # for init
     return actor_value
 
