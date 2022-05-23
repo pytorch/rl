@@ -1025,26 +1025,63 @@ def make_redq_model(
     if qvalue_net_kwargs is None:
         qvalue_net_kwargs = {}
 
-    if in_keys is None:
-        in_keys = ["observation_vector"]
+    linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
 
-    actor_net_kwargs_default = {
-        "num_cells": [args.actor_cells, args.actor_cells],
-        "out_features": (2 - gSDE) * action_spec.shape[-1],
-        "activation_class": ACTIVATIONS[args.activation],
-    }
-    actor_net_kwargs_default.update(actor_net_kwargs)
-    actor_net = MLP(**actor_net_kwargs_default)
+    out_features_actor = (2 - gSDE) * action_spec.shape[-1]
+    if args.from_pixels:
+        if in_keys is None:
+            in_keys_actor = ["pixels"]
+        else:
+            in_keys_actor = in_keys
+        actor_net_kwargs_default = {
+            "mlp_net_kwargs": {
+                "layer_class": linear_layer_class,
+                "activation_class": ACTIVATIONS[args.activation],
+            },
+            "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        }
+        actor_net_kwargs_default.update(actor_net_kwargs)
+        actor_net = DdpgCnnActor(out_features_actor, **actor_net_kwargs_default)
+        gSDE_state_key = "hidden"
+        out_keys_actor = ["param", "hidden"]
 
-    qvalue_net_kwargs_default = {
-        "num_cells": [args.qvalue_cells, args.qvalue_cells],
-        "out_features": 1,
-        "activation_class": ACTIVATIONS[args.activation],
-    }
-    qvalue_net_kwargs_default.update(qvalue_net_kwargs)
-    qvalue_net = MLP(
-        **qvalue_net_kwargs_default,
-    )
+        value_net_default_kwargs = {
+            "mlp_net_kwargs": {
+                "layer_class": linear_layer_class,
+                "activation_class": ACTIVATIONS[args.activation],
+            },
+            "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        }
+        value_net_default_kwargs.update(qvalue_net_kwargs)
+
+        in_keys_qvalue = ["pixels", "action"]
+        qvalue_net = DdpgCnnQNet(**value_net_default_kwargs)
+    else:
+        if in_keys is None:
+            in_keys_actor = ["observation_vector"]
+        else:
+            in_keys_actor = in_keys
+
+        actor_net_kwargs_default = {
+            "num_cells": [args.actor_cells, args.actor_cells],
+            "out_features": out_features_actor,
+            "activation_class": ACTIVATIONS[args.activation],
+        }
+        actor_net_kwargs_default.update(actor_net_kwargs)
+        actor_net = MLP(**actor_net_kwargs_default)
+        out_keys_actor = ["param"]
+        gSDE_state_key = in_keys_actor[0]
+
+        qvalue_net_kwargs_default = {
+            "num_cells": [args.qvalue_cells, args.qvalue_cells],
+            "out_features": 1,
+            "activation_class": ACTIVATIONS[args.activation],
+        }
+        qvalue_net_kwargs_default.update(qvalue_net_kwargs)
+        qvalue_net = MLP(
+            **qvalue_net_kwargs_default,
+        )
+        in_keys_qvalue = in_keys_actor + ["action"]
 
     dist_class = TanhNormal
     dist_kwargs = {
@@ -1059,17 +1096,17 @@ def make_redq_model(
             scale_mapping=f"biased_softplus_{default_policy_scale}",
             scale_lb=args.scale_lb,
         )
-        in_keys_actor = in_keys
         actor_module = TDModule(
-            actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale"]
+            actor_net,
+            in_keys=in_keys_actor,
+            out_keys=["loc", "scale"] + out_keys_actor[1:],
         )
 
     else:
-        gSDE_state_key = in_keys[0]
         actor_module = TDModule(
             actor_net,
-            in_keys=in_keys,
-            out_keys=["action"],  # will be overwritten
+            in_keys=in_keys_actor,
+            out_keys=["action"] + out_keys_actor[1:],  # will be overwritten
         )
 
         if action_spec.domain == "continuous":
@@ -1103,7 +1140,7 @@ def make_redq_model(
         return_log_prob=True,
     )
     qvalue = ValueOperator(
-        in_keys=["action"] + in_keys,
+        in_keys=in_keys_qvalue,
         module=qvalue_net,
     )
     model = nn.ModuleList([actor, qvalue]).to(device)
