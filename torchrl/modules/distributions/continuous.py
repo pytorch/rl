@@ -11,9 +11,11 @@ import torch
 from torch import distributions as D, nn
 from torch.distributions import constraints
 
-from torchrl.modules.utils import mappings
-from torchrl.modules.distributions.truncated_normal import TruncatedNormal as _TruncatedNormal
+from torchrl.modules.distributions.truncated_normal import (
+    TruncatedNormal as _TruncatedNormal,
+)
 from torchrl.modules.distributions.utils import _cast_device
+from torchrl.modules.utils import mappings
 
 __all__ = ["NormalParamWrapper", "TanhNormal", "Delta", "TanhDelta", "TruncatedNormal"]
 
