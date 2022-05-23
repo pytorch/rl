@@ -4,7 +4,10 @@ env_library=dm_control
 async_collection
 record_video
 prb
+normalize_rewards_online
+normalize_rewards_online_scale=10
 exp_name=humanoid
+tanh_loc
 
 num_workers=32
 env_per_collector=8
