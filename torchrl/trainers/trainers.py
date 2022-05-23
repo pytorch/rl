@@ -305,8 +305,7 @@ class Trainer:
         for op, kwargs in self._post_optim_log_ops:
             result = op(batch, **kwargs)
             if result is not None:
-                key, value = result
-                self._log(key=value)
+                self._log(**result)
 
     def _pre_optim_hook(self):
         for op, kwargs in self._pre_optim_ops:
@@ -334,17 +333,13 @@ class Trainer:
         for op, kwargs in self._pre_steps_log_ops:
             result = op(batch, **kwargs)
             if result is not None:
-                key, value = result
-                kwargs = {key: value}
-                self._log(**kwargs)
+                self._log(**result)
 
     def _post_steps_log_hook(self, batch: _TensorDict) -> None:
         for op, kwargs in self._post_steps_log_ops:
             result = op(batch, **kwargs)
             if result is not None:
-                key, value = result
-                kwargs = {key: value}
-                self._log(**kwargs)
+                self._log(**result)
 
     def train(self):
         if self.progress_bar:
@@ -429,7 +424,7 @@ class Trainer:
             nn.utils.clip_grad_value_(self._params, self.clip_norm)
         return float(gn)
 
-    def _log(self, **kwargs) -> None:
+    def _log(self, log_pbar=False, **kwargs) -> None:
         collected_frames = self.collected_frames
         for key, item in kwargs.items():
             self._log_dict[key].append(item)
@@ -442,7 +437,7 @@ class Trainer:
             method = WRITER_METHODS.get(key, "add_scalar")
             if _log and self.writer is not None:
                 getattr(self.writer, method)(key, item, global_step=collected_frames)
-            if method == "add_scalar" and self.progress_bar:
+            if method == "add_scalar" and self.progress_bar and log_pbar:
                 if isinstance(item, torch.Tensor):
                     item = item.item()
                 self._pbar_str[key] = item
@@ -552,7 +547,9 @@ class LogReward:
     """Reward logger hook.
 
     Args:
-        logname (str): name of the rewards to be logged. Default is `"r_training"`.
+        logname (str, optional): name of the rewards to be logged. Default is `"r_training"`.
+        log_pbar (bool, optional): if True, the reward value will be logged on
+            the progression bar. Default is `False`.
 
     Examples:
         >>> log_reward = LogReward("reward")
@@ -560,16 +557,22 @@ class LogReward:
 
     """
 
-    def __init__(self, logname="r_training"):
+    def __init__(self, logname="r_training", log_pbar: bool = False):
         self.logname = logname
+        self.log_pbar = log_pbar
 
-    def __call__(self, batch: _TensorDict) -> Tuple[str, torch.Tensor]:
+    def __call__(self, batch: _TensorDict) -> Dict:
         if "mask" in batch.keys():
-            return (
-                self.logname,
-                batch.get("reward")[batch.get("mask").squeeze(-1)].mean().item(),
-            )
-        return self.logname, batch.get("reward").mean().item()
+            return {
+                self.logname: batch.get("reward")[batch.get("mask").squeeze(-1)]
+                .mean()
+                .item(),
+                "log_pbar": self.log_pbar,
+            }
+        return {
+            self.logname: batch.get("reward").mean().item(),
+            "log_pbar": self.log_pbar,
+        }
 
 
 class RewardNormalizer:
@@ -586,13 +589,14 @@ class RewardNormalizer:
 
     """
 
-    def __init__(self, decay: float = 0.999, scale: float = 1.0):
+    def __init__(
+        self, decay: float = 0.999, scale: float = 1.0, log_pbar: bool = False
+    ):
         self._normalize_has_been_called = False
         self._update_has_been_called = False
         self._reward_stats = OrderedDict()
         self._reward_stats["decay"] = decay
         self.scale = scale
-        pass
 
     @torch.no_grad()
     def update_reward_stats(self, batch: _TensorDict) -> None:
@@ -803,6 +807,8 @@ class Recorder:
         out_key (str, optional): reward key to set to the logger. Default is
             `"reward_evaluation"`.
         suffix (str, optional): suffix of the video to be recorded.
+        log_pbar (bool, optional): if True, the reward value will be logged on
+            the progression bar. Default is `False`.
 
     """
 
@@ -816,6 +822,7 @@ class Recorder:
         exploration_mode: str = "mode",
         out_key: str = "r_evaluation",
         suffix: Optional[str] = None,
+        log_pbar: bool = False,
     ) -> None:
 
         self.policy_exploration = policy_exploration
@@ -827,9 +834,10 @@ class Recorder:
         self.exploration_mode = exploration_mode
         self.out_key = out_key
         self.suffix = suffix
+        self.log_pbar = log_pbar
 
     @torch.no_grad()
-    def __call__(self, batch: _TensorDict) -> Tuple[str, torch.Tensor]:
+    def __call__(self, batch: _TensorDict) -> Dict:
         out = None
         if self._count % self.record_interval == 0:
             with set_exploration_mode(self.exploration_mode):
@@ -848,7 +856,7 @@ class Recorder:
                 self.recorder.train()
                 reward = td_record.get("reward").mean() / self.frame_skip
                 self.recorder.transform.dump(suffix=self.suffix)
-                out = self.out_key, reward
+                out = {self.out_key: reward, "log_pbar": self.log_pbar}
         self._count += 1
         return out
 
@@ -891,6 +899,8 @@ class CountFramesLog:
         frame_skip (int): frame skip of the environment. This argument is
             important to keep track of the total number of frames, not the
             apparent one.
+        log_pbar (bool, optional): if True, the reward value will be logged on
+            the progression bar. Default is `False`.
 
     Examples:
         >>> count_frames = CountFramesLog(frame_skip=frame_skip)
@@ -899,17 +909,18 @@ class CountFramesLog:
 
     """
 
-    def __init__(self, frame_skip: int):
+    def __init__(self, frame_skip: int, log_pbar: bool = False):
         self.frame_count = 0
         self.frame_skip = frame_skip
+        self.log_pbar = log_pbar
 
-    def __call__(self, batch: _TensorDict) -> Tuple[str, int]:
+    def __call__(self, batch: _TensorDict) -> Dict:
         if "mask" in batch.keys():
             current_frames = batch.get("mask").sum().item() * self.frame_skip
         else:
             current_frames = batch.numel() * self.frame_skip
         self.frame_count += current_frames
-        return "n_frames", self.frame_count
+        return {"n_frames": self.frame_count, "log_pbar": self.log_pbar}
 
 
 def _check_input_output_typehint(func: Callable, input: Type, output: Type):

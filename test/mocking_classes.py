@@ -257,7 +257,7 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
         return obs
 
     def _get_in_obs(self, obs):
-        return obs.diagonal(0, -2, -3)[..., 0]
+        return obs.diagonal(0, -2, -3)[..., 0, :]
 
     def _obs_step(self, obs, a):
         return obs + a.unsqueeze(-1) / self.maxstep
@@ -293,10 +293,10 @@ class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
         return obs
 
     def _get_in_obs(self, obs):
-        return obs.diagonal(0, -2, -3)[..., 0]
+        return obs.diagonal(0, -2, -3)[..., 0, :]
 
     def _obs_step(self, obs, a):
-        return obs + a.unsqueeze(-1) / self.maxstep
+        return obs + a / self.maxstep
 
 
 class DiscreteActionConvPolicy(DiscreteActionVecPolicy):

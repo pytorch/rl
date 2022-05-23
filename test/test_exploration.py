@@ -165,6 +165,39 @@ def test_gsde(
                 torch.testing.assert_allclose(action1, action2)
 
 
+@pytest.mark.parametrize(
+    "state_dim",
+    [
+        (5,),
+        (12,),
+        (12, 3),
+    ],
+)
+@pytest.mark.parametrize("action_dim", [5, 12])
+@pytest.mark.parametrize("mean", [0, -2])
+@pytest.mark.parametrize("std", [1, 2])
+@pytest.mark.parametrize("sigma_init", [None, 1.5, 3])
+@pytest.mark.parametrize("learn_sigma", [False, True])
+@pytest.mark.parametrize("device", get_available_devices())
+def test_gsde_init(sigma_init, state_dim, action_dim, mean, std, device, learn_sigma):
+    torch.manual_seed(0)
+    state = torch.randn(100000, *state_dim, device=device) * std + mean
+    action = torch.randn(100000, *state_dim[:-1], action_dim, device=device)
+    # lazy
+    gsde_lazy = LazygSDEModule(sigma_init=sigma_init, learn_sigma=learn_sigma).to(
+        device
+    )
+    _eps = torch.randn(
+        100000, *state_dim[:-1], action_dim, state_dim[-1], device=device
+    )
+    with set_exploration_mode("random"):
+        mu, sigma, action_out, _eps = gsde_lazy(action, state, _eps)
+    sigma_init = sigma_init if sigma_init else 1.0
+    assert (
+        abs(sigma_init - sigma.mean()) < 0.3
+    ), f"failed: mean={mean}, std={std}, sigma_init={sigma_init}, actual: {sigma.mean()}"
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
