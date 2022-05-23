@@ -19,3 +19,6 @@ batch_size=128
 total_frames=5000000
 
 from_pixels
+activation=elu
+lr=0.001
+weight_decay=2e-5
