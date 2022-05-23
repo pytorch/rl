@@ -444,17 +444,18 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
         self, mu: torch.Tensor, state: torch.Tensor, _eps_gSDE: torch.Tensor
     ) -> None:
         if self.has_uninitialized_params():
+            device = mu.device
             action_dim = mu.shape[-1]
             state_dim = state.shape[-1]
             with torch.no_grad():
                 if state.ndimension() > 2:
                     state = state.flatten(0, -2).squeeze(0)
                 if state.ndimension() == 1:
-                    state_flatten_var = torch.ones(1).to(state.device)
+                    state_flatten_var = torch.ones(1).to(device)
                 else:
                     state_flatten_var = state.pow(2).mean(dim=0).reciprocal()
 
-                self.sigma_init.materialize(state_flatten_var.shape)
+                self.sigma_init.materialize(state_flatten_var.shape, device=device)
                 if self.learn_sigma:
                     if self._sigma_init is None:
                         state_flatten_var.clamp_min_(self.scale_min)
@@ -469,7 +470,7 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
                             )
                         )
 
-                    self.log_sigma.materialize((action_dim, state_dim))
+                    self.log_sigma.materialize((action_dim, state_dim), device=device)
                     self.log_sigma.data.copy_(self.sigma_init.expand_as(self.log_sigma))
 
                 else:
@@ -481,5 +482,5 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
                         self.sigma_init.data.copy_(
                             (state_flatten_var / state_dim).sqrt() * self._sigma_init
                         )
-                    self._sigma.materialize((action_dim, state_dim))
+                    self._sigma.materialize((action_dim, state_dim), device=device)
                     self._sigma.data.copy_(self.sigma_init.expand_as(self._sigma))
