@@ -13,7 +13,7 @@ from typing import Any, Callable, Iterator, Optional, Tuple, Union
 import numpy as np
 import torch
 
-from torchrl.data import CompositeSpec, TensorDict
+from torchrl.data import CompositeSpec, TensorDict, TensorSpec
 from ..data.tensordict.tensordict import _TensorDict
 from ..data.utils import DEVICE_TYPING
 from .utils import get_available_libraries, step_tensordict
@@ -125,9 +125,6 @@ class _EnvClass:
 
     """
 
-    action_spec = None
-    reward_spec = None
-    observation_spec = None
     from_pixels: bool
     device = torch.device("cpu")
     batch_size = torch.Size([])
@@ -137,10 +134,42 @@ class _EnvClass:
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
     ):
-        self.device = device
+        self.device = torch.device(device)
         self._is_done = None
         self.dtype = dtype_map.get(dtype, dtype)
-        self.is_closed = False
+        self.is_closed = True
+        if "_action_spec" not in self.__dir__():
+            self._action_spec = None
+        if "_reward_spec" not in self.__dir__():
+            self._reward_spec = None
+        if "_observation_spec" not in self.__dir__():
+            self._observation_spec = None
+        if "_current_tensordict" not in self.__dir__():
+            self._current_tensordict = None
+
+    @property
+    def action_spec(self) -> TensorSpec:
+        return self._action_spec
+
+    @action_spec.setter
+    def action_spec(self, value: TensorSpec) -> None:
+        self._action_spec = value
+
+    @property
+    def reward_spec(self) -> TensorSpec:
+        return self._reward_spec
+
+    @reward_spec.setter
+    def reward_spec(self, value: TensorSpec) -> None:
+        self._reward_spec = value
+
+    @property
+    def observation_spec(self) -> TensorSpec:
+        return self._observation_spec
+
+    @observation_spec.setter
+    def observation_spec(self, value: TensorSpec) -> None:
+        self._observation_spec = value
 
     def step(self, tensordict: _TensorDict) -> _TensorDict:
         """Makes a step in the environment.
@@ -237,8 +266,6 @@ class _EnvClass:
             a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
 
         """
-        # if tensordict is None:
-        #     tensordict = self.specs.build_tensordict()
         if tensordict is None:
             tensordict = TensorDict({}, device=self.device, batch_size=self.batch_size)
         tensordict_reset = self._reset(tensordict, **kwargs)
@@ -254,7 +281,10 @@ class _EnvClass:
             )
 
         self.current_tensordict = step_tensordict(
-            tensordict_reset, exclude_reward_done_action=False
+            tensordict_reset,
+            exclude_done=False,
+            exclude_reward=True,
+            exclude_action=True,
         )
         self.is_done = tensordict_reset.get(
             "done",
@@ -289,8 +319,11 @@ class _EnvClass:
 
     @current_tensordict.setter
     def current_tensordict(self, value: Union[_TensorDict, dict]):
+        if isinstance(self._current_tensordict, _TensorDict):
+            self._current_tensordict.update(value, inplace=True)
+            return
         if isinstance(value, dict):
-            value = TensorDict(value, [])
+            value = TensorDict(value, self.batch_size)
         if not isinstance(value, _TensorDict):
             raise RuntimeError(
                 f"current_tensordict setter got an object of type {type(value)} but a TensorDict was expected"
@@ -369,6 +402,7 @@ class _EnvClass:
         n_steps: int = 1,
         callback: Optional[Callable[[_TensorDict, ...], _TensorDict]] = None,
         auto_reset: bool = True,
+        auto_cast_to_device: bool = False,
     ) -> _TensorDict:
         """
 
@@ -376,13 +410,16 @@ class _EnvClass:
             policy (callable, optional): callable to be called to compute the desired action. If no policy is provided,
                 actions will be called using `env.rand_step()`
                 default = None
-            n_steps (int, optional): maximum number of steps to be executed. The actual number of steps can be smaller if
-                the environment reaches a done state before n_steps have been executed.
-                default = 1
+            n_steps (int, optional): maximum number of steps to be executed. The actual
+                number of steps can be smaller if the environment reaches a done
+                state before n_steps have been executed.
+                Default is 1.
             callback (callable, optional): function to be called at each iteration with the given TensorDict.
-            auto_reset (bool): if True, resets automatically the environment if it is in a done state when the rollout
-                is initiated.
-                default = True.
+            auto_reset (bool, optional): if True, resets automatically the environment
+                if it is in a done state when the rollout is initiated.
+                Default is `True`.
+            auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
+                policy device before the policy is used. Default is `False`.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -392,6 +429,8 @@ class _EnvClass:
             policy_device = next(policy.parameters()).device
         except AttributeError:
             policy_device = "cpu"
+
+        env_device = self.device
 
         if auto_reset:
             self.reset()
@@ -406,16 +445,16 @@ class _EnvClass:
         tensordicts = []
         if not self.is_done:
             for i in range(n_steps):
-                td = tensordict.to(policy_device)
-                td = policy(td)
-                tensordict = td.to("cpu")
+                if auto_cast_to_device:
+                    tensordicts = auto_cast_to_device.to(policy_device)
+                tensordict = policy(tensordict)
+                if auto_cast_to_device:
+                    tensordict = tensordict.to(env_device)
                 tensordict = self.step(tensordict)
                 tensordicts.append(tensordict.clone())
                 if tensordict.get("done").all() or i == n_steps - 1:
                     break
-                tensordict = step_tensordict(
-                    tensordict.exclude("reward", "done"), keep_other=True
-                )
+                tensordict = step_tensordict(tensordict, keep_other=True)
 
                 if callback is not None:
                     callback(self, tensordict)
@@ -436,6 +475,8 @@ class _EnvClass:
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[torch.dtype] = None,
     ) -> Union[torch.Tensor, dict]:
+        if device is None:
+            device = self.device
 
         if isinstance(value, dict):
             return {
@@ -451,9 +492,6 @@ class _EnvClass:
             dtype = dtype_map.get(dtype, dtype)
         else:
             dtype = value.dtype
-
-        if device is None:
-            device = self.device
 
         if not isinstance(value, torch.Tensor):
             if dtype is not None:
@@ -479,6 +517,19 @@ class _EnvClass:
     def __del__(self):
         if not self.is_closed:
             self.close()
+
+    def to(self, device: DEVICE_TYPING) -> _EnvClass:
+        self.action_spec = self.action_spec.to(device)
+        self.reward_spec = self.reward_spec.to(device)
+        self.observation_spec = self.observation_spec.to(device)
+
+        if self._current_tensordict is not None:
+            current_tensordict = self.current_tensordict.to(device)
+            self._current_tensordict = None
+            self.current_tensordict = current_tensordict
+        self.is_done = self.is_done.to(device)
+        self.device = torch.device(device)
+        return self
 
 
 class _EnvWrapper(_EnvClass):
@@ -532,8 +583,8 @@ class _EnvWrapper(_EnvClass):
                 f"{envname} with task {taskname} is unknown in {self.libname}"
             )
         self._build_env(envname, taskname, **kwargs)  # writes the self._env attribute
-        self._init_env()  # runs all the steps to have a ready-to-use env
         self.is_closed = False
+        self._init_env()  # runs all the steps to have a ready-to-use env
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
@@ -636,8 +687,9 @@ class GymLikeEnv(_EnvWrapper):
         done = self._to_tensor(done, dtype=torch.bool)
         self.is_done = done
 
-        tensordict_out = TensorDict({}, batch_size=tensordict.batch_size)
-        tensordict_out.update(obs_dict)
+        tensordict_out = TensorDict(
+            obs_dict, batch_size=tensordict.batch_size, device=self.device
+        )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
         self.current_tensordict = step_tensordict(tensordict_out)
@@ -697,9 +749,9 @@ def make_tensordict(
         tensordict = env.reset()
         if policy is not None:
             tensordict = tensordict.unsqueeze(0)
-            tensordict = policy(tensordict.to(next(policy.parameters()).device))
+            tensordict = policy(tensordict)
             tensordict = tensordict.squeeze(0)
         else:
             tensordict.set("action", env.action_spec.rand(), inplace=False)
-        tensordict = env.step(tensordict.to("cpu"))
+        tensordict = env.step(tensordict)
         return tensordict.zero_()

@@ -57,6 +57,7 @@ class _MockEnv(_EnvClass):
             dtype=torch.float,
         )
         self.set_seed(seed)
+        self.is_closed = False
 
     @property
     def maxstep(self):
@@ -76,6 +77,10 @@ class _MockEnv(_EnvClass):
     def custom_prop(self):
         return 2
 
+    @property
+    def custom_td(self):
+        return TensorDict({"a": torch.zeros(3)}, [])
+
 
 class MockSerialEnv(_EnvClass):
     def __init__(self, device):
@@ -83,6 +88,7 @@ class MockSerialEnv(_EnvClass):
         self.action_spec = NdUnboundedContinuousTensorSpec((1,))
         self.observation_spec = NdUnboundedContinuousTensorSpec((1,))
         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+        self.is_closed = False
 
     def set_seed(self, seed: int) -> int:
         assert seed >= 1

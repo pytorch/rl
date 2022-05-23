@@ -64,12 +64,13 @@ class _dispatch_caller_serial:
 
 
 class _dummy_env_context:
-    def __init__(self, fun, kwargs):
+    def __init__(self, fun, kwargs, device):
         self.fun = fun
         self.kwargs = kwargs
+        self.device = device
 
     def __enter__(self):
-        self.dummy_env = self.fun(**self.kwargs)
+        self.dummy_env = self.fun(**self.kwargs).to(self.device)
         return self.dummy_env
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -208,7 +209,9 @@ class _BatchedEnv(_EnvClass):
     @property
     def _dummy_env_context(self) -> _dummy_env_context:
         """Returns a context manager that will create a dummy env and delete it afterwards"""
-        return _dummy_env_context(self._dummy_env_fun, self.create_env_kwargs[0])
+        return _dummy_env_context(
+            self._dummy_env_fun, self.create_env_kwargs[0], self.device
+        )
 
     @property
     def _dummy_env(self) -> _EnvClass:
@@ -231,16 +234,20 @@ class _BatchedEnv(_EnvClass):
         raise NotImplementedError
 
     @property
+    def batch_size(self) -> TensorSpec:
+        if self._batch_size is None:
+            self._set_properties()
+        return self._batch_size
+
+    @property
     def action_spec(self) -> TensorSpec:
         if self._action_spec is None:
             self._set_properties()
         return self._action_spec
 
-    @property
-    def batch_size(self) -> TensorSpec:
-        if self._batch_size is None:
-            self._set_properties()
-        return self._batch_size
+    @action_spec.setter
+    def action_spec(self, value: TensorSpec) -> None:
+        self._action_spec = value
 
     @property
     def observation_spec(self) -> TensorSpec:
@@ -248,11 +255,19 @@ class _BatchedEnv(_EnvClass):
             self._set_properties()
         return self._observation_spec
 
+    @observation_spec.setter
+    def observation_spec(self, value: TensorSpec) -> None:
+        self._observation_spec = value
+
     @property
     def reward_spec(self) -> TensorSpec:
         if self._reward_spec is None:
             self._set_properties()
         return self._reward_spec
+
+    @reward_spec.setter
+    def reward_spec(self, value: TensorSpec) -> None:
+        self._reward_spec = value
 
     def is_done_set_fn(self, value: bool) -> None:
         self._is_done = value.all()
@@ -355,11 +370,31 @@ class _BatchedEnv(_EnvClass):
             raise RuntimeError("trying to close a closed environment")
         if self._verbose:
             print(f"closing {self.__class__.__name__}")
+        self._current_tensordict = None
         self._shutdown_workers()
         self.is_closed = True
 
     def _shutdown_workers(self) -> None:
         raise NotImplementedError
+
+    def start(self) -> None:
+        if not self.is_closed:
+            raise RuntimeError("trying to start a environment that is not closed.")
+        self._create_td()
+        self._start_workers()
+
+    def to(self, device: DEVICE_TYPING):
+        self.device = device
+        if not self.is_closed:
+            # the tensordicts must be re-created on device
+            super().to(device)
+            self.close()
+            self.start()
+        else:
+            self.action_spec = self.action_spec.to(device)
+            self.reward_spec = self.reward_spec.to(device)
+            self.observation_spec = self.observation_spec.to(device)
+        return self
 
 
 class SerialEnv(_BatchedEnv):
@@ -379,7 +414,7 @@ class SerialEnv(_BatchedEnv):
 
         for idx in range(_num_workers):
             env = self.create_env_fn[idx](**self.create_env_kwargs[idx])
-            self._envs.append(env)
+            self._envs.append(env.to(self.device))
         self.is_closed = False
 
     @_check_start
@@ -481,6 +516,30 @@ class SerialEnv(_BatchedEnv):
                     f"{self._dummy_env.__class__.__name__}"
                 )
 
+    def to(self, device: DEVICE_TYPING):
+        super().to(device)
+        if not self.is_closed:
+            for env in self._envs:
+                env.to(device)
+        return self
+
+    @property
+    def current_tensordict(self) -> _TensorDict:
+        if self._current_tensordict is None:
+            self._current_tensordict = torch.stack(
+                [env.current_tensordict for env in self._envs], 0
+            )
+        return self._current_tensordict
+
+    @current_tensordict.setter
+    def current_tensordict(self, tensordict: _TensorDict) -> None:
+        if self._current_tensordict is None:
+            self._current_tensordict = tensordict
+        else:
+            self._current_tensordict.update_(
+                tensordict.select(*self._current_tensordict.keys())
+            )
+
 
 class ParallelEnv(_BatchedEnv):
     """
@@ -490,6 +549,42 @@ class ParallelEnv(_BatchedEnv):
     """
 
     __doc__ += _BatchedEnv.__doc__
+
+    @property
+    def current_tensordict(self) -> _TensorDict:
+        current_tensordict = []
+        for idx, channel in enumerate(self.parent_channels):
+            channel.send(("current_tensordict_get", None))
+        for idx, channel in enumerate(self.parent_channels):
+            msg, _current_tensordict = channel.recv()
+            if msg != "current_tensordict_get_out":
+                raise RuntimeError(
+                    f"Expected 'current_tensordict_get_out' but received {msg}"
+                )
+            if _current_tensordict is not None:
+                current_tensordict.append(_current_tensordict)
+        if self._current_tensordict is None:
+            self._current_tensordict = torch.stack(current_tensordict, 0)
+        return self._current_tensordict
+
+    @current_tensordict.setter
+    def current_tensordict(self, tensordict: _TensorDict) -> _TensorDict:
+        if self._current_tensordict is not None:
+            self._current_tensordict.update_(
+                tensordict.select(*self._current_tensordict.keys())
+            )
+            return
+
+        if not tensordict.is_shared() and not tensordict.is_memmap():
+            tensordict.share_memory_()
+        for idx, channel in enumerate(self.parent_channels):
+            channel.send(("current_tensordict_set", tensordict[idx]))
+        for idx, channel in enumerate(self.parent_channels):
+            msg, _ = channel.recv()
+            if msg != "current_tensordict_set_out":
+                raise RuntimeError(
+                    f"Expected 'current_tensordict_set_out' but received {msg}"
+                )
 
     def _start_workers(self) -> None:
 
@@ -518,6 +613,7 @@ class ParallelEnv(_BatchedEnv):
                     self.create_env_kwargs[idx],
                     False,
                     self.action_keys,
+                    self.device,
                 ),
             )
             w.daemon = True
@@ -683,6 +779,12 @@ class ParallelEnv(_BatchedEnv):
                     f"{self._dummy_env.__class__.__name__}"
                 )
 
+    def to(self, device: DEVICE_TYPING):
+        super().to(device)
+        if not self.is_closed:
+            _dispatch_caller_parallel("to", self)(device)
+        return self
+
 
 def _run_worker_pipe_shared_mem(
     idx: int,
@@ -692,6 +794,7 @@ def _run_worker_pipe_shared_mem(
     env_fun_kwargs: dict,
     pin_memory: bool,
     action_keys: dict,
+    device: DEVICE_TYPING = "cpu",
     verbose: bool = False,
 ) -> None:
     parent_pipe.close()
@@ -704,13 +807,16 @@ def _run_worker_pipe_shared_mem(
                 "env_fun_kwargs must be empty if an environment is passed to a process."
             )
         env = env_fun
+    env = env.to(device)
     i = -1
     initialized = False
 
     # make sure that process can be closed
     tensordict = None
+    current_tensordict = None
     _td = None
     data = None
+    current_tensordict_sent = False
 
     while True:
         try:
@@ -782,7 +888,7 @@ def _run_worker_pipe_shared_mem(
             just_reset = False
 
         elif cmd == "close":
-            del tensordict, _td, data
+            del tensordict, _td, data, current_tensordict
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
             env.close()
@@ -804,6 +910,30 @@ def _run_worker_pipe_shared_mem(
             msg = "state_dict"
             child_pipe.send((msg, state_dict))
 
+        elif cmd == "current_tensordict_get":
+            current_tensordict = env.current_tensordict
+            msg = "current_tensordict_get_out"
+            if not current_tensordict_sent:
+                if (
+                    not current_tensordict.is_shared()
+                    and not current_tensordict.is_memmap()
+                ):
+                    current_tensordict.share_memory_()
+                child_pipe.send((msg, current_tensordict))
+                current_tensordict_sent = True
+            else:
+                if not current_tensordict.is_shared():
+                    raise RuntimeError(
+                        "current_tensordict is not shared but has already been sent."
+                    )
+                child_pipe.send((msg, None))
+
+        elif cmd == "current_tensordict_set":
+            current_tensordict = data
+            msg = "current_tensordict_set_out"
+            env.current_tensordict = current_tensordict
+            child_pipe.send((msg, None))
+
         else:
             err_msg = f"{cmd} from env"
             try:
@@ -823,4 +953,8 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError(
                     f"querying {err_msg} resulted in the following error: " f"{err}"
                 )
-            child_pipe.send(("_".join([cmd, "done"]), result))
+            if cmd not in ("to"):
+                child_pipe.send(("_".join([cmd, "done"]), result))
+            else:
+                # don't send env through pipe
+                child_pipe.send(("_".join([cmd, "done"]), None))

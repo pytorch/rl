@@ -295,7 +295,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
                 the transformation.
 
         Returns:
-            a new tensordict with transformed tensors.
+            a new tensordict with transformed_in tensors.
 
         """
         if batch_size is None:
@@ -2730,11 +2730,11 @@ class LazyStackedTensorDict(_TensorDict):
         self._valid_keys = sorted(list(valid_keys))
 
     def select(self, *keys: str, inplace: bool = False) -> _TensorDict:
-        if len(set(self.valid_keys).intersection(keys)) != len(keys):
-            raise KeyError(
-                f"Selected and existing keys mismatch, got self.valid_keys"
-                f"={self.valid_keys} and keys={keys}"
-            )
+        # if len(set(self.valid_keys).intersection(keys)) != len(keys):
+        #     raise KeyError(
+        #         f"Selected and existing keys mismatch, got self.valid_keys"
+        #         f"={self.valid_keys} and keys={keys}"
+        #     )
         tensordicts = [td.select(*keys, inplace=inplace) for td in self.tensordicts]
         if inplace:
             return self
@@ -3327,7 +3327,7 @@ class _CustomOpTensorDict(_TensorDict):
         )
         if transformed_tensor.data_ptr() != original_tensor.data_ptr():
             raise RuntimeError(
-                f"{self} original tensor and transformed do not point to the "
+                f"{self} original tensor and transformed_in do not point to the "
                 f"same storage. Setting values in place is not currently "
                 f"supported in this setting, consider calling "
                 f"`td.clone()` before `td.set_at_(...)`"

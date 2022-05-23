@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 
 from torchrl.envs import ParallelEnv
+from torchrl.envs.utils import set_exploration_mode
 
 try:
     import configargparse as argparse
@@ -103,7 +104,6 @@ def main(args):
     proof_env = transformed_env_constructor(
         args=args, use_env_creator=False, stats=stats
     )()
-    create_env_fn = parallel_env_constructor(args=args, stats=stats)
     model = make_dqn_actor(
         proof_environment=proof_env,
         args=args,
@@ -114,12 +114,30 @@ def main(args):
     model_explore = EGreedyWrapper(model, annealing_num_steps=args.annealing_frames).to(
         device
     )
+    if args.gSDE:
+        with torch.no_grad(), set_exploration_mode("random"):
+            # get dimensions to build the parallel env
+            proof_td = model(proof_env.reset().to(device))
+        action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]
+        del proof_td
+    else:
+        action_dim_gsde, state_dim_gsde = None, None
     proof_env.close()
+    create_env_fn = parallel_env_constructor(
+        args=args,
+        stats=stats,
+        action_dim_gsde=action_dim_gsde,
+        state_dim_gsde=state_dim_gsde,
+    )
 
     collector = make_collector_offpolicy(
         make_env=create_env_fn,
         actor_model_explore=model_explore,
         args=args,
+        # make_env_kwargs=[
+        #     {"device": device} if device >= 0 else {}
+        #     for device in args.env_rendering_devices
+        # ],
     )
 
     replay_buffer = make_replay_buffer(device, args)
