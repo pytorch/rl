@@ -185,7 +185,9 @@ def test_gsde_init(sigma_init, state_dim, action_dim, mean, std, device, learn_s
     action = torch.randn(100000, *state_dim[:-1], action_dim, device=device)
     # lazy
     gsde_lazy = LazygSDEModule(sigma_init=sigma_init, learn_sigma=learn_sigma)
-    _eps = torch.randn(100000, *state_dim[:-1], action_dim, state_dim[-1])
+    _eps = torch.randn(
+        100000, *state_dim[:-1], action_dim, state_dim[-1], device=device
+    )
     with set_exploration_mode("random"):
         mu, sigma, action_out, _eps = gsde_lazy(action, state, _eps)
     sigma_init = sigma_init if sigma_init else 1.0
