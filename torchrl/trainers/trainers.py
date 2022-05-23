@@ -557,7 +557,7 @@ class LogReward:
 
     """
 
-    def __init__(self, logname="r_training", log_pbar: bool=False):
+    def __init__(self, logname="r_training", log_pbar: bool = False):
         self.logname = logname
         self.log_pbar = log_pbar
 
@@ -569,7 +569,10 @@ class LogReward:
                 .item(),
                 "log_pbar": self.log_pbar,
             }
-        return {self.logname: batch.get("reward").mean().item(), "log_pbar": self.log_pbar}
+        return {
+            self.logname: batch.get("reward").mean().item(),
+            "log_pbar": self.log_pbar,
+        }
 
 
 class RewardNormalizer:
@@ -586,7 +589,9 @@ class RewardNormalizer:
 
     """
 
-    def __init__(self, decay: float = 0.999, scale: float = 1.0, log_pbar: bool = False):
+    def __init__(
+        self, decay: float = 0.999, scale: float = 1.0, log_pbar: bool = False
+    ):
         self._normalize_has_been_called = False
         self._update_has_been_called = False
         self._reward_stats = OrderedDict()
@@ -817,7 +822,7 @@ class Recorder:
         exploration_mode: str = "mode",
         out_key: str = "r_evaluation",
         suffix: Optional[str] = None,
-        log_pbar: bool = False
+        log_pbar: bool = False,
     ) -> None:
 
         self.policy_exploration = policy_exploration
@@ -904,10 +909,7 @@ class CountFramesLog:
 
     """
 
-    def __init__(
-        self, frame_skip: int,
-        log_pbar: bool = False
-    ):
+    def __init__(self, frame_skip: int, log_pbar: bool = False):
         self.frame_count = 0
         self.frame_skip = frame_skip
         self.log_pbar = log_pbar
