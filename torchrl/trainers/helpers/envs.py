@@ -265,8 +265,8 @@ def get_stats_random_rollout(
                 "thus get_stats_random_rollout cannot infer which to compute the stats of."
             )
     if args.from_pixels:
-        m = td_stats.get(key).mean().item()
-        s = td_stats.get(key).std().clamp_min(1e-5).item()
+        m = td_stats.get(key).mean()
+        s = td_stats.get(key).std().clamp_min(1e-5)
     else:
         m = td_stats.get(key).mean(dim=0)
         s = td_stats.get(key).std(dim=0).clamp_min(1e-5)
