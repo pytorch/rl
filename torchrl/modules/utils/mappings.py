@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Callable
+from typing import Callable, Union
 
 import torch
 from torch import nn
@@ -11,12 +11,19 @@ from torch import nn
 __all__ = ["mappings", "inv_softplus", "biased_softplus"]
 
 
-def inv_softplus(bias: float):
+def inv_softplus(bias: Union[float, torch.Tensor]) -> Union[float, torch.Tensor]:
     """
     inverse softplus function.
 
     """
-    return torch.tensor(bias).expm1().clamp_min(1e-6).log().item()
+    is_tensor = True
+    if not isinstance(bias, torch.Tensor):
+        is_tensor = False
+        bias = torch.tensor(bias)
+    out = bias.expm1().clamp_min(1e-6).log()
+    if not is_tensor and out.numel() == 1:
+        return out.item()
+    return out
 
 
 class biased_softplus(nn.Module):

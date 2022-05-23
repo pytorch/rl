@@ -1758,6 +1758,9 @@ class TensorDict(_TensorDict):
                 "share_memory_ must be called when the TensorDict is ("
                 "partially) populated. Set a tensor first."
             )
+        if self.device != torch.device("cpu"):
+            # cuda tensors are shared by default
+            return self
         for key, value in self.items():
             value.share_memory_()
         for key, value in self.items_meta():
