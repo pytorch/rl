@@ -85,19 +85,26 @@ def main(args):
     writer = SummaryWriter(f"ppo_logging/{exp_name}")
     video_tag = exp_name if args.record_video else ""
 
-    proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
+    stats = None
+    if not args.vecnorm and args.norm_stats:
+        proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
+        stats = get_stats_random_rollout(
+            args, proof_env, key="next_pixels" if args.from_pixels else None
+        )
+        # make sure proof_env is closed
+        proof_env.close()
+    elif args.from_pixels:
+        stats = {"loc": 0.5, "scale": 0.5}
+    proof_env = transformed_env_constructor(
+        args=args, use_env_creator=False, stats=stats
+    )()
+    create_env_fn = parallel_env_constructor(args=args, stats=stats)
+
     model = make_ppo_model(proof_env, args=args, device=device)
     actor_model = model.get_policy_operator()
 
     loss_module = make_ppo_loss(model, args)
-
-    stats = None
-    if not args.vecnorm:
-        stats = get_stats_random_rollout(args, proof_env)
-    # make sure proof_env is closed
     proof_env.close()
-
-    create_env_fn = parallel_env_constructor(args=args, stats=stats)
 
     collector = make_collector_onpolicy(
         make_env=create_env_fn,
