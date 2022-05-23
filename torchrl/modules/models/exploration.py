@@ -391,7 +391,7 @@ class gSDEModule(nn.Module):
     def to(self, device_or_dtype: Union[torch.dtype, DEVICE_TYPING]):
         if isinstance(device_or_dtype, get_args(DEVICE_TYPING)):
             self.transform = _cast_transform_device(self.transform, device_or_dtype)
-        return self.to(device_or_dtype)
+        return super().to(device_or_dtype)
 
 
 class LazygSDEModule(LazyModuleMixin, gSDEModule):
