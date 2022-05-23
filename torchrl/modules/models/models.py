@@ -805,7 +805,8 @@ class DdpgCnnQNet(nn.Module):
         ddpg_init_last_layer(self.mlp[-1], 6e-4)
 
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
-        value = self.mlp(torch.cat([self.convnet(observation), action], -1))
+        hidden = torch.cat([self.convnet(observation), action], -1)
+        value = self.mlp(hidden)
         return value
 
 

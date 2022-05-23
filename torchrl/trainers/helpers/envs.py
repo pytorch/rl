@@ -145,10 +145,15 @@ def transformed_env_constructor(
         if args.noops:
             env.append_transform(NoopResetEnv(env, args.noops))
         if from_pixels:
+            if not args.catframes:
+                raise RuntimeError(
+                    "this env builder currently only accepts positive catframes values"
+                    "when pixels are being used."
+                )
             env.append_transform(ToTensorImage())
             env.append_transform(Resize(84, 84))
             env.append_transform(GrayScale())
-            env.append_transform(CatFrames(keys=["next_pixels"]))
+            env.append_transform(CatFrames(N=args.catframes, keys=["next_pixels"]))
             if stats is None:
                 obs_stats = {"loc": 0.0, "scale": 1.0}
             else:

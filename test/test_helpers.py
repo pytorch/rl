@@ -46,7 +46,9 @@ def _assert_keys_match(td, expeceted_keys):
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("noisy", [tuple(), ("--noisy",)])
 @pytest.mark.parametrize("distributional", [tuple(), ("--distributional",)])
-@pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
+@pytest.mark.parametrize(
+    "from_pixels", [tuple(), ("--from_pixels", "--catframes", "4")]
+)
 def test_dqn_maker(device, noisy, distributional, from_pixels):
     flags = list(noisy + distributional + from_pixels) + ["--env_name=CartPole-v1"]
     parser = argparse.ArgumentParser()
@@ -84,7 +86,9 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
+@pytest.mark.parametrize(
+    "from_pixels", [tuple(), ("--from_pixels", "--catframes", "4")]
+)
 @pytest.mark.parametrize("gsde", [tuple(), ("--gSDE",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_ddpg_maker(device, from_pixels, gsde, exploration):
@@ -145,7 +149,9 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
+@pytest.mark.parametrize(
+    "from_pixels", [tuple(), ("--from_pixels", "--catframes", "4")]
+)
 @pytest.mark.parametrize("gsde", [tuple(), ("--gSDE",)])
 @pytest.mark.parametrize("shared_mapping", [tuple(), ("--shared_mapping",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
@@ -260,6 +266,8 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
     parser = parser_env_args(parser)
     parser = parser_model_args_continuous(parser, algorithm="SAC")
     args = parser.parse_args(flags)
+    if from_pixels:
+        args.catframes = 4
 
     env_maker = (
         ContinuousActionConvMockEnvNumpy if from_pixels else ContinuousActionVecMockEnv
@@ -337,7 +345,9 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("from_pixels", [tuple()])
+@pytest.mark.parametrize(
+    "from_pixels", [tuple(), ("--from_pixels", "--catframes", "4")]
+)
 @pytest.mark.parametrize("gsde", [tuple(), ("--gSDE",)])
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("exploration", ["random", "mode"])
@@ -372,7 +382,6 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         actor(td)
     expected_keys = [
         "done",
-        "observation_vector",
         "action",
         "sample_log_prob",
         "loc",
@@ -380,6 +389,11 @@ def test_redq_make(device, from_pixels, gsde, exploration):
     ]
     if len(gsde):
         expected_keys += ["_eps_gSDE"]
+    if from_pixels:
+        expected_keys += ["hidden", "pixels"]
+    else:
+        expected_keys += ["observation_vector"]
+
     try:
         _assert_keys_match(td, expected_keys)
     except AssertionError:
@@ -397,7 +411,6 @@ def test_redq_make(device, from_pixels, gsde, exploration):
     qvalue(td)
     expected_keys = [
         "done",
-        "observation_vector",
         "action",
         "sample_log_prob",
         "state_action_value",
@@ -406,6 +419,10 @@ def test_redq_make(device, from_pixels, gsde, exploration):
     ]
     if len(gsde):
         expected_keys += ["_eps_gSDE"]
+    if from_pixels:
+        expected_keys += ["hidden", "pixels"]
+    else:
+        expected_keys += ["observation_vector"]
     try:
         _assert_keys_match(td, expected_keys)
     except AssertionError:
