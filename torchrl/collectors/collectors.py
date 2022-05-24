@@ -292,7 +292,7 @@ class SyncDataCollector(_DataCollector):
         self.return_same_td = return_same_td
 
         env.reset()
-        self._tensordict = env.current_tensordict.to(self.passing_device)
+        self._tensordict = env.current_tensordict
         self._tensordict.set(
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
