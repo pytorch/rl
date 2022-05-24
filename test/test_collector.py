@@ -59,9 +59,10 @@ def make_policy(env):
         raise NotImplementedError
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [3, 1])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
-def test_concurrent_collector_consistency(num_env, env_name, seed=100):
+def test_concurrent_collector_consistency(num_env, env_name, seed=40):
+    torch.set_default_dtype(torch.double)
     if num_env == 1:
 
         def env_fn(seed):
@@ -97,6 +98,7 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=100):
             b2 = d
         else:
             break
+    print((b1["pixels"] - b2["pixels"]).norm())
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b2)
     collector.shutdown()

@@ -384,6 +384,7 @@ class _BatchedEnv(_EnvClass):
         self._start_workers()
 
     def to(self, device: DEVICE_TYPING):
+        device = torch.device(device)
         self.device = device
         if not self.is_closed:
             # the tensordicts must be re-created on device

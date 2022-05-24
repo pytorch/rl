@@ -455,11 +455,11 @@ class TestParallel:
 
     @pytest.mark.skipif(not torch.has_cuda, reason="no cuda to test on")
     @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.parametrize("frame_skip", [4])
+    @pytest.mark.parametrize("device", [0])
     @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [True, True])
     @pytest.mark.parametrize("transformed_out", [False, True])
-    @pytest.mark.parametrize("device", [0, "cuda:0"])
     @pytest.mark.parametrize("open_before", [True, False])
     def test_parallel_env_cast(
         self,
@@ -548,11 +548,11 @@ class TestParallel:
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.skipif(not torch.has_cuda, reason="no cuda device detected")
+    @pytest.mark.parametrize("frame_skip", [4])
+    @pytest.mark.parametrize("device", [0])
     @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [True, False])
     @pytest.mark.parametrize("transformed_out", [True, False])
-    @pytest.mark.parametrize("device", [0, "cuda:0"])
     def test_parallel_env_device(
         self, env_name, frame_skip, transformed_in, transformed_out, device
     ):
@@ -581,12 +581,11 @@ class TestParallel:
         env0.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.skipif(not torch.has_cuda, reason="no cuda device detected")
+    @pytest.mark.parametrize("frame_skip", [4])
+    @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [True, False])
     @pytest.mark.parametrize("transformed_out", [True, False])
-    @pytest.mark.parametrize("device", [0, "cuda:0"])
     def test_parallel_env_current(
         self, env_name, frame_skip, transformed_in, transformed_out, device
     ):
@@ -603,23 +602,41 @@ class TestParallel:
             N=N,
         )
 
-        out = env_parallel.rollout(n_steps=20)
-        current_tensordict = env_parallel.current_tensordict
+        out = env0.rollout(n_steps=20)
+        current_tensordict_art = step_tensordict(out[-1], exclude_done=False)
+        current_tensordict = env0.current_tensordict
+        assert (current_tensordict_art == current_tensordict).all()
         assert current_tensordict.device == torch.device(device)
         for key in current_tensordict.keys():
             current_tensordict.fill_(key, 0.0)
-        env_parallel.current_tensordict = current_tensordict.clone()
-        current_tensordict2 = env_parallel.current_tensordict
+        env0.current_tensordict = current_tensordict.clone()
+        current_tensordict2 = env0.current_tensordict
         assert (current_tensordict2 == current_tensordict).all()
+        env0.close()
 
         out = env_serial.rollout(n_steps=20)
+        current_tensordict_art = step_tensordict(out[:, -1], exclude_done=False)
         current_tensordict = env_serial.current_tensordict
+        assert (current_tensordict_art == current_tensordict).all()
         assert current_tensordict.device == torch.device(device)
         for key in current_tensordict.keys():
             current_tensordict.fill_(key, 0.0)
         env_serial.current_tensordict = current_tensordict.clone()
         current_tensordict2 = env_serial.current_tensordict
         assert (current_tensordict2 == current_tensordict).all()
+        env_serial.close()
+
+        out = env_parallel.rollout(n_steps=20)
+        current_tensordict_art = step_tensordict(out[:, -1], exclude_done=False)
+        current_tensordict = env_parallel.current_tensordict
+        assert (current_tensordict_art == current_tensordict).all()
+        assert current_tensordict.device == torch.device(device)
+        for key in current_tensordict.keys():
+            current_tensordict.fill_(key, 0.0)
+        env_parallel.current_tensordict = current_tensordict.clone()
+        current_tensordict2 = env_parallel.current_tensordict
+        assert (current_tensordict2 == current_tensordict).all()
+        env_parallel.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
