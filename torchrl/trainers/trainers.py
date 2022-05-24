@@ -848,7 +848,7 @@ class Recorder:
                     self.recorder.transform.eval()
                 td_record = self.recorder.rollout(
                     policy=self.policy_exploration,
-                    n_steps=self.record_frames,
+                    max_steps=self.record_frames,
                     auto_reset=True,
                 )
                 if isinstance(self.policy_exploration, torch.nn.Module):

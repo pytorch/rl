@@ -256,7 +256,7 @@ def get_stats_random_rollout(
     n = 0
     td_stats = []
     while n < args.init_env_steps:
-        _td_stats = proof_environment.rollout(n_steps=args.init_env_steps)
+        _td_stats = proof_environment.rollout(max_steps=args.init_env_steps)
         n += _td_stats.numel()
         td_stats.append(_td_stats)
     td_stats = torch.cat(td_stats, 0)
