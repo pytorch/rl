@@ -58,7 +58,13 @@ Depending on the use of functorch that you want to make, you may want to install
 **Stable**
 
 ```
-conda install pytorch torchvision cudatoolkit=10.2 -c pytorch  # refer to pytorch official website for cudatoolkit installation
+# For CUDA 10.2
+conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
+# For CUDA 11.1
+conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+# For CPU-only build
+conda install pytorch torchvision torchaudio cpuonly -c pytorch
+
 pip install functorch
 ```
 
