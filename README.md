@@ -60,7 +60,7 @@ Depending on the use of functorch that you want to make, you may want to install
 ```
 # For CUDA 10.2
 conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
-# For CUDA 11.1
+# For CUDA 11.3
 conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
 # For CPU-only build
 conda install pytorch torchvision torchaudio cpuonly -c pytorch
@@ -71,11 +71,11 @@ pip install functorch
 **Nightly**
 ```
 # For CUDA 10.2
-pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html --upgrade
-# For CUDA 11.1
-pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html --upgrade
+pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cu102
+# For CUDA 11.3
+pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 # For CPU-only build
-pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --upgrade
+pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 ```
 
 and functorch
