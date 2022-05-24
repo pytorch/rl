@@ -80,8 +80,8 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
             env = ParallelEnv(
                 num_workers=num_env,
                 create_env_fn=make_make_env(env_name),
+                create_env_kwargs=[{'seed': i} for i in range(seed, seed+num_env)],
             )
-            env.update_kwargs([{'seed': i} for i in range(seed, seed+num_env)])
             return env
 
     policy = make_policy(env_name)
