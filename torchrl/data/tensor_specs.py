@@ -955,5 +955,6 @@ dtype=torch.float32)},
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
         for value in self.values():
             value.to(dest)
-        self.device = torch.device(dest)
+        if not isinstance(dest, torch.dtype):
+            self.device = torch.device(dest)
         return self

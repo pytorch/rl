@@ -61,7 +61,7 @@ def make_policy(env):
 
 
 @pytest.mark.parametrize("num_env", [3, 1])
-@pytest.mark.parametrize("env_name", ["conv", "vec"])
+@pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     torch.set_default_dtype(torch.double)
     if num_env == 1:

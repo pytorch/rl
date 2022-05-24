@@ -54,10 +54,14 @@ class _MockEnv(_EnvClass):
     def __init__(self, seed: int = 100):
         super().__init__(
             device="cpu",
-            dtype=torch.float,
+            dtype=torch.get_default_dtype(),
         )
         self.set_seed(seed)
         self.is_closed = False
+
+        self.observation_spec = self.observation_spec.to(torch.get_default_dtype())
+        # self.action_spec = self.action_spec.to(torch.get_default_dtype())
+        self.reward_spec = self.reward_spec.to(torch.get_default_dtype())
 
     @property
     def maxstep(self):
@@ -99,13 +103,13 @@ class MockSerialEnv(_EnvClass):
 
     def _step(self, tensordict):
         self.counter += 1
-        n = torch.tensor([self.counter]).to(self.device).to(torch.float)
+        n = torch.tensor([self.counter]).to(self.device).to(torch.get_default_dtype())
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict({"reward": n, "done": done, "next_observation": n}, [])
 
     def _reset(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
-        n = torch.tensor([self.counter]).to(self.device).to(torch.float)
+        n = torch.tensor([self.counter]).to(self.device).to(torch.get_default_dtype())
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict({"done": done, "observation": n}, [])
@@ -158,7 +162,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
         reward = done.any(-1).unsqueeze(-1)
         done = done.all(-1).unsqueeze(-1)
-        tensordict.set("reward", reward.to(torch.float))
+        tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
         return tensordict
 
@@ -207,7 +211,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
         reward = done.any(-1).unsqueeze(-1)
         done = done.all(-1).unsqueeze(-1)
-        tensordict.set("reward", reward.to(torch.float))
+        tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
         return tensordict
 
