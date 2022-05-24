@@ -209,7 +209,7 @@ class TestDQN:
             actor, gamma=gamma, loss_function="l2", delay_value=delay_value
         )
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+        ms = MultiStep(gamma=gamma, max_steps=n).to(device)
         ms_td = ms(td.clone())
 
         with _check_td_steady(ms_td):
@@ -469,7 +469,7 @@ class TestDDPG:
             delay_value=delay_value,
         )
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+        ms = MultiStep(gamma=gamma, max_steps=n).to(device)
         ms_td = ms(td.clone())
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
@@ -736,7 +736,7 @@ class TestSAC:
             **kwargs,
         )
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+        ms = MultiStep(gamma=gamma, max_steps=n).to(device)
 
         td_clone = td.clone()
         ms_td = ms(td_clone)
@@ -1027,7 +1027,7 @@ class TestREDQ:
             delay_qvalue=delay_qvalue,
         )
 
-        ms = MultiStep(gamma=gamma, n_steps_max=n).to(device)
+        ms = MultiStep(gamma=gamma, max_steps=n).to(device)
 
         td_clone = td.clone()
         ms_td = ms(td_clone)

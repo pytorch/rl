@@ -75,7 +75,7 @@ except FileNotFoundError:
 #     seed = p.set_seed(0)
 #     p.reset()
 #     torch.manual_seed(seed)
-#     rollout1 = p.rollout(n_steps=100, policy=random_policy, auto_reset=False)
+#     rollout1 = p.rollout(max_steps=100, policy=random_policy, auto_reset=False)
 #     p.close()
 #     del p
 #
@@ -83,7 +83,7 @@ except FileNotFoundError:
 #     seed = p.set_seed(0)
 #     p.reset()
 #     torch.manual_seed(seed)
-#     rollout0 = p.rollout(n_steps=100, policy=random_policy, auto_reset=False)
+#     rollout0 = p.rollout(max_steps=100, policy=random_policy, auto_reset=False)
 #     p.close()
 #     del p
 #
@@ -132,20 +132,20 @@ def test_rollout(env_name, frame_skip, seed=0):
     np.random.seed(seed)
     env.set_seed(seed)
     env.reset()
-    rollout1 = env.rollout(n_steps=100)
+    rollout1 = env.rollout(max_steps=100)
 
     torch.manual_seed(seed)
     np.random.seed(seed)
     env.set_seed(seed)
     env.reset()
-    rollout2 = env.rollout(n_steps=100)
+    rollout2 = env.rollout(max_steps=100)
 
     assert_allclose_td(rollout1, rollout2)
 
     torch.manual_seed(seed)
     env.set_seed(seed + 10)
     env.reset()
-    rollout3 = env.rollout(n_steps=100)
+    rollout3 = env.rollout(max_steps=100)
     with pytest.raises(AssertionError):
         assert_allclose_td(rollout1, rollout3)
     env.close()
@@ -158,7 +158,7 @@ def test_rollout_predictability(device):
     policy = Actor(torch.nn.Linear(1, 1, bias=False))
     for p in policy.parameters():
         p.data.fill_(1.0)
-    td_out = env.rollout(policy=policy, n_steps=200)
+    td_out = env.rollout(policy=policy, max_steps=200)
     assert (torch.arange(100, 200) == td_out.get("observation").squeeze()).all()
     assert (torch.arange(101, 201) == td_out.get("next_observation").squeeze()).all()
     assert (torch.arange(101, 201) == td_out.get("reward").squeeze()).all()
@@ -219,7 +219,7 @@ def test_parallel_env(env_name, frame_skip, transformed, T=10, N=5):
     )
     env_parallel.reset(tensordict=td_reset)
 
-    td = env_parallel.rollout(policy=None, n_steps=T)
+    td = env_parallel.rollout(policy=None, max_steps=T)
     assert (
         td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
     ), f"{td.shape}, {td.get('done').sum(1)}"
@@ -287,7 +287,7 @@ def test_parallel_env_with_policy(
     )
     env_parallel.reset(tensordict=td_reset)
 
-    td = env_parallel.rollout(policy=policy, n_steps=T)
+    td = env_parallel.rollout(policy=policy, max_steps=T)
     assert (
         td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
     ), f"{td.shape}, {td.get('done').sum(1)}"
@@ -312,7 +312,7 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
     td0_serial = env_serial.current_tensordict
     torch.manual_seed(0)
 
-    td_serial = env_serial.rollout(n_steps=10, auto_reset=False).contiguous()
+    td_serial = env_serial.rollout(max_steps=10, auto_reset=False).contiguous()
     key = "pixels" if "pixels" in td_serial else "observation"
     torch.testing.assert_allclose(
         td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
@@ -324,7 +324,7 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
 
     torch.manual_seed(0)
     assert out_seed_parallel == out_seed_serial
-    td_parallel = env_parallel.rollout(n_steps=10, auto_reset=False).contiguous()
+    td_parallel = env_parallel.rollout(max_steps=10, auto_reset=False).contiguous()
     torch.testing.assert_allclose(
         td_parallel[:, 0].get("next_" + key), td_parallel[:, 1].get(key)
     )
@@ -393,7 +393,7 @@ def test_parallel_env_device(env_name, frame_skip, transformed, device):
                 Compose(*[RewardClipping(0, 0.1)]),
             )
     env_parallel = ParallelEnv(N, create_env_fn, device=device)
-    out = env_parallel.rollout(n_steps=20)
+    out = env_parallel.rollout(max_steps=20)
     env_parallel.close()
 
 
