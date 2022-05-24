@@ -47,7 +47,7 @@ def step_tensordict(
         >>> env = make_env()
         >>> policy = make_policy()
         >>> td = env.current_tensordict
-        >>> for i in range(n_steps):
+        >>> for i in range(max_steps):
         >>>     td = env.step(td)
         >>>     next_td = step_tensordict(td)
         >>>     assert next_td is not td # make sure that keys are not overwritten
@@ -181,9 +181,9 @@ class set_exploration_mode(_DecoratorContextManager):
 
     Examples:
         >>> policy = Actor(action_spec, module=network, default_interaction_mode="mode")
-        >>> env.rollout(policy=policy, n_steps=100)  # rollout with the "mode" interaction mode
+        >>> env.rollout(policy=policy, max_steps=100)  # rollout with the "mode" interaction mode
         >>> with set_exploration_mode("random"):
-        >>>     env.rollout(policy=policy, n_steps=100)  # rollout with the "random" interaction mode
+        >>>     env.rollout(policy=policy, max_steps=100)  # rollout with the "random" interaction mode
     """
 
     def __init__(self, mode: str = "mode"):

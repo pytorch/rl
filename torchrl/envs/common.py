@@ -366,7 +366,7 @@ class _EnvClass:
     def rollout(
         self,
         policy: Optional[Callable[[_TensorDict], _TensorDict]] = None,
-        n_steps: int = 1,
+        max_steps: int,
         callback: Optional[Callable[[_TensorDict, ...], _TensorDict]] = None,
         auto_reset: bool = True,
     ) -> _TensorDict:
@@ -376,9 +376,8 @@ class _EnvClass:
             policy (callable, optional): callable to be called to compute the desired action. If no policy is provided,
                 actions will be called using `env.rand_step()`
                 default = None
-            n_steps (int, optional): maximum number of steps to be executed. The actual number of steps can be smaller if
-                the environment reaches a done state before n_steps have been executed.
-                default = 1
+            max_steps (int, optional): maximum number of steps to be executed. The actual number of steps can be smaller if
+                the environment reaches a done state before max_steps have been executed.
             callback (callable, optional): function to be called at each iteration with the given TensorDict.
             auto_reset (bool): if True, resets automatically the environment if it is in a done state when the rollout
                 is initiated.
@@ -405,13 +404,13 @@ class _EnvClass:
 
         tensordicts = []
         if not self.is_done:
-            for i in range(n_steps):
+            for i in range(max_steps):
                 td = tensordict.to(policy_device)
                 td = policy(td)
                 tensordict = td.to("cpu")
                 tensordict = self.step(tensordict)
                 tensordicts.append(tensordict.clone())
-                if tensordict.get("done").all() or i == n_steps - 1:
+                if tensordict.get("done").all() or i == max_steps - 1:
                     break
                 tensordict = step_tensordict(
                     tensordict.exclude("reward", "done"), keep_other=True
