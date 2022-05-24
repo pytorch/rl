@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from collections import OrderedDict
+from logging import warn
 from multiprocessing import connection
 from typing import Callable, Optional, Sequence, Union, Any, List
 
@@ -385,8 +386,13 @@ class _BatchedEnv(_EnvClass):
 
     def to(self, device: DEVICE_TYPING):
         device = torch.device(device)
+        if device == self.device:
+            return self
         self.device = device
         if not self.is_closed:
+            warn(
+                "Casting an open environment to another device requires closing and re-opening it. "
+                 "This may have unexpected and unwanted effects (e.g. on seeding etc.)")
             # the tensordicts must be re-created on device
             super().to(device)
             self.close()
@@ -518,28 +524,14 @@ class SerialEnv(_BatchedEnv):
                 )
 
     def to(self, device: DEVICE_TYPING):
+        device = torch.device(device)
+        if device == self.device:
+            return self
         super().to(device)
         if not self.is_closed:
             for env in self._envs:
                 env.to(device)
         return self
-
-    @property
-    def current_tensordict(self) -> _TensorDict:
-        if self._current_tensordict is None:
-            self._current_tensordict = torch.stack(
-                [env.current_tensordict for env in self._envs], 0
-            )
-        return self._current_tensordict
-
-    @current_tensordict.setter
-    def current_tensordict(self, tensordict: _TensorDict) -> None:
-        if self._current_tensordict is None:
-            self._current_tensordict = tensordict
-        else:
-            self._current_tensordict.update_(
-                tensordict.select(*self._current_tensordict.keys())
-            )
 
 
 class ParallelEnv(_BatchedEnv):
@@ -550,42 +542,6 @@ class ParallelEnv(_BatchedEnv):
     """
 
     __doc__ += _BatchedEnv.__doc__
-
-    @property
-    def current_tensordict(self) -> _TensorDict:
-        current_tensordict = []
-        for idx, channel in enumerate(self.parent_channels):
-            channel.send(("current_tensordict_get", None))
-        for idx, channel in enumerate(self.parent_channels):
-            msg, _current_tensordict = channel.recv()
-            if msg != "current_tensordict_get_out":
-                raise RuntimeError(
-                    f"Expected 'current_tensordict_get_out' but received {msg}"
-                )
-            if _current_tensordict is not None:
-                current_tensordict.append(_current_tensordict)
-        if self._current_tensordict is None:
-            self._current_tensordict = torch.stack(current_tensordict, 0)
-        return self._current_tensordict
-
-    @current_tensordict.setter
-    def current_tensordict(self, tensordict: _TensorDict) -> _TensorDict:
-        if self._current_tensordict is not None:
-            self._current_tensordict.update_(
-                tensordict.select(*self._current_tensordict.keys())
-            )
-            return
-
-        if not tensordict.is_shared() and not tensordict.is_memmap():
-            tensordict.share_memory_()
-        for idx, channel in enumerate(self.parent_channels):
-            channel.send(("current_tensordict_set", tensordict[idx]))
-        for idx, channel in enumerate(self.parent_channels):
-            msg, _ = channel.recv()
-            if msg != "current_tensordict_set_out":
-                raise RuntimeError(
-                    f"Expected 'current_tensordict_set_out' but received {msg}"
-                )
 
     def _start_workers(self) -> None:
 
@@ -781,6 +737,9 @@ class ParallelEnv(_BatchedEnv):
                 )
 
     def to(self, device: DEVICE_TYPING):
+        device = torch.device(device)
+        if device == self.device:
+            return self
         super().to(device)
         if not self.is_closed:
             _dispatch_caller_parallel("to", self)(device)

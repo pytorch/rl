@@ -31,12 +31,15 @@ from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
 
 
 def make_make_env(env_name="conv"):
-    def make_transformed_env():
+    def make_transformed_env(seed = None):
         torch.set_default_dtype(torch.double)
         if env_name == "conv":
-            return DiscreteActionConvMockEnv()
+            env = DiscreteActionConvMockEnv()
         elif env_name == "vec":
-            return DiscreteActionVecMockEnv()
+            env = DiscreteActionVecMockEnv()
+        if seed is not None:
+            env.set_seed(seed)
+        return env
 
     return make_transformed_env
 
@@ -75,9 +78,10 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
 
         def env_fn(seed):
             env = ParallelEnv(
-                num_workers=num_env, create_env_fn=make_make_env(env_name)
+                num_workers=num_env,
+                create_env_fn=make_make_env(env_name),
             )
-            env.set_seed(seed)
+            env.update_kwargs([{'seed': i} for i in range(seed, seed+num_env)])
             return env
 
     policy = make_policy(env_name)
@@ -232,7 +236,7 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
     ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [3, 1])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
     if num_env == 1:
@@ -246,9 +250,10 @@ def test_collector_consistency(num_env, env_name, seed=100):
 
         def env_fn(seed):
             env = ParallelEnv(
-                num_workers=num_env, create_env_fn=make_make_env(env_name)
+                num_workers=num_env,
+                create_env_fn=make_make_env(env_name),
+                create_env_kwargs=[{'seed': i} for i in range(seed, seed+num_env)],
             )
-            env.set_seed(seed)
             return env
 
     policy = make_policy(env_name)
@@ -262,7 +267,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
     env.set_seed(seed)
     rollout1b = env.rollout(policy=policy, n_steps=20, auto_reset=True)
     rollout2 = env.rollout(policy=policy, n_steps=20, auto_reset=True)
-    assert assert_allclose_td(rollout1a, rollout1b)
+    assert_allclose_td(rollout1a, rollout1b)
     with pytest.raises(AssertionError):
         assert_allclose_td(rollout1a, rollout2)
     env.close()

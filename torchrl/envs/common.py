@@ -295,7 +295,7 @@ class _EnvClass:
                 f"Env {self} was done after reset. This is (currently) not allowed."
             )
         if execute_step:
-            tensordict_reset = self.current_tensordict
+            tensordict_reset = self.current_tensordict.clone()
         if tensordict is not None:
             tensordict.update(tensordict_reset)
         else:
@@ -311,11 +311,10 @@ class _EnvClass:
                 raise RuntimeError(
                     "env.current_tensordict returned None. make sure env has been reset."
                 )
-            return td
+            return td.clone()
         except AttributeError:
-            print(
-                f"env {self} does not have a _current_tensordict attribute. Consider calling reset() before querying it."
-            )
+            msg = f"env {self} does not have a _current_tensordict attribute. Consider calling reset() before querying it."
+            raise AttributeError(msg)
 
     @current_tensordict.setter
     def current_tensordict(self, value: Union[_TensorDict, dict]):
@@ -435,10 +434,9 @@ class _EnvClass:
         if auto_reset:
             self.reset()
 
-        tensordict = self.current_tensordict.clone()
+        tensordict = self.current_tensordict
 
         if policy is None:
-
             def policy(td):
                 return td.set("action", self.action_spec.rand(self.batch_size))
 
@@ -519,6 +517,9 @@ class _EnvClass:
             self.close()
 
     def to(self, device: DEVICE_TYPING) -> _EnvClass:
+        device = torch.device(device)
+        if device == self.device:
+            return self
         self.action_spec = self.action_spec.to(device)
         self.reward_spec = self.reward_spec.to(device)
         self.observation_spec = self.observation_spec.to(device)

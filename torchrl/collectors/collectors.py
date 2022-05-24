@@ -78,10 +78,6 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
 class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
     def _get_policy_and_device(
         self,
-        create_env_fn: Optional[
-            Union[_EnvClass, "EnvCreator", Sequence[Callable[[], _EnvClass]]]
-        ] = None,
-        create_env_kwargs: Optional[dict] = None,
         policy: Optional[
             Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
         ] = None,
@@ -102,23 +98,23 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                 the policy
 
         """
-        if create_env_fn is not None:
-            if create_env_kwargs is None:
-                create_env_kwargs = dict()
-            self.create_env_fn = create_env_fn
-            if isinstance(create_env_fn, _EnvClass):
-                env = create_env_fn
-            else:
-                env = self.create_env_fn(**create_env_kwargs)
-        else:
-            env = None
+        # if create_env_fn is not None:
+        #     if create_env_kwargs is None:
+        #         create_env_kwargs = dict()
+        #     self.create_env_fn = create_env_fn
+        #     if isinstance(create_env_fn, _EnvClass):
+        #         env = create_env_fn
+        #     else:
+        #         env = self.create_env_fn(**create_env_kwargs)
+        # else:
+        #     env = None
 
         if policy is None:
-            if env is None:
+            if not hasattr(self, 'env') or self.env is None:
                 raise ValueError(
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
-            policy = RandomPolicy(env.action_spec)
+            policy = RandomPolicy(self.env.action_spec)
         try:
             policy_device = next(policy.parameters()).device
         except:  # noqa
@@ -137,8 +133,6 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             policy.share_memory()
             # if not (len(list(policy.parameters())) == 0 or next(policy.parameters()).is_shared()):
             #     raise RuntimeError("Provided policy parameters must be shared.")
-        if hasattr(env, "close") and not env.is_closed:
-            env.close()
         return policy, device, get_weights_fn
 
     def update_policy_weights_(self) -> None:
@@ -271,13 +265,12 @@ class SyncDataCollector(_DataCollector):
                     )
                 env.update_kwargs(create_env_kwargs)
 
-        self.env: _EnvClass = env.to(passing_device)
+        self.passing_device = torch.device(passing_device)
+        self.env: _EnvClass = env.to(self.passing_device)
         self.closed = False
         self.n_env = self.env.numel()
 
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
-            create_env_fn=create_env_fn,
-            create_env_kwargs=create_env_kwargs,
             policy=policy,
             device=device,
         )
@@ -297,8 +290,6 @@ class SyncDataCollector(_DataCollector):
         self.exploration_mode = exploration_mode
         self.init_with_lag = init_with_lag and max_frames_per_traj > 0
         self.return_same_td = return_same_td
-
-        self.passing_device = torch.device(passing_device)
 
         env.reset()
         self._tensordict = env.current_tensordict.to(self.passing_device)
@@ -426,7 +417,7 @@ class SyncDataCollector(_DataCollector):
             else:
                 self._tensordict.zero_()
             self.env.reset()
-            self._tensordict.update(self.env.current_tensordict)
+            self._tensordict.update(self.env.current_tensordict, inplace=True)
             if self._tensordict.get("done").any():
                 raise RuntimeError(
                     f"Got {sum(self._tensordict.get('done'))} done envs after reset."
@@ -450,7 +441,7 @@ class SyncDataCollector(_DataCollector):
         """
         if self.reset_at_each_iter:
             self.env.reset()
-            self._tensordict.update(self.env.current_tensordict)
+            self._tensordict.update(self.env.current_tensordict, inplace=True)
             self._tensordict.fill_("step_count", 0)
 
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
@@ -475,7 +466,7 @@ class SyncDataCollector(_DataCollector):
                 self._tensordict.update(
                     step_tensordict(
                         self._tensordict.exclude("reward", "done"), keep_other=True
-                    )
+                    ), inplace=True,
                 )
             if self.return_in_place and len(self._tensordict_out.keys()) > 0:
                 tensordict_out = torch.stack(tensordict_out, len(self.env.batch_size))
@@ -507,10 +498,10 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.zero_()
 
         if td_in:
-            self._tensordict.update(td_in)
+            self._tensordict.update(td_in, inplace=True)
         self.env.reset(**kwargs)
 
-        self._tensordict.update(self.env.current_tensordict)
+        self._tensordict.update(self.env.current_tensordict, inplace=True)
         self._tensordict.fill_("step_count", 0)
 
     def shutdown(self) -> None:
