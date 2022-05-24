@@ -32,6 +32,7 @@ from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
 
 def make_make_env(env_name="conv"):
     def make_transformed_env():
+        torch.set_default_dtype(torch.double)
         if env_name == "conv":
             return DiscreteActionConvMockEnv()
         elif env_name == "vec":
@@ -98,7 +99,6 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
             b2 = d
         else:
             break
-    print((b1["pixels"] - b2["pixels"]).norm())
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b2)
     collector.shutdown()
