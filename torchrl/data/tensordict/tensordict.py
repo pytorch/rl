@@ -223,12 +223,16 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
-    def set_(self, key: str, item: COMPATIBLE_TYPES) -> _TensorDict:
+    def set_(
+        self, key: str, item: COMPATIBLE_TYPES, no_check: bool = False
+    ) -> _TensorDict:
         """Sets a value to an existing key while keeping the original storage.
 
         Args:
             key (str): name of the value
             item (torch.Tensor): value to be stored in the tensordict
+            no_check (bool, optional): if True, it is assumed that device and shape
+                match the original tensor and that the keys is in the tensordict.
 
         Returns:
             self
@@ -465,24 +469,15 @@ dtype=torch.float32)},
         else:
             tensor = input
 
-        try:
-            if check_device:
+        if check_device:
+            try:
                 device = self.device
                 tensor = tensor.to(device)
-        except RuntimeError:
-            self.device = tensor.device
+            except RuntimeError:
+                self.device = tensor.device
 
         if check_shared:
             raise DeprecationWarning("check_shared is not authorized anymore")
-        # if check_shared:
-        #     if (self.is_shared() and self.device == "cpu"   :
-        #         raise RuntimeError(
-        #             "cannot set a new shared tensor in a "
-        #             "tensordict that is already shared, as "
-        #             "the new key won't be passed across processes"
-        #         )
-        #     elif :
-        #         tensor = MemmapTensor(tensor)
 
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
             raise RuntimeError(
@@ -1685,23 +1680,30 @@ class TensorDict(_TensorDict):
         self.del_(old_key)
         return self
 
-    def set_(self, key: str, value: COMPATIBLE_TYPES) -> _TensorDict:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
-        if not isinstance(key, str):
-            raise TypeError(f"Expected key to be a string but found {type(key)}")
+    def set_(
+        self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
+    ) -> _TensorDict:
+        if not no_check:
+            if self.is_locked:
+                raise RuntimeError("Cannot modify immutable TensorDict")
+            if not isinstance(key, str):
+                raise TypeError(f"Expected key to be a string but found {type(key)}")
 
-        if key in self.keys():
-            proc_value = self._process_tensor(
-                value, check_device=False, check_shared=False
-            )
-            target_shape = self._get_meta(key).shape
-            if proc_value.shape != target_shape:
-                raise RuntimeError(
-                    f'calling set_("{key}", tensor) with tensors of '
-                    f"different shape: got tensor.shape={proc_value.shape} "
-                    f'and get("{key}").shape={target_shape}'
+        if no_check or key in self.keys():
+            if not no_check:
+                proc_value = self._process_tensor(
+                    value, check_device=False, check_shared=False
                 )
+                # copy_ will broadcast one tensor onto another's shape, which we don't want
+                target_shape = self._get_meta(key).shape
+                if proc_value.shape != target_shape:
+                    raise RuntimeError(
+                        f'calling set_("{key}", tensor) with tensors of '
+                        f"different shape: got tensor.shape={proc_value.shape} "
+                        f'and get("{key}").shape={target_shape}'
+                    )
+            else:
+                proc_value = value
             if proc_value is not self._tensordict[key]:
                 self._tensordict[key].copy_(proc_value)
         else:
@@ -2250,16 +2252,19 @@ torch.Size([3, 2])
     def keys(self) -> KeysView:
         return self._source.keys()
 
-    def set_(self, key: str, tensor: COMPATIBLE_TYPES) -> SubTensorDict:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
-        if key not in self.keys():
-            raise KeyError(f"key {key} not found in {self.keys()}")
-        if tensor.shape[: self.batch_dims] != self.batch_size:
-            raise RuntimeError(
-                f"tensor.shape={tensor.shape[:self.batch_dims]} and "
-                f"self.batch_size={self.batch_size} mismatch"
-            )
+    def set_(
+        self, key: str, tensor: COMPATIBLE_TYPES, no_check: bool = False
+    ) -> SubTensorDict:
+        if not no_check:
+            if self.is_locked:
+                raise RuntimeError("Cannot modify immutable TensorDict")
+            if key not in self.keys():
+                raise KeyError(f"key {key} not found in {self.keys()}")
+            if tensor.shape[: self.batch_dims] != self.batch_size:
+                raise RuntimeError(
+                    f"tensor.shape={tensor.shape[:self.batch_dims]} and "
+                    f"self.batch_size={self.batch_size} mismatch"
+                )
         self._source.set_at_(key, tensor, self.idx)
         return self
 
@@ -2629,27 +2634,30 @@ class LazyStackedTensorDict(_TensorDict):
         self._meta_dict.update({key: self._deduce_meta(key)})
         return self
 
-    def set_(self, key: str, tensor: COMPATIBLE_TYPES) -> _TensorDict:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
-        if self.batch_size != tensor.shape[: self.batch_dims]:
-            raise RuntimeError(
-                "Setting tensor to tensordict failed because the shapes "
-                f"mismatch: got tensor.shape = {tensor.shape} and "
-                f"tensordict.batch_size={self.batch_size}"
+    def set_(
+        self, key: str, tensor: COMPATIBLE_TYPES, no_check: bool = False
+    ) -> _TensorDict:
+        if not no_check:
+            if self.is_locked:
+                raise RuntimeError("Cannot modify immutable TensorDict")
+            if self.batch_size != tensor.shape[: self.batch_dims]:
+                raise RuntimeError(
+                    "Setting tensor to tensordict failed because the shapes "
+                    f"mismatch: got tensor.shape = {tensor.shape} and "
+                    f"tensordict.batch_size={self.batch_size}"
+                )
+            if key not in self.valid_keys:
+                raise KeyError(
+                    "setting a value in-place on a stack of TensorDict is only "
+                    "permitted if all members of the stack have this key in "
+                    "their register."
+                )
+            tensor = self._process_tensor(
+                tensor,
+                check_device=False,
+                check_tensor_shape=False,
+                check_shared=False,
             )
-        if key not in self.valid_keys:
-            raise KeyError(
-                "setting a value in-place on a stack of TensorDict is only "
-                "permitted if all members of the stack have this key in "
-                "their register."
-            )
-        tensor = self._process_tensor(
-            tensor,
-            check_device=False,
-            check_tensor_shape=False,
-            check_shared=False,
-        )
         tensor = tensor.unbind(self.stack_dim)
         for td, _item in zip(self.tensordicts, tensor):
             td.set_(key, _item)
@@ -3024,8 +3032,10 @@ class SavedTensorDict(_TensorDict):
             return self
         return td.to(SavedTensorDict)
 
-    def set_(self, key: str, value: COMPATIBLE_TYPES) -> _TensorDict:
-        if self.is_locked:
+    def set_(
+        self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
+    ) -> _TensorDict:
+        if not no_check and self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         self.set(key, value)
         return self
@@ -3361,15 +3371,17 @@ class _CustomOpTensorDict(_TensorDict):
         self._source.set(key, proc_value, **kwargs)
         return self
 
-    def set_(self, key: str, value: COMPATIBLE_TYPES) -> _CustomOpTensorDict:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
-        if self.inv_op is None:
-            raise Exception(
-                f"{self.__class__.__name__} does not support setting values. "
-                f"Consider calling .contiguous() before calling this method."
-            )
-        # meta_tensor = self._source._get_meta(key)
+    def set_(
+        self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
+    ) -> _CustomOpTensorDict:
+        if not no_check:
+            if self.is_locked:
+                raise RuntimeError("Cannot modify immutable TensorDict")
+            if self.inv_op is None:
+                raise Exception(
+                    f"{self.__class__.__name__} does not support setting values. "
+                    f"Consider calling .contiguous() before calling this method."
+                )
         value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(value))
         self._source.set_(key, value)
         return self

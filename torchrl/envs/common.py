@@ -404,7 +404,10 @@ class _EnvClass:
         auto_reset: bool = True,
         auto_cast_to_device: bool = False,
     ) -> _TensorDict:
-        """
+        """Executes a rollout in the environment.
+
+        The function will stop as soon as one of the contained environments
+        returns done=True.
 
         Args:
             policy (callable, optional): callable to be called to compute the desired action. If no policy is provided,
@@ -452,7 +455,7 @@ class _EnvClass:
                     tensordict = tensordict.to(env_device)
                 tensordict = self.step(tensordict)
                 tensordicts.append(tensordict.clone())
-                if tensordict.get("done").all() or i == n_steps - 1:
+                if tensordict.get("done").any() or i == n_steps - 1:
                     break
                 tensordict = step_tensordict(tensordict, keep_other=True)
 
