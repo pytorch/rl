@@ -131,7 +131,6 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
 
     ccollector.shutdown()
 
-
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_collector_batch_size(num_env, env_name, seed=100):
