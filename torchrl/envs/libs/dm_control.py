@@ -38,11 +38,13 @@ if _has_dmc:
 
 
 def _dmcontrol_to_torchrl_spec_transform(
-    spec, dtype: Optional[torch.dtype] = None
+    spec,
+    dtype: Optional[torch.dtype] = None,
+    device: DEVICE_TYPING = None,
 ) -> TensorSpec:
     if isinstance(spec, collections.OrderedDict):
         spec = {
-            "next_" + k: _dmcontrol_to_torchrl_spec_transform(item)
+            "next_" + k: _dmcontrol_to_torchrl_spec_transform(item, device=device)
             for k, item in spec.items()
         }
         return CompositeSpec(**spec)
@@ -54,11 +56,14 @@ def _dmcontrol_to_torchrl_spec_transform(
             minimum=spec.minimum,
             maximum=spec.maximum,
             dtype=dtype,
+            device=device,
         )
     elif isinstance(spec, dm_env.specs.Array):
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return NdUnboundedContinuousTensorSpec(shape=spec.shape, dtype=dtype)
+        return NdUnboundedContinuousTensorSpec(
+            shape=spec.shape, dtype=dtype, device=device
+        )
     else:
         raise NotImplementedError
 
@@ -186,12 +191,36 @@ class DMControlEnv(GymLikeEnv):
 
     @property
     def action_spec(self) -> TensorSpec:
-        return _dmcontrol_to_torchrl_spec_transform(self._env.action_spec())
+        if self._action_spec is None:
+            self._action_spec = _dmcontrol_to_torchrl_spec_transform(
+                self._env.action_spec(), device=self.device
+            )
+        return self._action_spec
+
+    @action_spec.setter
+    def action_spec(self, value: TensorSpec) -> None:
+        self._action_spec = value
 
     @property
     def observation_spec(self) -> TensorSpec:
-        return _dmcontrol_to_torchrl_spec_transform(self._env.observation_spec())
+        if self._observation_spec is None:
+            self._observation_spec = _dmcontrol_to_torchrl_spec_transform(
+                self._env.observation_spec(), device=self.device
+            )
+        return self._observation_spec
+
+    @observation_spec.setter
+    def observation_spec(self, value: TensorSpec) -> None:
+        self._observation_spec = value
 
     @property
     def reward_spec(self) -> TensorSpec:
-        return _dmcontrol_to_torchrl_spec_transform(self._env.reward_spec())
+        if self._reward_spec is None:
+            self._reward_spec = _dmcontrol_to_torchrl_spec_transform(
+                self._env.reward_spec(), device=self.device
+            )
+        return self._reward_spec
+
+    @reward_spec.setter
+    def reward_spec(self, value: TensorSpec) -> None:
+        self._reward_spec = value
