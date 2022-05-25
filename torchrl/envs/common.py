@@ -709,7 +709,7 @@ class GymLikeEnv(_EnvWrapper):
     def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs) -> _TensorDict:
         obs, *_ = self._output_transform((self._env.reset(**kwargs),))
         tensordict_out = TensorDict(
-            source=self._read_obs(obs), batch_size=self.batch_size
+            source=self._read_obs(obs), batch_size=self.batch_size, device=self.device,
         )
         self._is_done = torch.zeros(1, dtype=torch.bool)
         tensordict_out.set("done", self._is_done)

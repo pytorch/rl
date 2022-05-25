@@ -1081,6 +1081,74 @@ def test_set_sub_key(index0):
     assert (td.get_sub_tensordict(idx0).get("c") == 0).all()
     assert (td0.get("c") == 0).all()
 
+@pytest.skip(not torch.cuda.device_count())
+def test_create_on_device():
+    device = torch.device(0)
+
+    # TensorDict
+    td = TensorDict({}, [5])
+    with pytest.raises(RuntimeError):
+        td.device
+    td.set("a", torch.randn(5, device=device))
+    assert td.device == device
+
+    td = TensorDict({}, [5], device='cuda:0')
+    td.set("a", torch.randn(5, 1))
+    assert td.get("a").device == device
+
+    # TensorDict, indexed
+    td = TensorDict({}, [5])
+    subtd = td[1]
+    with pytest.raises(RuntimeError):
+        subtd.device
+    subtd.set("a", torch.randn(1, device=device))
+    assert subtd.device == device
+
+    td = TensorDict({}, [5], device='cuda:0')
+    subtd = td[1]
+    subtd.set("a", torch.randn(1))
+    assert subtd.get("a").device == device
+
+    # TensorDict, indexed, slice
+    td = TensorDict({}, [5])
+    subtd = td[1:3]
+    with pytest.raises(RuntimeError):
+        subtd.device
+    subtd.set("a", torch.randn(2, device=device))
+    assert subtd.device == device
+
+    td = TensorDict({}, [5], device='cuda:0')
+    subtd = td[1:3]
+    subtd.set("a", torch.randn(2))
+    assert subtd.get("a").device == device
+
+    # SavedTensorDict
+    td = TensorDict({}, [5])
+    savedtd = td.to(SavedTensorDict)
+    with pytest.raises(RuntimeError):
+        savedtd.device
+    savedtd.set("a", torch.randn(5, device=device))
+    assert savedtd.device == device
+
+    td = TensorDict({}, [5], device='cuda:0')
+    savedtd = td.to(SavedTensorDict)
+    savedtd.set("a", torch.randn(5))
+    assert savedtd.get("a").device == device
+
+    # ViewedTensorDict
+    td = TensorDict({}, [6])
+    viewedtd = td.view(2, 3)
+    with pytest.raises(RuntimeError):
+        viewedtd.device
+    viewedtd.set("a", torch.randn(2, 3, device=device))
+    assert viewedtd.device == device
+
+    td = TensorDict({}, [6], device='cuda:0')
+    viewedtd = td.view(2, 3)
+    a = torch.randn(2, 3)
+    viewedtd.set("a", a)
+    assert viewedtd.get("a").device == device
+    assert (a.to(device) == viewedtd.get("a")).all()
 
 def _remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordict):
     command_pipe_parent.close()

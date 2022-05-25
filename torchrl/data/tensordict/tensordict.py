@@ -457,12 +457,12 @@ dtype=torch.float32)},
         else:
             tensor = input
 
-        if (
-            check_device
-            and (self.device is not None)
-            and (tensor.device is not self.device)
-        ):
-            tensor = tensor.to(self.device)
+        try:
+            if check_device:
+                device = self.device
+                tensor = tensor.to(device)
+        except RuntimeError:
+            self.device = tensor.device
 
         if check_shared:
             raise DeprecationWarning("check_shared is not authorized anymore")
@@ -1476,10 +1476,11 @@ class TensorDict(_TensorDict):
                 "instance and it could not be retrieved from source."
             )
 
-        if isinstance(device, (int, str)):
-            device = torch.device(device)
         map_item_to_device = device is not None
+        if map_item_to_device:
+            device = torch.device
         self._device = device
+
         if source is not None:
             for key, value in source.items():
                 if not isinstance(key, str):
@@ -1517,18 +1518,16 @@ class TensorDict(_TensorDict):
             for _, item in self.items_meta():
                 device = item.device
                 break
-        if (not isinstance(device, torch.device)) and (device is not None):
-            device = torch.device(device)
-        self._device = device
+        elif device is None:
+            raise RuntimeError(
+                "querying device from an empty tensordict is not permitted, "
+                "unless this device has been specified upon creation."
+            )
         return device
 
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
-        raise RuntimeError(
-            f"Setting device on {self.__class__.__name__} instances is not "
-            f"allowed. Please call {self.__class__.__name__}.to(device) "
-            f"instead."
-        )
+        self.to(value)
 
     @property
     def batch_size(self) -> torch.Size:
@@ -1803,9 +1802,8 @@ class TensorDict(_TensorDict):
             return td
         elif isinstance(dest, (torch.device, str, int)):
             # must be device
-            if not isinstance(dest, torch.device):
-                dest = torch.device(dest)
-            if dest == self.device:
+            dest = torch.device(dest)
+            if dest == self._device:
                 return self
 
             self_copy = TensorDict(
@@ -2181,6 +2179,10 @@ torch.Size([3, 2])
     def device(self) -> torch.device:
         return self._source.device
 
+    @device.setter
+    def device(self, value: DEVICE_TYPING) -> None:
+        return self.to(value)
+
     def _preallocate(self, key: str, value: COMPATIBLE_TYPES) -> _TensorDict:
         return self._source.set(key, value)
 
@@ -2243,10 +2245,14 @@ torch.Size([3, 2])
                 source=self.clone(),
             )
         elif isinstance(dest, (torch.device, str, int)):
-            if not isinstance(dest, torch.device):
-                dest = torch.device(dest)
-            if dest == self.device:
-                return self
+            dest = torch.device(dest)
+            try:
+                self_device = self.device
+                if dest == self.device:
+                    return self
+            except RuntimeError:
+                # if device has not been set, pass
+                pass
             td = self.to(TensorDict)
             # must be device
             return td.to(dest, **kwargs)
@@ -2528,6 +2534,10 @@ class LazyStackedTensorDict(_TensorDict):
             )
         return self.tensordicts[0].device
 
+    @device.setter
+    def device(self, value: DEVICE_TYPING) -> None:
+        self.to(value)
+
     @property
     def batch_size(self) -> torch.Size:
         return self._batch_size
@@ -2689,10 +2699,12 @@ class LazyStackedTensorDict(_TensorDict):
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             return dest(source=self, batch_size=self.batch_size)
         elif isinstance(dest, (torch.device, str, int)):
-            if not isinstance(dest, torch.device):
-                dest = torch.device(dest)
-            if dest == self.device:
-                return self
+            dest = torch.device(dest)
+            try:
+                if dest == self.device:
+                    return self
+            except RuntimeError:
+                pass
             tds = [td.to(dest) for td in self.tensordicts]
             return LazyStackedTensorDict(*tds, stack_dim=self.stack_dim)
         elif isinstance(dest, torch.Size):
@@ -2947,6 +2959,10 @@ class SavedTensorDict(_TensorDict):
     def device(self) -> torch.device:
         return self._device
 
+    @device.setter
+    def device(self, value: DEVICE_TYPING) -> None:
+        self.to(value)
+
     def keys(self) -> Sequence[str]:
         for k in self._keys:
             yield k
@@ -3098,10 +3114,12 @@ class SavedTensorDict(_TensorDict):
             return td
         elif isinstance(dest, (torch.device, str, int)):
             # must be device
-            if not isinstance(dest, torch.device):
-                dest = torch.device(dest)
-            if dest == self.device:
-                return self
+            dest = torch.device(dest)
+            try:
+                if dest == self.device:
+                    return self
+            except RuntimeError:
+                pass
             self_copy = copy(self)
             self_copy._device = dest
             for k, item in self.items_meta():
@@ -3230,6 +3248,10 @@ class _CustomOpTensorDict(_TensorDict):
     @property
     def device(self) -> torch.device:
         return self._source.device
+
+    @device.setter
+    def device(self, value: DEVICE_TYPING) -> None:
+        self.to(value)
 
     def _get_meta(self, key: str) -> MetaTensor:
         item = self._source._get_meta(key)
@@ -3395,8 +3417,11 @@ class _CustomOpTensorDict(_TensorDict):
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             return dest(source=self.contiguous().clone())
         elif isinstance(dest, (torch.device, str, int)):
-            if torch.device(dest) == self.device:
-                return self
+            try:
+                if torch.device(dest) == self.device:
+                    return self
+            except RuntimeError:
+                pass
             td = self._source.to(dest)
             self_copy = copy(self)
             self_copy._source = td
