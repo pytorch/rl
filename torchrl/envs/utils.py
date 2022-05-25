@@ -22,7 +22,9 @@ def step_tensordict(
     tensordict: _TensorDict,
     next_tensordict: _TensorDict = None,
     keep_other: bool = True,
-    exclude_reward_done_action: bool = True,
+    exclude_reward: bool = True,
+    exclude_done: bool = True,
+    exclude_action: bool = True,
 ) -> _TensorDict:
     """
     Given a tensordict retrieved after a step, returns another tensordict with all the 'next_' prefixes are removed,
@@ -34,8 +36,14 @@ def step_tensordict(
         next_tensordict (_TensorDict, optional): destination tensordict
         keep_other (bool, optional): if True, all keys that do not start with `'next_'` will be kept.
             Default is True.
-        exclude_reward_done_action (bool, optional): if True, `"reward"` and `"done"` keys will be discarded
-            from the resulting tensordict ast they are considered to be time-sensitive.
+        exclude_reward (bool, optional): if True, the `"reward"` key will be discarded
+            from the resulting tensordict.
+            Default is True.
+        exclude_done (bool, optional): if True, the `"done"` key will be discarded
+            from the resulting tensordict.
+            Default is True.
+        exclude_action (bool, optional): if True, the `"action"` key will be discarded
+            from the resulting tensordict.
             Default is True.
 
     Returns:
@@ -58,9 +66,16 @@ def step_tensordict(
 
     """
     other_keys = []
-    if exclude_reward_done_action:
+    to_exclude = []
+    if exclude_done:
+        to_exclude.append("done")
+    if exclude_reward:
+        to_exclude.append("reward")
+    if exclude_action:
+        to_exclude.append("action")
+    if to_exclude:
         # we exclude those keys to make sure we aren't reporting time-specific values at the next step.
-        tensordict = tensordict.exclude("reward", "done", "action")
+        tensordict = tensordict.exclude(*to_exclude)
     keys = [key for key in tensordict.keys() if key.startswith("next_")]
     new_keys = [key[5:] for key in keys]
     if keep_other:

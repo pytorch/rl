@@ -55,7 +55,7 @@ class VideoRecorder(ObservationTransform):
         except ImportError:
             raise Exception("moviepy not found, VideoRecorder cannot be created")
 
-    def _apply(self, observation: torch.Tensor) -> torch.Tensor:
+    def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         if not (observation.shape[-1] == 3 or observation.ndimension() == 2):
             raise RuntimeError(f"Invalid observation shape, got: {observation.shape}")
         observation_trsf = observation

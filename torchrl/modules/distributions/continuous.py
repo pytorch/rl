@@ -101,7 +101,7 @@ class NormalParamWrapper(nn.Module):
     """A wrapper for normal distirbution parameters.
 
     Args:
-        operator (nn.Module): operator whose output will be transformed in location and scale parameters
+        operator (nn.Module): operator whose output will be transformed_in in location and scale parameters
         scale_mapping (str, optional): positive mapping function to be used with the std.
             default = "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
             choices: "softplus", "exp", "relu", "biased_softplus_1";
@@ -473,7 +473,7 @@ class Delta(D.Distribution):
 
 class TanhDelta(D.TransformedDistribution):
     """
-    Implements a Tanh transformed Delta distribution.
+    Implements a Tanh transformed_in Delta distribution.
 
     Args:
         param (torch.Tensor): parameter of the delta distribution;

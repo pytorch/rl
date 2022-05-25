@@ -29,13 +29,18 @@ from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
 
+# torch.set_default_dtype(torch.double)
+
 
 def make_make_env(env_name="conv"):
-    def make_transformed_env():
+    def make_transformed_env(seed=None):
         if env_name == "conv":
-            return DiscreteActionConvMockEnv()
+            env = DiscreteActionConvMockEnv()
         elif env_name == "vec":
-            return DiscreteActionVecMockEnv()
+            env = DiscreteActionVecMockEnv()
+        if seed is not None:
+            env.set_seed(seed)
+        return env
 
     return make_transformed_env
 
@@ -59,9 +64,9 @@ def make_policy(env):
         raise NotImplementedError
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
-@pytest.mark.parametrize("env_name", ["conv", "vec"])
-def test_concurrent_collector_consistency(num_env, env_name, seed=100):
+@pytest.mark.parametrize("num_env", [3, 1])
+@pytest.mark.parametrize("env_name", ["vec", "conv"])
+def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     if num_env == 1:
 
         def env_fn(seed):
@@ -73,9 +78,10 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=100):
 
         def env_fn(seed):
             env = ParallelEnv(
-                num_workers=num_env, create_env_fn=make_make_env(env_name)
+                num_workers=num_env,
+                create_env_fn=make_make_env(env_name),
+                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
             )
-            env.set_seed(seed)
             return env
 
     policy = make_policy(env_name)
@@ -230,7 +236,7 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
     ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("num_env", [3, 1])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
     if num_env == 1:
@@ -244,9 +250,10 @@ def test_collector_consistency(num_env, env_name, seed=100):
 
         def env_fn(seed):
             env = ParallelEnv(
-                num_workers=num_env, create_env_fn=make_make_env(env_name)
+                num_workers=num_env,
+                create_env_fn=make_make_env(env_name),
+                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
             )
-            env.set_seed(seed)
             return env
 
     policy = make_policy(env_name)
@@ -450,7 +457,6 @@ def test_collector_vecnorm_envcreator():
 @pytest.mark.skipif(torch.cuda.device_count() <= 1, reason="no cuda device found")
 def test_update_weights(use_async):
     policy = torch.nn.Linear(3, 4).cuda(1)
-    policy.share_memory()
     collector_class = (
         MultiSyncDataCollector if not use_async else MultiaSyncDataCollector
     )

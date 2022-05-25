@@ -225,7 +225,7 @@ class TDModule(nn.Module):
         return self._spec
 
     @spec.setter
-    def _spec_set(self, spec: TensorSpec) -> None:
+    def spec(self, spec: TensorSpec) -> None:
         if not isinstance(spec, TensorSpec):
             raise RuntimeError(
                 f"Trying to set an object of type {type(spec)} as a tensorspec."

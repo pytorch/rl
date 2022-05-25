@@ -104,6 +104,11 @@ class TestTDModule:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
+        else:
+            raise NotImplementedError
+        spec = (
+            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -115,7 +120,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=net,
-                    spec=CompositeSpec(out=spec, loc=None, scale=None),
+                    spec=spec,
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -125,7 +130,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=net,
-                spec=CompositeSpec(out=spec, loc=None, scale=None),
+                spec=spec,
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -215,6 +220,11 @@ class TestTDModule:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
+        else:
+            raise NotImplementedError
+        spec = (
+            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -226,7 +236,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
-                    spec=CompositeSpec(out=spec, loc=None, scale=None),
+                    spec=spec,
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -236,7 +246,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
-                spec=CompositeSpec(out=spec, loc=None, scale=None),
+                spec=spec,
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -273,6 +283,11 @@ class TestTDModule:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
+        else:
+            raise NotImplementedError
+        spec = (
+            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -284,7 +299,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
-                    spec=CompositeSpec(out=spec, loc=None, scale=None),
+                    spec=spec,
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -294,7 +309,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
-                spec=CompositeSpec(out=spec, loc=None, scale=None),
+                spec=spec,
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -384,6 +399,11 @@ class TestTDModule:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 32)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(32)
+        else:
+            raise NotImplementedError
+        spec = (
+            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -395,7 +415,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
-                    spec=CompositeSpec(out=spec, loc=None, scale=None),
+                    spec=spec,
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -405,7 +425,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
-                spec=CompositeSpec(out=spec, loc=None, scale=None),
+                spec=spec,
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -442,6 +462,11 @@ class TestTDModule:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 32)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(32)
+        else:
+            raise NotImplementedError
+        spec = (
+            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -453,7 +478,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
-                    spec=CompositeSpec(out=spec, loc=None, scale=None),
+                    spec=spec,
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -463,7 +488,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
-                spec=CompositeSpec(out=spec, loc=None, scale=None),
+                spec=spec,
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -578,6 +603,11 @@ class TestTDModule:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
+        else:
+            raise NotImplementedError
+        spec = (
+            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -589,7 +619,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
-                    spec=CompositeSpec(out=spec, loc=None, scale=None),
+                    spec=spec,
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -599,7 +629,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
-                spec=CompositeSpec(out=spec, loc=None, scale=None),
+                spec=spec,
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -661,6 +691,11 @@ class TestTDModule:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
+        else:
+            raise NotImplementedError
+        spec = (
+            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -672,7 +707,7 @@ class TestTDModule:
             ):
                 tdmodule = ProbabilisticTensorDictModule(
                     module=tdnet,
-                    spec=CompositeSpec(out=spec, loc=None, scale=None),
+                    spec=spec,
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
@@ -682,7 +717,7 @@ class TestTDModule:
         else:
             tdmodule = ProbabilisticTensorDictModule(
                 module=tdnet,
-                spec=CompositeSpec(out=spec, loc=None, scale=None),
+                spec=spec,
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -830,6 +865,11 @@ class TestTDSequence:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
+        else:
+            raise NotImplementedError
+        spec = (
+            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -851,7 +891,7 @@ class TestTDSequence:
                 safe=False,
             )
             tdmodule2 = ProbabilisticTensorDictModule(
-                spec=CompositeSpec(out=spec, loc=None, scale=None),
+                spec=spec,
                 module=net2,
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
@@ -983,6 +1023,11 @@ class TestTDSequence:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
+        else:
+            raise NotImplementedError
+        spec = (
+            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -1001,7 +1046,7 @@ class TestTDSequence:
             )
             tdmodule2 = ProbabilisticTensorDictModule(
                 fnet2,
-                spec=CompositeSpec(out=spec, loc=None, scale=None),
+                spec=spec,
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -1151,6 +1196,11 @@ class TestTDSequence:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 7)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(7)
+        else:
+            raise NotImplementedError
+        spec = (
+            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -1169,7 +1219,7 @@ class TestTDSequence:
             )
             tdmodule2 = ProbabilisticTensorDictModule(
                 fnet2,
-                spec=CompositeSpec(out=spec, loc=None, scale=None),
+                spec=spec,
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -1229,6 +1279,11 @@ class TestTDSequence:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 7)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(7)
+        else:
+            raise NotImplementedError
+        spec = (
+            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -1240,7 +1295,7 @@ class TestTDSequence:
             )
             tdmodule2 = ProbabilisticTensorDictModule(
                 net2,
-                spec=CompositeSpec(out=spec, loc=None, scale=None),
+                spec=spec,
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
@@ -1385,6 +1440,11 @@ class TestTDSequence:
             spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
         elif spec_type == "unbounded":
             spec = NdUnboundedContinuousTensorSpec(4)
+        else:
+            raise NotImplementedError
+        spec = (
+            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+        )
 
         kwargs = {"distribution_class": TanhNormal}
 
@@ -1400,7 +1460,7 @@ class TestTDSequence:
             )
             tdmodule2 = ProbabilisticTensorDictModule(
                 fnet2,
-                spec=CompositeSpec(out=spec, loc=None, scale=None),
+                spec=spec,
                 out_key_sample=["out"],
                 dist_param_keys=["loc", "scale"],
                 safe=safe,
