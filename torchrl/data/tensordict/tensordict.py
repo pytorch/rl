@@ -2519,7 +2519,7 @@ class LazyStackedTensorDict(_TensorDict):
                 "StackedTensorDict to be instantiated"
             )
         _batch_size = tensordicts[0].batch_size
-        device = tensordicts[0].device
+        device = tensordicts[0]._device_safe()
 
         for i, td in enumerate(tensordicts[1:]):
             if not isinstance(td, _TensorDict):
@@ -2528,7 +2528,7 @@ class LazyStackedTensorDict(_TensorDict):
                     f" but got {type(tensordicts[0])} instead."
                 )
             _bs = td.batch_size
-            _device = td.device
+            _device = td._device_safe()
             if device != _device:
                 raise RuntimeError(f"devices differ, got {device} and {_device}")
             if _bs != _batch_size:

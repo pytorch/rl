@@ -1097,6 +1097,25 @@ def test_create_on_device():
     td.set("a", torch.randn(5, 1))
     assert td.get("a").device == device
 
+    # stacked TensorDict
+    td1 = TensorDict({}, [5])
+    td2 = TensorDict({}, [5])
+    stackedtd = torch.stack([td1, td2], 0)
+    with pytest.raises(RuntimeError):
+        stackedtd.device
+    stackedtd.set("a", torch.randn(2, 5, device=device))
+    assert stackedtd.device == device
+    assert td1.device == device
+    assert td2.device == device
+
+    td1 = TensorDict({}, [5], device="cuda:0")
+    td2 = TensorDict({}, [5], device="cuda:0")
+    stackedtd = torch.stack([td1, td2], 0)
+    stackedtd.set("a", torch.randn(2, 5, 1))
+    assert stackedtd.get("a").device == device
+    assert td1.get("a").device == device
+    assert td2.get("a").device == device
+
     # TensorDict, indexed
     td = TensorDict({}, [5])
     subtd = td[1]
