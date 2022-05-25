@@ -169,17 +169,17 @@ class GymEnv(GymLikeEnv):
             self._env.reset()
             self._env = PixelObservationWrapper(self._env, pixels_only)
 
-        self.action_spec = _gym_to_torchrl_spec_transform(self._env.action_space)
+        self.action_spec = _gym_to_torchrl_spec_transform(self._env.action_space).to(self.device)
         self.observation_spec = _gym_to_torchrl_spec_transform(
             self._env.observation_space
-        )
+        ).to(self.device)
         if not isinstance(self.observation_spec, CompositeSpec):
             self.observation_spec = CompositeSpec(
                 next_observation=self.observation_spec
             )
         self.reward_spec = UnboundedContinuousTensorSpec(
             device=self.device,
-        )  # default
+        ).to(self.device)  # default
 
     def _init_env(self):
         self.reset()  # make sure that _current_observation and

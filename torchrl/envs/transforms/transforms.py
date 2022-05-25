@@ -248,7 +248,7 @@ class TransformedEnv(_EnvClass):
     ):
         kwargs.setdefault("device", env.device)
         device = kwargs["device"]
-        self.env = env
+        self.env = env.to(device)
         if transform is None:
             transform = Compose()
         else:
