@@ -261,7 +261,10 @@ class TDSequence(TDModule):
                     f"TDSequence.spec requires all specs to be valid TensorSpec objects. Got "
                     f"{type(layer.spec)}"
                 )
-            kwargs[out_key] = spec
+            if isinstance(spec, CompositeSpec):
+                kwargs.update(**spec._spec)
+            else:
+                kwargs[out_key] = spec
         return CompositeSpec(**kwargs)
 
     def make_functional_with_buffers(self, clone: bool = False):
