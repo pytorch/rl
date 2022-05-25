@@ -12,7 +12,11 @@ import pytest
 import torch
 import yaml
 from _utils_internal import get_available_devices
-from mocking_classes import DiscreteActionVecMockEnv, MockSerialEnv
+from mocking_classes import (
+    DiscreteActionVecMockEnv,
+    MockSerialEnv,
+    DiscreteActionConvMockEnv,
+)
 from scipy.stats import chisquare
 from torch import nn
 from torchrl.data.tensor_specs import (
@@ -173,6 +177,7 @@ def _make_envs(
     N,
     selected_keys=None,
     device="cpu",
+    kwargs=None,
 ):
     torch.manual_seed(0)
     if not transformed_in:
@@ -194,8 +199,12 @@ def _make_envs(
                 t_in,
             )
     env0 = create_env_fn()
-    env_parallel = ParallelEnv(N, create_env_fn, selected_keys=selected_keys)
-    env_serial = SerialEnv(N, create_env_fn, selected_keys=selected_keys)
+    env_parallel = ParallelEnv(
+        N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
+    )
+    env_serial = SerialEnv(
+        N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
+    )
     if transformed_out:
         if env_name == "ALE/Pong-v5":
             t_out = (
@@ -249,7 +258,7 @@ class TestParallel:
     @pytest.mark.parametrize("transformed_in", [False, True])
     @pytest.mark.parametrize("transformed_out", [False, True])
     def test_parallel_env(
-        self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=5
+        self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=3
     ):
         env_parallel, env_serial, env0 = _make_envs(
             env_name,
@@ -314,7 +323,7 @@ class TestParallel:
         transformed_out,
         selected_keys,
         T=10,
-        N=5,
+        N=3,
     ):
         env_parallel, env_serial, env0 = _make_envs(
             env_name,
@@ -470,7 +479,7 @@ class TestParallel:
         device,
         open_before,
         T=10,
-        N=5,
+        N=3,
     ):
         # tests casting to device
         env_parallel, env_serial, env0 = _make_envs(
@@ -558,7 +567,7 @@ class TestParallel:
     ):
         # tests creation on device
         torch.manual_seed(0)
-        N = 5
+        N = 3
 
         env_parallel, env_serial, env0 = _make_envs(
             env_name,
@@ -591,7 +600,7 @@ class TestParallel:
     ):
         # tests creation on device
         torch.manual_seed(0)
-        N = 5
+        N = 3
 
         env_parallel, env_serial, env0 = _make_envs(
             env_name,
@@ -649,7 +658,7 @@ class TestParallel:
             transformed_in=True,
             transformed_out=False,
             device=device,
-            N=10,
+            N=3,
         )
         env_parallel_out, env_serial_out, env0_out = _make_envs(
             env_name,
@@ -657,7 +666,7 @@ class TestParallel:
             transformed_in=False,
             transformed_out=True,
             device=device,
-            N=10,
+            N=3,
         )
         torch.manual_seed(0)
         env_parallel_in.set_seed(0)
@@ -688,6 +697,44 @@ class TestParallel:
         assert_allclose_td(r_in, r_out)
         env0_in.close()
         env0_in.close()
+
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_parallel_env_kwargs_set(self, parallel):
+        num_env = 3
+
+        def make_make_env():
+            def make_transformed_env(seed=None):
+                env = DiscreteActionConvMockEnv()
+                if seed is not None:
+                    env.set_seed(seed)
+                return env
+
+            return make_transformed_env
+
+        _class = ParallelEnv if parallel else SerialEnv
+
+        def env_fn1(seed):
+            env = _class(
+                num_workers=num_env,
+                create_env_fn=make_make_env(),
+                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+            )
+            return env
+
+        def env_fn2(seed):
+            env = _class(
+                num_workers=num_env,
+                create_env_fn=make_make_env(),
+            )
+            env.update_kwargs([{"seed": i} for i in range(seed, seed + num_env)])
+            return env
+
+        env1 = env_fn1(100)
+        env2 = env_fn2(100)
+        env1.start()
+        env2.start()
+        for c1, c2 in zip(env1.counter, env2.counter):
+            assert c1 == c2
 
 
 class TestSpec:

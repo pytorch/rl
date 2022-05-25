@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from collections import OrderedDict
+from copy import deepcopy
 from logging import warn
 from multiprocessing import connection
 from typing import Callable, Optional, Sequence, Union, Any, List
@@ -141,7 +142,6 @@ class _BatchedEnv(_EnvClass):
         super().__init__(device=device)
         self.is_closed = True
 
-        create_env_kwargs = dict() if create_env_kwargs is None else create_env_kwargs
         if callable(create_env_fn):
             create_env_fn = [create_env_fn for _ in range(num_workers)]
         else:
@@ -150,8 +150,11 @@ class _BatchedEnv(_EnvClass):
                     f"num_workers and len(create_env_fn) mismatch, "
                     f"got {len(create_env_fn)} and {num_workers}"
                 )
+        create_env_kwargs = dict() if create_env_kwargs is None else create_env_kwargs
         if isinstance(create_env_kwargs, dict):
-            create_env_kwargs = [create_env_kwargs for _ in range(num_workers)]
+            create_env_kwargs = [
+                deepcopy(create_env_kwargs) for _ in range(num_workers)
+            ]
 
         self._dummy_env_instance = None
         try:

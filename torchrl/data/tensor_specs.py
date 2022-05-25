@@ -126,8 +126,21 @@ class DiscreteBox(Box):
     n: int
     register = invertible_dict()
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> ContinuousBox:
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> DiscreteBox:
         return self
+
+
+@dataclass(repr=False)
+class BoxList(Box):
+    """
+    A box of discrete values
+
+    """
+
+    boxes: list
+
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> BoxList:
+        return BoxList([box.to(dest) for box in self.boxes])
 
 
 @dataclass(repr=False)
@@ -730,7 +743,7 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     ):
         dtype, device = _default_dtype_and_device(dtype, device)
         shape = torch.Size((sum(nvec),))
-        space = [DiscreteBox(n) for n in nvec]
+        space = BoxList([DiscreteBox(n) for n in nvec])
         self.use_register = use_register
         super(OneHotDiscreteTensorSpec, self).__init__(
             shape, space, device, dtype, domain="discrete"
@@ -881,7 +894,7 @@ dtype=torch.float32)},
     def __setitem__(self, key, value):
         if key in {"shape", "device", "dtype", "space"}:
             raise AttributeError(f"CompositeSpec[{key}] cannot be set")
-        if value.device != self.device:
+        if value is not None and value.device != self.device:
             raise RuntimeError(
                 f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "
                 f"All devices of CompositeSpec must match."
