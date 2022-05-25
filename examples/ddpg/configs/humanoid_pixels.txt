@@ -6,7 +6,7 @@ record_video
 prb
 exp_name=humanoid
 
-num_workers=96
+num_workers=32
 env_per_collector=8
 
 frame_skip=2
