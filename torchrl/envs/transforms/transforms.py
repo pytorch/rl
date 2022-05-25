@@ -246,9 +246,13 @@ class TransformedEnv(_EnvClass):
         cache_specs: bool = True,
         **kwargs,
     ):
+        kwargs.setdefault("device", env.device)
+        device = kwargs["device"]
         self.env = env
         if transform is None:
             transform = Compose()
+        else:
+            transform = transform.to(device)
         self.transform = transform
         transform.set_parent(self)  # allows to find env specs from the transform
 
@@ -260,8 +264,6 @@ class TransformedEnv(_EnvClass):
         self._observation_spec = None
         self.batch_size = self.env.batch_size
 
-        kwargs.setdefault("device", env.device)
-        self.transform.to(kwargs["device"])
         super().__init__(**kwargs)
 
     @property
@@ -364,6 +366,7 @@ class TransformedEnv(_EnvClass):
                 "TransformedEnv.append_transform expected a transform but received an object of "
                 f"type {type(transform)} instead."
             )
+        transform = transform.to(self.device)
         if not isinstance(self.transform, Compose):
             self.transform = Compose(self.transform)
             self.transform.set_parent(self)

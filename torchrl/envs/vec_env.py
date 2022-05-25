@@ -209,6 +209,7 @@ class _BatchedEnv(_EnvClass):
             self._observation_spec = dummy_env.observation_spec
             self._reward_spec = dummy_env.reward_spec
             self._dummy_env_str = str(dummy_env)
+            self.device = dummy_env.device
 
     @property
     def _dummy_env_context(self) -> _dummy_env_context:
