@@ -130,7 +130,8 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         if policy_device != device:
             get_weights_fn = policy.state_dict
             policy = deepcopy(policy).requires_grad_(False).to(device)
-            policy.share_memory()
+            if device == torch.device("cpu"):
+                policy.share_memory()
             # if not (len(list(policy.parameters())) == 0 or next(policy.parameters()).is_shared()):
             #     raise RuntimeError("Provided policy parameters must be shared.")
         return policy, device, get_weights_fn
