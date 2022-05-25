@@ -137,7 +137,7 @@ class _BatchedEnv(_EnvClass):
         shared_memory: bool = True,
         memmap: bool = False,
         policy_proof: Optional[Callable] = None,
-        device: Optional[DEVICE_TYPING] = "cpu",
+        device: Optional[DEVICE_TYPING] = None,
     ):
         if device is not None:
             raise ValueError(
