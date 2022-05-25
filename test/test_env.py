@@ -750,6 +750,9 @@ class TestParallel:
         for c1, c2 in zip(env1.counter, env2.counter):
             assert c1 == c2
 
+        env1.close()
+        env2.close()
+
 
 class TestSpec:
     def test_discrete_action_spec_reconstruct(self):
