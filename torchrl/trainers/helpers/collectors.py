@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from argparse import ArgumentParser, Namespace
-from typing import Callable, List, Optional, Type, Union
+from typing import Callable, List, Optional, Type, Union, Dict
 
 from torchrl.collectors.collectors import (
     _DataCollector,
@@ -242,7 +242,7 @@ def make_collector_offpolicy(
     make_env: Callable[[], _EnvClass],
     actor_model_explore: Union[TDModuleWrapper, ProbabilisticTensorDictModule],
     args: Namespace,
-    make_env_kwargs=None,
+    make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     """
     Returns a data collector for off-policy algorithms.
@@ -268,8 +268,10 @@ def make_collector_offpolicy(
         ms = None
 
     env_kwargs = {}
-    if make_env_kwargs is not None:
+    if make_env_kwargs is not None and isinstance(make_env_kwargs, dict):
         env_kwargs.update(make_env_kwargs)
+    elif make_env_kwargs is not None:
+        env_kwargs = make_env_kwargs
     args.collector_devices = (
         args.collector_devices
         if len(args.collector_devices) > 1
@@ -305,15 +307,17 @@ def make_collector_onpolicy(
     make_env: Callable[[], _EnvClass],
     actor_model_explore: Union[TDModuleWrapper, ProbabilisticTensorDictModule],
     args: Namespace,
-    make_env_kwargs=None,
+    make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     collector_helper = sync_sync_collector
 
     ms = None
 
     env_kwargs = {}
-    if make_env_kwargs is not None:
+    if make_env_kwargs is not None and isinstance(make_env_kwargs, dict):
         env_kwargs.update(make_env_kwargs)
+    elif make_env_kwargs is not None:
+        env_kwargs = make_env_kwargs
     args.collector_devices = (
         args.collector_devices
         if len(args.collector_devices) > 1

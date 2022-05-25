@@ -58,11 +58,11 @@ def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec
     if isinstance(spec, gym.spaces.tuple.Tuple):
         raise NotImplementedError("gym.spaces.tuple.Tuple mapping not yet implemented")
     if isinstance(spec, gym.spaces.discrete.Discrete):
-        return OneHotDiscreteTensorSpec(spec.n)
+        return OneHotDiscreteTensorSpec(spec.n, device=device)
     elif isinstance(spec, gym.spaces.multi_binary.MultiBinary):
-        return BinaryDiscreteTensorSpec(spec.n)
+        return BinaryDiscreteTensorSpec(spec.n, device=device)
     elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
-        return MultOneHotDiscreteTensorSpec(spec.nvec)
+        return MultOneHotDiscreteTensorSpec(spec.nvec, device=device)
     elif isinstance(spec, gym.spaces.Box):
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
@@ -71,9 +71,13 @@ def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec
             torch.tensor(spec.high, device=device, dtype=dtype),
             torch.Size(spec.shape),
             dtype=dtype,
+            device=device,
         )
     elif isinstance(spec, (dict, gym.spaces.dict.Dict)):
-        spec = {"next_" + k: _gym_to_torchrl_spec_transform(spec[k]) for k in spec}
+        spec = {
+            "next_" + k: _gym_to_torchrl_spec_transform(spec[k], device=device)
+            for k in spec
+        }
         return CompositeSpec(**spec)
     else:
         raise NotImplementedError(
@@ -169,9 +173,11 @@ class GymEnv(GymLikeEnv):
             self._env.reset()
             self._env = PixelObservationWrapper(self._env, pixels_only)
 
-        self.action_spec = _gym_to_torchrl_spec_transform(self._env.action_space)
+        self.action_spec = _gym_to_torchrl_spec_transform(
+            self._env.action_space, device=self.device
+        )
         self.observation_spec = _gym_to_torchrl_spec_transform(
-            self._env.observation_space
+            self._env.observation_space, device=self.device
         )
         if not isinstance(self.observation_spec, CompositeSpec):
             self.observation_spec = CompositeSpec(
@@ -179,7 +185,7 @@ class GymEnv(GymLikeEnv):
             )
         self.reward_spec = UnboundedContinuousTensorSpec(
             device=self.device,
-        )  # default
+        )
 
     def _init_env(self):
         self.reset()  # make sure that _current_observation and

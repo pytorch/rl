@@ -2,7 +2,9 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
+import os
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -14,7 +16,7 @@ from torchrl.data import (
     NdUnboundedContinuousTensorSpec,
     TensorSpec,
 )
-from ...data.utils import numpy_to_torch_dtype_dict
+from ...data.utils import numpy_to_torch_dtype_dict, DEVICE_TYPING
 from ..common import GymLikeEnv
 
 __all__ = ["DMControlEnv"]
@@ -129,6 +131,7 @@ class DMControlEnv(GymLikeEnv):
             kwargs = {"random": random_state}
         env = suite.load(envname, taskname, task_kwargs=kwargs)
         if from_pixels:
+            self._set_egl_device(self.device)
             self.render_kwargs = {"camera_id": 0}
             if render_kwargs is not None:
                 self.render_kwargs.update(render_kwargs)
@@ -139,6 +142,25 @@ class DMControlEnv(GymLikeEnv):
             )
         self._env = env
         return env
+
+    def _set_egl_device(self, device: DEVICE_TYPING):
+        if device != torch.device("cpu"):
+            device_id = str(device).split(":")[-1]
+            if (
+                "EGL_DEVICE_ID" in os.environ
+                and os.environ["EGL_DEVICE_ID"] != device_id
+            ):
+                raise RuntimeError(
+                    f"Conflicting devices for DMControl env pixel rendering: "
+                    f"got {device_id} but device already set to {os.environ['EGL_DEVICE_ID']}"
+                )
+            print(f"rendering on device {device_id}")
+            os.environ["EGL_DEVICE_ID"] = device_id
+
+    def to(self, device: DEVICE_TYPING) -> DMControlEnv:
+        super().to(device)
+        self._set_egl_device(self.device)
+        return self
 
     def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
         seed = self.set_seed(seed)

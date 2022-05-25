@@ -13,7 +13,6 @@ import torch
 from torch import nn, Tensor
 
 from torchrl.data import (
-    UnboundedContinuousTensorSpec,
     TensorSpec,
     CompositeSpec,
 )
@@ -256,15 +255,15 @@ class TDSequence(TDModule):
         for layer in self.module:
             out_key = layer.out_keys[0]
             spec = layer.spec
-            if spec is None:
-                # By default, we consider that unspecified specs are unbounded.
-                spec = UnboundedContinuousTensorSpec()
-            if not isinstance(spec, TensorSpec):
+            if spec is not None and not isinstance(spec, TensorSpec):
                 raise RuntimeError(
                     f"TDSequence.spec requires all specs to be valid TensorSpec objects. Got "
                     f"{type(layer.spec)}"
                 )
-            kwargs[out_key] = spec
+            if isinstance(spec, CompositeSpec):
+                kwargs.update(spec._specs)
+            else:
+                kwargs[out_key] = spec
         return CompositeSpec(**kwargs)
 
     def make_functional_with_buffers(self, clone: bool = False):

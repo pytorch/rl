@@ -77,6 +77,113 @@ def correct_for_frame_skip(args: Namespace) -> Namespace:
     return args
 
 
+def make_env_transforms(
+    env,
+    args,
+    video_tag,
+    writer,
+    env_name,
+    stats,
+    norm_obs_only,
+    env_library,
+    action_dim_gsde,
+    state_dim_gsde,
+):
+    env = TransformedEnv(env)
+
+    from_pixels = args.from_pixels
+    vecnorm = args.vecnorm
+    norm_rewards = vecnorm and args.norm_rewards
+    _norm_obs_only = norm_obs_only or not norm_rewards
+    reward_scaling = args.reward_scaling
+    reward_loc = args.reward_loc
+
+    if len(video_tag):
+        env.append_transform(
+            VideoRecorder(
+                writer=writer,
+                tag=f"{video_tag}_{env_name}_video",
+            ),
+        )
+
+    if args.noops:
+        env.append_transform(NoopResetEnv(env, args.noops))
+    if from_pixels:
+        if not args.catframes:
+            raise RuntimeError(
+                "this env builder currently only accepts positive catframes values"
+                "when pixels are being used."
+            )
+        env.append_transform(ToTensorImage())
+        env.append_transform(Resize(84, 84))
+        env.append_transform(GrayScale())
+        env.append_transform(CatFrames(N=args.catframes, keys=["next_pixels"]))
+        if stats is None:
+            obs_stats = {"loc": 0.0, "scale": 1.0}
+        else:
+            obs_stats = stats
+        obs_stats["standard_normal"] = True
+        env.append_transform(ObservationNorm(**obs_stats, keys=["next_pixels"]))
+    if norm_rewards:
+        reward_scaling = 1.0
+        reward_loc = 0.0
+    if norm_obs_only:
+        reward_scaling = 1.0
+        reward_loc = 0.0
+    if reward_scaling is not None:
+        env.append_transform(RewardScaling(reward_loc, reward_scaling))
+
+    double_to_float_list = []
+    if env_library is DMControlEnv:
+        double_to_float_list += [
+            "reward",
+            "action",
+        ]  # DMControl requires double-precision
+    if not from_pixels:
+        selected_keys = [
+            key for key in env.observation_spec.keys() if "pixels" not in key
+        ]
+
+        # even if there is a single tensor, it'll be renamed in "next_observation_vector"
+        out_key = "next_observation_vector"
+        env.append_transform(CatTensors(keys=selected_keys, out_key=out_key))
+
+        if not vecnorm:
+            if stats is None:
+                _stats = {"loc": 0.0, "scale": 1.0}
+            else:
+                _stats = stats
+            env.append_transform(
+                ObservationNorm(**_stats, keys=[out_key], standard_normal=True)
+            )
+        else:
+            env.append_transform(
+                VecNorm(
+                    keys=[out_key, "reward"] if not _norm_obs_only else [out_key],
+                    decay=0.9999,
+                )
+            )
+
+        double_to_float_list.append(out_key)
+        env.append_transform(DoubleToFloat(keys=double_to_float_list))
+
+        if hasattr(args, "catframes") and args.catframes:
+            env.append_transform(
+                CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1)
+            )
+
+    else:
+        env.append_transform(DoubleToFloat(keys=double_to_float_list))
+
+    if hasattr(args, "gSDE") and args.gSDE:
+        env.append_transform(
+            gSDENoise(action_dim=action_dim_gsde, state_dim=state_dim_gsde)
+        )
+
+    env.append_transform(FiniteTensorDictCheck())
+    return env
+
+
 def transformed_env_constructor(
     args: Namespace,
     video_tag: str = "",
@@ -85,6 +192,10 @@ def transformed_env_constructor(
     norm_obs_only: bool = False,
     use_env_creator: bool = True,
     custom_env_maker: Optional[Callable] = None,
+    custom_env: Optional[_EnvClass] = None,
+    return_transformed_envs: bool = True,
+    action_dim_gsde: Optional[int] = None,
+    state_dim_gsde: Optional[int] = None,
 ) -> Union[Callable, EnvCreator]:
     """
     Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
@@ -103,6 +214,15 @@ def transformed_env_constructor(
             of torchrl env wrappers, a custom callable
             can be passed instead. In this case it will override the
             constructor retrieved from `args`.
+        custom_env (_EnvClass, optional): if an existing environment needs to be
+            transformed_in, it can be passed directly to this helper. `custom_env_maker`
+            and `custom_env` are exclusive features.
+        return_transformed_envs (bool, optional): if True, a transformed_in environment
+            is returned.
+        action_dim_gsde (int, Optional): if gSDE is used, this can present the action dim to initialize the noise.
+            Make sure this is indicated in environment executed in parallel.
+        state_dim_gsde: if gSDE is used, this can present the state dim to initialize the noise.
+            Make sure this is indicated in environment executed in parallel.
     """
 
     def make_transformed_env(**kwargs) -> TransformedEnv:
@@ -111,13 +231,8 @@ def transformed_env_constructor(
         env_library = LIBS[args.env_library]
         frame_skip = args.frame_skip
         from_pixels = args.from_pixels
-        vecnorm = args.vecnorm
-        norm_rewards = vecnorm and args.norm_rewards
-        _norm_obs_only = norm_obs_only or not norm_rewards
-        reward_scaling = args.reward_scaling
-        reward_loc = args.reward_loc
 
-        if custom_env_maker is None:
+        if custom_env is None and custom_env_maker is None:
             env_kwargs = {
                 "envname": env_name,
                 "device": "cpu",
@@ -129,93 +244,28 @@ def transformed_env_constructor(
                 env_kwargs.update({"taskname": env_task})
             env_kwargs.update(kwargs)
             env = env_library(**env_kwargs)
-        else:
+        elif custom_env is None and custom_env_maker is not None:
             env = custom_env_maker(**kwargs)
-
-        env = TransformedEnv(env)
-
-        if len(video_tag):
-            env.append_transform(
-                VideoRecorder(
-                    writer=writer,
-                    tag=f"{video_tag}_{env_name}_video",
-                ),
-            )
-
-        if args.noops:
-            env.append_transform(NoopResetEnv(env, args.noops))
-        if from_pixels:
-            if not args.catframes:
-                raise RuntimeError(
-                    "this env builder currently only accepts positive catframes values"
-                    "when pixels are being used."
-                )
-            env.append_transform(ToTensorImage())
-            env.append_transform(Resize(84, 84))
-            env.append_transform(GrayScale())
-            env.append_transform(CatFrames(N=args.catframes, keys=["next_pixels"]))
-            if stats is None:
-                obs_stats = {"loc": 0.0, "scale": 1.0}
-            else:
-                obs_stats = stats
-            obs_stats["standard_normal"] = True
-            env.append_transform(ObservationNorm(**obs_stats, keys=["next_pixels"]))
-        if norm_rewards:
-            reward_scaling = 1.0
-            reward_loc = 0.0
-        if norm_obs_only:
-            reward_scaling = 1.0
-            reward_loc = 0.0
-        if reward_scaling is not None:
-            env.append_transform(RewardScaling(reward_loc, reward_scaling))
-
-        double_to_float_list = []
-        if env_library is DMControlEnv:
-            double_to_float_list += [
-                "reward",
-                "action",
-            ]  # DMControl requires double-precision
-        if not from_pixels:
-            selected_keys = [
-                key for key in env.observation_spec.keys() if "pixels" not in key
-            ]
-
-            # even if there is a single tensor, it'll be renamed in "next_observation_vector"
-            out_key = "next_observation_vector"
-            env.append_transform(CatTensors(keys=selected_keys, out_key=out_key))
-
-            if not vecnorm:
-                if stats is None:
-                    _stats = {"loc": 0.0, "scale": 1.0}
-                else:
-                    _stats = stats
-                env.append_transform(
-                    ObservationNorm(**_stats, keys=[out_key], standard_normal=True)
-                )
-            else:
-                env.append_transform(
-                    VecNorm(
-                        keys=[out_key, "reward"] if not _norm_obs_only else [out_key],
-                        decay=0.9999,
-                    )
-                )
-
-            double_to_float_list.append(out_key)
-            env.append_transform(DoubleToFloat(keys=double_to_float_list))
-
-            if hasattr(args, "catframes") and args.catframes:
-                env.append_transform(
-                    CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1)
-                )
-
+        elif custom_env_maker is None and custom_env is not None:
+            env = custom_env
         else:
-            env.append_transform(DoubleToFloat(keys=double_to_float_list))
+            raise RuntimeError("cannot provive both custom_env and custom_env_maker")
 
-        if hasattr(args, "gSDE") and args.gSDE:
-            env.append_transform(gSDENoise())
+        if not return_transformed_envs:
+            return env
 
-        env.append_transform(FiniteTensorDictCheck())
-        return env
+        return make_env_transforms(
+            env,
+            args,
+            video_tag,
+            writer,
+            env_name,
+            stats,
+            norm_obs_only,
+            env_library,
+            action_dim_gsde,
+            state_dim_gsde,
+        )
 
     if use_env_creator:
         return env_creator(make_transformed_env)
@@ -223,12 +273,14 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(
-    args: Namespace, **kwargs
+    args: Namespace, batch_transform: bool = True, **kwargs
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
         args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
+        batch_transform (bool, optional): if True, the transforms will be applied to the parallel env.
+            Default is `False`
         kwargs: keyword arguments for the `transformed_env_constructor` method.
     """
     if args.env_per_collector == 1:
@@ -236,14 +288,22 @@ def parallel_env_constructor(
         make_transformed_env = transformed_env_constructor(**kwargs)
         return make_transformed_env
     kwargs.update({"args": args, "use_env_creator": True})
-    make_transformed_env = transformed_env_constructor(**kwargs)
-    env = ParallelEnv(
+    make_transformed_env = transformed_env_constructor(
+        return_transformed_envs=not batch_transform, **kwargs
+    )
+    parallel_env = ParallelEnv(
         num_workers=args.env_per_collector,
         create_env_fn=make_transformed_env,
         create_env_kwargs=None,
         pin_memory=args.pin_memory,
     )
-    return env
+    if batch_transform:
+        kwargs.update(
+            {"args": args, "use_env_creator": False, "custom_env": parallel_env}
+        )
+        env = transformed_env_constructor(**kwargs)()
+        return env
+    return parallel_env
 
 
 def get_stats_random_rollout(
