@@ -374,7 +374,13 @@ class _BatchedEnv(_EnvClass):
             raise RuntimeError("trying to close a closed environment")
         if self._verbose:
             print(f"closing {self.__class__.__name__}")
+
         self._current_tensordict = None
+
+        self.action_spec = None
+        self.observation_spec = None
+        self.reward_spec = None
+
         self._shutdown_workers()
         self.is_closed = True
 

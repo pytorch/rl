@@ -462,7 +462,7 @@ class TestParallel:
         assert all(result == 2 for result in env.custom_prop)  # to be fixed
         env.close()
 
-    @pytest.mark.skipif(not torch.has_cuda, reason="no cuda to test on")
+    @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda to test on")
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
@@ -556,7 +556,7 @@ class TestParallel:
         env0.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.skipif(not torch.has_cuda, reason="no cuda device detected")
+    @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
     @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])

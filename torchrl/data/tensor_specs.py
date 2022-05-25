@@ -90,6 +90,9 @@ class Box:
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> ContinuousBox:
         raise NotImplementedError
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}()"
+
 
 @dataclass(repr=False)
 class Values:
@@ -115,6 +118,11 @@ class ContinuousBox(Box):
         self.maximum = self.maximum.to(dest)
         return self
 
+    def __repr__(self):
+        min_str = f"minimum={self.minimum}"
+        max_str = f"maximum={self.maximum}"
+        return f"{self.__class__.__name__}({min_str}, {max_str})"
+
 
 @dataclass(repr=False)
 class DiscreteBox(Box):
@@ -128,6 +136,9 @@ class DiscreteBox(Box):
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> DiscreteBox:
         return self
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(n={self.n})"
 
 
 @dataclass(repr=False)
@@ -146,6 +157,9 @@ class BoxList(Box):
         for elt in self.boxes:
             yield elt
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(boxes={self.boxes})"
+
 
 @dataclass(repr=False)
 class BinaryBox(Box):
@@ -158,6 +172,9 @@ class BinaryBox(Box):
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> ContinuousBox:
         return self
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(n={self.n})"
 
 
 @dataclass(repr=False)
@@ -316,7 +333,9 @@ class TensorSpec:
         device_str = "device=" + str(self.device)
         dtype_str = "dtype=" + str(self.dtype)
         domain_str = "domain=" + str(self.domain)
-        sub_string = ",".join([shape_str, space_str, device_str, dtype_str, domain_str])
+        sub_string = ", ".join(
+            [shape_str, space_str, device_str, dtype_str, domain_str]
+        )
         string = f"{self.__class__.__name__}(\n     {sub_string})"
         return string
 
