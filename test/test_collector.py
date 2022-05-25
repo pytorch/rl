@@ -32,7 +32,7 @@ from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
 
 def make_make_env(env_name="conv"):
     def make_transformed_env(seed = None):
-        torch.set_default_dtype(torch.double)
+        # torch.set_default_dtype(torch.double)
         if env_name == "conv":
             env = DiscreteActionConvMockEnv()
         elif env_name == "vec":
@@ -66,7 +66,7 @@ def make_policy(env):
 @pytest.mark.parametrize("num_env", [3, 1])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_concurrent_collector_consistency(num_env, env_name, seed=40):
-    torch.set_default_dtype(torch.double)
+    # torch.set_default_dtype(torch.double)
     if num_env == 1:
 
         def env_fn(seed):
