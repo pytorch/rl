@@ -163,13 +163,31 @@ def test_rollout_predictability(device):
     for p in policy.parameters():
         p.data.fill_(1.0)
     td_out = env.rollout(policy=policy, max_steps=200)
-    assert (torch.arange(100, 200) == td_out.get("observation").squeeze()).all()
-    assert (torch.arange(101, 201) == td_out.get("next_observation").squeeze()).all()
-    assert (torch.arange(101, 201) == td_out.get("reward").squeeze()).all()
-    assert (torch.arange(100, 200) == td_out.get("action").squeeze()).all()
+    assert (
+        torch.arange(100, 200, device=device) == td_out.get("observation").squeeze()
+    ).all()
+    assert (
+        torch.arange(101, 201, device=device)
+        == td_out.get("next_observation").squeeze()
+    ).all()
+    assert (
+        torch.arange(101, 201, device=device) == td_out.get("reward").squeeze()
+    ).all()
+    assert (
+        torch.arange(100, 200, device=device) == td_out.get("action").squeeze()
+    ).all()
 
 
-def _make_envs(env_name, frame_skip, transformed, N, selected_keys=None):
+def _make_envs(
+    env_name,
+    frame_skip,
+    transformed_in,
+    transformed_out,
+    N,
+    selected_keys=None,
+    device="cpu",
+    kwargs=None,
+):
     torch.manual_seed(0)
     if not transformed_in:
         create_env_fn = lambda: GymEnv(env_name, frame_skip=frame_skip, device=device)
@@ -285,7 +303,7 @@ class TestParallel:
         )
         env_parallel.reset(tensordict=td_reset)
 
-        td = env_parallel.rollout(policy=None, n_steps=T)
+        td = env_parallel.rollout(policy=None, max_steps=T)
         assert (
             td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
         ), f"{td.shape}, {td.get('done').sum(1)}"
@@ -306,49 +324,24 @@ class TestParallel:
             None,
         ],
     )
-    env_parallel.reset(tensordict=td_reset)
-
-    td = env_parallel.rollout(policy=None, max_steps=T)
-    assert (
-        td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
-    ), f"{td.shape}, {td.get('done').sum(1)}"
-    env_parallel.close()
-
-
-@pytest.mark.skipif(not _has_gym, reason="no gym")
-@pytest.mark.parametrize("env_name", ["Pendulum-v1"])
-@pytest.mark.parametrize("frame_skip", [4, 1])
-@pytest.mark.parametrize("transformed", [True, False])
-@pytest.mark.parametrize(
-    "selected_keys",
-    [
-        ["action", "observation", "next_observation", "done", "reward"],
-        ["hidden", "action", "observation", "next_observation", "done", "reward"],
-        None,
-    ],
-)
-def test_parallel_env_with_policy(
-    env_name, frame_skip, transformed, selected_keys, T=10, N=5
-):
-    env_parallel, env_serial, env0 = _make_envs(
-        env_name, frame_skip, transformed, N, selected_keys
-    )
-
-    policy = ActorCriticOperator(
-        TDModule(
-            spec=None,
-            module=nn.LazyLinear(12),
-            in_keys=["observation"],
-            out_keys=["hidden"],
-        ),
-        TDModule(
-            spec=None,
-            module=nn.LazyLinear(env0.action_spec.shape[-1]),
-            in_keys=["hidden"],
-            out_keys=["action"],
-        ),
-        ValueOperator(module=nn.LazyLinear(1), in_keys=["hidden"]),
-    )
+    def test_parallel_env_with_policy(
+        self,
+        env_name,
+        frame_skip,
+        transformed_in,
+        transformed_out,
+        selected_keys,
+        T=10,
+        N=3,
+    ):
+        env_parallel, env_serial, env0 = _make_envs(
+            env_name,
+            frame_skip,
+            transformed_in=transformed_in,
+            transformed_out=transformed_out,
+            N=N,
+            selected_keys=selected_keys,
+        )
 
         policy = ActorCriticOperator(
             TDModule(
@@ -392,7 +385,7 @@ def test_parallel_env_with_policy(
         )
         env_parallel.reset(tensordict=td_reset)
 
-        td = env_parallel.rollout(policy=policy, n_steps=T)
+        td = env_parallel.rollout(policy=policy, max_steps=T)
         assert (
             td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
         ), f"{td.shape}, {td.get('done').sum(1)}"
@@ -408,55 +401,34 @@ def test_parallel_env_with_policy(
             "ALE/Pong-v5",
         ],
     )
-    env_parallel.reset(tensordict=td_reset)
+    @pytest.mark.parametrize("frame_skip", [4, 1])
+    @pytest.mark.parametrize("transformed_in", [False, True])
+    @pytest.mark.parametrize("transformed_out", [True, False])
+    def test_parallel_env_seed(
+        self, env_name, frame_skip, transformed_in, transformed_out
+    ):
+        env_parallel, env_serial, env0 = _make_envs(
+            env_name, frame_skip, transformed_in, transformed_out, 5
+        )
 
-    td = env_parallel.rollout(policy=policy, max_steps=T)
-    assert (
-        td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
-    ), f"{td.shape}, {td.get('done').sum(1)}"
-    env_parallel.close()
+        out_seed_serial = env_serial.set_seed(0)
+        env_serial.reset()
+        td0_serial = env_serial.current_tensordict
+        torch.manual_seed(0)
 
-
-@pytest.mark.skipif(not _has_gym, reason="no gym")
-@pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
-@pytest.mark.parametrize("frame_skip", [4, 1])
-@pytest.mark.parametrize(
-    "transformed",
-    [
-        False,
-        True,
-    ],
-)
-def test_parallel_env_seed(env_name, frame_skip, transformed):
-    env_parallel, env_serial, env0 = _make_envs(env_name, frame_skip, transformed, 5)
-
-    out_seed_serial = env_serial.set_seed(0)
-    env_serial.reset()
-    td0_serial = env_serial.current_tensordict
-    torch.manual_seed(0)
-
-    td_serial = env_serial.rollout(max_steps=10, auto_reset=False).contiguous()
-    key = "pixels" if "pixels" in td_serial else "observation"
-    torch.testing.assert_allclose(
-        td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
-    )
-
-        td_serial = env_serial.rollout(n_steps=10, auto_reset=False).contiguous()
+        td_serial = env_serial.rollout(max_steps=10, auto_reset=False).contiguous()
         key = "pixels" if "pixels" in td_serial else "observation"
         torch.testing.assert_allclose(
             td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
         )
 
-    torch.manual_seed(0)
-    assert out_seed_parallel == out_seed_serial
-    td_parallel = env_parallel.rollout(max_steps=10, auto_reset=False).contiguous()
-    torch.testing.assert_allclose(
-        td_parallel[:, 0].get("next_" + key), td_parallel[:, 1].get(key)
-    )
+        out_seed_parallel = env_parallel.set_seed(0)
+        env_parallel.reset()
+        td0_parallel = env_parallel.current_tensordict
 
         torch.manual_seed(0)
         assert out_seed_parallel == out_seed_serial
-        td_parallel = env_parallel.rollout(n_steps=10, auto_reset=False).contiguous()
+        td_parallel = env_parallel.rollout(max_steps=10, auto_reset=False).contiguous()
         torch.testing.assert_allclose(
             td_parallel[:, 0].get("next_" + key), td_parallel[:, 1].get(key)
         )
@@ -527,11 +499,11 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
             N=N,
         )
         if open_before:
-            td_cpu = env0.rollout(n_steps=10)
+            td_cpu = env0.rollout(max_steps=10)
             assert td_cpu.device == torch.device("cpu")
-            td_cpu = env_serial.rollout(n_steps=10)
+            td_cpu = env_serial.rollout(max_steps=10)
             assert td_cpu.device == torch.device("cpu")
-            td_cpu = env_parallel.rollout(n_steps=10)
+            td_cpu = env_parallel.rollout(max_steps=10)
             assert td_cpu.device == torch.device("cpu")
 
         env0 = env0.to(device)
@@ -575,11 +547,11 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
         td_device = env_parallel.rand_step()
         assert td_device.device == torch.device(device), env_parallel
 
-        td_device = env0.rollout(n_steps=10)
+        td_device = env0.rollout(max_steps=10)
         assert td_device.device == torch.device(device), env0
-        td_device = env_serial.rollout(n_steps=10)
+        td_device = env_serial.rollout(max_steps=10)
         assert td_device.device == torch.device(device), env_serial
-        td_device = env_parallel.rollout(n_steps=10)
+        td_device = env_parallel.rollout(max_steps=10)
         assert td_device.device == torch.device(device), env_parallel
 
         td_device = env0.current_tensordict
@@ -616,15 +588,15 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
         )
 
         assert env0.device == torch.device(device)
-        out = env0.rollout(n_steps=20)
+        out = env0.rollout(max_steps=20)
         assert out.device == torch.device(device)
 
         assert env_serial.device == torch.device(device)
-        out = env_serial.rollout(n_steps=20)
+        out = env_serial.rollout(max_steps=20)
         assert out.device == torch.device(device)
 
         assert env_parallel.device == torch.device(device)
-        out = env_parallel.rollout(n_steps=20)
+        out = env_parallel.rollout(max_steps=20)
         assert out.device == torch.device(device)
 
         env_parallel.close()
@@ -653,7 +625,7 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
             N=N,
         )
 
-        out = env0.rollout(n_steps=20)
+        out = env0.rollout(max_steps=20)
         current_tensordict_art = step_tensordict(out[-1], exclude_done=False)
         current_tensordict = env0.current_tensordict
         assert (current_tensordict_art == current_tensordict).all()
@@ -665,7 +637,7 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
         assert (current_tensordict2 == current_tensordict).all()
         env0.close()
 
-        out = env_serial.rollout(n_steps=20)
+        out = env_serial.rollout(max_steps=20)
         current_tensordict_art = step_tensordict(out[:, -1], exclude_done=False)
         current_tensordict = env_serial.current_tensordict
         assert (current_tensordict_art == current_tensordict).all()
@@ -677,7 +649,7 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
         assert (current_tensordict2 == current_tensordict).all()
         env_serial.close()
 
-        out = env_parallel.rollout(n_steps=20)
+        out = env_parallel.rollout(max_steps=20)
         current_tensordict_art = step_tensordict(out[:, -1], exclude_done=False)
         current_tensordict = env_parallel.current_tensordict
         assert (current_tensordict_art == current_tensordict).all()
@@ -712,30 +684,30 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
         )
         torch.manual_seed(0)
         env_parallel_in.set_seed(0)
-        r_in = env_parallel_in.rollout(n_steps=20)
+        r_in = env_parallel_in.rollout(max_steps=20)
         torch.manual_seed(0)
         env_parallel_out.set_seed(0)
-        r_out = env_parallel_out.rollout(n_steps=20)
+        r_out = env_parallel_out.rollout(max_steps=20)
         assert_allclose_td(r_in, r_out)
         env_parallel_in.close()
         env_parallel_out.close()
 
         torch.manual_seed(0)
         env_serial_in.set_seed(0)
-        r_in = env_serial_in.rollout(n_steps=20)
+        r_in = env_serial_in.rollout(max_steps=20)
         torch.manual_seed(0)
         env_serial_out.set_seed(0)
-        r_out = env_serial_out.rollout(n_steps=20)
+        r_out = env_serial_out.rollout(max_steps=20)
         assert_allclose_td(r_in, r_out)
         env_serial_in.close()
         env_serial_out.close()
 
         torch.manual_seed(0)
         env0_in.set_seed(0)
-        r_in = env0_in.rollout(n_steps=20)
+        r_in = env0_in.rollout(max_steps=20)
         torch.manual_seed(0)
         env0_out.set_seed(0)
-        r_out = env0_out.rollout(n_steps=20)
+        r_out = env0_out.rollout(max_steps=20)
         assert_allclose_td(r_in, r_out)
         env0_in.close()
         env0_in.close()
@@ -778,31 +750,9 @@ def test_parallel_env_seed(env_name, frame_skip, transformed):
         for c1, c2 in zip(env1.counter, env2.counter):
             assert c1 == c2
 
-@pytest.mark.skipif(not _has_gym, reason="no gym")
-@pytest.mark.skipif(torch.cuda.device_count() < 1, reason="no cuda device detected")
-@pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
-@pytest.mark.parametrize("frame_skip", [4, 1])
-@pytest.mark.parametrize("transformed", [True, False])
-@pytest.mark.parametrize("device", [0, "cuda:0"])
-def test_parallel_env_device(env_name, frame_skip, transformed, device):
-    torch.manual_seed(0)
-    N = 5
-    if not transformed:
-        create_env_fn = lambda: GymEnv("ALE/Pong-v5", frame_skip=frame_skip)
-    else:
-        if env_name == "ALE/Pong-v5":
-            create_env_fn = lambda: TransformedEnv(
-                GymEnv(env_name, frame_skip=frame_skip),
-                Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
-            )
-        else:
-            create_env_fn = lambda: TransformedEnv(
-                GymEnv(env_name, frame_skip=frame_skip),
-                Compose(*[RewardClipping(0, 0.1)]),
-            )
-    env_parallel = ParallelEnv(N, create_env_fn, device=device)
-    out = env_parallel.rollout(max_steps=20)
-    env_parallel.close()
+        env1.close()
+        env2.close()
+
 
 class TestSpec:
     def test_discrete_action_spec_reconstruct(self):
