@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from time import sleep
 from typing import Any, List, Optional, OrderedDict, Sequence, Union
 from warnings import warn
 
