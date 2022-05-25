@@ -365,21 +365,21 @@ class _EnvClass:
 
     def rollout(
         self,
-        policy: Optional[Callable[[_TensorDict], _TensorDict]] = None,
         max_steps: int,
+        policy: Optional[Callable[[_TensorDict], _TensorDict]] = None,
         callback: Optional[Callable[[_TensorDict, ...], _TensorDict]] = None,
         auto_reset: bool = True,
     ) -> _TensorDict:
         """
 
         Args:
+            max_steps (int): maximum number of steps to be executed. The actual number of steps can be smaller if
+                the environment reaches a done state before max_steps have been executed.
             policy (callable, optional): callable to be called to compute the desired action. If no policy is provided,
                 actions will be called using `env.rand_step()`
                 default = None
-            max_steps (int, optional): maximum number of steps to be executed. The actual number of steps can be smaller if
-                the environment reaches a done state before max_steps have been executed.
             callback (callable, optional): function to be called at each iteration with the given TensorDict.
-            auto_reset (bool): if True, resets automatically the environment if it is in a done state when the rollout
+            auto_reset (bool, optional): if True, resets automatically the environment if it is in a done state when the rollout
                 is initiated.
                 default = True.
 
