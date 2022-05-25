@@ -256,9 +256,6 @@ class TDSequence(TDModule):
         for layer in self.module:
             out_key = layer.out_keys[0]
             spec = layer.spec
-            if spec is None:
-                # By default, we consider that unspecified specs are unbounded.
-                spec = UnboundedContinuousTensorSpec()
             if not isinstance(spec, TensorSpec):
                 raise RuntimeError(
                     f"TDSequence.spec requires all specs to be valid TensorSpec objects. Got "

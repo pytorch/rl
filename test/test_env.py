@@ -159,7 +159,7 @@ def test_rollout(env_name, frame_skip, seed=0):
 def test_rollout_predictability(device):
     env = MockSerialEnv(device=device)
     env.set_seed(100)
-    policy = Actor(torch.nn.Linear(1, 1, bias=False))
+    policy = Actor(torch.nn.Linear(1, 1, bias=False)).to(device)
     for p in policy.parameters():
         p.data.fill_(1.0)
     td_out = env.rollout(policy=policy, n_steps=200)
