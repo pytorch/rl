@@ -446,7 +446,7 @@ class _EnvClass:
         if not self.is_done:
             for i in range(n_steps):
                 if auto_cast_to_device:
-                    tensordicts = tensordict.to(policy_device)
+                    tensordict = tensordict.to(policy_device)
                 tensordict = policy(tensordict)
                 if auto_cast_to_device:
                     tensordict = tensordict.to(env_device)
