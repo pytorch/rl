@@ -163,10 +163,19 @@ def test_rollout_predictability(device):
     for p in policy.parameters():
         p.data.fill_(1.0)
     td_out = env.rollout(policy=policy, n_steps=200)
-    assert (torch.arange(100, 200, device=device) == td_out.get("observation").squeeze()).all()
-    assert (torch.arange(101, 201, device=device) == td_out.get("next_observation").squeeze()).all()
-    assert (torch.arange(101, 201, device=device) == td_out.get("reward").squeeze()).all()
-    assert (torch.arange(100, 200, device=device) == td_out.get("action").squeeze()).all()
+    assert (
+        torch.arange(100, 200, device=device) == td_out.get("observation").squeeze()
+    ).all()
+    assert (
+        torch.arange(101, 201, device=device)
+        == td_out.get("next_observation").squeeze()
+    ).all()
+    assert (
+        torch.arange(101, 201, device=device) == td_out.get("reward").squeeze()
+    ).all()
+    assert (
+        torch.arange(100, 200, device=device) == td_out.get("action").squeeze()
+    ).all()
 
 
 def _make_envs(

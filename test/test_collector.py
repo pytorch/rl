@@ -457,7 +457,6 @@ def test_collector_vecnorm_envcreator():
 @pytest.mark.skipif(torch.cuda.device_count() <= 1, reason="no cuda device found")
 def test_update_weights(use_async):
     policy = torch.nn.Linear(3, 4).cuda(1)
-    policy.share_memory()
     collector_class = (
         MultiSyncDataCollector if not use_async else MultiaSyncDataCollector
     )
