@@ -1081,7 +1081,7 @@ def test_set_sub_key(index0):
     assert (td.get_sub_tensordict(idx0).get("c") == 0).all()
     assert (td0.get("c") == 0).all()
 
-@pytest.skip(not torch.cuda.device_count())
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
 def test_create_on_device():
     device = torch.device(0)
 
