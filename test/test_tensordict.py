@@ -1148,7 +1148,7 @@ def test_create_on_device():
     a = torch.randn(2, 3)
     viewedtd.set("a", a)
     assert viewedtd.get("a").device == device
-    assert (a.to(device) == viewedtd.get("a")).all()
+    assert (a.unsqueeze(-1).to(device) == viewedtd.get("a")).all()
 
 def _remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordict):
     command_pipe_parent.close()
