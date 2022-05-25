@@ -6,7 +6,7 @@
 import uuid
 from datetime import datetime
 
-from torchrl.envs import ParallelEnv
+from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.utils import set_exploration_mode
 
 try:
@@ -159,6 +159,8 @@ def main(args):
     if isinstance(create_env_fn, ParallelEnv):
         recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
         create_env_fn.close()
+    elif isinstance(create_env_fn, EnvCreator):
+        recorder_rm.load_state_dict(create_env_fn().state_dict())
     else:
         recorder_rm.load_state_dict(create_env_fn().state_dict())
     # reset reward scaling
