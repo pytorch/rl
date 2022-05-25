@@ -142,6 +142,9 @@ class BoxList(Box):
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> BoxList:
         return BoxList([box.to(dest) for box in self.boxes])
 
+    def __iter__(self):
+        for elt in self.boxes:
+            yield elt
 
 @dataclass(repr=False)
 class BinaryBox(Box):
