@@ -903,10 +903,10 @@ dtype=torch.float32)},
                         f"Setting a new attribute ({key}) on another device ({item.device} against {self.device}). "
                         f"All devices of CompositeSpec must match."
                     )
-            if _device is None:
-                raise RuntimeError(
-                    "CompositeSpec cannot be initialized without any valid spec."
-                )
+            # if _device is None:
+            #     raise RuntimeError(
+            #         "CompositeSpec cannot be initialized without any valid spec."
+            #     )
             self._device = _device
 
     @property
