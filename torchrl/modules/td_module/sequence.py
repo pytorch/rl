@@ -13,7 +13,6 @@ import torch
 from torch import nn, Tensor
 
 from torchrl.data import (
-    UnboundedContinuousTensorSpec,
     TensorSpec,
     CompositeSpec,
 )
@@ -262,7 +261,7 @@ class TDSequence(TDModule):
                     f"{type(layer.spec)}"
                 )
             if isinstance(spec, CompositeSpec):
-                kwargs.update(spec._spec)
+                kwargs.update(self._specs)
             else:
                 kwargs[out_key] = spec
         return CompositeSpec(**kwargs)
