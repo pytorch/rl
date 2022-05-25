@@ -2939,6 +2939,8 @@ class SavedTensorDict(_TensorDict):
             if device is not None
             else source._device_safe()
             if (hasattr(source, "_device_safe") and source._device_safe() is not None)
+            else source[list(source.keys())[0]].device
+            if len(source)
             else torch.device("cpu")
         )
         td = source
