@@ -907,7 +907,22 @@ dtype=torch.float32)},
                 raise RuntimeError(
                     "CompositeSpec cannot be initialized without any valid spec."
                 )
-            self.device = _device
+            self._device = _device
+
+    @property
+    def device(self) -> DEVICE_TYPING:
+        if self._device is None:
+            # try to replace device by the true device
+            _device = None
+            for value in self.values():
+                if value is not None:
+                    _device = value.device
+            self._device = _device
+        return self._device
+
+    @device.setter
+    def device(self, value: DEVICE_TYPING):
+        self._device = value
 
     def __getitem__(self, item):
         if item in {"shape", "device", "dtype", "space"}:
