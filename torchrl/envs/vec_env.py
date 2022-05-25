@@ -392,7 +392,8 @@ class _BatchedEnv(_EnvClass):
         if not self.is_closed:
             warn(
                 "Casting an open environment to another device requires closing and re-opening it. "
-                 "This may have unexpected and unwanted effects (e.g. on seeding etc.)")
+                "This may have unexpected and unwanted effects (e.g. on seeding etc.)"
+            )
             # the tensordicts must be re-created on device
             super().to(device)
             self.close()

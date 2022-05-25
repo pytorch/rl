@@ -319,7 +319,7 @@ class _EnvClass:
     @current_tensordict.setter
     def current_tensordict(self, value: Union[_TensorDict, dict]):
         if isinstance(self._current_tensordict, _TensorDict):
-            self._current_tensordict.update(value, inplace=True)
+            self._current_tensordict.update_(value)
             return
         if isinstance(value, dict):
             value = TensorDict(value, self.batch_size)
@@ -437,6 +437,7 @@ class _EnvClass:
         tensordict = self.current_tensordict
 
         if policy is None:
+
             def policy(td):
                 return td.set("action", self.action_spec.rand(self.batch_size))
 

@@ -29,10 +29,11 @@ from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
 
+# torch.set_default_dtype(torch.double)
+
 
 def make_make_env(env_name="conv"):
-    def make_transformed_env(seed = None):
-        # torch.set_default_dtype(torch.double)
+    def make_transformed_env(seed=None):
         if env_name == "conv":
             env = DiscreteActionConvMockEnv()
         elif env_name == "vec":
@@ -66,7 +67,6 @@ def make_policy(env):
 @pytest.mark.parametrize("num_env", [3, 1])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_concurrent_collector_consistency(num_env, env_name, seed=40):
-    # torch.set_default_dtype(torch.double)
     if num_env == 1:
 
         def env_fn(seed):
@@ -80,7 +80,7 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
             env = ParallelEnv(
                 num_workers=num_env,
                 create_env_fn=make_make_env(env_name),
-                create_env_kwargs=[{'seed': i} for i in range(seed, seed+num_env)],
+                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
             )
             return env
 
@@ -252,7 +252,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
             env = ParallelEnv(
                 num_workers=num_env,
                 create_env_fn=make_make_env(env_name),
-                create_env_kwargs=[{'seed': i} for i in range(seed, seed+num_env)],
+                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
             )
             return env
 

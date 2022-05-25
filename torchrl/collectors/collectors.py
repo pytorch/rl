@@ -110,7 +110,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         #     env = None
 
         if policy is None:
-            if not hasattr(self, 'env') or self.env is None:
+            if not hasattr(self, "env") or self.env is None:
                 raise ValueError(
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
@@ -466,7 +466,8 @@ class SyncDataCollector(_DataCollector):
                 self._tensordict.update(
                     step_tensordict(
                         self._tensordict.exclude("reward", "done"), keep_other=True
-                    ), inplace=True,
+                    ),
+                    inplace=True,
                 )
             if self.return_in_place and len(self._tensordict_out.keys()) > 0:
                 tensordict_out = torch.stack(tensordict_out, len(self.env.batch_size))

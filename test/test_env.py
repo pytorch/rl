@@ -810,7 +810,9 @@ def test_current_tensordict():
     tensordict = env.step(
         TensorDict(source={"action": env.action_spec.rand()}, batch_size=[])
     )
-    assert_allclose_td(step_tensordict(tensordict), env.current_tensordict)
+    assert_allclose_td(
+        step_tensordict(tensordict, exclude_done=False), env.current_tensordict
+    )
 
 
 # TODO: test for frame-skip

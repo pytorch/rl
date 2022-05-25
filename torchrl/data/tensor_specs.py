@@ -856,13 +856,22 @@ dtype=torch.float32)},
     def __init__(self, **kwargs):
         self._specs = kwargs
         if len(kwargs):
-            self.device = list(self.values())[0].device
-            for key, value in self.items():
-                if value.device != self.device:
+            _device = None
+            for key, item in self.items():
+                if item is None:
+                    continue
+                if _device is None:
+                    _device = item.device
+                elif item.device != _device:
                     raise RuntimeError(
-                        f"Setting a new attribute ({key}) on another device ({value.device} against {self.device}). "
+                        f"Setting a new attribute ({key}) on another device ({item.device} against {self.device}). "
                         f"All devices of CompositeSpec must match."
                     )
+            if _device is None:
+                raise RuntimeError(
+                    "CompositeSpec cannot be initialized without any valid spec."
+                )
+            self.device = _device
 
     def __getitem__(self, item):
         if item in {"shape", "device", "dtype", "space"}:
@@ -954,6 +963,8 @@ dtype=torch.float32)},
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
         for value in self.values():
+            if value is None:
+                continue
             value.to(dest)
         if not isinstance(dest, torch.dtype):
             self.device = torch.device(dest)
