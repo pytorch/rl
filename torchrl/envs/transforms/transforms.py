@@ -358,6 +358,7 @@ class TransformedEnv(_EnvClass):
         self._reward_spec = None
 
     def append_transform(self, transform: Transform) -> None:
+        self._erase_metadata()
         if not isinstance(transform, Transform):
             raise ValueError(
                 "TransformedEnv.append_transform expected a transform but received an object of "
@@ -389,6 +390,13 @@ class TransformedEnv(_EnvClass):
 
     def __repr__(self) -> str:
         return f"TransformedEnv(env={self.env}, transform={self.transform})"
+
+    def _erase_metadata(self):
+        self._current_tensordict = None
+        if self.cache_specs:
+            self._action_spec = None
+            self._observation_spec = None
+            self._reward_spec = None
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
         self.env.to(device)
