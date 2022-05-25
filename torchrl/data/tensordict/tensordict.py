@@ -1827,7 +1827,7 @@ class TensorDict(_TensorDict):
             try:
                 if dest == self.device:
                     return self
-            except:
+            except RuntimeError:
                 pass
 
             self_copy = TensorDict(
