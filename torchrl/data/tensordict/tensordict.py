@@ -307,7 +307,9 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         if batch_size is None:
             td = TensorDict({}, batch_size=self.batch_size, device=self._device_safe())
         else:
-            td = TensorDict({}, batch_size=torch.Size(batch_size), device=self._device_safe())
+            td = TensorDict(
+                {}, batch_size=torch.Size(batch_size), device=self._device_safe()
+            )
         for key, item in self.items():
             item_trsf = fn(item)
             td.set(key, item_trsf)
@@ -591,7 +593,9 @@ dtype=torch.float32)},
         d = dict()
         for (key, item1) in self.items():
             d[key] = item1 != other.get(key)
-        return TensorDict(batch_size=self.batch_size, source=d, device=self._device_safe())
+        return TensorDict(
+            batch_size=self.batch_size, source=d, device=self._device_safe()
+        )
 
     def __eq__(self, other: object) -> _TensorDict:
         """Compares two tensordicts against each other, for evey key. The two
@@ -616,7 +620,9 @@ dtype=torch.float32)},
         d = dict()
         for (key, item1) in self.items():
             d[key] = item1 == other.get(key)
-        return TensorDict(batch_size=self.batch_size, source=d, device=self._device_safe())
+        return TensorDict(
+            batch_size=self.batch_size, source=d, device=self._device_safe()
+        )
 
     @abc.abstractmethod
     def del_(self, key: str) -> _TensorDict:
@@ -954,7 +960,9 @@ dtype=torch.float32)},
             value_select = value[mask_expand]
             d[key] = value_select
         dim = int(mask.sum().item())
-        return TensorDict(device=self._device_safe(), source=d, batch_size=torch.Size([dim]))
+        return TensorDict(
+            device=self._device_safe(), source=d, batch_size=torch.Size([dim])
+        )
 
     @abc.abstractmethod
     def is_contiguous(self) -> bool:
@@ -2260,7 +2268,6 @@ torch.Size([3, 2])
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
             try:
-                self_device = self.device
                 if dest == self.device:
                     return self
             except RuntimeError:

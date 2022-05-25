@@ -97,7 +97,6 @@ class _BatchedEnv(_EnvClass):
         create_env_fn (callable or list of callables): function (or list of functions) to be used for the environment
             creation;
         create_env_kwargs (dict or list of dicts, optional): kwargs to be used with the environments being created;
-        device (str, int, torch.device): device of the environment;
         action_keys (list of str, optional): list of keys that are to be considered policy-output. If the policy has it,
             the attribute policy.out_keys can be used.
             Providing the action_keys permit to select which keys to update after the policy is called, which can
@@ -118,6 +117,12 @@ class _BatchedEnv(_EnvClass):
         memmap (bool): whether or not the returned tensordict will be placed in memory map.
         policy_proof (callable, optional): if provided, it'll be used to get the list of
             tensors to return through the `step()` and `reset()` methods, such as `"hidden"` etc.
+        device (str, int, torch.device): for consistency, this argument is kept. However this
+            argument should not be passed, as the device will be inferred from the environments.
+            It is assumed that all environments will run on the same device as a common shared
+            tensordict will be used to pass data from process to process. The device can be
+            changed after instantiation using `env.to(device)`.
+
 
     """
 

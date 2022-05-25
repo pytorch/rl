@@ -1081,6 +1081,7 @@ def test_set_sub_key(index0):
     assert (td.get_sub_tensordict(idx0).get("c") == 0).all()
     assert (td0.get("c") == 0).all()
 
+
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
 def test_create_on_device():
     device = torch.device(0)
@@ -1092,7 +1093,7 @@ def test_create_on_device():
     td.set("a", torch.randn(5, device=device))
     assert td.device == device
 
-    td = TensorDict({}, [5], device='cuda:0')
+    td = TensorDict({}, [5], device="cuda:0")
     td.set("a", torch.randn(5, 1))
     assert td.get("a").device == device
 
@@ -1104,7 +1105,7 @@ def test_create_on_device():
     subtd.set("a", torch.randn(1, device=device))
     assert subtd.device == device
 
-    td = TensorDict({}, [5], device='cuda:0')
+    td = TensorDict({}, [5], device="cuda:0")
     subtd = td[1]
     subtd.set("a", torch.randn(1))
     assert subtd.get("a").device == device
@@ -1117,7 +1118,7 @@ def test_create_on_device():
     subtd.set("a", torch.randn(2, device=device))
     assert subtd.device == device
 
-    td = TensorDict({}, [5], device='cuda:0')
+    td = TensorDict({}, [5], device="cuda:0")
     subtd = td[1:3]
     subtd.set("a", torch.randn(2))
     assert subtd.get("a").device == device
@@ -1130,7 +1131,7 @@ def test_create_on_device():
     savedtd.set("a", torch.randn(5, device=device))
     assert savedtd.device == device
 
-    td = TensorDict({}, [5], device='cuda:0')
+    td = TensorDict({}, [5], device="cuda:0")
     savedtd = td.to(SavedTensorDict)
     savedtd.set("a", torch.randn(5))
     assert savedtd.get("a").device == device
@@ -1143,12 +1144,13 @@ def test_create_on_device():
     viewedtd.set("a", torch.randn(2, 3, device=device))
     assert viewedtd.device == device
 
-    td = TensorDict({}, [6], device='cuda:0')
+    td = TensorDict({}, [6], device="cuda:0")
     viewedtd = td.view(2, 3)
     a = torch.randn(2, 3)
     viewedtd.set("a", a)
     assert viewedtd.get("a").device == device
     assert (a.unsqueeze(-1).to(device) == viewedtd.get("a")).all()
+
 
 def _remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordict):
     command_pipe_parent.close()
