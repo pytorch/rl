@@ -418,7 +418,7 @@ class _BatchedEnv(_EnvClass):
         device = torch.device(device)
         if device == self.device:
             return self
-        self.device = device
+        self._device = device
         if not self.is_closed:
             warn(
                 "Casting an open environment to another device requires closing and re-opening it. "
