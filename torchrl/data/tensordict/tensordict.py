@@ -2972,7 +2972,17 @@ class SavedTensorDict(_TensorDict):
 
     @property
     def device(self) -> torch.device:
-        return self._device
+        device = self._device
+        if device is None and not self.is_empty():
+            for _, item in self.items_meta():
+                device = item.device
+                break
+        elif device is None:
+            raise RuntimeError(
+                "querying device from an empty tensordict is not permitted, "
+                "unless this device has been specified upon creation."
+            )
+        return device
 
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
