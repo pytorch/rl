@@ -2957,7 +2957,7 @@ class SavedTensorDict(_TensorDict):
         torch.save(tensordict, self.filename)
 
     def _load(self) -> _TensorDict:
-        return torch.load(self.filename, self.device)
+        return torch.load(self.filename, map_location=self._device_safe())
 
     def _get_meta(self, key: str) -> MetaTensor:
         return self._tensordict_meta.get(key)
