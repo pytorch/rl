@@ -72,7 +72,9 @@ class _dummy_env_context:
         self.device = device
 
     def __enter__(self):
-        self.dummy_env = self.fun(**self.kwargs).to(self.device)
+        self.dummy_env = self.fun(**self.kwargs)
+        if self.device is not None:
+            self.dummy_env.to(self.device)
         return self.dummy_env
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -223,7 +225,7 @@ class _BatchedEnv(_EnvClass):
     def _dummy_env_context(self) -> _dummy_env_context:
         """Returns a context manager that will create a dummy env and delete it afterwards"""
         return _dummy_env_context(
-            self._dummy_env_fun, self.create_env_kwargs[0], self.device
+            self._dummy_env_fun, self.create_env_kwargs[0], self._device
         )
 
     @property
