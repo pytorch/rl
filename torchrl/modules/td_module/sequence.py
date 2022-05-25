@@ -256,7 +256,7 @@ class TDSequence(TDModule):
         for layer in self.module:
             out_key = layer.out_keys[0]
             spec = layer.spec
-            if not isinstance(spec, TensorSpec):
+            if spec is not None and not isinstance(spec, TensorSpec):
                 raise RuntimeError(
                     f"TDSequence.spec requires all specs to be valid TensorSpec objects. Got "
                     f"{type(layer.spec)}"
