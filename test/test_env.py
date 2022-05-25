@@ -578,13 +578,18 @@ class TestParallel:
             N=N,
         )
 
-        out = env_parallel.rollout(n_steps=20)
+        assert env0.device == torch.device(device)
+        out = env0.rollout(n_steps=20)
         assert out.device == torch.device(device)
-        assert env_parallel.device == torch.device(device)
 
+        assert env_serial.device == torch.device(device)
         out = env_serial.rollout(n_steps=20)
         assert out.device == torch.device(device)
-        assert env_serial.device == torch.device(device)
+
+        assert env_parallel.device == torch.device(device)
+        out = env_parallel.rollout(n_steps=20)
+        assert out.device == torch.device(device)
+
         env_parallel.close()
         env_serial.close()
         env0.close()

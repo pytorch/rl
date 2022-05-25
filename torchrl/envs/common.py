@@ -134,7 +134,8 @@ class _EnvClass:
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
     ):
-        self.device = torch.device(device)
+        if device is not None:
+            self.device = torch.device(device)
         self._is_done = None
         self.dtype = dtype_map.get(dtype, dtype)
         self.is_closed = True

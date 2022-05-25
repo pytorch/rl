@@ -129,7 +129,6 @@ class _BatchedEnv(_EnvClass):
             Callable[[], _EnvClass], Sequence[Callable[[], _EnvClass]]
         ],
         create_env_kwargs: Union[dict, Sequence[dict]] = None,
-        device: DEVICE_TYPING = "cpu",
         action_keys: Optional[Sequence[str]] = None,
         pin_memory: bool = False,
         selected_keys: Optional[Sequence[str]] = None,
@@ -138,8 +137,16 @@ class _BatchedEnv(_EnvClass):
         shared_memory: bool = True,
         memmap: bool = False,
         policy_proof: Optional[Callable] = None,
+        device: Optional[DEVICE_TYPING] = "cpu",
     ):
-        super().__init__(device=device)
+        if device is not None:
+            raise ValueError(
+                "Device setting for batched environment can't be done at initialization. "
+                "The device will be inferred from the constructed environment. "
+                "It can be set through the `to(device)` method."
+            )
+
+        super().__init__(device=None)
         self.is_closed = True
 
         if callable(create_env_fn):
@@ -187,6 +194,7 @@ class _BatchedEnv(_EnvClass):
         self._action_spec = None
         self._observation_spec = None
         self._reward_spec = None
+        self._device = None
 
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
@@ -253,6 +261,16 @@ class _BatchedEnv(_EnvClass):
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
         self._action_spec = value
+
+    @property
+    def device(self) -> torch.device:
+        if self._device is None:
+            self._set_properties()
+        return self._device
+
+    @device.setter
+    def device(self, value: DEVICE_TYPING) -> None:
+        self.to(value)
 
     @property
     def observation_spec(self) -> TensorSpec:
