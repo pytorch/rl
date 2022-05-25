@@ -1824,8 +1824,11 @@ class TensorDict(_TensorDict):
         elif isinstance(dest, (torch.device, str, int)):
             # must be device
             dest = torch.device(dest)
-            if dest == self._device:
-                return self
+            try:
+                if dest == self.device:
+                    return self
+            except:
+                pass
 
             self_copy = TensorDict(
                 source={key: value.to(dest) for key, value in self.items()},
