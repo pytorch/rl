@@ -204,7 +204,7 @@ class _EnvClass:
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
         self.is_done = tensordict_out.get("done")
-        self.current_tensordict = step_tensordict(tensordict_out)
+        self.current_tensordict = step_tensordict(tensordict_out, exclude_done=False)
 
         for key in self._select_observation_keys(tensordict_out):
             obs = tensordict_out.get(key)
