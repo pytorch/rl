@@ -146,6 +146,7 @@ class BoxList(Box):
         for elt in self.boxes:
             yield elt
 
+
 @dataclass(repr=False)
 class BinaryBox(Box):
     """
