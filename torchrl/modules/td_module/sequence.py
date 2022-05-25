@@ -262,7 +262,7 @@ class TDSequence(TDModule):
                     f"{type(layer.spec)}"
                 )
             if isinstance(spec, CompositeSpec):
-                kwargs.update(**spec._spec)
+                kwargs.update(spec._spec)
             else:
                 kwargs[out_key] = spec
         return CompositeSpec(**kwargs)
