@@ -850,6 +850,7 @@ class Recorder:
                     policy=self.policy_exploration,
                     n_steps=self.record_frames,
                     auto_reset=True,
+                    auto_cast_to_device=True,
                 )
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.train()
