@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import os
 from typing import Optional, Tuple, Union
 
@@ -155,9 +157,10 @@ class DMControlEnv(GymLikeEnv):
             print(f"rendering on device {device_id}")
             os.environ["EGL_DEVICE_ID"] = device_id
 
-    def to(self, device: DEVICE_TYPING):
+    def to(self, device: DEVICE_TYPING) -> DMControlEnv:
         super().to(device)
         self._set_egl_device(self.device)
+        return self
 
     def _init_env(self, seed: Optional[int] = None) -> Optional[int]:
         seed = self.set_seed(seed)
