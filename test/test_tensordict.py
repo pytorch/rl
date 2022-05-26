@@ -600,7 +600,7 @@ class TestTensorDicts:
     @pytest.mark.skipif(
         torch.cuda.device_count() == 0, reason="No cuda device detected"
     )
-    @pytest.mark.parametrize("device", [0, "cuda:0", "cuda", torch.device("cuda:0")])
+    @pytest.mark.parametrize("device", [0, "cuda:0", torch.device("cuda:0")])
     def test_pin_memory(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)
