@@ -672,7 +672,7 @@ class GymLikeEnv(_EnvWrapper):
 
     def _step(self, tensordict: _TensorDict) -> _TensorDict:
         action = tensordict.get("action")
-        action_np = self.action_spec.to_numpy(action)
+        action_np = self.action_spec.to_numpy(action, safe=False)
 
         reward = 0.0
         for _ in range(self.wrapper_frame_skip):
@@ -698,7 +698,7 @@ class GymLikeEnv(_EnvWrapper):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
-        self.current_tensordict = step_tensordict(tensordict_out)
+        # self.current_tensordict = step_tensordict(tensordict_out)
         return tensordict_out
 
     def set_seed(self, seed: Optional[int] = None) -> Optional[int]:
