@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import dataclass
 from textwrap import indent
 from typing import (
@@ -210,24 +209,28 @@ class TensorSpec:
 
         """
         if not isinstance(val, torch.Tensor):
-            try:
-                val = torch.tensor(val, dtype=self.dtype)
-            except ValueError:
-                val = torch.tensor(deepcopy(val), dtype=self.dtype)
+            if isinstance(val, np.ndarray) and not all(
+                stride > 0 for stride in val.strides
+            ):
+                val = val.copy()
+            val = torch.as_tensor(val, dtype=self.dtype, device=self.device)
         self.assert_is_in(val)
         return val
 
-    def to_numpy(self, val: torch.Tensor) -> np.ndarray:
+    def to_numpy(self, val: torch.Tensor, safe: bool = True) -> np.ndarray:
         """Returns the np.ndarray correspondent of an input tensor.
 
         Args:
             val (torch.Tensor): tensor to be transformed_in to numpy
+            safe (bool): boolean value indicating whether a check should be
+                performed on the value against the domain of the spec.
 
         Returns:
             a np.ndarray
 
         """
-        self.assert_is_in(val)
+        if safe:
+            self.assert_is_in(val)
         return val.detach().cpu().numpy()
 
     def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
@@ -490,9 +493,8 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         space: Optional[DiscreteBox] = None,
     ) -> torch.Tensor:
         if not isinstance(val, torch.Tensor):
-            val = torch.tensor(val)
+            val = torch.as_tensor(val, dtype=self.dtype, device=self.device)
 
-        val = torch.tensor(val, dtype=torch.long)
         if space is None:
             space = self.space
 
@@ -504,10 +506,11 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         val = torch.nn.functional.one_hot(val, space.n).to(torch.long)
         return val
 
-    def to_numpy(self, val: torch.Tensor) -> np.ndarray:
-        if not isinstance(val, torch.Tensor):
-            raise NotImplementedError
-        self.assert_is_in(val)
+    def to_numpy(self, val: torch.Tensor, safe: bool = True) -> np.ndarray:
+        if safe:
+            if not isinstance(val, torch.Tensor):
+                raise NotImplementedError
+            self.assert_is_in(val)
         val = val.argmax(-1).cpu().numpy()
         if self.use_register:
             inv_reg = self.space.register.inverse()
@@ -794,7 +797,7 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
 
     def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
         if not isinstance(val, torch.Tensor):
-            val = torch.tensor(val)
+            val = torch.tensor(val, device=self.device)
 
         x = []
         for v, space in zip(val.unbind(-1), self.space):
@@ -809,7 +812,9 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         vals = val.split([space.n for space in self.space], dim=-1)
         return vals
 
-    def to_numpy(self, val: torch.Tensor) -> np.ndarray:
+    def to_numpy(self, val: torch.Tensor, safe: bool = True) -> np.ndarray:
+        if safe:
+            self.assert_is_in(val)
         vals = self._split(val)
         out = torch.stack([val.argmax(-1) for val in vals], -1).numpy()
         return out

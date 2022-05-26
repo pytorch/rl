@@ -273,16 +273,15 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(
-    args: Namespace, batch_transform: bool = True, **kwargs
+    args: Namespace, **kwargs
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
         args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
-        batch_transform (bool, optional): if True, the transforms will be applied to the parallel env.
-            Default is `False`
         kwargs: keyword arguments for the `transformed_env_constructor` method.
     """
+    batch_transform = args.batch_transform
     if args.env_per_collector == 1:
         kwargs.update({"args": args, "use_env_creator": True})
         make_transformed_env = transformed_env_constructor(**kwargs)
@@ -453,5 +452,10 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         help="Number of steps before a reset of the environment is called (if it has not been flagged as "
         "done before). ",
     )
-
+    parser.add_argument(
+        "--batch_transform",
+        "--batch-transform",
+        action="store_true",
+        help="if True, the transforms will be applied to the parallel env, and not to each individual env.",
+    )
     return parser

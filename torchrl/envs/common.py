@@ -404,7 +404,10 @@ class _EnvClass:
         auto_reset: bool = True,
         auto_cast_to_device: bool = False,
     ) -> _TensorDict:
-        """
+        """Executes a rollout in the environment.
+
+        The function will stop as soon as one of the contained environments
+        returns done=True.
 
         Args:
             max_steps (int): maximum number of steps to be executed. The actual number of steps can be smaller if
@@ -444,7 +447,7 @@ class _EnvClass:
         if not self.is_done:
             for i in range(max_steps):
                 if auto_cast_to_device:
-                    tensordicts = auto_cast_to_device.to(policy_device)
+                    tensordict = tensordict.to(policy_device)
                 tensordict = policy(tensordict)
                 if auto_cast_to_device:
                     tensordict = tensordict.to(env_device)
@@ -667,7 +670,7 @@ class GymLikeEnv(_EnvWrapper):
 
     def _step(self, tensordict: _TensorDict) -> _TensorDict:
         action = tensordict.get("action")
-        action_np = self.action_spec.to_numpy(action)
+        action_np = self.action_spec.to_numpy(action, safe=False)
 
         reward = 0.0
         for _ in range(self.wrapper_frame_skip):
@@ -693,7 +696,7 @@ class GymLikeEnv(_EnvWrapper):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
-        self.current_tensordict = step_tensordict(tensordict_out)
+        # self.current_tensordict = step_tensordict(tensordict_out)
         return tensordict_out
 
     def set_seed(self, seed: Optional[int] = None) -> Optional[int]:

@@ -5,9 +5,9 @@ dependencies:
   - pip
   - ninja
   - cmake >= 3.18
+  - protobuf
   - pip:
     - hypothesis
-    - protobuf
     - future
     - cloudpickle
     - gym_retro
