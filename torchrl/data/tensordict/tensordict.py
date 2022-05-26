@@ -2321,14 +2321,17 @@ torch.Size([3, 2])
         return self
 
     def get_at(
-        self, key: str, idx: INDEX_TYPING, discard_idx_attr: bool = False
+        self, key: str, idx: INDEX_TYPING, discard_idx_attr: bool = False, default: Optional[Union[torch.Tensor, str]] = "_no_default_",
     ) -> COMPATIBLE_TYPES:
         if not isinstance(idx, tuple):
             idx = (idx,)
         if discard_idx_attr:
-            return self._source.get_at(key, idx)
+            return self._source.get_at(key, idx, default=default)
         else:
-            return self._source.get_at(key, self.idx)[idx]
+            out = self._source.get_at(key, self.idx, default=default)
+            if out is default:
+                return out
+            return out[idx]
 
     def update_(
         self,
