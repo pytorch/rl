@@ -3307,7 +3307,7 @@ class _CustomOpTensorDict(_TensorDict):
         self._source.device = value
 
     def _device_safe(self) -> Union[None, torch.device]:
-        return self._source._device
+        return self._source._device_safe()
 
     def _get_meta(self, key: str) -> MetaTensor:
         item = self._source._get_meta(key)
