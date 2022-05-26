@@ -130,6 +130,11 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError
 
+    @device.setter
+    @abc.abstractmethod
+    def device(self, value: DEVICE_TYPING) -> None:
+        raise NotImplementedError
+
     @abc.abstractmethod
     def _device_safe(self) -> Union[None, torch.device]:
         raise NotImplementedError
@@ -1521,20 +1526,19 @@ class TensorDict(_TensorDict):
     @property
     def device(self) -> torch.device:
         device = self._device
-        if device is None and not self.is_empty():
-            for _, item in self.items_meta():
-                device = item.device
-                break
-        elif device is None:
-            raise RuntimeError(
-                "querying device from an empty tensordict is not permitted, "
-                "unless this device has been specified upon creation."
-            )
         return device
 
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
-        self.to(value)
+        if self._device is None:
+            self._device = torch.device(value)
+        else:
+            raise RuntimeError(
+                "device cannot be set using tensordict.device = device, "
+                "because device cannot be updated in-place. To update device, use "
+                "tensordict.to(new_device), which will return a new tensordict "
+                "on the new device."
+            )
 
     def _device_safe(self) -> Union[None, torch.device]:
         return self._device
@@ -1820,15 +1824,13 @@ class TensorDict(_TensorDict):
         elif isinstance(dest, (torch.device, str, int)):
             # must be device
             dest = torch.device(dest)
-            try:
-                if dest == self.device:
-                    return self
-            except RuntimeError:
-                pass
+            if self._device_safe() is not None and dest == self.device:
+                return self
 
             self_copy = TensorDict(
                 source={key: value.to(dest) for key, value in self.items()},
                 batch_size=self.batch_size,
+                device=dest,
             )
             if self._safe:
                 # sanity check
@@ -2201,7 +2203,7 @@ torch.Size([3, 2])
 
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
-        return self.to(value)
+        self._source.device = value
 
     def _device_safe(self) -> Union[None, torch.device]:
         return self._source._device_safe()
@@ -2563,7 +2565,8 @@ class LazyStackedTensorDict(_TensorDict):
 
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
-        self.to(value)
+        for t in self.tensordicts:
+            t.device = value
 
     def _device_safe(self) -> Union[None, torch.device]:
         return self.tensordicts[0]._device_safe()
@@ -3005,7 +3008,15 @@ class SavedTensorDict(_TensorDict):
 
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
-        self.to(value)
+        if self._device is None:
+            self._device = torch.device(value)
+        else:
+            raise RuntimeError(
+                "device cannot be set using tensordict.device = device, "
+                "because device cannot be updated in-place. To update device, use "
+                "tensordict.to(new_device), which will return a new tensordict "
+                "on the new device."
+            )
 
     def _device_safe(self) -> Union[None, torch.device]:
         return self._device
@@ -3300,7 +3311,7 @@ class _CustomOpTensorDict(_TensorDict):
 
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
-        self.to(value)
+        self._source.device = value
 
     def _device_safe(self) -> Union[None, torch.device]:
         return self._source._device
