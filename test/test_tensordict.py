@@ -607,7 +607,7 @@ class TestTensorDicts:
         if td_name != "saved_td":
             td.pin_memory()
             td_device = td.to(device)
-            _device = torch.device("cuda:0")
+            _device = torch.device(device)
             assert td_device.device == _device
             assert td_device.clone().device == _device
             assert td_device is not td
