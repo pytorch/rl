@@ -453,7 +453,7 @@ class _EnvClass:
                     tensordict = tensordict.to(env_device)
                 tensordict = self.step(tensordict)
                 tensordicts.append(tensordict.clone())
-                if tensordict.get("done").all() or i == max_steps - 1:
+                if tensordict.get("done").any() or i == max_steps - 1:
                     break
                 tensordict = step_tensordict(tensordict, keep_other=True)
 
