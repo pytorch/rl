@@ -1589,21 +1589,8 @@ class TensorDict(_TensorDict):
 
     def _check_device(self) -> None:
         devices = {key: value.device for key, value in self.items_meta()}
-        if len(devices):
-            if not (
-                len(np.unique([str(device) for key, device in devices.items()])) == 1
-            ):
-                raise RuntimeError(
-                    f"expected tensors to be on a single device, found" f" {devices}"
-                )
-            device = devices[list(devices.keys())[0]]
-            if torch.device(device) != self.device:
-                raise RuntimeError(
-                    f"expected {self.__class__.__name__}.device to be "
-                    f"identical to tensors device, found"
-                    f" {self.__class__.__name__}.device={self.device} and"
-                    f" {device}"
-                )
+        if not len(set(devices)) <= 1:
+            raise RuntimeError(f"Found more than one device: {devices}")
 
     def pin_memory(self) -> _TensorDict:
         if self.device == torch.device("cpu"):
