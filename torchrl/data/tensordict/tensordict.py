@@ -1489,6 +1489,8 @@ class TensorDict(_TensorDict):
 
         if isinstance(source, _TensorDict) and device is None:
             device = source._device_safe()
+        elif device is not None:
+            device = torch.device(device)
 
         map_item_to_device = device is not None
         self._device = device
