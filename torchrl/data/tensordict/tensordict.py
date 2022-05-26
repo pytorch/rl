@@ -1588,9 +1588,13 @@ class TensorDict(_TensorDict):
         return all(memmap_list) and len(memmap_list) > 0
 
     def _check_device(self) -> None:
-        devices = {key: value.device for key, value in self.items_meta()}
-        if not len(set(devices)) <= 1:
-            raise RuntimeError(f"Found more than one device: {devices}")
+        devices = [value.device for value in self.values_meta()]
+        device0 = None
+        for _device in devices:
+            if device0 is None:
+                device0 is _device
+            elif device0 != _device:
+                raise RuntimeError(f"Found more than one device: {_device} and {device0}")
 
     def pin_memory(self) -> _TensorDict:
         if self.device == torch.device("cpu"):
