@@ -11,7 +11,6 @@ import math
 import tempfile
 import textwrap
 import uuid
-from collections import OrderedDict
 from collections.abc import Mapping
 from copy import copy, deepcopy
 from numbers import Number
@@ -131,11 +130,9 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def _device_safe(self) -> Union[None, torch.device]:
-        try:
-            return self.device
-        except RuntimeError:
-            return None
+        raise NotImplementedError
 
     def is_shared(self, no_check: bool = True) -> bool:
         """Checks if tensordict is in shared memory.
@@ -469,12 +466,11 @@ dtype=torch.float32)},
         else:
             tensor = input
 
-        if check_device:
-            try:
-                device = self.device
-                tensor = tensor.to(device)
-            except RuntimeError:
-                self.device = tensor.device
+        if check_device and self._device_safe() is not None:
+            device = self.device
+            tensor = tensor.to(device)
+        elif self._device_safe() is None:
+            self.device = tensor.device
 
         if check_shared:
             raise DeprecationWarning("check_shared is not authorized anymore")
@@ -696,15 +692,10 @@ dtype=torch.float32)},
             indexed tensor.
 
         """
-        try:
-            return self.get(key)[idx]
-        except KeyError:
-            if default is not None:
-                return default
-            raise KeyError(
-                f"key {key} not found in {self.__class__.__name__} with keys"
-                f" {sorted(list(self.keys()))}"
-            )
+        value = self.get(key, default=default)
+        if value is not default:
+            return value[idx]
+        return value
 
     @abc.abstractmethod
     def share_memory_(self) -> _TensorDict:
@@ -1459,7 +1450,7 @@ class TensorDict(_TensorDict):
         _meta_source: Optional[dict] = None,
     ) -> object:
         self._tensordict: Dict = dict()
-        self._tensordict_meta: OrderedDict = OrderedDict()
+        self._tensordict_meta: Dict = dict()
 
         self._is_shared = None
         self._is_memmap = None
@@ -1544,6 +1535,9 @@ class TensorDict(_TensorDict):
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
         self.to(value)
+
+    def _device_safe(self) -> Union[None, torch.device]:
+        return self._device
 
     @property
     def batch_size(self) -> torch.Size:
@@ -1875,9 +1869,9 @@ class TensorDict(_TensorDict):
         d_meta = {key: value for (key, value) in self.items_meta() if key in keys}
         if inplace:
             self._tensordict = d
-            self._tensordict_meta = OrderedDict(
-                {key: value for (key, value) in self.items_meta() if key in keys}
-            )
+            self._tensordict_meta = {
+                key: value for (key, value) in self.items_meta() if key in keys
+            }
             return self
         return TensorDict(
             device=self._device_safe(),
@@ -2209,6 +2203,9 @@ torch.Size([3, 2])
     def device(self, value: DEVICE_TYPING) -> None:
         return self.to(value)
 
+    def _device_safe(self) -> Union[None, torch.device]:
+        return self._source._device_safe()
+
     def _preallocate(self, key: str, value: COMPATIBLE_TYPES) -> _TensorDict:
         return self._source.set(key, value)
 
@@ -2512,6 +2509,11 @@ class LazyStackedTensorDict(_TensorDict):
 
         # sanity check
         N = len(tensordicts)
+        if not N:
+            raise RuntimeError(
+                "at least one tensordict must be provided to "
+                "StackedTensorDict to be instantiated"
+            )
         if not isinstance(tensordicts[0], _TensorDict):
             raise TypeError(
                 f"Expected input to be _TensorDict instance"
@@ -2520,11 +2522,6 @@ class LazyStackedTensorDict(_TensorDict):
         if stack_dim < 0:
             raise RuntimeError(
                 f"stack_dim must be non negative, got stack_dim={stack_dim}"
-            )
-        if not N:
-            raise RuntimeError(
-                "at least one tensordict must be provided to "
-                "StackedTensorDict to be instantiated"
             )
         _batch_size = tensordicts[0].batch_size
         device = tensordicts[0]._device_safe()
@@ -2556,6 +2553,7 @@ class LazyStackedTensorDict(_TensorDict):
 
     @property
     def device(self) -> torch.device:
+        # devices might have changed so we check that they're all the same
         device_set = {td.device for td in self.tensordicts}
         if len(device_set) != 1:
             raise RuntimeError(
@@ -2566,6 +2564,9 @@ class LazyStackedTensorDict(_TensorDict):
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
         self.to(value)
+
+    def _device_safe(self) -> Union[None, torch.device]:
+        return self.tensordicts[0]._device_safe()
 
     @property
     def batch_size(self) -> torch.Size:
@@ -3006,6 +3007,9 @@ class SavedTensorDict(_TensorDict):
     def device(self, value: DEVICE_TYPING) -> None:
         self.to(value)
 
+    def _device_safe(self) -> Union[None, torch.device]:
+        return self._device
+
     def keys(self) -> Sequence[str]:
         for k in self._keys:
             yield k
@@ -3298,6 +3302,9 @@ class _CustomOpTensorDict(_TensorDict):
     def device(self, value: DEVICE_TYPING) -> None:
         self.to(value)
 
+    def _device_safe(self) -> Union[None, torch.device]:
+        return self._source._device
+
     def _get_meta(self, key: str) -> MetaTensor:
         item = self._source._get_meta(key)
         return getattr(item, self.custom_op)(**self._update_custom_op_kwargs(item))
@@ -3421,18 +3428,9 @@ class _CustomOpTensorDict(_TensorDict):
         if inplace:
             self._source.select(*keys, inplace=inplace)
             return self
-        try:
-            return type(self)(
-                source=self._source.select(*keys),
-                custom_op=self.custom_op,
-                inv_op=self.inv_op,
-                custom_op_kwargs=self.custom_op_kwargs,
-                inv_op_kwargs=self.inv_op_kwargs,
-            )
-        except TypeError:
-            self_copy = deepcopy(self)
-            self_copy._source = self._source.select(*keys)
-            return self_copy
+        self_copy = copy(self)
+        self_copy._source = self_copy._source.select(*keys)
+        return self_copy
 
     def clone(self, recursive: bool = True) -> _TensorDict:
         if not recursive:
@@ -3465,11 +3463,8 @@ class _CustomOpTensorDict(_TensorDict):
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             return dest(source=self.contiguous().clone())
         elif isinstance(dest, (torch.device, str, int)):
-            try:
-                if torch.device(dest) == self.device:
-                    return self
-            except RuntimeError:
-                pass
+            if self._device_safe() is not None and torch.device(dest) == self.device:
+                return self
             td = self._source.to(dest)
             self_copy = copy(self)
             self_copy._source = td
@@ -3622,10 +3617,12 @@ def _td_fields(td: _TensorDict) -> str:
     return indent(
         "\n"
         + ",\n".join(
-            [
-                f"{key}: {item.class_name}({item.shape}, dtype={item.dtype})"
-                for key, item in td.items_meta()
-            ]
+            sorted(
+                [
+                    f"{key}: {item.class_name}({item.shape}, dtype={item.dtype})"
+                    for key, item in td.items_meta()
+                ]
+            )
         ),
         4 * " ",
     )
