@@ -848,7 +848,7 @@ class Recorder:
                     self.recorder.transform.eval()
                 td_record = self.recorder.rollout(
                     policy=self.policy_exploration,
-                    n_steps=self.record_frames,
+                    max_steps=self.record_frames,
                     auto_reset=True,
                     auto_cast_to_device=True,
                 )

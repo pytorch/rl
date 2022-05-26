@@ -263,10 +263,10 @@ def test_collector_consistency(num_env, env_name, seed=100):
 
     # Get a single rollout with dummypolicy
     env = env_fn(seed)
-    rollout1a = env.rollout(policy=policy, n_steps=20, auto_reset=True)
+    rollout1a = env.rollout(policy=policy, max_steps=20, auto_reset=True)
     env.set_seed(seed)
-    rollout1b = env.rollout(policy=policy, n_steps=20, auto_reset=True)
-    rollout2 = env.rollout(policy=policy, n_steps=20, auto_reset=True)
+    rollout1b = env.rollout(policy=policy, max_steps=20, auto_reset=True)
+    rollout2 = env.rollout(policy=policy, max_steps=20, auto_reset=True)
     assert_allclose_td(rollout1a, rollout1b)
     with pytest.raises(AssertionError):
         assert_allclose_td(rollout1a, rollout2)

@@ -398,8 +398,8 @@ class _EnvClass:
 
     def rollout(
         self,
+        max_steps: int,
         policy: Optional[Callable[[_TensorDict], _TensorDict]] = None,
-        n_steps: int = 1,
         callback: Optional[Callable[[_TensorDict, ...], _TensorDict]] = None,
         auto_reset: bool = True,
         auto_cast_to_device: bool = False,
@@ -410,13 +410,11 @@ class _EnvClass:
         returns done=True.
 
         Args:
+            max_steps (int): maximum number of steps to be executed. The actual number of steps can be smaller if
+                the environment reaches a done state before max_steps have been executed.
             policy (callable, optional): callable to be called to compute the desired action. If no policy is provided,
                 actions will be called using `env.rand_step()`
                 default = None
-            n_steps (int, optional): maximum number of steps to be executed. The actual
-                number of steps can be smaller if the environment reaches a done
-                state before n_steps have been executed.
-                Default is 1.
             callback (callable, optional): function to be called at each iteration with the given TensorDict.
             auto_reset (bool, optional): if True, resets automatically the environment
                 if it is in a done state when the rollout is initiated.
@@ -447,7 +445,7 @@ class _EnvClass:
 
         tensordicts = []
         if not self.is_done:
-            for i in range(n_steps):
+            for i in range(max_steps):
                 if auto_cast_to_device:
                     tensordict = tensordict.to(policy_device)
                 tensordict = policy(tensordict)
@@ -455,7 +453,7 @@ class _EnvClass:
                     tensordict = tensordict.to(env_device)
                 tensordict = self.step(tensordict)
                 tensordicts.append(tensordict.clone())
-                if tensordict.get("done").any() or i == n_steps - 1:
+                if tensordict.get("done").any() or i == max_steps - 1:
                     break
                 tensordict = step_tensordict(tensordict, keep_other=True)
 
