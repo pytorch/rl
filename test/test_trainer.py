@@ -10,8 +10,16 @@ from os import walk, path
 
 import pytest
 import torch
-from tensorboard.backend.event_processing import event_accumulator
-from torch.utils.tensorboard import SummaryWriter
+
+try:
+    import tensorboard
+    from tensorboard.backend.event_processing import event_accumulator
+    from torch.utils.tensorboard import SummaryWriter
+
+    _has_tb = True
+except ImportError:
+    _has_tb = False
+
 from torchrl.data import (
     TensorDict,
     TensorDictPrioritizedReplayBuffer,
@@ -214,6 +222,7 @@ def test_subsampler():
 
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library")
+@pytest.mark.skipif(not _has_tb, reason="No tensorboard library")
 def test_recorder():
     with tempfile.TemporaryDirectory() as folder:
         writer = SummaryWriter(log_dir=folder)

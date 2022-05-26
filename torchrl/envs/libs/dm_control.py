@@ -149,7 +149,6 @@ class DMControlEnv(GymLikeEnv):
         return env
 
     def _set_egl_device(self, device: DEVICE_TYPING):
-        return
         if device != torch.device("cpu"):
             device_id = str(device).split(":")[-1]
             if (
