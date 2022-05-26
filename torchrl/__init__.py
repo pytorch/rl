@@ -61,10 +61,14 @@ class timeit:
         self._REG[self.name][2] = count + 1
 
     @staticmethod
-    def print():
+    def print(prefix=None):
         keys = list(timeit._REG)
         keys.sort()
         for name in keys:
-            print(
+            strings = []
+            if prefix:
+                strings.append(prefix)
+            strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
+            print(" -- ".join(strings))

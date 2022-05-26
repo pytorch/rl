@@ -1533,16 +1533,26 @@ class VecNorm(Transform):
         _count = self._td.get(key + "_count")
 
         if self.training:
+            _sum = self._td.get(key + "_sum")
             value_sum = _sum_left(value, _sum)
+            _sum *= self.decay
+            _sum += value_sum
+            self._td.set_(key + "_sum", _sum, no_check=True)
+
+            _ssq = self._td.get(key + "_ssq")
             value_ssq = _sum_left(value.pow(2), _ssq)
+            _ssq *= self.decay
+            _ssq += value_ssq
+            self._td.set_(key + "_ssq", _ssq, no_check=True)
 
-            _sum = self.decay * _sum + value_sum
-            _ssq = self.decay * _ssq + value_ssq
-            _count = self.decay * _count + N
-
-            self._td.set_(key + "_sum", _sum)
-            self._td.set_(key + "_ssq", _ssq)
-            self._td.set_(key + "_count", _count)
+            _count = self._td.get(key + "_count")
+            _count *= self.decay
+            _count += N
+            self._td.set_(key + "_count", _count, no_check=True)
+        else:
+            _sum = self._td.get(key + "_sum")
+            _ssq = self._td.get(key + "_ssq")
+            _count = self._td.get(key + "_count")
 
         mean = _sum / _count
         std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
