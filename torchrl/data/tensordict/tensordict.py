@@ -683,7 +683,7 @@ dtype=torch.float32)},
         return self.update_at_(tensordict, idx)
 
     def get_at(
-        self, key: str, idx: INDEX_TYPING, default: COMPATIBLE_TYPES = None
+        self, key: str, idx: INDEX_TYPING, default: COMPATIBLE_TYPES = "_no_default_"
     ) -> COMPATIBLE_TYPES:
         """Get the value of a tensordict from the key `key` at the index `idx`.
 
@@ -2293,9 +2293,9 @@ torch.Size([3, 2])
         self._batch_size = new_size
 
     def get(
-        self, key: str, default: Optional[Union[torch.Tensor, str]] = None
+        self, key: str, default: Optional[Union[torch.Tensor, str]] = "_no_default_",
     ) -> COMPATIBLE_TYPES:
-        return self._source.get_at(key, self.idx)
+        return self._source.get_at(key, self.idx, default=default)
 
     def _get_meta(self, key: str) -> MetaTensor:
         return self._source._get_meta(key)[self.idx]
