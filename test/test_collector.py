@@ -28,6 +28,7 @@ from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
+from torchrl import seed_generator
 
 # torch.set_default_dtype(torch.double)
 
@@ -236,8 +237,10 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
     ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [3, 1])
-@pytest.mark.parametrize("env_name", ["conv", "vec"])
+# @pytest.mark.parametrize("num_env", [3, 1])
+# @pytest.mark.parametrize("env_name", ["conv", "vec"])
+@pytest.mark.parametrize("num_env", [3])
+@pytest.mark.parametrize("env_name", ["vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
     if num_env == 1:
 
@@ -247,12 +250,13 @@ def test_collector_consistency(num_env, env_name, seed=100):
             return env
 
     else:
-
+        seed_gen = seed_generator(seed, num_env)
+        seed_args = [{"seed": next(seed_gen)} for i in range(num_env)]
         def env_fn(seed):
             env = ParallelEnv(
                 num_workers=num_env,
                 create_env_fn=make_make_env(env_name),
-                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+                create_env_kwargs=seed_args,
             )
             return env
 
@@ -291,6 +295,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
     if num_env == 1:
         # rollouts collected through DataCollector are padded using pad_sequence, which introduces a first dimension
         rollout1a = rollout1a.unsqueeze(0)
+
     assert (
         rollout1a.batch_size == b1.batch_size
     ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
@@ -420,15 +425,20 @@ def test_collector_vecnorm_envcreator():
     """
     from torchrl.envs import GymEnv
 
+    num_envs = 4
     env_make = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
-    env_make = ParallelEnv(4, env_make)
+    env_make = ParallelEnv(num_envs, env_make)
 
     policy = RandomPolicy(env_make.action_spec)
+    num_data_collectors = 2
     c = MultiSyncDataCollector(
-        [env_make, env_make], policy=policy, total_frames=int(1e6)
+        [env_make] * num_data_collectors, policy=policy, total_frames=int(1e6)
     )
-    final_seed = c.set_seed(0)
-    assert final_seed == 7
+
+    init_seed = 0
+    final_seed = c.set_seed(init_seed)
+    *_, last_seed = seed_generator(init_seed, num_data_collectors)
+    assert final_seed == last_seed
 
     c_iter = iter(c)
     next(c_iter)

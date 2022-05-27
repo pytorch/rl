@@ -5,6 +5,9 @@
 
 import abc
 import time
+
+import numpy as np
+
 from warnings import warn
 
 from torch import multiprocessing as mp
@@ -88,3 +91,8 @@ def _check_for_faulty_process(processes):
         raise RuntimeError(
             "At least on process failed. Check for more infos in the log."
         )
+def seed_generator(seed, repeat):
+    MAX_SEED_VAL =  2**32 - 1
+    rng = np.random.default_rng(seed)
+    for i in range(repeat):
+        yield int.from_bytes(rng.bytes(8), "big") % MAX_SEED_VAL

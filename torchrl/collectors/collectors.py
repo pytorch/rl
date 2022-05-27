@@ -23,6 +23,8 @@ from .. import _check_for_faulty_process
 from ..modules.tensordict_module import ProbabilisticTensorDictModule
 from .utils import split_trajectories
 
+from torchrl import seed_generator
+
 __all__ = [
     "SyncDataCollector",
     "aSyncDataCollector",
@@ -839,14 +841,13 @@ class _MultiDataCollector(_DataCollector):
 
         """
         _check_for_faulty_process(self.procs)
+        seed_gen = seed_generator(seed, self.num_workers)
         for idx in range(self.num_workers):
+            seed = next(seed_gen)
             self.pipes[idx].send((seed, "seed"))
-            new_seed, msg = self.pipes[idx].recv()
+            _, msg = self.pipes[idx].recv()
             if msg != "seeded":
                 raise RuntimeError(f"Expected msg='seeded', got {msg}")
-            seed = new_seed
-            if idx < self.num_workers - 1:
-                seed = seed + 1
         self.reset()
         return seed
 

@@ -22,6 +22,8 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvClass, make_tensordict
 from torchrl.envs.env_creator import EnvCreator
 
+from torchrl import seed_generator
+
 __all__ = ["SerialEnv", "ParallelEnv"]
 
 
@@ -512,10 +514,10 @@ class SerialEnv(_BatchedEnv):
 
     @_check_start
     def set_seed(self, seed: int) -> int:
+        seed_gen = seed_generator(seed, self.num_workers)
         for i, env in enumerate(self._envs):
+            seed = next(seed_gen)
             env.set_seed(seed)
-            if i < self.num_workers - 1:
-                seed = seed + 1
         return seed
 
     @_check_start
@@ -712,11 +714,12 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def set_seed(self, seed: int) -> int:
         self._seeds = []
+        seed_gen = seed_generator(seed, len(self.parent_channels))
         for i, channel in enumerate(self.parent_channels):
+            seed = next(seed_gen)
             channel.send(("seed", seed))
             self._seeds.append(seed)
-            if i < self.num_workers - 1:
-                seed = seed + 1
+
         for channel in self.parent_channels:
             msg, _ = channel.recv()
             if msg != "seeded":
