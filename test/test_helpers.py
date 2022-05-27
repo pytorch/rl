@@ -27,6 +27,7 @@ from torchrl.trainers.helpers.models import (
     make_redq_model,
 )
 
+from torchrl import seed_generator
 
 ## these tests aren't truly unitary but setting up a fake env for the
 # purpose of building a model with args is a lot of unstable scaffoldings
@@ -430,6 +431,29 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         raise
     proof_environment.close()
     del proof_environment
+
+def test_seed_generator():
+    num_tests = 5
+    num_seeds = 100
+    prev_seeds = []
+
+    # Check unique seed generation
+    for initial_seed in range(num_tests):
+        generator = seed_generator(initial_seed, num_seeds)
+        seeds = [next(generator) for _ in range(num_seeds)]        
+        assert len(seeds) == num_seeds
+        assert len(seeds) == len(set(seeds))
+        if prev_seeds:
+            assert set(prev_seeds) != set(seeds)
+        prev_seeds = seeds.copy()
+
+    # Check deterministic seed generation
+    initial_seed = 0
+    generator = seed_generator(initial_seed, num_seeds)
+    seeds_1 = [next(generator) for _ in range(num_seeds)]
+    generator = seed_generator(initial_seed, num_seeds)
+    seeds_2 = [next(generator) for _ in range(num_seeds)]
+    assert seeds_1 == seeds_2
 
 
 if __name__ == "__main__":
