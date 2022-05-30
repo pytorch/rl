@@ -1,7 +1,6 @@
 env_name=humanoid
 env_task=walk
 env_library=dm_control
-async_collection
 record_video
 prb
 exp_name=humanoid
