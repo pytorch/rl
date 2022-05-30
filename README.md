@@ -24,12 +24,12 @@ On the high-level end, torchrl provides:
 - multiprocess [data collectors](torchrl/collectors/collectors.py);
 - efficient and generic [replay buffers](torchrl/data/replay_buffers/replay_buffers.py);
 - [TensorDict](torchrl/data/tensordict/tensordict.py), a convenient data structure to pass data from one object to another without friction;
-- An associated [`TDModule` class](torchrl/modules/td_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible! 
+- An associated [`TensorDictModule` class](torchrl/modules/tensordict_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible! 
 - [interfaces for environments](torchrl/envs) from common libraries (OpenAI gym, deepmind control lab, etc.) and [wrappers for parallel execution](torchrl/envs/vec_env.py), as well as a new pytorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py);
 - [environment transforms](torchrl/envs/transforms/transforms.py), which process and prepare the data coming out of the environments to be used by the agent;
 - various tools for distributed learning (e.g. [memory mapped tensors](torchrl/data/tensordict/memmap.py));
-- various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/td_module/actors.py));
-- [exploration wrappers](torchrl/modules/td_module/exploration.py) and [modules](torchrl/modules/models/exploration.py);
+- various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py));
+- [exploration wrappers](torchrl/modules/tensordict_module/exploration.py) and [modules](torchrl/modules/models/exploration.py);
 - various [recipes](torchrl/trainers/helpers/models.py) to build models that correspond to the environment being deployed;
 - a generic [trainer class](torchrl/trainers/trainers.py).
 

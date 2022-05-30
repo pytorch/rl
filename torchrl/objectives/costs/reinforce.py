@@ -4,7 +4,7 @@ import torch
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import step_tensordict
-from torchrl.modules import TDModule, ProbabilisticTensorDictModule
+from torchrl.modules import TensorDictModule, ProbabilisticTensorDictModule
 from torchrl.objectives import distance_loss
 from torchrl.objectives.costs.common import _LossModule
 
@@ -20,7 +20,7 @@ class ReinforceLoss(_LossModule):
         self,
         actor_network: ProbabilisticTensorDictModule,
         advantage_module: Callable[[_TensorDict], _TensorDict],
-        critic: Optional[TDModule] = None,
+        critic: Optional[TensorDictModule] = None,
         delay_value: bool = False,
         gamma: float = 0.99,
         advantage_key: str = "advantage",

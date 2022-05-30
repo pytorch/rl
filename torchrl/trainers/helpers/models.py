@@ -15,9 +15,9 @@ from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     ActorValueOperator,
     NoisyLinear,
-    TDModule,
+    TensorDictModule,
     NormalParamWrapper,
-    TDSequence,
+    TensorDictSequence,
 )
 from torchrl.modules.distributions import (
     Delta,
@@ -41,12 +41,12 @@ from torchrl.modules.models.models import (
     MLP,
     DuelingMlpDQNet,
 )
-from torchrl.modules.td_module import (
+from torchrl.modules.tensordict_module import (
     Actor,
     DistributionalQValueActor,
     QValueActor,
 )
-from torchrl.modules.td_module.actors import (
+from torchrl.modules.tensordict_module.actors import (
     ActorCriticWrapper,
     ValueOperator,
     ProbabilisticActor,
@@ -293,7 +293,7 @@ def make_ddpg_actor(
         actor_net = DdpgMlpActor(**actor_net_default_kwargs)
         gSDE_state_key = "observation_vector"
         out_keys = ["param"]
-    actor_module = TDModule(actor_net, in_keys=in_keys, out_keys=out_keys)
+    actor_module = TensorDictModule(actor_net, in_keys=in_keys, out_keys=out_keys)
 
     if args.gSDE:
         min = env_specs["action_spec"].space.minimum
@@ -303,9 +303,9 @@ def make_ddpg_actor(
             transform = d.ComposeTransform(
                 transform, d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)
             )
-        actor_module = TDSequence(
+        actor_module = TensorDictSequence(
             actor_module,
-            TDModule(
+            TensorDictModule(
                 LazygSDEModule(transform=transform, learn_sigma=False),
                 in_keys=["param", gSDE_state_key, "_eps_gSDE"],
                 out_keys=["loc", "scale", "action", "_eps_gSDE"],
@@ -536,7 +536,7 @@ def make_ppo_model(
                 out_features=hidden_features,
                 activate_last_layer=True,
             )
-        common_operator = TDModule(
+        common_operator = TensorDictModule(
             spec=None,
             module=common_module,
             in_keys=in_keys_actor,
@@ -552,13 +552,13 @@ def make_ppo_model(
                 policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
             )
             in_keys = ["hidden"]
-            actor_module = TDModule(
+            actor_module = TensorDictModule(
                 actor_net, in_keys=in_keys, out_keys=["loc", "scale"]
             )
         else:
             in_keys = ["hidden"]
             gSDE_state_key = "hidden"
-            actor_module = TDModule(
+            actor_module = TensorDictModule(
                 policy_net,
                 in_keys=in_keys,
                 out_keys=["action"],  # will be overwritten
@@ -576,9 +576,9 @@ def make_ppo_model(
             else:
                 raise RuntimeError("cannot use gSDE with discrete actions")
 
-            actor_module = TDSequence(
+            actor_module = TensorDictSequence(
                 actor_module,
-                TDModule(
+                TensorDictModule(
                     LazygSDEModule(transform=transform),
                     in_keys=["action", gSDE_state_key, "_eps_gSDE"],
                     out_keys=["loc", "scale", "action", "_eps_gSDE"],
@@ -627,13 +627,13 @@ def make_ppo_model(
             actor_net = NormalParamWrapper(
                 policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
             )
-            actor_module = TDModule(
+            actor_module = TensorDictModule(
                 actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale"]
             )
         else:
             in_keys = in_keys_actor
             gSDE_state_key = in_keys_actor[0]
-            actor_module = TDModule(
+            actor_module = TensorDictModule(
                 policy_net,
                 in_keys=in_keys,
                 out_keys=["action"],  # will be overwritten
@@ -651,9 +651,9 @@ def make_ppo_model(
             else:
                 raise RuntimeError("cannot use gSDE with discrete actions")
 
-            actor_module = TDSequence(
+            actor_module = TensorDictSequence(
                 actor_module,
-                TDModule(
+                TensorDictModule(
                     LazygSDEModule(transform=transform),
                     in_keys=["action", gSDE_state_key, "_eps_gSDE"],
                     out_keys=["loc", "scale", "action", "_eps_gSDE"],
@@ -851,7 +851,7 @@ def make_sac_model(
             scale_lb=args.scale_lb,
         )
         in_keys_actor = in_keys
-        actor_module = TDModule(
+        actor_module = TensorDictModule(
             actor_net,
             in_keys=in_keys_actor,
             out_keys=[
@@ -862,7 +862,7 @@ def make_sac_model(
 
     else:
         gSDE_state_key = in_keys[0]
-        actor_module = TDModule(
+        actor_module = TensorDictModule(
             actor_net,
             in_keys=in_keys,
             out_keys=["action"],  # will be overwritten
@@ -880,9 +880,9 @@ def make_sac_model(
         else:
             raise RuntimeError("cannot use gSDE with discrete actions")
 
-        actor_module = TDSequence(
+        actor_module = TensorDictSequence(
             actor_module,
-            TDModule(
+            TensorDictModule(
                 LazygSDEModule(transform=transform),
                 in_keys=["action", gSDE_state_key, "_eps_gSDE"],
                 out_keys=["loc", "scale", "action", "_eps_gSDE"],
@@ -1094,14 +1094,14 @@ def make_redq_model(
             scale_mapping=f"biased_softplus_{default_policy_scale}",
             scale_lb=args.scale_lb,
         )
-        actor_module = TDModule(
+        actor_module = TensorDictModule(
             actor_net,
             in_keys=in_keys_actor,
             out_keys=["loc", "scale"] + out_keys_actor[1:],
         )
 
     else:
-        actor_module = TDModule(
+        actor_module = TensorDictModule(
             actor_net,
             in_keys=in_keys_actor,
             out_keys=["action"] + out_keys_actor[1:],  # will be overwritten
@@ -1119,9 +1119,9 @@ def make_redq_model(
         else:
             raise RuntimeError("cannot use gSDE with discrete actions")
 
-        actor_module = TDSequence(
+        actor_module = TensorDictSequence(
             actor_module,
-            TDModule(
+            TensorDictModule(
                 LazygSDEModule(transform=transform),
                 in_keys=["action", gSDE_state_key, "_eps_gSDE"],
                 out_keys=["loc", "scale", "action", "_eps_gSDE"],

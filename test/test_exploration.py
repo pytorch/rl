@@ -14,15 +14,15 @@ from torchrl.data import NdBoundedTensorSpec
 from torchrl.data.tensordict.tensordict import TensorDict
 from torchrl.envs.transforms.transforms import gSDENoise
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import TDModule, TDSequence
+from torchrl.modules import TensorDictModule, TensorDictSequence
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import (
     IndependentNormal,
     NormalParamWrapper,
 )
 from torchrl.modules.models.exploration import LazygSDEModule
-from torchrl.modules.td_module.actors import ProbabilisticActor
-from torchrl.modules.td_module.exploration import (
+from torchrl.modules.tensordict_module.actors import ProbabilisticActor
+from torchrl.modules.tensordict_module.exploration import (
     _OrnsteinUhlenbeckProcess,
     OrnsteinUhlenbeckProcessWrapper,
 )
@@ -59,7 +59,7 @@ def test_ou(device, seed=0):
 def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     torch.manual_seed(seed)
     net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
-    module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+    module = TensorDictModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
     action_spec = NdBoundedTensorSpec(-torch.ones(d_act), torch.ones(d_act), (d_act,))
     policy = ProbabilisticActor(
         spec=action_spec,
@@ -103,9 +103,9 @@ def test_gsde(
     if gSDE:
         model = torch.nn.LazyLinear(action_dim)
         in_keys = ["observation"]
-        module = TDSequence(
-            TDModule(model, in_keys=in_keys, out_keys=["action"]),
-            TDModule(
+        module = TensorDictSequence(
+            TensorDictModule(model, in_keys=in_keys, out_keys=["action"]),
+            TensorDictModule(
                 LazygSDEModule(),
                 in_keys=["action", "observation", "_eps_gSDE"],
                 out_keys=["loc", "scale", "action", "_eps_gSDE"],
@@ -117,9 +117,9 @@ def test_gsde(
         in_keys = ["observation"]
         model = torch.nn.LazyLinear(action_dim * 2)
         wrapper = NormalParamWrapper(model)
-        module = TDModule(wrapper, in_keys=in_keys, out_keys=["loc", "scale"]).to(
-            device
-        )
+        module = TensorDictModule(
+            wrapper, in_keys=in_keys, out_keys=["loc", "scale"]
+        ).to(device)
         distribution_class = TanhNormal
         distribution_kwargs = {"min": -bound, "max": bound}
     spec = NdBoundedTensorSpec(

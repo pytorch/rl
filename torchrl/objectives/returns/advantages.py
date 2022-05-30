@@ -19,7 +19,7 @@ from torch import Tensor
 
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import step_tensordict
-from torchrl.modules import TDModule
+from torchrl.modules import TensorDictModule
 from torchrl.objectives.returns.functional import (
     generalized_advantage_estimate,
     td_lambda_advantage_estimate,
@@ -35,7 +35,7 @@ class TDEstimate:
 
     Args:
         gamma (scalar): exponential mean discount.
-        value_network (TDModule): value operator used to retrieve the value estimates.
+        value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool, optional): if True, rewards will be standardized
             before the TD is computed.
         gradient_mode (bool, optional): if True, gradients are propagated throught
@@ -47,7 +47,7 @@ class TDEstimate:
     def __init__(
         self,
         gamma: Union[float, torch.Tensor],
-        value_network: TDModule,
+        value_network: TensorDictModule,
         average_rewards: bool = False,
         gradient_mode: bool = False,
         value_key: str = "state_value",
@@ -130,7 +130,7 @@ class TDLambdaEstimate:
     Args:
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
-        value_network (TDModule): value operator used to retrieve the value estimates.
+        value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool, optional): if True, rewards will be standardized
             before the TD is computed.
         gradient_mode (bool, optional): if True, gradients are propagated throught
@@ -145,7 +145,7 @@ class TDLambdaEstimate:
         self,
         gamma: Union[float, torch.Tensor],
         lmbda: Union[float, torch.Tensor],
-        value_network: TDModule,
+        value_network: TensorDictModule,
         average_rewards: bool = False,
         gradient_mode: bool = False,
         value_key: str = "state_value",
@@ -244,7 +244,7 @@ class GAE:
     Args:
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
-        value_network (TDModule): value operator used to retrieve the value estimates.
+        value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool): if True, rewards will be standardized before the GAE is computed.
         gradient_mode (bool): if True, gradients are propagated throught the computation of the value function.
             Default is `False`.
@@ -254,7 +254,7 @@ class GAE:
         self,
         gamma: Union[float, torch.Tensor],
         lmbda: float,
-        value_network: TDModule,
+        value_network: TensorDictModule,
         average_rewards: bool = False,
         gradient_mode: bool = False,
     ):

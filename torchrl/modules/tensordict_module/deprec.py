@@ -10,15 +10,15 @@ from torch import Tensor, nn, distributions as d
 from torchrl.data import TensorSpec, DEVICE_TYPING
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import exploration_mode
-from torchrl.modules import TDModule, Delta, distributions_maps
+from torchrl.modules import TensorDictModule, Delta, distributions_maps
 
 
-class ProbabilisticTDModule(TDModule):
+class ProbabilisticTDModule(TensorDictModule):
     """
     DEPRECATED
 
     A probabilistic TD Module.
-    ProbabilisticTDModule is a special case of a TDModule where the output is sampled given some rule, specified by
+    ProbabilisticTDModule is a special case of a TensorDictModule where the output is sampled given some rule, specified by
     the input `default_interaction_mode` argument and the `exploration_mode()` global function.
 
     A ProbabilisticTDModule instance has two main features:
@@ -29,7 +29,7 @@ class ProbabilisticTDModule(TDModule):
 
     By default, ProbabilisticTDModule distribution class is a Delta distribution, making ProbabilisticTDModule a
     simple wrapper around a deterministic mapping function (i.e. it can be used interchangeably with its parent
-    TDModule).
+    TensorDictModule).
 
     Args:
         module (nn.Module): a nn.Module used to map the input to the output parameter space. Can be a functional

@@ -14,7 +14,7 @@ from torch import nn
 from torch.nn import Parameter
 
 from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.modules import TDModule
+from torchrl.modules import TensorDictModule
 
 
 class _LossModule(nn.Module):
@@ -44,7 +44,7 @@ class _LossModule(nn.Module):
 
     def convert_to_functional(
         self,
-        module: TDModule,
+        module: TensorDictModule,
         module_name: str,
         expand_dim: Optional[int] = None,
         create_target_params: bool = False,

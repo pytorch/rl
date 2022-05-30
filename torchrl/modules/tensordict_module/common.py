@@ -30,8 +30,8 @@ from torchrl.data import (
 from torchrl.data.tensordict.tensordict import _TensorDict
 
 __all__ = [
-    "TDModule",
-    "TDModuleWrapper",
+    "TensorDictModule",
+    "TensorDictModuleWrapper",
 ]
 
 
@@ -48,7 +48,7 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
     spec = module.spec
     if len(module.out_keys) > 1 and not isinstance(spec, CompositeSpec):
         raise RuntimeError(
-            "safe TDModules with multiple out_keys require a CompositeSpec with matching keys. Got "
+            "safe TensorDictModules with multiple out_keys require a CompositeSpec with matching keys. Got "
             f"keys {module.out_keys}."
         )
     elif not isinstance(spec, CompositeSpec):
@@ -74,8 +74,8 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
                 )
 
 
-class TDModule(nn.Module):
-    """A TDModule, for TensorDict module, is a python wrapper around a `nn.Module` that reads and writes to a
+class TensorDictModule(nn.Module):
+    """A TensorDictModule, for TensorDict module, is a python wrapper around a `nn.Module` that reads and writes to a
     TensorDict, instead of reading and returning tensors.
 
     Args:
@@ -93,19 +93,19 @@ class TDModule(nn.Module):
             If this value is out of bounds, it is projected back onto the desired space using the `TensorSpec.project`
             method. Default is `False`.
 
-    Embedding a neural network in a TDModule only requires to specify the input and output keys. The domain spec can
-        be passed along if needed. TDModule support functional and regular `nn.Module` objects. In the functional
+    Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can
+        be passed along if needed. TensorDictModule support functional and regular `nn.Module` objects. In the functional
         case, the 'params' (and 'buffers') keyword argument must be specified:
 
     Examples:
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import TDModule
+        >>> from torchrl.modules import TensorDictModule
         >>> import torch, functorch
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> spec = NdUnboundedContinuousTensorSpec(8)
         >>> module = torch.nn.GRUCell(4, 8)
         >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
-        >>> td_fmodule = TDModule(
+        >>> td_fmodule = TensorDictModule(
         ...    module=fmodule,
         ...    spec=spec,
         ...    in_keys=["input", "hidden"],
@@ -122,7 +122,7 @@ class TDModule(nn.Module):
             device=cpu)
 
     In the stateful case:
-        >>> td_module = TDModule(
+        >>> td_module = TensorDictModule(
         ...    module=module,
         ...    spec=spec,
         ...    in_keys=["input", "hidden"],
@@ -158,7 +158,7 @@ class TDModule(nn.Module):
     def __init__(
         self,
         module: Union[
-            FunctionalModule, FunctionalModuleWithBuffers, TDModule, nn.Module
+            FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
         ],
         in_keys: Iterable[str],
         out_keys: Iterable[str],
@@ -182,7 +182,7 @@ class TDModule(nn.Module):
         elif spec is not None and not isinstance(spec, CompositeSpec):
             if len(self.out_keys) > 1:
                 raise RuntimeError(
-                    f"got mode than one out_key for the TDModule: {self.out_keys},\nbut only one spec. "
+                    f"got mode than one out_key for the TensorDictModule: {self.out_keys},\nbut only one spec. "
                     "Consider using a CompositeSpec object or no spec at all."
                 )
             spec = CompositeSpec(**{self.out_keys[0]: spec})
@@ -200,7 +200,7 @@ class TDModule(nn.Module):
                 and all(_spec is None for _spec in spec.values())
             ):
                 raise RuntimeError(
-                    "`TDModule(spec=None, safe=True)` is not a valid configuration as the tensor "
+                    "`TensorDictModule(spec=None, safe=True)` is not a valid configuration as the tensor "
                     "specs are not specified"
                 )
             self.register_forward_hook(_forward_hook_safe_action)
@@ -300,7 +300,7 @@ class TDModule(nn.Module):
     def _call_module(
         self, tensors: Sequence[Tensor], **kwargs
     ) -> Union[Tensor, Sequence[Tensor]]:
-        err_msg = "Did not find the {0} keyword argument to be used with the functional module. Check it was passed to the TDModule method."
+        err_msg = "Did not find the {0} keyword argument to be used with the functional module. Check it was passed to the TensorDictModule method."
         if isinstance(self.module, (FunctionalModule, FunctionalModuleWithBuffers)):
             _vmap = self._make_vmap(kwargs, len(tensors))
             if _vmap:
@@ -370,7 +370,7 @@ class TDModule(nn.Module):
         return tensordict
 
     def random_sample(self, tensordict: _TensorDict) -> _TensorDict:
-        """see TDModule.random(...)"""
+        """see TensorDictModule.random(...)"""
         return self.random(tensordict)
 
     @property
@@ -379,7 +379,7 @@ class TDModule(nn.Module):
             return p.device
         return torch.device("cpu")
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> TDModule:
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> TensorDictModule:
         if self.spec is not None:
             self.spec = self.spec.to(dest)
         out = super().to(dest)
@@ -408,7 +408,7 @@ class TDModule(nn.Module):
             >>> from torchrl.data import NdUnboundedContinuousTensorSpec, TensorDict
             >>> lazy_module = nn.LazyLinear(4)
             >>> spec = NdUnboundedContinuousTensorSpec(18)
-            >>> td_module = TDModule(lazy_module, spec, ["some_input"],
+            >>> td_module = TensorDictModule(lazy_module, spec, ["some_input"],
             ...     ["some_output"])
             >>> _, (params, buffers) = td_module.make_functional_with_buffers()
             >>> print(params[0].shape)  # the lazy module has been initialized
@@ -433,10 +433,10 @@ class TDModule(nn.Module):
 
         if isinstance(
             self_copy.module,
-            (TDModule, FunctionalModule, FunctionalModuleWithBuffers),
+            (TensorDictModule, FunctionalModule, FunctionalModuleWithBuffers),
         ):
             raise RuntimeError(
-                "TDModule.make_functional_with_buffers requires the module to be a regular nn.Module. "
+                "TensorDictModule.make_functional_with_buffers requires the module to be a regular nn.Module. "
                 f"Found type {type(self_copy.module)}"
             )
 
@@ -484,24 +484,24 @@ class TDModule(nn.Module):
             return 0
 
 
-class TDModuleWrapper(nn.Module):
+class TensorDictModuleWrapper(nn.Module):
     """
-    Wrapper calss for TDModule objects.
-    Once created, a TDModuleWrapper will behave exactly as the TDModule it contains except for the methods that are
+    Wrapper calss for TensorDictModule objects.
+    Once created, a TensorDictModuleWrapper will behave exactly as the TensorDictModule it contains except for the methods that are
     overwritten.
 
     Args:
-        td_module (TDModule): operator to be wrapped.
+        td_module (TensorDictModule): operator to be wrapped.
 
     Examples:
         >>> #     This class can be used for exploration wrappers
         >>> import functorch
-        >>> from torchrl.modules import TDModuleWrapper, TDModule
+        >>> from torchrl.modules import TensorDictModuleWrapper, TensorDictModule
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
         >>> from torchrl.data.utils import expand_as_right
         >>> import torch
         >>>
-        >>> class EpsilonGreedyExploration(TDModuleWrapper):
+        >>> class EpsilonGreedyExploration(TensorDictModuleWrapper):
         ...     eps = 0.5
         ...     def forward(self, tensordict, params, buffers):
         ...         rand_output_clone = self.random(tensordict.clone())
@@ -519,13 +519,13 @@ class TDModuleWrapper(nn.Module):
         >>> module = torch.nn.Linear(4, 4, bias=False)  # should return a zero tensor if input is a zero tensor
         >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         >>> spec = NdUnboundedContinuousTensorSpec(4)
-        >>> tdmodule = TDModule(module=fmodule, spec=spec, in_keys=["input"], out_keys=["output"])
-        >>> tdmodule_wrapped = EpsilonGreedyExploration(tdmodule)
-        >>> tdmodule_wrapped(td, params=params, buffers=buffers)
+        >>> tensordict_module = TensorDictModule(module=fmodule, spec=spec, in_keys=["input"], out_keys=["output"])
+        >>> tensordict_module_wrapped = EpsilonGreedyExploration(tensordict_module)
+        >>> tensordict_module_wrapped(td, params=params, buffers=buffers)
         >>> print(td.get("output"))
     """
 
-    def __init__(self, td_module: TDModule):
+    def __init__(self, td_module: TensorDictModule):
         super().__init__()
         self.td_module = td_module
         if len(self.td_module._forward_hooks):

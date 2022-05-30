@@ -26,7 +26,7 @@ __all__ = [
 ]
 
 from torchrl.envs.common import _EnvClass
-from torchrl.modules import TDModuleWrapper, ProbabilisticTensorDictModule
+from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule
 
 
 def sync_async_collector(
@@ -240,7 +240,7 @@ def _make_collector(
 
 def make_collector_offpolicy(
     make_env: Callable[[], _EnvClass],
-    actor_model_explore: Union[TDModuleWrapper, ProbabilisticTensorDictModule],
+    actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
     args: Namespace,
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
@@ -249,7 +249,7 @@ def make_collector_offpolicy(
 
     Args:
         make_env (Callable): environment creator
-        actor_model_explore (TDModule): Model instance used for evaluation and exploration update
+        actor_model_explore (TensorDictModule): Model instance used for evaluation and exploration update
         args (Namespace): argument namespace built from the parser constructor
         make_env_kwargs (dict): kwargs for the env creator
 
@@ -305,7 +305,7 @@ def make_collector_offpolicy(
 
 def make_collector_onpolicy(
     make_env: Callable[[], _EnvClass],
-    actor_model_explore: Union[TDModuleWrapper, ProbabilisticTensorDictModule],
+    actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
     args: Namespace,
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:

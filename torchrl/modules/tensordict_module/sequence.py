@@ -17,13 +17,15 @@ from torchrl.data import (
     CompositeSpec,
 )
 from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.modules.td_module.common import TDModule
-from torchrl.modules.td_module.probabilistic import ProbabilisticTensorDictModule
+from torchrl.modules.tensordict_module.common import TensorDictModule
+from torchrl.modules.tensordict_module.probabilistic import (
+    ProbabilisticTensorDictModule,
+)
 
-__all__ = ["TDSequence"]
+__all__ = ["TensorDictSequence"]
 
 
-class TDSequence(TDModule):
+class TensorDictSequence(TensorDictModule):
     """
     A sequence of TDModules.
     Similarly to `nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
@@ -38,13 +40,13 @@ class TDSequence(TDModule):
     Examples:
         >>> from torchrl.modules.td_module import ProbabilisticTensorDictModule
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import  TanhNormal, TDSequence, NormalParamWrapper
+        >>> from torchrl.modules import  TanhNormal, TensorDictSequence, NormalParamWrapper
         >>> import torch, functorch
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
         >>> spec1 = NdUnboundedContinuousTensorSpec(4)
         >>> net1 = NormalParamWrapper(torch.nn.Linear(4, 8))
         >>> fnet1, params1, buffers1 = functorch.make_functional_with_buffers(net1)
-        >>> fmodule1 = TDModule(fnet1, in_keys=["input"], out_keys=["loc", "scale"])
+        >>> fmodule1 = TensorDictModule(fnet1, in_keys=["input"], out_keys=["loc", "scale"])
         >>> td_module1 = ProbabilisticTensorDictModule(
         ...    module=fmodule1,
         ...    spec=spec1,
@@ -56,13 +58,13 @@ class TDSequence(TDModule):
         >>> spec2 = NdUnboundedContinuousTensorSpec(8)
         >>> module2 = torch.nn.Linear(4, 8)
         >>> fmodule2, params2, buffers2 = functorch.make_functional_with_buffers(module2)
-        >>> td_module2 = TDModule(
+        >>> td_module2 = TensorDictModule(
         ...    module=fmodule2,
         ...    spec=spec2,
         ...    in_keys=["hidden"],
         ...    out_keys=["output"],
         ...    )
-        >>> td_module = TDSequence(td_module1, td_module2)
+        >>> td_module = TensorDictSequence(td_module1, td_module2)
         >>> params = params1 + params2
         >>> buffers = buffers1 + buffers2
         >>> _ = td_module(td, params=params, buffers=buffers)
@@ -111,7 +113,7 @@ class TDSequence(TDModule):
 
     def __init__(
         self,
-        *modules: TDModule,
+        *modules: TensorDictModule,
     ):
         in_keys = []
         out_keys = []
@@ -141,7 +143,7 @@ class TDSequence(TDModule):
         )
 
     @staticmethod
-    def _find_functional_module(module: TDModule) -> nn.Module:
+    def _find_functional_module(module: TensorDictModule) -> nn.Module:
         fmodule = module
         while not isinstance(
             fmodule, (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers)
@@ -230,7 +232,7 @@ class TDSequence(TDModule):
                 tensordict = module(tensordict)
         else:
             raise RuntimeError(
-                "TDSequence does not support keyword arguments other than 'tensordict_out', 'params', 'buffers' and 'vmap'"
+                "TensorDictSequence does not support keyword arguments other than 'tensordict_out', 'params', 'buffers' and 'vmap'"
             )
         if tensordict_out is not None:
             tensordict_out.update(tensordict, inplace=True)
@@ -240,11 +242,11 @@ class TDSequence(TDModule):
     def __len__(self):
         return len(self.module)
 
-    def __getitem__(self, index: Union[int, slice]) -> TDModule:
+    def __getitem__(self, index: Union[int, slice]) -> TensorDictModule:
         return self.module.__getitem__(index)
 
-    def __setitem__(self, index: int, tdmodule: TDModule) -> None:
-        return self.module.__setitem__(idx=index, module=tdmodule)
+    def __setitem__(self, index: int, tensordict_module: TensorDictModule) -> None:
+        return self.module.__setitem__(idx=index, module=tensordict_module)
 
     def __delitem__(self, index: Union[int, slice]) -> None:
         self.module.__delitem__(idx=index)
@@ -257,7 +259,7 @@ class TDSequence(TDModule):
             spec = layer.spec
             if spec is not None and not isinstance(spec, TensorSpec):
                 raise RuntimeError(
-                    f"TDSequence.spec requires all specs to be valid TensorSpec objects. Got "
+                    f"TensorDictSequence.spec requires all specs to be valid TensorSpec objects. Got "
                     f"{type(layer.spec)}"
                 )
             if isinstance(spec, CompositeSpec):
@@ -280,9 +282,9 @@ class TDSequence(TDModule):
             >>> lazy_module2 = nn.LazyLinear(3)
             >>> spec1 = NdUnboundedContinuousTensorSpec(18)
             >>> spec2 = NdUnboundedContinuousTensorSpec(4)
-            >>> td_module1 = TDModule(spec=spec1, module=lazy_module1, in_keys=["some_input"], out_keys=["hidden"])
-            >>> td_module2 = TDModule(spec=spec2, module=lazy_module2, in_keys=["hidden"], out_keys=["some_output"])
-            >>> td_module = TDSequence(td_module1, td_module2)
+            >>> td_module1 = TensorDictModule(spec=spec1, module=lazy_module1, in_keys=["some_input"], out_keys=["hidden"])
+            >>> td_module2 = TensorDictModule(spec=spec2, module=lazy_module2, in_keys=["hidden"], out_keys=["some_output"])
+            >>> td_module = TensorDictSequence(td_module1, td_module2)
             >>> _, (params, buffers) = td_module.make_functional_with_buffers()
             >>> print(params[0].shape) # the lazy module has been initialized
             torch.Size([4, 18])
@@ -369,7 +371,7 @@ class TDSequence(TDModule):
                         out = module.get_dist(tensordict)
             else:
                 raise RuntimeError(
-                    "TDSequence does not support keyword arguments other than 'params', 'buffers' and 'vmap'"
+                    "TensorDictSequence does not support keyword arguments other than 'params', 'buffers' and 'vmap'"
                 )
 
             return out

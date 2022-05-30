@@ -10,8 +10,8 @@ from typing import Tuple
 import torch
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.modules import TDModule
-from torchrl.modules.td_module.actors import ActorCriticWrapper
+from torchrl.modules import TensorDictModule
+from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.costs.utils import (
     distance_loss,
     hold_out_params,
@@ -25,8 +25,8 @@ class DDPGLoss(_LossModule):
     """
     The DDPG Loss class.
     Args:
-        actor_network (TDModule): a policy operator.
-        value_network (TDModule): a Q value operator.
+        actor_network (TensorDictModule): a policy operator.
+        value_network (TensorDictModule): a Q value operator.
         gamma (scalar): a discount factor for return computation.
         device (str, int or torch.device, optional): a device where the losses will be computed, if it can't be found
             via the value operator.
@@ -39,8 +39,8 @@ class DDPGLoss(_LossModule):
 
     def __init__(
         self,
-        actor_network: TDModule,
-        value_network: TDModule,
+        actor_network: TensorDictModule,
+        value_network: TensorDictModule,
         gamma: float,
         loss_function: str = "l2",
         delay_actor: bool = False,
