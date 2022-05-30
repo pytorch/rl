@@ -17,6 +17,7 @@ except ImportError:
     import argparse
 
     _configargparse = False
+
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
@@ -117,10 +118,11 @@ def main(args):
 
     model = make_ddpg_actor(
         proof_env,
-        args,
+        args=args,
         device=device,
     )
     loss_module, target_net_updater = make_ddpg_loss(model, args)
+
     actor_model_explore = model[0]
     if args.ou_exploration:
         if args.gSDE:
@@ -131,15 +133,16 @@ def main(args):
     if device == torch.device("cpu"):
         # mostly for debugging
         actor_model_explore.share_memory()
+
     if args.gSDE:
-        if args.gSDE:
-            with torch.no_grad(), set_exploration_mode("random"):
-                # get dimensions to build the parallel env
-                proof_td = actor_model_explore(proof_env.reset().to(device))
+        with torch.no_grad(), set_exploration_mode("random"):
+            # get dimensions to build the parallel env
+            proof_td = actor_model_explore(proof_env.reset().to(device))
         action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]
         del proof_td
     else:
         action_dim_gsde, state_dim_gsde = None, None
+
     proof_env.close()
     create_env_fn = parallel_env_constructor(
         args=args,
@@ -174,6 +177,7 @@ def main(args):
         recorder_rm = TransformedEnv(recorder.env, recorder.transform[1:])
     else:
         recorder_rm = recorder
+
     if isinstance(create_env_fn, ParallelEnv):
         recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
         create_env_fn.close()
