@@ -31,7 +31,8 @@ def _check_start(fun):
             self._create_td()
             self._start_workers()
         else:
-            _check_for_faulty_process(self._workers)
+            if isinstance(self, ParallelEnv):
+                _check_for_faulty_process(self._workers)
         return fun(self, *args, **kwargs)
 
     return decorated_fun
@@ -233,7 +234,7 @@ class _BatchedEnv(_EnvClass):
             self._observation_spec = dummy_env.observation_spec
             self._reward_spec = dummy_env.reward_spec
             self._dummy_env_str = str(dummy_env)
-            self._device = dummy_env.device
+            self._device = torch.device(dummy_env.device)
 
     @property
     def _dummy_env_context(self) -> _dummy_env_context:

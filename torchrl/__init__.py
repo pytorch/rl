@@ -79,9 +79,11 @@ def _check_for_faulty_process(processes):
     for p in processes:
         if not p.is_alive():
             terminate = True
-            for p in processes:
-                p.terminate()
-                break
+            for _p in processes:
+                if _p.is_alive():
+                    _p.terminate()
+        if terminate:
+            break
     if terminate:
         raise RuntimeError(
             "At least on process failed. Check for more infos in the log."

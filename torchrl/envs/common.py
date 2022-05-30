@@ -138,7 +138,8 @@ class _EnvClass:
             self.device = torch.device(device)
         self._is_done = None
         self.dtype = dtype_map.get(dtype, dtype)
-        self.is_closed = True
+        if not hasattr(self, "is_closed"):
+            self.is_closed = True
         if "_action_spec" not in self.__dir__():
             self._action_spec = None
         if "_reward_spec" not in self.__dir__():
