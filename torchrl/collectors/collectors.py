@@ -979,7 +979,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if same_device:
                 out = torch.cat([item for item in out_tensordicts_shared.values()], 0)
             else:
-                out = torch.cat([item.cpu() for item in out_tensordicts_shared.values()], 0)
+                out = torch.cat(
+                    [item.cpu() for item in out_tensordicts_shared.values()], 0
+                )
 
             if self.split_trajs:
                 out = split_trajectories(out)

@@ -14,6 +14,8 @@ fi
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 root_dir="$(git rev-parse --show-toplevel)"
+# Avoid error: "fatal: unsafe repository"
+git config --global --add safe.directory '*'
 export MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1
 export MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210
 export DISPLAY=unix:0.0
