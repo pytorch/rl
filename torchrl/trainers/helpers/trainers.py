@@ -166,6 +166,7 @@ def make_trainer(
     if hasattr(args, "noisy") and args.noisy:
         trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
 
+    trainer.register_op("batch_process", lambda batch: batch.cpu())
     if args.selected_keys:
         trainer.register_op("batch_process", SelectKeys(args.selected_keys))
 
@@ -202,7 +203,7 @@ def make_trainer(
         )
 
     trainer.register_op(
-        "post_steps_log", lambda *args: ("lr", optimizer.param_groups[0]["lr"])
+        "post_steps_log", lambda *args: {"lr": optimizer.param_groups[0]["lr"]}
     )
 
     if recorder is not None:
@@ -300,7 +301,7 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
         "--weight_decay",
         "--weight-decay",
         type=float,
-        default=2e-5,
+        default=0.0,
         help="Weight-decay to be used with the optimizer. Default=0.0.",
     )
     parser.add_argument(

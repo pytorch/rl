@@ -27,7 +27,7 @@ from torchrl.data import (
     TensorSpec,
     CompositeSpec,
 )
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import _TensorDict
 
 __all__ = [
     "TDModule",
@@ -225,7 +225,7 @@ class TDModule(nn.Module):
         return self._spec
 
     @spec.setter
-    def _spec_set(self, spec: TensorSpec) -> None:
+    def spec(self, spec: TensorSpec) -> None:
         if not isinstance(spec, TensorSpec):
             raise RuntimeError(
                 f"Trying to set an object of type {type(spec)} as a tensorspec."
@@ -248,12 +248,9 @@ class TDModule(nn.Module):
             and vmap
             and (isinstance(vmap, bool) or vmap[-1] is None)
         ):
+            #
             dim = tensors[0].shape[0]
-            shape = [dim, *tensordict.shape]
-            tensordict_out = TensorDict(
-                {key: val.expand(dim, *val.shape) for key, val in tensordict.items()},
-                shape,
-            )
+            tensordict_out = tensordict.expand(dim).contiguous()
         elif tensordict_out is None:
             tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):
@@ -267,13 +264,37 @@ class TDModule(nn.Module):
                     "vmap argument must be a boolean or a tuple of dim expensions."
                 )
             _buffers = "buffers" in kwargs
-            _vmap = (
-                kwargs["vmap"]
-                if isinstance(kwargs["vmap"], tuple)
-                else (0, 0, *(None,) * n_input)
-                if _buffers
-                else (0, *(None,) * n_input)
-            )
+            # if vmap is a tuple, we make sure the number of inputs after params and buffers match
+            if isinstance(kwargs["vmap"], (tuple, list)):
+                err_msg = f"the vmap argument had {len(kwargs['vmap'])} elements, but the module has {len(self.in_keys)} inputs"
+                if isinstance(self.module, FunctionalModuleWithBuffers):
+                    if len(kwargs["vmap"]) == 3:
+                        _vmap = (
+                            *kwargs["vmap"][:2],
+                            *[kwargs["vmap"][2]] * len(self.in_keys),
+                        )
+                    elif len(kwargs["vmap"]) == 2 + len(self.in_keys):
+                        _vmap = kwargs["vmap"]
+                    else:
+                        raise RuntimeError(err_msg)
+                elif isinstance(self.module, FunctionalModule):
+                    if len(kwargs["vmap"]) == 2:
+                        _vmap = (
+                            *kwargs["vmap"][:1],
+                            *[kwargs["vmap"][1]] * len(self.in_keys),
+                        )
+                    elif len(kwargs["vmap"]) == 1 + len(self.in_keys):
+                        _vmap = kwargs["vmap"]
+                    else:
+                        raise RuntimeError(err_msg)
+                else:
+                    raise TypeError(
+                        f"vmap not compatible with modules of type {type(self.module)}"
+                    )
+            else:
+                _vmap = (
+                    (0, 0, *(None,) * n_input) if _buffers else (0, *(None,) * n_input)
+                )
             return _vmap
 
     def _call_module(
@@ -321,7 +342,7 @@ class TDModule(nn.Module):
         tensordict_out: Optional[_TensorDict] = None,
         **kwargs,
     ) -> _TensorDict:
-        tensors = tuple(tensordict.get(in_key) for in_key in self.in_keys)
+        tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
         tensors = self._call_module(tensors, **kwargs)
         if not isinstance(tensors, tuple):
             tensors = (tensors,)
@@ -444,6 +465,23 @@ class TDModule(nn.Module):
             break
 
         return self_copy, (params, buffers)
+
+    @property
+    def num_params(self):
+        if isinstance(
+            self.module,
+            (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers),
+        ):
+            return len(self.module.param_names)
+        else:
+            return 0
+
+    @property
+    def num_buffers(self):
+        if isinstance(self.module, (functorch.FunctionalModuleWithBuffers,)):
+            return len(self.module.buffer_names)
+        else:
+            return 0
 
 
 class TDModuleWrapper(nn.Module):

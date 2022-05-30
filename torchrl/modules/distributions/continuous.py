@@ -4,20 +4,22 @@
 # LICENSE file in the root directory of this source tree.
 
 from numbers import Number
-from typing import Dict, Sequence, Union, Optional
+from typing import Dict, Sequence, Union, Optional, Tuple
 
 import numpy as np
 import torch
 from torch import distributions as D, nn
 from torch.distributions import constraints
 
+from torchrl.modules.distributions.truncated_normal import (
+    TruncatedNormal as _TruncatedNormal,
+)
+from torchrl.modules.distributions.utils import _cast_device
 from torchrl.modules.utils import mappings
-from .truncated_normal import TruncatedNormal as _TruncatedNormal
 
 __all__ = ["NormalParamWrapper", "TanhNormal", "Delta", "TanhDelta", "TruncatedNormal"]
 
-from .utils import _cast_device
-
+# speeds up distribution construction
 D.Distribution.set_default_validate_args(False)
 
 
@@ -96,15 +98,34 @@ class SafeTanhTransform(D.TanhTransform):
 
 
 class NormalParamWrapper(nn.Module):
-    """
-    A wrapper for normal distirbution parameters.
+    """A wrapper for normal distirbution parameters.
 
     Args:
-        operator (nn.Module): operator whose output will be transformed in location and scale parameters
+        operator (nn.Module): operator whose output will be transformed_in in location and scale parameters
         scale_mapping (str, optional): positive mapping function to be used with the std.
             default = "biased_softplus_1.0" (i.e. softplus map with bias such that fn(0.0) = 1.0)
             choices: "softplus", "exp", "relu", "biased_softplus_1";
         scale_lb (Number, optional): The minimum value that the variance can take. Default is 1e-4.
+
+    Examples:
+        >>> from torch import nn
+        >>> import torch
+        >>> module = nn.Linear(3, 4)
+        >>> module_normal = NormalParamWrapper(module)
+        >>> tensor = torch.randn(3)
+        >>> loc, scale = module_normal(tensor)
+        >>> print(loc.shape, scale.shape)
+        torch.Size([2]) torch.Size([2])
+        >>> assert (scale > 0).all()
+        >>> # with modules that return more than one tensor
+        >>> module = nn.LSTM(3, 4)
+        >>> module_normal = NormalParamWrapper(module)
+        >>> tensor = torch.randn(4, 2, 3)
+        >>> loc, scale, others = module_normal(tensor)
+        >>> print(loc.shape, scale.shape)
+        torch.Size([4, 2, 2]) torch.Size([4, 2, 2])
+        >>> assert (scale > 0).all()
+
     """
 
     def __init__(
@@ -118,11 +139,14 @@ class NormalParamWrapper(nn.Module):
         self.scale_mapping = scale_mapping
         self.scale_lb = scale_lb
 
-    def forward(self, *tensors):
+    def forward(self, *tensors: torch.Tensor) -> Tuple[torch.Tensor]:
         net_output = self.operator(*tensors)
+        others = tuple()
+        if not isinstance(net_output, torch.Tensor):
+            net_output, *others = net_output
         loc, scale = net_output.chunk(2, -1)
         scale = mappings(self.scale_mapping)(scale).clamp_min(self.scale_lb)
-        return loc, scale
+        return (loc, scale, *others)
 
 
 class TruncatedNormal(D.Independent):
@@ -449,7 +473,7 @@ class Delta(D.Distribution):
 
 class TanhDelta(D.TransformedDistribution):
     """
-    Implements a Tanh transformed Delta distribution.
+    Implements a Tanh transformed_in Delta distribution.
 
     Args:
         param (torch.Tensor): parameter of the delta distribution;

@@ -693,9 +693,10 @@ class DdpgCnnActor(nn.Module):
         self.mlp = MLP(**mlp_net_default_kwargs)
         ddpg_init_last_layer(self.mlp[-1], 6e-4)
 
-    def forward(self, observation: torch.Tensor) -> torch.Tensor:
-        action = self.mlp(self.convnet(observation))
-        return action
+    def forward(self, observation: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        hidden = self.convnet(observation)
+        action = self.mlp(hidden)
+        return action, hidden
 
 
 class DdpgMlpActor(nn.Module):
@@ -804,7 +805,8 @@ class DdpgCnnQNet(nn.Module):
         ddpg_init_last_layer(self.mlp[-1], 6e-4)
 
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
-        value = self.mlp(torch.cat([self.convnet(observation), action], -1))
+        hidden = torch.cat([self.convnet(observation), action], -1)
+        value = self.mlp(hidden)
         return value
 
 

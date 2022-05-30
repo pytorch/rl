@@ -6,7 +6,8 @@
 import uuid
 from datetime import datetime
 
-from torchrl.envs import ParallelEnv
+from torchrl.envs import ParallelEnv, EnvCreator
+from torchrl.envs.utils import set_exploration_mode
 
 try:
     import configargparse as argparse
@@ -100,7 +101,19 @@ def main(args):
     writer = SummaryWriter(f"sac_logging/{exp_name}")
     video_tag = exp_name if args.record_video else ""
 
-    proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
+    stats = None
+    if not args.vecnorm and args.norm_stats:
+        proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
+        stats = get_stats_random_rollout(
+            args, proof_env, key="next_pixels" if args.from_pixels else None
+        )
+        # make sure proof_env is closed
+        proof_env.close()
+    elif args.from_pixels:
+        stats = {"loc": 0.5, "scale": 0.5}
+    proof_env = transformed_env_constructor(
+        args=args, use_env_creator=False, stats=stats
+    )()
     model = make_sac_model(
         proof_env,
         args=args,
@@ -117,18 +130,30 @@ def main(args):
         # mostly for debugging
         actor_model_explore.share_memory()
 
-    stats = None
-    if not args.vecnorm and args.norm_stats:
-        stats = get_stats_random_rollout(args, proof_env)
-    # make sure proof_env is closed
+    if args.gSDE:
+        with torch.no_grad(), set_exploration_mode("random"):
+            # get dimensions to build the parallel env
+            proof_td = actor_model_explore(proof_env.reset().to(device))
+        action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]
+        del proof_td
+    else:
+        action_dim_gsde, state_dim_gsde = None, None
     proof_env.close()
-
-    create_env_fn = parallel_env_constructor(args=args, stats=stats)
+    create_env_fn = parallel_env_constructor(
+        args=args,
+        stats=stats,
+        action_dim_gsde=action_dim_gsde,
+        state_dim_gsde=state_dim_gsde,
+    )
 
     collector = make_collector_offpolicy(
         make_env=create_env_fn,
         actor_model_explore=actor_model_explore,
         args=args,
+        # make_env_kwargs=[
+        #     {"device": device} if device >= 0 else {}
+        #     for device in args.env_rendering_devices
+        # ],
     )
 
     replay_buffer = make_replay_buffer(device, args)
@@ -150,6 +175,8 @@ def main(args):
     if isinstance(create_env_fn, ParallelEnv):
         recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
         create_env_fn.close()
+    elif isinstance(create_env_fn, EnvCreator):
+        recorder_rm.load_state_dict(create_env_fn().state_dict())
     else:
         recorder_rm.load_state_dict(create_env_fn.state_dict())
 

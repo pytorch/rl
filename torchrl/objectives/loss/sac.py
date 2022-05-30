@@ -22,6 +22,8 @@ from .common import _LossModule
 
 __all__ = ["SACLoss"]
 
+from ...envs.utils import set_exploration_mode
+
 
 class SACLoss(_LossModule):
     """
@@ -194,12 +196,13 @@ class SACLoss(_LossModule):
 
     def _loss_actor(self, tensordict: _TensorDict) -> Tensor:
         # KL lossa
-        dist = self.actor_network.get_dist(
-            tensordict,
-            params=list(self.actor_network_params),
-            buffers=list(self.actor_network_buffers),
-        )[0]
-        a_reparm = dist.rsample()
+        with set_exploration_mode("random"):
+            dist = self.actor_network.get_dist(
+                tensordict,
+                params=list(self.actor_network_params),
+                buffers=list(self.actor_network_buffers),
+            )[0]
+            a_reparm = dist.rsample()
         # if not self.actor_network.spec.is_in(a_reparm):
         #     a_reparm.data.copy_(self.actor_network.spec.project(a_reparm.data))
         log_prob = dist.log_prob(a_reparm)
@@ -231,14 +234,15 @@ class SACLoss(_LossModule):
         buffers = list(self.target_actor_network_buffers) + list(
             self.target_value_network_buffers
         )
-        target_value = next_state_value(
-            tensordict,
-            actor_critic,
-            gamma=self.gamma,
-            next_val_key="state_value",
-            params=params,
-            buffers=buffers,
-        )
+        with set_exploration_mode("mode"):
+            target_value = next_state_value(
+                tensordict,
+                actor_critic,
+                gamma=self.gamma,
+                next_val_key="state_value",
+                params=params,
+                buffers=buffers,
+            )
 
         # value loss
         qvalue_network = self.qvalue_network

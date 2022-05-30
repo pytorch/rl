@@ -600,14 +600,14 @@ class TestTensorDicts:
     @pytest.mark.skipif(
         torch.cuda.device_count() == 0, reason="No cuda device detected"
     )
-    @pytest.mark.parametrize("device", [0, "cuda:0", "cuda", torch.device("cuda:0")])
+    @pytest.mark.parametrize("device", [0, "cuda:0", torch.device("cuda:0")])
     def test_pin_memory(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)
         if td_name != "saved_td":
             td.pin_memory()
             td_device = td.to(device)
-            _device = torch.device("cuda:0")
+            _device = torch.device(device)
             assert td_device.device == _device
             assert td_device.clone().device == _device
             assert td_device is not td
@@ -1080,6 +1080,95 @@ def test_set_sub_key(index0):
     assert (td.get("c")[idx0] == 0).all()
     assert (td.get_sub_tensordict(idx0).get("c") == 0).all()
     assert (td0.get("c") == 0).all()
+
+
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
+def test_create_on_device():
+    device = torch.device(0)
+
+    # TensorDict
+    td = TensorDict({}, [5])
+    with pytest.raises(RuntimeError):
+        td.device
+    td.set("a", torch.randn(5, device=device))
+    assert td.device == device
+
+    td = TensorDict({}, [5], device="cuda:0")
+    td.set("a", torch.randn(5, 1))
+    assert td.get("a").device == device
+
+    # stacked TensorDict
+    td1 = TensorDict({}, [5])
+    td2 = TensorDict({}, [5])
+    stackedtd = torch.stack([td1, td2], 0)
+    with pytest.raises(RuntimeError):
+        stackedtd.device
+    stackedtd.set("a", torch.randn(2, 5, device=device))
+    assert stackedtd.device == device
+    assert td1.device == device
+    assert td2.device == device
+
+    td1 = TensorDict({}, [5], device="cuda:0")
+    td2 = TensorDict({}, [5], device="cuda:0")
+    stackedtd = torch.stack([td1, td2], 0)
+    stackedtd.set("a", torch.randn(2, 5, 1))
+    assert stackedtd.get("a").device == device
+    assert td1.get("a").device == device
+    assert td2.get("a").device == device
+
+    # TensorDict, indexed
+    td = TensorDict({}, [5])
+    subtd = td[1]
+    with pytest.raises(RuntimeError):
+        subtd.device
+    subtd.set("a", torch.randn(1, device=device))
+    assert subtd.device == device
+
+    td = TensorDict({}, [5], device="cuda:0")
+    subtd = td[1]
+    subtd.set("a", torch.randn(1))
+    assert subtd.get("a").device == device
+
+    # TensorDict, indexed, slice
+    td = TensorDict({}, [5])
+    subtd = td[1:3]
+    with pytest.raises(RuntimeError):
+        subtd.device
+    subtd.set("a", torch.randn(2, device=device))
+    assert subtd.device == device
+
+    td = TensorDict({}, [5], device="cuda:0")
+    subtd = td[1:3]
+    subtd.set("a", torch.randn(2))
+    assert subtd.get("a").device == device
+
+    # SavedTensorDict
+    td = TensorDict({}, [5])
+    savedtd = td.to(SavedTensorDict)
+    with pytest.raises(RuntimeError):
+        savedtd.device
+    savedtd.set("a", torch.randn(5, device=device))
+    assert savedtd.device == device
+
+    td = TensorDict({}, [5], device="cuda:0")
+    savedtd = td.to(SavedTensorDict)
+    savedtd.set("a", torch.randn(5))
+    assert savedtd.get("a").device == device
+
+    # ViewedTensorDict
+    td = TensorDict({}, [6])
+    viewedtd = td.view(2, 3)
+    with pytest.raises(RuntimeError):
+        viewedtd.device
+    viewedtd.set("a", torch.randn(2, 3, device=device))
+    assert viewedtd.device == device
+
+    td = TensorDict({}, [6], device="cuda:0")
+    viewedtd = td.view(2, 3)
+    a = torch.randn(2, 3)
+    viewedtd.set("a", a)
+    assert viewedtd.get("a").device == device
+    assert (a.unsqueeze(-1).to(device) == viewedtd.get("a")).all()
 
 
 def _remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordict):

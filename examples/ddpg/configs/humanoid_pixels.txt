@@ -4,15 +4,20 @@ env_library=dm_control
 async_collection
 record_video
 prb
-normalize_rewards_online
-normalize_rewards_online_scale=10
 exp_name=humanoid
 
-num_workers=8
-env_per_collector=2
+num_workers=32
+env_per_collector=8
 
 frame_skip=2
 frames_per_batch=500
 optim_steps_per_batch=80
 batch_size=128
 total_frames=5000000
+
+from_pixels
+activation=elu
+lr=0.0002
+weight_decay=2e-5
+
+catframes=4

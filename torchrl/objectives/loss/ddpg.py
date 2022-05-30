@@ -17,6 +17,7 @@ from torchrl.objectives.loss.utils import (
     hold_out_params,
     next_state_value,
 )
+from ...envs.utils import set_exploration_mode
 from .common import _LossModule
 
 
@@ -149,13 +150,14 @@ class DDPGLoss(_LossModule):
         target_buffers = list(self.target_actor_network_buffers) + list(
             self.target_value_network_buffers
         )
-        target_value = next_state_value(
-            tensordict,
-            actor_critic,
-            gamma=self.gamma,
-            params=target_params,
-            buffers=target_buffers,
-        )
+        with set_exploration_mode("mode"):
+            target_value = next_state_value(
+                tensordict,
+                actor_critic,
+                gamma=self.gamma,
+                params=target_params,
+                buffers=target_buffers,
+            )
 
         # td_error = pred_val - target_value
         loss_value = distance_loss(

@@ -13,7 +13,6 @@ import torch
 from torch import nn, Tensor
 
 from torchrl.data import (
-    UnboundedContinuousTensorSpec,
     TensorSpec,
     CompositeSpec,
 )
@@ -114,20 +113,20 @@ class TDSequence(TDModule):
         self,
         *modules: TDModule,
     ):
-        in_keys_tmp = []
+        in_keys = []
         out_keys = []
         for module in modules:
-            in_keys_tmp += module.in_keys
+            in_keys += module.in_keys
             out_keys += module.out_keys
-        in_keys = []
-        for in_key in in_keys_tmp:
-            if (in_key not in in_keys) and (in_key not in out_keys):
-                in_keys.append(in_key)
-        if not len(in_keys):
-            raise RuntimeError(
-                "in_keys empty. Please ensure that there is at least one input "
-                "key that is not part of the output key set."
-            )
+        # in_keys = []
+        # for in_key in in_keys_tmp:
+        #     if (in_key not in in_keys) and (in_key not in out_keys):
+        #         in_keys.append(in_key)
+        # if not len(in_keys):
+        #     raise RuntimeError(
+        #         "in_keys empty. Please ensure that there is at least one input "
+        #         "key that is not part of the output key set."
+        #     )
         out_keys = [
             out_key
             for i, out_key in enumerate(out_keys)
@@ -156,13 +155,19 @@ class TDSequence(TDModule):
         return fmodule
 
     @property
+    def num_params(self):
+        return self.param_len[-1]
+
+    @property
+    def num_buffers(self):
+        return self.buffer_len[-1]
+
+    @property
     def param_len(self) -> List[int]:
         param_list = []
         prev = 0
         for module in self.module:
-            # look for functional module
-            fmodule = self._find_functional_module(module)
-            param_list.append(len(fmodule.param_names) + prev)
+            param_list.append(module.num_params + prev)
             prev = param_list[-1]
         return param_list
 
@@ -171,8 +176,7 @@ class TDSequence(TDModule):
         buffer_list = []
         prev = 0
         for module in self.module:
-            fmodule = self._find_functional_module(module)
-            buffer_list.append(len(fmodule.buffer_names) + prev)
+            buffer_list.append(module.num_buffers + prev)
             prev = buffer_list[-1]
         return buffer_list
 
@@ -189,7 +193,9 @@ class TDSequence(TDModule):
             out.append(param_list[a:b])
         return out
 
-    def forward(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
+    def forward(
+        self, tensordict: _TensorDict, tensordict_out=None, **kwargs
+    ) -> _TensorDict:
         if "params" in kwargs and "buffers" in kwargs:
             param_splits = self._split_param(kwargs["params"], "params")
             buffer_splits = self._split_param(kwargs["buffers"], "buffers")
@@ -224,9 +230,11 @@ class TDSequence(TDModule):
                 tensordict = module(tensordict)
         else:
             raise RuntimeError(
-                "TDSequence does not support keyword arguments other than 'params', 'buffers' and 'vmap'"
+                "TDSequence does not support keyword arguments other than 'tensordict_out', 'params', 'buffers' and 'vmap'"
             )
-
+        if tensordict_out is not None:
+            tensordict_out.update(tensordict, inplace=True)
+            return tensordict_out
         return tensordict
 
     def __len__(self):
@@ -247,15 +255,15 @@ class TDSequence(TDModule):
         for layer in self.module:
             out_key = layer.out_keys[0]
             spec = layer.spec
-            if spec is None:
-                # By default, we consider that unspecified specs are unbounded.
-                spec = UnboundedContinuousTensorSpec()
-            if not isinstance(spec, TensorSpec):
+            if spec is not None and not isinstance(spec, TensorSpec):
                 raise RuntimeError(
                     f"TDSequence.spec requires all specs to be valid TensorSpec objects. Got "
                     f"{type(layer.spec)}"
                 )
-            kwargs[out_key] = spec
+            if isinstance(spec, CompositeSpec):
+                kwargs.update(spec._specs)
+            else:
+                kwargs[out_key] = spec
         return CompositeSpec(**kwargs)
 
     def make_functional_with_buffers(self, clone: bool = False):

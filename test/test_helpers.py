@@ -15,6 +15,7 @@ from mocking_classes import (
     DiscreteActionConvMockEnvNumpy,
 )
 from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs.utils import set_exploration_mode
 from torchrl.trainers.helpers import parser_env_args, transformed_env_constructor
 from torchrl.trainers.helpers.models import (
     make_dqn_actor,
@@ -45,7 +46,9 @@ def _assert_keys_match(td, expeceted_keys):
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("noisy", [tuple(), ("--noisy",)])
 @pytest.mark.parametrize("distributional", [tuple(), ("--distributional",)])
-@pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
+@pytest.mark.parametrize(
+    "from_pixels", [tuple(), ("--from_pixels", "--catframes", "4")]
+)
 def test_dqn_maker(device, noisy, distributional, from_pixels):
     flags = list(noisy + distributional + from_pixels) + ["--env_name=CartPole-v1"]
     parser = argparse.ArgumentParser()
@@ -83,10 +86,16 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
-def test_ddpg_maker(device, from_pixels):
+@pytest.mark.parametrize(
+    "from_pixels", [tuple(), ("--from_pixels", "--catframes", "4")]
+)
+@pytest.mark.parametrize("gsde", [tuple(), ("--gSDE",)])
+@pytest.mark.parametrize("exploration", ["random", "mode"])
+def test_ddpg_maker(device, from_pixels, gsde, exploration):
+    if not gsde and exploration != "random":
+        pytest.skip("no need to test this setting")
     device = torch.device("cpu")
-    flags = list(from_pixels)
+    flags = list(from_pixels + gsde)
     parser = argparse.ArgumentParser()
     parser = parser_env_args(parser)
     parser = parser_model_args_continuous(parser, algorithm="DDPG")
@@ -101,18 +110,30 @@ def test_ddpg_maker(device, from_pixels):
     proof_environment = env_maker()
     actor, value = make_ddpg_actor(proof_environment, device=device, args=args)
     td = proof_environment.reset().to(device)
-    actor(td)
+    with set_exploration_mode(exploration):
+        actor(td)
     expected_keys = ["done", "action", "param"]
     if from_pixels:
-        expected_keys += ["pixels"]
+        expected_keys += ["pixels", "hidden"]
     else:
         expected_keys += ["observation_vector"]
+
+    if args.gSDE:
+        expected_keys += ["scale", "loc", "_eps_gSDE"]
 
     try:
         _assert_keys_match(td, expected_keys)
     except AssertionError:
         proof_environment.close()
         raise
+
+    if args.gSDE:
+        tsf_loc = actor.module[-1].module.transform(td.get("loc"))
+        if exploration == "random":
+            with pytest.raises(AssertionError):
+                torch.testing.assert_allclose(td.get("action"), tsf_loc)
+        else:
+            torch.testing.assert_allclose(td.get("action"), tsf_loc)
 
     value(td)
     expected_keys += ["state_action_value"]
@@ -128,13 +149,18 @@ def test_ddpg_maker(device, from_pixels):
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("from_pixels", [tuple(), ("--from_pixels",)])
+@pytest.mark.parametrize(
+    "from_pixels", [tuple(), ("--from_pixels", "--catframes", "4")]
+)
 @pytest.mark.parametrize("gsde", [tuple(), ("--gSDE",)])
 @pytest.mark.parametrize("shared_mapping", [tuple(), ("--shared_mapping",)])
-def test_ppo_maker(device, from_pixels, shared_mapping, gsde):
+@pytest.mark.parametrize("exploration", ["random", "mode"])
+def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
+    if not gsde and exploration != "random":
+        pytest.skip("no need to test this setting")
     flags = list(from_pixels + shared_mapping + gsde)
-    if gsde and from_pixels:
-        pytest.skip("gsde and from_pixels are incompatible")
+    # if gsde and from_pixels:
+    #     pytest.skip("gsde and from_pixels are incompatible")
     parser = argparse.ArgumentParser()
     parser = parser_env_args(parser)
     parser = parser_model_args_continuous(parser, algorithm="PPO")
@@ -147,6 +173,18 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde):
         args, use_env_creator=False, custom_env_maker=env_maker
     )
     proof_environment = env_maker()
+
+    if args.from_pixels and not args.shared_mapping:
+        with pytest.raises(
+            RuntimeError,
+            match="PPO learnt from pixels require the shared_mapping to be set to True",
+        ):
+            actor_value = make_ppo_model(
+                proof_environment,
+                device=device,
+                args=args,
+            )
+        return
 
     actor_value = make_ppo_model(
         proof_environment,
@@ -166,14 +204,28 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde):
         expected_keys += ["hidden"]
     if len(gsde):
         expected_keys += ["_eps_gSDE"]
+
     td = proof_environment.reset().to(device)
     td_clone = td.clone()
-    actor(td_clone)
+    with set_exploration_mode(exploration):
+        actor(td_clone)
     try:
         _assert_keys_match(td_clone, expected_keys)
     except AssertionError:
         proof_environment.close()
         raise
+
+    if args.gSDE:
+        if args.shared_mapping:
+            tsf_loc = actor[-1].module[-1].module.transform(td_clone.get("loc"))
+        else:
+            tsf_loc = actor.module[-1].module.transform(td_clone.get("loc"))
+
+        if exploration == "random":
+            with pytest.raises(AssertionError):
+                torch.testing.assert_allclose(td_clone.get("action"), tsf_loc)
+        else:
+            torch.testing.assert_allclose(td_clone.get("action"), tsf_loc)
 
     value = actor_value.get_value_operator()
     expected_keys = [
@@ -202,7 +254,10 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde):
 @pytest.mark.parametrize("from_pixels", [tuple()])
 @pytest.mark.parametrize("tanh_loc", [tuple(), ("--tanh_loc",)])
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
-def test_sac_make(device, gsde, tanh_loc, from_pixels):
+@pytest.mark.parametrize("exploration", ["random", "mode"])
+def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
+    if not gsde and exploration != "random":
+        pytest.skip("no need to test this setting")
     flags = list(gsde + tanh_loc + from_pixels)
     if gsde and from_pixels:
         pytest.skip("gsde and from_pixels are incompatible")
@@ -211,6 +266,8 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels):
     parser = parser_env_args(parser)
     parser = parser_model_args_continuous(parser, algorithm="SAC")
     args = parser.parse_args(flags)
+    if from_pixels:
+        args.catframes = 4
 
     env_maker = (
         ContinuousActionConvMockEnvNumpy if from_pixels else ContinuousActionVecMockEnv
@@ -229,7 +286,8 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels):
     actor, qvalue, value = model
     td = proof_environment.reset().to(device)
     td_clone = td.clone()
-    actor(td_clone)
+    with set_exploration_mode(exploration):
+        actor(td_clone)
     expected_keys = [
         "done",
         "pixels" if len(from_pixels) else "observation_vector",
@@ -239,6 +297,14 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels):
     ]
     if len(gsde):
         expected_keys += ["_eps_gSDE"]
+
+    if args.gSDE:
+        tsf_loc = actor.module[-1].module.transform(td_clone.get("loc"))
+        if exploration == "random":
+            with pytest.raises(AssertionError):
+                torch.testing.assert_allclose(td_clone.get("action"), tsf_loc)
+        else:
+            torch.testing.assert_allclose(td_clone.get("action"), tsf_loc)
 
     try:
         _assert_keys_match(td_clone, expected_keys)
@@ -279,10 +345,15 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("from_pixels", [tuple()])
+@pytest.mark.parametrize(
+    "from_pixels", [tuple(), ("--from_pixels", "--catframes", "4")]
+)
 @pytest.mark.parametrize("gsde", [tuple(), ("--gSDE",)])
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
-def test_redq_make(device, from_pixels, gsde):
+@pytest.mark.parametrize("exploration", ["random", "mode"])
+def test_redq_make(device, from_pixels, gsde, exploration):
+    if not gsde and exploration != "random":
+        pytest.skip("no need to test this setting")
     flags = list(from_pixels + gsde)
     if gsde and from_pixels:
         pytest.skip("gsde and from_pixels are incompatible")
@@ -307,10 +378,10 @@ def test_redq_make(device, from_pixels, gsde):
     )
     actor, qvalue = model
     td = proof_environment.reset().to(device)
-    actor(td)
+    with set_exploration_mode(exploration):
+        actor(td)
     expected_keys = [
         "done",
-        "observation_vector",
         "action",
         "sample_log_prob",
         "loc",
@@ -318,16 +389,28 @@ def test_redq_make(device, from_pixels, gsde):
     ]
     if len(gsde):
         expected_keys += ["_eps_gSDE"]
+    if from_pixels:
+        expected_keys += ["hidden", "pixels"]
+    else:
+        expected_keys += ["observation_vector"]
+
     try:
         _assert_keys_match(td, expected_keys)
     except AssertionError:
         proof_environment.close()
         raise
 
+    if args.gSDE:
+        tsf_loc = actor.module[-1].module.transform(td.get("loc"))
+        if exploration == "random":
+            with pytest.raises(AssertionError):
+                torch.testing.assert_allclose(td.get("action"), tsf_loc)
+        else:
+            torch.testing.assert_allclose(td.get("action"), tsf_loc)
+
     qvalue(td)
     expected_keys = [
         "done",
-        "observation_vector",
         "action",
         "sample_log_prob",
         "state_action_value",
@@ -336,6 +419,10 @@ def test_redq_make(device, from_pixels, gsde):
     ]
     if len(gsde):
         expected_keys += ["_eps_gSDE"]
+    if from_pixels:
+        expected_keys += ["hidden", "pixels"]
+    else:
+        expected_keys += ["observation_vector"]
     try:
         _assert_keys_match(td, expected_keys)
     except AssertionError:

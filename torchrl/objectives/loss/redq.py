@@ -296,6 +296,8 @@ class REDQLoss(_LossModule):
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
         delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
             for data collection. Default is `False`.
+        gSDE (bool, optional): Knowing if gSDE is used is necessary to create random noise variables.
+            Default is False
 
     """
 
@@ -316,6 +318,7 @@ class REDQLoss(_LossModule):
         fixed_alpha: bool = False,
         target_entropy: Union[str, Number] = "auto",
         delay_qvalue: bool = True,
+        gSDE: bool = False,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -370,6 +373,7 @@ class REDQLoss(_LossModule):
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
+        self.gSDE = gSDE
 
     @property
     def alpha(self):
@@ -416,6 +420,11 @@ class REDQLoss(_LossModule):
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
 
         with set_exploration_mode("random"):
+            if self.gSDE:
+                tensordict_actor.set(
+                    "_eps_gSDE",
+                    torch.zeros(tensordict_actor.shape, device=tensordict_actor.device),
+                )
             tensordict_actor = self.actor_network(
                 tensordict_actor,
                 params=actor_params,

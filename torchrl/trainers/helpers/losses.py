@@ -128,6 +128,7 @@ def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
         qvalue_network=qvalue_model,
         num_qvalue_nets=args.num_q_values,
         gamma=args.gamma,
+        gSDE=args.gSDE,
         **loss_kwargs,
     )
     target_net_updater = make_target_updater(args, loss_module)

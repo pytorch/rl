@@ -25,7 +25,7 @@ numpy_to_torch_dtype_dict = {
 torch_to_numpy_dtype_dict = {
     value: key for key, value in numpy_to_torch_dtype_dict.items()
 }
-DEVICE_TYPING = Union[torch.device, str]  # , int]
+DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[None, int, slice, Tensor, List[Any], Tuple[Any, ...]]
 
