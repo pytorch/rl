@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+from time import sleep
 
 import pytest
 import torch
@@ -153,15 +154,16 @@ def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.
     t = env.transform
     obs_sum = t._td.get("next_observation_sum").clone()
     obs_ssq = t._td.get("next_observation_ssq").clone()
-    obs_count = t._td.get("next_observation_ssq").clone()
+    obs_count = t._td.get("next_observation_count").clone()
     reward_sum = t._td.get("reward_sum").clone()
     reward_ssq = t._td.get("reward_ssq").clone()
-    reward_count = t._td.get("reward_ssq").clone()
+    reward_count = t._td.get("reward_count").clone()
 
     queue_out.put((obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count))
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "all_done"
     env.close()
+    print("closed")
 
 
 @pytest.mark.parametrize("nprc", [2, 5])
@@ -169,10 +171,12 @@ def test_vecnorm_parallel_auto(nprc):
     queues = []
     prcs = []
     if _has_gym:
-        make_env = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
+        make_env = EnvCreator(
+            lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm(decay=1.0))
+        )
     else:
         make_env = EnvCreator(
-            lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
+            lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm(decay=1.0))
         )
     for idx in range(nprc):
         prc_queue_in = mp.Queue(1)
@@ -197,22 +201,25 @@ def test_vecnorm_parallel_auto(nprc):
     for idx in range(nprc):
         queues[idx][1].put(msg)
 
+    sleep(0.01)
     obs_sum = td.get("next_observation_sum").clone()
     obs_ssq = td.get("next_observation_ssq").clone()
-    obs_count = td.get("next_observation_ssq").clone()
+    obs_count = td.get("next_observation_count").clone()
     reward_sum = td.get("reward_sum").clone()
     reward_ssq = td.get("reward_ssq").clone()
-    reward_count = td.get("reward_ssq").clone()
+    reward_count = td.get("reward_count").clone()
+
+    assert obs_count == nprc * 11 + 2  # 10 steps + reset + init
 
     for idx in range(nprc):
         tup = queues[idx][0].get(timeout=TIMEOUT)
         _obs_sum, _obs_ssq, _obs_count, _reward_sum, _reward_ssq, _reward_count = tup
-        assert (obs_sum == _obs_sum).all(), (_obs_sum, obs_sum)
-        assert (obs_ssq == _obs_ssq).all()
-        assert (obs_count == _obs_count).all()
-        assert (reward_sum == _reward_sum).all()
-        assert (reward_ssq == _reward_ssq).all()
-        assert (reward_count == _reward_count).all()
+        assert (obs_sum == _obs_sum).all(), "sum"
+        assert (obs_ssq == _obs_ssq).all(), "ssq"
+        assert (obs_count == _obs_count).all(), "count"
+        assert (reward_sum == _reward_sum).all(), "sum"
+        assert (reward_ssq == _reward_ssq).all(), "ssq"
+        assert (reward_count == _reward_count).all(), "count"
 
         obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
             _obs_sum,
@@ -274,7 +281,8 @@ def test_parallelenv_vecnorm():
             continue
         assert (item != new_values.get(k)).any(), k
     proc.join()
-    parallel_env.close()
+    if not parallel_env.is_closed:
+        parallel_env.close()
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
@@ -297,14 +305,14 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
         env = SerialEnv(num_workers=5, create_env_fn=lambda: GymEnv("Pendulum-v1"))
 
     env.set_seed(0)
-    t = VecNorm()
-    env = TransformedEnv(env, t)
-    env.reset()
+    t = VecNorm(decay=1.0)
+    env_t = TransformedEnv(env, t)
+    env_t.reset()
     tds = []
     for _ in range(N):
-        td = env.rand_step()
+        td = env_t.rand_step()
         if td.get("done").any():
-            env.reset()
+            env_t.reset()
         tds.append(td)
     tds = torch.stack(tds, 0)
     obs = tds.get("next_observation")
@@ -313,7 +321,8 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     assert (abs(mean) < thr).all()
     std = obs.std(0)
     assert (abs(std - 1) < thr).all()
-    env.close()
+    if not env_t.is_closed:
+        env_t.close()
 
 
 class TestTransforms:

@@ -207,28 +207,30 @@ def make_trainer(
     )
 
     if recorder is not None:
-        trainer.register_op(
-            "post_steps_log",
-            Recorder(
-                record_frames=args.record_frames,
-                frame_skip=args.frame_skip,
-                policy_exploration=policy_exploration,
-                recorder=recorder,
-                record_interval=args.record_interval,
-            ),
+        recorder_obj = Recorder(
+            record_frames=args.record_frames,
+            frame_skip=args.frame_skip,
+            policy_exploration=policy_exploration,
+            recorder=recorder,
+            record_interval=args.record_interval,
         )
         trainer.register_op(
             "post_steps_log",
-            Recorder(
-                record_frames=args.record_frames,
-                frame_skip=args.frame_skip,
-                policy_exploration=policy_exploration,
-                recorder=recorder,
-                record_interval=args.record_interval,
-                exploration_mode="random",
-                suffix="exploration",
-                out_key="r_evaluation_exploration",
-            ),
+            recorder_obj,
+        )
+        recorder_obj_explore = Recorder(
+            record_frames=args.record_frames,
+            frame_skip=args.frame_skip,
+            policy_exploration=policy_exploration,
+            recorder=recorder,
+            record_interval=args.record_interval,
+            exploration_mode="random",
+            suffix="exploration",
+            out_key="r_evaluation_exploration",
+        )
+        trainer.register_op(
+            "post_steps_log",
+            recorder_obj_explore,
         )
     trainer.register_op("post_steps", UpdateWeights(collector, 1))
 

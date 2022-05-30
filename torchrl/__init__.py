@@ -72,3 +72,19 @@ class timeit:
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
             print(" -- ".join(strings))
+
+
+def _check_for_faulty_process(processes):
+    terminate = False
+    for p in processes:
+        if not p.is_alive():
+            terminate = True
+            for _p in processes:
+                if _p.is_alive():
+                    _p.terminate()
+        if terminate:
+            break
+    if terminate:
+        raise RuntimeError(
+            "At least on process failed. Check for more infos in the log."
+        )

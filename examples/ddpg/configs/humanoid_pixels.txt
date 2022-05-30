@@ -1,13 +1,12 @@
 env_name=humanoid
 env_task=walk
 env_library=dm_control
-async_collection
 record_video
 prb
 exp_name=humanoid
 
-num_workers=32
-env_per_collector=8
+num_workers=4
+env_per_collector=1
 
 frame_skip=2
 frames_per_batch=500

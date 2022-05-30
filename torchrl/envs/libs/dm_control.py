@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import os
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -149,18 +148,13 @@ class DMControlEnv(GymLikeEnv):
         return env
 
     def _set_egl_device(self, device: DEVICE_TYPING):
-        if device != torch.device("cpu"):
-            device_id = str(device).split(":")[-1]
-            if (
-                "EGL_DEVICE_ID" in os.environ
-                and os.environ["EGL_DEVICE_ID"] != device_id
-            ):
-                raise RuntimeError(
-                    f"Conflicting devices for DMControl env pixel rendering: "
-                    f"got {device_id} but device already set to {os.environ['EGL_DEVICE_ID']}"
-                )
-            print(f"rendering on device {device_id}")
-            os.environ["EGL_DEVICE_ID"] = device_id
+        # Deprecated as lead to unreliable rendering
+        # egl device needs to be set before importing mujoco bindings: in
+        # distributed settings, it'll be easy to tell which cuda device to use.
+        # In mp settings, we'll need to use mp.Pool with a specific init function
+        # that defines the EGL device before importing libraries. For now, we'll
+        # just use a common EGL_DEVICE_ID environment variable for all processes.
+        return
 
     def to(self, device: DEVICE_TYPING) -> DMControlEnv:
         super().to(device)
