@@ -338,6 +338,7 @@ class ConvNet(nn.Sequential):
         num_cells: Union[Sequence, int] = [32, 32, 32],
         kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 3,
         strides: Union[Sequence, int] = 1,
+        paddings: Union[Sequence, int] = 1,
         activation_class: Type = nn.ELU,
         activation_kwargs: Optional[dict] = None,
         norm_class: Type = None,
@@ -363,14 +364,14 @@ class ConvNet(nn.Sequential):
         self.squeeze_output = squeeze_output
         # self.single_bias_last_layer = single_bias_last_layer
 
-        depth = _find_depth(depth, num_cells, kernel_sizes, strides)
+        depth = _find_depth(depth, num_cells, kernel_sizes, strides, paddings)
         self.depth = depth
         if depth == 0:
             raise ValueError("Null depth is not permitted with ConvNet.")
 
         for _field, _value in zip(
-            ["num_cells", "kernel_sizes", "strides"],
-            [num_cells, kernel_sizes, strides],
+            ["num_cells", "kernel_sizes", "strides", "paddings"],
+            [num_cells, kernel_sizes, strides, paddings],
         ):
             _depth = depth
             setattr(
@@ -401,8 +402,9 @@ class ConvNet(nn.Sequential):
         out_features = self.num_cells + [self.out_features]
         kernel_sizes = self.kernel_sizes
         strides = self.strides
-        for i, (_in, _out, _kernel, _stride) in enumerate(
-            zip(in_features, out_features, kernel_sizes, strides)
+        paddings = self.paddings
+        for i, (_in, _out, _kernel, _stride, _padding) in enumerate(
+            zip(in_features, out_features, kernel_sizes, strides, paddings)
         ):
             _bias = (i < len(in_features) - 1) or self.bias_last_layer
             if _in is not None:
@@ -413,11 +415,18 @@ class ConvNet(nn.Sequential):
                         kernel_size=_kernel,
                         stride=_stride,
                         bias=_bias,
+                        padding=_padding,
                     )
                 )
             else:
                 layers.append(
-                    nn.LazyConv2d(_out, kernel_size=_kernel, stride=_stride, bias=_bias)
+                    nn.LazyConv2d(
+                        _out,
+                        kernel_size=_kernel,
+                        stride=_stride,
+                        bias=_bias,
+                        padding=_padding,
+                    )
                 )
 
             layers.append(self.activation_class(**self.activation_kwargs))
@@ -671,6 +680,7 @@ class DdpgCnnActor(nn.Module):
             "num_cells": [32, 64, 64],
             "kernel_sizes": [8, 4, 3],
             "strides": [4, 2, 1],
+            "paddings": [0, 0, 1],
             "activation_class": nn.ELU,
             "norm_class": None,
             "aggregator_class": SquashDims,
