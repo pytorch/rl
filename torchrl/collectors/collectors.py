@@ -932,6 +932,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
         out_tensordicts_shared = OrderedDict()
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
+        same_device = None
         while not all(dones) and frames < self.total_frames:
             _check_for_faulty_process(self.procs)
             if self.update_at_each_batch:
@@ -967,7 +968,19 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
                 max_traj_idx = traj_ids.max().item() + 1
                 # out = out_tensordicts_shared[idx]
-            out = torch.cat([item for item in out_tensordicts_shared.values()], 0)
+            if same_device is None:
+                prev_device = None
+                same_device = True
+                for item in out_tensordicts_shared.values():
+                    if prev_device is None:
+                        prev_device = item.device
+                    else:
+                        same_device = same_device and (item.device == prev_device)
+            if same_device:
+                out = torch.cat([item for item in out_tensordicts_shared.values()], 0)
+            else:
+                out = torch.cat([item.cpu() for item in out_tensordicts_shared.values()], 0)
+
             if self.split_trajs:
                 out = split_trajectories(out)
                 frames += out.get("mask").sum()
@@ -978,7 +991,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 out = out.exclude(*excluded_keys)
-            yield out.clone()
+            yield out
 
         del out_tensordicts_shared
         self._shutdown_main()
