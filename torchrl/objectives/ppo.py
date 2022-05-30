@@ -12,11 +12,11 @@ from torch import distributions as d
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import step_tensordict
 from torchrl.modules import TDModule
-from ...modules.td_module import ProbabilisticTensorDictModule
+from torchrl.modules.td_module import ProbabilisticTensorDictModule
 
 __all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
 
-from torchrl.objectives.loss.utils import distance_loss
+from torchrl.objectives.utils import distance_loss
 from .common import _LossModule
 
 

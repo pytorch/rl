@@ -10,14 +10,14 @@ from typing import Tuple
 import torch
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TDModule
 from torchrl.modules.td_module.actors import ActorCriticWrapper
-from torchrl.objectives.loss.utils import (
+from torchrl.objectives.utils import (
     distance_loss,
     hold_out_params,
     next_state_value,
 )
-from ...envs.utils import set_exploration_mode
 from .common import _LossModule
 
 

@@ -36,14 +36,14 @@ from torchrl.objectives import (
     ClipPPOLoss,
     KLPENPPOLoss,
 )
-from torchrl.objectives.loss.common import _LossModule
-from torchrl.objectives.loss.redq import (
+from torchrl.objectives.common import _LossModule
+from torchrl.objectives.redq import (
     REDQLoss,
     REDQLoss_deprecated,
     DoubleREDQLoss_deprecated,
 )
-from torchrl.objectives.loss.reinforce import ReinforceLoss
-from torchrl.objectives.loss.utils import hold_out_net, HardUpdate, SoftUpdate
+from torchrl.objectives.reinforce import ReinforceLoss
+from torchrl.objectives.utils import hold_out_net, HardUpdate, SoftUpdate
 from torchrl.objectives.value.advantages import TDEstimate, GAE, TDLambdaEstimate
 from torchrl.objectives.value.functional import (
     vec_td_lambda_advantage_estimate,
