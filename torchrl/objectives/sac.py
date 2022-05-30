@@ -13,8 +13,8 @@ from torch import Tensor
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.modules import ProbabilisticActor
-from torchrl.modules import TDModule
-from torchrl.modules.td_module.actors import (
+from torchrl.modules import TensorDictModule
+from torchrl.modules.tensordict_module.actors import (
     ActorCriticWrapper,
 )
 from torchrl.objectives.utils import distance_loss, next_state_value
@@ -32,8 +32,8 @@ class SACLoss(_LossModule):
 
     Args:
         actor_network (ProbabilisticActor): stochastic actor
-        qvalue_network (TDModule): Q(s, a) parametric model
-        value_network (TDModule): V(s) parametric model\
+        qvalue_network (TensorDictModule): Q(s, a) parametric model
+        value_network (TensorDictModule): V(s) parametric model\
         qvalue_network_bis (ProbabilisticTDModule, optional): if required, the
             Q-value can be computed twice independently using two separate
             networks. The minimum predicted value will then be used for
@@ -72,8 +72,8 @@ class SACLoss(_LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
-        qvalue_network: TDModule,
-        value_network: TDModule,
+        qvalue_network: TensorDictModule,
+        value_network: TensorDictModule,
         num_qvalue_nets: int = 2,
         gamma: Number = 0.99,
         priotity_key: str = "td_error",

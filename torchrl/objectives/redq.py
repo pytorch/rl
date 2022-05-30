@@ -13,9 +13,9 @@ from torch import Tensor
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
-from torchrl.modules import TDModule
-from torchrl.objectives.common import _LossModule
-from torchrl.objectives.utils import (
+from torchrl.modules import TensorDictModule
+from torchrl.objectives.costs.common import _LossModule
+from torchrl.objectives.costs.utils import (
     distance_loss,
     hold_out_params,
     next_state_value as get_next_state_value,
@@ -32,8 +32,8 @@ class REDQLoss_deprecated(_LossModule):
     train a SAC-like algorithm.
 
     Args:
-        actor_network (TDModule): the actor to be trained
-        qvalue_network (TDModule): a single Q-value network that will be multiplicated as many times as needed.
+        actor_network (TensorDictModule): the actor to be trained
+        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
         sub_sample_len (int, optional): number of Q-value networks to be subsampled to evaluate the next state value
             Default is 2.
@@ -58,8 +58,8 @@ class REDQLoss_deprecated(_LossModule):
 
     def __init__(
         self,
-        actor_network: TDModule,
-        qvalue_network: TDModule,
+        actor_network: TensorDictModule,
+        qvalue_network: TensorDictModule,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
         gamma: Number = 0.99,
@@ -276,8 +276,8 @@ class REDQLoss(_LossModule):
     train a SAC-like algorithm.
 
     Args:
-        actor_network (TDModule): the actor to be trained
-        qvalue_network (TDModule): a single Q-value network that will be multiplicated as many times as needed.
+        actor_network (TensorDictModule): the actor to be trained
+        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
         sub_sample_len (int, optional): number of Q-value networks to be subsampled to evaluate the next state value
             Default is 2.
@@ -305,8 +305,8 @@ class REDQLoss(_LossModule):
 
     def __init__(
         self,
-        actor_network: TDModule,
-        qvalue_network: TDModule,
+        actor_network: TensorDictModule,
+        qvalue_network: TensorDictModule,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
         gamma: Number = 0.99,

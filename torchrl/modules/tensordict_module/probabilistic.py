@@ -15,12 +15,12 @@ from torchrl.data import TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import exploration_mode, set_exploration_mode
 from torchrl.modules.distributions import distributions_maps, Delta
-from torchrl.modules.td_module.common import TDModule, _check_all_str
+from torchrl.modules.tensordict_module.common import TensorDictModule, _check_all_str
 
 __all__ = ["ProbabilisticTensorDictModule"]
 
 
-class ProbabilisticTensorDictModule(TDModule):
+class ProbabilisticTensorDictModule(TensorDictModule):
     """
     A probabilistic TD Module.
     `ProbabilisticTDModule` is a special case of a TDModule where the output is
@@ -96,7 +96,7 @@ class ProbabilisticTensorDictModule(TDModule):
         >>> spec = NdUnboundedContinuousTensorSpec(4)
         >>> net = NormalParamWrapper(torch.nn.GRUCell(4, 8))
         >>> fnet, params, buffers = functorch.make_functional_with_buffers(net)
-        >>> module = TDModule(fnet, in_keys=["input", "hidden"], out_keys=["loc", "scale"])
+        >>> module = TensorDictModule(fnet, in_keys=["input", "hidden"], out_keys=["loc", "scale"])
         >>> td_module = ProbabilisticTensorDictModule(
         ...    module=module,
         ...    spec=spec,
@@ -140,7 +140,7 @@ class ProbabilisticTensorDictModule(TDModule):
 
     def __init__(
         self,
-        module: TDModule,
+        module: TensorDictModule,
         dist_param_keys: Union[str, Sequence[str]],
         out_key_sample: Union[str, Sequence[str]],
         spec: Optional[TensorSpec] = None,

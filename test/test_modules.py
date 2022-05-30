@@ -14,7 +14,7 @@ from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
 from torchrl.modules import (
     QValueActor,
     ActorValueOperator,
-    TDModule,
+    TensorDictModule,
     ValueOperator,
     ProbabilisticActor,
 )
@@ -127,10 +127,10 @@ def test_value_based_policy(device):
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_actorcritic(device):
-    common_module = TDModule(
+    common_module = TensorDictModule(
         spec=None, module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"]
     ).to(device)
-    module = TDModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
+    module = TensorDictModule(nn.Linear(4, 5), in_keys=["hidden"], out_keys=["param"])
     policy_operator = ProbabilisticActor(
         spec=None, module=module, dist_param_keys=["param"], return_log_prob=True
     ).to(device)

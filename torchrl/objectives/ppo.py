@@ -11,12 +11,12 @@ from torch import distributions as d
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import step_tensordict
-from torchrl.modules import TDModule
-from torchrl.modules.td_module import ProbabilisticTensorDictModule
+from torchrl.modules import TensorDictModule
+from ...modules.tensordict_module import ProbabilisticTensorDictModule
 
 __all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
 
-from torchrl.objectives.utils import distance_loss
+from torchrl.objectives.costs.utils import distance_loss
 from .common import _LossModule
 
 
@@ -57,7 +57,7 @@ class PPOLoss(_LossModule):
     def __init__(
         self,
         actor: ProbabilisticTensorDictModule,
-        critic: TDModule,
+        critic: TensorDictModule,
         advantage_key: str = "advantage",
         advantage_diff_key: str = "value_error",
         entropy_bonus: bool = True,
@@ -188,7 +188,7 @@ class ClipPPOLoss(PPOLoss):
     def __init__(
         self,
         actor: ProbabilisticTensorDictModule,
-        critic: TDModule,
+        critic: TensorDictModule,
         advantage_key: str = "advantage",
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
@@ -297,7 +297,7 @@ class KLPENPPOLoss(PPOLoss):
     def __init__(
         self,
         actor: ProbabilisticTensorDictModule,
-        critic: TDModule,
+        critic: TensorDictModule,
         advantage_key="advantage",
         dtarg: float = 0.01,
         beta: float = 1.0,

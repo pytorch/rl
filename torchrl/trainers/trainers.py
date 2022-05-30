@@ -33,8 +33,8 @@ from torchrl.data.utils import expand_right
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import TDModule
-from torchrl.objectives.common import _LossModule
+from torchrl.modules import TensorDictModule
+from torchrl.objectives.costs.common import _LossModule
 
 REPLAY_BUFFER_CLASS = {
     "prioritized": TensorDictPrioritizedReplayBuffer,
@@ -817,7 +817,7 @@ class Recorder:
         record_interval: int,
         record_frames: int,
         frame_skip: int,
-        policy_exploration: TDModule,
+        policy_exploration: TensorDictModule,
         recorder: _EnvClass,
         exploration_mode: str = "mode",
         out_key: str = "r_evaluation",
