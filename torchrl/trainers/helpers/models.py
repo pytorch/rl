@@ -1001,8 +1001,6 @@ def make_redq_model(
     default_policy_scale = args.default_policy_scale
     gSDE = args.gSDE
 
-    proof_environment.reset()
-    td = proof_environment.current_tensordict
     action_spec = proof_environment.action_spec
     obs_spec = proof_environment.observation_spec
 
@@ -1147,6 +1145,7 @@ def make_redq_model(
 
     # init nets
     with torch.no_grad(), set_exploration_mode("random"):
+        td = proof_environment.rollout(1000)
         td = td.to(device)
         for net in model:
             net(td)
