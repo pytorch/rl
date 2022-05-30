@@ -17,6 +17,7 @@ except ImportError:
     import argparse
 
     _configargparse = False
+
 import torch.cuda
 from torch.utils.tensorboard import SummaryWriter
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
@@ -100,7 +101,11 @@ def main(args):
         args=args, use_env_creator=False, stats=stats
     )()
 
-    model = make_ppo_model(proof_env, args=args, device=device)
+    model = make_ppo_model(
+        proof_env,
+        args=args,
+        device=device,
+    )
     actor_model = model.get_policy_operator()
 
     loss_module = make_ppo_loss(model, args)
@@ -112,6 +117,7 @@ def main(args):
         del proof_td
     else:
         action_dim_gsde, state_dim_gsde = None, None
+
     proof_env.close()
     create_env_fn = parallel_env_constructor(
         args=args,
@@ -136,6 +142,7 @@ def main(args):
         norm_obs_only=True,
         stats=stats,
         writer=writer,
+        use_env_creator=False,
     )()
 
     # remove video recorder from recorder to have matching state_dict keys
@@ -159,7 +166,14 @@ def main(args):
             t.loc.fill_(0.0)
 
     trainer = make_trainer(
-        collector, loss_module, recorder, None, actor_model, None, writer, args
+        collector,
+        loss_module,
+        recorder,
+        None,
+        actor_model,
+        None,
+        writer,
+        args,
     )
     if args.loss == "kl":
         trainer.register_op("pre_optim_steps", loss_module.reset)

@@ -903,14 +903,19 @@ class LSTMNet(nn.Module):
         hidden0_in: Optional[torch.Tensor] = None,
         hidden1_in: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        squeeze = False
+        squeeze0 = False
+        squeeze1 = False
+        if input.ndimension() == 1:
+            squeeze0 = True
+            input = input.unsqueeze(0).contiguous()
+
         if input.ndimension() == 2:
-            squeeze = True
+            squeeze1 = True
             input = input.unsqueeze(1).contiguous()
         batch, steps = input.shape[:2]
 
         if hidden1_in is None and hidden0_in is None:
-            shape = (batch, steps) if not squeeze else (batch,)
+            shape = (batch, steps) if not squeeze1 else (batch,)
             hidden0_in, hidden1_in = [
                 torch.zeros(
                     *shape,
@@ -944,9 +949,13 @@ class LSTMNet(nn.Module):
         y = self.linear(y0)
 
         out = [y, hidden0_in, hidden1_in, *hidden]
-        if squeeze:
+        if squeeze1:
+            # squeezes time
             out[0] = out[0].squeeze(1)
-        else:
+        if squeeze0:
+            # squeezes batch
+            out[0] = out[0].squeeze(0)
+        if not squeeze0 and not squeeze1:
             # we pad the hidden states with zero to make tensordict happy
             for i in range(3, 5):
                 out[i] = torch.stack(
