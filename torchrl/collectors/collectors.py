@@ -965,9 +965,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 if max_traj_idx is not None:
                     traj_ids += max_traj_idx
                     # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
-                max_traj_idx = traj_ids.max() + 1
+                max_traj_idx = traj_ids.max().item() + 1
                 # out = out_tensordicts_shared[idx]
-            out = torch.cat([item for key, item in out_tensordicts_shared.items()], 0)
+            out = torch.cat([item for item in out_tensordicts_shared.values()], 0)
             if self.split_trajs:
                 out = split_trajectories(out)
                 frames += out.get("mask").sum()
