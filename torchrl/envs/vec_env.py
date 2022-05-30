@@ -15,6 +15,7 @@ from typing import Callable, Optional, Sequence, Union, Any, List
 import torch
 from torch import multiprocessing as mp
 
+from torchrl import _check_for_faulty_process
 from torchrl.data import TensorDict, TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -29,6 +30,8 @@ def _check_start(fun):
         if self.is_closed:
             self._create_td()
             self._start_workers()
+        else:
+            _check_for_faulty_process(self._workers)
         return fun(self, *args, **kwargs)
 
     return decorated_fun
@@ -127,7 +130,12 @@ class _BatchedEnv(_EnvClass):
     """
 
     _verbose: bool = False
-    _excluded_wrapped_keys = ["is_closed", "parent_channels", "batch_size"]
+    _excluded_wrapped_keys = [
+        "is_closed",
+        "parent_channels",
+        "batch_size",
+        "_dummy_env_str",
+    ]
 
     def __init__(
         self,
@@ -202,6 +210,7 @@ class _BatchedEnv(_EnvClass):
         self._observation_spec = None
         self._reward_spec = None
         self._device = None
+        self._dummy_env_str = None
 
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.

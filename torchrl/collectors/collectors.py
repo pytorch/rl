@@ -19,6 +19,7 @@ from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
+from .. import _check_for_faulty_process
 from ..modules.td_module import ProbabilisticTensorDictModule
 from .utils import split_trajectories
 
@@ -799,6 +800,7 @@ class _MultiDataCollector(_DataCollector):
         self._shutdown_main()
 
     def _shutdown_main(self) -> None:
+        _check_for_faulty_process(self.procs)
         if self.closed:
             return
         self.closed = True
@@ -836,7 +838,7 @@ class _MultiDataCollector(_DataCollector):
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
-
+        _check_for_faulty_process(self.procs)
         for idx in range(self.num_workers):
             self.pipes[idx].send((seed, "seed"))
             new_seed, msg = self.pipes[idx].recv()
@@ -856,6 +858,7 @@ class _MultiDataCollector(_DataCollector):
                 to be reset. If None, all environments are reset.
 
         """
+        _check_for_faulty_process(self.procs)
 
         if reset_idx is None:
             reset_idx = [True for _ in range(self.num_workers)]
@@ -930,6 +933,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         while not all(dones) and frames < self.total_frames:
+            _check_for_faulty_process(self.procs)
             if self.update_at_each_batch:
                 self.update_policy_weights_()
 
@@ -1030,6 +1034,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         while self._frames < self.total_frames:
+            _check_for_faulty_process(self.procs)
             i += 1
             idx, j, out = self._get_from_queue()
 
