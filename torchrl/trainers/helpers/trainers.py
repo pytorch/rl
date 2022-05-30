@@ -14,7 +14,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import _EnvClass
-from torchrl.modules import TDModule, TDModuleWrapper, reset_noise
+from torchrl.modules import TensorDictModule, TensorDictModuleWrapper, reset_noise
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 from torchrl.trainers.trainers import (
@@ -47,7 +47,9 @@ def make_trainer(
     loss_module: _LossModule,
     recorder: Optional[_EnvClass] = None,
     target_net_updater: Optional[_TargetNetUpdate] = None,
-    policy_exploration: Optional[Union[TDModuleWrapper, TDModule]] = None,
+    policy_exploration: Optional[
+        Union[TensorDictModuleWrapper, TensorDictModule]
+    ] = None,
     replay_buffer: Optional[ReplayBuffer] = None,
     writer: Optional["SummaryWriter"] = None,
     args: Optional[Namespace] = None,
@@ -60,7 +62,7 @@ def make_trainer(
         recorder (_EnvClass, optional): a recorder environment. If None, the trainer will train the policy without
             testing it.
         target_net_updater (_TargetNetUpdate, optional): A target network update object.
-        policy_exploration (TDModule or TDModuleWrapper, optional): a policy to be used for recording and exploration
+        policy_exploration (TDModule or TensorDictModuleWrapper, optional): a policy to be used for recording and exploration
             updates (should be synced with the learnt policy).
         replay_buffer (ReplayBuffer, optional): a replay buffer to be used to collect data.
         writer (SummaryWriter, optional): a tensorboard SummaryWriter to be used for logging.
@@ -79,7 +81,7 @@ def make_trainer(
         >>> from torchrl.collectors.collectors import SyncDataCollector
         >>> from torchrl.data import TensorDictReplayBuffer
         >>> from torchrl.envs import GymEnv
-        >>> from torchrl.modules import TDModuleWrapper, TDModule, ValueOperator, EGreedyWrapper
+        >>> from torchrl.modules import TensorDictModuleWrapper, TensorDictModule, ValueOperator, EGreedyWrapper
         >>> from torchrl.objectives.costs.common import _LossModule
         >>> from torchrl.objectives.costs.utils import _TargetNetUpdate
         >>> from torchrl.objectives import DDPGLoss
@@ -89,7 +91,7 @@ def make_trainer(
         >>> action_spec = env_proof.action_spec
         >>> net = torch.nn.Linear(env_proof.observation_spec.shape[-1], action_spec.shape[-1])
         >>> net_value = torch.nn.Linear(env_proof.observation_spec.shape[-1], 1)  # for the purpose of testing
-        >>> policy = TDModule(action_spec, net, in_keys=["observation"], out_keys=["action"])
+        >>> policy = TensorDictModule(action_spec, net, in_keys=["observation"], out_keys=["action"])
         >>> value = ValueOperator(net_value, in_keys=["observation"], out_keys=["state_action_value"])
         >>> collector = SyncDataCollector(env_maker, policy, total_frames=100)
         >>> loss_module = DDPGLoss(policy, value, gamma=0.99)

@@ -13,7 +13,7 @@ from torch.nn import functional as F
 
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.utils import step_tensordict
-from torchrl.modules import TDModule
+from torchrl.modules import TensorDictModule
 
 __all__ = ["SoftUpdate", "HardUpdate", "distance_loss", "hold_out_params"]
 
@@ -289,7 +289,7 @@ class hold_out_params(_context_manager):
 @torch.no_grad()
 def next_state_value(
     tensordict: _TensorDict,
-    operator: Optional[TDModule] = None,
+    operator: Optional[TensorDictModule] = None,
     next_val_key: str = "state_action_value",
     gamma: float = 0.99,
     pred_next_val: Optional[Tensor] = None,

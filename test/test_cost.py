@@ -23,10 +23,14 @@ from torchrl.data.postprocs.postprocs import MultiStep
 # from torchrl.data.postprocs.utils import expand_as_right
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.data.utils import expand_as_right
-from torchrl.modules import DistributionalQValueActor, QValueActor, TDModule
+from torchrl.modules import DistributionalQValueActor, QValueActor, TensorDictModule
 from torchrl.modules.distributions.continuous import TanhNormal, NormalParamWrapper
 from torchrl.modules.models.models import MLP
-from torchrl.modules.td_module.actors import ValueOperator, Actor, ProbabilisticActor
+from torchrl.modules.tensordict_module.actors import (
+    ValueOperator,
+    Actor,
+    ProbabilisticActor,
+)
 from torchrl.objectives import (
     DQNLoss,
     DistributionalDQNLoss,
@@ -500,7 +504,9 @@ class TestSAC:
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
         actor = ProbabilisticActor(
             spec=CompositeSpec(action=action_spec, loc=None, scale=None),
             module=module,
@@ -812,7 +818,9 @@ class TestREDQ:
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
@@ -1099,7 +1107,9 @@ class TestPPO:
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
@@ -1249,7 +1259,9 @@ class TestReinforce:
         gamma = 0.9
         value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
         net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
-        module = TDModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
         actor_net = ProbabilisticActor(
             module,
             distribution_class=TanhNormal,

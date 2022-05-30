@@ -11,10 +11,10 @@ import torch
 from torchrl.data import CompositeSpec
 from torchrl.data.utils import expand_as_right
 from torchrl.envs.utils import exploration_mode
-from torchrl.modules.td_module.common import (
+from torchrl.modules.tensordict_module.common import (
     _forward_hook_safe_action,
-    TDModule,
-    TDModuleWrapper,
+    TensorDictModule,
+    TensorDictModuleWrapper,
 )
 
 __all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
@@ -22,12 +22,12 @@ __all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
 from torchrl.data.tensordict.tensordict import _TensorDict
 
 
-class EGreedyWrapper(TDModuleWrapper):
+class EGreedyWrapper(TensorDictModuleWrapper):
     """
     Epsilon-Greedy PO wrapper.
 
     Args:
-        policy (TDModule): a deterministic policy.
+        policy (TensorDictModule): a deterministic policy.
         eps_init (scalar): initial epsilon value.
             default: 1.0
         eps_end (scalar): final epsilon value.
@@ -60,7 +60,7 @@ class EGreedyWrapper(TDModuleWrapper):
 
     def __init__(
         self,
-        policy: TDModule,
+        policy: TensorDictModule,
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
@@ -106,7 +106,7 @@ class EGreedyWrapper(TDModuleWrapper):
         return tensordict
 
 
-class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
+class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     """
     Ornstein-Uhlenbeck exploration policy wrapper as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
     https://arxiv.org/pdf/1509.02971.pdf.
@@ -126,7 +126,7 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
     zeroing the tensordict at reset time.
 
     Args:
-        policy (TDModule): a policy
+        policy (TensorDictModule): a policy
         eps_init (scalar): initial epsilon value, determining the amount of noise to be added.
             default: 1.0
         eps_end (scalar): final epsilon value, determining the amount of noise to be added.
@@ -168,7 +168,7 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
 
     def __init__(
         self,
-        policy: TDModule,
+        policy: TensorDictModule,
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
