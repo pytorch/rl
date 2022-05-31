@@ -883,10 +883,31 @@ class DdpgMlpQNet(nn.Module):
 
 
 class LSTMNet(nn.Module):
-    """
-    An embedder for an LSTM followed by an MLP.
+    """An embedder for an LSTM preceded by an MLP.
+
     The forward method returns the hidden states of the current state (input hidden states) and the output, as
     the environment returns the 'observation' and 'next_observation'.
+
+    Because the LSTM kernel only returns the last hidden state, hidden states
+    are padded with zeros such that they have the right size to be stored in a
+    TensorDict of size [batch x time_steps].
+
+    If a 2D tensor is provided as input, it is assumed that it is a batch of data
+    with only one time step. This means that we explicitely assume that users will
+    unsqueeze inputs of a single batch with multiple time steps.
+
+    Examples:
+        >>> batch = 7
+        >>> time_steps = 6
+        >>> in_features = 4
+        >>> net = LSTMNet(
+        ...     out_features,
+        ...     {"input_size": hidden_size, "hidden_size": hidden_size},
+        ...     {"out_features": hidden_size},
+        ... )
+        >>> # test single step vs multi-step
+        >>> x = torch.randn(batch, time_steps, in_features)
+        >>> y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(x)
 
     """
 
@@ -903,14 +924,19 @@ class LSTMNet(nn.Module):
         hidden0_in: Optional[torch.Tensor] = None,
         hidden1_in: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        squeeze = False
+        squeeze0 = False
+        squeeze1 = False
+        if input.ndimension() == 1:
+            squeeze0 = True
+            input = input.unsqueeze(0).contiguous()
+
         if input.ndimension() == 2:
-            squeeze = True
+            squeeze1 = True
             input = input.unsqueeze(1).contiguous()
         batch, steps = input.shape[:2]
 
         if hidden1_in is None and hidden0_in is None:
-            shape = (batch, steps) if not squeeze else (batch,)
+            shape = (batch, steps) if not squeeze1 else (batch,)
             hidden0_in, hidden1_in = [
                 torch.zeros(
                     *shape,
@@ -925,9 +951,12 @@ class LSTMNet(nn.Module):
             raise RuntimeError(
                 f"got type(hidden0)={type(hidden0_in)} and type(hidden1)={type(hidden1_in)}"
             )
+        elif squeeze0:
+            hidden0_in = hidden0_in.unsqueeze(0)
+            hidden1_in = hidden1_in.unsqueeze(0)
 
         # we only need the first hidden state
-        if not squeeze:
+        if not squeeze1:
             _hidden0_in = hidden0_in[:, 0]
             _hidden1_in = hidden1_in[:, 0]
         else:
@@ -944,9 +973,10 @@ class LSTMNet(nn.Module):
         y = self.linear(y0)
 
         out = [y, hidden0_in, hidden1_in, *hidden]
-        if squeeze:
+        if squeeze1:
+            # squeezes time
             out[0] = out[0].squeeze(1)
-        else:
+        if not squeeze1:
             # we pad the hidden states with zero to make tensordict happy
             for i in range(3, 5):
                 out[i] = torch.stack(
@@ -954,6 +984,8 @@ class LSTMNet(nn.Module):
                     + [out[i]],
                     1,
                 )
+        if squeeze0:
+            out = [_out.squeeze(0) for _out in out]
         return tuple(out)
 
     def forward(
