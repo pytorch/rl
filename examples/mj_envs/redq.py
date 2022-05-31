@@ -7,7 +7,11 @@ import uuid
 from datetime import datetime
 
 from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.trainers.helpers.envs import LIBS
+from utils import MJEnv
+
+LIBS["mjenv"] = MJEnv
+
 
 try:
     import configargparse as argparse
@@ -26,7 +30,6 @@ from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     parser_collector_args_offpolicy,
 )
-from torchrl.trainers.helpers.envs import LIBS
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     get_stats_random_rollout,
@@ -45,10 +48,6 @@ from torchrl.trainers.helpers.replay_buffer import (
     parser_replay_args,
 )
 from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
-
-from .utils import MJEnv
-
-LIBS["mjenv"] = MJEnv
 
 
 def make_args():
