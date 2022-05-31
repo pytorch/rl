@@ -631,6 +631,7 @@ class RewardNormalizer:
         self._update_has_been_called = True
 
     def normalize_reward(self, tensordict: _TensorDict) -> _TensorDict:
+        tensordict = tensordict.to_tensordict()  # make sure it is not a SubTensorDict
         reward = tensordict.get("reward")
         reward = reward - self._reward_stats["mean"].to(tensordict.device)
         reward = reward / self._reward_stats["std"].to(tensordict.device)
