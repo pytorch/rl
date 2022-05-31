@@ -18,7 +18,6 @@ except ImportError:
 
     _configargparse = False
 import torch.cuda
-from torch.utils.tensorboard import SummaryWriter
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules import EGreedyWrapper
 from torchrl.trainers.helpers.collectors import (
@@ -69,6 +68,8 @@ parser = make_args()
 
 
 def main(args):
+    from torch.utils.tensorboard import SummaryWriter
+
     args = correct_for_frame_skip(args)
 
     if not isinstance(args.reward_scaling, float):

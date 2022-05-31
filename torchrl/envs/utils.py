@@ -77,6 +77,10 @@ def step_tensordict(
         # we exclude those keys to make sure we aren't reporting time-specific values at the next step.
         tensordict = tensordict.exclude(*to_exclude)
     keys = [key for key in tensordict.keys() if key.startswith("next_")]
+    if len(keys) == 0:
+        raise RuntimeError(
+            "There was no key starting with 'next_' in the provided TensorDict"
+        )
     new_keys = [key[5:] for key in keys]
     if keep_other:
         prohibited = set(keys).union(new_keys)
