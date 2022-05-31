@@ -184,8 +184,10 @@ class REDQLoss_deprecated(_LossModule):
     def _qvalue_loss(self, tensordict: _TensorDict) -> Tensor:
         tensordict_save = tensordict
 
-        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs")]
+        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]
         obs_keys = [key for key in tensordict.keys() if key.startswith("obs")]
+        if "pixels" in tensordict.keys():
+            raise RuntimeError("not suited for pixel-based experiments")
         tensordict = tensordict.select(
             "reward", "done", *next_obs_keys, *obs_keys, "action"
         )
@@ -384,7 +386,7 @@ class REDQLoss(_LossModule):
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         obs_keys = self.actor_network.in_keys
-        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs")]
+        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]
         tensordict_select = tensordict.select(
             "reward", "done", *next_obs_keys, *obs_keys, "action"
         )

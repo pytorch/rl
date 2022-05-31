@@ -19,7 +19,7 @@ except ImportError:
     _configargparse = False
 
 import torch.cuda
-from torch.utils.tensorboard import SummaryWriter
+from torch.profiler import profile, ProfilerActivity
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 from torchrl.trainers.helpers.collectors import (
@@ -80,6 +80,8 @@ DEFAULT_REWARD_SCALING = {
 
 
 def main(args):
+    from torch.utils.tensorboard import SummaryWriter  # avoid loading on each process
+
     args = correct_for_frame_skip(args)
 
     if not isinstance(args.reward_scaling, float):
@@ -202,7 +204,35 @@ def main(args):
         args,
     )
 
-    trainer.train()
+    with profile(
+        activities=[ProfilerActivity.CUDA, ProfilerActivity.CPU],
+        record_shapes=True,
+        schedule=torch.profiler.schedule(wait=3, warmup=3, active=10),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(
+            f"redq_logging/profile_cuda_{exp_name}",
+        ),
+    ) as p_cuda:
+
+        def step(*whatever):
+            p_cuda.step()
+
+        trainer.register_op("post_steps_log", step)
+
+        def select_keys(batch):
+            return batch.select(
+                "reward",
+                "done",
+                "steps_to_next_obs",
+                "pixels",
+                "next_pixels",
+                "observation_vector",
+                "next_observation_vector",
+                "action",
+            )
+
+        trainer.register_op("batch_process", select_keys)
+
+        trainer.train()
     return (writer.log_dir, trainer._log_dict, trainer.state_dict())
 
 

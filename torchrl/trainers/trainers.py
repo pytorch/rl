@@ -402,6 +402,7 @@ class Trainer:
 
             losses_detached = self._optimizer_step(losses_td)
             self._post_optim_hook()
+            self._post_optim_log(sub_batch_device)
 
             if average_losses is None:
                 average_losses: _TensorDict = losses_detached
