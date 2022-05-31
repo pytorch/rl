@@ -4,11 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
-from typing import Optional, Sequence, Union
-from warnings import warn
+from typing import Optional, Sequence, Union, get_args
 
 import torch
-from torch import nn
+from torch import nn, distributions as d
 from torch.nn.modules.lazy import LazyModuleMixin
 from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
 
@@ -16,6 +15,7 @@ __all__ = ["NoisyLinear", "NoisyLazyLinear", "reset_noise"]
 
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import exploration_mode
+from torchrl.modules.distributions.utils import _cast_transform_device
 from torchrl.modules.utils import inv_softplus
 
 
@@ -229,38 +229,23 @@ def reset_noise(layer: nn.Module) -> None:
         layer.reset_noise()
 
 
-class gSDEWrapper(nn.Module):
-    """A gSDE exploration wrapper as presented in "Smooth Exploration for
+class gSDEModule(nn.Module):
+    """A gSDE exploration module as presented in "Smooth Exploration for
     Robotic Reinforcement Learning" by Antonin Raffin, Jens Kober,
     Freek Stulp (https://arxiv.org/abs/2005.05719)
 
-    gSDEWrapper encapsulates nn.Module that outputs the average of a
-    normal distribution and adds a state-dependent exploration noise to it.
-    It outputs the mean, scale (standard deviation) of the normal
-    distribution as well as the chosen action.
+    gSDEModule adds a state-dependent exploration noise to an input action.
+    It also outputs the mean, scale (standard deviation) of the normal
+    distribution, as well as the Gaussian noise used.
 
-    For now, only vector states are considered, but the distribution can
-    read other inputs (e.g. hidden states etc.)
+    The noise input should be reset through a `torchrl.envs.transforms.gSDENoise`
+    instance: each time the environment is reset, the input noise will be set to
+    zero by the environment transform, indicating to gSDEModule that it has to be resampled.
+    This scheme allows us to have the environemt tell the module to resample a
+    noise only the latter knows the shape of.
 
-    When used, the gSDEWrapper should also be accompanied by a few
-    configuration changes: the exploration mode of the policy should be set
-    to "net_output", meaning that the action from the ProbabilisticTDModule
-    will be retrieved directly from the network output and not simulated
-    from the constructed distribution. Second, the noise input should be
-    created through a `torchrl.envs.transforms.gSDENoise` instance,
-    which will reset this noise parameter each time the environment is reset.
-    Finally, a regular normal distribution should be used to sample the
-    actions, the `ProbabilisticTDModule` should be created
-    in safe mode (in order for the action to be clipped in the desired
-    range) and its input keys should include `"_eps_gSDE"` which is the
-    default gSDE noise key:
-
-        >>> actor = ProbabilisticActor(
-        ...     wrapped_module,
-        ...     in_keys=["observation", "_eps_gSDE"]
-        ...     spec,
-        ...     distribution_class=IndependentNormal,
-        ...     safe=True)
+    A variable transform function can also be provided to map the noicy action
+    to the desired space (e.g. a SafeTanhTransform or similar).
 
     Args:
         policy_model (nn.Module): a model that reads observations and
@@ -272,101 +257,230 @@ class gSDEWrapper(nn.Module):
             positive value.
         scale_min (float, optional): min value of the scale.
         scale_max (float, optional): max value of the scale.
+        transform (torch.distribution.Transform, optional): a transform to apply
+            to the sampled action.
 
     Examples:
+        >>> from torchrl.modules import TensorDictModule, TensorDictSequence, ProbabilisticActor, TanhNormal
+        >>> from torchrl.data import TensorDict
         >>> batch, state_dim, action_dim = 3, 7, 5
         >>> model = nn.Linear(state_dim, action_dim)
-        >>> wrapped_model = gSDEWrapper(model, action_dim=action_dim,
-        ...     state_dim=state_dim)
-        >>> state = torch.randn(batch, state_dim)
-        >>> eps_gSDE = torch.randn(batch, action_dim, state_dim)
-        >>> # the module takes inputs (state, *additional_vectors, noise_param)
-        >>> mu, sigma, action = wrapped_model(state, eps_gSDE)
-        >>> print(mu.shape, sigma.shape, action.shape)
-        torch.Size([3, 5]) torch.Size([3, 5]) torch.Size([3, 5])
+        >>> deterministic_policy = TensorDictModule(model, in_keys=["obs"], out_keys=["action"])
+        >>> stochatstic_part = TensorDictModule(
+        ...     gSDEModule(action_dim, state_dim),
+        ...     in_keys=["action", "obs", "_eps_gSDE"],
+        ...     out_keys=["loc", "scale", "action", "_eps_gSDE"])
+        >>> stochatstic_part = ProbabilisticActor(stochatstic_part,
+        ...      dist_param_keys=["loc", "scale"],
+        ...      distribution_class=TanhNormal)
+        >>> stochatstic_policy = TensorDictSequence(deterministic_policy, stochatstic_part)
+        >>> tensordict = TensorDict({'obs': torch.randn(state_dim), '_epx_gSDE': torch.zeros(1)}, [])
+        >>> _ = stochatstic_policy(tensordict)
+        >>> print(tensordict)
+        TensorDict(
+            fields={
+                obs: Tensor(torch.Size([7]), dtype=torch.float32),
+                _epx_gSDE: Tensor(torch.Size([1]), dtype=torch.float32),
+                action: Tensor(torch.Size([5]), dtype=torch.float32),
+                loc: Tensor(torch.Size([5]), dtype=torch.float32),
+                scale: Tensor(torch.Size([5]), dtype=torch.float32),
+                _eps_gSDE: Tensor(torch.Size([5, 7]), dtype=torch.float32)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
+        >>> action_first_call = tensordict.get("action").clone()
+        >>> dist, *_ = stochatstic_policy.get_dist(tensordict)
+        >>> print(dist)
+        TanhNormal(loc: torch.Size([5]), scale: torch.Size([5]))
+        >>> _ = stochatstic_policy(tensordict)
+        >>> action_second_call = tensordict.get("action").clone()
+        >>> assert (action_second_call == action_first_call).all()  # actions are the same
+        >>> assert (action_first_call != dist.base_dist.base_dist.loc).all()  # actions are truly stochastic
     """
 
     def __init__(
         self,
-        policy_model: nn.Module,
         action_dim: int,
         state_dim: int,
         sigma_init: float = None,
         scale_min: float = 0.01,
         scale_max: float = 10.0,
-        learn_scale: bool = True,
-        total_steps: Optional[int] = None,
+        learn_sigma: bool = True,
+        transform: Optional[d.Transform] = None,
     ) -> None:
         super().__init__()
-        self.policy_model = policy_model
         self.action_dim = action_dim
         self.state_dim = state_dim
         self.scale_min = scale_min
         self.scale_max = scale_max
-        self.learn_scale = learn_scale
-        if self.learn_scale:
+        self.transform = transform
+        self.learn_sigma = learn_sigma
+        if learn_sigma:
             if sigma_init is None:
                 sigma_init = inv_softplus(math.sqrt((1.0 - scale_min) / state_dim))
             self.register_parameter(
                 "log_sigma",
                 nn.Parameter(torch.zeros((action_dim, state_dim), requires_grad=True)),
             )
-            self.register_buffer("sigma_init", torch.tensor(sigma_init))
         else:
             if sigma_init is None:
                 sigma_init = math.sqrt((1.0 - scale_min) / state_dim)
-            self.register_buffer("sigma_init", torch.tensor(sigma_init))
             self.register_buffer(
-                "sigma", torch.full((action_dim, state_dim), sigma_init)
+                "_sigma",
+                torch.full((action_dim, state_dim), sigma_init),
             )
-            if total_steps:
-                self._update_step = (sigma_init - scale_min) / total_steps
 
-    def forward(self, state, *tensors):
-        *tensors, gSDE_noise = tensors
-        if self.learn_scale:
-            sigma = (
-                torch.nn.functional.softplus(self.log_sigma + self.sigma_init)
-                + self.scale_min
-            )
+        if sigma_init != 0.0:
+            self.register_buffer("sigma_init", torch.tensor(sigma_init))
+
+    @property
+    def sigma(self):
+        if self.learn_sigma:
+            sigma = torch.nn.functional.softplus(self.log_sigma)
+            return sigma.clamp_min(self.scale_min)
         else:
-            sigma = self.sigma
-        sigma = sigma.clamp_max(self.scale_max)
-        if gSDE_noise is None:
-            # if exploration_mode() in ("random", "net_output", None):
-            #     raise RuntimeError(
-            #         "No noise was provided to gSDE wrapper but the exploration "
-            #         "mode suggests that actions should be sampled randomly.")
-            gSDE_noise = torch.randn(
-                *state.shape[:-1], *sigma.shape, device=state.device, dtype=state.dtype
+            return self._sigma.clamp_min(self.scale_min)
+
+    def forward(self, mu, state, _eps_gSDE):
+        sigma = self.sigma.clamp_max(self.scale_max)
+        _err_explo = f"gSDE behaviour for exploration mode {exploration_mode()} is not defined. Choose from 'random' or 'mode'."
+
+        if state.shape[:-1] != mu.shape[:-1]:
+            _err_msg = f"mu and state are expected to have matching batch size, got shapes {mu.shape} and {state.shape}"
+            raise RuntimeError(_err_msg)
+        if _eps_gSDE is not None and (
+            _eps_gSDE.shape[: state.ndimension() - 1] != state.shape[:-1]
+        ):
+            _err_msg = f"noise and state are expected to have matching batch size, got shapes {_eps_gSDE.shape} and {state.shape}"
+            raise RuntimeError(_err_msg)
+
+        if _eps_gSDE is None and exploration_mode() == "mode":
+            # noise is irrelevant in with no exploration
+            _eps_gSDE = torch.zeros(
+                *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
             )
-        elif gSDE_noise.numel() == state[..., 0].numel() and (gSDE_noise == 0).all():
-            # this is the reset signal
-            gSDE_noise = torch.randn(
-                *state.shape[:-1], *sigma.shape, device=state.device, dtype=state.dtype
+        elif (_eps_gSDE is None and exploration_mode() == "random") or (
+            _eps_gSDE is not None
+            and _eps_gSDE.numel() == math.prod(state.shape[:-1])
+            and (_eps_gSDE == 0).all()
+        ):
+            _eps_gSDE = torch.randn(
+                *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
             )
-        gSDE_noise = sigma * gSDE_noise
-        mu = self.policy_model(state, *tensors)
-        if isinstance(mu, tuple):
-            # if mu is a tuple, it is assumed that the second output is a hidden state
-            # this allows us to use gSDE for pixel-based experiments
-            mu, state = mu
+        elif _eps_gSDE is None:
+            raise RuntimeError(_err_explo)
+
+        gSDE_noise = sigma * _eps_gSDE
         eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
-        if exploration_mode() in ("random", "net_output", None):
+
+        if exploration_mode() in ("random",):
             action = mu + eps
         elif exploration_mode() in ("mode",):
             action = mu
         else:
-            raise RuntimeError(
-                f"exploration mode {exploration_mode()} is not known to gSDE"
-            )
+            raise RuntimeError(_err_explo)
+
         sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(1e-5).sqrt()
         if not torch.isfinite(sigma).all():
             print("inf sigma")
-        return action, gSDE_noise, mu, sigma
 
-    def sigma_step(self, frames: int = 1):
-        if self.learn_scale:
-            raise RuntimeError("gSDE sigma_step is prohibited when sigma is learnt")
-        self.sigma.data -= self._update_step * frames
-        self.sigma.data.clamp_min_(self.scale_min)
+        if self.transform is not None:
+            action = self.transform(action)
+        return mu, sigma, action, _eps_gSDE
+
+    def to(self, device_or_dtype: Union[torch.dtype, DEVICE_TYPING]):
+        if isinstance(device_or_dtype, get_args(DEVICE_TYPING)):
+            self.transform = _cast_transform_device(self.transform, device_or_dtype)
+        return super().to(device_or_dtype)
+
+
+class LazygSDEModule(LazyModuleMixin, gSDEModule):
+    """Lazy gSDE Module.
+    This module behaves exactly as gSDEModule except that it does not require the
+    user to specify the action and state dimension.
+    If the input state is multi-dimensional (i.e. more than one state is provided), the
+    sigma value is initialized such that the resulting variance will match `sigma_init`
+    (or 1 if no `sigma_init` value is provided).
+
+    """
+
+    cls_to_become = gSDEModule
+    log_sigma: UninitializedParameter
+    _sigma: UninitializedBuffer
+    sigma_init: UninitializedBuffer
+
+    def __init__(
+        self,
+        sigma_init: float = None,
+        scale_min: float = 0.01,
+        scale_max: float = 10.0,
+        learn_sigma: bool = True,
+        transform: Optional[d.Transform] = None,
+    ) -> None:
+        factory_kwargs = {
+            "device": torch.device("cpu"),
+            "dtype": torch.get_default_dtype(),
+        }
+        super().__init__(
+            0,
+            0,
+            sigma_init=0.0,
+            scale_min=scale_min,
+            scale_max=scale_max,
+            learn_sigma=learn_sigma,
+            transform=transform,
+        )
+        self._sigma_init = sigma_init
+        self.sigma_init = UninitializedBuffer(**factory_kwargs)
+        if learn_sigma:
+            self.log_sigma = UninitializedParameter(**factory_kwargs)
+        else:
+            self._sigma = UninitializedBuffer(**factory_kwargs)
+
+    def reset_parameters(self) -> None:
+        pass
+
+    def initialize_parameters(
+        self, mu: torch.Tensor, state: torch.Tensor, _eps_gSDE: torch.Tensor
+    ) -> None:
+        if self.has_uninitialized_params():
+            device = mu.device
+            action_dim = mu.shape[-1]
+            state_dim = state.shape[-1]
+            with torch.no_grad():
+                if state.ndimension() > 2:
+                    state = state.flatten(0, -2).squeeze(0)
+                if state.ndimension() == 1:
+                    state_flatten_var = torch.ones(1).to(device)
+                else:
+                    state_flatten_var = state.pow(2).mean(dim=0).reciprocal()
+
+                self.sigma_init.materialize(state_flatten_var.shape, device=device)
+                if self.learn_sigma:
+                    if self._sigma_init is None:
+                        state_flatten_var.clamp_min_(self.scale_min)
+                        self.sigma_init.data.copy_(
+                            inv_softplus((state_flatten_var / state_dim).sqrt())
+                        )
+                    else:
+                        self.sigma_init.data.copy_(
+                            inv_softplus(
+                                self._sigma_init
+                                * (state_flatten_var / state_dim).sqrt()
+                            )
+                        )
+
+                    self.log_sigma.materialize((action_dim, state_dim), device=device)
+                    self.log_sigma.data.copy_(self.sigma_init.expand_as(self.log_sigma))
+
+                else:
+                    if self._sigma_init is None:
+                        self.sigma_init.data.copy_(
+                            (state_flatten_var / state_dim).sqrt()
+                        )
+                    else:
+                        self.sigma_init.data.copy_(
+                            (state_flatten_var / state_dim).sqrt() * self._sigma_init
+                        )
+                    self._sigma.materialize((action_dim, state_dim), device=device)
+                    self._sigma.data.copy_(self.sigma_init.expand_as(self._sigma))

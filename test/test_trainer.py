@@ -10,8 +10,15 @@ from os import walk, path
 
 import pytest
 import torch
-from tensorboard.backend.event_processing import event_accumulator
-from torch.utils.tensorboard import SummaryWriter
+
+try:
+    from tensorboard.backend.event_processing import event_accumulator
+    from torch.utils.tensorboard import SummaryWriter
+
+    _has_tb = True
+except ImportError:
+    _has_tb = False
+
 from torchrl.data import (
     TensorDict,
     TensorDictPrioritizedReplayBuffer,
@@ -130,15 +137,16 @@ def test_rb_trainer(prioritized):
 
 
 @pytest.mark.parametrize("logname", ["a", "b"])
-def test_log_reward(logname):
+@pytest.mark.parametrize("pbar", [True, False])
+def test_log_reward(logname, pbar):
     trainer = mocking_trainer()
     trainer.collected_frames = 0
 
-    log_reward = LogReward(logname)
+    log_reward = LogReward(logname, log_pbar=pbar)
     trainer.register_op("pre_steps_log", log_reward)
     td = TensorDict({"reward": torch.ones(3)}, [3])
     trainer._pre_steps_log_hook(td)
-    if _has_tqdm:
+    if _has_tqdm and pbar:
         assert trainer._pbar_str[logname] == 1
     else:
         assert logname not in trainer._pbar_str
@@ -213,6 +221,7 @@ def test_subsampler():
 
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library")
+@pytest.mark.skipif(not _has_tb, reason="No tensorboard library")
 def test_recorder():
     with tempfile.TemporaryDirectory() as folder:
         writer = SummaryWriter(log_dir=folder)

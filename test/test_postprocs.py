@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import argparse
 
 import pytest
 import torch
@@ -167,4 +168,5 @@ class TestSplits:
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "--capture", "no"])
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

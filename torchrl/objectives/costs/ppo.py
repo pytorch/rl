@@ -11,7 +11,8 @@ from torch import distributions as d
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import step_tensordict
-from torchrl.modules import ProbabilisticTDModule, TDModule
+from torchrl.modules import TensorDictModule
+from ...modules.tensordict_module import ProbabilisticTensorDictModule
 
 __all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
 
@@ -35,8 +36,8 @@ class PPOLoss(_LossModule):
     https://arxiv.org/abs/1707.06347
 
     Args:
-        actor (Actor): policy operator.
-        critic (ProbabilisticTDModule): value operator.
+        actor (ProbabilisticTensorDictModule): policy operator.
+        critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
         entropy_bonus (bool): if True, an entropy bonus will be added to the loss to favour exploratory policies.
@@ -55,8 +56,8 @@ class PPOLoss(_LossModule):
 
     def __init__(
         self,
-        actor: ProbabilisticTDModule,
-        critic: TDModule,
+        actor: ProbabilisticTensorDictModule,
+        critic: TensorDictModule,
         advantage_key: str = "advantage",
         advantage_diff_key: str = "value_error",
         entropy_bonus: bool = True,
@@ -104,7 +105,7 @@ class PPOLoss(_LossModule):
         log_prob = dist.log_prob(action)
         log_prob = log_prob.unsqueeze(-1)
 
-        prev_log_prob = tensordict.get("action_log_prob")
+        prev_log_prob = tensordict.get("sample_log_prob")
         if prev_log_prob.requires_grad:
             raise RuntimeError("tensordict prev_log_prob requires grad.")
 
@@ -164,8 +165,8 @@ class ClipPPOLoss(PPOLoss):
         loss = -min( weight * advantage, min(max(weight, 1-eps), 1+eps) * advantage)
 
     Args:
-        actor (Actor): policy operator.
-        critic (ProbabilisticTDModule): value operator.
+        actor (ProbabilisticTensorDictModule): policy operator.
+        critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
         clip_epsilon (scalar): weight clipping threshold in the clipped PPO loss equation.
@@ -186,8 +187,8 @@ class ClipPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: ProbabilisticTDModule,
-        critic: TDModule,
+        actor: ProbabilisticTensorDictModule,
+        critic: TensorDictModule,
         advantage_key: str = "advantage",
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
@@ -268,8 +269,8 @@ class KLPENPPOLoss(PPOLoss):
     favouring a certain level of distancing between the two while still preventing them to be too much apart.
 
     Args:
-        actor (Actor): policy operator.
-        critic (ProbabilisticTDModule): value operator.
+        actor (ProbabilisticTensorDictModule): policy operator.
+        critic (ValueOperator): value operator.
         advantage_key (str): the input tensordict key where the advantage is expected to be written.
             default: "advantage"
         dtarg (scalar): target KL divergence.
@@ -295,8 +296,8 @@ class KLPENPPOLoss(PPOLoss):
 
     def __init__(
         self,
-        actor: ProbabilisticTDModule,
-        critic: TDModule,
+        actor: ProbabilisticTensorDictModule,
+        critic: TensorDictModule,
         advantage_key="advantage",
         dtarg: float = 0.01,
         beta: float = 1.0,
@@ -348,23 +349,11 @@ class KLPENPPOLoss(PPOLoss):
         log_weight, dist = self._log_weight(tensordict)
         neg_loss = log_weight.exp() * advantage
 
-        tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
-        params = []
-        out_key = self.actor.out_keys[0]
-        i = 0
-        while True:
-            key = f"{out_key}_dist_param_{i}"
-            if key in tensordict.keys():
-                params.append(tensordict.get(key))
-                i += 1
-            else:
-                break
+        tensordict_clone = tensordict.select(
+            *self.actor.in_keys, *self.actor.out_keys
+        ).clone()
 
-        if i == 0:
-            raise Exception(
-                "No parameter was found for the policy distribution. Consider building the policy with save_dist_params=True"
-            )
-        previous_dist, *_ = self.actor.build_dist_from_params(params)
+        previous_dist = self.actor.build_dist_from_params(tensordict_clone)
         current_dist, *_ = self.actor.get_dist(tensordict_clone)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)

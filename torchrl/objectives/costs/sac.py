@@ -12,15 +12,17 @@ import torch
 from torch import Tensor
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.modules import TDModule
-from torchrl.modules.td_module.actors import (
+from torchrl.modules import ProbabilisticActor
+from torchrl.modules import TensorDictModule
+from torchrl.modules.tensordict_module.actors import (
     ActorCriticWrapper,
-    ProbabilisticActor,
 )
 from torchrl.objectives.costs.utils import distance_loss, next_state_value
 from .common import _LossModule
 
 __all__ = ["SACLoss"]
+
+from ...envs.utils import set_exploration_mode
 
 
 class SACLoss(_LossModule):
@@ -30,8 +32,8 @@ class SACLoss(_LossModule):
 
     Args:
         actor_network (ProbabilisticActor): stochastic actor
-        qvalue_network (TDModule): Q(s, a) parametric model
-        value_network (TDModule): V(s) parametric model\
+        qvalue_network (TensorDictModule): Q(s, a) parametric model
+        value_network (TensorDictModule): V(s) parametric model\
         qvalue_network_bis (ProbabilisticTDModule, optional): if required, the
             Q-value can be computed twice independently using two separate
             networks. The minimum predicted value will then be used for
@@ -70,8 +72,8 @@ class SACLoss(_LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
-        qvalue_network: TDModule,
-        value_network: TDModule,
+        qvalue_network: TensorDictModule,
+        value_network: TensorDictModule,
         num_qvalue_nets: int = 2,
         gamma: Number = 0.99,
         priotity_key: str = "td_error",
@@ -139,7 +141,13 @@ class SACLoss(_LossModule):
             )
 
         if target_entropy == "auto":
-            target_entropy = -float(np.prod(actor_network.spec.shape))
+            if actor_network.spec is None:
+                raise RuntimeError(
+                    "Cannot infer the dimensionality of the action. Consider providing "
+                    "the target entropy explicitely or provide the spec of the "
+                    "action tensor in the actor network."
+                )
+            target_entropy = -float(np.prod(actor_network.spec["action"].shape))
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
@@ -188,12 +196,13 @@ class SACLoss(_LossModule):
 
     def _loss_actor(self, tensordict: _TensorDict) -> Tensor:
         # KL lossa
-        dist = self.actor_network.get_dist(
-            tensordict,
-            params=list(self.actor_network_params),
-            buffers=list(self.actor_network_buffers),
-        )[0]
-        a_reparm = dist.rsample()
+        with set_exploration_mode("random"):
+            dist = self.actor_network.get_dist(
+                tensordict,
+                params=list(self.actor_network_params),
+                buffers=list(self.actor_network_buffers),
+            )[0]
+            a_reparm = dist.rsample()
         # if not self.actor_network.spec.is_in(a_reparm):
         #     a_reparm.data.copy_(self.actor_network.spec.project(a_reparm.data))
         log_prob = dist.log_prob(a_reparm)
@@ -225,14 +234,15 @@ class SACLoss(_LossModule):
         buffers = list(self.target_actor_network_buffers) + list(
             self.target_value_network_buffers
         )
-        target_value = next_state_value(
-            tensordict,
-            actor_critic,
-            gamma=self.gamma,
-            next_val_key="state_value",
-            params=params,
-            buffers=buffers,
-        )
+        with set_exploration_mode("mode"):
+            target_value = next_state_value(
+                tensordict,
+                actor_critic,
+                gamma=self.gamma,
+                next_val_key="state_value",
+                params=params,
+                buffers=buffers,
+            )
 
         # value loss
         qvalue_network = self.qvalue_network

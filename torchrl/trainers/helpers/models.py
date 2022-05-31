@@ -7,16 +7,17 @@ from argparse import ArgumentParser, Namespace
 from typing import Optional, Sequence
 
 import torch
-from torch import nn
+from torch import nn, distributions as d
 
-from torchrl.data import DEVICE_TYPING, TensorDict
+from torchrl.data import DEVICE_TYPING, CompositeSpec
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     ActorValueOperator,
     NoisyLinear,
-    TDModule,
+    TensorDictModule,
     NormalParamWrapper,
+    TensorDictSequence,
 )
 from torchrl.modules.distributions import (
     Delta,
@@ -25,9 +26,10 @@ from torchrl.modules.distributions import (
     TanhNormal,
     TruncatedNormal,
 )
-from torchrl.modules.distributions.continuous import IndependentNormal
-from torchrl.modules.distributions.utils import _cast_device
-from torchrl.modules.models.exploration import gSDEWrapper
+from torchrl.modules.distributions.continuous import (
+    SafeTanhTransform,
+)
+from torchrl.modules.models.exploration import LazygSDEModule
 from torchrl.modules.models.models import (
     ConvNet,
     DdpgCnnActor,
@@ -39,15 +41,15 @@ from torchrl.modules.models.models import (
     MLP,
     DuelingMlpDQNet,
 )
-from torchrl.modules.td_module import (
+from torchrl.modules.tensordict_module import (
     Actor,
     DistributionalQValueActor,
     QValueActor,
 )
-from torchrl.modules.td_module.actors import (
+from torchrl.modules.tensordict_module.actors import (
     ActorCriticWrapper,
-    ProbabilisticActor,
     ValueOperator,
+    ProbabilisticActor,
 )
 
 DISTRIBUTIONS = {
@@ -106,6 +108,7 @@ def make_dqn_actor(
         >>> print(actor(td))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 pixels: Tensor(torch.Size([3, 210, 160]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.int64),
                 action_value: Tensor(torch.Size([6]), dtype=torch.float32),
@@ -177,7 +180,7 @@ def make_dqn_actor(
 
     model = actor_class(
         module=net,
-        spec=action_spec,
+        spec=CompositeSpec(action=action_spec),
         in_keys=[in_key],
         safe=True,
         **actor_kwargs,
@@ -185,8 +188,7 @@ def make_dqn_actor(
 
     # init
     with torch.no_grad():
-        proof_environment.reset()
-        td = proof_environment.current_tensordict
+        td = proof_environment.rollout(max_steps=1000)
         model(td.to(device))
     return model
 
@@ -237,7 +239,9 @@ def make_ddpg_actor(
         >>> print(actor(td))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                param: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32)},
             batch_size=torch.Size([]),
             device=cpu,
@@ -245,7 +249,9 @@ def make_ddpg_actor(
         >>> print(value(td))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                param: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
@@ -266,10 +272,6 @@ def make_ddpg_actor(
     env_specs = proof_environment.specs
     out_features = env_specs["action_spec"].shape[0]
 
-    # We use a ProbabilisticActor to make sure that we map the network output to the right space using a TanhDelta
-    # distribution.
-    actor_class = ProbabilisticActor
-
     actor_net_default_kwargs = {
         "action_dim": out_features,
         "mlp_net_kwargs": {
@@ -278,78 +280,51 @@ def make_ddpg_actor(
         },
     }
     actor_net_default_kwargs.update(actor_net_kwargs)
-    out_keys = ["action"]
-    obs_spec = env_specs["observation_spec"]
-
     if from_pixels:
         in_keys = ["pixels"]
-        obs_spec = obs_spec["next_pixels"]
         actor_net_default_kwargs["conv_net_kwargs"] = {
             "activation_class": ACTIVATIONS[args.activation]
         }
         actor_net = DdpgCnnActor(**actor_net_default_kwargs)
-        hidden_features = actor_net(torch.randn(obs_spec.shape))[-1].shape[-1]
-        out_keys += ["_hidden"]
+        gSDE_state_key = "hidden"
+        out_keys = ["param", "hidden"]
     else:
         in_keys = ["observation_vector"]
-        obs_spec = obs_spec["next_observation_vector"]
-        hidden_features = obs_spec.shape[-1]
         actor_net = DdpgMlpActor(**actor_net_default_kwargs)
+        gSDE_state_key = "observation_vector"
+        out_keys = ["param"]
+    actor_module = TensorDictModule(actor_net, in_keys=in_keys, out_keys=out_keys)
 
-    distribution_kwargs = {
-        "min": _cast_device(env_specs["action_spec"].space.minimum, device),
-        "max": _cast_device(env_specs["action_spec"].space.maximum, device),
-    }
-    if not args.gSDE:
-        distribution_class = TanhDelta
-        interaction = "random"
-    else:
-        distribution_class = TanhNormal
-        actor_net = gSDEWrapper(
-            actor_net,
-            action_dim=env_specs["action_spec"].shape[0],
-            state_dim=hidden_features,
-            learn_scale=False,
-            total_steps=args.total_frames,
+    if args.gSDE:
+        min = env_specs["action_spec"].space.minimum
+        max = env_specs["action_spec"].space.maximum
+        transform = SafeTanhTransform()
+        if (min != -1).any() or (max != 1).any():
+            transform = d.ComposeTransform(
+                transform, d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)
+            )
+        actor_module = TensorDictSequence(
+            actor_module,
+            TensorDictModule(
+                LazygSDEModule(transform=transform, learn_sigma=False),
+                in_keys=["param", gSDE_state_key, "_eps_gSDE"],
+                out_keys=["loc", "scale", "action", "_eps_gSDE"],
+            ),
         )
-        in_keys += ["_eps_gSDE"]
-        out_keys = ["action", "action_copy", "_eps_gSDE"]
-        interaction = "net_output"
 
-    actor = actor_class(
-        in_keys=in_keys,
-        out_keys=out_keys,
-        spec=env_specs["action_spec"],
-        module=actor_net,
+    # We use a ProbabilisticActor to make sure that we map the network output to the right space using a TanhDelta
+    # distribution.
+    actor = ProbabilisticActor(
+        module=actor_module,
+        dist_param_keys=["param"],
+        spec=CompositeSpec(action=env_specs["action_spec"]),
         safe=True,
-        distribution_class=distribution_class,
-        distribution_kwargs=distribution_kwargs,
-        default_interaction_mode=interaction,
+        distribution_class=TanhDelta,
+        distribution_kwargs={
+            "min": env_specs["action_spec"].space.minimum,
+            "max": env_specs["action_spec"].space.maximum,
+        },
     )
-    with set_exploration_mode("net_output"):
-        if from_pixels:
-            td = actor(
-                TensorDict(
-                    {"pixels": torch.randn(4, 84, 84), "_eps_gSDE": torch.zeros(1)}, []
-                )
-            )
-        else:
-            td = actor(
-                TensorDict(
-                    {
-                        "observation_vector": torch.randn(hidden_features),
-                        "_eps_gSDE": torch.zeros(1),
-                    },
-                    [],
-                )
-            )
-    with set_exploration_mode("mode"):
-        if from_pixels:
-            td = actor(TensorDict({"pixels": torch.randn(4, 84, 84)}, []))
-        else:
-            td = actor(
-                TensorDict({"observation_vector": torch.randn(hidden_features)}, [])
-            )
 
     state_class = ValueOperator
     if from_pixels:
@@ -357,10 +332,7 @@ def make_ddpg_actor(
             "mlp_net_kwargs": {
                 "layer_class": linear_layer_class,
                 "activation_class": ACTIVATIONS[args.activation],
-            },
-            "conv_net_kwargs": {
-                "activation_class": ACTIVATIONS[args.activation],
-            },
+            }
         }
         value_net_default_kwargs.update(value_net_kwargs)
 
@@ -408,9 +380,9 @@ def make_ddpg_actor(
     module = torch.nn.ModuleList([actor, value]).to(device)
 
     # init
-    with torch.no_grad(), set_exploration_mode("mode"):
-        proof_environment.reset()
-        td = proof_environment.current_tensordict.to(device)
+    with torch.no_grad(), set_exploration_mode("random"):
+        td = proof_environment.rollout(max_steps=1000)
+        td = td.to(device)
         module[0](td)
         module[1](td)
 
@@ -466,18 +438,20 @@ def make_ppo_model(
         >>> print(actor(td.clone()))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 hidden: Tensor(torch.Size([300]), dtype=torch.float32),
-                action_dist_param_0: Tensor(torch.Size([6]), dtype=torch.float32),
-                action_dist_param_1: Tensor(torch.Size([6]), dtype=torch.float32),
+                loc: Tensor(torch.Size([6]), dtype=torch.float32),
+                scale: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
-                action_log_prob: Tensor(torch.Size([1]), dtype=torch.float32)},
+                sample_log_prob: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
             device=cpu,
             is_shared=False)
         >>> print(value(td.clone()))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
                 hidden: Tensor(torch.Size([300]), dtype=torch.float32),
                 state_value: Tensor(torch.Size([1]), dtype=torch.float32)},
@@ -515,12 +489,7 @@ def make_ppo_model(
 
     if action_spec.domain == "continuous":
         out_features = (2 - args.gSDE) * action_spec.shape[-1]
-        if args.gSDE:
-            policy_distribution_kwargs = {
-                "tanh_loc": args.tanh_loc,
-            }
-            policy_distribution_class = IndependentNormal
-        elif args.distribution == "tanh_normal":
+        if args.distribution == "tanh_normal":
             policy_distribution_kwargs = {
                 "min": action_spec.space.minimum,
                 "max": action_spec.space.maximum,
@@ -555,8 +524,6 @@ def make_ppo_model(
                 kernel_sizes=[8, 4, 3],
                 strides=[4, 2, 1],
             )
-            if args.gSDE:
-                raise NotImplementedError("must define the hidden_features accordingly")
         else:
             if args.lstm:
                 raise NotImplementedError(
@@ -569,7 +536,7 @@ def make_ppo_model(
                 out_features=hidden_features,
                 activate_last_layer=True,
             )
-        common_operator = TDModule(
+        common_operator = TensorDictModule(
             spec=None,
             module=common_module,
             in_keys=in_keys_actor,
@@ -585,23 +552,47 @@ def make_ppo_model(
                 policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
             )
             in_keys = ["hidden"]
-        else:
-            actor_net = gSDEWrapper(
-                policy_net, action_dim=action_spec.shape[0], state_dim=hidden_features
+            actor_module = TensorDictModule(
+                actor_net, in_keys=in_keys, out_keys=["loc", "scale"]
             )
-            in_keys = ["hidden", "gSDE_noise"]
-            out_keys += ["_action_duplicate"]
+        else:
+            in_keys = ["hidden"]
+            gSDE_state_key = "hidden"
+            actor_module = TensorDictModule(
+                policy_net,
+                in_keys=in_keys,
+                out_keys=["action"],  # will be overwritten
+            )
+
+            if action_spec.domain == "continuous":
+                min = action_spec.space.minimum
+                max = action_spec.space.maximum
+                transform = SafeTanhTransform()
+                if (min != -1).any() or (max != 1).any():
+                    transform = d.ComposeTransform(
+                        transform,
+                        d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                    )
+            else:
+                raise RuntimeError("cannot use gSDE with discrete actions")
+
+            actor_module = TensorDictSequence(
+                actor_module,
+                TensorDictModule(
+                    LazygSDEModule(transform=transform),
+                    in_keys=["action", gSDE_state_key, "_eps_gSDE"],
+                    out_keys=["loc", "scale", "action", "_eps_gSDE"],
+                ),
+            )
 
         policy_operator = ProbabilisticActor(
-            spec=action_spec,
-            module=actor_net,
-            in_keys=in_keys,
-            out_keys=out_keys,
-            default_interaction_mode="random" if not args.gSDE else "net_output",
+            spec=CompositeSpec(action=action_spec),
+            module=actor_module,
+            dist_param_keys=["loc", "scale"],
+            default_interaction_mode="random",
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
             return_log_prob=True,
-            save_dist_params=True,
         )
         value_net = MLP(
             num_cells=[200],
@@ -614,6 +605,10 @@ def make_ppo_model(
             value_operator=value_operator,
         ).to(device)
     else:
+        if args.from_pixels:
+            raise RuntimeError(
+                "PPO learnt from pixels require the shared_mapping to be set to True."
+            )
         if args.lstm:
             policy_net = LSTMNet(
                 out_features=out_features,
@@ -632,23 +627,47 @@ def make_ppo_model(
             actor_net = NormalParamWrapper(
                 policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
             )
-        else:
-            actor_net = gSDEWrapper(
-                policy_net, action_dim=action_spec.shape[0], state_dim=obs_spec.shape[0]
+            actor_module = TensorDictModule(
+                actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale"]
             )
-            in_keys_actor += ["_eps_gSDE"]
-            out_keys += ["_action_duplicate"]
+        else:
+            in_keys = in_keys_actor
+            gSDE_state_key = in_keys_actor[0]
+            actor_module = TensorDictModule(
+                policy_net,
+                in_keys=in_keys,
+                out_keys=["action"],  # will be overwritten
+            )
+
+            if action_spec.domain == "continuous":
+                min = action_spec.space.minimum
+                max = action_spec.space.maximum
+                transform = SafeTanhTransform()
+                if (min != -1).any() or (max != 1).any():
+                    transform = d.ComposeTransform(
+                        transform,
+                        d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                    )
+            else:
+                raise RuntimeError("cannot use gSDE with discrete actions")
+
+            actor_module = TensorDictSequence(
+                actor_module,
+                TensorDictModule(
+                    LazygSDEModule(transform=transform),
+                    in_keys=["action", gSDE_state_key, "_eps_gSDE"],
+                    out_keys=["loc", "scale", "action", "_eps_gSDE"],
+                ),
+            )
 
         policy_po = ProbabilisticActor(
-            actor_net,
-            action_spec,
+            actor_module,
+            spec=action_spec,
+            dist_param_keys=["loc", "scale"],
             distribution_class=policy_distribution_class,
             distribution_kwargs=policy_distribution_kwargs,
-            in_keys=in_keys_actor,
-            out_keys=out_keys,
             return_log_prob=True,
-            save_dist_params=True,
-            default_interaction_mode="random" if not args.gSDE else "net_output",
+            default_interaction_mode="random",
         )
 
         value_net = MLP(
@@ -661,11 +680,9 @@ def make_ppo_model(
         )
         actor_value = ActorCriticWrapper(policy_po, value_po).to(device)
 
-    with torch.no_grad():
-        proof_environment.reset()
-        td = proof_environment.current_tensordict
+    with torch.no_grad(), set_exploration_mode("random"):
+        td = proof_environment.rollout(max_steps=1000)
         td_device = td.to(device)
-        td_device = td_device.unsqueeze(0)
         td_device = actor_value(td_device)  # for init
     return actor_value
 
@@ -725,7 +742,10 @@ def make_sac_model(
         >>> print(actor(td))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                loc: Tensor(torch.Size([6]), dtype=torch.float32),
+                scale: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32)},
             batch_size=torch.Size([]),
             device=cpu,
@@ -733,7 +753,10 @@ def make_sac_model(
         >>> print(qvalue(td.clone()))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                loc: Tensor(torch.Size([6]), dtype=torch.float32),
+                scale: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
@@ -742,7 +765,10 @@ def make_sac_model(
         >>> print(value(td.clone()))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                loc: Tensor(torch.Size([6]), dtype=torch.float32),
+                scale: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
                 state_value: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
@@ -811,6 +837,13 @@ def make_sac_model(
         **value_net_kwargs_default,
     )
 
+    dist_class = TanhNormal
+    dist_kwargs = {
+        "min": action_spec.space.minimum,
+        "max": action_spec.space.maximum,
+        "tanh_loc": tanh_loc,
+    }
+
     if not gSDE:
         actor_net = NormalParamWrapper(
             actor_net,
@@ -818,41 +851,54 @@ def make_sac_model(
             scale_lb=args.scale_lb,
         )
         in_keys_actor = in_keys
-        dist_class = TanhNormal
-        dist_kwargs = {
-            "min": action_spec.space.minimum,
-            "max": action_spec.space.maximum,
-            "tanh_loc": tanh_loc,
-        }
-    else:
-        obs_spec_len = obs_spec.shape[0]
-        actor_net = gSDEWrapper(
-            actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len
+        actor_module = TensorDictModule(
+            actor_net,
+            in_keys=in_keys_actor,
+            out_keys=[
+                "loc",
+                "scale",
+            ],
         )
-        in_keys_actor = in_keys + ["_eps_gSDE"]
-        dist_class = TanhNormal  # IndependentNormal
-        dist_kwargs = {
-            "tanh_loc": tanh_loc,
-        }
 
-    # using "random" exploration will sample from TanhNormal, which we don't want.
-    # Instad, the sample used should come directly from gSDE. "net_output" tells the actor
-    # not to worry about sampling, and that sample already originates from the network.
+    else:
+        gSDE_state_key = in_keys[0]
+        actor_module = TensorDictModule(
+            actor_net,
+            in_keys=in_keys,
+            out_keys=["action"],  # will be overwritten
+        )
+
+        if action_spec.domain == "continuous":
+            min = action_spec.space.minimum
+            max = action_spec.space.maximum
+            transform = SafeTanhTransform()
+            if (min != -1).any() or (max != 1).any():
+                transform = d.ComposeTransform(
+                    transform,
+                    d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                )
+        else:
+            raise RuntimeError("cannot use gSDE with discrete actions")
+
+        actor_module = TensorDictSequence(
+            actor_module,
+            TensorDictModule(
+                LazygSDEModule(transform=transform),
+                in_keys=["action", gSDE_state_key, "_eps_gSDE"],
+                out_keys=["loc", "scale", "action", "_eps_gSDE"],
+            ),
+        )
+
     actor = ProbabilisticActor(
         spec=action_spec,
-        in_keys=in_keys_actor,
-        module=actor_net,
+        dist_param_keys=["loc", "scale"],
+        module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
-        default_interaction_mode="random" if not gSDE else "net_output",
-        safe=True,
+        default_interaction_mode="random",
+        return_log_prob=False,
     )
-    # with set_exploration_mode("net_output"):
-    #     obs_spec_len = obs_spec.shape[0]
-    #     td = actor(TensorDict({"observation_vector": torch.randn(obs_spec_len)}, []))
-    # with set_exploration_mode("mode"):
-    #     obs_spec_len = obs_spec.shape[0]
-    #     td = actor(TensorDict({"observation_vector": torch.randn(obs_spec_len)}, []))
+
     qvalue = ValueOperator(
         in_keys=["action"] + in_keys,
         module=qvalue_net,
@@ -864,9 +910,10 @@ def make_sac_model(
     model = nn.ModuleList([actor, qvalue, value]).to(device)
 
     # init nets
-    td = td.to(device)
-    for net in model:
-        net(td)
+    with torch.no_grad(), set_exploration_mode("random"):
+        td = td.to(device)
+        for net in model:
+            net(td)
     del td
 
     return model
@@ -925,18 +972,24 @@ def make_redq_model(
         >>> print(actor(td))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                loc: Tensor(torch.Size([6]), dtype=torch.float32),
+                scale: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
-                action_log_prob: Tensor(torch.Size([1]), dtype=torch.float32)},
+                sample_log_prob: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
             device=cpu,
             is_shared=False)
         >>> print(qvalue(td.clone()))
         TensorDict(
             fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
                 observation_vector: Tensor(torch.Size([17]), dtype=torch.float32),
+                loc: Tensor(torch.Size([6]), dtype=torch.float32),
+                scale: Tensor(torch.Size([6]), dtype=torch.float32),
                 action: Tensor(torch.Size([6]), dtype=torch.float32),
-                action_log_prob: Tensor(torch.Size([1]), dtype=torch.float32),
+                sample_log_prob: Tensor(torch.Size([1]), dtype=torch.float32),
                 state_action_value: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
             device=cpu,
@@ -948,8 +1001,6 @@ def make_redq_model(
     default_policy_scale = args.default_policy_scale
     gSDE = args.gSDE
 
-    proof_environment.reset()
-    td = proof_environment.current_tensordict
     action_spec = proof_environment.action_spec
     obs_spec = proof_environment.observation_spec
 
@@ -972,26 +1023,70 @@ def make_redq_model(
     if qvalue_net_kwargs is None:
         qvalue_net_kwargs = {}
 
-    if in_keys is None:
-        in_keys = ["observation_vector"]
+    linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
 
-    actor_net_kwargs_default = {
-        "num_cells": [args.actor_cells, args.actor_cells],
-        "out_features": (2 - gSDE) * action_spec.shape[-1],
-        "activation_class": ACTIVATIONS[args.activation],
-    }
-    actor_net_kwargs_default.update(actor_net_kwargs)
-    actor_net = MLP(**actor_net_kwargs_default)
+    out_features_actor = (2 - gSDE) * action_spec.shape[-1]
+    if args.from_pixels:
+        if in_keys is None:
+            in_keys_actor = ["pixels"]
+        else:
+            in_keys_actor = in_keys
+        actor_net_kwargs_default = {
+            "mlp_net_kwargs": {
+                "layer_class": linear_layer_class,
+                "activation_class": ACTIVATIONS[args.activation],
+            },
+            "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        }
+        actor_net_kwargs_default.update(actor_net_kwargs)
+        actor_net = DdpgCnnActor(out_features_actor, **actor_net_kwargs_default)
+        gSDE_state_key = "hidden"
+        out_keys_actor = ["param", "hidden"]
 
-    qvalue_net_kwargs_default = {
-        "num_cells": [args.qvalue_cells, args.qvalue_cells],
-        "out_features": 1,
-        "activation_class": ACTIVATIONS[args.activation],
+        value_net_default_kwargs = {
+            "mlp_net_kwargs": {
+                "layer_class": linear_layer_class,
+                "activation_class": ACTIVATIONS[args.activation],
+            },
+            "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        }
+        value_net_default_kwargs.update(qvalue_net_kwargs)
+
+        in_keys_qvalue = ["pixels", "action"]
+        qvalue_net = DdpgCnnQNet(**value_net_default_kwargs)
+    else:
+        if in_keys is None:
+            in_keys_actor = ["observation_vector"]
+        else:
+            in_keys_actor = in_keys
+
+        actor_net_kwargs_default = {
+            "num_cells": [args.actor_cells, args.actor_cells],
+            "out_features": out_features_actor,
+            "activation_class": ACTIVATIONS[args.activation],
+        }
+        actor_net_kwargs_default.update(actor_net_kwargs)
+        actor_net = MLP(**actor_net_kwargs_default)
+        out_keys_actor = ["param"]
+        gSDE_state_key = in_keys_actor[0]
+
+        qvalue_net_kwargs_default = {
+            "num_cells": [args.qvalue_cells, args.qvalue_cells],
+            "out_features": 1,
+            "activation_class": ACTIVATIONS[args.activation],
+        }
+        qvalue_net_kwargs_default.update(qvalue_net_kwargs)
+        qvalue_net = MLP(
+            **qvalue_net_kwargs_default,
+        )
+        in_keys_qvalue = in_keys_actor + ["action"]
+
+    dist_class = TanhNormal
+    dist_kwargs = {
+        "min": action_spec.space.minimum,
+        "max": action_spec.space.maximum,
+        "tanh_loc": tanh_loc,
     }
-    qvalue_net_kwargs_default.update(qvalue_net_kwargs)
-    qvalue_net = MLP(
-        **qvalue_net_kwargs_default,
-    )
 
     if not gSDE:
         actor_net = NormalParamWrapper(
@@ -999,45 +1094,61 @@ def make_redq_model(
             scale_mapping=f"biased_softplus_{default_policy_scale}",
             scale_lb=args.scale_lb,
         )
-        in_keys_actor = in_keys
-        dist_class = TanhNormal
-        dist_kwargs = {
-            "min": action_spec.space.minimum,
-            "max": action_spec.space.maximum,
-            "tanh_loc": tanh_loc,
-        }
-    else:
-        obs_spec_len = obs_spec.shape[0]
-        actor_net = gSDEWrapper(
-            actor_net, action_dim=action_spec.shape[0], state_dim=obs_spec_len
+        actor_module = TensorDictModule(
+            actor_net,
+            in_keys=in_keys_actor,
+            out_keys=["loc", "scale"] + out_keys_actor[1:],
         )
-        in_keys_actor = in_keys + ["_eps_gSDE"]
-        dist_class = TanhNormal
-        dist_kwargs = {
-            "min": action_spec.space.minimum,
-            "max": action_spec.space.maximum,
-            "tanh_loc": tanh_loc,
-        }
+
+    else:
+        actor_module = TensorDictModule(
+            actor_net,
+            in_keys=in_keys_actor,
+            out_keys=["action"] + out_keys_actor[1:],  # will be overwritten
+        )
+
+        if action_spec.domain == "continuous":
+            min = action_spec.space.minimum
+            max = action_spec.space.maximum
+            transform = SafeTanhTransform()
+            if (min != -1).any() or (max != 1).any():
+                transform = d.ComposeTransform(
+                    transform,
+                    d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                )
+        else:
+            raise RuntimeError("cannot use gSDE with discrete actions")
+
+        actor_module = TensorDictSequence(
+            actor_module,
+            TensorDictModule(
+                LazygSDEModule(transform=transform),
+                in_keys=["action", gSDE_state_key, "_eps_gSDE"],
+                out_keys=["loc", "scale", "action", "_eps_gSDE"],
+            ),
+        )
 
     actor = ProbabilisticActor(
         spec=action_spec,
-        in_keys=in_keys_actor,
-        module=actor_net,
+        dist_param_keys=["loc", "scale"],
+        module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
-        default_interaction_mode="random" if not args.gSDE else "net_output",
+        default_interaction_mode="random",
         return_log_prob=True,
     )
     qvalue = ValueOperator(
-        in_keys=["action"] + in_keys,
+        in_keys=in_keys_qvalue,
         module=qvalue_net,
     )
     model = nn.ModuleList([actor, qvalue]).to(device)
 
     # init nets
-    td = td.to(device)
-    for net in model:
-        net(td)
+    with torch.no_grad(), set_exploration_mode("random"):
+        td = proof_environment.rollout(1000)
+        td = td.to(device)
+        for net in model:
+            net(td)
     del td
     return model
 
@@ -1082,21 +1193,7 @@ def parser_model_args_continuous(
             "--no-ou-exploration",
             action="store_false",
             dest="ou_exploration",
-            help="see `'--ou_exploration'`.",
-        )
-        parser.add_argument(
-            "--ou_sigma",
-            "--ou-sigma",
-            type=float,
-            default=0.2,
-            help="sigma of OU exploration method",
-        )
-        parser.add_argument(
-            "--ou_theta",
-            "--ou-theta",
-            type=float,
-            default=0.2,
-            help="theta of OU exploration method",
+            help="Aimed at superseeding --ou_exploration.",
         )
         parser.add_argument(
             "--distributional",
@@ -1110,7 +1207,12 @@ def parser_model_args_continuous(
             help="number of atoms used for the distributional loss (TODO)",
         )
 
-    if algorithm in ("SAC", "PPO", "REDQ", "DDPG"):
+    parser.add_argument(
+        "--gSDE",
+        action="store_true",
+        help="if True, exploration is achieved using the gSDE technique.",
+    )
+    if algorithm in ("SAC", "PPO", "REDQ"):
         parser.add_argument(
             "--tanh_loc",
             "--tanh-loc",
@@ -1119,11 +1221,6 @@ def parser_model_args_continuous(
             "location of the form "
             "`upscale * tanh(loc/upscale)` (only available with "
             "TanhTransform and TruncatedGaussian distributions)",
-        )
-        parser.add_argument(
-            "--gSDE",
-            action="store_true",
-            help="if True, exploration is achieved using the gSDE technique.",
         )
         parser.add_argument(
             "--default_policy_scale",

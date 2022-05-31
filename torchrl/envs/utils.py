@@ -21,7 +21,10 @@ class classproperty(property):
 def step_tensordict(
     tensordict: _TensorDict,
     next_tensordict: _TensorDict = None,
-    keep_other: bool = False,
+    keep_other: bool = True,
+    exclude_reward: bool = True,
+    exclude_done: bool = True,
+    exclude_action: bool = True,
 ) -> _TensorDict:
     """
     Given a tensordict retrieved after a step, returns another tensordict with all the 'next_' prefixes are removed,
@@ -32,7 +35,16 @@ def step_tensordict(
         tensordict (_TensorDict): tensordict with keys to be renamed
         next_tensordict (_TensorDict, optional): destination tensordict
         keep_other (bool, optional): if True, all keys that do not start with `'next_'` will be kept.
-            Default is False.
+            Default is True.
+        exclude_reward (bool, optional): if True, the `"reward"` key will be discarded
+            from the resulting tensordict.
+            Default is True.
+        exclude_done (bool, optional): if True, the `"done"` key will be discarded
+            from the resulting tensordict.
+            Default is True.
+        exclude_action (bool, optional): if True, the `"action"` key will be discarded
+            from the resulting tensordict.
+            Default is True.
 
     Returns:
          A new tensordict (or next_tensordict) with the "next_*" keys renamed without the "next_" prefix.
@@ -43,7 +55,7 @@ def step_tensordict(
         >>> env = make_env()
         >>> policy = make_policy()
         >>> td = env.current_tensordict
-        >>> for i in range(n_steps):
+        >>> for i in range(max_steps):
         >>>     td = env.step(td)
         >>>     next_td = step_tensordict(td)
         >>>     assert next_td is not td # make sure that keys are not overwritten
@@ -54,10 +66,25 @@ def step_tensordict(
 
     """
     other_keys = []
+    to_exclude = []
+    if exclude_done:
+        to_exclude.append("done")
+    if exclude_reward:
+        to_exclude.append("reward")
+    if exclude_action:
+        to_exclude.append("action")
+    if to_exclude:
+        # we exclude those keys to make sure we aren't reporting time-specific values at the next step.
+        tensordict = tensordict.exclude(*to_exclude)
     keys = [key for key in tensordict.keys() if key.startswith("next_")]
+    if len(keys) == 0:
+        raise RuntimeError(
+            "There was no key starting with 'next_' in the provided TensorDict"
+        )
     new_keys = [key[5:] for key in keys]
     if keep_other:
-        other_keys = [key for key in tensordict.keys() if key not in new_keys]
+        prohibited = set(keys).union(new_keys)
+        other_keys = [key for key in tensordict.keys() if key not in prohibited]
     select_tensordict = tensordict.select(*other_keys, *keys).clone()
     for new_key, key in zip(new_keys, keys):
         select_tensordict.rename_key(key, new_key, safe=True)
@@ -173,9 +200,9 @@ class set_exploration_mode(_DecoratorContextManager):
 
     Examples:
         >>> policy = Actor(action_spec, module=network, default_interaction_mode="mode")
-        >>> env.rollout(policy=policy, n_steps=100)  # rollout with the "mode" interaction mode
+        >>> env.rollout(policy=policy, max_steps=100)  # rollout with the "mode" interaction mode
         >>> with set_exploration_mode("random"):
-        >>>     env.rollout(policy=policy, n_steps=100)  # rollout with the "random" interaction mode
+        >>>     env.rollout(policy=policy, max_steps=100)  # rollout with the "random" interaction mode
     """
 
     def __init__(self, mode: str = "mode"):

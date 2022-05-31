@@ -22,16 +22,16 @@ On the low-level end, torchrl comes with a set of highly re-usable functionals f
 
 On the high-level end, torchrl provides:
 - multiprocess [data collectors](torchrl/collectors/collectors.py);
-- a generic [agent class](torchrl/trainers/trainers.py);
 - efficient and generic [replay buffers](torchrl/data/replay_buffers/replay_buffers.py);
 - [TensorDict](torchrl/data/tensordict/tensordict.py), a convenient data structure to pass data from one object to another without friction;
-- An associated [`TDModule` class](torchrl/modules/td_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible! 
+- An associated [`TensorDictModule` class](torchrl/modules/tensordict_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible! 
 - [interfaces for environments](torchrl/envs) from common libraries (OpenAI gym, deepmind control lab, etc.) and [wrappers for parallel execution](torchrl/envs/vec_env.py), as well as a new pytorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py);
 - [environment transforms](torchrl/envs/transforms/transforms.py), which process and prepare the data coming out of the environments to be used by the agent;
 - various tools for distributed learning (e.g. [memory mapped tensors](torchrl/data/tensordict/memmap.py));
-- various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/td_module/actors.py));
-- [exploration wrappers](torchrl/modules/td_module/exploration.py);
-- various [recipes](torchrl/trainers/helpers/models.py) to build models that correspond to the environment being deployed.
+- various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py));
+- [exploration wrappers](torchrl/modules/tensordict_module/exploration.py) and [modules](torchrl/modules/models/exploration.py);
+- various [recipes](torchrl/trainers/helpers/models.py) to build models that correspond to the environment being deployed;
+- a generic [trainer class](torchrl/trainers/trainers.py).
 
 A series of [examples](examples/) are provided with an illustrative purpose:
 - [DQN (and add-ons up to Rainbow)](examples/dqn/dqn.py)
@@ -58,18 +58,24 @@ Depending on the use of functorch that you want to make, you may want to install
 **Stable**
 
 ```
-conda install pytorch torchvision cudatoolkit=10.2 -c pytorch  # refer to pytorch official website for cudatoolkit installation
+# For CUDA 10.2
+conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
+# For CUDA 11.3
+conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+# For CPU-only build
+conda install pytorch torchvision torchaudio cpuonly -c pytorch
+
 pip install functorch
 ```
 
 **Nightly**
 ```
 # For CUDA 10.2
-pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html --upgrade
-# For CUDA 11.1
-pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html --upgrade
+pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cu102
+# For CUDA 11.3
+pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 # For CPU-only build
-pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --upgrade
+pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 ```
 
 and functorch

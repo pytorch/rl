@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from typing import Optional
 
 import torch
 from torchrl.data.tensor_specs import (
@@ -14,7 +15,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.common import _EnvClass
 
 spec_dict = {
@@ -53,9 +54,14 @@ class _MockEnv(_EnvClass):
     def __init__(self, seed: int = 100):
         super().__init__(
             device="cpu",
-            dtype=torch.float,
+            dtype=torch.get_default_dtype(),
         )
         self.set_seed(seed)
+        self.is_closed = False
+
+        self.observation_spec = self.observation_spec.to(torch.get_default_dtype())
+        # self.action_spec = self.action_spec.to(torch.get_default_dtype())
+        self.reward_spec = self.reward_spec.to(torch.get_default_dtype())
 
     @property
     def maxstep(self):
@@ -74,6 +80,42 @@ class _MockEnv(_EnvClass):
     @property
     def custom_prop(self):
         return 2
+
+    @property
+    def custom_td(self):
+        return TensorDict({"a": torch.zeros(3)}, [])
+
+
+class MockSerialEnv(_EnvClass):
+    def __init__(self, device):
+        super(MockSerialEnv, self).__init__(device=device)
+        self.action_spec = NdUnboundedContinuousTensorSpec((1,))
+        self.observation_spec = NdUnboundedContinuousTensorSpec((1,))
+        self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+        self.is_closed = False
+
+    def set_seed(self, seed: int) -> int:
+        assert seed >= 1
+        self.seed = seed
+        self.counter = seed
+        self.max_val = self.seed * 2
+        return seed
+
+    def _step(self, tensordict):
+        self.counter += 1
+        n = torch.tensor([self.counter]).to(self.device).to(torch.get_default_dtype())
+        done = self.counter >= self.max_val
+        done = torch.tensor([done], dtype=torch.bool, device=self.device)
+        return TensorDict({"reward": n, "done": done, "next_observation": n}, [])
+
+    def _reset(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
+        n = torch.tensor([self.counter]).to(self.device).to(torch.get_default_dtype())
+        done = self.counter >= self.max_val
+        done = torch.tensor([done], dtype=torch.bool, device=self.device)
+        return TensorDict({"done": done, "observation": n}, [])
+
+    def rand_step(self, tensordict: Optional[_TensorDict] = None) -> _TensorDict:
+        return self.step(tensordict)
 
 
 class DiscreteActionVecMockEnv(_MockEnv):
@@ -120,7 +162,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
         reward = done.any(-1).unsqueeze(-1)
         done = done.all(-1).unsqueeze(-1)
-        tensordict.set("reward", reward.to(torch.float))
+        tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
         return tensordict
 
@@ -169,7 +211,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
         reward = done.any(-1).unsqueeze(-1)
         done = done.all(-1).unsqueeze(-1)
-        tensordict.set("reward", reward.to(torch.float))
+        tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
         return tensordict
 
@@ -225,7 +267,7 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
         return obs
 
     def _get_in_obs(self, obs):
-        return obs.diagonal(0, -2, -3)[..., 0]
+        return obs.diagonal(0, -2, -3)[..., 0, :]
 
     def _obs_step(self, obs, a):
         return obs + a.unsqueeze(-1) / self.maxstep
@@ -261,10 +303,10 @@ class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
         return obs
 
     def _get_in_obs(self, obs):
-        return obs.diagonal(0, -2, -3)[..., 0]
+        return obs.diagonal(0, -2, -3)[..., 0, :]
 
     def _obs_step(self, obs, a):
-        return obs + a.unsqueeze(-1) / self.maxstep
+        return obs + a / self.maxstep
 
 
 class DiscreteActionConvPolicy(DiscreteActionVecPolicy):

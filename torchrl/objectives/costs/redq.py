@@ -13,7 +13,7 @@ from torch import Tensor
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
-from torchrl.modules import TDModule
+from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import _LossModule
 from torchrl.objectives.costs.utils import (
     distance_loss,
@@ -32,8 +32,8 @@ class REDQLoss_deprecated(_LossModule):
     train a SAC-like algorithm.
 
     Args:
-        actor_network (TDModule): the actor to be trained
-        qvalue_network (TDModule): a single Q-value network that will be multiplicated as many times as needed.
+        actor_network (TensorDictModule): the actor to be trained
+        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
         sub_sample_len (int, optional): number of Q-value networks to be subsampled to evaluate the next state value
             Default is 2.
@@ -58,8 +58,8 @@ class REDQLoss_deprecated(_LossModule):
 
     def __init__(
         self,
-        actor_network: TDModule,
-        qvalue_network: TDModule,
+        actor_network: TensorDictModule,
+        qvalue_network: TensorDictModule,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
         gamma: Number = 0.99,
@@ -113,7 +113,13 @@ class REDQLoss_deprecated(_LossModule):
             )
 
         if target_entropy == "auto":
-            target_entropy = -float(np.prod(actor_network.spec.shape))
+            if actor_network.spec is None:
+                raise RuntimeError(
+                    "Cannot infer the dimensionality of the action. Consider providing "
+                    "the target entropy explicitely or provide the spec of the "
+                    "action tensor in the actor network."
+                )
+            target_entropy = -float(np.prod(actor_network.spec["action"].shape))
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
@@ -127,10 +133,10 @@ class REDQLoss_deprecated(_LossModule):
         return alpha
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
-        loss_actor, action_log_prob = self._actor_loss(tensordict)
+        loss_actor, sample_log_prob = self._actor_loss(tensordict)
 
         loss_qval = self._qvalue_loss(tensordict)
-        loss_alpha = self._loss_alpha(action_log_prob)
+        loss_alpha = self._loss_alpha(sample_log_prob)
         if not loss_qval.shape == loss_actor.shape:
             raise RuntimeError(
                 f"QVal and actor loss have different shape: {loss_qval.shape} and {loss_actor.shape}"
@@ -141,7 +147,7 @@ class REDQLoss_deprecated(_LossModule):
                 "loss_qvalue": loss_qval.mean(),
                 "loss_alpha": loss_alpha.mean(),
                 "alpha": self.alpha,
-                "entropy": -action_log_prob.mean().detach(),
+                "entropy": -sample_log_prob.mean().detach(),
             },
             [],
         )
@@ -171,15 +177,17 @@ class REDQLoss_deprecated(_LossModule):
             state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
         loss_actor = -(
             state_action_value
-            - self.alpha * tensordict_clone.get("action_log_prob").squeeze(-1)
+            - self.alpha * tensordict_clone.get("sample_log_prob").squeeze(-1)
         ).mean(0)
-        return loss_actor, tensordict_clone.get("action_log_prob")
+        return loss_actor, tensordict_clone.get("sample_log_prob")
 
     def _qvalue_loss(self, tensordict: _TensorDict) -> Tensor:
         tensordict_save = tensordict
 
-        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs")]
+        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]
         obs_keys = [key for key in tensordict.keys() if key.startswith("obs")]
+        if "pixels" in tensordict.keys():
+            raise RuntimeError("not suited for pixel-based experiments")
         tensordict = tensordict.select(
             "reward", "done", *next_obs_keys, *obs_keys, "action"
         )
@@ -206,7 +214,7 @@ class REDQLoss_deprecated(_LossModule):
                     params=list(self.target_actor_network_params),
                     buffers=self.target_actor_network_buffers,
                 )
-            action_log_prob = next_td.get("action_log_prob")
+            sample_log_prob = next_td.get("sample_log_prob")
             # get q-values
             next_td = self.qvalue_network(
                 next_td,
@@ -216,7 +224,7 @@ class REDQLoss_deprecated(_LossModule):
                 vmap=True,
             )
             state_value = (
-                next_td.get("state_action_value") - self.alpha * action_log_prob
+                next_td.get("state_action_value") - self.alpha * sample_log_prob
             )
             state_value = state_value.min(0)[0]
 
@@ -270,8 +278,8 @@ class REDQLoss(_LossModule):
     train a SAC-like algorithm.
 
     Args:
-        actor_network (TDModule): the actor to be trained
-        qvalue_network (TDModule): a single Q-value network that will be multiplicated as many times as needed.
+        actor_network (TensorDictModule): the actor to be trained
+        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
         sub_sample_len (int, optional): number of Q-value networks to be subsampled to evaluate the next state value
             Default is 2.
@@ -290,6 +298,8 @@ class REDQLoss(_LossModule):
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
         delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
             for data collection. Default is `False`.
+        gSDE (bool, optional): Knowing if gSDE is used is necessary to create random noise variables.
+            Default is False
 
     """
 
@@ -297,8 +307,8 @@ class REDQLoss(_LossModule):
 
     def __init__(
         self,
-        actor_network: TDModule,
-        qvalue_network: TDModule,
+        actor_network: TensorDictModule,
+        qvalue_network: TensorDictModule,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
         gamma: Number = 0.99,
@@ -310,6 +320,7 @@ class REDQLoss(_LossModule):
         fixed_alpha: bool = False,
         target_entropy: Union[str, Number] = "auto",
         delay_qvalue: bool = True,
+        gSDE: bool = False,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -354,10 +365,17 @@ class REDQLoss(_LossModule):
             )
 
         if target_entropy == "auto":
-            target_entropy = -float(np.prod(actor_network.spec.shape))
+            if actor_network.spec is None:
+                raise RuntimeError(
+                    "Cannot infer the dimensionality of the action. Consider providing "
+                    "the target entropy explicitely or provide the spec of the "
+                    "action tensor in the actor network."
+                )
+            target_entropy = -float(np.prod(actor_network.spec["action"].shape))
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
+        self.gSDE = gSDE
 
     @property
     def alpha(self):
@@ -368,7 +386,7 @@ class REDQLoss(_LossModule):
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         obs_keys = self.actor_network.in_keys
-        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_obs")]
+        next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]
         tensordict_select = tensordict.select(
             "reward", "done", *next_obs_keys, *obs_keys, "action"
         )
@@ -404,6 +422,11 @@ class REDQLoss(_LossModule):
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
 
         with set_exploration_mode("random"):
+            if self.gSDE:
+                tensordict_actor.set(
+                    "_eps_gSDE",
+                    torch.zeros(tensordict_actor.shape, device=tensordict_actor.device),
+                )
             tensordict_actor = self.actor_network(
                 tensordict_actor,
                 params=actor_params,
@@ -461,11 +484,11 @@ class REDQLoss(_LossModule):
             [self.num_qvalue_nets, self.sub_sample_len, self.num_qvalue_nets],
             dim=0,
         )
-        action_log_prob = tensordict_actor.get("action_log_prob").squeeze(-1)
+        sample_log_prob = tensordict_actor.get("sample_log_prob").squeeze(-1)
         (
             action_log_prob_actor,
             next_action_log_prob_qvalue,
-        ) = action_log_prob.unbind(0)
+        ) = sample_log_prob.unbind(0)
 
         loss_actor = -(
             state_action_value_actor - self.alpha * action_log_prob_actor
@@ -491,7 +514,7 @@ class REDQLoss(_LossModule):
 
         tensordict.set("td_error", td_error.detach().max(0)[0])
 
-        loss_alpha = self._loss_alpha(action_log_prob)
+        loss_alpha = self._loss_alpha(sample_log_prob)
         if not loss_qval.shape == loss_actor.shape:
             raise RuntimeError(
                 f"QVal and actor loss have different shape: {loss_qval.shape} and {loss_actor.shape}"
@@ -502,7 +525,7 @@ class REDQLoss(_LossModule):
                 "loss_qvalue": loss_qval.mean(),
                 "loss_alpha": loss_alpha.mean(),
                 "alpha": self.alpha,
-                "entropy": -action_log_prob.mean(),
+                "entropy": -sample_log_prob.mean(),
             },
             [],
         )

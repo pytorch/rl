@@ -6,7 +6,6 @@ dependencies:
   - cmake >= 3.18
   - pip:
     - hypothesis
-    - protobuf
     - future
     - cloudpickle
     - pytest

@@ -8,12 +8,13 @@ from typing import Optional, Union
 import numpy as np
 import torch
 
+from torchrl.data import CompositeSpec
 from torchrl.data.utils import expand_as_right
 from torchrl.envs.utils import exploration_mode
-from torchrl.modules.td_module.common import (
+from torchrl.modules.tensordict_module.common import (
     _forward_hook_safe_action,
-    TDModule,
-    TDModuleWrapper,
+    TensorDictModule,
+    TensorDictModuleWrapper,
 )
 
 __all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
@@ -21,12 +22,12 @@ __all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
 from torchrl.data.tensordict.tensordict import _TensorDict
 
 
-class EGreedyWrapper(TDModuleWrapper):
+class EGreedyWrapper(TensorDictModuleWrapper):
     """
     Epsilon-Greedy PO wrapper.
 
     Args:
-        policy (TDModule): a deterministic policy.
+        policy (TensorDictModule): a deterministic policy.
         eps_init (scalar): initial epsilon value.
             default: 1.0
         eps_end (scalar): final epsilon value.
@@ -40,7 +41,7 @@ class EGreedyWrapper(TDModuleWrapper):
         >>> torch.manual_seed(0)
         >>> spec = NdBoundedTensorSpec(-1, 1, torch.Size([4]))
         >>> module = torch.nn.Linear(4, 4, bias=False)
-        >>> policy = Actor(spec, module=module)
+        >>> policy = Actor(spec=spec, module=module)
         >>> explorative_policy = EGreedyWrapper(policy, eps_init=0.2)
         >>> td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
         >>> print(explorative_policy(td).get("action"))
@@ -59,7 +60,7 @@ class EGreedyWrapper(TDModuleWrapper):
 
     def __init__(
         self,
-        policy: TDModule,
+        policy: TensorDictModule,
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
@@ -105,7 +106,7 @@ class EGreedyWrapper(TDModuleWrapper):
         return tensordict
 
 
-class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
+class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     """
     Ornstein-Uhlenbeck exploration policy wrapper as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
     https://arxiv.org/pdf/1509.02971.pdf.
@@ -125,7 +126,7 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
     zeroing the tensordict at reset time.
 
     Args:
-        policy (TDModule): a policy
+        policy (TensorDictModule): a policy
         eps_init (scalar): initial epsilon value, determining the amount of noise to be added.
             default: 1.0
         eps_end (scalar): final epsilon value, determining the amount of noise to be added.
@@ -167,7 +168,7 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
 
     def __init__(
         self,
-        policy: TDModule,
+        policy: TensorDictModule,
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
@@ -201,7 +202,12 @@ class OrnsteinUhlenbeckProcessWrapper(TDModuleWrapper):
             )
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
-        self.out_keys = list(self.td_module.out_keys) + [self.ou.out_keys]
+        self.out_keys = list(self.td_module.out_keys) + self.ou.out_keys
+        self._spec = CompositeSpec(
+            **self.td_module._spec, **{key: None for key in self.ou.out_keys}
+        )
+        if len(set(self.out_keys)) != len(self.out_keys):
+            raise RuntimeError(f"Got multiple identical output keys: {self.out_keys}")
         self.safe = safe
         if self.safe:
             self.register_forward_hook(_forward_hook_safe_action)
@@ -268,7 +274,7 @@ class _OrnsteinUhlenbeckProcess:
         self.key = key
         self._noise_key = "_ou_prev_noise"
         self._steps_key = "_ou_steps"
-        self.out_keys = [self.key, self.noise_key, self.steps_key]
+        self.out_keys = [self.noise_key, self.steps_key]
 
     @property
     def noise_key(self):

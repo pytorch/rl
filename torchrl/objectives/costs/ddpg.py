@@ -10,13 +10,14 @@ from typing import Tuple
 import torch
 
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.modules import TDModule
-from torchrl.modules.td_module.actors import ActorCriticWrapper
+from torchrl.modules import TensorDictModule
+from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.costs.utils import (
     distance_loss,
     hold_out_params,
     next_state_value,
 )
+from ...envs.utils import set_exploration_mode
 from .common import _LossModule
 
 
@@ -24,8 +25,8 @@ class DDPGLoss(_LossModule):
     """
     The DDPG Loss class.
     Args:
-        actor_network (TDModule): a policy operator.
-        value_network (TDModule): a Q value operator.
+        actor_network (TensorDictModule): a policy operator.
+        value_network (TensorDictModule): a Q value operator.
         gamma (scalar): a discount factor for return computation.
         device (str, int or torch.device, optional): a device where the losses will be computed, if it can't be found
             via the value operator.
@@ -38,8 +39,8 @@ class DDPGLoss(_LossModule):
 
     def __init__(
         self,
-        actor_network: TDModule,
-        value_network: TDModule,
+        actor_network: TensorDictModule,
+        value_network: TensorDictModule,
         gamma: float,
         loss_function: str = "l2",
         delay_actor: bool = False,
@@ -149,13 +150,14 @@ class DDPGLoss(_LossModule):
         target_buffers = list(self.target_actor_network_buffers) + list(
             self.target_value_network_buffers
         )
-        target_value = next_state_value(
-            tensordict,
-            actor_critic,
-            gamma=self.gamma,
-            params=target_params,
-            buffers=target_buffers,
-        )
+        with set_exploration_mode("mode"):
+            target_value = next_state_value(
+                tensordict,
+                actor_critic,
+                gamma=self.gamma,
+                params=target_params,
+                buffers=target_buffers,
+            )
 
         # td_error = pred_val - target_value
         loss_value = distance_loss(

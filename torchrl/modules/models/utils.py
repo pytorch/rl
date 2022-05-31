@@ -73,12 +73,26 @@ class SquashDims(nn.Module):
 
 
 def _find_depth(depth: Optional[int], *list_or_ints: Sequence):
+    """
+    Find depth based on a sequence of inputs and a depth indicator.
+    If the depth is None, it is inferred by the length of one (or more) matching
+    lists of integers.
+    Raises an exception if depth does not match the list lengths or if lists lengths
+    do not match.
+
+    Args:
+        depth (int, optional): depth of the network
+        *list_or_ints (lists of int or int): if depth is None, at least one of
+            these inputs must be a list of ints of the length of the desired
+            network.
+    """
     if depth is None:
         for item in list_or_ints:
             if isinstance(item, (list, tuple)):
                 depth = len(item)
     if depth is None:
         raise Exception(
-            f"depth=None requires one of the input args (kernel_sizes, strides, num_cells) to be a a list or tuple. Got {tuple(type(item) for item in list_or_ints)}"
+            f"depth=None requires one of the input args (kernel_sizes, strides, "
+            f"num_cells) to be a a list or tuple. Got {tuple(type(item) for item in list_or_ints)}"
         )
     return depth

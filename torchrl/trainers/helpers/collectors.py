@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from argparse import ArgumentParser, Namespace
-from typing import Callable, List, Optional, Type, Union
+from typing import Callable, List, Optional, Type, Union, Dict
 
 from torchrl.collectors.collectors import (
     _DataCollector,
@@ -26,7 +26,7 @@ __all__ = [
 ]
 
 from torchrl.envs.common import _EnvClass
-from torchrl.modules import ProbabilisticTDModule, TDModuleWrapper
+from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule
 
 
 def sync_async_collector(
@@ -240,16 +240,16 @@ def _make_collector(
 
 def make_collector_offpolicy(
     make_env: Callable[[], _EnvClass],
-    actor_model_explore: Union[TDModuleWrapper, ProbabilisticTDModule],
+    actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
     args: Namespace,
-    make_env_kwargs=None,
+    make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     """
     Returns a data collector for off-policy algorithms.
 
     Args:
         make_env (Callable): environment creator
-        actor_model_explore (TDModule): Model instance used for evaluation and exploration update
+        actor_model_explore (TensorDictModule): Model instance used for evaluation and exploration update
         args (Namespace): argument namespace built from the parser constructor
         make_env_kwargs (dict): kwargs for the env creator
 
@@ -305,17 +305,19 @@ def make_collector_offpolicy(
 
 def make_collector_onpolicy(
     make_env: Callable[[], _EnvClass],
-    actor_model_explore: Union[TDModuleWrapper, ProbabilisticTDModule],
+    actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
     args: Namespace,
-    make_env_kwargs=None,
+    make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     collector_helper = sync_sync_collector
 
     ms = None
 
     env_kwargs = {}
-    if make_env_kwargs is not None:
+    if make_env_kwargs is not None and isinstance(make_env_kwargs, dict):
         env_kwargs.update(make_env_kwargs)
+    elif make_env_kwargs is not None:
+        env_kwargs = make_env_kwargs
     args.collector_devices = (
         args.collector_devices
         if len(args.collector_devices) > 1
@@ -422,7 +424,7 @@ def _parser_collector_args(parser: ArgumentParser) -> ArgumentParser:
         "--exploration-mode",
         type=str,
         default=None,
-        help="exploration mode of the data collector. If gSDE is being used, this should be set to `'net_output'`.",
+        help="exploration mode of the data collector.",
     )
     parser.add_argument(
         "--async_collection",
