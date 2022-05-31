@@ -1752,9 +1752,9 @@ class TensorDict(_TensorDict):
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
-        try:
+        if key in self._tensordict.keys():
             return self._tensordict[key]
-        except KeyError:
+        else:
             return self._default_get(key, default)
 
     def _get_meta(self, key: str) -> MetaTensor:
@@ -3355,7 +3355,7 @@ class _CustomOpTensorDict(_TensorDict):
         default: Union[str, COMPATIBLE_TYPES] = "_no_default_",
         _return_original_tensor: bool = False,
     ) -> COMPATIBLE_TYPES:
-        try:
+        if key in self._source.keys():
             source_meta_tensor = self._source._get_meta(key)
             item = self._source.get(key)
             transformed_tensor = getattr(item, self.custom_op)(
@@ -3364,7 +3364,7 @@ class _CustomOpTensorDict(_TensorDict):
             if not _return_original_tensor:
                 return transformed_tensor
             return transformed_tensor, item
-        except KeyError:
+        else:
             if _return_original_tensor:
                 raise RuntimeError(
                     "_return_original_tensor not compatible with get(..., "

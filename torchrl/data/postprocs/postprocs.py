@@ -168,9 +168,9 @@ class MultiStep(nn.Module):
             raise RuntimeError("Expected a tensordict with B x T x ... dimensions")
 
         done = tensordict.get("done")
-        try:
+        if "mask" in tensordict.keys():
             mask = tensordict.get("mask")
-        except KeyError:
+        else:
             mask = done.clone().flip(1).cumsum(1).flip(1).to(torch.bool)
         reward = tensordict.get("reward")
 

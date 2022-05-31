@@ -317,9 +317,9 @@ def next_state_value(
     Returns:
         a Tensor of the size of the input tensordict containing the predicted value state.
     """
-    try:
+    if "steps_to_next_obs" in tensordict.keys():
         steps_to_next_obs = tensordict.get("steps_to_next_obs").squeeze(-1)
-    except KeyError:
+    else:
         steps_to_next_obs = 1
 
     rewards = tensordict.get("reward").squeeze(-1)
