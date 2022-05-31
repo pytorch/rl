@@ -25,7 +25,7 @@ class MJEnv(GymEnv):
             render_device = int(str(self.device)[-1])
         except ValueError:
             render_device = 0
-        print(f"rendering device: {render_device}")
+        print(f"rendering device: {render_device}, device is {self.device}")
         if not _has_gym:
             raise RuntimeError(
                 f"gym not found, unable to create {envname}. "
@@ -96,4 +96,5 @@ class MJEnv(GymEnv):
             out.render_device = int(str(out.device)[-1])
         except ValueError:
             out.render_device = 0
+        self._build_env(self.envname, self.taskname, **self.constructor_kwargs)
         return out
