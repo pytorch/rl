@@ -220,6 +220,7 @@ def make_trainer(
             "post_steps_log",
             recorder_obj,
         )
+        recorder_obj(None)
         recorder_obj_explore = Recorder(
             record_frames=args.record_frames,
             frame_skip=args.frame_skip,
@@ -312,8 +313,8 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
         "--clip_norm",
         "--clip-norm",
         type=float,
-        default=0.1,
-        help="value at which the total gradient norm / single derivative should be clipped. Default=0.1",
+        default=1000.0,
+        help="value at which the total gradient norm / single derivative should be clipped. Default=1000.0",
     )
     parser.add_argument(
         "--clip_grad_norm",

@@ -1752,9 +1752,9 @@ class TensorDict(_TensorDict):
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
-        try:
+        if key in self._tensordict.keys():
             return self._tensordict[key]
-        except KeyError:
+        else:
             return self._default_get(key, default)
 
     def _get_meta(self, key: str) -> MetaTensor:
@@ -1817,6 +1817,8 @@ class TensorDict(_TensorDict):
 
     def to(self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs) -> _TensorDict:
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
+            if isinstance(self, dest):
+                return self
             td = dest(
                 source=self,
                 **kwargs,
@@ -2270,6 +2272,8 @@ torch.Size([3, 2])
 
     def to(self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs) -> _TensorDict:
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
+            if isinstance(self, dest):
+                return self
             return dest(
                 source=self.clone(),
             )
@@ -2744,6 +2748,8 @@ class LazyStackedTensorDict(_TensorDict):
 
     def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs) -> _TensorDict:
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
+            if isinstance(self, dest):
+                return self
             return dest(source=self, batch_size=self.batch_size)
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
@@ -3177,6 +3183,8 @@ class SavedTensorDict(_TensorDict):
 
     def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs):
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
+            if isinstance(self, dest):
+                return self
             td = dest(
                 source=TensorDict(self.to_dict(), batch_size=self.batch_size),
                 **kwargs,
@@ -3355,7 +3363,7 @@ class _CustomOpTensorDict(_TensorDict):
         default: Union[str, COMPATIBLE_TYPES] = "_no_default_",
         _return_original_tensor: bool = False,
     ) -> COMPATIBLE_TYPES:
-        try:
+        if key in self._source.keys():
             source_meta_tensor = self._source._get_meta(key)
             item = self._source.get(key)
             transformed_tensor = getattr(item, self.custom_op)(
@@ -3364,7 +3372,7 @@ class _CustomOpTensorDict(_TensorDict):
             if not _return_original_tensor:
                 return transformed_tensor
             return transformed_tensor, item
-        except KeyError:
+        else:
             if _return_original_tensor:
                 raise RuntimeError(
                     "_return_original_tensor not compatible with get(..., "
@@ -3482,6 +3490,8 @@ class _CustomOpTensorDict(_TensorDict):
 
     def to(self, dest: Union[DEVICE_TYPING, Type], **kwargs) -> _TensorDict:
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
+            if isinstance(self, dest):
+                return self
             return dest(source=self.contiguous().clone())
         elif isinstance(dest, (torch.device, str, int)):
             if self._device_safe() is not None and torch.device(dest) == self.device:
