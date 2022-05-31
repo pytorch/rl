@@ -18,10 +18,14 @@ class MJEnv(GymEnv):
         taskname: str,
         from_pixels: bool = False,
         pixels_only: bool = False,
-        render_device: int = 0,
         **kwargs,
     ) -> "gym.core.Env":
         self.pixels_only = pixels_only
+        try:
+            render_device = int(str(self.device)[-1])
+        except ValueError:
+            render_device = 0
+        print(f"rendering device: {render_device}")
         if not _has_gym:
             raise RuntimeError(
                 f"gym not found, unable to create {envname}. "
@@ -85,3 +89,11 @@ class MJEnv(GymEnv):
             img = torch.Tensor(img).squeeze(0)
             td.set("next_pixels", img)
         return td
+
+    def to(self, *args, **kwargs):
+        out = super().to(*args, **kwargs)
+        try:
+            out.render_device = int(str(out.device)[-1])
+        except ValueError:
+            out.render_device = 0
+        return out
