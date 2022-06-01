@@ -20,7 +20,4 @@ activation=elu
 lr=0.0002
 weight_decay=1e-5
 
-normalize_rewards_online
-normalize_rewards_online_scale=10
-
 catframes=4
