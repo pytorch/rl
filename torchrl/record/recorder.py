@@ -87,10 +87,10 @@ class VideoRecorder(ObservationTransform):
                         f"got {observation_trsf.ndimension()} instead"
                     )
                 observation_trsf = observation_trsf.permute(2, 0, 1)
-                if self.center_crop:
-                    observation_trsf = center_crop_fn(
-                        observation_trsf, [self.center_crop, self.center_crop]
-                    )
+            if self.center_crop:
+                observation_trsf = center_crop_fn(
+                    observation_trsf, [self.center_crop, self.center_crop]
+                )
             self.obs.append(observation_trsf.cpu().to(torch.uint8))
         return observation
 

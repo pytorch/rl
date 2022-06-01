@@ -228,8 +228,10 @@ def test_recorder():
         args = Namespace()
         args.env_name = "ALE/Pong-v5"
         args.env_task = ""
+        args.grayscale = True
         args.env_library = "gym"
         args.frame_skip = 1
+        args.center_crop = []
         args.from_pixels = False
         args.vecnorm = False
         args.norm_rewards = False
