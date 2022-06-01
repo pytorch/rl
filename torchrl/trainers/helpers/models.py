@@ -1188,6 +1188,20 @@ def parser_model_args_continuous(
             "efficient entropy-based exploration, this should be left for experimentation only.",
         )
         parser.add_argument(
+            "--ou-sigma",
+            "--ou_sigma",
+            type=float,
+            default=0.2,
+            help="Ornstein-Uhlenbeck sigma.",
+        )
+        parser.add_argument(
+            "--ou-theta",
+            "--ou_theta",
+            type=float,
+            default=0.15,
+            help="Ornstein-Uhlenbeck theta.",
+        )
+        parser.add_argument(
             "--no_ou_exploration",
             "--no-ou-exploration",
             action="store_false",

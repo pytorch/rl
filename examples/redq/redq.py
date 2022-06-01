@@ -128,7 +128,10 @@ def main(args):
         if args.gSDE:
             raise RuntimeError("gSDE and ou_exploration are incompatible")
         actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-            actor_model_explore, annealing_num_steps=args.annealing_frames
+            actor_model_explore,
+            annealing_num_steps=args.annealing_frames,
+            sigma=args.ou_sigma,
+            theta=args.ou_theta,
         ).to(device)
     if device == torch.device("cpu"):
         # mostly for debugging
