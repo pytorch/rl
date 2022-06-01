@@ -338,7 +338,7 @@ class ConvNet(nn.Sequential):
         num_cells: Union[Sequence, int] = [32, 32, 32],
         kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 3,
         strides: Union[Sequence, int] = 1,
-        paddings: Union[Sequence, int] = 1,
+        paddings: Union[Sequence, int] = 0,
         activation_class: Type = nn.ELU,
         activation_kwargs: Optional[dict] = None,
         norm_class: Type = None,
@@ -648,9 +648,10 @@ class DdpgCnnActor(nn.Module):
         conv_net_kwargs (dict, optional): kwargs for the ConvNet.
             default: {
             'in_features': None,
-            'num_cells': [32, 64, 64],
-            'kernel_sizes': [8, 4, 3],
-            'strides': [4, 2, 1],
+            "num_cells": [32, 64, 64],
+            "kernel_sizes": [8, 4, 3],
+            "strides": [4, 2, 1],
+            "paddings": [0, 0, 1],
             'activation_class': nn.ELU,
             'norm_class': None,
             'aggregator_class': SquashDims,
@@ -666,6 +667,8 @@ class DdpgCnnActor(nn.Module):
             'activation_class': nn.ELU,
             'bias_last_layer': True,
         }
+        use_avg_pooling (bool, optional): if True, a nn.AvgPooling layer is
+            used to aggregate the output. Default is `False`.
     """
 
     def __init__(
@@ -673,6 +676,7 @@ class DdpgCnnActor(nn.Module):
         action_dim: int,
         conv_net_kwargs: Optional[dict] = None,
         mlp_net_kwargs: Optional[dict] = None,
+        use_avg_pooling: bool = False,
     ):
         super().__init__()
         conv_net_default_kwargs = {
@@ -683,9 +687,13 @@ class DdpgCnnActor(nn.Module):
             "paddings": [0, 0, 1],
             "activation_class": nn.ELU,
             "norm_class": None,
-            "aggregator_class": SquashDims,
-            "aggregator_kwargs": {"ndims_in": 3},
-            "squeeze_output": False,
+            "aggregator_class": SquashDims
+            if not use_avg_pooling
+            else nn.AdaptiveAvgPool2d,
+            "aggregator_kwargs": {"ndims_in": 3}
+            if not use_avg_pooling
+            else {"output_size": (1, 1)},
+            "squeeze_output": use_avg_pooling,
         }
         conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else dict()
         conv_net_default_kwargs.update(conv_net_kwargs)
@@ -761,13 +769,14 @@ class DdpgCnnQNet(nn.Module):
         conv_net_kwargs (dict, optional): kwargs for the convolutional network.
             default: {
             'in_features': None,
-            'num_cells': [32, 32, 32],
-            'kernel_sizes': 3,
-            'strides': 1,
+            "num_cells": [32, 64, 128],
+            "kernel_sizes": [8, 4, 3],
+            "strides": [4, 2, 1],
+            "paddings": [0, 0, 1],
             'activation_class': nn.ELU,
             'norm_class': None,
-            'aggregator_class': SquashDims,
-            'aggregator_kwargs': {"ndims_in": 3},
+            'aggregator_class': nn.AdaptiveAvgPool2d,
+            'aggregator_kwargs': {},
             'squeeze_output': True,
         }
         mlp_net_kwargs (dict, optional): kwargs for MLP.
@@ -779,24 +788,32 @@ class DdpgCnnQNet(nn.Module):
             'activation_class': nn.ELU,
             'bias_last_layer': True,
         }
+        use_avg_pooling (bool, optional): if True, a nn.AvgPooling layer is
+            used to aggregate the output. Default is `True`.
     """
 
     def __init__(
         self,
         conv_net_kwargs: Optional[dict] = None,
         mlp_net_kwargs: Optional[dict] = None,
+        use_avg_pooling: bool = True,
     ):
         super().__init__()
         conv_net_default_kwargs = {
             "in_features": None,
-            "num_cells": [32, 32, 32],
-            "kernel_sizes": 3,
-            "strides": 1,
+            "num_cells": [32, 64, 128],
+            "kernel_sizes": [8, 4, 3],
+            "strides": [4, 2, 1],
+            "paddings": [0, 0, 1],
             "activation_class": nn.ELU,
             "norm_class": None,
-            "aggregator_class": SquashDims,
-            "aggregator_kwargs": {"ndims_in": 3},
-            "squeeze_output": False,
+            "aggregator_class": SquashDims
+            if not use_avg_pooling
+            else nn.AdaptiveAvgPool2d,
+            "aggregator_kwargs": {"ndims_in": 3}
+            if not use_avg_pooling
+            else {"output_size": (1, 1)},
+            "squeeze_output": use_avg_pooling,
         }
         conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else dict()
         conv_net_default_kwargs.update(conv_net_kwargs)

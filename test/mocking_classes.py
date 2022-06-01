@@ -112,7 +112,7 @@ class MockSerialEnv(_EnvClass):
         n = torch.tensor([self.counter]).to(self.device).to(torch.get_default_dtype())
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
-        return TensorDict({"done": done, "observation": n}, [])
+        return TensorDict({"done": done, "next_observation": n}, [])
 
     def rand_step(self, tensordict: Optional[_TensorDict] = None) -> _TensorDict:
         return self.step(tensordict)

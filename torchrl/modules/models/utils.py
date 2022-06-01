@@ -34,10 +34,17 @@ class SqueezeLayer(nn.Module):
 
     def __init__(self, dims: Sequence[int] = (-1,)):
         super().__init__()
+        for dim in dims:
+            if dim >= 0:
+                raise RuntimeError("dims must all be < 0")
         self.dims = dims
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         for dim in self.dims:
+            if input.shape[dim] != 1:
+                raise RuntimeError(
+                    f"Tried to squeeze an input over dims {self.dims} with shape {input.shape}"
+                )
             input = input.squeeze(dim)
         return input
 
@@ -50,7 +57,7 @@ class Squeeze2dLayer(SqueezeLayer):
     """
 
     def __init__(self):
-        super().__init__((-1, -2))
+        super().__init__((-2, -1))
 
 
 class SquashDims(nn.Module):
