@@ -14,6 +14,7 @@ from torch import nn, Tensor
 
 try:
     _has_tv = True
+    from torchvision.transforms.functional import center_crop
     from torchvision.transforms.functional_tensor import (
         resize,
     )  # as of now resize is imported from torchvision
@@ -41,6 +42,7 @@ __all__ = [
     "TransformedEnv",
     "RewardClipping",
     "Resize",
+    "CenterCrop",
     "GrayScale",
     "Compose",
     "ToTensorImage",
@@ -512,6 +514,9 @@ class Compose(Transform):
             t.to(dest)
         return super().to(dest)
 
+    def __iter__(self):
+        return iter(self.transforms)
+
     def __len__(self):
         return len(self.transforms)
 
@@ -756,6 +761,70 @@ class Resize(ObservationTransform):
             f"{self.__class__.__name__}("
             f"w={float(self.w):4.4f}, h={float(self.h):4.4f}, "
             f"interpolation={self.interpolation}, keys={self.keys})"
+        )
+
+
+class CenterCrop(ObservationTransform):
+    """Crops the center of an image
+
+    Args:
+        w (int): resulting width
+        h (int, optional): resulting height. If None, then w is used (square crop).
+    """
+
+    inplace = False
+
+    def __init__(
+        self,
+        w: int,
+        h: int = None,
+        keys: Optional[Sequence[str]] = None,
+    ):
+        if not _has_tv:
+            raise ImportError(
+                "Torchvision not found. The Resize transform relies on "
+                "torchvision implementation. "
+                "Consider installing this dependency."
+            )
+        if keys is None:
+            keys = IMAGE_KEYS  # default
+        super().__init__(keys=keys)
+        self.w = w
+        self.h = h if h else w
+
+    def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        observation = center_crop(observation, [self.w, self.h])
+        return observation
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if isinstance(observation_spec, CompositeSpec):
+            return CompositeSpec(
+                **{
+                    key: self.transform_observation_spec(_obs_spec)
+                    if key in self.keys
+                    else _obs_spec
+                    for key, _obs_spec in observation_spec._specs.items()
+                }
+            )
+        else:
+            _observation_spec = observation_spec
+        space = _observation_spec.space
+        if isinstance(space, ContinuousBox):
+            space.minimum = self._apply_transform(space.minimum)
+            space.maximum = self._apply_transform(space.maximum)
+            _observation_spec.shape = space.minimum.shape
+        else:
+            _observation_spec.shape = self._apply_transform(
+                torch.zeros(_observation_spec.shape)
+            ).shape
+
+        observation_spec = _observation_spec
+        return observation_spec
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"w={float(self.w):4.4f}, h={float(self.h):4.4f}, "
         )
 
 

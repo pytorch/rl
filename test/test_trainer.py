@@ -230,6 +230,7 @@ def test_recorder():
         args.env_task = ""
         args.env_library = "gym"
         args.frame_skip = 1
+        args.center_crop = []
         args.from_pixels = False
         args.vecnorm = False
         args.norm_rewards = False
