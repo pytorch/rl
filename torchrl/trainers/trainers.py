@@ -347,6 +347,7 @@ class Trainer:
             self._pbar_str = dict()
 
         self.collected_frames = 0
+
         for i, batch in enumerate(self.collector):
             batch = self._process_batch_hook(batch)
             self._pre_steps_log_hook(batch)

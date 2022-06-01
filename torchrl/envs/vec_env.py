@@ -212,6 +212,7 @@ class _BatchedEnv(_EnvClass):
         self._reward_spec = None
         self._device = None
         self._dummy_env_str = None
+        self._seeds = None
 
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
@@ -710,8 +711,10 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def set_seed(self, seed: int) -> int:
+        self._seeds = []
         for i, channel in enumerate(self.parent_channels):
             channel.send(("seed", seed))
+            self._seeds.append(seed)
             if i < self.num_workers - 1:
                 seed = seed + 1
         for channel in self.parent_channels:
@@ -787,8 +790,12 @@ class ParallelEnv(_BatchedEnv):
         if device == self.device:
             return self
         super().to(device)
-        if not self.is_closed:
-            _dispatch_caller_parallel("to", self)(device)
+        if self._seeds is not None:
+            warn(
+                "Sending a seeded ParallelEnv to another device requires "
+                f"re-seeding it. Re-seeding envs to {self._seeds}."
+            )
+            self.set_seed(self._seeds[0])
         return self
 
 

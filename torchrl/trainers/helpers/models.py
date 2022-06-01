@@ -1002,21 +1002,20 @@ def make_redq_model(
     gSDE = args.gSDE
 
     action_spec = proof_environment.action_spec
-    obs_spec = proof_environment.observation_spec
-
-    if observation_key is not None:
-        obs_spec = obs_spec[observation_key]
-    else:
-        obs_spec_values = list(obs_spec.values())
-        if len(obs_spec_values) > 1:
-            raise RuntimeError(
-                "There is more than one observation in the spec, REDQ helper "
-                "cannot infer automatically which to pick. "
-                "Please indicate which key to read via the `observation_key` "
-                "keyword in this helper."
-            )
-        else:
-            obs_spec = obs_spec_values[0]
+    # obs_spec = proof_environment.observation_spec
+    # if observation_key is not None:
+    #     obs_spec = obs_spec[observation_key]
+    # else:
+    #     obs_spec_values = list(obs_spec.values())
+    #     if len(obs_spec_values) > 1:
+    #         raise RuntimeError(
+    #             "There is more than one observation in the spec, REDQ helper "
+    #             "cannot infer automatically which to pick. "
+    #             "Please indicate which key to read via the `observation_key` "
+    #             "keyword in this helper."
+    #         )
+    #     else:
+    #         obs_spec = obs_spec_values[0]
 
     if actor_net_kwargs is None:
         actor_net_kwargs = {}
@@ -1187,6 +1186,20 @@ def parser_model_args_continuous(
             action="store_true",
             help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
             "efficient entropy-based exploration, this should be left for experimentation only.",
+        )
+        parser.add_argument(
+            "--ou-sigma",
+            "--ou_sigma",
+            type=float,
+            default=0.2,
+            help="Ornstein-Uhlenbeck sigma.",
+        )
+        parser.add_argument(
+            "--ou-theta",
+            "--ou_theta",
+            type=float,
+            default=0.15,
+            help="Ornstein-Uhlenbeck theta.",
         )
         parser.add_argument(
             "--no_ou_exploration",

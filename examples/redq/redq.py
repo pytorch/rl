@@ -19,7 +19,6 @@ except ImportError:
     _configargparse = False
 
 import torch.cuda
-from torch.profiler import profile, ProfilerActivity
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 from torchrl.trainers.helpers.collectors import (
@@ -129,7 +128,10 @@ def main(args):
         if args.gSDE:
             raise RuntimeError("gSDE and ou_exploration are incompatible")
         actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-            actor_model_explore, annealing_num_steps=args.annealing_frames
+            actor_model_explore,
+            annealing_num_steps=args.annealing_frames,
+            sigma=args.ou_sigma,
+            theta=args.ou_theta,
         ).to(device)
     if device == torch.device("cpu"):
         # mostly for debugging
@@ -204,35 +206,24 @@ def main(args):
         args,
     )
 
-    with profile(
-        activities=[ProfilerActivity.CUDA, ProfilerActivity.CPU],
-        record_shapes=True,
-        schedule=torch.profiler.schedule(wait=3, warmup=3, active=10),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(
-            f"redq_logging/profile_cuda_{exp_name}",
-        ),
-    ) as p_cuda:
+    def select_keys(batch):
+        return batch.select(
+            "reward",
+            "done",
+            "steps_to_next_obs",
+            "pixels",
+            "next_pixels",
+            "observation_vector",
+            "next_observation_vector",
+            "action",
+        )
 
-        def step(*whatever):
-            p_cuda.step()
+    trainer.register_op("batch_process", select_keys)
 
-        trainer.register_op("post_steps_log", step)
+    final_seed = collector.set_seed(args.seed)
+    print(f"init seed: {args.seed}, final seed: {final_seed}")
 
-        def select_keys(batch):
-            return batch.select(
-                "reward",
-                "done",
-                "steps_to_next_obs",
-                "pixels",
-                "next_pixels",
-                "observation_vector",
-                "next_observation_vector",
-                "action",
-            )
-
-        trainer.register_op("batch_process", select_keys)
-
-        trainer.train()
+    trainer.train()
     return (writer.log_dir, trainer._log_dict, trainer.state_dict())
 
 

@@ -125,7 +125,10 @@ def main(args):
     actor_model_explore = model[0]
     if args.ou_exploration:
         actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-            actor_model_explore, annealing_num_steps=args.annealing_frames
+            actor_model_explore,
+            annealing_num_steps=args.annealing_frames,
+            sigma=args.ou_sigma,
+            theta=args.ou_theta,
         ).to(device)
     if device == torch.device("cpu"):
         # mostly for debugging
@@ -197,6 +200,23 @@ def main(args):
         writer,
         args,
     )
+
+    def select_keys(batch):
+        return batch.select(
+            "reward",
+            "done",
+            "steps_to_next_obs",
+            "pixels",
+            "next_pixels",
+            "observation_vector",
+            "next_observation_vector",
+            "action",
+        )
+
+    trainer.register_op("batch_process", select_keys)
+
+    final_seed = collector.set_seed(args.seed)
+    print(f"init seed: {args.seed}, final seed: {final_seed}")
 
     trainer.train()
     return (writer.log_dir, trainer._log_dict, trainer.state_dict())

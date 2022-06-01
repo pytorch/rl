@@ -22,6 +22,7 @@ from functorch import FunctionalModule, FunctionalModuleWithBuffers, vmap
 from functorch._src.make_functional import _swap_state
 from torch import nn, Tensor
 
+from torchrl import timeit
 from torchrl.data import (
     DEVICE_TYPING,
     TensorSpec,
@@ -304,7 +305,7 @@ class TensorDictModule(nn.Module):
         if isinstance(self.module, (FunctionalModule, FunctionalModuleWithBuffers)):
             _vmap = self._make_vmap(kwargs, len(tensors))
             if _vmap:
-                module = vmap(self.module, _vmap)
+                module = timeit("vmap")(vmap(self.module, _vmap))
             else:
                 module = self.module
 
@@ -316,7 +317,8 @@ class TensorDictModule(nn.Module):
                 for key, item in kwargs.items()
                 if key not in ("params", "vmap")
             }
-            return module(kwargs["params"], *tensors, **kwargs_pruned)
+            out = module(kwargs["params"], *tensors, **kwargs_pruned)
+            return out
 
         elif isinstance(self.module, FunctionalModuleWithBuffers):
             if "params" not in kwargs:
@@ -329,9 +331,8 @@ class TensorDictModule(nn.Module):
                 for key, item in kwargs.items()
                 if key not in ("params", "buffers", "vmap")
             }
-            return module(
-                kwargs["params"], kwargs["buffers"], *tensors, **kwargs_pruned
-            )
+            out = module(kwargs["params"], kwargs["buffers"], *tensors, **kwargs_pruned)
+            return out
         else:
             out = self.module(*tensors, **kwargs)
         return out
