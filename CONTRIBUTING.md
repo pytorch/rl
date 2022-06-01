@@ -29,6 +29,9 @@ pre-commit run --all-files
 ```
 from within the torchrl cloned directory.
 
+You can also install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`
+). You can disable the check by appending `-n` to your commit command: `git commit -m <commit message> -n`
+
 ## Pull Requests
 We actively welcome your pull requests.
 
