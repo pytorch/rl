@@ -9,8 +9,8 @@ __all__ = ["parser_recorder_args"]
 
 @dataclass
 class RecorderConfig: 
-    record_video: bool = True
-    no_video: bool = False
+    record_video: bool = False
+    no_video: bool = True
     exp_name: str = ""
     record_interval: int = 1000
     record_frames: int = 1000

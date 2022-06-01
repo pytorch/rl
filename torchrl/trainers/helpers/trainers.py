@@ -253,7 +253,7 @@ class TrainConfig:
     lr: float = 3e-4
     weight_decay: float = 0.0
     clip_norm: float = 1000.0
-    clip_grad_norm: bool = True
-    normalize_rewards_online: bool = True
+    clip_grad_norm: bool = False
+    normalize_rewards_online: bool = False
     normalize_rewards_online_scale: float = 1.0
     sub_traj_len: int = -1

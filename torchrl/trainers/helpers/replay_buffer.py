@@ -38,26 +38,6 @@ def make_replay_buffer(device: DEVICE_TYPING, args: Namespace) -> ReplayBuffer:
         )
     return buffer
 
-
-def parser_replay_args(parser: ArgumentParser) -> ArgumentParser:
-    """
-    Populates the argument parser to build a replay buffer.
-
-    Args:
-        parser (ArgumentParser): parser to be populated.
-
-    """
-
-    parser.add_argument(
-        "--buffer_size",
-        "--buffer-size",
-        type=int,
-        default=1000000,
-        help="buffer size, in number of frames stored. Default=1e6",
-    )
-    parser.add_argument(
-        "--prb",
-        action="store_true",
-        help="whether a Prioritized replay buffer should be used instead of a more basic circular one.",
-    )
-    return parser
+class ReplayArgsConfig: 
+    buffer_size: int = 1000000
+    prb: bool = False
