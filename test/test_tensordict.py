@@ -14,7 +14,7 @@ from _utils_internal import get_available_devices
 from torch import multiprocessing as mp
 from torchrl.data import SavedTensorDict, TensorDict
 from torchrl.data.tensordict.tensordict import assert_allclose_td, LazyStackedTensorDict
-from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
+from torchrl.data.tensordict.utils import _getitem_batch_size
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -814,55 +814,55 @@ class TestTensorDicts:
         td.set("numpy", r.numpy())
         torch.testing.assert_allclose(td.get("numpy"), r)
 
-    def test_getitem_ellipsis(self, td_name): 
+    def test_getitem_ellipsis(self, td_name):
         torch.manual_seed(1)
-        td = TensorDict({"a": torch.randn(1, 3, 4, 5, 6), "b": torch.randn(1, 3, 4, 5)}, batch_size=[1, 3, 4])
-        
-        actual_idx = [..., 
-                     (..., 0), 
-                     (0, ...), 
-                     (0, ..., 0)
-        ]
-        expected_idx = [(slice(None), slice(None), slice(None)),
-                        (slice(None), slice(None), 0), 
-                        (0, slice(None), slice(None)), 
-                        (0, slice(None), 0)
+        td = TensorDict(
+            {"a": torch.randn(1, 3, 4, 5, 6), "b": torch.randn(1, 3, 4, 5)},
+            batch_size=[1, 3, 4],
+        )
+
+        actual_idx = [..., (..., 0), (0, ...), (0, ..., 0)]
+        expected_idx = [
+            (slice(None), slice(None), slice(None)),
+            (slice(None), slice(None), 0),
+            (0, slice(None), slice(None)),
+            (0, slice(None), 0),
         ]
 
-        for i in range(len(actual_idx)): 
+        for i in range(len(actual_idx)):
             actual_td = td[actual_idx[i]]
             expected_td = td[expected_idx[i]]
 
-            for key in td.keys(): 
+            for key in td.keys():
                 actual_tensor = actual_td[key]
                 expected_tensor = expected_td[key]
 
                 assert actual_tensor.shape == expected_tensor.shape
                 torch.testing.assert_allclose(actual_tensor, expected_tensor)
 
-    def test_setitem_ellipsis(self, td_name): 
+    def test_setitem_ellipsis(self, td_name):
         torch.manual_seed(1)
-        td = TensorDict({"a": torch.randn(1, 3, 4, 5, 6), "b": torch.randn(1, 3, 4, 5)}, batch_size=[1, 3, 4])
-        
-        actual_idx = [..., 
-                     (..., 0), 
-                     (0, ...), 
-                     (0, ..., 0)
-        ]
-        expected_idx = [(slice(None), slice(None), slice(None)),
-                        (slice(None), slice(None), 0), 
-                        (0, slice(None), slice(None)), 
-                        (0, slice(None), 0)
+        td = TensorDict(
+            {"a": torch.randn(1, 3, 4, 5, 6), "b": torch.randn(1, 3, 4, 5)},
+            batch_size=[1, 3, 4],
+        )
+
+        actual_idx = [..., (..., 0), (0, ...), (0, ..., 0)]
+        expected_idx = [
+            (slice(None), slice(None), slice(None)),
+            (slice(None), slice(None), 0),
+            (0, slice(None), slice(None)),
+            (0, slice(None), 0),
         ]
 
-        for i in range(len(actual_idx)): 
+        for i in range(len(actual_idx)):
             idx = actual_idx[i]
             td_clone = td.clone()
             actual_td = td[idx].clone().zero_()
             td_clone[idx] = actual_td
 
-            for key in td.keys(): 
-                 assert (td[idx].get(key) == 0).all()
+            for key in td.keys():
+                assert (td[idx].get(key) == 0).all()
 
     @pytest.mark.parametrize("idx", [slice(1), torch.tensor([0]), torch.tensor([0, 1])])
     def test_setitem(self, td_name, idx):
@@ -871,7 +871,7 @@ class TestTensorDicts:
         if isinstance(idx, torch.Tensor) and idx.numel() > 1 and td.shape[0] == 1:
             pytest.mark.skip("cannot index tensor with desired index")
             return
-  
+
         td_clone = td[idx].clone().zero_()
         td[idx] = td_clone
         assert (td[idx].get("a") == 0).all()

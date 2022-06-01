@@ -36,7 +36,11 @@ import torch
 
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.metatensor import MetaTensor
-from torchrl.data.tensordict.utils import _getitem_batch_size, _sub_index,  convert_ellipsis_to_idx
+from torchrl.data.tensordict.utils import (
+    _getitem_batch_size,
+    _sub_index,
+    convert_ellipsis_to_idx,
+)
 from torchrl.data.utils import DEVICE_TYPING, expand_as_right, INDEX_TYPING
 
 __all__ = [
@@ -1265,7 +1269,7 @@ dtype=torch.float32)},
             idx = (idx,)
         elif isinstance(idx, torch.Tensor) and idx.dtype == torch.bool:
             return self.masked_select(idx)
-     
+
         contiguous_input = (int, slice)
         return_simple_view = isinstance(idx, contiguous_input) or (
             isinstance(idx, tuple)
@@ -1276,9 +1280,9 @@ dtype=torch.float32)},
                 "indexing a tensordict with td.batch_dims==0 is not permitted"
             )
 
-        if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx): 
+        if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
-    
+
         if return_simple_view and not self.is_memmap():
             return TensorDict(
                 source={key: item[idx] for key, item in self.items()},
@@ -1290,7 +1294,7 @@ dtype=torch.float32)},
         return self.get_sub_tensordict(idx)
 
     def __setitem__(self, index: INDEX_TYPING, value: _TensorDict) -> None:
-        if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index): 
+        if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if isinstance(index, str):
             self.set(index, value, inplace=False)
@@ -3258,9 +3262,9 @@ class SavedTensorDict(_TensorDict):
         return super().__reduce__(*args, **kwargs)
 
     def __getitem__(self, idx: INDEX_TYPING) -> _TensorDict:
-        if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx): 
+        if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
-       
+
         if isinstance(idx, str):
             return self.get(idx)
         elif isinstance(idx, Number):

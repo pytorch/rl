@@ -4,12 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 from __future__ import annotations
-from doctest import ELLIPSIS
 
 from numbers import Number
-from pickle import NONE
-from tracemalloc import start
-from typing import Union
 
 import torch
 
@@ -87,12 +83,10 @@ def _getitem_batch_size(
     bs += list_iter_bs
     return torch.Size(bs)
 
-def convert_ellipsis_to_idx(
-    idx: tuple, 
-    batch_size: list
-): 
+
+def convert_ellipsis_to_idx(idx: tuple, batch_size: list):
     """
-    Given an index containing an ellipsis, converts any ellipsis to slice(None)
+    Given an index containing an ellipsis or just an ellipsis, converts any ellipsis to slice(None)
     Example: idx = (..., 0), batch_size = [1,2,3] -> new_index = (slice(None), slice(None), 0)
 
     Args:
@@ -104,41 +98,36 @@ def convert_ellipsis_to_idx(
     """
     new_index = ()
     num_dims = len(batch_size)
-    
-    if idx is Ellipsis: 
-        idx = (..., )
-    if num_dims < len(idx): 
-        raise RuntimeError (
-            f"Not enough dimensions in TensorDict for index provided."
-        )
+
+    if idx is Ellipsis:
+        idx = (...,)
+    if num_dims < len(idx):
+        raise RuntimeError("Not enough dimensions in TensorDict for index provided.")
 
     start_pos, after_ellipsis_length = None, 0
-    for i, item in enumerate(idx): 
-        if item is Ellipsis: 
-            if start_pos: 
-                raise RuntimeError(
-                    f"An index can only have one ellipsis at most."
-                )
-            else: 
+    for i, item in enumerate(idx):
+        if item is Ellipsis:
+            if start_pos:
+                raise RuntimeError("An index can only have one ellipsis at most.")
+            else:
                 start_pos = i
-        if item is not Ellipsis and start_pos is not None: 
+        if item is not Ellipsis and start_pos is not None:
             after_ellipsis_length += 1
 
     before_ellipsis_length = start_pos
     ellipsis_length = num_dims - after_ellipsis_length - before_ellipsis_length
-   
+
     new_index += idx[:start_pos]
 
     ellipsis_start = start_pos
-    ellipsis_end = start_pos+ellipsis_length
-    new_index += (slice(None),) * (ellipsis_end-ellipsis_start)
+    ellipsis_end = start_pos + ellipsis_length
+    new_index += (slice(None),) * (ellipsis_end - ellipsis_start)
 
-    new_index += idx[start_pos+1: start_pos+1+after_ellipsis_length]
-   
-    if len(new_index) != num_dims: 
+    new_index += idx[start_pos + 1 : start_pos + 1 + after_ellipsis_length]
+
+    if len(new_index) != num_dims:
         raise RuntimeError(
             f"The new index {new_index} is incompatible with the dimensions of the batch size {num_dims}."
         )
-
 
     return new_index
