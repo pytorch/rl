@@ -5,7 +5,8 @@
 
 import argparse
 from argparse import ArgumentParser, Namespace
-from typing import Optional, Union
+from dataclasses import dataclass
+from typing import Optional, Union, List
 from warnings import warn
 
 from torch import optim
@@ -241,105 +242,18 @@ def make_trainer(
 
     return trainer
 
-
-def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
-    """
-    Populates the argument parser to build the trainer.
-
-    Args:
-        parser (ArgumentParser): parser to be populated.
-
-    """
-    parser.add_argument(
-        "--optim_steps_per_batch",
-        "--optim-steps-per-batch",
-        type=int,
-        default=1,
-        help="Number of optimization steps in between two collection of data. See frames_per_batch "
-        "below. "
-        "Default=1",
-    )
-    parser.add_argument(
-        "--optimizer", type=str, default="adam", help="Optimizer to be used."
-    )
-    parser.add_argument(
-        "--lr_scheduler",
-        "--lr-scheduler",
-        type=str,
-        default="cosine",
-        choices=["cosine", ""],
-        help="LR scheduler.",
-    )
-    parser.add_argument(
-        "--selected_keys",
-        "--selected-keys",
-        nargs="+",
-        default=None,
-        help="a list of strings that indicate the data that should be kept from the data collector. Since storing and "
-        "retrieving information from the replay buffer does not come for free, limiting the amount of data "
-        "passed to it can improve the algorithm performance."
-        "Default is None, i.e. all keys are kept.",
-    )
-
-    parser.add_argument(
-        "--batch_size",
-        "--batch-size",
-        type=int,
-        default=256,
-        help="batch size of the TensorDict retrieved from the replay buffer. Default=64.",
-    )
-    parser.add_argument(
-        "--log_interval",
-        "--log-interval",
-        type=int,
-        default=10000,
-        help="logging interval, in terms of optimization steps. Default=1000.",
-    )
-    parser.add_argument(
-        "--lr",
-        type=float,
-        default=3e-4,
-        help="Learning rate used for the optimizer. Default=2e-4.",
-    )
-    parser.add_argument(
-        "--weight_decay",
-        "--weight-decay",
-        type=float,
-        default=0.0,
-        help="Weight-decay to be used with the optimizer. Default=0.0.",
-    )
-    parser.add_argument(
-        "--clip_norm",
-        "--clip-norm",
-        type=float,
-        default=1000.0,
-        help="value at which the total gradient norm / single derivative should be clipped. Default=1000.0",
-    )
-    parser.add_argument(
-        "--clip_grad_norm",
-        action="store_true",
-        help="if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient "
-        "values will be clipped to the desired threshold.",
-    )
-    parser.add_argument(
-        "--normalize_rewards_online",
-        "--normalize-rewards-online",
-        action="store_true",
-        help="Computes the running statistics of the rewards and normalizes them before they are "
-        "passed to the loss module.",
-    )
-    parser.add_argument(
-        "--normalize_rewards_online_scale",
-        "--normalize-rewards-online-scale",
-        default=1.0,
-        type=float,
-        help="Final value of the normalized rewards.",
-    )
-    parser.add_argument(
-        "--sub_traj_len",
-        "--sub-traj-len",
-        type=int,
-        default=-1,
-        help="length of the trajectories that sub-samples must have in online settings.",
-    )
-    return parser
+@dataclass
+class TrainConfig: 
+    optim_steps_per_batch: int = 500 
+    optimizer: str = "adam"
+    lr_scheduler: str = "cosine"
+    selected_keys: Optional[List] = None
+    batch_size: int = 256
+    log_interval: int = 10000
+    lr: float = 3e-4
+    weight_decay: float = 0.0
+    clip_norm: float = 1000.0
+    clip_grad_norm: bool = True
+    normalize_rewards_online: bool = True
+    normalize_rewards_online_scale: float = 1.0
+    sub_traj_len: int = -1
