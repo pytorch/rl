@@ -168,6 +168,9 @@ Each example will write a tensorboard log in a dedicated folder, e.g. `ppo_loggi
 ## Contributing
 Internal collaborations to torchrl are welcome! Feel free to fork, submit issues and PRs.
 
+Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is commited locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
+
+
 ## Upcoming features
 In the near future, we plan to:
 - provide tutorials on how to design new actors or environment wrappers;
