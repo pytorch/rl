@@ -107,7 +107,7 @@ def convert_ellipsis_to_idx(idx: tuple, batch_size: list):
     start_pos, after_ellipsis_length = None, 0
     for i, item in enumerate(idx):
         if item is Ellipsis:
-            if start_pos:
+            if start_pos is not None:
                 raise RuntimeError("An index can only have one ellipsis at most.")
             else:
                 start_pos = i
