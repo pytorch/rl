@@ -123,7 +123,8 @@ def make_env_transforms(
         if args.center_crop:
             env.append_transform(CenterCrop(*args.center_crop))
         env.append_transform(Resize(84, 84))
-        env.append_transform(GrayScale())
+        if args.grayscale:
+            env.append_transform(GrayScale())
         env.append_transform(CatFrames(N=args.catframes, keys=["next_pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
@@ -458,6 +459,13 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         nargs="+",
         default=[],
         help="center crop size.",
+    )
+    parser.add_argument(
+        "--no_grayscale",
+        "--no-grayscale",
+        action="store_false",
+        dest="grayscale",
+        help="Disables grayscale transform.",
     )
     parser.add_argument(
         "--max_frames_per_traj",
