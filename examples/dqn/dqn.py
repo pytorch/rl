@@ -181,6 +181,23 @@ def main(args):
         args,
     )
 
+    def select_keys(batch):
+        return batch.select(
+            "reward",
+            "done",
+            "steps_to_next_obs",
+            "pixels",
+            "next_pixels",
+            "observation_vector",
+            "next_observation_vector",
+            "action",
+        )
+
+    trainer.register_op("batch_process", select_keys)
+
+    final_seed = collector.set_seed(args.seed)
+    print(f"init seed: {args.seed}, final seed: {final_seed}")
+
     trainer.train()
     return (writer.log_dir, trainer._log_dict, trainer.state_dict())
 

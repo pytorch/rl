@@ -1002,21 +1002,20 @@ def make_redq_model(
     gSDE = args.gSDE
 
     action_spec = proof_environment.action_spec
-    obs_spec = proof_environment.observation_spec
-
-    if observation_key is not None:
-        obs_spec = obs_spec[observation_key]
-    else:
-        obs_spec_values = list(obs_spec.values())
-        if len(obs_spec_values) > 1:
-            raise RuntimeError(
-                "There is more than one observation in the spec, REDQ helper "
-                "cannot infer automatically which to pick. "
-                "Please indicate which key to read via the `observation_key` "
-                "keyword in this helper."
-            )
-        else:
-            obs_spec = obs_spec_values[0]
+    # obs_spec = proof_environment.observation_spec
+    # if observation_key is not None:
+    #     obs_spec = obs_spec[observation_key]
+    # else:
+    #     obs_spec_values = list(obs_spec.values())
+    #     if len(obs_spec_values) > 1:
+    #         raise RuntimeError(
+    #             "There is more than one observation in the spec, REDQ helper "
+    #             "cannot infer automatically which to pick. "
+    #             "Please indicate which key to read via the `observation_key` "
+    #             "keyword in this helper."
+    #         )
+    #     else:
+    #         obs_spec = obs_spec_values[0]
 
     if actor_net_kwargs is None:
         actor_net_kwargs = {}

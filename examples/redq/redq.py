@@ -217,6 +217,9 @@ def main(args):
 
     trainer.register_op("batch_process", select_keys)
 
+    final_seed = collector.set_seed(args.seed)
+    print(f"init seed: {args.seed}, final seed: {final_seed}")
+
     trainer.train()
     return (writer.log_dir, trainer._log_dict, trainer.state_dict())
 
