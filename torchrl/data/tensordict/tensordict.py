@@ -2815,7 +2815,7 @@ class LazyStackedTensorDict(_TensorDict):
         )
 
     def __getitem__(self, item: INDEX_TYPING) -> _TensorDict:
-        if item is Ellipsis or (isinstance(item, tuple) and Ellipsis in item): 
+        if item is Ellipsis or (isinstance(item, tuple) and Ellipsis in item):
             item = convert_ellipsis_to_idx(item, self.batch_size)
 
         if isinstance(item, str):
@@ -3260,7 +3260,7 @@ class SavedTensorDict(_TensorDict):
     def __getitem__(self, idx: INDEX_TYPING) -> _TensorDict:
         if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx): 
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
-
+       
         if isinstance(idx, str):
             return self.get(idx)
         elif isinstance(idx, Number):

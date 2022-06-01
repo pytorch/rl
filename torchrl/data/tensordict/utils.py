@@ -4,11 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 
 from __future__ import annotations
+from doctest import ELLIPSIS
 
 from numbers import Number
 from pickle import NONE
 from tracemalloc import start
-from typing import Tuple
+from typing import Union
 
 import torch
 
