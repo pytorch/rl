@@ -452,6 +452,14 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         help="Number of frames to concatenate through time. Default is 0 (do not use CatFrames).",
     )
     parser.add_argument(
+        "--center_crop",
+        "--center-crop",
+        type=int,
+        nargs="+",
+        default=[],
+        help="center crop size.",
+    )
+    parser.add_argument(
         "--max_frames_per_traj",
         "--max-frames-per-traj",
         type=int,
