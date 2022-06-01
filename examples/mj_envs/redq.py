@@ -208,35 +208,25 @@ def main(args):
         args,
     )
 
-    with profile(
-        activities=[ProfilerActivity.CUDA, ProfilerActivity.CPU],
-        record_shapes=True,
-        schedule=torch.profiler.schedule(wait=3, warmup=3, active=10),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(
-            f"redq_logging/profile_cuda_{exp_name}",
-        ),
-    ) as p_cuda:
 
-        def step(*whatever):
-            p_cuda.step()
+    def select_keys(batch):
+        return batch.select(
+            "reward",
+            "done",
+            "steps_to_next_obs",
+            "pixels",
+            "next_pixels",
+            "observation_vector",
+            "next_observation_vector",
+            "action",
+        )
 
-        trainer.register_op("post_steps_log", step)
+    trainer.register_op("batch_process", select_keys)
 
-        def select_keys(batch):
-            return batch.select(
-                "reward",
-                "done",
-                "steps_to_next_obs",
-                "pixels",
-                "next_pixels",
-                "observation_vector",
-                "next_observation_vector",
-                "action",
-            )
+    final_seed = collector.set_seed(args.seed)
+    print(f"init seed: {args.seed}, final seed: {final_seed}")
 
-        trainer.register_op("batch_process", select_keys)
-
-        trainer.train()
+    trainer.train()
     return (writer.log_dir, trainer._log_dict, trainer.state_dict())
 
 

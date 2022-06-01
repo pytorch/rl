@@ -160,6 +160,8 @@ def main(args):
         #     for device in args.env_rendering_devices
         # ],
     )
+    final_seed = collector.set_seed(args.seed)
+    print(f"init seed: {args.seed}, final seed: {final_seed}")
 
     replay_buffer = make_replay_buffer(device, args)
 
