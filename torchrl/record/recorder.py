@@ -6,7 +6,11 @@
 from typing import Optional, Sequence
 
 import torch
-from torchvision.transforms.functional import center_crop
+
+try:
+    from torchvision.transforms.functional import center_crop as center_crop_fn
+except ImportError:
+    center_crop_fn = None
 
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.transforms import ObservationTransform, Transform
@@ -53,6 +57,10 @@ class VideoRecorder(ObservationTransform):
         self.tag = tag
         self.count = 0
         self.center_crop = center_crop
+        if center_crop and not center_crop_fn:
+            raise ImportError(
+                "Could not load center_crop from torchvision. Make sure torchvision is installed."
+            )
         self.obs = []
         try:
             import moviepy  # noqa
@@ -80,7 +88,9 @@ class VideoRecorder(ObservationTransform):
                     )
                 observation_trsf = observation_trsf.permute(2, 0, 1)
                 if self.center_crop:
-                    observation_trsf = center_crop(observation_trsf, [self.center_crop, self.center_crop])
+                    observation_trsf = center_crop_fn(
+                        observation_trsf, [self.center_crop, self.center_crop]
+                    )
             self.obs.append(observation_trsf.cpu().to(torch.uint8))
         return observation
 

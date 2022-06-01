@@ -791,8 +791,10 @@ class ParallelEnv(_BatchedEnv):
             return self
         super().to(device)
         if self._seeds is not None:
-            warn("Sending a seeded ParallelEnv to another device requires "
-                 f"re-seeding it. Re-seeding envs to {self._seeds}.")
+            warn(
+                "Sending a seeded ParallelEnv to another device requires "
+                f"re-seeding it. Re-seeding envs to {self._seeds}."
+            )
             self.set_seed(self._seeds[0])
         return self
 

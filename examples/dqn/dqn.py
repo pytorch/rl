@@ -8,6 +8,7 @@ from datetime import datetime
 
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.utils import set_exploration_mode
+from torchrl.record import VideoRecorder
 
 try:
     import configargparse as argparse
@@ -153,7 +154,10 @@ def main(args):
 
     # remove video recorder from recorder to have matching state_dict keys
     if args.record_video:
-        recorder_rm = TransformedEnv(recorder.env, recorder.transform[1:])
+        recorder_rm = TransformedEnv(recorder.env)
+        for transform in recorder.transform:
+            if not isinstance(transform, VideoRecorder):
+                recorder_rm.append_transform(transform)
     else:
         recorder_rm = recorder
 
@@ -180,6 +184,23 @@ def main(args):
         writer,
         args,
     )
+
+    def select_keys(batch):
+        return batch.select(
+            "reward",
+            "done",
+            "steps_to_next_obs",
+            "pixels",
+            "next_pixels",
+            "observation_vector",
+            "next_observation_vector",
+            "action",
+        )
+
+    trainer.register_op("batch_process", select_keys)
+
+    final_seed = collector.set_seed(args.seed)
+    print(f"init seed: {args.seed}, final seed: {final_seed}")
 
     trainer.train()
     return (writer.log_dir, trainer._log_dict, trainer.state_dict())
