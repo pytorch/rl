@@ -24,6 +24,7 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
     VecNorm,
+    CenterCrop,
 )
 from torchrl.envs.transforms.transforms import gSDENoise
 from torchrl.record.recorder import VideoRecorder
@@ -99,10 +100,14 @@ def make_env_transforms(
     reward_loc = args.reward_loc
 
     if len(video_tag):
+        center_crop = args.center_crop
+        if center_crop:
+            center_crop = center_crop[0]
         env.append_transform(
             VideoRecorder(
                 writer=writer,
                 tag=f"{video_tag}_{env_name}_video",
+                center_crop=center_crop,
             ),
         )
 
@@ -115,6 +120,8 @@ def make_env_transforms(
                 "when pixels are being used."
             )
         env.append_transform(ToTensorImage())
+        if args.center_crop:
+            env.append_transform(CenterCrop(*args.center_crop))
         env.append_transform(Resize(84, 84))
         env.append_transform(GrayScale())
         env.append_transform(CatFrames(N=args.catframes, keys=["next_pixels"]))
@@ -443,6 +450,14 @@ def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
         type=int,
         default=0,
         help="Number of frames to concatenate through time. Default is 0 (do not use CatFrames).",
+    )
+    parser.add_argument(
+        "--center_crop",
+        "--center-crop",
+        type=int,
+        nargs="+",
+        default=[],
+        help="center crop size.",
     )
     parser.add_argument(
         "--max_frames_per_traj",

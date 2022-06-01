@@ -6,6 +6,7 @@
 from typing import Optional, Sequence
 
 import torch
+from torchvision.transforms.functional import center_crop
 
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.transforms import ObservationTransform, Transform
@@ -27,6 +28,7 @@ class VideoRecorder(ObservationTransform):
             Default is `"next_pixels"`.
         skip (int): frame interval in the output video.
             Default is 2.
+        center_crop (int, optional): value of square center crop.
     """
 
     def __init__(
@@ -35,6 +37,7 @@ class VideoRecorder(ObservationTransform):
         tag: str,
         keys: Optional[Sequence[str]] = None,
         skip: int = 2,
+        center_crop: Optional[int] = None,
         **kwargs,
     ) -> None:
         if keys is None:
@@ -49,6 +52,7 @@ class VideoRecorder(ObservationTransform):
         self.writer = writer
         self.tag = tag
         self.count = 0
+        self.center_crop = center_crop
         self.obs = []
         try:
             import moviepy  # noqa
@@ -75,6 +79,8 @@ class VideoRecorder(ObservationTransform):
                         f"got {observation_trsf.ndimension()} instead"
                     )
                 observation_trsf = observation_trsf.permute(2, 0, 1)
+                if self.center_crop:
+                    observation_trsf = center_crop(observation_trsf, [self.center_crop, self.center_crop])
             self.obs.append(observation_trsf.cpu().to(torch.uint8))
         return observation
 

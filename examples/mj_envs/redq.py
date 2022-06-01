@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 
 from torchrl.envs import ParallelEnv, EnvCreator
+from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.envs import LIBS
 from utils import MJEnv
 
@@ -179,7 +180,10 @@ def main(args):
 
     # remove video recorder from recorder to have matching state_dict keys
     if args.record_video:
-        recorder_rm = TransformedEnv(recorder.env, recorder.transform[1:])
+        recorder_rm = TransformedEnv(recorder.env)
+        for transform in recorder.transform:
+            if not isinstance(transform, VideoRecorder):
+                recorder_rm.append_transform(transform)
     else:
         recorder_rm = recorder
 
