@@ -813,6 +813,19 @@ class TestTensorDicts:
         r = torch.randn_like(td.get("a"))
         td.set("numpy", r.numpy())
         torch.testing.assert_allclose(td.get("numpy"), r)
+    
+    @pytest.mark.parametrize("idx", [..., (..., 0), (0, ...), (0, ..., 0)])
+    def test_getitem_ellipsis(self, td_name, idx): 
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        # print(td, "\n")
+        if idx is not Ellipsis and len(idx) > len(td.batch_size):
+            pytest.mark.skip("cannot index tensor with desired index")
+            return
+       
+        actual = td[idx]
+        #expected = 
+        # assert torch.testing.assert_allclose(actual, expected)
 
     @pytest.mark.parametrize("idx", [slice(1), torch.tensor([0]), torch.tensor([0, 1])])
     def test_setitem(self, td_name, idx):
@@ -821,7 +834,7 @@ class TestTensorDicts:
         if isinstance(idx, torch.Tensor) and idx.numel() > 1 and td.shape[0] == 1:
             pytest.mark.skip("cannot index tensor with desired index")
             return
-
+  
         td_clone = td[idx].clone().zero_()
         td[idx] = td_clone
         assert (td[idx].get("a") == 0).all()
