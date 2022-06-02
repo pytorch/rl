@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from numbers import Number
+from typing import Tuple, List, Union
 
 import torch
 
@@ -84,17 +85,17 @@ def _getitem_batch_size(
     return torch.Size(bs)
 
 
-def convert_ellipsis_to_idx(idx: tuple, batch_size: list):
+def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
     """
     Given an index containing an ellipsis or just an ellipsis, converts any ellipsis to slice(None)
     Example: idx = (..., 0), batch_size = [1,2,3] -> new_index = (slice(None), slice(None), 0)
 
     Args:
-        idx: Input index
-        batch_size: Shape of tensor to be indexed
+        idx (Tuple, Ellipsis): Input index
+        batch_size (List): Shape of tensor to be indexed
 
     Returns:
-        new_index: Output index
+        new_index (Tuple): Output index
     """
     new_index = ()
     num_dims = len(batch_size)

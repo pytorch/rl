@@ -14,7 +14,7 @@ from _utils_internal import get_available_devices
 from torch import multiprocessing as mp
 from torchrl.data import SavedTensorDict, TensorDict
 from torchrl.data.tensordict.tensordict import assert_allclose_td, LazyStackedTensorDict
-from torchrl.data.tensordict.utils import _getitem_batch_size
+from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -813,6 +813,31 @@ class TestTensorDicts:
         r = torch.randn_like(td.get("a"))
         td.set("numpy", r.numpy())
         torch.testing.assert_allclose(td.get("numpy"), r)
+
+    def test_convert_ellipsis_to_idx(self, td_name):
+        torch.manual_seed(1)
+        batch_size = [3, 4, 5, 6, 7]
+
+        ellipsis_idx = [..., (0, ..., 0), (..., 0), (0, ...), (slice(1, 2), ...)]
+
+        error_idx = [(..., 0, ...), (0, ..., 0, ...)]
+
+        expected_idx = [
+            (slice(None), slice(None), slice(None), slice(None), slice(None)),
+            (0, slice(None), slice(None), slice(None), 0),
+            (slice(None), slice(None), slice(None), slice(None), 0),
+            (0, slice(None), slice(None), slice(None), slice(None)),
+            (slice(1, 2), slice(None), slice(None), slice(None), slice(None)),
+        ]
+
+        for i in range(len(ellipsis_idx)):
+            assert (
+                convert_ellipsis_to_idx(ellipsis_idx[i], batch_size) == expected_idx[i]
+            )
+
+        for i in range(len(error_idx)):
+            with pytest.raises(RuntimeError):
+                _ = convert_ellipsis_to_idx(error_idx[i], batch_size)
 
     def test_getitem_ellipsis(self, td_name):
         torch.manual_seed(1)
