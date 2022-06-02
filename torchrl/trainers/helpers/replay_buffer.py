@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from argparse import ArgumentParser, Namespace
-
+from dataclasses import dataclass
 import torch
 
 from torchrl.data import (
@@ -38,6 +38,9 @@ def make_replay_buffer(device: DEVICE_TYPING, args: Namespace) -> ReplayBuffer:
         )
     return buffer
 
+@dataclass
 class ReplayArgsConfig: 
     buffer_size: int = 1000000
+    # buffer size, in number of frames stored. Default=1e6
     prb: bool = False
+    # whether a Prioritized replay buffer should be used instead of a more basic circular one.

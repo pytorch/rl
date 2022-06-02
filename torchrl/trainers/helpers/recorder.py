@@ -10,7 +10,13 @@ __all__ = ["parser_recorder_args"]
 @dataclass
 class RecorderConfig: 
     record_video: bool = False
+    # whether a video of the task should be rendered during logging.
     no_video: bool = True
+    # whether a video of the task should be rendered during logging.
     exp_name: str = ""
+    # experiment name. Used for logging directory.
+    # A date and uuid will be joined to account for multiple experiments with the same name.
     record_interval: int = 1000
+    # number of batch collections in between two collections of validation rollouts. Default=1000.
     record_frames: int = 1000
+    # number of steps in validation rollouts. " "Default=1000.

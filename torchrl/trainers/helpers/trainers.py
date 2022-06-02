@@ -245,15 +245,30 @@ def make_trainer(
 @dataclass
 class TrainConfig: 
     optim_steps_per_batch: int = 500 
+    # Number of optimization steps in between two collection of data. See frames_per_batch below. 
     optimizer: str = "adam"
+    # Optimizer to be used.
     lr_scheduler: str = "cosine"
+    # LR scheduler.
     selected_keys: Optional[List] = None
+    # a list of strings that indicate the data that should be kept from the data collector. Since storing and 
+    # retrieving information from the replay buffer does not come for free, limiting the amount of data
+    # passed to it can improve the algorithm performance.
     batch_size: int = 256
+    # batch size of the TensorDict retrieved from the replay buffer. Default=256.
     log_interval: int = 10000
+    # logging interval, in terms of optimization steps. Default=10000.
     lr: float = 3e-4
+    # Learning rate used for the optimizer. Default=3e-4.
     weight_decay: float = 0.0
+    # Weight-decay to be used with the optimizer. Default=0.0.
     clip_norm: float = 1000.0
+    # value at which the total gradient norm / single derivative should be clipped. Default=1000.0
     clip_grad_norm: bool = False
+    # if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient values will be clipped to the desired threshold.
     normalize_rewards_online: bool = False
+    # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
     normalize_rewards_online_scale: float = 1.0
+    # Final value of the normalized rewards.
     sub_traj_len: int = -1
+    # length of the trajectories that sub-samples must have in online settings.
