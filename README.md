@@ -166,9 +166,15 @@ python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt --frame_sk
 Each example will write a tensorboard log in a dedicated folder, e.g. `ppo_logging/...`.
 
 ## Contributing
+
 Internal collaborations to torchrl are welcome! Feel free to fork, submit issues and PRs.
+You can checkout the detailed contribution guide [here](CONTRIBUTING.md).
+
+Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is commited locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
+
 
 ## Upcoming features
+
 In the near future, we plan to:
 - provide tutorials on how to design new actors or environment wrappers;
 - implement IMPALA (as a distributed RL example) and Meta-RL algorithms;
