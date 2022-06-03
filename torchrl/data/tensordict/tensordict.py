@@ -2819,13 +2819,25 @@ class LazyStackedTensorDict(_TensorDict):
         ) and self.stack_dim == 0:
             return self.tensordicts[item]
         elif isinstance(item, (torch.Tensor, list)) and self.stack_dim == 0:
-            return LazyStackedTensorDict(
+            out = LazyStackedTensorDict(
                 *[self.tensordicts[_item] for _item in item],
                 stack_dim=self.stack_dim,
             )
+            return out
+        elif isinstance(item, (torch.Tensor, list)) and self.stack_dim != 0:
+            out = LazyStackedTensorDict(
+                *[tensordict[item] for tensordict in self.tensordicts],
+                stack_dim=self.stack_dim,
+            )
+            return out
         elif isinstance(item, slice) and self.stack_dim == 0:
             return LazyStackedTensorDict(
                 *self.tensordicts[item], stack_dim=self.stack_dim
+            )
+        elif isinstance(item, slice) and self.stack_dim != 0:
+            return LazyStackedTensorDict(
+                *[tensordict[item] for tensordict in self.tensordicts],
+                stack_dim=self.stack_dim,
             )
         elif isinstance(item, (slice, Number)):
             new_stack_dim = (
@@ -2937,7 +2949,7 @@ class LazyStackedTensorDict(_TensorDict):
     def masked_fill_(
         self, mask: torch.Tensor, value: Union[float, bool]
     ) -> _TensorDict:
-        mask_unbind = mask.unique(dim=self.stack_dim)
+        mask_unbind = mask.unbind(dim=self.stack_dim)
         for _mask, td in zip(mask_unbind, self.tensordicts):
             td.masked_fill_(_mask, value)
         return self
@@ -3576,7 +3588,10 @@ class SqueezedTensorDict(_CustomOpTensorDict):
     def unsqueeze(self, dim: int) -> _TensorDict:
         if dim < 0:
             dim = self.batch_dims + dim + 1
-        if dim == self.inv_op_kwargs.get("dim"):
+        inv_op_dim = self.inv_op_kwargs.get("dim")
+        if inv_op_dim < 0:
+            inv_op_dim = self.batch_dims + inv_op_dim + 1
+        if dim == inv_op_dim:
             return self._source
         return super().unsqueeze(dim)
 
