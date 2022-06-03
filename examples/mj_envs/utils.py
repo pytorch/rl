@@ -60,12 +60,30 @@ class MJEnv(GymEnv):
                 next_observation=self.observation_spec
             )
         if from_pixels:
+            self.cameras = kwargs.get("cameras", ["left_cam", "right_cam", "top_cam"])
+
             self.observation_spec["next_pixels"] = NdBoundedTensorSpec(
-                torch.zeros(480, 640, 3, device=self.device, dtype=torch.uint8),
-                255 * torch.ones(480, 640, 3, device=self.device, dtype=torch.uint8),
-                torch.Size(torch.Size([480, 640, 3])),
+                torch.zeros(
+                    len(self.cameras),
+                    480,
+                    640,
+                    3,
+                    device=self.device,
+                    dtype=torch.uint8,
+                ),
+                255
+                * torch.ones(
+                    len(self.cameras),
+                    480,
+                    640,
+                    3,
+                    device=self.device,
+                    dtype=torch.uint8,
+                ),
+                torch.Size(torch.Size([len(self.cameras), 480, 640, 3])),
                 dtype=torch.uint8,
             )
+
         self.reward_spec = UnboundedContinuousTensorSpec(
             device=self.device,
         )  # default
@@ -74,7 +92,7 @@ class MJEnv(GymEnv):
         td = super()._step(td)
         if self.from_pixels:
             img = self._env.render_camera_offscreen(
-                sim=self._env.sim, cameras=[None], device_id=self.render_device
+                sim=self._env.sim, cameras=self.cameras, device_id=self.render_device
             )
             img = torch.Tensor(img).squeeze(0)
             td.set("next_pixels", img)
@@ -84,7 +102,7 @@ class MJEnv(GymEnv):
         td = super()._reset(td, **kwargs)
         if self.from_pixels:
             img = self._env.render_camera_offscreen(
-                sim=self._env.sim, cameras=[None], device_id=self.render_device
+                sim=self._env.sim, cameras=self.cameras, device_id=self.render_device
             )
             img = torch.Tensor(img).squeeze(0)
             td.set("next_pixels", img)

@@ -48,6 +48,7 @@ __all__ = [
     "Compose",
     "ToTensorImage",
     "ObservationNorm",
+    "FlattenObs",
     "RewardScaling",
     "ObservationTransform",
     "CatFrames",
@@ -764,71 +765,6 @@ class Resize(ObservationTransform):
             f"interpolation={self.interpolation}, keys={self.keys})"
         )
 
-class CenterCrop(ObservationTransform):
-    """Crops the center of an image
-
-    Args:
-        w (int): resulting width
-        h (int, optional): resulting height. If None, then w is used (square crop).
-    """
-
-    inplace = False
-
-    def __init__(
-        self,
-        w: int,
-        h: int = None,
-        keys: Optional[Sequence[str]] = None,
-    ):
-        if not _has_tv:
-            raise ImportError(
-                "Torchvision not found. The Resize transform relies on "
-                "torchvision implementation. "
-                "Consider installing this dependency."
-            )
-        if keys is None:
-            keys = IMAGE_KEYS  # default
-        super().__init__(keys=keys)
-        self.w = w
-        self.h = h if h else w
-
-    def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
-        observation = center_crop(
-            observation, [self.w, self.h]
-        )
-        return observation
-
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        if isinstance(observation_spec, CompositeSpec):
-            return CompositeSpec(
-                **{
-                    key: self.transform_observation_spec(_obs_spec)
-                    if key in self.keys
-                    else _obs_spec
-                    for key, _obs_spec in observation_spec._specs.items()
-                }
-            )
-        else:
-            _observation_spec = observation_spec
-        space = _observation_spec.space
-        if isinstance(space, ContinuousBox):
-            space.minimum = self._apply_transform(space.minimum)
-            space.maximum = self._apply_transform(space.maximum)
-            _observation_spec.shape = space.minimum.shape
-        else:
-            _observation_spec.shape = self._apply_transform(
-                torch.zeros(_observation_spec.shape)
-            ).shape
-
-        observation_spec = _observation_spec
-        return observation_spec
-
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"w={float(self.w):4.4f}, h={float(self.h):4.4f}, "
-        )
-
 
 class CenterCrop(ObservationTransform):
     """Crops the center of an image
@@ -894,20 +830,22 @@ class CenterCrop(ObservationTransform):
         )
 
 
-class CenterCrop(ObservationTransform):
-    """Crops the center of an image
+class FlattenObs(ObservationTransform):
+    """Flatten adjacent dimensions of a tensor.
 
     Args:
-        w (int): resulting width
-        h (int, optional): resulting height. If None, then w is used (square crop).
+        first_dim (int, optional): first dimension of the dimensions to flatten.
+            Default is 0.
+        last_dim (int, optional): last dimension of the dimensions to flatten.
+            Default is -3.
     """
 
     inplace = False
 
     def __init__(
         self,
-        w: int,
-        h: int = None,
+        first_dim: int = 0,
+        last_dim: int = -3,
         keys: Optional[Sequence[str]] = None,
     ):
         if not _has_tv:
@@ -919,11 +857,11 @@ class CenterCrop(ObservationTransform):
         if keys is None:
             keys = IMAGE_KEYS  # default
         super().__init__(keys=keys)
-        self.w = w
-        self.h = h if h else w
+        self.first_dim = first_dim
+        self.last_dim = last_dim
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
-        observation = center_crop(observation, [self.w, self.h])
+        observation = torch.flatten(observation, self.first_dim, self.last_dim)
         return observation
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -954,7 +892,7 @@ class CenterCrop(ObservationTransform):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
-            f"w={float(self.w):4.4f}, h={float(self.h):4.4f}, "
+            f"first_dim={float(self.first_dim):4.4f}, last_dim={float(self.last_dim):4.4f}, "
         )
 
 
