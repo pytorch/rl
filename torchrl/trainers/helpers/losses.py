@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from argparse import ArgumentParser, Namespace
+from dataclasses import dataclass
 
 __all__ = [
     "make_sac_loss",
@@ -208,117 +209,37 @@ def make_ppo_loss(model, args) -> PPOLoss:
     )
     return loss_module
 
+@dataclass
+class LossConfig: 
+    loss: str = "double"
+    # whether double or single SAC loss should be used. Default=double
+    hard_update: bool = False
+    # whether soft-update should be used with double SAC loss (default) or hard updates.
+    loss_function: str = "smooth_l1"
+    # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
+    value_network_update_interval: int = 1000
+    # how often the target value network weights are updated (in number of updates).
+    # If soft-updates are used, the value is translated into a moving average decay by using 
+    # the formula decay=1-1/args.value_network_update_interval. Default=1000
+    gamma: float = 0.99
+    # Decay factor for return computation. Default=0.99.
+    num_q_values: int = 2
+    # As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can 
+    # use two (or more!) different qvalue networks trained independently and choose the lowest value 
+    # predicted to predict the state action value. This can be disabled by using this flag.
+    # REDQ uses an arbitrary number of Q-value functions to speed up learning in MF contexts.
+    target_entropy: float = None
+    # Target entropy for the policy distribution. Default is None (auto calculated as the `target_entropy = -action_dim`)
 
-def parser_loss_args(parser: ArgumentParser, algorithm: str) -> ArgumentParser:
-    """
-    Populates the argument parser to build the off-policy loss function (REDQ, SAC, DDPG, DQN).
-
-    Args:
-        parser (ArgumentParser): parser to be populated.
-        algorithm (str): one of `"DDPG"`, `"SAC"`, `"REDQ"`, `"DQN"`
-
-    """
-    parser.add_argument(
-        "--loss",
-        type=str,
-        default="double",
-        choices=["double", "single"],
-        help="whether double or single SAC loss should be used. Default=double",
-    )
-    parser.add_argument(
-        "--hard_update",
-        "--hard-update",
-        action="store_true",
-        help="whether soft-update should be used with double SAC loss (default) or hard updates.",
-    )
-    parser.add_argument(
-        "--loss_function",
-        "--loss-function",
-        type=str,
-        default="smooth_l1",
-        choices=["l1", "l2", "smooth_l1"],
-        help="loss function for the value network. Either one of l1, l2 or smooth_l1 (default).",
-    )
-    parser.add_argument(
-        "--value_network_update_interval",
-        "--value-network-update-interval",
-        type=int,
-        default=1000,
-        help="how often the target value network weights are updated (in number of updates)."
-        "If soft-updates are used, the value is translated into a moving average decay by using "
-        "the formula decay=1-1/args.value_network_update_interval. Default=1000",
-    )
-    parser.add_argument(
-        "--gamma",
-        type=float,
-        default=0.99,
-        help="Decay factor for return computation. Default=0.99.",
-    )
-    if algorithm in ("SAC", "REDQ"):
-        parser.add_argument(
-            "--num_q_values",
-            "--num-q-values",
-            default=2,
-            type=int,
-            help="As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can "
-            "use two (or more!) different qvalue networks trained independently and choose the lowest value "
-            "predicted to predict the state action value. This can be disabled by using this flag."
-            "REDQ uses an arbitrary number of Q-value functions to speed up learning in MF contexts.",
-        )
-
-        parser.add_argument(
-            "--target_entropy",
-            "--target-entropy",
-            default=None,
-            type=float,
-            help="Target entropy for the policy distribution. Default is None (auto calculated as"
-            "the `target_entropy = -action_dim`)",
-        )
-
-    return parser
-
-
-def parser_loss_args_ppo(parser: ArgumentParser) -> ArgumentParser:
-    """
-    Populates the argument parser to build the PPO loss function.
-
-    Args:
-        parser (ArgumentParser): parser to be populated.
-
-    """
-    parser.add_argument(
-        "--loss",
-        type=str,
-        default="clip",
-        choices=["clip", "kl", "base", ""],
-        help="PPO loss class, either clip or kl or base/<empty>. Default=clip",
-    )
-    parser.add_argument(
-        "--gamma",
-        type=float,
-        default=0.99,
-        help="Decay factor for return computation. Default=0.99.",
-    )
-    parser.add_argument(
-        "--lmbda",
-        default=0.95,
-        type=float,
-        help="lambda factor in GAE (using 'lambda' as attribute is prohibited in python, "
-        "hence the misspelling)",
-    )
-    parser.add_argument(
-        "--entropy_coef",
-        "--entropy-coef",
-        type=float,
-        default=1e-3,
-        help="Entropy factor for the PPO loss",
-    )
-    parser.add_argument(
-        "--loss_function",
-        type=str,
-        default="smooth_l1",
-        choices=["l1", "l2", "smooth_l1"],
-        help="loss function for the value network. Either one of l1, l2 or smooth_l1 (default).",
-    )
-
-    return parser
+@dataclass
+class PPOLossConfig: 
+    loss: str = "clip"
+    # PPO loss class, either clip or kl or base/<empty>. Default=clip
+    gamma: float = 0.99
+    # Decay factor for return computation. Default=0.99.
+    lmbda: float = 0.95
+    # lambda factor in GAE (using 'lambda' as attribute is prohibited in python, hence the misspelling)
+    entropy_coef: float = 1e-3
+    # Entropy factor for the PPO loss
+    loss_function: str = "smooth"
+    # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
