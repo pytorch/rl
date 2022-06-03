@@ -91,11 +91,11 @@ def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
     Example: idx = (..., 0), batch_size = [1,2,3] -> new_index = (slice(None), slice(None), 0)
 
     Args:
-        idx (Tuple, Ellipsis): Input index
-        batch_size (List): Shape of tensor to be indexed
+        idx (tuple, Ellipsis): Input index
+        batch_size (list): Shape of tensor to be indexed
 
     Returns:
-        new_index (Tuple): Output index
+        new_index (tuple): Output index
     """
     new_index = ()
     num_dims = len(batch_size)

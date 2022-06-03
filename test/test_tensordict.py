@@ -13,7 +13,7 @@ import torch
 from _utils_internal import get_available_devices
 from torch import multiprocessing as mp
 from torchrl.data import SavedTensorDict, TensorDict
-from torchrl.data.tensordict.tensordict import assert_allclose_td, LazyStackedTensorDict
+from torchrl.data.tensordict.tensordict import SubTensorDict, UnsqueezedTensorDict, assert_allclose_td, LazyStackedTensorDict
 from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 
 
@@ -430,6 +430,55 @@ def test_savedtensordict(device):
     torch.testing.assert_allclose(ss[1].get("a"), ss.get("a")[1])
     assert ss.get("a").device == device
 
+def test_convert_ellipsis_to_idx():
+    torch.manual_seed(1)
+    batch_size = [3, 4, 5, 6, 7]
+
+    ellipsis_idx = [..., (0, ..., 0), (..., 0), (0, ...), (slice(1, 2), ...)]
+
+    error_idx = [(..., 0, ...), (0, ..., 0, ...)]
+
+    expected_idx = [
+        (slice(None), slice(None), slice(None), slice(None), slice(None)),
+        (0, slice(None), slice(None), slice(None), 0),
+        (slice(None), slice(None), slice(None), slice(None), 0),
+        (0, slice(None), slice(None), slice(None), slice(None)),
+        (slice(1, 2), slice(None), slice(None), slice(None), slice(None)),
+    ]
+
+    for i in range(len(ellipsis_idx)):
+        assert (
+            convert_ellipsis_to_idx(ellipsis_idx[i], batch_size) == expected_idx[i]
+        )
+
+    for i in range(len(error_idx)):
+        with pytest.raises(RuntimeError):
+            _ = convert_ellipsis_to_idx(error_idx[i], batch_size)
+def td(td): 
+    return td
+
+def stacked_td(td):
+    return torch.stack([td for _ in range(2)], 0)
+
+def idx_td(td):
+    return td[0]
+
+def sub_td(td):
+    return td.get_sub_tensordict(0)
+
+def saved_td(td):
+    return SavedTensorDict(source=td)
+
+def unsqueezed_td(td):
+    return td.unsqueeze(0)
+
+def td_reset_bs(td):
+    td = td.unsqueeze(-1).to_tensordict()
+    td.batch_size = torch.Size([1, 3, 4, 5])
+    return td
+
+td_dict = {"td": td, "stacked_td": stacked_td, "sub_td": sub_td, "idx_td": idx_td, 
+           "saved_td": saved_td, "unsqueezed_td": unsqueezed_td, "td_reset_bs": td_reset_bs}
 
 @pytest.mark.parametrize(
     "td_name",
@@ -814,47 +863,35 @@ class TestTensorDicts:
         td.set("numpy", r.numpy())
         torch.testing.assert_allclose(td.get("numpy"), r)
 
-    def test_convert_ellipsis_to_idx(self, td_name):
-        torch.manual_seed(1)
-        batch_size = [3, 4, 5, 6, 7]
-
-        ellipsis_idx = [..., (0, ..., 0), (..., 0), (0, ...), (slice(1, 2), ...)]
-
-        error_idx = [(..., 0, ...), (0, ..., 0, ...)]
-
-        expected_idx = [
-            (slice(None), slice(None), slice(None), slice(None), slice(None)),
-            (0, slice(None), slice(None), slice(None), 0),
-            (slice(None), slice(None), slice(None), slice(None), 0),
-            (0, slice(None), slice(None), slice(None), slice(None)),
-            (slice(1, 2), slice(None), slice(None), slice(None), slice(None)),
-        ]
-
-        for i in range(len(ellipsis_idx)):
-            assert (
-                convert_ellipsis_to_idx(ellipsis_idx[i], batch_size) == expected_idx[i]
-            )
-
-        for i in range(len(error_idx)):
-            with pytest.raises(RuntimeError):
-                _ = convert_ellipsis_to_idx(error_idx[i], batch_size)
-
     def test_getitem_ellipsis(self, td_name):
         torch.manual_seed(1)
-        td = TensorDict(
-            {"a": torch.randn(1, 3, 4, 5, 6), "b": torch.randn(1, 3, 4, 5)},
-            batch_size=[1, 3, 4],
-        )
 
+        td = TensorDict(
+                {"a": torch.randn(1, 3, 4, 5, 6, 6), "b": torch.randn(1, 3, 4, 5, 3)}, 
+                batch_size=[1, 3, 4, 5]
+            )
+        td = td_dict[td_name](td)
+        batch_size = len(td.batch_size)
+        
         actual_idx = [..., (..., 0), (0, ...), (0, ..., 0)]
         expected_idx = [
-            (slice(None), slice(None), slice(None)),
-            (slice(None), slice(None), 0),
-            (0, slice(None), slice(None)),
-            (0, slice(None), 0),
+            (slice(None),) * batch_size,
+            (slice(None),) * (batch_size-1) + (0,),
+            (0,) + (slice(None),) * (batch_size-1),
+            (0,) + (slice(None),) * (batch_size-2) + (0,),
         ]
 
         for i in range(len(actual_idx)):
+            
+            actual_idx[3] = (0,) + (slice(None),) * (batch_size-2) + (0,)
+            if td_name == "stacked_td": 
+                print("START")
+                print(td_name)
+                print("\n")
+                print(td.batch_size, td[actual_idx[i]].batch_size, td[expected_idx[i]].batch_size)
+                print(actual_idx[i])
+                print("\n")
+                print("END")
             actual_td = td[actual_idx[i]]
             expected_td = td[expected_idx[i]]
 
@@ -866,28 +903,33 @@ class TestTensorDicts:
                 torch.testing.assert_allclose(actual_tensor, expected_tensor)
 
     def test_setitem_ellipsis(self, td_name):
+        # if td_name == "stacked_td":
+        #     pytest.set_trace()
         torch.manual_seed(1)
+     
         td = TensorDict(
-            {"a": torch.randn(1, 3, 4, 5, 6), "b": torch.randn(1, 3, 4, 5)},
-            batch_size=[1, 3, 4],
-        )
+                {"a": torch.randn(1, 3, 4, 5, 6, 6), "b": torch.randn(1, 3, 4, 5, 3)}, 
+                batch_size=[1, 3, 4, 5]
+            )
+        td = td_dict[td_name](td)
 
-        actual_idx = [..., (..., 0), (0, ...), (0, ..., 0)]
-        expected_idx = [
-            (slice(None), slice(None), slice(None)),
-            (slice(None), slice(None), 0),
-            (0, slice(None), slice(None)),
-            (0, slice(None), 0),
-        ]
-
+        actual_idx = [(0, ..., 0)]
+        # print("NEW")
         for i in range(len(actual_idx)):
             idx = actual_idx[i]
             td_clone = td.clone()
-            actual_td = td[idx].clone().zero_()
+            actual_td = td_clone[idx].clone().zero_()
+            # print("TD CLONE")
+            # print(td_clone)
+            # print(actual_td)
+            # print(td_clone[idx])
+            # if td_name == "stacked_td": 
+                # print("HERE")
+                # print(td_clone[0, slice(None), slice(None), slice(None), 0])
             td_clone[idx] = actual_td
 
-            for key in td.keys():
-                assert (td[idx].get(key) == 0).all()
+            for key in td_clone.keys():
+                assert (td_clone[idx].get(key) == 0).all()
 
     @pytest.mark.parametrize("idx", [slice(1), torch.tensor([0]), torch.tensor([0, 1])])
     def test_setitem(self, td_name, idx):
