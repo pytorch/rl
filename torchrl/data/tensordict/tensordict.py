@@ -2861,11 +2861,9 @@ class LazyStackedTensorDict(_TensorDict):
                 stack_dim=new_stack_dim,
             )
         elif isinstance(item, tuple):
-            print("HERE")
             _sub_item = tuple(
                 _item for i, _item in enumerate(item) if i == self.stack_dim
             )
-            print(self.stack_dim, item, _sub_item)
             if len(_sub_item):
                 tensordicts = self.tensordicts[_sub_item[0]]
                 if isinstance(tensordicts, _TensorDict):
@@ -2881,7 +2879,6 @@ class LazyStackedTensorDict(_TensorDict):
             new_stack_dim = self.stack_dim - sum(
                 [isinstance(_item, Number) for _item in item[: self.stack_dim]]
             )
-            # print(torch.stack(list(tensordicts), dim=new_stack_dim))
             return torch.stack(list(tensordicts), dim=new_stack_dim)
         else:
             raise NotImplementedError(
