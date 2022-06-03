@@ -448,24 +448,56 @@ class TestTensorDicts:
     def td(self):
         return TensorDict(
             source={
-                "a": torch.randn(3, 1, 5),
-                "b": torch.randn(3, 1, 10),
-                "c": torch.randint(10, (3, 1, 3)),
+                "a": torch.randn(4, 3, 2, 1, 5),
+                "b": torch.randn(4, 3, 2, 1, 10),
+                "c": torch.randint(10, (4, 3, 2, 1, 3)),
             },
-            batch_size=[3, 1],
+            batch_size=[4, 3, 2, 1],
         )
 
     @property
     def stacked_td(self):
-        return torch.stack([self.td for _ in range(2)], 0)
+        td1 = TensorDict(
+            source={
+                "a": torch.randn(4, 3, 1, 5),
+                "b": torch.randn(4, 3, 1, 10),
+                "c": torch.randint(10, (4, 3, 1, 3)),
+            },
+            batch_size=[4, 3, 1],
+        )
+        td2 = TensorDict(
+            source={
+                "a": torch.randn(4, 3, 1, 5),
+                "b": torch.randn(4, 3, 1, 10),
+                "c": torch.randint(10, (4, 3, 1, 3)),
+            },
+            batch_size=[4, 3, 1],
+        )
+        return torch.stack([td1, td2], 2)
 
     @property
     def idx_td(self):
-        return self.td[0]
+        td = TensorDict(
+            source={
+                "a": torch.randn(2, 4, 3, 2, 1, 5),
+                "b": torch.randn(2, 4, 3, 2, 1, 10),
+                "c": torch.randint(10, (2, 4, 3, 2, 1, 3)),
+            },
+            batch_size=[2, 4, 3, 2, 1],
+        )
+        return td[1]
 
     @property
     def sub_td(self):
-        return self.td.get_sub_tensordict(0)
+        td = TensorDict(
+            source={
+                "a": torch.randn(2, 4, 3, 2, 1, 5),
+                "b": torch.randn(2, 4, 3, 2, 1, 10),
+                "c": torch.randint(10, (2, 4, 3, 2, 1, 3)),
+            },
+            batch_size=[2, 4, 3, 2, 1],
+        )
+        return td.get_sub_tensordict(1)
 
     @property
     def saved_td(self):
@@ -473,13 +505,27 @@ class TestTensorDicts:
 
     @property
     def unsqueezed_td(self):
-        return self.td.unsqueeze(0)
+        td = TensorDict(
+            source={
+                "a": torch.randn(4, 3, 2, 5),
+                "b": torch.randn(4, 3, 2, 10),
+                "c": torch.randint(10, (4, 3, 2, 3)),
+            },
+            batch_size=[4, 3, 2],
+        )
+        return td.unsqueeze(-1)
 
     @property
     def td_reset_bs(self):
-        td = self.td
-        td = td.unsqueeze(-1).to_tensordict()
-        td.batch_size = torch.Size([3, 1])
+        td = td = TensorDict(
+            source={
+                "a": torch.randn(4, 3, 2, 1, 5),
+                "b": torch.randn(4, 3, 2, 1, 10),
+                "c": torch.randint(10, (4, 3, 2, 1, 3)),
+            },
+            batch_size=[4, 3, 2],
+        )
+        td.batch_size = torch.Size([4, 3, 2, 1])
         return td
 
     def test_select(self, td_name):
@@ -558,7 +604,7 @@ class TestTensorDicts:
         new_td = td.masked_fill_(mask, -10.0)
         assert new_td is td
         for k, item in td.items():
-            assert (item[mask] == -10).all()
+            assert (item[mask] == -10).all(), item[mask]
 
     def test_masked_fill(self, td_name):
         torch.manual_seed(1)
@@ -696,9 +742,13 @@ class TestTensorDicts:
             td_squeeze.set_("a", tensor)
         else:
             td_squeeze.set("a", tensor)
+        assert td.batch_size[squeeze_dim] == 1
         assert (td_squeeze.get("a") == tensor).all()
         assert (td.get("a") == tensor.unsqueeze(tensor_squeeze_dim)).all()
-        assert td_squeeze.unsqueeze(squeeze_dim) is td
+        if td_name != "unsqueezed_td":
+            assert td_squeeze.unsqueeze(squeeze_dim) is td
+        else:
+            assert td_squeeze is td._source
         assert (td_squeeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
@@ -783,12 +833,7 @@ class TestTensorDicts:
     def test_setitem_string(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        if td_name == "stacked_td":
-            td["d"] = torch.randn(2, 3, 1, 5)
-        elif td_name in ["sub_td", "idx_td"]:
-            td["d"] = torch.randn(1, 5)
-        else:
-            td["d"] = torch.randn(3, 1, 5)
+        td["d"] = torch.randn(4, 3, 2, 1, 5)
         assert "d" in td.keys()
 
     def test_getitem_string(self, td_name):
