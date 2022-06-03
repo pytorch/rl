@@ -4,7 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 
 from argparse import ArgumentParser, Namespace
+from dataclasses import dataclass
 from typing import Optional, Sequence
+
+from importlib_metadata import distribution
 
 import torch
 from torch import nn, distributions as d
@@ -1151,189 +1154,54 @@ def make_redq_model(
     del td
     return model
 
+@dataclass 
+class ContinuousModelConfig: 
+    annealing_frames: int = 1000000
+    # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
+    noisy: bool = False
+    # whether to use NoisyLinearLayers in the value network.
+    ou_exploration: bool = False
+    # wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for 
+    # efficient entropy-based exploration, this should be left for experimentation only.
+    ou_sigma: float = 0.2
+    # Ornstein-Uhlenbeck sigma
+    ou_theta: float = 0.15
+    # Aimed at superseeding --ou_exploration.
+    distributional: bool = False
+    # whether a distributional loss should be used (TODO: not implemented yet).
+    atoms: int = 51
+    # number of atoms used for the distributional loss (TODO)
+    gSDE: bool = False
+    # if True, exploration is achieved using the gSDE technique.
+    tanh_loc: bool = False
+    # if True, uses a Tanh-Normal transform for the policy location of the form 
+    # upscale * tanh(loc/upscale) (only available with TanhTransform and TruncatedGaussian distributions)
+    default_policy_scale: float = 1.0
+    # Default policy scale parameter
+    distribution: str = "tanh_normal"
+    # if True, uses a Tanh-Normal-Tanh distribution for the policy
+    lstm: bool = False
+    # if True, uses an LSTM for the policy.
+    shared_mapping: bool = False
+    # if True, the first layers of the actor-critic are shared.
+    actor_cells: int = 256
+    # cells of the actor
+    qvalue_cells: int = 256
+    # cells of the qvalue net
+    scale_lb: float = 0.1
+    # min value of scale
+    value_cells: int = 256
+    # cells of the value net
+    activation: str = "tanh"
+    # activation function, either relu or elu or tanh, Default=tanh
 
-def parser_model_args_continuous(
-    parser: ArgumentParser, algorithm: str
-) -> ArgumentParser:
-    """
-    Populates the argument parser to build a model for continuous actions.
-
-    Args:
-        parser (ArgumentParser): parser to be populated.
-        algorithm (str): one of `"DDPG"`, `"SAC"`, `"REDQ"`, `"PPO"`
-
-    """
-
-    if algorithm not in ("SAC", "DDPG", "PPO", "REDQ"):
-        raise NotImplementedError(f"Unknown algorithm {algorithm}")
-
-    if algorithm in ("SAC", "DDPG", "REDQ"):
-        parser.add_argument(
-            "--annealing_frames",
-            "--annealing-frames",
-            type=int,
-            default=1000000,
-            help="float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.",
-        )
-        parser.add_argument(
-            "--noisy",
-            action="store_true",
-            help="whether to use NoisyLinearLayers in the value network.",
-        )
-        parser.add_argument(
-            "--ou_exploration",
-            "--ou-exploration",
-            action="store_true",
-            help="wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for "
-            "efficient entropy-based exploration, this should be left for experimentation only.",
-        )
-        parser.add_argument(
-            "--ou-sigma",
-            "--ou_sigma",
-            type=float,
-            default=0.2,
-            help="Ornstein-Uhlenbeck sigma.",
-        )
-        parser.add_argument(
-            "--ou-theta",
-            "--ou_theta",
-            type=float,
-            default=0.15,
-            help="Ornstein-Uhlenbeck theta.",
-        )
-        parser.add_argument(
-            "--no_ou_exploration",
-            "--no-ou-exploration",
-            action="store_false",
-            dest="ou_exploration",
-            help="Aimed at superseeding --ou_exploration.",
-        )
-        parser.add_argument(
-            "--distributional",
-            action="store_true",
-            help="whether a distributional loss should be used (TODO: not implemented yet).",
-        )
-        parser.add_argument(
-            "--atoms",
-            type=int,
-            default=51,
-            help="number of atoms used for the distributional loss (TODO)",
-        )
-
-    parser.add_argument(
-        "--gSDE",
-        action="store_true",
-        help="if True, exploration is achieved using the gSDE technique.",
-    )
-    if algorithm in ("SAC", "PPO", "REDQ"):
-        parser.add_argument(
-            "--tanh_loc",
-            "--tanh-loc",
-            action="store_true",
-            help="if True, uses a Tanh-Normal transform for the policy "
-            "location of the form "
-            "`upscale * tanh(loc/upscale)` (only available with "
-            "TanhTransform and TruncatedGaussian distributions)",
-        )
-        parser.add_argument(
-            "--default_policy_scale",
-            "--default-policy-scale",
-            default=1.0,
-            help="Default policy scale parameter",
-        )
-        parser.add_argument(
-            "--distribution",
-            type=str,
-            default="tanh_normal",
-            help="if True, uses a Tanh-Normal-Tanh distribution for the policy",
-        )
-    if algorithm == "PPO":
-        parser.add_argument(
-            "--lstm",
-            action="store_true",
-            help="if True, uses an LSTM for the policy.",
-        )
-        parser.add_argument(
-            "--shared_mapping",
-            "--shared-mapping",
-            action="store_true",
-            help="if True, the first layers of the actor-critic are shared.",
-        )
-
-    if algorithm in ("SAC", "REDQ"):
-        parser.add_argument(
-            "--actor_cells",
-            "--actor-cells",
-            type=int,
-            default=256,
-            help="cells of the actor",
-        )
-        parser.add_argument(
-            "--qvalue_cells",
-            "--qvalue-cells",
-            type=int,
-            default=256,
-            help="cells of the qvalue net",
-        )
-        parser.add_argument(
-            "--scale_lb",
-            "--scale-lb",
-            type=float,
-            default=0.1,
-            help="min value of scale",
-        )
-
-    if algorithm in ("SAC", "REDQ"):
-        parser.add_argument(
-            "--value_cells",
-            type=int,
-            default=256,
-            help="cells of the value net",
-        )
-
-    if algorithm in ("SAC", "DDPG", "REDQ"):
-        parser.add_argument(
-            "--activation",
-            type=str,
-            choices=["relu", "elu", "tanh"],
-            default="tanh",
-            help="activation function",
-        )
-
-    return parser
-
-
-def parser_model_args_discrete(parser: ArgumentParser) -> ArgumentParser:
-    """
-    Populates the argument parser to build a model for discrete actions.
-
-    Args:
-        parser (ArgumentParser): parser to be populated.
-
-    """
-    parser.add_argument(
-        "--annealing_frames",
-        "--annealing-frames",
-        type=int,
-        default=1000000,
-        help="Number of frames used for annealing of the EGreedy exploration. Default=1e6.",
-    )
-
-    parser.add_argument(
-        "--noisy",
-        action="store_true",
-        help="whether to use NoisyLinearLayers in the value network.",
-    )
-    parser.add_argument(
-        "--distributional",
-        action="store_true",
-        help="whether a distributional loss should be used.",
-    )
-    parser.add_argument(
-        "--atoms",
-        type=int,
-        default=51,
-        help="number of atoms used for the distributional loss",
-    )
-
-    return parser
+@dataclass
+class DiscreteModelConfig: 
+    annealing_frames: int = 1000000
+    # Number of frames used for annealing of the EGreedy exploration. Default=1e6.
+    noisy: bool = False
+    # whether to use NoisyLinearLayers in the value network
+    distributional: bool = False
+    # whether a distributional loss should be used.
+    atoms: int = 51
+    # number of atoms used for the distributional loss
