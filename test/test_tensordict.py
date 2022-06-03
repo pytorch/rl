@@ -13,8 +13,11 @@ import torch
 from _utils_internal import get_available_devices
 from torch import multiprocessing as mp
 from torchrl.data import SavedTensorDict, TensorDict
-from torchrl.data.tensordict.tensordict import assert_allclose_td, LazyStackedTensorDict
-from torchrl.data.tensordict.utils import _getitem_batch_size
+from torchrl.data.tensordict.tensordict import (
+    assert_allclose_td,
+    LazyStackedTensorDict,
+)
+from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -432,6 +435,44 @@ def test_savedtensordict(device):
 
 
 @pytest.mark.parametrize(
+    "ellipsis_index, expected_index",
+    [
+        (..., (slice(None), slice(None), slice(None), slice(None), slice(None))),
+        ((0, ..., 0), (0, slice(None), slice(None), slice(None), 0)),
+        ((..., 0), (slice(None), slice(None), slice(None), slice(None), 0)),
+        ((0, ...), (0, slice(None), slice(None), slice(None), slice(None))),
+        (
+            (slice(1, 2), ...),
+            (slice(1, 2), slice(None), slice(None), slice(None), slice(None)),
+        ),
+    ],
+)
+def test_convert_ellipsis_to_idx_valid(ellipsis_index, expected_index):
+    torch.manual_seed(1)
+    batch_size = [3, 4, 5, 6, 7]
+
+    assert convert_ellipsis_to_idx(ellipsis_index, batch_size) == expected_index
+
+
+@pytest.mark.parametrize(
+    "ellipsis_index, expectation",
+    [
+        ((..., 0, ...), pytest.raises(RuntimeError)),
+        ((0, ..., 0, ...), pytest.raises(RuntimeError)),
+    ],
+)
+def test_convert_ellipsis_to_idx_invalid(ellipsis_index, expectation):
+    torch.manual_seed(1)
+    batch_size = [3, 4, 5, 6, 7]
+
+    with expectation:
+        _ = convert_ellipsis_to_idx(ellipsis_index, batch_size)
+
+
+TD_BATCH_SIZE = 4
+
+
+@pytest.mark.parametrize(
     "td_name",
     [
         "td",
@@ -813,6 +854,40 @@ class TestTensorDicts:
         r = torch.randn_like(td.get("a"))
         td.set("numpy", r.numpy())
         torch.testing.assert_allclose(td.get("numpy"), r)
+
+    @pytest.mark.parametrize(
+        "actual_index,expected_index",
+        [
+            (..., (slice(None),) * TD_BATCH_SIZE),
+            ((..., 0), (slice(None),) * (TD_BATCH_SIZE - 1) + (0,)),
+            ((0, ...), (0,) + (slice(None),) * (TD_BATCH_SIZE - 1)),
+            ((0, ..., 0), (0,) + (slice(None),) * (TD_BATCH_SIZE - 2) + (0,)),
+        ],
+    )
+    def test_getitem_ellipsis(self, td_name, actual_index, expected_index):
+        torch.manual_seed(1)
+
+        td = getattr(self, td_name)
+
+        actual_td = td[actual_index]
+        expected_td = td[expected_index]
+        assert expected_td.shape == _getitem_batch_size(
+            td.batch_size, convert_ellipsis_to_idx(actual_index, td.batch_size)
+        )
+        assert_allclose_td(actual_td, expected_td)
+
+    @pytest.mark.parametrize("actual_index", [..., (..., 0), (0, ...), (0, ..., 0)])
+    def test_setitem_ellipsis(self, td_name, actual_index):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+
+        idx = actual_index
+        td_clone = td.clone()
+        actual_td = td_clone[idx].clone().zero_()
+        td_clone[idx] = actual_td
+
+        for key in td_clone.keys():
+            assert (td_clone[idx].get(key) == 0).all()
 
     @pytest.mark.parametrize("idx", [slice(1), torch.tensor([0]), torch.tensor([0, 1])])
     def test_setitem(self, td_name, idx):
