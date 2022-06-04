@@ -9,6 +9,7 @@ import torch
 
 try:
     from torchvision.transforms.functional import center_crop as center_crop_fn
+    from torchvision.utils import make_grid
 except ImportError:
     center_crop_fn = None
 
@@ -33,6 +34,9 @@ class VideoRecorder(ObservationTransform):
         skip (int): frame interval in the output video.
             Default is 2.
         center_crop (int, optional): value of square center crop.
+        make_grid (bool, optional): if True, a grid is created assuming that a
+            tensor of shape [B x W x H x 3] is provided, with B being the batch
+            size. Default is True.
     """
 
     def __init__(
@@ -42,6 +46,7 @@ class VideoRecorder(ObservationTransform):
         keys: Optional[Sequence[str]] = None,
         skip: int = 2,
         center_crop: Optional[int] = None,
+        make_grid: bool = True,
         **kwargs,
     ) -> None:
         if keys is None:
@@ -57,6 +62,7 @@ class VideoRecorder(ObservationTransform):
         self.tag = tag
         self.count = 0
         self.center_crop = center_crop
+        self.make_grid = make_grid
         if center_crop and not center_crop_fn:
             raise ImportError(
                 "Could not load center_crop from torchvision. Make sure torchvision is installed."
@@ -76,21 +82,29 @@ class VideoRecorder(ObservationTransform):
             if observation.ndimension() == 2:
                 observation_trsf = observation.unsqueeze(-3)
             else:
-                if observation.ndimension() != 3:
-                    raise RuntimeError(
-                        "observation is expected to have 3 dimensions, "
-                        f"got {observation.ndimension()} instead"
-                    )
                 if observation_trsf.shape[-1] != 3:
                     raise RuntimeError(
                         "observation_trsf is expected to have 3 dimensions, "
                         f"got {observation_trsf.ndimension()} instead"
                     )
-                observation_trsf = observation_trsf.permute(2, 0, 1)
+                trailing_dim = range(observation_trsf.ndimension() - 3)
+                observation_trsf = observation_trsf.permute(*trailing_dim, -1, -3, -2)
             if self.center_crop:
+                if center_crop_fn is None:
+                    raise ImportError(
+                        "Could not import torchvision, `center_crop` not available."
+                        "Make sure torchvision is installed in your environment."
+                    )
                 observation_trsf = center_crop_fn(
                     observation_trsf, [self.center_crop, self.center_crop]
                 )
+            if self.make_grid and observation_trsf.ndimension() == 4:
+                if make_grid is None:
+                    raise ImportError(
+                        "Could not import torchvision, `make_grid` not available."
+                        "Make sure torchvision is installed in your environment."
+                    )
+                observation_trsf = make_grid(observation_trsf)
             self.obs.append(observation_trsf.cpu().to(torch.uint8))
         return observation
 
