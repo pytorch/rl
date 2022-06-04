@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import math
 from time import sleep
 
 import pytest
@@ -25,6 +26,7 @@ from torchrl.envs import (
     FiniteTensorDictCheck,
     DoubleToFloat,
     CatTensors,
+    FlattenObservation,
 )
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import VecNorm, TransformedEnv
@@ -32,6 +34,7 @@ from torchrl.envs.transforms.transforms import (
     _has_tv,
     NoopResetEnv,
     PinMemoryTransform,
+    CenterCrop,
 )
 
 TIMEOUT = 10.0
@@ -329,16 +332,21 @@ class TestTransforms:
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize("interpolation", ["bilinear", "bicubic"])
     @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize(
         "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_resize(self, interpolation, keys, nchannels, device):
+    def test_resize(self, interpolation, keys, nchannels, batch, device):
         torch.manual_seed(0)
-        dont_touch = torch.randn(1, nchannels, 32, 32, device=device)
+        dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
         resize = Resize(w=20, h=21, interpolation=interpolation, keys=keys)
         td = TensorDict(
-            {key: torch.randn(1, nchannels, 32, 32, device=device) for key in keys}, [1]
+            {
+                key: torch.randn(*batch, nchannels, 32, 32, device=device)
+                for key in keys
+            },
+            batch,
         )
         td.set("dont touch", dont_touch.clone())
         resize(td)
@@ -357,6 +365,87 @@ class TestTransforms:
             observation_spec = resize.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([nchannels, 20, 21])
+
+    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("h", [None, 21])
+    @pytest.mark.parametrize(
+        "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_centercrop(self, keys, h, nchannels, batch, device):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
+        cc = CenterCrop(w=20, h=h, keys=keys)
+        if h is None:
+            h = 20
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, nchannels, 32, 32, device=device)
+                for key in keys
+            },
+            batch,
+        )
+        td.set("dont touch", dont_touch.clone())
+        cc(td)
+        for key in keys:
+            assert td.get(key).shape[-2:] == torch.Size([20, h])
+        assert (td.get("dont touch") == dont_touch).all()
+
+        if len(keys) == 1:
+            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32))
+            observation_spec = cc.transform_observation_spec(observation_spec)
+            assert observation_spec.shape == torch.Size([nchannels, 20, h])
+        else:
+            observation_spec = CompositeSpec(
+                **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32)) for key in keys}
+            )
+            observation_spec = cc.transform_observation_spec(observation_spec)
+            for key in keys:
+                assert observation_spec[key].shape == torch.Size([nchannels, 20, h])
+
+    @pytest.mark.skipif(not _has_tv, reason="no torchvision")
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("size", [[], [4]])
+    @pytest.mark.parametrize(
+        "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_flatten(self, keys, size, nchannels, batch, device):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(*batch, *size, nchannels, 32, 32, device=device)
+        start_dim = -3 - len(size)
+        flatten = FlattenObservation(start_dim, -3, keys=keys)
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, *size, nchannels, 32, 32, device=device)
+                for key in keys
+            },
+            batch,
+        )
+        td.set("dont touch", dont_touch.clone())
+        flatten(td)
+        expected_size = math.prod(size + [nchannels])
+        for key in keys:
+            assert td.get(key).shape[-3] == expected_size
+        assert (td.get("dont touch") == dont_touch).all()
+
+        if len(keys) == 1:
+            observation_spec = NdBoundedTensorSpec(-1, 1, (*size, nchannels, 32, 32))
+            observation_spec = flatten.transform_observation_spec(observation_spec)
+            assert observation_spec.shape[-3] == expected_size
+        else:
+            observation_spec = CompositeSpec(
+                **{
+                    key: NdBoundedTensorSpec(-1, 1, (*size, nchannels, 32, 32))
+                    for key in keys
+                }
+            )
+            observation_spec = flatten.transform_observation_spec(observation_spec)
+            for key in keys:
+                assert observation_spec[key].shape[-3] == expected_size
 
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize(

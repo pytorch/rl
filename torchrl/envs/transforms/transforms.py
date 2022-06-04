@@ -47,6 +47,7 @@ __all__ = [
     "Compose",
     "ToTensorImage",
     "ObservationNorm",
+    "FlattenObservation",
     "RewardScaling",
     "ObservationTransform",
     "CatFrames",
@@ -725,9 +726,16 @@ class Resize(ObservationTransform):
         self.interpolation = interpolation
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        # flatten if necessary
+        ndim = observation.ndimension()
+        if ndim > 4:
+            sizes = observation.shape[:-3]
+            observation = torch.flatten(observation, 0, ndim - 4)
         observation = resize(
             observation, [self.w, self.h], interpolation=self.interpolation
         )
+        if ndim > 4:
+            observation = observation.unflatten(0, sizes)
 
         return observation
 
@@ -825,6 +833,72 @@ class CenterCrop(ObservationTransform):
         return (
             f"{self.__class__.__name__}("
             f"w={float(self.w):4.4f}, h={float(self.h):4.4f}, "
+        )
+
+
+class FlattenObservation(ObservationTransform):
+    """Flatten adjacent dimensions of a tensor.
+
+    Args:
+        first_dim (int, optional): first dimension of the dimensions to flatten.
+            Default is 0.
+        last_dim (int, optional): last dimension of the dimensions to flatten.
+            Default is -3.
+    """
+
+    inplace = False
+
+    def __init__(
+        self,
+        first_dim: int = 0,
+        last_dim: int = -3,
+        keys: Optional[Sequence[str]] = None,
+    ):
+        if not _has_tv:
+            raise ImportError(
+                "Torchvision not found. The Resize transform relies on "
+                "torchvision implementation. "
+                "Consider installing this dependency."
+            )
+        if keys is None:
+            keys = IMAGE_KEYS  # default
+        super().__init__(keys=keys)
+        self.first_dim = first_dim
+        self.last_dim = last_dim
+
+    def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        observation = torch.flatten(observation, self.first_dim, self.last_dim)
+        return observation
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if isinstance(observation_spec, CompositeSpec):
+            return CompositeSpec(
+                **{
+                    key: self.transform_observation_spec(_obs_spec)
+                    if key in self.keys
+                    else _obs_spec
+                    for key, _obs_spec in observation_spec._specs.items()
+                }
+            )
+        else:
+            _observation_spec = observation_spec
+        space = _observation_spec.space
+        if isinstance(space, ContinuousBox):
+            space.minimum = self._apply_transform(space.minimum)
+            space.maximum = self._apply_transform(space.maximum)
+            _observation_spec.shape = space.minimum.shape
+        else:
+            _observation_spec.shape = self._apply_transform(
+                torch.zeros(_observation_spec.shape)
+            ).shape
+
+        observation_spec = _observation_spec
+        return observation_spec
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"first_dim={float(self.first_dim):4.4f}, last_dim={float(self.last_dim):4.4f}, "
         )
 
 
