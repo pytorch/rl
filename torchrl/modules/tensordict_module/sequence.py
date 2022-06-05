@@ -134,6 +134,7 @@ class TensorDictSequence(TensorDictModule):
             for i, out_key in enumerate(out_keys)
             if out_key not in out_keys[i + 1 :]
         ]
+        in_keys = [in_key for in_key in in_keys if in_key not in out_keys]
 
         super().__init__(
             spec=None,
