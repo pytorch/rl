@@ -8,8 +8,8 @@ from torchrl.data import DEVICE_TYPING
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import NoisyLinear, DdpgCnnActor, DdpgCnnQNet, TanhNormal, \
-    ActorCriticWrapper, ValueOperator, ProbabilisticActor, TensorDictModule, \
-    NormalParamWrapper, MLP
+    ValueOperator, ProbabilisticActor, TensorDictModule, \
+    NormalParamWrapper, MLP, ActorCriticOperator
 from torchrl.trainers.helpers.models import ACTIVATIONS
 
 
@@ -280,7 +280,7 @@ def make_redq_model_pixels_shared(
         in_keys=["hidden"],
     )
 
-    model = ActorCriticWrapper(
+    model = ActorCriticOperator(
         common_net,
         actor_subnet,
         qvalue_subnet,
