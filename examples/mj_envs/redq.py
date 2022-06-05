@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 
 from torchrl.envs import ParallelEnv, EnvCreator
+from torchrl.envs.utils import set_exploration_mode
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.envs import LIBS
 from utils import MJEnv
@@ -24,7 +25,6 @@ except ImportError:
     _configargparse = False
 
 import torch.cuda
-from torch.profiler import profile, ProfilerActivity
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 from torchrl.trainers.helpers.collectors import (
@@ -40,7 +40,6 @@ from torchrl.trainers.helpers.envs import (
 )
 from torchrl.trainers.helpers.losses import make_redq_loss, parser_loss_args
 from torchrl.trainers.helpers.models import (
-    make_redq_model,
     parser_model_args_continuous,
 )
 from torchrl.trainers.helpers.recorder import parser_recorder_args
@@ -49,7 +48,7 @@ from torchrl.trainers.helpers.replay_buffer import (
     parser_replay_args,
 )
 from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
-
+from .utils_redq import make_redq_model_pixels, make_redq_model_pixels_shared, make_redq_model_state
 
 def make_args():
     parser = argparse.ArgumentParser()
@@ -122,14 +121,31 @@ def main(args):
     proof_env = transformed_env_constructor(
         args=args, use_env_creator=False, stats=stats
     )()
-    model = make_redq_model(
-        proof_env,
-        args=args,
-        device=device,
-    )
-    loss_module, target_net_updater = make_redq_loss(model, args)
+    if args.from_pixels:
+        if args.shared_mapping:
+            model = make_redq_model_pixels_shared(
+                proof_env,
+                args=args,
+                device=device,
+            )
+            actor_model_explore = model.get_policy_operator()
+        else:
+            model = make_redq_model_pixels(
+                proof_env,
+                args=args,
+                device=device,
+            )
+            actor_model_explore = model[0]
+    else:
+        model = make_redq_model_state(
+            proof_env,
+            args=args,
+            device=device,
+        )
+        actor_model_explore = model[0]
 
-    actor_model_explore = model[0]
+
+    loss_module, target_net_updater = make_redq_loss(model, args)
     if args.ou_exploration:
         if args.gSDE:
             raise RuntimeError("gSDE and ou_exploration are incompatible")
