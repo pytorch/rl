@@ -106,6 +106,8 @@ class _LossModule(nn.Module):
         if expand_dim:
             if compare_against is not None:
                 compare_against = set(compare_against)
+            else:
+                compare_against = set()
             for i, p in enumerate(params):
                 if p in compare_against:
                     p_out = p.expand(expand_dim, *p.shape)
