@@ -334,6 +334,7 @@ class REDQLoss(_LossModule):
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=self.delay_qvalue,
+            compare_against=list(actor_network.parameters()),
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))

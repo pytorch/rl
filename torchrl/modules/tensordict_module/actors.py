@@ -536,9 +536,9 @@ class ActorValueOperator(TensorDictSequence):
         value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
-        >>> from torchrl.modules.td_module.deprec import ProbabilisticActor_deprecated
+        >>> from torchrl.modules.tensordict_module import ProbabilisticActor
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
-        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorValueOperator
+        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorValueOperator, NormalParamWrapper
         >>> import torch
         >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
@@ -549,11 +549,16 @@ class ActorValueOperator(TensorDictSequence):
         ...    out_keys=["hidden"],
         ...    )
         >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
-        >>> module_action = torch.nn.Linear(4, 8)
-        >>> td_module_action = ProbabilisticActor_deprecated(
+        >>> module_action = TensorDictModule(
+        ...     NormalParamWrapper(torch.nn.Linear(4, 8)),
+        ...     in_keys=["hidden"],
+        ...     out_keys=["loc", "scale"],
+        ...     )
+        >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
         ...    spec=spec_action,
-        ...    in_keys=["hidden"],
+        ...    dist_param_keys=["loc", "scale"],
+        ...    out_key_sample=["action"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )

@@ -58,6 +58,7 @@ class DDPGLoss(_LossModule):
             value_network,
             "value_network",
             create_target_params=self.delay_value,
+            compare_against=list(actor_network.parameters()),
         )
 
         self.actor_in_keys = actor_network.in_keys

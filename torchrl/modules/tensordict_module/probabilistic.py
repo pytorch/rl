@@ -192,7 +192,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
     def _call_module(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
         return self.module(tensordict, **kwargs)
 
-    def make_functional_with_buffers(self, clone: bool = False):
+    def make_functional_with_buffers(self, clone: bool = True):
         module_params = self.parameters(recurse=False)
         if len(list(module_params)):
             raise RuntimeError(
@@ -204,8 +204,9 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         else:
             self_copy = self
 
-        module, other = self_copy.module.make_functional_with_buffers(clone=False)
-        self_copy.module = module
+        self_copy.module, other = self_copy.module.make_functional_with_buffers(
+            clone=True
+        )
         return self_copy, other
 
     def get_dist(

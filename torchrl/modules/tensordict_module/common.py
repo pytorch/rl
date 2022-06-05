@@ -397,7 +397,7 @@ class TensorDictModule(nn.Module):
 
         return f"{self.__class__.__name__}(\n{fields})"
 
-    def make_functional_with_buffers(self, clone: bool = False):
+    def make_functional_with_buffers(self, clone: bool = True):
         """
         Transforms a stateful module in a functional module and returns its parameters and buffers.
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
@@ -437,7 +437,8 @@ class TensorDictModule(nn.Module):
             (TensorDictModule, FunctionalModule, FunctionalModuleWithBuffers),
         ):
             raise RuntimeError(
-                "TensorDictModule.make_functional_with_buffers requires the module to be a regular nn.Module. "
+                "TensorDictModule.make_functional_with_buffers requires the "
+                "module to be a regular nn.Module. "
                 f"Found type {type(self_copy.module)}"
             )
 
@@ -448,9 +449,8 @@ class TensorDictModule(nn.Module):
                 self_copy.module(pseudo_input)
                 break
 
-        fmodule, params, buffers = functorch.make_functional_with_buffers(
-            self_copy.module
-        )
+        module = self_copy.module
+        fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         self_copy.module = fmodule
 
         # Erase meta params

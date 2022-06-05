@@ -103,6 +103,7 @@ class SACLoss(_LossModule):
             value_network,
             "value_network",
             create_target_params=self.delay_value,
+            compare_against=list(actor_network.parameters()),
         )
 
         # Q value
@@ -113,6 +114,8 @@ class SACLoss(_LossModule):
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=self.delay_qvalue,
+            compare_against=list(actor_network.parameters())
+            + list(value_network.parameters()),
         )
 
         self.gamma = gamma

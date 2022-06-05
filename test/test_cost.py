@@ -30,6 +30,7 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
     Actor,
     ProbabilisticActor,
+    ActorValueOperator,
 )
 from torchrl.objectives import (
     DQNLoss,
@@ -1511,6 +1512,107 @@ def test_tdlambda(device, gamma, lmbda, N, T):
         gamma, lmbda, state_value, next_state_value, reward, done
     )
     torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.parametrize(
+    "dest,expected_dtype,expected_device",
+    list(
+        zip(
+            get_available_devices(),
+            [torch.float] * len(get_available_devices()),
+            get_available_devices(),
+        )
+    )
+    + [
+        ["cuda", torch.float, "cuda"],
+        ["double", torch.double, "cpu"],
+        [torch.double, torch.double, "cpu"],
+        [torch.half, torch.half, "cpu"],
+        ["half", torch.half, "cpu"],
+    ],
+)
+def test_shared_params(dest, expected_dtype, expected_device):
+    if torch.cuda.device_count() == 0 and dest == "cuda":
+        pytest.skip("no cuda device available")
+    module_hidden = torch.nn.Linear(4, 4)
+    td_module_hidden = TensorDictModule(
+        module=module_hidden,
+        spec=None,
+        in_keys=["observation"],
+        out_keys=["hidden"],
+    )
+    module_action = TensorDictModule(
+        NormalParamWrapper(torch.nn.Linear(4, 8)),
+        in_keys=["hidden"],
+        out_keys=["loc", "scale"],
+    )
+    td_module_action = ProbabilisticActor(
+        module=module_action,
+        spec=None,
+        dist_param_keys=["loc", "scale"],
+        out_key_sample=["action"],
+        distribution_class=TanhNormal,
+        return_log_prob=True,
+    )
+    module_value = torch.nn.Linear(4, 1)
+    td_module_value = ValueOperator(
+        module=module_value,
+        in_keys=["hidden"],
+    )
+    td_module = ActorValueOperator(td_module_hidden, td_module_action, td_module_value)
+
+    class MyLoss(_LossModule):
+        def __init__(self, actor_network, qvalue_network):
+            super().__init__()
+            self.convert_to_functional(
+                actor_network,
+                "actor_network",
+                create_target_params=True,
+            )
+            self.convert_to_functional(
+                qvalue_network,
+                "qvalue_network",
+                3,
+                create_target_params=True,
+                compare_against=list(actor_network.parameters()),
+            )
+
+    actor_network = td_module.get_policy_operator()
+    value_network = td_module.get_value_operator()
+
+    loss = MyLoss(actor_network, value_network)
+    # modify params
+    for p in loss.parameters():
+        p.data += torch.randn_like(p)
+
+    assert len(list(loss.parameters())) == 6
+    assert len(loss.actor_network_params) == 4
+    assert len(loss.qvalue_network_params) == 4
+    for p in loss.actor_network_params:
+        assert isinstance(p, nn.Parameter)
+    assert (loss.qvalue_network_params[0] == loss.actor_network_params[0]).all()
+    assert (loss.qvalue_network_params[1] == loss.actor_network_params[1]).all()
+
+    # map module
+    if dest == "double":
+        loss = loss.double()
+    elif dest == "cuda":
+        loss = loss.cuda()
+    elif dest == "half":
+        loss = loss.half()
+    else:
+        loss = loss.to(dest)
+
+    for p in loss.actor_network_params:
+        assert isinstance(p, nn.Parameter)
+        assert p.dtype is expected_dtype
+        assert p.device == torch.device(expected_device)
+    loss.qvalue_network_params[0].dtype is expected_dtype
+    loss.qvalue_network_params[1].dtype is expected_dtype
+    loss.qvalue_network_params[0].device == torch.device(expected_device)
+    loss.qvalue_network_params[1].device == torch.device(expected_device)
+    assert (loss.qvalue_network_params[0] == loss.actor_network_params[0]).all()
+    assert (loss.qvalue_network_params[1] == loss.actor_network_params[1]).all()
 
 
 if __name__ == "__main__":
