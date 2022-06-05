@@ -48,7 +48,7 @@ from torchrl.trainers.helpers.replay_buffer import (
     parser_replay_args,
 )
 from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
-from .utils_redq import make_redq_model_pixels, make_redq_model_pixels_shared, make_redq_model_state
+from utils_redq import make_redq_model_pixels, make_redq_model_pixels_shared, make_redq_model_state
 
 def make_args():
     parser = argparse.ArgumentParser()
