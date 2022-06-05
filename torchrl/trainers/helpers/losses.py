@@ -124,7 +124,7 @@ def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
         loss_class = REDQLoss
     if isinstance(model, ActorCriticOperator):
         actor_model = model.get_policy_operator()
-        qvalue_model = model.get_value_operator()
+        qvalue_model = model.get_critic_operator()
     else:
         actor_model, qvalue_model = model
 
