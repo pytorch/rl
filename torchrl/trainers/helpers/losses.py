@@ -18,6 +18,7 @@ __all__ = [
 
 from typing import Optional, Tuple
 
+from torchrl.modules import ActorCriticOperator
 from torchrl.objectives import (
     ClipPPOLoss,
     DDPGLoss,
@@ -121,7 +122,11 @@ def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
         loss_kwargs.update({"loss_function": args.loss_function})
         loss_kwargs.update({"delay_qvalue": args.loss == "double"})
         loss_class = REDQLoss
-    actor_model, qvalue_model = model
+    if isinstance(model, ActorCriticOperator):
+        actor_model = model.get_policy_operator()
+        qvalue_model = model.get_critic_operator()
+    else:
+        actor_model, qvalue_model = model
 
     loss_module = loss_class(
         actor_network=actor_model,
