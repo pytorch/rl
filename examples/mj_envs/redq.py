@@ -67,6 +67,7 @@ def make_args():
     parser_model_args_continuous(parser, "REDQ")
     parser_recorder_args(parser)
     parser_replay_args(parser)
+    parser.add_argument("--shared_mapping", action="store_true")
     return parser
 
 
