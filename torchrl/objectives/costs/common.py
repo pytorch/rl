@@ -114,20 +114,19 @@ class _LossModule(nn.Module):
                     # the expanded parameter must be sent to device when to()
                     # is called:
                     self._param_maps[p_out] = p
-                    p = p_out
                 else:
-                    p = p.repeat(expand_dim, *[1 for _ in p.shape])
-                    p = nn.Parameter(
-                        p.uniform_(p.min().item(), p.max().item()).requires_grad_()
+                    p_out = p.repeat(expand_dim, *[1 for _ in p.shape])
+                    p_out = nn.Parameter(
+                        p_out.uniform_(p_out.min().item(), p_out.max().item()).requires_grad_()
                     )
-                params[i] = p
+                params[i] = p_out
 
             for i, b in enumerate(module_buffers):
                 b = b.expand(expand_dim, *b.shape).clone()
                 module_buffers[i] = b
 
-            # delete weights of original model as they do not correspond to the optimized weights
-            network_orig.to("meta")
+            # # delete weights of original model as they do not correspond to the optimized weights
+            # network_orig.to("meta")
 
         setattr(
             self,
