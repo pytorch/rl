@@ -82,19 +82,19 @@ class VideoRecorder(ObservationTransform):
             if observation.ndimension() == 2:
                 observation_trsf = observation.unsqueeze(-3)
             else:
-                # if observation.ndimension() != 3:
-                #     raise RuntimeError(
-                #         "observation is expected to have 3 dimensions, "
-                #         f"got {observation.ndimension()} instead"
-                #     )
                 if observation_trsf.shape[-1] != 3:
                     raise RuntimeError(
                         "observation_trsf is expected to have 3 dimensions, "
                         f"got {observation_trsf.ndimension()} instead"
                     )
-                trailing_dim = range(observation_trsf.ndimension()-3)
+                trailing_dim = range(observation_trsf.ndimension() - 3)
                 observation_trsf = observation_trsf.permute(*trailing_dim, -1, -3, -2)
             if self.center_crop:
+                if center_crop_fn is None:
+                    raise ImportError(
+                        "Could not import torchvision, `center_crop` not available."
+                        "Make sure torchvision is installed in your environment."
+                    )
                 observation_trsf = center_crop_fn(
                     observation_trsf, [self.center_crop, self.center_crop]
                 )

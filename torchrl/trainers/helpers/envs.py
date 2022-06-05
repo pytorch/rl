@@ -26,7 +26,7 @@ from torchrl.envs.transforms import (
     VecNorm,
     CenterCrop,
 )
-from torchrl.envs.transforms.transforms import gSDENoise, FlattenObs
+from torchrl.envs.transforms.transforms import gSDENoise, FlattenObservation
 from torchrl.record.recorder import VideoRecorder
 
 __all__ = [
@@ -125,7 +125,7 @@ def make_env_transforms(
         env.append_transform(Resize(84, 84))
         if args.grayscale:
             env.append_transform(GrayScale())
-        env.append_transform(FlattenObs())
+        env.append_transform(FlattenObservation())
         env.append_transform(CatFrames(N=args.catframes, keys=["next_pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}

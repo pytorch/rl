@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from copy import copy
+from copy import copy, deepcopy
 from typing import List, Iterable, Union, Tuple
 
 import functorch
@@ -268,7 +268,7 @@ class TensorDictSequence(TensorDictModule):
                 kwargs[out_key] = spec
         return CompositeSpec(**kwargs)
 
-    def make_functional_with_buffers(self, clone: bool = False):
+    def make_functional_with_buffers(self, clone: bool = True):
         """
         Transforms a stateful module in a functional module and returns its parameters and buffers.
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
@@ -303,7 +303,7 @@ class TensorDictSequence(TensorDictModule):
 
         """
         if clone:
-            self_copy = copy(self)
+            self_copy = deepcopy(self)
             self_copy.module = copy(self_copy.module)
         else:
             self_copy = self
@@ -313,7 +313,7 @@ class TensorDictSequence(TensorDictModule):
             self_copy.module[i], (
                 _params,
                 _buffers,
-            ) = module.make_functional_with_buffers()
+            ) = module.make_functional_with_buffers(clone=True)
             params.extend(_params)
             buffers.extend(_buffers)
         return self_copy, (params, buffers)

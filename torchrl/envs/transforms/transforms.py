@@ -11,7 +11,6 @@ from warnings import warn
 
 import torch
 from torch import nn, Tensor
-from torchvision.transforms.functional import center_crop
 
 try:
     _has_tv = True
@@ -48,7 +47,7 @@ __all__ = [
     "Compose",
     "ToTensorImage",
     "ObservationNorm",
-    "FlattenObs",
+    "FlattenObservation",
     "RewardScaling",
     "ObservationTransform",
     "CatFrames",
@@ -727,9 +726,16 @@ class Resize(ObservationTransform):
         self.interpolation = interpolation
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        # flatten if necessary
+        ndim = observation.ndimension()
+        if ndim > 4:
+            sizes = observation.shape[:-3]
+            observation = torch.flatten(observation, 0, ndim - 4)
         observation = resize(
             observation, [self.w, self.h], interpolation=self.interpolation
         )
+        if ndim > 4:
+            observation = observation.unflatten(0, sizes)
 
         return observation
 
@@ -830,7 +836,7 @@ class CenterCrop(ObservationTransform):
         )
 
 
-class FlattenObs(ObservationTransform):
+class FlattenObservation(ObservationTransform):
     """Flatten adjacent dimensions of a tensor.
 
     Args:
