@@ -80,8 +80,9 @@ class REDQLoss_deprecated(_LossModule):
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
-            num_qvalue_nets,
+            expand_dim=num_qvalue_nets,
             create_target_params=self.delay_qvalue,
+            compare_against=actor_network.parameters(),
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
