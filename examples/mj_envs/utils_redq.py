@@ -51,7 +51,6 @@ def make_redq_model_state(
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = MLP(**actor_net_kwargs_default)
     out_keys_actor = ["param"]
-    gSDE_state_key = in_keys_actor[0]
 
     qvalue_net_kwargs_default = {
         "num_cells": [args.qvalue_cells, args.qvalue_cells],
@@ -252,7 +251,7 @@ def make_redq_model_pixels_shared(
     common_net = TensorDictModule(
         common_mapper,
         in_keys=["pixels"],
-        out_keys=["hidden"]
+        out_keys=["hidden"],
     )
     actor_mapper = NormalParamWrapper(actor_net.mlp)
     dist_class = TanhNormal
@@ -278,7 +277,7 @@ def make_redq_model_pixels_shared(
     qvalue_mapper = qvalue_net.mlp
     qvalue_subnet = ValueOperator(
         qvalue_mapper,
-        in_keys="hidden"
+        in_keys=["hidden"],
     )
 
     model = ActorCriticWrapper(
