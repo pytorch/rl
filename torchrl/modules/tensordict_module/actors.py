@@ -752,6 +752,8 @@ class ActorCriticOperator(ActorValueOperator):
                 "Value out_key is state_value, which may lead to errors in downstream usages"
                 "of that module. Consider setting `'state_action_value'` instead."
                 "Make also sure that `'action'` is amongst the input keys of the value network."
+                "If you are confident that action should not be used to compute the value, please"
+                "user `ActorValueOperator` instead."
             )
 
     def get_critic_operator(self) -> TensorDictModuleWrapper:

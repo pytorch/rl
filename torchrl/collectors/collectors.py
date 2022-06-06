@@ -801,9 +801,9 @@ class _MultiDataCollector(_DataCollector):
         self._shutdown_main()
 
     def _shutdown_main(self) -> None:
-        _check_for_faulty_process(self.procs)
         if self.closed:
             return
+        _check_for_faulty_process(self.procs)
         self.closed = True
         for idx in range(self.num_workers):
             self.pipes[idx].send((None, "close"))
