@@ -11,10 +11,10 @@ from torchrl.data import (
 )
 from torchrl.envs import GymEnv
 from torchrl.envs.libs.gym import _has_gym, _gym_to_torchrl_spec_transform
+from torchrl.trainers.helpers.envs import LIBS
 from mj_envs.envs.relay_kitchen import *
 from mj_envs.envs.env_variants import register_env_variant
 from envs_reg import *
-
 
 class MJEnv(GymEnv):
     info_keys = ["time", "rwd_dense", "rwd_sparse", "solved"]
@@ -123,3 +123,5 @@ class MJEnv(GymEnv):
             out.render_device = 0
         self._build_env(self.envname, self.taskname, **self.constructor_kwargs)
         return out
+
+LIBS["mj_envs"] = MJEnv

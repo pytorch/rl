@@ -26,12 +26,7 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.transforms.transforms import gSDENoise, FlattenObservation
 from torchrl.record.recorder import VideoRecorder
-
-LIBS = {
-    "gym": GymEnv,
-    "retro": RetroEnv,
-    "dm_control": DMControlEnv,
-}
+from torchrl.trainers.helpers.envs import LIBS
 
 
 def make_env_transforms(
