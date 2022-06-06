@@ -91,15 +91,6 @@ def _check_for_faulty_process(processes):
         )
 
 
-# def seed_generator(seed, repeat):
-#     max_seed_val = (
-#         2 ** 32 - 1
-#     )  # https://discuss.pytorch.org/t/what-is-the-max-seed-you-can-set-up/145688
-#     rng = np.random.default_rng(seed)
-#     for i in range(repeat):
-#         yield int.from_bytes(rng.bytes(8), "big") % max_seed_val
-
-
 def seed_generator(seed):
     max_seed_val = (
         2 ** 32 - 1
