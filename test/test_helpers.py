@@ -437,10 +437,16 @@ def test_seed_generator():
     num_seeds = 100
     prev_seeds = []
 
+    def generate_seeds(seed, repeat):
+        seeds = []
+        for _ in range(repeat):
+            seed = seed_generator(seed)
+            seeds.append(seed)
+        return seeds
+
     # Check unique seed generation
     for initial_seed in range(num_tests):
-        generator = seed_generator(initial_seed, num_seeds)
-        seeds = [next(generator) for _ in range(num_seeds)]
+        seeds = generate_seeds(initial_seed, num_seeds)
         assert len(seeds) == num_seeds
         assert len(seeds) == len(set(seeds))
         if prev_seeds:
@@ -449,10 +455,8 @@ def test_seed_generator():
 
     # Check deterministic seed generation
     initial_seed = 0
-    generator = seed_generator(initial_seed, num_seeds)
-    seeds_1 = [next(generator) for _ in range(num_seeds)]
-    generator = seed_generator(initial_seed, num_seeds)
-    seeds_2 = [next(generator) for _ in range(num_seeds)]
+    seeds_1 = generate_seeds(initial_seed, num_seeds)
+    seeds_2 = generate_seeds(initial_seed, num_seeds)
     assert seeds_1 == seeds_2
 
 

@@ -514,9 +514,8 @@ class SerialEnv(_BatchedEnv):
 
     @_check_start
     def set_seed(self, seed: int) -> int:
-        seed_gen = seed_generator(seed, self.num_workers)
         for i, env in enumerate(self._envs):
-            seed = next(seed_gen)
+            seed = seed_generator(seed)
             env.set_seed(seed)
         return seed
 
@@ -714,9 +713,8 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def set_seed(self, seed: int) -> int:
         self._seeds = []
-        seed_gen = seed_generator(seed, len(self.parent_channels))
         for i, channel in enumerate(self.parent_channels):
-            seed = next(seed_gen)
+            seed = seed_generator(seed)
             channel.send(("seed", seed))
             self._seeds.append(seed)
 
@@ -853,8 +851,8 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before closing")
             # torch.manual_seed(data)
             # np.random.seed(data)
-            env.set_seed(data)
-            child_pipe.send(("seeded", None))
+            final_seed = env.set_seed(data)
+            child_pipe.send(("seeded", final_seed))
 
         elif cmd == "init":
             if verbose:
