@@ -1040,6 +1040,42 @@ class TestREDQ:
         with _check_td_steady(td):
             loss = loss_fn(td)
 
+        # check that losses are independent
+        for k in loss.keys():
+            if not k.startswith("loss"):
+                continue
+            loss[k].sum().backward(retain_graph=True)
+            if k == "loss_actor":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn._qvalue_network_params
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn._actor_network_params
+                )
+            elif k == "loss_qvalue":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn._actor_network_params
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn._qvalue_network_params
+                )
+            elif k == "loss_alpha":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn._actor_network_params
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn._qvalue_network_params
+                )
+            else:
+                raise NotImplementedError(k)
+            loss_fn.zero_grad()
+
         # check td is left untouched
         assert loss_fn.priority_key in td.keys()
 
@@ -1052,6 +1088,23 @@ class TestREDQ:
 
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+        # modify params and check that expanded values are updated
+        for p in loss_fn.parameters():
+            p.data *= 0
+
+        counter = 0
+        for p in loss_fn.qvalue_network_params:
+            if not isinstance(p, nn.Parameter):
+                counter += 1
+                assert (p == loss_fn._param_maps[p]).all()
+                assert (p == 0).all()
+        assert counter == len(loss_fn._actor_network_params)
+        assert counter == len(loss_fn.actor_network_params)
+
+        # check that params of the original actor are those of the loss_fn
+        for p in actor.parameters():
+            assert p in set(loss_fn.parameters())
 
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
