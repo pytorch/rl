@@ -52,6 +52,7 @@ from utils_redq import (
     make_redq_model_pixels,
     make_redq_model_pixels_shared,
     make_redq_model_state,
+    make_redq_model_state_pixels,
 )
 
 
@@ -73,6 +74,7 @@ def make_args():
     parser_recorder_args(parser)
     parser_replay_args(parser)
     parser.add_argument("--shared_mapping", action="store_true")
+    parser.add_argument("--include_state", action="store_true")
     return parser
 
 
@@ -136,12 +138,20 @@ def main(args):
             )
             actor_model_explore = model.get_policy_operator()
         else:
-            model = make_redq_model_pixels(
-                proof_env,
-                args=args,
-                device=device,
-            )
-            actor_model_explore = model[0]
+            if args.include_state:
+                model = make_redq_model_state_pixels(
+                    proof_env,
+                    args=args,
+                    device=device,
+                )
+                actor_model_explore = model[0]
+            else:
+                model = make_redq_model_pixels(
+                    proof_env,
+                    args=args,
+                    device=device,
+                )
+                actor_model_explore = model[0]
     else:
         model = make_redq_model_state(
             proof_env,
