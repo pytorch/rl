@@ -841,9 +841,10 @@ class _MultiDataCollector(_DataCollector):
         _check_for_faulty_process(self.procs)
         for idx in range(self.num_workers):
             self.pipes[idx].send((seed, "seed"))
-            seed, msg = self.pipes[idx].recv()
+            new_seed, msg = self.pipes[idx].recv()
             if msg != "seeded":
                 raise RuntimeError(f"Expected msg='seeded', got {msg}")
+            seed = new_seed
         self.reset()
         return seed
 

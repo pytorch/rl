@@ -5,6 +5,7 @@
 from typing import Optional
 
 import torch
+from torchrl import seed_generator
 from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
     NdBoundedTensorSpec,
@@ -70,7 +71,7 @@ class _MockEnv(_EnvClass):
     def set_seed(self, seed: int) -> int:
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
-        return seed
+        return seed_generator(seed)
 
     def custom_fun(self):
         return 0
@@ -99,7 +100,7 @@ class MockSerialEnv(_EnvClass):
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
         self.max_val = max(self.counter + 100, self.counter * 2)
-        return seed
+        return seed_generator(seed)
 
     def _step(self, tensordict):
         self.counter += 1

@@ -7,14 +7,13 @@ import argparse
 
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from _utils_internal import get_available_devices, generate_seeds
 from mocking_classes import (
     ContinuousActionConvMockEnvNumpy,
     ContinuousActionVecMockEnv,
     DiscreteActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
 )
-from torchrl import seed_generator
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.trainers.helpers import parser_env_args, transformed_env_constructor
@@ -432,32 +431,27 @@ def test_redq_make(device, from_pixels, gsde, exploration):
     del proof_environment
 
 
-def test_seed_generator():
-    num_tests = 5
+@pytest.mark.parametrize("initial_seed", range(5))
+def test_seed_generator(initial_seed):
     num_seeds = 100
     prev_seeds = []
 
-    def generate_seeds(seed, repeat):
-        seeds = []
-        for _ in range(repeat):
-            seed = seed_generator(seed)
-            seeds.append(seed)
-        return seeds
-
     # Check unique seed generation
-    for initial_seed in range(num_tests):
-        seeds = generate_seeds(initial_seed, num_seeds)
-        assert len(seeds) == num_seeds
-        assert len(seeds) == len(set(seeds))
-        if prev_seeds:
-            assert set(prev_seeds) != set(seeds)
-        prev_seeds = seeds.copy()
+    if initial_seed == 0:
+        with pytest.raises(ValueError) as e:
+            seeds0 = generate_seeds(initial_seed - 1, num_seeds)
+        return
+    else:
+        seeds0 = generate_seeds(initial_seed - 1, num_seeds)
+    seeds1 = generate_seeds(initial_seed, num_seeds)
+    assert len(seeds1) == num_seeds
+    assert len(seeds1) == len(set(seeds1))
+    assert len(set(seeds0).intersection(set(seeds1))) == 0
 
     # Check deterministic seed generation
-    initial_seed = 0
-    seeds_1 = generate_seeds(initial_seed, num_seeds)
-    seeds_2 = generate_seeds(initial_seed, num_seeds)
-    assert seeds_1 == seeds_2
+    seeds0 = generate_seeds(initial_seed, num_seeds)
+    seeds1 = generate_seeds(initial_seed, num_seeds)
+    assert seeds0 == seeds1
 
 
 if __name__ == "__main__":

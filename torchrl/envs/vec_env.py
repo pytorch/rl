@@ -17,7 +17,6 @@ import torch
 from torch import multiprocessing as mp
 
 from torchrl import _check_for_faulty_process
-from torchrl import seed_generator
 from torchrl.data import TensorDict, TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -515,8 +514,8 @@ class SerialEnv(_BatchedEnv):
     @_check_start
     def set_seed(self, seed: int) -> int:
         for i, env in enumerate(self._envs):
-            seed = seed_generator(seed)
-            env.set_seed(seed)
+            new_seed = env.set_seed(seed)
+            seed = new_seed
         return seed
 
     @_check_start
@@ -713,15 +712,13 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def set_seed(self, seed: int) -> int:
         self._seeds = []
-        for i, channel in enumerate(self.parent_channels):
-            seed = seed_generator(seed)
+        for channel in self.parent_channels:
             channel.send(("seed", seed))
             self._seeds.append(seed)
-
-        for channel in self.parent_channels:
-            msg, _ = channel.recv()
+            msg, new_seed = channel.recv()
             if msg != "seeded":
                 raise RuntimeError(f"Expected 'seeded' but received {msg}")
+            seed = new_seed
         return seed
 
     @_check_start
@@ -851,8 +848,8 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before closing")
             # torch.manual_seed(data)
             # np.random.seed(data)
-            final_seed = env.set_seed(data)
-            child_pipe.send(("seeded", final_seed))
+            new_seed = env.set_seed(data)
+            child_pipe.send(("seeded", new_seed))
 
         elif cmd == "init":
             if verbose:
