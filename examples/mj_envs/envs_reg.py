@@ -1,6 +1,6 @@
 from gym.envs.registration import register
 
-from mj_envs.envs.kitchen import CURR_DIR, ENTRY_POINT, MODEL_PATH, CONFIG_PATH
+from mj_envs.envs.relay_kitchen import CURR_DIR, ENTRY_POINT, MODEL_PATH, CONFIG_PATH
 
 state_obs_keys_wt = {"robot_jnt": 1.0, "objs_jnt": 1.0, "obj_goal": 1.0, "end_effector": 1.0}
 visual_obs_keys_wt = {"robot_jnt": 1.0,
