@@ -134,6 +134,10 @@ class TensorDictSequence(TensorDictModule):
             for i, out_key in enumerate(out_keys)
             if out_key not in out_keys[i + 1 :]
         ]
+        # we sometimes use in_keys to select keys of a tensordict that are
+        # necessary to run a TensorDictModule. If a key is an intermediary in
+        # the chain, there is not reason why it should belong to the input
+        # TensorDict.
         in_keys = [in_key for in_key in in_keys if in_key not in out_keys]
 
         super().__init__(

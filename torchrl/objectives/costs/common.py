@@ -117,7 +117,9 @@ class _LossModule(nn.Module):
                 else:
                     p_out = p.repeat(expand_dim, *[1 for _ in p.shape])
                     p_out = nn.Parameter(
-                        p_out.uniform_(p_out.min().item(), p_out.max().item()).requires_grad_()
+                        p_out.uniform_(
+                            p_out.min().item(), p_out.max().item()
+                        ).requires_grad_()
                     )
                 params[i] = p_out
 

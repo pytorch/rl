@@ -329,6 +329,10 @@ class REDQLoss(_LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
+
+        # let's make sure that actor_network has `return_log_prob` set to True
+        self.actor_network.return_log_prob = True
+
         self.delay_qvalue = delay_qvalue
         self.convert_to_functional(
             qvalue_network,
@@ -367,7 +371,7 @@ class REDQLoss(_LossModule):
             )
 
         if target_entropy == "auto":
-            if actor_network.spec is None:
+            if actor_network.spec["action"] is None:
                 raise RuntimeError(
                     "Cannot infer the dimensionality of the action. Consider providing "
                     "the target entropy explicitely or provide the spec of the "
@@ -474,7 +478,11 @@ class REDQLoss(_LossModule):
             tensordict_out=TensorDict({}, tensordict_qval.shape),
             params=qvalue_params,
             buffers=qvalue_buffers,
-            vmap=(0, 0, 0, 0),
+            vmap=(
+                0,
+                0,
+                0,
+            ),  # TensorDict vmap will take care of expanding the tuple as needed
         )
 
         state_action_value = tensordict_qval.get("state_action_value").squeeze(-1)
