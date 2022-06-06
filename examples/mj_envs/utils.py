@@ -13,14 +13,7 @@ from torchrl.envs import GymEnv
 from torchrl.envs.libs.gym import _has_gym, _gym_to_torchrl_spec_transform
 from mj_envs.envs.relay_kitchen import *
 from mj_envs.envs.env_variants import register_env_variant
-
-
-# register_env_variant(
-#     env_id="kitchen_micro_open-v3",
-#     variants={"obs_keys_wt": {"robot_jnt", "robot_vel"}},
-#     variant_id="visual_kitchen_micro_open-v3",
-#     silent=False,
-# )
+from envs_reg import *
 
 
 class MJEnv(GymEnv):
