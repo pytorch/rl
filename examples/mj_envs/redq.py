@@ -118,15 +118,23 @@ def main(args):
     stats = None
     if not args.vecnorm and args.norm_stats:
         proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
-        stats = get_stats_random_rollout(
-            args, proof_env, key="next_pixels" if args.from_pixels else None
-        )
+        if args.from_pixels:
+            stats_pixels = get_stats_random_rollout(
+                args, proof_env,
+                key="next_pixels",
+            )
+        if not args.from_pixels or args.include_state:
+            stats_state = get_stats_random_rollout(
+                args, proof_env,
+                key="next_observation",
+            )
+
         # make sure proof_env is closed
         proof_env.close()
     elif args.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
     proof_env = transformed_env_constructor(
-        args=args, use_env_creator=False, stats=stats
+        args=args, use_env_creator=False, stats_pixels=stats_pixels, stats_state=stats_state,
     )()
     if args.from_pixels:
         if args.shared_mapping:
@@ -182,7 +190,7 @@ def main(args):
     proof_env.close()
     create_env_fn = parallel_env_constructor(
         args=args,
-        stats=stats,
+        stats_pixels=stats_pixels, stats_state=stats_state,
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )

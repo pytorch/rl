@@ -35,7 +35,8 @@ def make_env_transforms(
     video_tag,
     writer,
     env_name,
-    stats,
+    stats_pixels,
+    stats_states,
     norm_obs_only,
     env_library,
     action_dim_gsde,
@@ -79,10 +80,10 @@ def make_env_transforms(
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(first_dim=batch_dims))
         env.append_transform(CatFrames(N=args.catframes, keys=["next_pixels"]))
-        if stats is None:
+        if stats_pixels is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
         else:
-            obs_stats = stats
+            obs_stats = stats_pixels
         obs_stats["standard_normal"] = True
         env.append_transform(ObservationNorm(**obs_stats, keys=["next_pixels"]))
     if norm_rewards:
@@ -111,12 +112,13 @@ def make_env_transforms(
         env.append_transform(CatTensors(keys=selected_keys, out_key=out_key))
 
         if not vecnorm:
-            if stats is None:
-                _stats = {"loc": 0.0, "scale": 1.0}
+            if stats_states is None:
+                obs_stats = {"loc": 0.0, "scale": 1.0}
             else:
-                _stats = stats
+                obs_stats = stats_states
+            obs_stats["standard_normal"] = True
             env.append_transform(
-                ObservationNorm(**_stats, keys=[out_key], standard_normal=True)
+                ObservationNorm(**obs_stats, keys=[out_key])
             )
         else:
             env.append_transform(
@@ -150,7 +152,8 @@ def transformed_env_constructor(
     args: Namespace,
     video_tag: str = "",
     writer: Optional["SummaryWriter"] = None,
-    stats: Optional[dict] = None,
+    stats_pixels: Optional[dict] = None,
+    stats_state: Optional[dict] = None,
     norm_obs_only: bool = False,
     use_env_creator: bool = True,
     custom_env_maker: Optional[Callable] = None,
@@ -167,7 +170,8 @@ def transformed_env_constructor(
         args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
         video_tag (str, optional): video tag to be passed to the SummaryWriter object
         writer (SummaryWriter, optional): tensorboard writer associated with the script
-        stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
+        stats_pixels (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform (pixels)
+        stats_state (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform (state)
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.
         use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,
@@ -226,7 +230,8 @@ def transformed_env_constructor(
             video_tag,
             writer,
             env_name,
-            stats,
+            stats_pixels,
+            stats_state,
             norm_obs_only,
             env_library,
             action_dim_gsde,
