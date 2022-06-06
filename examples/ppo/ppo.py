@@ -10,64 +10,67 @@ from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.record import VideoRecorder
 
-try:
-    import configargparse as argparse
-
-    _configargparse = True
-except ImportError:
-    import argparse
-
-    _configargparse = False
+import hydra
+from hydra.core.config_store import ConfigStore
+from omegaconf import DictConfig
+import dataclasses
 
 import torch.cuda
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,
-    parser_collector_args_onpolicy,
+    OnPolicyCollectorConfig,
 )
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     get_stats_random_rollout,
     parallel_env_constructor,
-    parser_env_args,
     transformed_env_constructor,
+    EnvConfig, 
 )
-from torchrl.trainers.helpers.losses import make_ppo_loss, parser_loss_args_ppo
+from torchrl.trainers.helpers.losses import make_ppo_loss, PPOLossConfig
 from torchrl.trainers.helpers.models import (
     make_ppo_model,
-    parser_model_args_continuous,
+    ContinuousModelConfig,
 )
-from torchrl.trainers.helpers.recorder import parser_recorder_args
-from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
+from torchrl.trainers.helpers.recorder import RecorderConfig
+from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
 
 
-def make_args():
-    parser = argparse.ArgumentParser()
-    if _configargparse:
-        parser.add_argument(
-            "-c",
-            "--config",
-            required=True,
-            is_config_file=True,
-            help="config file path",
-        )
-    parser_trainer_args(parser)
-    parser_collector_args_onpolicy(parser)
-    parser_env_args(parser)
-    parser_loss_args_ppo(parser)
-    parser_model_args_continuous(parser, "PPO")
+# def make_args():
+#     parser = argparse.ArgumentParser()
+#     if _configargparse:
+#         parser.add_argument(
+#             "-c",
+#             "--config",
+#             required=True,
+#             is_config_file=True,
+#             help="config file path",
+#         )
+#     parser_trainer_args(parser)
+#     parser_collector_args_onpolicy(parser)
+#     parser_env_args(parser)
+#     parser_loss_args_ppo(parser)
+#     parser_model_args_continuous(parser, "PPO")
 
-    parser_recorder_args(parser)
-    return parser
-
-
-parser = make_args()
+#     parser_recorder_args(parser)
+#     return parser
 
 
-def main(args):
+config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
+    (TrainerConfig, OnPolicyCollectorConfig, EnvConfig, PPOLossConfig, ContinuousModelConfig, RecorderConfig) 
+    for config_field in dataclasses.fields(config_cls) 
+]
+
+Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+cs = ConfigStore.instance()
+cs.store(name="config", node=Config)
+
+@hydra.main(config_name="config")
+def main(cfg: DictConfig):
     from torch.utils.tensorboard import SummaryWriter
 
-    args = correct_for_frame_skip(args)
+    args = correct_for_frame_skip(cfg)
 
     if not isinstance(args.reward_scaling, float):
         args.reward_scaling = 1.0
@@ -191,5 +194,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
-    main(args)
+    main()

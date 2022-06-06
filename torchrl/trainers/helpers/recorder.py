@@ -5,8 +5,6 @@
 
 from dataclasses import dataclass
 
-__all__ = ["parser_recorder_args"]
-
 @dataclass
 class RecorderConfig: 
     record_video: bool = False

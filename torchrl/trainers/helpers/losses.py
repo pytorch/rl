@@ -3,8 +3,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
+
+from omegaconf import DictConfig
 
 __all__ = [
     "make_sac_loss",
@@ -13,8 +14,6 @@ __all__ = [
     "make_target_updater",
     "make_ppo_loss",
     "make_redq_loss",
-    "parser_loss_args",
-    "parser_loss_args_ppo",
 ]
 
 from typing import Optional, Tuple
@@ -40,7 +39,7 @@ from torchrl.objectives.returns.advantages import GAE
 
 
 def make_target_updater(
-    args: Namespace, loss_module: _LossModule
+    args: DictConfig, loss_module: _LossModule
 ) -> Optional[_TargetNetUpdate]:
     """Builds a target network weight update object."""
     if args.loss == "double":

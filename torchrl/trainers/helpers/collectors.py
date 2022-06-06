@@ -3,9 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Type, Union, Dict
+
+from omegaconf import DictConfig
 
 from torchrl.collectors.collectors import (
     _DataCollector,
@@ -22,8 +23,6 @@ __all__ = [
     "sync_async_collector",
     "make_collector_offpolicy",
     "make_collector_onpolicy",
-    "parser_collector_args_offpolicy",
-    "parser_collector_args_onpolicy",
 ]
 
 from torchrl.envs.common import _EnvClass
@@ -242,7 +241,7 @@ def _make_collector(
 def make_collector_offpolicy(
     make_env: Callable[[], _EnvClass],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    args: Namespace,
+    args: DictConfig,
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     """
@@ -307,7 +306,7 @@ def make_collector_offpolicy(
 def make_collector_onpolicy(
     make_env: Callable[[], _EnvClass],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    args: Namespace,
+    args: DictConfig,
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     collector_helper = sync_sync_collector
@@ -350,7 +349,7 @@ def make_collector_onpolicy(
 
 @dataclass 
 class OnPolicyCollectorConfig: 
-    collector_devices: list = field(default_factory=lambda: ['cpu'])
+    collector_devices: List = field(default_factory=lambda: ['cpu'])
     # device on which the data collector should store the trajectories to be passed to this script.
     # If the collector device differs from the policy device (cuda:0 if available), then the 
     # weights of the collector policy are synchronized with collector.update_policy_weights_().
@@ -382,7 +381,7 @@ class OnPolicyCollectorConfig:
     # for each of these parallel wrappers. If env_per_collector=num_workers, no parallel wrapper is created
     seed: int = 42
     # seed used for the environment, pytorch and numpy.
-    exploration_mode: str = None
+    exploration_mode: str = ""
     # exploration mode of the data collector. 
     async_collection: bool = False
     # whether data collection should be done asynchrously. Asynchrounous data collection means 
@@ -391,51 +390,9 @@ class OnPolicyCollectorConfig:
     # synchronously, data collection and optimization will occur iteratively, not concurrently.
 
 @dataclass
-class OffPolicyCollectorConfig: 
+class OffPolicyCollectorConfig(OnPolicyCollectorConfig): 
     multi_step: bool = False
     # whether or not multi-step rewards should be used.
     n_steps_return: int = 3
     # If multi_step is set to True, this value defines the number of steps to look ahead for the reward computation.
     init_random_frames: int = 50000
-
-# def parser_collector_args_offpolicy(parser: ArgumentParser) -> ArgumentParser:
-#     """
-#     Populates the argument parser to build a data collector for on-policy algorithms (DQN, DDPG, SAC, REDQ).
-
-#     Args:
-#         parser (ArgumentParser): parser to be populated.
-
-#     """
-#     parser = _parser_collector_args(parser)
-#     parser.add_argument(
-#         "--multi_step",
-#         "--multi-step",
-#         dest="multi_step",
-#         action="store_true",
-#         help="whether or not multi-step rewards should be used.",
-#     )
-#     parser.add_argument(
-#         "--n_steps_return",
-#         "--n-steps-return",
-#         type=int,
-#         default=3,
-#         help="If multi_step is set to True, this value defines the number of steps to look ahead for the "
-#         "reward computation.",
-#     )
-#     parser.add_argument(
-#         "--init_random_frames",
-#         "--init-random-frames",
-#         type=int,
-#         default=50000,
-#         help="Initial number of random frames used before the policy is being used. Default=5000.",
-#     )
-#     return parser
-
-# def parser_collector_args_onpolicy(parser: ArgumentParser) -> ArgumentParser:
-#     """
-#     Populates the argument parser to build a data collector for on-policy algorithms (PPO).
-#     Args:
-#         parser (ArgumentParser): parser to be populated.
-#     """
-#     parser = _parser_collector_args(parser)
-#     return parser

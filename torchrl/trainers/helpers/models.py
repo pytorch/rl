@@ -3,11 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
 from importlib_metadata import distribution
+from omegaconf import DictConfig
 
 import torch
 from torch import nn, distributions as d
@@ -74,13 +74,11 @@ __all__ = [
     "make_ppo_model",
     "make_sac_model",
     "make_redq_model",
-    "parser_model_args_continuous",
-    "parser_model_args_discrete",
 ]
 
 
 def make_dqn_actor(
-    proof_environment: _EnvClass, args: Namespace, device: torch.device
+    proof_environment: _EnvClass, args: DictConfig, device: torch.device
 ) -> Actor:
     """
     DQN constructor helper function.
@@ -198,7 +196,7 @@ def make_dqn_actor(
 
 def make_ddpg_actor(
     proof_environment: _EnvClass,
-    args: Namespace,
+    args: DictConfig,
     actor_net_kwargs: Optional[dict] = None,
     value_net_kwargs: Optional[dict] = None,
     device: DEVICE_TYPING = "cpu",
@@ -394,7 +392,7 @@ def make_ddpg_actor(
 
 def make_ppo_model(
     proof_environment: _EnvClass,
-    args: Namespace,
+    args: DictConfig,
     device: DEVICE_TYPING,
     in_keys_actor: Optional[Sequence[str]] = None,
     observation_key=None,
@@ -692,7 +690,7 @@ def make_ppo_model(
 
 def make_sac_model(
     proof_environment: _EnvClass,
-    args: Namespace,
+    args: DictConfig,
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -924,7 +922,7 @@ def make_sac_model(
 
 def make_redq_model(
     proof_environment: _EnvClass,
-    args: Namespace,
+    args: DictConfig,
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -1155,7 +1153,7 @@ def make_redq_model(
     return model
 
 @dataclass 
-class ContinuousModelConfig: 
+class ContinuousModelConfig: #TODO: conditional statements for this? 
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
     noisy: bool = False

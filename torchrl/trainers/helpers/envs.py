@@ -3,9 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Optional, Union
+
+from omegaconf import DictConfig
 
 import torch
 
@@ -28,6 +29,7 @@ from torchrl.envs.transforms import (
     CenterCrop,
 )
 from torchrl.envs.transforms.transforms import gSDENoise, FlattenObservation
+from torchrl.modules.models.models import DuelingCnnDQNet
 from torchrl.record.recorder import VideoRecorder
 
 __all__ = [
@@ -35,7 +37,6 @@ __all__ = [
     "transformed_env_constructor",
     "parallel_env_constructor",
     "get_stats_random_rollout",
-    "parser_env_args",
 ]
 
 LIBS = {
@@ -45,7 +46,7 @@ LIBS = {
 }
 
 
-def correct_for_frame_skip(args: Namespace) -> Namespace:
+def correct_for_frame_skip(args: DictConfig) -> DictConfig:
     """
     Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the
     frame_skip.
@@ -196,7 +197,7 @@ def make_env_transforms(
 
 
 def transformed_env_constructor(
-    args: Namespace,
+    args: DictConfig,
     video_tag: str = "",
     writer: Optional["SummaryWriter"] = None,
     stats: Optional[dict] = None,
@@ -289,7 +290,7 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(
-    args: Namespace, **kwargs
+    args: DictConfig, **kwargs
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
@@ -327,7 +328,7 @@ def parallel_env_constructor(
 
 
 def get_stats_random_rollout(
-    args: Namespace, proof_environment: _EnvClass, key: Optional[str] = None
+    args: DictConfig, proof_environment: _EnvClass, key: Optional[str] = None
 ):
     print("computing state stats")
     if not hasattr(args, "init_env_steps"):
@@ -393,13 +394,13 @@ class EnvConfig:
     # Normalizes the environment observation and reward outputs with the running statistics obtained across processes.
     norm_rewards: bool = False
     # If True, rewards will be normalized on the fly. This may interfere with SAC update rule and should be used cautiously.
-    no_norm_stats: bool = True
+    norm_stats: bool = True
     # Deactivates the normalization based on random collection of data.
     noops: int = 0
     # number of random steps to do after reset. Default is 0
     catframes: int = 0
     # Number of frames to concatenate through time. Default is 0 (do not use CatFrames).
-    center_crop: int = []
+    center_crop: int = 0
     # center crop size.
     no_grayscale: bool = True
     # Disables grayscale transform.

@@ -3,11 +3,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import argparse
-from argparse import ArgumentParser, Namespace
+from hydra import compose, initialize
+from hydra.core.config_store import ConfigStore
 from dataclasses import dataclass
 from typing import Optional, Union, List
 from warnings import warn
+
+from omegaconf import DictConfig, open_dict
 
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -39,9 +41,41 @@ OPTIMIZERS = {
 
 __all__ = [
     "make_trainer",
-    "parser_trainer_args",
 ]
 
+@dataclass
+class TrainerConfig: 
+    optim_steps_per_batch: int = 500 
+    # Number of optimization steps in between two collection of data. See frames_per_batch below. 
+    optimizer: str = "adam"
+    # Optimizer to be used.
+    lr_scheduler: str = "cosine"
+    # LR scheduler.
+    selected_keys: Optional[List] = None
+    # a list of strings that indicate the data that should be kept from the data collector. Since storing and 
+    # retrieving information from the replay buffer does not come for free, limiting the amount of data
+    # passed to it can improve the algorithm performance.
+    batch_size: int = 256
+    # batch size of the TensorDict retrieved from the replay buffer. Default=256.
+    log_interval: int = 10000
+    # logging interval, in terms of optimization steps. Default=10000.
+    lr: float = 3e-4
+    # Learning rate used for the optimizer. Default=3e-4.
+    weight_decay: float = 0.0
+    # Weight-decay to be used with the optimizer. Default=0.0.
+    clip_norm: float = 1000.0
+    # value at which the total gradient norm / single derivative should be clipped. Default=1000.0
+    clip_grad_norm: bool = False
+    # if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient values will be clipped to the desired threshold.
+    normalize_rewards_online: bool = False
+    # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
+    normalize_rewards_online_scale: float = 1.0
+    # Final value of the normalized rewards.
+    sub_traj_len: int = -1
+    # length of the trajectories that sub-samples must have in online settings.
+
+cs = ConfigStore.instance()
+cs.store(name="trainer", node=TrainerConfig)
 
 def make_trainer(
     collector: _DataCollector,
@@ -53,7 +87,7 @@ def make_trainer(
     ] = None,
     replay_buffer: Optional[ReplayBuffer] = None,
     writer: Optional["SummaryWriter"] = None,
-    args: Optional[Namespace] = None,
+    args: DictConfig = None,
 ) -> Trainer:
     """Creates a Trainer instance given its constituents.
 
@@ -112,12 +146,13 @@ def make_trainer(
             "Getting default args for the trainer. "
             "This should be only used for debugging."
         )
-        parser = parser_trainer_args(argparse.ArgumentParser())
-        parser.add_argument("--frame_skip", default=1)
-        parser.add_argument("--total_frames", default=1000)
-        parser.add_argument("--record_frames", default=10)
-        parser.add_argument("--record_interval", default=10)
-        args = parser.parse_args([])
+        with initialize(config_path="."): 
+            args = compose(config_name="trainer")
+            with open_dict(args):
+                args.frame_skip = 1
+                args.total_frames = 1000
+                args.record_frames = 10
+                args.record_interval = 10
 
     optimizer_kwargs = {} if args.optimizer != "adam" else {"betas": (0.0, 0.9)}
     optimizer = OPTIMIZERS[args.optimizer](
@@ -241,34 +276,3 @@ def make_trainer(
     trainer.register_op("pre_steps_log", CountFramesLog(frame_skip=args.frame_skip))
 
     return trainer
-
-@dataclass
-class TrainConfig: 
-    optim_steps_per_batch: int = 500 
-    # Number of optimization steps in between two collection of data. See frames_per_batch below. 
-    optimizer: str = "adam"
-    # Optimizer to be used.
-    lr_scheduler: str = "cosine"
-    # LR scheduler.
-    selected_keys: Optional[List] = None
-    # a list of strings that indicate the data that should be kept from the data collector. Since storing and 
-    # retrieving information from the replay buffer does not come for free, limiting the amount of data
-    # passed to it can improve the algorithm performance.
-    batch_size: int = 256
-    # batch size of the TensorDict retrieved from the replay buffer. Default=256.
-    log_interval: int = 10000
-    # logging interval, in terms of optimization steps. Default=10000.
-    lr: float = 3e-4
-    # Learning rate used for the optimizer. Default=3e-4.
-    weight_decay: float = 0.0
-    # Weight-decay to be used with the optimizer. Default=0.0.
-    clip_norm: float = 1000.0
-    # value at which the total gradient norm / single derivative should be clipped. Default=1000.0
-    clip_grad_norm: bool = False
-    # if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient values will be clipped to the desired threshold.
-    normalize_rewards_online: bool = False
-    # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
-    normalize_rewards_online_scale: float = 1.0
-    # Final value of the normalized rewards.
-    sub_traj_len: int = -1
-    # length of the trajectories that sub-samples must have in online settings.
