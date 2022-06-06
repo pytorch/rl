@@ -43,10 +43,12 @@ from torchrl.objectives import (
     KLPENPPOLoss,
 )
 from torchrl.objectives.costs.common import _LossModule
-from torchrl.objectives.costs.redq import (
-    REDQLoss,
+from torchrl.objectives.costs.deprecated import (
     REDQLoss_deprecated,
     DoubleREDQLoss_deprecated,
+)
+from torchrl.objectives.costs.redq import (
+    REDQLoss,
 )
 from torchrl.objectives.costs.reinforce import ReinforceLoss
 from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
@@ -1037,6 +1039,10 @@ class TestREDQ:
             target_entropy=0.0,
         )
 
+        if delay_qvalue:
+            target_updater = SoftUpdate(loss_fn)
+            target_updater.init_()
+
         with _check_td_steady(td):
             loss = loss_fn(td)
 
@@ -1105,6 +1111,10 @@ class TestREDQ:
         # check that params of the original actor are those of the loss_fn
         for p in actor.parameters():
             assert p in set(loss_fn.parameters())
+
+        if delay_qvalue:
+            # test that updating with target updater resets the targets of qvalue to 0
+            target_updater.step()
 
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])

@@ -178,7 +178,7 @@ class _TargetNetUpdate:
             for p_source, p_target in zip(source, target):
                 if p_target.requires_grad:
                     raise RuntimeError("the target parameter is part of a graph.")
-                if isinstance(p_source, nn.Parameter):
+                if p_source.is_leaf:
                     self._step(p_source, p_target)
                 else:
                     p_target.copy_(p_source)
