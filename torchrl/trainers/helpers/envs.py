@@ -89,6 +89,7 @@ def make_env_transforms(
     env_library,
     action_dim_gsde,
     state_dim_gsde,
+    batch_dims=0,
 ):
     env = TransformedEnv(env)
 
@@ -125,7 +126,7 @@ def make_env_transforms(
         env.append_transform(Resize(84, 84))
         if args.grayscale:
             env.append_transform(GrayScale())
-        env.append_transform(FlattenObservation())
+        env.append_transform(FlattenObservation(first_dim=batch_dims))
         env.append_transform(CatFrames(N=args.catframes, keys=["next_pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
@@ -205,6 +206,7 @@ def transformed_env_constructor(
     return_transformed_envs: bool = True,
     action_dim_gsde: Optional[int] = None,
     state_dim_gsde: Optional[int] = None,
+    batch_dims: Optional[int] = 0,
 ) -> Union[Callable, EnvCreator]:
     """
     Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
@@ -232,6 +234,9 @@ def transformed_env_constructor(
             Make sure this is indicated in environment executed in parallel.
         state_dim_gsde: if gSDE is used, this can present the state dim to initialize the noise.
             Make sure this is indicated in environment executed in parallel.
+        batch_dims (int, optional): number of dimensions of a batch of data. If a single env is
+            used, it should be 0 (default). If multiple envs are being transformed in parallel,
+            it should be set to 1 (or the number of dims of the batch).
     """
 
     def make_transformed_env(**kwargs) -> TransformedEnv:
@@ -274,6 +279,7 @@ def transformed_env_constructor(
             env_library,
             action_dim_gsde,
             state_dim_gsde,
+            batch_dims=batch_dims,
         )
 
     if use_env_creator:
@@ -307,7 +313,12 @@ def parallel_env_constructor(
     )
     if batch_transform:
         kwargs.update(
-            {"args": args, "use_env_creator": False, "custom_env": parallel_env}
+            {
+                "args": args,
+                "use_env_creator": False,
+                "custom_env": parallel_env,
+                "batch_dims": 1,
+            }
         )
         env = transformed_env_constructor(**kwargs)()
         return env
