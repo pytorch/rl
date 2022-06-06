@@ -21,14 +21,24 @@ from torchrl.modules import (
     TensorDictModule,
     NormalParamWrapper,
     MLP,
-    ActorCriticOperator, ConvNet,
+    ConvNet,
+    ActorValueOperator,
 )
 from torchrl.modules.models.models import ddpg_init_last_layer
 from torchrl.modules.models.utils import SquashDims
 from torchrl.trainers.helpers.models import ACTIVATIONS
 
+
 class StatePixelModule(nn.Module):
-    def __init__(self, out_dim, hidden_dim=256, cnn_kwargs=None, mlp_kwargs=None, common_mlp_kwargs=None, use_avg_pooling=False):
+    def __init__(
+        self,
+        out_dim,
+        hidden_dim=256,
+        cnn_kwargs=None,
+        mlp_kwargs=None,
+        common_mlp_kwargs=None,
+        use_avg_pooling=False,
+    ):
         super().__init__()
         out_dim_cnn = hidden_dim if use_avg_pooling else 64
         conv_net_default_kwargs = {
@@ -63,7 +73,6 @@ class StatePixelModule(nn.Module):
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.mlp = MLP(**mlp_net_default_kwargs)
 
-
         common_mlp_net_default_kwargs = {
             "in_features": None,
             "out_features": out_dim,
@@ -71,13 +80,20 @@ class StatePixelModule(nn.Module):
             "activation_class": nn.ELU,
             "bias_last_layer": True,
         }
-        common_mlp_net_kwargs = common_mlp_kwargs if common_mlp_kwargs is not None else dict()
+        common_mlp_net_kwargs = (
+            common_mlp_kwargs if common_mlp_kwargs is not None else dict()
+        )
         common_mlp_net_default_kwargs.update(common_mlp_net_kwargs)
         self.common_mlp = MLP(**common_mlp_net_default_kwargs)
 
         ddpg_init_last_layer(self.common_mlp[-1], 6e-4)
 
-    def forward(self, pixels: torch.Tensor, observation_vector: torch.Tensor, *other: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        pixels: torch.Tensor,
+        observation_vector: torch.Tensor,
+        *other: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         hidden_pixels = self.convnet(pixels)
         hidden_state = self.mlp(observation_vector)
         if self.use_avg_pooling:
@@ -328,7 +344,7 @@ def make_redq_model_state_pixels(
     }
     value_net_default_kwargs.update(qvalue_net_kwargs)
     qvalue_net = StatePixelModule(1, **value_net_default_kwargs)
-    in_keys_qvalue = in_keys_actor+ ["action"]
+    in_keys_qvalue = in_keys_actor + ["action"]
 
     dist_class = TanhNormal
     dist_kwargs = {
@@ -407,18 +423,6 @@ def make_redq_model_pixels_shared(
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = DdpgCnnActor(out_features_actor, **actor_net_kwargs_default)
 
-    value_net_default_kwargs = {
-        "mlp_net_kwargs": {
-            "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
-        },
-        "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
-        "use_avg_pooling": False,
-    }
-    value_net_default_kwargs.update(qvalue_net_kwargs)
-
-    qvalue_net = DdpgCnnQNet(**value_net_default_kwargs)
-
     # a bit of surgery
     common_mapper = actor_net.convnet
     common_net = TensorDictModule(
@@ -426,6 +430,8 @@ def make_redq_model_pixels_shared(
         in_keys=["pixels"],
         out_keys=["hidden"],
     )
+
+    # actor
     actor_mapper = NormalParamWrapper(actor_net.mlp)
     dist_class = TanhNormal
     dist_kwargs = {
@@ -445,13 +451,26 @@ def make_redq_model_pixels_shared(
         default_interaction_mode="random",
         return_log_prob=True,
     )
+
+    # qvalue
+    value_net_default_kwargs = {
+        "mlp_net_kwargs": {
+            "layer_class": linear_layer_class,
+            "activation_class": ACTIVATIONS[args.activation],
+        },
+        "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        "use_avg_pooling": False,
+    }
+    value_net_default_kwargs.update(qvalue_net_kwargs)
+
+    qvalue_net = DdpgCnnQNet(**value_net_default_kwargs)
     qvalue_mapper = qvalue_net.mlp
     qvalue_subnet = ValueOperator(
         qvalue_mapper,
         in_keys=["hidden", "action"],
     )
 
-    model = ActorCriticOperator(
+    model = ActorValueOperator(
         common_net,
         actor_subnet,
         qvalue_subnet,

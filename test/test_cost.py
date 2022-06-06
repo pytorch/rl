@@ -31,7 +31,6 @@ from torchrl.modules.tensordict_module.actors import (
     Actor,
     ProbabilisticActor,
     ActorValueOperator,
-    ActorCriticOperator,
 )
 from torchrl.objectives import (
     DQNLoss,
@@ -889,7 +888,9 @@ class TestREDQ:
             return_log_prob=True,
         )
         qvalue_subnet = ValueOperator(ValueClass(), in_keys=["hidden", "action"])
-        model = ActorCriticOperator(common, actor_subnet, qvalue_subnet)
+        # although ActorCriticOperator would be suited here, actions are computed
+        # before we call the qvalue operator: we should not resample them.
+        model = ActorValueOperator(common, actor_subnet, qvalue_subnet)
         return model.to(device)
 
     def _create_mock_data_redq(
@@ -1027,7 +1028,7 @@ class TestREDQ:
 
         actor_critic = self._create_shared_mock_actor_qvalue(device=device)
         actor = actor_critic.get_policy_operator()
-        qvalue = actor_critic.get_critic_operator()
+        qvalue = actor_critic.get_value_operator()
 
         loss_fn = REDQLoss(
             actor_network=actor,
@@ -1105,8 +1106,8 @@ class TestREDQ:
                 counter += 1
                 assert (p == loss_fn._param_maps[p]).all()
                 assert (p == 0).all()
-        assert counter == len(loss_fn._actor_network_params)
-        assert counter == len(loss_fn.actor_network_params)
+        assert counter == 2
+        assert len(loss_fn._actor_network_params) == len(loss_fn.actor_network_params)
 
         # check that params of the original actor are those of the loss_fn
         for p in actor.parameters():
