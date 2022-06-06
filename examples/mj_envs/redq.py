@@ -126,7 +126,7 @@ def main(args):
         if not args.from_pixels or args.include_state:
             stats_state = get_stats_random_rollout(
                 args, proof_env,
-                key="next_observation",
+                key="next_observation_vector",
             )
 
         # make sure proof_env is closed
