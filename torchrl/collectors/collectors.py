@@ -18,12 +18,11 @@ import torch
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
+from torchrl import seed_generator
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
 from .. import _check_for_faulty_process
 from ..modules.tensordict_module import ProbabilisticTensorDictModule
 from .utils import split_trajectories
-
-from torchrl import seed_generator
 
 __all__ = [
     "SyncDataCollector",

@@ -14,6 +14,7 @@ from mocking_classes import (
     DiscreteActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
 )
+from torchrl import seed_generator
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.trainers.helpers import parser_env_args, transformed_env_constructor
@@ -26,8 +27,6 @@ from torchrl.trainers.helpers.models import (
     make_sac_model,
     make_redq_model,
 )
-
-from torchrl import seed_generator
 
 ## these tests aren't truly unitary but setting up a fake env for the
 # purpose of building a model with args is a lot of unstable scaffoldings
@@ -432,6 +431,7 @@ def test_redq_make(device, from_pixels, gsde, exploration):
     proof_environment.close()
     del proof_environment
 
+
 def test_seed_generator():
     num_tests = 5
     num_seeds = 100
@@ -440,7 +440,7 @@ def test_seed_generator():
     # Check unique seed generation
     for initial_seed in range(num_tests):
         generator = seed_generator(initial_seed, num_seeds)
-        seeds = [next(generator) for _ in range(num_seeds)]        
+        seeds = [next(generator) for _ in range(num_seeds)]
         assert len(seeds) == num_seeds
         assert len(seeds) == len(set(seeds))
         if prev_seeds:

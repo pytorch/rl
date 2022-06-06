@@ -16,13 +16,12 @@ import torch
 from torch import multiprocessing as mp
 
 from torchrl import _check_for_faulty_process
+from torchrl import seed_generator
 from torchrl.data import TensorDict, TensorSpec
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvClass, make_tensordict
 from torchrl.envs.env_creator import EnvCreator
-
-from torchrl import seed_generator
 
 __all__ = ["SerialEnv", "ParallelEnv"]
 
