@@ -1605,7 +1605,7 @@ def test_tdlambda(device, gamma, lmbda, N, T):
         )
     )
     + [
-        ["cuda", torch.float, "cuda"],
+        ["cuda", torch.float, "cuda:0"],
         ["double", torch.double, "cpu"],
         [torch.double, torch.double, "cpu"],
         [torch.half, torch.half, "cpu"],
