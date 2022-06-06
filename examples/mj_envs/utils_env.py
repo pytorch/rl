@@ -111,6 +111,11 @@ def make_env_transforms(
         out_key = "next_observation_vector"
         env.append_transform(CatTensors(keys=selected_keys, out_key=out_key))
 
+        if hasattr(args, "catframes") and args.catframes:
+            env.append_transform(
+                CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1)
+            )
+
         if not vecnorm:
             if stats_states is None:
                 obs_stats = {"loc": 0.0, "scale": 1.0}
@@ -131,10 +136,6 @@ def make_env_transforms(
         double_to_float_list.append(out_key)
         env.append_transform(DoubleToFloat(keys=double_to_float_list))
 
-        if hasattr(args, "catframes") and args.catframes:
-            env.append_transform(
-                CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1)
-            )
 
     else:
         env.append_transform(DoubleToFloat(keys=double_to_float_list))
