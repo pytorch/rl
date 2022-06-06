@@ -16,6 +16,7 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
 )
 from torch import nn
+from torchrl import seed_generator
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.collectors.collectors import (
     RandomPolicy,
@@ -28,7 +29,6 @@ from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
-from torchrl import seed_generator
 
 # torch.set_default_dtype(torch.double)
 
@@ -237,10 +237,8 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
     ccollector.shutdown()
 
 
-# @pytest.mark.parametrize("num_env", [3, 1])
-# @pytest.mark.parametrize("env_name", ["conv", "vec"])
-@pytest.mark.parametrize("num_env", [3])
-@pytest.mark.parametrize("env_name", ["vec"])
+@pytest.mark.parametrize("num_env", [3, 1])
+@pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
     if num_env == 1:
 
@@ -252,6 +250,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
     else:
         seed_gen = seed_generator(seed, num_env)
         seed_args = [{"seed": next(seed_gen)} for i in range(num_env)]
+
         def env_fn(seed):
             env = ParallelEnv(
                 num_workers=num_env,
