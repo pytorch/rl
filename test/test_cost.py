@@ -43,10 +43,12 @@ from torchrl.objectives import (
     KLPENPPOLoss,
 )
 from torchrl.objectives.costs.common import _LossModule
-from torchrl.objectives.costs.redq import (
-    REDQLoss,
+from torchrl.objectives.costs.deprecated import (
     REDQLoss_deprecated,
     DoubleREDQLoss_deprecated,
+)
+from torchrl.objectives.costs.redq import (
+    REDQLoss,
 )
 from torchrl.objectives.costs.reinforce import ReinforceLoss
 from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
