@@ -281,7 +281,7 @@ def make_redq_model_pixels_shared(
     qvalue_mapper = qvalue_net.mlp
     qvalue_subnet = ValueOperator(
         qvalue_mapper,
-        in_keys=["hidden"],
+        in_keys=["hidden", "action"],
         out_keys=["state_action_value"],
     )
 
