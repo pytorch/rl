@@ -110,7 +110,9 @@ class _LossModule(nn.Module):
                 compare_against = set()
             for i, p in enumerate(params):
                 if p in compare_against:
-                    p_out = p.expand(expand_dim, *p.shape)
+                    # expanded parameters are 'detached': the parameter will not
+                    # be trained to minimize loss involving this network.
+                    p_out = p.data.expand(expand_dim, *p.shape)
                     # the expanded parameter must be sent to device when to()
                     # is called:
                     self._param_maps[p_out] = p
@@ -272,7 +274,7 @@ class _LossModule(nn.Module):
             for i, param in enumerate(list_of_params):
                 # we replace the param by the expanded form if needs be
                 if param in self._param_maps:
-                    list_of_params[i] = self._param_maps[param].expand_as(param)
+                    list_of_params[i] = self._param_maps[param].data.expand_as(param)
         return out
 
     def cuda(self, device: Optional[Union[int, device]] = None) -> _LossModule:

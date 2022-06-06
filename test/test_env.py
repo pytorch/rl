@@ -37,7 +37,13 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.utils import step_tensordict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
-from torchrl.modules import ActorCriticOperator, TensorDictModule, ValueOperator, Actor
+from torchrl.modules import (
+    ActorCriticOperator,
+    TensorDictModule,
+    ValueOperator,
+    Actor,
+    MLP,
+)
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -356,7 +362,9 @@ class TestParallel:
                 in_keys=["hidden"],
                 out_keys=["action"],
             ),
-            ValueOperator(module=nn.LazyLinear(1), in_keys=["hidden"]),
+            ValueOperator(
+                module=MLP(out_features=1, num_cells=[]), in_keys=["hidden", "action"]
+            ),
         )
 
         td = TensorDict(
