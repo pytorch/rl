@@ -34,9 +34,7 @@ from torchrl.trainers.helpers.collectors import (
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     get_stats_random_rollout,
-    parallel_env_constructor,
     parser_env_args,
-    transformed_env_constructor,
 )
 from torchrl.trainers.helpers.losses import make_redq_loss, parser_loss_args
 from torchrl.trainers.helpers.models import (
@@ -48,6 +46,7 @@ from torchrl.trainers.helpers.replay_buffer import (
     parser_replay_args,
 )
 from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
+from utils_env import transformed_env_constructor, parallel_env_constructor
 from utils_redq import (
     make_redq_model_pixels,
     make_redq_model_pixels_shared,
