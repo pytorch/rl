@@ -313,15 +313,15 @@ def make_redq_model_state_pixels(
 
     out_features_actor = 2 * action_spec.shape[-1]
     actor_net_kwargs_default = {
-        "mlp_net_kwargs": {
+        "mlp_kwargs": {
             "layer_class": linear_layer_class,
             "activation_class": ACTIVATIONS[args.activation],
         },
-        "common_mlp_net_kwargs": {
+        "common_mlp_kwargs": {
             "layer_class": linear_layer_class,
             "activation_class": ACTIVATIONS[args.activation],
         },
-        "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        "cnn_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = StatePixelModule(out_features_actor, **actor_net_kwargs_default)
@@ -332,15 +332,15 @@ def make_redq_model_state_pixels(
     out_keys_actor = ["param", "hidden"]
 
     value_net_default_kwargs = {
-        "mlp_net_kwargs": {
+        "mlp_kwargs": {
             "layer_class": linear_layer_class,
             "activation_class": ACTIVATIONS[args.activation],
         },
-        "common_mlp_net_kwargs": {
+        "common_mlp_kwargs": {
             "layer_class": linear_layer_class,
             "activation_class": ACTIVATIONS[args.activation],
         },
-        "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        "cnn_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
     }
     value_net_default_kwargs.update(qvalue_net_kwargs)
     qvalue_net = StatePixelModule(1, **value_net_default_kwargs)
