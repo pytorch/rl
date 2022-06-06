@@ -15,12 +15,12 @@ from mj_envs.envs.relay_kitchen import *
 from mj_envs.envs.env_variants import register_env_variant
 
 
-register_env_variant(
-    env_id="kitchen_micro_open-v3",
-    variants={"obs_keys_wt": {"robot_jnt", "robot_vel"}},
-    variant_id="visual_kitchen_micro_open-v3",
-    silent=False,
-)
+# register_env_variant(
+#     env_id="kitchen_micro_open-v3",
+#     variants={"obs_keys_wt": {"robot_jnt", "robot_vel"}},
+#     variant_id="visual_kitchen_micro_open-v3",
+#     silent=False,
+# )
 
 
 class MJEnv(GymEnv):
