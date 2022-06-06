@@ -18,7 +18,6 @@ import torch
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
-from torchrl import seed_generator
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
 from .. import _check_for_faulty_process
 from ..modules.tensordict_module import ProbabilisticTensorDictModule
@@ -840,11 +839,9 @@ class _MultiDataCollector(_DataCollector):
 
         """
         _check_for_faulty_process(self.procs)
-        seed_gen = seed_generator(seed, self.num_workers)
         for idx in range(self.num_workers):
-            seed = next(seed_gen)
             self.pipes[idx].send((seed, "seed"))
-            _, msg = self.pipes[idx].recv()
+            seed, msg = self.pipes[idx].recv()
             if msg != "seeded":
                 raise RuntimeError(f"Expected msg='seeded', got {msg}")
         self.reset()
