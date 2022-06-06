@@ -31,6 +31,7 @@ from torchrl.modules.tensordict_module.actors import (
     Actor,
     ProbabilisticActor,
     ActorValueOperator,
+    ActorCriticOperator,
 )
 from torchrl.objectives import (
     DQNLoss,
@@ -398,7 +399,7 @@ class TestDDPG:
         with _check_td_steady(td):
             loss = loss_fn(td)
 
-        # check that loss are independent
+        # check that losses are independent
         for k in loss.keys():
             if not k.startswith("loss"):
                 continue
@@ -636,7 +637,7 @@ class TestSAC:
             loss = loss_fn(td)
         assert loss_fn.priority_key in td.keys()
 
-        # check that loss are independent
+        # check that losses are independent
         for k in loss.keys():
             if not k.startswith("loss"):
                 continue
@@ -847,6 +848,48 @@ class TestREDQ:
         )
         return qvalue.to(device)
 
+    def _create_shared_mock_actor_qvalue(
+        self, batch=2, obs_dim=3, action_dim=4, hidden_dim=5, device="cpu"
+    ):
+        class CommonClass(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(obs_dim, hidden_dim)
+
+            def forward(self, obs):
+                return self.linear(obs)
+
+        class ActorClass(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = NormalParamWrapper(nn.Linear(hidden_dim, 2 * action_dim))
+
+            def forward(self, hidden):
+                return self.linear(hidden)
+
+        class ValueClass(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(hidden_dim + action_dim, 1)
+
+            def forward(self, hidden, act):
+                return self.linear(torch.cat([hidden, act], -1))
+
+        common = TensorDictModule(
+            CommonClass(), in_keys=["observation"], out_keys=["hidden"]
+        )
+        actor_subnet = ProbabilisticActor(
+            TensorDictModule(
+                ActorClass(), in_keys=["hidden"], out_keys=["loc", "scale"]
+            ),
+            dist_param_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+        )
+        qvalue_subnet = ValueOperator(ValueClass(), in_keys=["hidden", "action"])
+        model = ActorCriticOperator(common, actor_subnet, qvalue_subnet)
+        return model.to(device)
+
     def _create_mock_data_redq(
         self, batch=16, obs_dim=3, action_dim=4, atoms=None, device="cpu"
     ):
@@ -926,7 +969,7 @@ class TestREDQ:
         # check td is left untouched
         assert loss_fn.priority_key in td.keys()
 
-        # check that loss are independent
+        # check that losses are independent
         for k in loss.keys():
             if not k.startswith("loss"):
                 continue
@@ -961,6 +1004,44 @@ class TestREDQ:
             else:
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
+
+        sum([item for _, item in loss.items()]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len(set(p for n, p in named_parameters)) == len(list(named_parameters))
+        assert len(set(p for n, p in named_buffers)) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("delay_qvalue", (True, False))
+    @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_redq_shared(self, delay_qvalue, num_qvalue, device):
+
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_redq(device=device)
+
+        actor_critic = self._create_shared_mock_actor_qvalue(device=device)
+        actor = actor_critic.get_policy_operator()
+        qvalue = actor_critic.get_critic_operator()
+
+        loss_fn = REDQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_qvalue_nets=num_qvalue,
+            gamma=0.9,
+            loss_function="l2",
+            delay_qvalue=delay_qvalue,
+            target_entropy=0.0,
+        )
+
+        with _check_td_steady(td):
+            loss = loss_fn(td)
+
+        # check td is left untouched
+        assert loss_fn.priority_key in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
         named_parameters = list(loss_fn.named_parameters())
