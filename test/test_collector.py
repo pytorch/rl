@@ -277,6 +277,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
     rollout2 = env.rollout(policy=policy, max_steps=20, auto_reset=True)
     assert_allclose_td(rollout1a, rollout1b)
     with pytest.raises(AssertionError):
+        print(rollout1a, rollout1b, rollout2)
         assert_allclose_td(rollout1a, rollout2)
     env.close()
 
