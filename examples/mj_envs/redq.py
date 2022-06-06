@@ -211,7 +211,8 @@ def main(args):
         args,
         video_tag=video_tag,
         norm_obs_only=True,
-        stats=stats,
+        stats_state=stats_state,
+        stats_pixels=stats_pixels,
         writer=writer,
         use_env_creator=False,
     )()
