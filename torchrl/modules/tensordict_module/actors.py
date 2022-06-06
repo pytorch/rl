@@ -225,7 +225,7 @@ class QValueHook:
     Examples:
         >>> import functorch
         >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
-        >>> from torchrl.modules.td_module.actors import QValueHook, Actor
+        >>> from torchrl.modules.tensordict_module.actors import QValueHook, Actor
         >>> from torch import nn
         >>> from torchrl.data import OneHotDiscreteTensorSpec, TensorDict
         >>> import torch, functorch
@@ -672,7 +672,7 @@ class ActorCriticOperator(ActorValueOperator):
     Examples:
         >>> from torchrl.modules.tensordict_module import ProbabilisticActor
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
-        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamWrapper
+        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamWrapper, MLP
         >>> import torch
         >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
@@ -693,46 +693,55 @@ class ActorCriticOperator(ActorValueOperator):
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )
-        >>> module_value = torch.nn.Linear(4, 1)
+        >>> module_value = MLP(in_features=8, out_features=1, num_cells=[])
         >>> td_module_value = ValueOperator(
         ...    module=module_value,
-        ...    in_keys=["hidden"],
+        ...    in_keys=["hidden", "action"],
+        ...    out_keys=["state_action_value"],
         ...    )
         >>> td_module = ActorCriticOperator(td_module_hidden, td_module_action, td_module_value)
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
         >>> td_clone = td_module(td.clone())
         >>> print(td_clone)
         TensorDict(
-            fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
-                state_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
-            shared=False,
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                state_action_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu)
+            device=cpu,
+            is_shared=False)
         >>> td_clone = td_module.get_policy_operator()(td.clone())
         >>> print(td_clone)  # no value
         TensorDict(
-            fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
-            shared=False,
+                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu)
-
+            device=cpu,
+            is_shared=False)
         >>> td_clone = td_module.get_critic_operator()(td.clone())
         >>> print(td_clone)  # no action
         TensorDict(
-            fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
-                state_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
-            shared=False,
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                state_action_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu)
+            device=cpu,
+            is_shared=False)
 
     """
 
@@ -742,6 +751,7 @@ class ActorCriticOperator(ActorValueOperator):
             raise RuntimeError(
                 "Value out_key is state_value, which may lead to errors in downstream usages"
                 "of that module. Consider setting `'state_action_value'` instead."
+                "Make also sure that `'action'` is amongst the input keys of the value network."
             )
 
     def get_critic_operator(self) -> TensorDictModuleWrapper:
