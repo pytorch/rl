@@ -36,7 +36,11 @@ import torch
 
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.metatensor import MetaTensor
-from torchrl.data.tensordict.utils import _getitem_batch_size, _sub_index
+from torchrl.data.tensordict.utils import (
+    _getitem_batch_size,
+    _sub_index,
+    convert_ellipsis_to_idx,
+)
 from torchrl.data.utils import DEVICE_TYPING, expand_as_right, INDEX_TYPING
 
 __all__ = [
@@ -1275,6 +1279,10 @@ dtype=torch.float32)},
             raise RuntimeError(
                 "indexing a tensordict with td.batch_dims==0 is not permitted"
             )
+
+        if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
+            idx = convert_ellipsis_to_idx(idx, self.batch_size)
+
         if return_simple_view and not self.is_memmap():
             return TensorDict(
                 source={key: item[idx] for key, item in self.items()},
@@ -1286,6 +1294,8 @@ dtype=torch.float32)},
         return self.get_sub_tensordict(idx)
 
     def __setitem__(self, index: INDEX_TYPING, value: _TensorDict) -> None:
+        if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
+            index = convert_ellipsis_to_idx(index, self.batch_size)
         if isinstance(index, str):
             self.set(index, value, inplace=False)
         else:
@@ -2809,6 +2819,9 @@ class LazyStackedTensorDict(_TensorDict):
         )
 
     def __getitem__(self, item: INDEX_TYPING) -> _TensorDict:
+        if item is Ellipsis or (isinstance(item, tuple) and Ellipsis in item):
+            item = convert_ellipsis_to_idx(item, self.batch_size)
+
         if isinstance(item, str):
             return self.get(item)
         elif isinstance(item, torch.Tensor) and item.dtype == torch.bool:
@@ -2819,13 +2832,25 @@ class LazyStackedTensorDict(_TensorDict):
         ) and self.stack_dim == 0:
             return self.tensordicts[item]
         elif isinstance(item, (torch.Tensor, list)) and self.stack_dim == 0:
-            return LazyStackedTensorDict(
+            out = LazyStackedTensorDict(
                 *[self.tensordicts[_item] for _item in item],
                 stack_dim=self.stack_dim,
             )
+            return out
+        elif isinstance(item, (torch.Tensor, list)) and self.stack_dim != 0:
+            out = LazyStackedTensorDict(
+                *[tensordict[item] for tensordict in self.tensordicts],
+                stack_dim=self.stack_dim,
+            )
+            return out
         elif isinstance(item, slice) and self.stack_dim == 0:
             return LazyStackedTensorDict(
                 *self.tensordicts[item], stack_dim=self.stack_dim
+            )
+        elif isinstance(item, slice) and self.stack_dim != 0:
+            return LazyStackedTensorDict(
+                *[tensordict[item] for tensordict in self.tensordicts],
+                stack_dim=self.stack_dim,
             )
         elif isinstance(item, (slice, Number)):
             new_stack_dim = (
@@ -2937,7 +2962,7 @@ class LazyStackedTensorDict(_TensorDict):
     def masked_fill_(
         self, mask: torch.Tensor, value: Union[float, bool]
     ) -> _TensorDict:
-        mask_unbind = mask.unique(dim=self.stack_dim)
+        mask_unbind = mask.unbind(dim=self.stack_dim)
         for _mask, td in zip(mask_unbind, self.tensordicts):
             td.masked_fill_(_mask, value)
         return self
@@ -3237,6 +3262,9 @@ class SavedTensorDict(_TensorDict):
         return super().__reduce__(*args, **kwargs)
 
     def __getitem__(self, idx: INDEX_TYPING) -> _TensorDict:
+        if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
+            idx = convert_ellipsis_to_idx(idx, self.batch_size)
+
         if isinstance(idx, str):
             return self.get(idx)
         elif isinstance(idx, Number):
@@ -3576,7 +3604,10 @@ class SqueezedTensorDict(_CustomOpTensorDict):
     def unsqueeze(self, dim: int) -> _TensorDict:
         if dim < 0:
             dim = self.batch_dims + dim + 1
-        if dim == self.inv_op_kwargs.get("dim"):
+        inv_op_dim = self.inv_op_kwargs.get("dim")
+        if inv_op_dim < 0:
+            inv_op_dim = self.batch_dims + inv_op_dim + 1
+        if dim == inv_op_dim:
             return self._source
         return super().unsqueeze(dim)
 

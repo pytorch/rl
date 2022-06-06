@@ -56,6 +56,7 @@ class ReinforceLoss(_LossModule):
                 critic,
                 "critic",
                 create_target_params=self.delay_value,
+                compare_against=list(actor_network.parameters()),
             )
 
         self.advantage_module = advantage_module

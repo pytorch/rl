@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from copy import copy
+from copy import copy, deepcopy
 from typing import List, Iterable, Union, Tuple
 
 import functorch
@@ -134,6 +134,11 @@ class TensorDictSequence(TensorDictModule):
             for i, out_key in enumerate(out_keys)
             if out_key not in out_keys[i + 1 :]
         ]
+        # we sometimes use in_keys to select keys of a tensordict that are
+        # necessary to run a TensorDictModule. If a key is an intermediary in
+        # the chain, there is not reason why it should belong to the input
+        # TensorDict.
+        in_keys = [in_key for in_key in in_keys if in_key not in out_keys]
 
         super().__init__(
             spec=None,
@@ -268,7 +273,7 @@ class TensorDictSequence(TensorDictModule):
                 kwargs[out_key] = spec
         return CompositeSpec(**kwargs)
 
-    def make_functional_with_buffers(self, clone: bool = False):
+    def make_functional_with_buffers(self, clone: bool = True):
         """
         Transforms a stateful module in a functional module and returns its parameters and buffers.
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
@@ -303,7 +308,7 @@ class TensorDictSequence(TensorDictModule):
 
         """
         if clone:
-            self_copy = copy(self)
+            self_copy = deepcopy(self)
             self_copy.module = copy(self_copy.module)
         else:
             self_copy = self
@@ -313,7 +318,7 @@ class TensorDictSequence(TensorDictModule):
             self_copy.module[i], (
                 _params,
                 _buffers,
-            ) = module.make_functional_with_buffers()
+            ) = module.make_functional_with_buffers(clone=True)
             params.extend(_params)
             buffers.extend(_buffers)
         return self_copy, (params, buffers)

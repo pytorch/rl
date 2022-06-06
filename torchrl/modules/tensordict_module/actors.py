@@ -225,7 +225,7 @@ class QValueHook:
     Examples:
         >>> import functorch
         >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
-        >>> from torchrl.modules.td_module.actors import QValueHook, Actor
+        >>> from torchrl.modules.tensordict_module.actors import QValueHook, Actor
         >>> from torch import nn
         >>> from torchrl.data import OneHotDiscreteTensorSpec, TensorDict
         >>> import torch, functorch
@@ -536,9 +536,9 @@ class ActorValueOperator(TensorDictSequence):
         value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
-        >>> from torchrl.modules.td_module.deprec import ProbabilisticActor_deprecated
+        >>> from torchrl.modules.tensordict_module import ProbabilisticActor
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
-        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorValueOperator
+        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorValueOperator, NormalParamWrapper
         >>> import torch
         >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
@@ -549,11 +549,16 @@ class ActorValueOperator(TensorDictSequence):
         ...    out_keys=["hidden"],
         ...    )
         >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
-        >>> module_action = torch.nn.Linear(4, 8)
-        >>> td_module_action = ProbabilisticActor_deprecated(
+        >>> module_action = TensorDictModule(
+        ...     NormalParamWrapper(torch.nn.Linear(4, 8)),
+        ...     in_keys=["hidden"],
+        ...     out_keys=["loc", "scale"],
+        ...     )
+        >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
         ...    spec=spec_action,
-        ...    in_keys=["hidden"],
+        ...    dist_param_keys=["loc", "scale"],
+        ...    out_key_sample=["action"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )
@@ -665,8 +670,9 @@ class ActorCriticOperator(ActorValueOperator):
         value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
-        >>> from torchrl.modules.td_module.deprec import ProbabilisticActor_deprecated        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
-        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator
+        >>> from torchrl.modules.tensordict_module import ProbabilisticActor
+        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
+        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamWrapper, MLP
         >>> import torch
         >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
@@ -677,56 +683,78 @@ class ActorCriticOperator(ActorValueOperator):
         ...    out_keys=["hidden"],
         ...    )
         >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
-        >>> module_action = torch.nn.Linear(4, 8)
-        >>> td_module_action = ProbabilisticActor_deprecated(
+        >>> module_action = NormalParamWrapper(torch.nn.Linear(4, 8))
+        >>> module_action = TensorDictModule(module_action, in_keys=["hidden"], out_keys=["loc", "scale"])
+        >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
         ...    spec=spec_action,
-        ...    in_keys=["hidden"],
+        ...    dist_param_keys=["loc", "scale"],
+        ...    out_key_sample=["action"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )
-        >>> module_value = torch.nn.Linear(4, 1)
+        >>> module_value = MLP(in_features=8, out_features=1, num_cells=[])
         >>> td_module_value = ValueOperator(
         ...    module=module_value,
-        ...    in_keys=["hidden"],
+        ...    in_keys=["hidden", "action"],
+        ...    out_keys=["state_action_value"],
         ...    )
         >>> td_module = ActorCriticOperator(td_module_hidden, td_module_action, td_module_value)
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
         >>> td_clone = td_module(td.clone())
         >>> print(td_clone)
         TensorDict(
-            fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
-                state_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
-            shared=False,
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                state_action_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu)
+            device=cpu,
+            is_shared=False)
         >>> td_clone = td_module.get_policy_operator()(td.clone())
         >>> print(td_clone)  # no value
         TensorDict(
-            fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
-            shared=False,
+                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu)
-
+            device=cpu,
+            is_shared=False)
         >>> td_clone = td_module.get_critic_operator()(td.clone())
         >>> print(td_clone)  # no action
         TensorDict(
-            fields={observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
-                state_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
-            shared=False,
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                state_action_value: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu)
+            device=cpu,
+            is_shared=False)
 
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self[2].out_keys[0] == "state_value":
+            raise RuntimeError(
+                "Value out_key is state_value, which may lead to errors in downstream usages"
+                "of that module. Consider setting `'state_action_value'` instead."
+                "Make also sure that `'action'` is amongst the input keys of the value network."
+                "If you are confident that action should not be used to compute the value, please"
+                "user `ActorValueOperator` instead."
+            )
 
     def get_critic_operator(self) -> TensorDictModuleWrapper:
         """

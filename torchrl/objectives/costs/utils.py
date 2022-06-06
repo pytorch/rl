@@ -178,7 +178,10 @@ class _TargetNetUpdate:
             for p_source, p_target in zip(source, target):
                 if p_target.requires_grad:
                     raise RuntimeError("the target parameter is part of a graph.")
-                self._step(p_source, p_target)
+                if p_source.is_leaf:
+                    self._step(p_source, p_target)
+                else:
+                    p_target.copy_(p_source)
 
     def _step(self, p_source: Tensor, p_target: Tensor) -> None:
         raise NotImplementedError

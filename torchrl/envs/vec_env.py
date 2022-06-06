@@ -10,6 +10,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from logging import warn
 from multiprocessing import connection
+from time import sleep
 from typing import Callable, Optional, Sequence, Union, Any, List
 
 import torch
@@ -745,8 +746,15 @@ class ParallelEnv(_BatchedEnv):
             keys = keys.union(new_keys)
             if cmd_in != "reset_obs":
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
-        if self.shared_tensordict_parent.get("done").any():
-            raise RuntimeError("Envs have just been reset but some are still done")
+        check_count = 0
+        while self.shared_tensordict_parent.get("done").any():
+            if check_count == 4:
+                raise RuntimeError("Envs have just been reset but some are still done")
+            else:
+                check_count += 1
+                # there might be some delay between writing the shared tensordict
+                # and reading the updated value on the main process
+                sleep(0.01)
         return self.shared_tensordict_parent.select(*keys).clone()
 
     def __reduce__(self):

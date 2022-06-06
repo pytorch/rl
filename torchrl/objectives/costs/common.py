@@ -3,9 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from __future__ import annotations
+
 __all__ = ["_LossModule"]
 
-from typing import Iterator, Optional, Tuple
+from typing import Iterator, Optional, Tuple, List, Union
 
 import functorch
 import torch
@@ -25,6 +27,10 @@ class _LossModule(nn.Module):
     Splitting the loss in its component can then be used by the trainer to log the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
     """
+
+    def __init__(self):
+        super().__init__()
+        self._param_maps = dict()
 
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         """It is designed to read an input TensorDict and return another tensordict
@@ -48,6 +54,7 @@ class _LossModule(nn.Module):
         module_name: str,
         expand_dim: Optional[int] = None,
         create_target_params: bool = False,
+        compare_against: Optional[List[Parameter]] = None,
     ) -> None:
         # To make it robust to device casting, we must register list of
         # tensors as lazy calls to `getattr(self, name_of_tensor)`.
@@ -97,21 +104,46 @@ class _LossModule(nn.Module):
         module_buffers = list(module_buffers)
 
         if expand_dim:
+            if compare_against is not None:
+                compare_against = set(compare_against)
+            else:
+                compare_against = set()
             for i, p in enumerate(params):
-                p = p.repeat(expand_dim, *[1 for _ in p.shape])
-                p = nn.Parameter(
-                    p.uniform_(p.min().item(), p.max().item()).requires_grad_()
-                )
-                params[i] = p
+                if p in compare_against:
+                    # expanded parameters are 'detached': the parameter will not
+                    # be trained to minimize loss involving this network.
+                    p_out = p.data.expand(expand_dim, *p.shape)
+                    # the expanded parameter must be sent to device when to()
+                    # is called:
+                    self._param_maps[p_out] = p
+                else:
+                    p_out = p.repeat(expand_dim, *[1 for _ in p.shape])
+                    p_out = nn.Parameter(
+                        p_out.uniform_(
+                            p_out.min().item(), p_out.max().item()
+                        ).requires_grad_()
+                    )
+                params[i] = p_out
 
             for i, b in enumerate(module_buffers):
                 b = b.expand(expand_dim, *b.shape).clone()
                 module_buffers[i] = b
 
-            # delete weights of original model as they do not correspond to the optimized weights
-            network_orig.to("meta")
+            # # delete weights of original model as they do not correspond to the optimized weights
+            # network_orig.to("meta")
 
-        setattr(self, param_name, nn.ParameterList(params))
+        setattr(
+            self,
+            "_" + param_name,
+            nn.ParameterList(
+                [
+                    p
+                    for p in params
+                    if isinstance(p, nn.Parameter) and p not in set(self.parameters())
+                ]
+            ),
+        )
+        setattr(self, param_name, params)
 
         # we register each buffer independently
         for i, p in enumerate(module_buffers):
@@ -229,3 +261,36 @@ class _LossModule(nn.Module):
     def reset(self) -> None:
         # mainly used for PPO with KL target
         pass
+
+    def to(self, *args, **kwargs):
+        # get the names of the parameters to map
+        out = super().to(*args, **kwargs)
+        lists_of_params = {
+            name: value
+            for name, value in self.__dict__.items()
+            if name.endswith("_params") and (type(value) is list)
+        }
+        for attribute_name, list_of_params in lists_of_params.items():
+            for i, param in enumerate(list_of_params):
+                # we replace the param by the expanded form if needs be
+                if param in self._param_maps:
+                    list_of_params[i] = self._param_maps[param].data.expand_as(param)
+        return out
+
+    def cuda(self, device: Optional[Union[int, device]] = None) -> _LossModule:
+        if device is None:
+            return self.to("cuda")
+        else:
+            return self.to(device)
+
+    def double(self) -> _LossModule:
+        return self.to(torch.double)
+
+    def float(self) -> _LossModule:
+        return self.to(torch.float)
+
+    def half(self) -> _LossModule:
+        return self.to(torch.half)
+
+    def cpu(self) -> _LossModule:
+        return self.to(torch.device("cpu"))
