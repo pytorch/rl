@@ -3,13 +3,21 @@ from typing import Optional, Sequence
 
 import torch
 from torch import nn
-
 from torchrl.data import DEVICE_TYPING
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import NoisyLinear, DdpgCnnActor, DdpgCnnQNet, TanhNormal, \
-    ValueOperator, ProbabilisticActor, TensorDictModule, \
-    NormalParamWrapper, MLP, ActorCriticOperator
+from torchrl.modules import (
+    NoisyLinear,
+    DdpgCnnActor,
+    DdpgCnnQNet,
+    TanhNormal,
+    ValueOperator,
+    ProbabilisticActor,
+    TensorDictModule,
+    NormalParamWrapper,
+    MLP,
+    ActorCriticOperator,
+)
 from torchrl.trainers.helpers.models import ACTIVATIONS
 
 
@@ -34,8 +42,6 @@ def make_redq_model_state(
         actor_net_kwargs = {}
     if qvalue_net_kwargs is None:
         qvalue_net_kwargs = {}
-
-    linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
 
     out_features_actor = (2 - gSDE) * action_spec.shape[-1]
     if in_keys is None:
@@ -81,7 +87,6 @@ def make_redq_model_state(
         out_keys=["loc", "scale"] + out_keys_actor[1:],
     )
 
-
     actor = ProbabilisticActor(
         spec=action_spec,
         dist_param_keys=["loc", "scale"],
@@ -105,6 +110,7 @@ def make_redq_model_state(
             net(td)
     del td
     return model
+
 
 def make_redq_model_pixels(
     proof_environment: _EnvClass,
@@ -199,6 +205,7 @@ def make_redq_model_pixels(
     del td
     return model
 
+
 def make_redq_model_pixels_shared(
     proof_environment: _EnvClass,
     args: Namespace,
@@ -210,7 +217,6 @@ def make_redq_model_pixels_shared(
     **kwargs,
 ) -> nn.ModuleList:
     tanh_loc = args.tanh_loc
-    default_policy_scale = args.default_policy_scale
     gSDE = args.gSDE
 
     action_spec = proof_environment.action_spec
@@ -261,9 +267,7 @@ def make_redq_model_pixels_shared(
         "tanh_loc": tanh_loc,
     }
     actor_subnet = TensorDictModule(
-        actor_mapper,
-        in_keys=["hidden"],
-        out_keys=["loc", "scale"]
+        actor_mapper, in_keys=["hidden"], out_keys=["loc", "scale"]
     )
     actor_subnet = ProbabilisticActor(
         spec=action_spec,
@@ -278,6 +282,7 @@ def make_redq_model_pixels_shared(
     qvalue_subnet = ValueOperator(
         qvalue_mapper,
         in_keys=["hidden"],
+        out_keys=["state_action_value"],
     )
 
     model = ActorCriticOperator(

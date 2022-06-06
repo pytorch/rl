@@ -670,8 +670,9 @@ class ActorCriticOperator(ActorValueOperator):
         value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
-        >>> from torchrl.modules.td_module.deprec import ProbabilisticActor_deprecated        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
-        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator
+        >>> from torchrl.modules.tensordict_module import ProbabilisticActor
+        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
+        >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticOperator, NormalParamWrapper
         >>> import torch
         >>> spec_hidden = NdUnboundedContinuousTensorSpec(4)
         >>> module_hidden = torch.nn.Linear(4, 4)
@@ -682,11 +683,13 @@ class ActorCriticOperator(ActorValueOperator):
         ...    out_keys=["hidden"],
         ...    )
         >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))
-        >>> module_action = torch.nn.Linear(4, 8)
-        >>> td_module_action = ProbabilisticActor_deprecated(
+        >>> module_action = NormalParamWrapper(torch.nn.Linear(4, 8))
+        >>> module_action = TensorDictModule(module_action, in_keys=["hidden"], out_keys=["loc", "scale"])
+        >>> td_module_action = ProbabilisticActor(
         ...    module=module_action,
         ...    spec=spec_action,
-        ...    in_keys=["hidden"],
+        ...    dist_param_keys=["loc", "scale"],
+        ...    out_key_sample=["action"],
         ...    distribution_class=TanhNormal,
         ...    return_log_prob=True,
         ...    )
@@ -732,6 +735,14 @@ class ActorCriticOperator(ActorValueOperator):
             device=cpu)
 
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self[2].out_keys[0] == "state_value":
+            raise RuntimeError(
+                "Value out_key is state_value, which may lead to errors in downstream usages"
+                "of that module. Consider setting `'state_action_value'` instead."
+            )
 
     def get_critic_operator(self) -> TensorDictModuleWrapper:
         """
