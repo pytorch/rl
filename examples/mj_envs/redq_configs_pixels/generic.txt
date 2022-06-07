@@ -31,8 +31,3 @@ include_state
 frames_per_batch=50
 optim_steps_per_batch=8
 batch_transform
-
-
-
-LD_PRELOAD=/fsx/users/vmoens/conda/envs/mj_envs/x86_64-conda-linux-gnu/sysroot/usr/lib64/libGLdispatch.so.0 srun -p train --gpus-per-node=5 \
-    --cpus-per-task=96 python examples/mj_envs/redq.py \
