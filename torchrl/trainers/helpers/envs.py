@@ -3,12 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Callable, Optional, Union, Any
 
-from omegaconf import DictConfig
-
 import torch
+from omegaconf import DictConfig
 
 from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
 from torchrl.envs.common import _EnvClass
@@ -29,7 +29,6 @@ from torchrl.envs.transforms import (
     CenterCrop,
 )
 from torchrl.envs.transforms.transforms import gSDENoise, FlattenObservation
-from torchrl.modules.models.models import DuelingCnnDQNet
 from torchrl.record.recorder import VideoRecorder
 
 __all__ = [
@@ -369,8 +368,9 @@ def get_stats_random_rollout(
     stats = {"loc": m, "scale": s}
     return stats
 
-@dataclass 
-class EnvConfig: 
+
+@dataclass
+class EnvConfig:
     env_library: str = "gym"
     # env_library used for the simulated environment. Default=gym
     env_name: str = "Humanoid-v2"
@@ -387,7 +387,7 @@ class EnvConfig:
     reward_scaling: Optional[float] = None
     # scale of the reward.
     reward_loc: float = 0.0
-    # location of the reward. 
+    # location of the reward.
     init_env_steps: int = 1000
     # number of random steps to compute normalizing constants
     vecnorm: bool = False
@@ -400,7 +400,7 @@ class EnvConfig:
     # number of random steps to do after reset. Default is 0
     catframes: int = 0
     # Number of frames to concatenate through time. Default is 0 (do not use CatFrames).
-    center_crop: Any = field(default_factory=lambda: [])
+    center_crop: Any = dataclass_field(default_factory=lambda: [])
     # center crop size.
     grayscale: bool = True
     # Disables grayscale transform.

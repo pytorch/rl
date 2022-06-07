@@ -6,10 +6,8 @@
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
-from importlib_metadata import distribution
-from omegaconf import DictConfig
-
 import torch
+from omegaconf import DictConfig
 from torch import nn, distributions as d
 
 from torchrl.data import DEVICE_TYPING, CompositeSpec
@@ -1152,12 +1150,13 @@ def make_redq_model(
     del td
     return model
 
-@dataclass 
-class PPOModelConfig: 
+
+@dataclass
+class PPOModelConfig:
     gSDE: bool = False
     # if True, exploration is achieved using the gSDE technique.
     tanh_loc: bool = False
-    # if True, uses a Tanh-Normal transform for the policy location of the form 
+    # if True, uses a Tanh-Normal transform for the policy location of the form
     # upscale * tanh(loc/upscale) (only available with TanhTransform and TruncatedGaussian distributions)
     default_policy_scale: float = 1.0
     # Default policy scale parameter
@@ -1167,16 +1166,16 @@ class PPOModelConfig:
     # if True, uses an LSTM for the policy.
     shared_mapping: bool = False
     # if True, the first layers of the actor-critic are shared.
-    
 
-@dataclass 
-class ContinuousModelConfig: #TODO: conditional statements for this? 
+
+@dataclass
+class ContinuousModelConfig:  # TODO: conditional statements for this?
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
     noisy: bool = False
     # whether to use NoisyLinearLayers in the value network.
     ou_exploration: bool = False
-    # wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for 
+    # wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for
     # efficient entropy-based exploration, this should be left for experimentation only.
     ou_sigma: float = 0.2
     # Ornstein-Uhlenbeck sigma
@@ -1189,7 +1188,7 @@ class ContinuousModelConfig: #TODO: conditional statements for this?
     gSDE: bool = False
     # if True, exploration is achieved using the gSDE technique.
     tanh_loc: bool = False
-    # if True, uses a Tanh-Normal transform for the policy location of the form 
+    # if True, uses a Tanh-Normal transform for the policy location of the form
     # upscale * tanh(loc/upscale) (only available with TanhTransform and TruncatedGaussian distributions)
     default_policy_scale: float = 1.0
     # Default policy scale parameter
@@ -1210,8 +1209,9 @@ class ContinuousModelConfig: #TODO: conditional statements for this?
     activation: str = "tanh"
     # activation function, either relu or elu or tanh, Default=tanh
 
+
 @dataclass
-class DiscreteModelConfig: 
+class DiscreteModelConfig:
     annealing_frames: int = 1000000
     # Number of frames used for annealing of the EGreedy exploration. Default=1e6.
     noisy: bool = False

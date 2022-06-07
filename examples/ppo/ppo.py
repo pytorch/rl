@@ -3,20 +3,18 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import dataclasses
 import uuid
 from datetime import datetime
 
-from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.utils import set_exploration_mode
-from torchrl.record import VideoRecorder
-
 import hydra
+import torch.cuda
 from hydra.core.config_store import ConfigStore
 from omegaconf import DictConfig, OmegaConf
-import dataclasses
-
-import torch.cuda
+from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
+from torchrl.envs.utils import set_exploration_mode
+from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,
     OnPolicyCollectorConfig,
@@ -26,7 +24,7 @@ from torchrl.trainers.helpers.envs import (
     get_stats_random_rollout,
     parallel_env_constructor,
     transformed_env_constructor,
-    EnvConfig, 
+    EnvConfig,
 )
 from torchrl.trainers.helpers.losses import make_ppo_loss, PPOLossConfig
 from torchrl.trainers.helpers.models import (
@@ -36,14 +34,23 @@ from torchrl.trainers.helpers.models import (
 from torchrl.trainers.helpers.recorder import RecorderConfig
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
 
-config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
-    (TrainerConfig, OnPolicyCollectorConfig, EnvConfig, PPOLossConfig, PPOModelConfig, RecorderConfig) 
-    for config_field in dataclasses.fields(config_cls) 
+config_fields = [
+    (config_field.name, config_field.type, config_field)
+    for config_cls in (
+        TrainerConfig,
+        OnPolicyCollectorConfig,
+        EnvConfig,
+        PPOLossConfig,
+        PPOModelConfig,
+        RecorderConfig,
+    )
+    for config_field in dataclasses.fields(config_cls)
 ]
 
 Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
 cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
+
 
 @hydra.main(config_path=None, config_name="config")
 def main(cfg: DictConfig):
@@ -97,7 +104,6 @@ def main(cfg: DictConfig):
 
     loss_module = make_ppo_loss(model, args)
     if args.gSDE:
-        print("HERHOREHIRHIER")
         with torch.no_grad(), set_exploration_mode("random"):
             # get dimensions to build the parallel env
             proof_td = model(proof_env.reset().to(device))

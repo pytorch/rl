@@ -3,11 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
 
-from omegaconf import DictConfig
 import torch
+from omegaconf import DictConfig
 
 from torchrl.data import (
     DEVICE_TYPING,
@@ -40,8 +39,9 @@ def make_replay_buffer(device: DEVICE_TYPING, args: DictConfig) -> ReplayBuffer:
         )
     return buffer
 
+
 @dataclass
-class ReplayArgsConfig: 
+class ReplayArgsConfig:
     buffer_size: int = 1000000
     # buffer size, in number of frames stored. Default=1e6
     prb: bool = False

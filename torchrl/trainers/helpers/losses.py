@@ -208,8 +208,9 @@ def make_ppo_loss(model, args) -> PPOLoss:
     )
     return loss_module
 
+
 @dataclass
-class LossConfig: 
+class LossConfig:
     loss: str = "double"
     # whether double or single SAC loss should be used. Default=double
     hard_update: bool = False
@@ -218,20 +219,21 @@ class LossConfig:
     # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
     value_network_update_interval: int = 1000
     # how often the target value network weights are updated (in number of updates).
-    # If soft-updates are used, the value is translated into a moving average decay by using 
+    # If soft-updates are used, the value is translated into a moving average decay by using
     # the formula decay=1-1/args.value_network_update_interval. Default=1000
     gamma: float = 0.99
     # Decay factor for return computation. Default=0.99.
     num_q_values: int = 2
-    # As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can 
-    # use two (or more!) different qvalue networks trained independently and choose the lowest value 
+    # As suggested in the original SAC paper and in https://arxiv.org/abs/1802.09477, we can
+    # use two (or more!) different qvalue networks trained independently and choose the lowest value
     # predicted to predict the state action value. This can be disabled by using this flag.
     # REDQ uses an arbitrary number of Q-value functions to speed up learning in MF contexts.
     target_entropy: float = None
     # Target entropy for the policy distribution. Default is None (auto calculated as the `target_entropy = -action_dim`)
 
+
 @dataclass
-class PPOLossConfig: 
+class PPOLossConfig:
     loss: str = "clip"
     # PPO loss class, either clip or kl or base/<empty>. Default=clip
     gamma: float = 0.99

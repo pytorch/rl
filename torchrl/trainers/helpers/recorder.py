@@ -5,8 +5,9 @@
 
 from dataclasses import dataclass
 
+
 @dataclass
-class RecorderConfig: 
+class RecorderConfig:
     record_video: bool = False
     # whether a video of the task should be rendered during logging.
     no_video: bool = True

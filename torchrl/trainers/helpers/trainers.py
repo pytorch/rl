@@ -3,14 +3,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from hydra import compose, initialize
-from hydra.core.config_store import ConfigStore
 from dataclasses import dataclass
 from typing import Optional, Union, List
 from warnings import warn
 
+from hydra import compose, initialize
+from hydra.core.config_store import ConfigStore
 from omegaconf import DictConfig, open_dict
-
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
@@ -43,16 +42,17 @@ __all__ = [
     "make_trainer",
 ]
 
+
 @dataclass
-class TrainerConfig: 
-    optim_steps_per_batch: int = 500 
-    # Number of optimization steps in between two collection of data. See frames_per_batch below. 
+class TrainerConfig:
+    optim_steps_per_batch: int = 500
+    # Number of optimization steps in between two collection of data. See frames_per_batch below.
     optimizer: str = "adam"
     # Optimizer to be used.
     lr_scheduler: str = "cosine"
     # LR scheduler.
     selected_keys: Optional[List] = None
-    # a list of strings that indicate the data that should be kept from the data collector. Since storing and 
+    # a list of strings that indicate the data that should be kept from the data collector. Since storing and
     # retrieving information from the replay buffer does not come for free, limiting the amount of data
     # passed to it can improve the algorithm performance.
     batch_size: int = 256
@@ -74,8 +74,10 @@ class TrainerConfig:
     sub_traj_len: int = -1
     # length of the trajectories that sub-samples must have in online settings.
 
+
 cs = ConfigStore.instance()
 cs.store(name="trainer", node=TrainerConfig)
+
 
 def make_trainer(
     collector: _DataCollector,
@@ -146,7 +148,7 @@ def make_trainer(
             "Getting default args for the trainer. "
             "This should be only used for debugging."
         )
-        with initialize(config_path="."): 
+        with initialize(config_path="."):
             args = compose(config_name="trainer")
             with open_dict(args):
                 args.frame_skip = 1
