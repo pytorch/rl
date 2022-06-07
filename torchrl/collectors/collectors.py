@@ -845,8 +845,6 @@ class _MultiDataCollector(_DataCollector):
             if msg != "seeded":
                 raise RuntimeError(f"Expected msg='seeded', got {msg}")
             seed = new_seed
-            if idx < self.num_workers - 1:
-                seed = seed + 1
         self.reset()
         return seed
 

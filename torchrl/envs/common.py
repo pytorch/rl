@@ -13,6 +13,7 @@ from typing import Any, Callable, Iterator, Optional, Tuple, Union
 import numpy as np
 import torch
 
+from torchrl import seed_generator
 from torchrl.data import CompositeSpec, TensorDict, TensorSpec
 from ..data.tensordict.tensordict import _TensorDict
 from ..data.utils import DEVICE_TYPING
@@ -703,7 +704,11 @@ class GymLikeEnv(_EnvWrapper):
     def set_seed(self, seed: Optional[int] = None) -> Optional[int]:
         if seed is not None:
             torch.manual_seed(seed)
-        return self._set_seed(seed)
+        self._set_seed(seed)
+        if seed is not None:
+            new_seed = seed_generator(seed)
+            seed = new_seed
+        return seed
 
     def _set_seed(self, seed: Optional[int]) -> Optional[int]:
         raise NotImplementedError
