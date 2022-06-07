@@ -1,5 +1,6 @@
 import time
 from os import path
+import os
 
 import submitit
 import torch
@@ -36,7 +37,7 @@ for env in envs:
                     ["SUBMITIT", env, "seed",
                      str(seed)] + use_avg_pooling_str + shared_mapping_str)
                 flags = ["--config",
-                         f"examples/mj_envs/redq_configs_pixels/generic.txt",
+                         f"redq_configs_pixels/generic.txt",
                          "--env_name", env,
                          "--seed", str(seed),
                          "--exp_name", exp_name,
