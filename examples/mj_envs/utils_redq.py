@@ -229,6 +229,7 @@ def make_redq_model_pixels(
             "activation_class": ACTIVATIONS[args.activation],
         },
         "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        "use_avg_pooling": args.use_avg_pooling,
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = DdpgCnnActor(out_features_actor, **actor_net_kwargs_default)
@@ -240,6 +241,7 @@ def make_redq_model_pixels(
             "activation_class": ACTIVATIONS[args.activation],
         },
         "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        "use_avg_pooling": args.use_avg_pooling,
     }
     value_net_default_kwargs.update(qvalue_net_kwargs)
 
@@ -322,6 +324,7 @@ def make_redq_model_state_pixels(
             "activation_class": ACTIVATIONS[args.activation],
         },
         "cnn_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        "use_avg_pooling": args.use_avg_pooling,
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = StatePixelModule(out_features_actor, **actor_net_kwargs_default)
@@ -341,6 +344,7 @@ def make_redq_model_state_pixels(
             "activation_class": ACTIVATIONS[args.activation],
         },
         "cnn_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        "use_avg_pooling": args.use_avg_pooling,
     }
     value_net_default_kwargs.update(qvalue_net_kwargs)
     qvalue_net = StatePixelModule(1, **value_net_default_kwargs)
@@ -418,7 +422,7 @@ def make_redq_model_pixels_shared(
             "activation_class": ACTIVATIONS[args.activation],
         },
         "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
-        "use_avg_pooling": False,
+        "use_avg_pooling": args.use_avg_pooling,
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = DdpgCnnActor(out_features_actor, **actor_net_kwargs_default)
@@ -459,7 +463,7 @@ def make_redq_model_pixels_shared(
             "activation_class": ACTIVATIONS[args.activation],
         },
         "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
-        "use_avg_pooling": False,
+        "use_avg_pooling": args.use_avg_pooling,
     }
     value_net_default_kwargs.update(qvalue_net_kwargs)
 

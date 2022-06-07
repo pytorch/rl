@@ -74,6 +74,7 @@ def make_args():
     parser_replay_args(parser)
     parser.add_argument("--shared_mapping", action="store_true")
     parser.add_argument("--include_state", action="store_true")
+    parser.add_argument("--use_avg_pooling", action="store_true")
     return parser
 
 
