@@ -321,7 +321,7 @@ class _EnvClass:
     @current_tensordict.setter
     def current_tensordict(self, value: Union[_TensorDict, dict]):
         if isinstance(self._current_tensordict, _TensorDict):
-            self._current_tensordict.update_(value)
+            self._current_tensordict.update_(value.select(*self._current_tensordict.keys()))
             return
         if isinstance(value, dict):
             value = TensorDict(value, self.batch_size)
