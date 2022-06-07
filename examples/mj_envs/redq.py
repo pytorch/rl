@@ -52,6 +52,7 @@ from utils_redq import (
     make_redq_model_pixels_shared,
     make_redq_model_state,
     make_redq_model_state_pixels,
+    make_redq_model_state_pixels_shared,
 )
 
 
@@ -122,12 +123,14 @@ def main(args):
         proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
         if args.from_pixels:
             stats_pixels = get_stats_random_rollout(
-                args, proof_env,
+                args,
+                proof_env,
                 key="next_pixels",
             )
         if not args.from_pixels or args.include_state:
             stats_state = get_stats_random_rollout(
-                args, proof_env,
+                args,
+                proof_env,
                 key="next_observation_vector",
             )
 
@@ -136,16 +139,27 @@ def main(args):
     elif args.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
     proof_env = transformed_env_constructor(
-        args=args, use_env_creator=False, stats_pixels=stats_pixels, stats_state=stats_state,
+        args=args,
+        use_env_creator=False,
+        stats_pixels=stats_pixels,
+        stats_state=stats_state,
     )()
     if args.from_pixels:
         if args.shared_mapping:
-            model = make_redq_model_pixels_shared(
-                proof_env,
-                args=args,
-                device=device,
-            )
-            actor_model_explore = model.get_policy_operator()
+            if args.include_state:
+                model = make_redq_model_state_pixels_shared(
+                    proof_env,
+                    args=args,
+                    device=device,
+                )
+                actor_model_explore = model.get_policy_operator()
+            else:
+                model = make_redq_model_pixels_shared(
+                    proof_env,
+                    args=args,
+                    device=device,
+                )
+                actor_model_explore = model.get_policy_operator()
         else:
             if args.include_state:
                 model = make_redq_model_state_pixels(
@@ -192,7 +206,8 @@ def main(args):
     proof_env.close()
     create_env_fn = parallel_env_constructor(
         args=args,
-        stats_pixels=stats_pixels, stats_state=stats_state,
+        stats_pixels=stats_pixels,
+        stats_state=stats_state,
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
@@ -263,9 +278,24 @@ def main(args):
             "observation_vector",
             "next_observation_vector",
             "action",
+            "time",
+            "rwd_dense",
+            "rwd_sparse",
+            "solved",
         )
 
     trainer.register_op("batch_process", select_keys)
+    trainer.register_op("pre_steps_log", lambda batch: ("time", batch["time"].mean()))
+    trainer.register_op(
+        "pre_steps_log",
+        lambda batch: ("solved", batch["solved"].sum() / batch["solved"].numel()),
+    )
+    trainer.register_op(
+        "pre_steps_log", lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean())
+    )
+    trainer.register_op(
+        "pre_steps_log", lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean())
+    )
 
     final_seed = collector.set_seed(args.seed)
     print(f"init seed: {args.seed}, final seed: {final_seed}")

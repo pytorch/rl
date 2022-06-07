@@ -2,14 +2,20 @@ from gym.envs.registration import register
 
 from mj_envs.envs.relay_kitchen import CURR_DIR, ENTRY_POINT, MODEL_PATH, CONFIG_PATH
 
-state_obs_keys_wt = {"robot_jnt": 1.0, "objs_jnt": 1.0, "obj_goal": 1.0, "end_effector": 1.0}
-visual_obs_keys_wt = {"robot_jnt": 1.0,
-            "end_effector": 1.0,
-            # "rgb:right_cam:224x224:r3m18": 1.0,
-            # "rgb:left_cam:224x224:r3m18": 1.0,
-            # "rgb:right_cam:224x224:flat": 1.0,
-            # "rgb:left_cam:224x224:flat": 1.0,
-            }
+state_obs_keys_wt = {
+    "robot_jnt": 1.0,
+    "objs_jnt": 1.0,
+    "obj_goal": 1.0,
+    "end_effector": 1.0,
+}
+visual_obs_keys_wt = {
+    "robot_jnt": 1.0,
+    "end_effector": 1.0,
+    # "rgb:right_cam:224x224:r3m18": 1.0,
+    # "rgb:left_cam:224x224:r3m18": 1.0,
+    # "rgb:right_cam:224x224:flat": 1.0,
+    # "rgb:left_cam:224x224:flat": 1.0,
+}
 obs_keys_wt = visual_obs_keys_wt
 
 # Kitchen
@@ -314,10 +320,19 @@ register(
 
 
 # Franka Appliance ======================================================================
-from mj_envs.envs.relay_kitchen.franka_appliance_v1 import FrankaApplianceFixed, FrankaApplianceRandom
+from mj_envs.envs.relay_kitchen.franka_appliance_v1 import (
+    FrankaApplianceFixed,
+    FrankaApplianceRandom,
+)
 
 # MICROWAVE
-obs_keys_wt = {"robot_jnt": 1.0, "objs_jnt": 1.0, "obj_goal": 1.0, "end_effector": 1.0, "microhandle_site_err":1}
+obs_keys_wt = {
+    "robot_jnt": 1.0,
+    "objs_jnt": 1.0,
+    "obj_goal": 1.0,
+    "end_effector": 1.0,
+    "microhandle_site_err": 1,
+}
 register(
     id="visual_franka_micro_open-v3",
     entry_point="mj_envs.envs.relay_kitchen:FrankaApplianceFixed",
@@ -368,7 +383,13 @@ register(
 )
 
 # SLIDE-CABINET
-obs_keys_wt = {"robot_jnt": 1.0, "objs_jnt": 1.0, "obj_goal": 1.0, "end_effector": 1.0, "slide_site_err":1}
+obs_keys_wt = {
+    "robot_jnt": 1.0,
+    "objs_jnt": 1.0,
+    "obj_goal": 1.0,
+    "end_effector": 1.0,
+    "slide_site_err": 1,
+}
 register(
     id="visual_franka_slide_open-v3",
     entry_point="mj_envs.envs.relay_kitchen:FrankaApplianceFixed",
@@ -377,7 +398,7 @@ register(
         "model_path": CURR_DIR + "/assets/franka_slidecabinet.xml",
         "config_path": CURR_DIR + "/assets/franka_slidecabinet.config",
         "obj_init": {"slidedoor_joint": 0},
-        "obj_goal": {"slidedoor_joint": .44},
+        "obj_goal": {"slidedoor_joint": 0.44},
         "obj_interaction_site": ("slide_site",),
         "obj_jnt_names": ("slidedoor_joint",),
         "obj_body_names": ("slidecabinet",),
@@ -392,7 +413,7 @@ register(
     kwargs={
         "model_path": CURR_DIR + "/assets/franka_slidecabinet.xml",
         "config_path": CURR_DIR + "/assets/franka_slidecabinet.config",
-        "obj_init": {"slidedoor_joint": .44},
+        "obj_init": {"slidedoor_joint": 0.44},
         "obj_goal": {"slidedoor_joint": 0},
         "obj_interaction_site": ("slide_site",),
         "obj_jnt_names": ("slidedoor_joint",),
@@ -408,8 +429,8 @@ register(
     kwargs={
         "model_path": CURR_DIR + "/assets/franka_slidecabinet.xml",
         "config_path": CURR_DIR + "/assets/franka_slidecabinet.config",
-        "obj_init": {"slidedoor_joint": (0, .44)},
-        "obj_goal": {"slidedoor_joint": (0, .44)},
+        "obj_init": {"slidedoor_joint": (0, 0.44)},
+        "obj_goal": {"slidedoor_joint": (0, 0.44)},
         "obj_interaction_site": ("slide_site",),
         "obj_jnt_names": ("slidedoor_joint",),
         "obj_body_names": ("slidecabinet",),

@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from argparse import Namespace
-from typing import Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple, Union
 
 import torch
 from torch import nn
@@ -38,6 +38,7 @@ class StatePixelModule(nn.Module):
         mlp_kwargs=None,
         common_mlp_kwargs=None,
         use_avg_pooling=False,
+        make_common=True,
     ):
         super().__init__()
         out_dim_cnn = hidden_dim if use_avg_pooling else 64
@@ -73,35 +74,39 @@ class StatePixelModule(nn.Module):
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.mlp = MLP(**mlp_net_default_kwargs)
 
-        common_mlp_net_default_kwargs = {
-            "in_features": None,
-            "out_features": out_dim,
-            "num_cells": [200, 200],
-            "activation_class": nn.ELU,
-            "bias_last_layer": True,
-        }
-        common_mlp_net_kwargs = (
-            common_mlp_kwargs if common_mlp_kwargs is not None else dict()
-        )
-        common_mlp_net_default_kwargs.update(common_mlp_net_kwargs)
-        self.common_mlp = MLP(**common_mlp_net_default_kwargs)
+        self.make_common = make_common
+        if make_common:
+            common_mlp_net_default_kwargs = {
+                "in_features": None,
+                "out_features": out_dim,
+                "num_cells": [200, 200],
+                "activation_class": nn.ELU,
+                "bias_last_layer": True,
+            }
+            common_mlp_net_kwargs = (
+                common_mlp_kwargs if common_mlp_kwargs is not None else dict()
+            )
+            common_mlp_net_default_kwargs.update(common_mlp_net_kwargs)
+            self.common_mlp = MLP(**common_mlp_net_default_kwargs)
 
-        ddpg_init_last_layer(self.common_mlp[-1], 6e-4)
+            ddpg_init_last_layer(self.common_mlp[-1], 6e-4)
 
     def forward(
         self,
         pixels: torch.Tensor,
         observation_vector: torch.Tensor,
         *other: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         hidden_pixels = self.convnet(pixels)
         hidden_state = self.mlp(observation_vector)
         if self.use_avg_pooling:
             hidden = hidden_state + hidden_pixels
         else:
             hidden = torch.cat([hidden_state, hidden_pixels], -1)
-        out = self.common_mlp(torch.cat([hidden, *other], -1))
-        return out, hidden
+        if self.make_common:
+            out = self.common_mlp(torch.cat([hidden, *other], -1))
+            return out, hidden
+        return hidden
 
 
 def make_redq_model_state(
@@ -485,5 +490,170 @@ def make_redq_model_pixels_shared(
         td = proof_environment.rollout(1000)
         td = td.to(device)
         model(td)
+    del td
+    return model
+
+
+def make_redq_model_state_pixels_shared(
+    proof_environment: _EnvClass,
+    args: Namespace,
+    device: DEVICE_TYPING = "cpu",
+    in_keys: Optional[Sequence[str]] = None,
+    actor_net_kwargs=None,
+    qvalue_net_kwargs=None,
+    common_net_kwargs=None,
+    observation_key=None,
+    **kwargs,
+) -> nn.ModuleList:
+    tanh_loc = args.tanh_loc
+    default_policy_scale = args.default_policy_scale
+
+    action_spec = proof_environment.action_spec
+
+    if common_net_kwargs is None:
+        common_net_kwargs = {}
+    if actor_net_kwargs is None:
+        actor_net_kwargs = {}
+    if qvalue_net_kwargs is None:
+        qvalue_net_kwargs = {}
+
+    linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
+
+    # Common
+    common_net_kwargs_default = {
+        "mlp_kwargs": {
+            "layer_class": linear_layer_class,
+            "activation_class": ACTIVATIONS[args.activation],
+        },
+        "cnn_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        "use_avg_pooling": args.use_avg_pooling,
+        "make_common": False,
+    }
+    common_net_kwargs_default.update(common_net_kwargs)
+    common_mapper = StatePixelModule(None, **common_net_kwargs_default)
+
+    # Actor
+    out_features_actor = 2 * action_spec.shape[-1]
+    actor_net_kwargs_default = {
+        "mlp_kwargs": {
+            "layer_class": linear_layer_class,
+            "activation_class": ACTIVATIONS[args.activation],
+        },
+        "common_mlp_kwargs": {
+            "layer_class": linear_layer_class,
+            "activation_class": ACTIVATIONS[args.activation],
+        },
+        "cnn_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        "use_avg_pooling": args.use_avg_pooling,
+    }
+    actor_net_kwargs_default.update(actor_net_kwargs)
+    actor_mapper = StatePixelModule(
+        out_features_actor, **actor_net_kwargs_default
+    ).common_mlp
+
+    # Q-Value
+    value_net_default_kwargs = {
+        "mlp_kwargs": {
+            "layer_class": linear_layer_class,
+            "activation_class": ACTIVATIONS[args.activation],
+        },
+        "common_mlp_kwargs": {
+            "layer_class": linear_layer_class,
+            "activation_class": ACTIVATIONS[args.activation],
+        },
+        "cnn_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+        "use_avg_pooling": args.use_avg_pooling,
+    }
+    value_net_default_kwargs.update(qvalue_net_kwargs)
+    qvalue_mapper = StatePixelModule(1, **value_net_default_kwargs).common_mlp
+
+    # a bit of surgery
+    common_net = TensorDictModule(
+        common_mapper,
+        in_keys=["pixels", "observation_vector"],
+        out_keys=["hidden"],
+    )
+
+    # actor
+    actor_mapper = NormalParamWrapper(actor_mapper)
+    dist_class = TanhNormal
+    dist_kwargs = {
+        "min": action_spec.space.minimum,
+        "max": action_spec.space.maximum,
+        "tanh_loc": tanh_loc,
+    }
+    actor_subnet = TensorDictModule(
+        actor_mapper, in_keys=["hidden"], out_keys=["loc", "scale"]
+    )
+    actor_subnet = ProbabilisticActor(
+        spec=action_spec,
+        dist_param_keys=["loc", "scale"],
+        module=actor_subnet,
+        distribution_class=dist_class,
+        distribution_kwargs=dist_kwargs,
+        default_interaction_mode="random",
+        return_log_prob=True,
+    )
+
+    qvalue_subnet = ValueOperator(
+        qvalue_mapper,
+        in_keys=["hidden", "action"],
+    )
+
+    model = ActorValueOperator(
+        common_net,
+        actor_subnet,
+        qvalue_subnet,
+    ).to(device)
+
+    # init nets
+    with torch.no_grad(), set_exploration_mode("random"):
+        td = proof_environment.rollout(1000)
+        td = td.to(device)
+        model(td)
+    del td
+    return model
+
+    in_keys_qvalue = in_keys_actor + ["action"]
+
+    dist_class = TanhNormal
+    dist_kwargs = {
+        "min": action_spec.space.minimum,
+        "max": action_spec.space.maximum,
+        "tanh_loc": tanh_loc,
+    }
+
+    actor_net = NormalParamWrapper(
+        actor_net,
+        scale_mapping=f"biased_softplus_{default_policy_scale}",
+        scale_lb=args.scale_lb,
+    )
+    actor_module = TensorDictModule(
+        actor_net,
+        in_keys=in_keys_actor,
+        out_keys=["loc", "scale"] + out_keys_actor[1:],
+    )
+
+    actor = ProbabilisticActor(
+        spec=action_spec,
+        dist_param_keys=["loc", "scale"],
+        module=actor_module,
+        distribution_class=dist_class,
+        distribution_kwargs=dist_kwargs,
+        default_interaction_mode="random",
+        return_log_prob=True,
+    )
+    qvalue = ValueOperator(
+        in_keys=in_keys_qvalue,
+        module=qvalue_net,
+    )
+    model = nn.ModuleList([actor, qvalue]).to(device)
+
+    # init nets
+    with torch.no_grad(), set_exploration_mode("random"):
+        td = proof_environment.rollout(1000)
+        td = td.to(device)
+        for net in model:
+            net(td)
     del td
     return model

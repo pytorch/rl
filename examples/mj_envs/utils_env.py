@@ -122,9 +122,7 @@ def make_env_transforms(
             else:
                 obs_stats = stats_states
             obs_stats["standard_normal"] = True
-            env.append_transform(
-                ObservationNorm(**obs_stats, keys=[out_key])
-            )
+            env.append_transform(ObservationNorm(**obs_stats, keys=[out_key]))
         else:
             env.append_transform(
                 VecNorm(
@@ -135,7 +133,6 @@ def make_env_transforms(
 
         double_to_float_list.append(out_key)
         env.append_transform(DoubleToFloat(keys=double_to_float_list))
-
 
     else:
         env.append_transform(DoubleToFloat(keys=double_to_float_list))

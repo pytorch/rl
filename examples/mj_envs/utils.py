@@ -16,6 +16,7 @@ from mj_envs.envs.relay_kitchen import *
 from mj_envs.envs.env_variants import register_env_variant
 from envs_reg import *
 
+
 class MJEnv(GymEnv):
     info_keys = ["time", "rwd_dense", "rwd_sparse", "solved"]
 
@@ -62,14 +63,20 @@ class MJEnv(GymEnv):
             self._env.action_space, device=self.device
         )
         self.observation_spec = _gym_to_torchrl_spec_transform(
-            self._env.observation_space, device=self.device,
+            self._env.observation_space,
+            device=self.device,
         )
         if not isinstance(self.observation_spec, CompositeSpec):
             self.observation_spec = CompositeSpec(
                 next_observation=self.observation_spec
             )
         if from_pixels:
-            self.cameras = kwargs.get("cameras", ["left_cam", "right_cam", "top_cam"])
+            self.cameras = kwargs.get(
+                "cameras",
+                ["left_cam", "right_cam", "top_cam"]
+                if "franka" in envname
+                else ["left_cam", "right_cam"],
+            )
 
             self.observation_spec["next_pixels"] = NdBoundedTensorSpec(
                 torch.zeros(
@@ -126,5 +133,6 @@ class MJEnv(GymEnv):
             out.render_device = 0
         self._build_env(self.envname, self.taskname, **self.constructor_kwargs)
         return out
+
 
 LIBS["mj_envs"] = MJEnv
