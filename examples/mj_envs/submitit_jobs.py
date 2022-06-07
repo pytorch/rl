@@ -20,7 +20,7 @@ shared_mapping = [True, False]
 
 envs = []
 
-from mj_envs.env import *
+from mj_envs.envs import *
 import gym
 
 envs = [k for k in gym.envs.registration.registry.env_specs.keys() if
