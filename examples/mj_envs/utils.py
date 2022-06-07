@@ -58,7 +58,9 @@ class MJEnv(GymEnv):
         self.from_pixels = from_pixels
         self.render_device = render_device
 
-        self.action_spec = _gym_to_torchrl_spec_transform(self._env.action_space)
+        self.action_spec = _gym_to_torchrl_spec_transform(
+            self._env.action_space, device=self.device
+        )
         self.observation_spec = _gym_to_torchrl_spec_transform(
             self._env.observation_space, device=self.device,
         )
@@ -89,6 +91,7 @@ class MJEnv(GymEnv):
                 ),
                 torch.Size(torch.Size([len(self.cameras), 480, 640, 3])),
                 dtype=torch.uint8,
+                device=self.device,
             )
 
         self.reward_spec = UnboundedContinuousTensorSpec(
