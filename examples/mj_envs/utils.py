@@ -60,7 +60,7 @@ class MJEnv(GymEnv):
 
         self.action_spec = _gym_to_torchrl_spec_transform(self._env.action_space)
         self.observation_spec = _gym_to_torchrl_spec_transform(
-            self._env.observation_space
+            self._env.observation_space, device=self.device,
         )
         if not isinstance(self.observation_spec, CompositeSpec):
             self.observation_spec = CompositeSpec(
