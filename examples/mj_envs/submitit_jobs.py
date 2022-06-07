@@ -24,7 +24,7 @@ from mj_envs.envs import *
 import gym
 
 envs = [k for k in gym.envs.registration.registry.env_specs.keys() if
-        k.startswith("visual")]
+        k.startswith("visual") and k != "visual_kitchen-v3"]
 
 for env in envs:
     for _shared_mapping in shared_mapping:
@@ -32,7 +32,7 @@ for env in envs:
             use_avg_pooling_str = ["avg_pooling"] if _use_avg_pooling else []
             shared_mapping_str = ["shared_mapping"] if _shared_mapping else []
             for seed in seed_list:
-                exp_name = "".join(
+                exp_name = "_".join(
                     ["SUBMITIT", env, "seed",
                      str(seed)] + use_avg_pooling_str + shared_mapping_str)
                 flags = ["--config",
