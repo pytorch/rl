@@ -278,23 +278,13 @@ def main(args):
             "observation_vector",
             "next_observation_vector",
             "action",
-            "time",
-            "rwd_dense",
-            "rwd_sparse",
             "solved",
         )
 
     trainer.register_op("batch_process", select_keys)
-    trainer.register_op("pre_steps_log", lambda batch: ("time", batch["time"].mean()))
     trainer.register_op(
         "pre_steps_log",
         lambda batch: ("solved", batch["solved"].sum() / batch["solved"].numel()),
-    )
-    trainer.register_op(
-        "pre_steps_log", lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean())
-    )
-    trainer.register_op(
-        "pre_steps_log", lambda batch: ("rwd_sparse", batch["rwd_sparse"].mean())
     )
 
     final_seed = collector.set_seed(args.seed)
