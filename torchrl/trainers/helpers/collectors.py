@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Type, Union, Dict
+from typing import Callable, List, Optional, Type, Union, Dict, Any
 
 from omegaconf import DictConfig
 
@@ -349,7 +349,7 @@ def make_collector_onpolicy(
 
 @dataclass 
 class OnPolicyCollectorConfig: 
-    collector_devices: List = field(default_factory=lambda: ['cpu'])
+    collector_devices: Any = field(default_factory=lambda: ['cpu'])
     # device on which the data collector should store the trajectories to be passed to this script.
     # If the collector device differs from the policy device (cuda:0 if available), then the 
     # weights of the collector policy are synchronized with collector.update_policy_weights_().

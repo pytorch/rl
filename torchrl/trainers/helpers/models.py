@@ -1153,6 +1153,23 @@ def make_redq_model(
     return model
 
 @dataclass 
+class PPOModelConfig: 
+    gSDE: bool = False
+    # if True, exploration is achieved using the gSDE technique.
+    tanh_loc: bool = False
+    # if True, uses a Tanh-Normal transform for the policy location of the form 
+    # upscale * tanh(loc/upscale) (only available with TanhTransform and TruncatedGaussian distributions)
+    default_policy_scale: float = 1.0
+    # Default policy scale parameter
+    distribution: str = "tanh_normal"
+    # if True, uses a Tanh-Normal-Tanh distribution for the policy
+    lstm: bool = False
+    # if True, uses an LSTM for the policy.
+    shared_mapping: bool = False
+    # if True, the first layers of the actor-critic are shared.
+    
+
+@dataclass 
 class ContinuousModelConfig: #TODO: conditional statements for this? 
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.

@@ -12,7 +12,7 @@ from torchrl.record import VideoRecorder
 
 import hydra
 from hydra.core.config_store import ConfigStore
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 import dataclasses
 
 import torch.cuda
@@ -31,34 +31,13 @@ from torchrl.trainers.helpers.envs import (
 from torchrl.trainers.helpers.losses import make_ppo_loss, PPOLossConfig
 from torchrl.trainers.helpers.models import (
     make_ppo_model,
-    ContinuousModelConfig,
+    PPOModelConfig,
 )
 from torchrl.trainers.helpers.recorder import RecorderConfig
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
 
-
-# def make_args():
-#     parser = argparse.ArgumentParser()
-#     if _configargparse:
-#         parser.add_argument(
-#             "-c",
-#             "--config",
-#             required=True,
-#             is_config_file=True,
-#             help="config file path",
-#         )
-#     parser_trainer_args(parser)
-#     parser_collector_args_onpolicy(parser)
-#     parser_env_args(parser)
-#     parser_loss_args_ppo(parser)
-#     parser_model_args_continuous(parser, "PPO")
-
-#     parser_recorder_args(parser)
-#     return parser
-
-
 config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
-    (TrainerConfig, OnPolicyCollectorConfig, EnvConfig, PPOLossConfig, ContinuousModelConfig, RecorderConfig) 
+    (TrainerConfig, OnPolicyCollectorConfig, EnvConfig, PPOLossConfig, PPOModelConfig, RecorderConfig) 
     for config_field in dataclasses.fields(config_cls) 
 ]
 
@@ -66,10 +45,13 @@ Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
 cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
 
-@hydra.main(config_name="config")
+@hydra.main(config_path=None, config_name="config")
 def main(cfg: DictConfig):
     from torch.utils.tensorboard import SummaryWriter
 
+    if cfg.config_file is not None:
+        config_file = OmegaConf.load(cfg.config_file)
+        cfg = OmegaConf.merge(cfg, config_file)
     args = correct_for_frame_skip(cfg)
 
     if not isinstance(args.reward_scaling, float):
