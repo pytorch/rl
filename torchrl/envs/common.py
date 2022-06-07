@@ -322,7 +322,9 @@ class _EnvClass:
     @current_tensordict.setter
     def current_tensordict(self, value: Union[_TensorDict, dict]):
         if isinstance(self._current_tensordict, _TensorDict):
-            self._current_tensordict.update_(value)
+            self._current_tensordict.update_(
+                value.select(*self._current_tensordict.keys())
+            )
             return
         if isinstance(value, dict):
             value = TensorDict(value, self.batch_size)
@@ -336,18 +338,26 @@ class _EnvClass:
         return math.prod(self.batch_size)
 
     def set_seed(self, seed: int) -> int:
-        """Sets the seed of the environment and returns the last seed used (
+        """Sets the seed of the environment and returns the next seed to be used (
         which is the input seed if a single environment is present)
 
         Args:
             seed: integer
 
         Returns:
-            integer representing the "final seed" in case the environment has
-            a non-empty batch. This feature makes sure that the same seed
-            won't be used for two different environments.
+            integer representing the "next seed": i.e. the seed that should be
+            used for another environment if created concomittently to this environment.
 
         """
+        if seed is not None:
+            torch.manual_seed(seed)
+        self._set_seed(seed)
+        if seed is not None:
+            new_seed = seed_generator(seed)
+            seed = new_seed
+        return seed
+
+    def _set_seed(self, seed: Optional[int]):
         raise NotImplementedError
 
     def set_state(self):
@@ -651,6 +661,8 @@ class _EnvWrapper(_EnvClass):
 
 
 class GymLikeEnv(_EnvWrapper):
+    info_keys = []
+
     """
     A gym-like env is an environment whose behaviour is similar to gym environments in what
     common methods (specifically reset and step) are expected to do.
@@ -698,7 +710,11 @@ class GymLikeEnv(_EnvWrapper):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
-        # self.current_tensordict = step_tensordict(tensordict_out)
+        for key in self.info_keys:
+            data = info[0][key]
+            tensordict_out.set(key, data)
+
+        self.current_tensordict = step_tensordict(tensordict_out)
         return tensordict_out
 
     def set_seed(self, seed: Optional[int] = None) -> Optional[int]:
@@ -710,7 +726,7 @@ class GymLikeEnv(_EnvWrapper):
             seed = new_seed
         return seed
 
-    def _set_seed(self, seed: Optional[int]) -> Optional[int]:
+    def _set_seed(self, seed: Optional[int]):
         raise NotImplementedError
 
     def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs) -> _TensorDict:
