@@ -284,7 +284,7 @@ def main(args):
     trainer.register_op("batch_process", select_keys)
     trainer.register_op(
         "pre_steps_log",
-        lambda batch: ("solved", batch["solved"].sum() / batch["solved"].numel()),
+        lambda batch: {"solved": batch["solved"].sum() / batch["solved"].numel()},
     )
 
     final_seed = collector.set_seed(args.seed)
