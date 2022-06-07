@@ -650,6 +650,8 @@ class _EnvWrapper(_EnvClass):
 
 
 class GymLikeEnv(_EnvWrapper):
+    info_keys = []
+
     """
     A gym-like env is an environment whose behaviour is similar to gym environments in what
     common methods (specifically reset and step) are expected to do.
@@ -697,7 +699,11 @@ class GymLikeEnv(_EnvWrapper):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
-        # self.current_tensordict = step_tensordict(tensordict_out)
+        for key in self.info_keys:
+            data = info[0][key]
+            tensordict_out.set(key, data)
+
+        self.current_tensordict = step_tensordict(tensordict_out)
         return tensordict_out
 
     def set_seed(self, seed: Optional[int] = None) -> Optional[int]:
