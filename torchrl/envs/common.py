@@ -13,6 +13,7 @@ from typing import Any, Callable, Iterator, Optional, Tuple, Union
 import numpy as np
 import torch
 
+from torchrl import seed_generator
 from torchrl.data import CompositeSpec, TensorDict, TensorSpec
 from ..data.tensordict.tensordict import _TensorDict
 from ..data.utils import DEVICE_TYPING
@@ -321,7 +322,9 @@ class _EnvClass:
     @current_tensordict.setter
     def current_tensordict(self, value: Union[_TensorDict, dict]):
         if isinstance(self._current_tensordict, _TensorDict):
-            self._current_tensordict.update_(value.select(*self._current_tensordict.keys()))
+            self._current_tensordict.update_(
+                value.select(*self._current_tensordict.keys())
+            )
             return
         if isinstance(value, dict):
             value = TensorDict(value, self.batch_size)
@@ -335,18 +338,26 @@ class _EnvClass:
         return math.prod(self.batch_size)
 
     def set_seed(self, seed: int) -> int:
-        """Sets the seed of the environment and returns the last seed used (
+        """Sets the seed of the environment and returns the next seed to be used (
         which is the input seed if a single environment is present)
 
         Args:
             seed: integer
 
         Returns:
-            integer representing the "final seed" in case the environment has
-            a non-empty batch. This feature makes sure that the same seed
-            won't be used for two different environments.
+            integer representing the "next seed": i.e. the seed that should be
+            used for another environment if created concomittently to this environment.
 
         """
+        if seed is not None:
+            torch.manual_seed(seed)
+        self._set_seed(seed)
+        if seed is not None:
+            new_seed = seed_generator(seed)
+            seed = new_seed
+        return seed
+
+    def _set_seed(self, seed: Optional[int]):
         raise NotImplementedError
 
     def set_state(self):
@@ -709,9 +720,13 @@ class GymLikeEnv(_EnvWrapper):
     def set_seed(self, seed: Optional[int] = None) -> Optional[int]:
         if seed is not None:
             torch.manual_seed(seed)
-        return self._set_seed(seed)
+        self._set_seed(seed)
+        if seed is not None:
+            new_seed = seed_generator(seed)
+            seed = new_seed
+        return seed
 
-    def _set_seed(self, seed: Optional[int]) -> Optional[int]:
+    def _set_seed(self, seed: Optional[int]):
         raise NotImplementedError
 
     def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs) -> _TensorDict:
