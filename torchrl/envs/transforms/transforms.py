@@ -1361,11 +1361,13 @@ class CatTensors(Transform):
         spec0 = observation_spec[keys[0]]
         out_key = self.out_key
         shape = list(spec0.shape)
+        device = spec0.device
         shape[self.dim] = sum_shape
         shape = torch.Size(shape)
         observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
             shape=shape,
             dtype=spec0.dtype,
+            device=device,
         )
         if self.del_keys:
             for key in self.keys:
