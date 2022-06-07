@@ -1,0 +1,13 @@
+env_name: humanoid
+env_task: walk
+env_library: dm_control
+optim_steps_per_batch: 10
+lmbda: 0.95
+normalize_rewards_online: True
+record_video: False
+max_frames_per_traj: 1000
+record_interval: 200
+lr: 3e-4
+entropy_coef: 1e-4
+frame_skip: 4
+tanh_loc: True

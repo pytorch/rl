@@ -240,5 +240,5 @@ class PPOLossConfig:
     # lambda factor in GAE (using 'lambda' as attribute is prohibited in python, hence the misspelling)
     entropy_coef: float = 1e-3
     # Entropy factor for the PPO loss
-    loss_function: str = "smooth"
+    loss_function: str = "smooth_l1"
     # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).

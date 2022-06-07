@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Union, Any
 
 from omegaconf import DictConfig
 
@@ -400,11 +400,11 @@ class EnvConfig:
     # number of random steps to do after reset. Default is 0
     catframes: int = 0
     # Number of frames to concatenate through time. Default is 0 (do not use CatFrames).
-    center_crop: int = 0
+    center_crop: Any = field(default_factory=lambda: [])
     # center crop size.
-    no_grayscale: bool = True
+    grayscale: bool = True
     # Disables grayscale transform.
-    max_frames_per_traj: bool = True
+    max_frames_per_traj: int = 1000
     # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
     batch_transform: bool = False
     # if True, the transforms will be applied to the parallel env, and not to each individual env.

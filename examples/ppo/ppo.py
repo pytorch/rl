@@ -97,6 +97,7 @@ def main(cfg: DictConfig):
 
     loss_module = make_ppo_loss(model, args)
     if args.gSDE:
+        print("HERHOREHIRHIER")
         with torch.no_grad(), set_exploration_mode("random"):
             # get dimensions to build the parallel env
             proof_td = model(proof_env.reset().to(device))
