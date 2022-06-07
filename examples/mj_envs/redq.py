@@ -116,7 +116,8 @@ def main(args):
     writer = SummaryWriter(f"redq_logging/{exp_name}")
     video_tag = exp_name if args.record_video else ""
 
-    stats = None
+    stats_pixels = None
+    stats_state = None
     if not args.vecnorm and args.norm_stats:
         proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
         if args.from_pixels:
