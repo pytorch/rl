@@ -25,15 +25,13 @@ import collections
 try:
 
     import dm_env
+    from dm_control import suite
+    from dm_control.suite.wrappers import pixels
 
     _has_dmc = True
 
 except ImportError:
     _has_dmc = False
-
-if _has_dmc:
-    from dm_control import suite
-    from dm_control.suite.wrappers import pixels
 
 
 def _dmcontrol_to_torchrl_spec_transform(
