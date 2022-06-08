@@ -305,8 +305,7 @@ class _EnvClass:
             tensordict = tensordict_reset
         return tensordict
 
-    @property
-    def current_tensordict(self) -> _TensorDict:
+    def _current_tensordict_get(self) -> _TensorDict:
         """Returns the last tensordict encountered after calling `reset` or `step`."""
         try:
             td = self._current_tensordict
@@ -319,8 +318,7 @@ class _EnvClass:
             msg = f"env {self} does not have a _current_tensordict attribute. Consider calling reset() before querying it."
             raise AttributeError(msg)
 
-    @current_tensordict.setter
-    def current_tensordict(self, value: Union[_TensorDict, dict]):
+    def _current_tensordict_set(self, value: Union[_TensorDict, dict]):
         if isinstance(self._current_tensordict, _TensorDict):
             self._current_tensordict.update_(
                 value.select(*self._current_tensordict.keys())
@@ -333,6 +331,8 @@ class _EnvClass:
                 f"current_tensordict setter got an object of type {type(value)} but a TensorDict was expected"
             )
         self._current_tensordict = value
+
+    current_tensordict = property(_current_tensordict_get, _current_tensordict_set)
 
     def numel(self) -> int:
         return math.prod(self.batch_size)
@@ -392,7 +392,7 @@ class _EnvClass:
 
         """
         if tensordict is None:
-            tensordict = self.current_tensordict.clone()
+            tensordict = self.current_tensordict
         action = self.action_spec.rand(self.batch_size)
         tensordict.set("action", action)
         return self.step(tensordict)
