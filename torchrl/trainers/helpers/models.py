@@ -1202,11 +1202,7 @@ class PPOModelConfig:
 
 
 @dataclass
-<<<<<<< HEAD
-class ContinuousModelConfig:  # TODO: conditional statements for this?
-=======
 class ContinuousModelConfig:
->>>>>>> 0dd367f (Fixed style issues)
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
     noisy: bool = False

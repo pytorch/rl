@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import dataclasses
 import uuid
 from datetime import datetime
 
@@ -21,9 +20,7 @@ except ImportError:
     _configargparse = False
 import torch.cuda
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import EGreedyWrapper
-from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     parser_collector_args_offpolicy,
