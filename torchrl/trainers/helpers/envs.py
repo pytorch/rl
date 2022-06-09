@@ -179,9 +179,7 @@ def make_env_transforms(
         env.append_transform(DoubleToFloat(keys=double_to_float_list))
 
         if hasattr(cfg, "catframes") and cfg.catframes:
-            env.append_transform(
-                CatFrames(N=cfg.catframes, keys=[out_key], cat_dim=-1)
-            )
+            env.append_transform(CatFrames(N=cfg.catframes, keys=[out_key], cat_dim=-1))
 
     else:
         env.append_transform(DoubleToFloat(keys=double_to_float_list))
@@ -213,7 +211,7 @@ def transformed_env_constructor(
     Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
-        cfg (DictConfig): 
+        cfg (DictConfig): a DictConfig containing the arguments of the script.
         video_tag (str, optional): video tag to be passed to the SummaryWriter object
         writer (SummaryWriter, optional): tensorboard writer associated with the script
         stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform

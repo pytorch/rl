@@ -100,13 +100,13 @@ def make_dqn_actor(
         >>> proof_environment = TransformedEnv(GymEnv("ALE/Pong-v5",
         ...    pixels_only=True), ToTensorImage())
         >>> device = torch.device("cpu")
-        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
-        ...                    (DiscreteModelConfig, EnvConfig) 
+        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
+        ...                    (DiscreteModelConfig, EnvConfig)
         ...                   for config_field in dataclasses.fields(config_cls)]
         >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
         >>> cs = ConfigStore.instance()
         >>> cs.store(name="config", node=Config)
-        >>> with initialize(config_path=None): 
+        >>> with initialize(config_path=None):
         >>>     cfg = compose(config_name="config")
         >>> actor = make_dqn_actor(proof_environment, cfg, device)
         >>> _ = proof_environment.reset()
@@ -235,13 +235,13 @@ def make_ddpg_actor(
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
         >>> device = torch.device("cpu")
-        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
-        ...                    (DDPGModelConfig, EnvConfig) 
+        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
+        ...                    (DDPGModelConfig, EnvConfig)
         ...                   for config_field in dataclasses.fields(config_cls)]
         >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
         >>> cs = ConfigStore.instance()
         >>> cs.store(name="config", node=Config)
-        >>> with initialize(config_path=None): 
+        >>> with initialize(config_path=None):
         >>>     cfg = compose(config_name="config")
         >>> actor, value = make_ddpg_actor(
         ...     proof_environment,
@@ -438,13 +438,13 @@ def make_ppo_model(
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
         >>> device = torch.device("cpu")
-        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
-        ...                    (PPOModelConfig, EnvConfig) 
+        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
+        ...                    (PPOModelConfig, EnvConfig)
         ...                   for config_field in dataclasses.fields(config_cls)]
         >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
         >>> cs = ConfigStore.instance()
         >>> cs.store(name="config", node=Config)
-        >>> with initialize(config_path=None): 
+        >>> with initialize(config_path=None):
         >>>     cfg = compose(config_name="config")
         >>> actor_value = make_ppo_model(
         ...     proof_environment,
@@ -749,13 +749,13 @@ def make_sac_model(
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
         >>> device = torch.device("cpu")
-        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
-        ...                    (SACModelConfig, EnvConfig) 
+        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
+        ...                    (SACModelConfig, EnvConfig)
         ...                   for config_field in dataclasses.fields(config_cls)]
         >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
         >>> cs = ConfigStore.instance()
         >>> cs.store(name="config", node=Config)
-        >>> with initialize(config_path=None): 
+        >>> with initialize(config_path=None):
         >>>     cfg = compose(config_name="config")
         >>> model = make_sac_model(
         ...     proof_environment,
@@ -985,13 +985,13 @@ def make_redq_model(
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
         >>> device = torch.device("cpu")
-        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
-        ...                    (RedqModelConfig, EnvConfig) 
+        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in
+        ...                    (RedqModelConfig, EnvConfig)
         ...                   for config_field in dataclasses.fields(config_cls)]
         >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
         >>> cs = ConfigStore.instance()
         >>> cs.store(name="config", node=Config)
-        >>> with initialize(config_path=None): 
+        >>> with initialize(config_path=None):
         >>>     cfg = compose(config_name="config")
         >>> model = make_redq_model(
         ...     proof_environment,
@@ -1202,7 +1202,11 @@ class PPOModelConfig:
 
 
 @dataclass
+<<<<<<< HEAD
 class ContinuousModelConfig:  # TODO: conditional statements for this?
+=======
+class ContinuousModelConfig:
+>>>>>>> 0dd367f (Fixed style issues)
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
     noisy: bool = False

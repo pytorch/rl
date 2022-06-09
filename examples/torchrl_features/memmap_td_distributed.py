@@ -9,6 +9,8 @@ import time
 import configargparse
 import torch
 import torch.distributed.rpc as rpc
+from hydra import compose, initialize
+from hydra.core.config_store import ConfigStore
 from torchrl.data import TensorDict
 from torchrl.data.tensordict.memmap import set_transfer_ownership
 
