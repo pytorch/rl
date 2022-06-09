@@ -113,7 +113,7 @@ def make_env_transforms(
         )
 
     if args.noops:
-        env.append_transform(NoopResetEnv(env, args.noops))
+        env.append_transform(NoopResetEnv(args.noops))
     if from_pixels:
         if not args.catframes:
             raise RuntimeError(
