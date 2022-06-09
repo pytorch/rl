@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import torch
-from omegaconf import DictConfig
 from torch import nn, distributions as d
 
 from torchrl.data import DEVICE_TYPING, CompositeSpec
@@ -76,7 +75,7 @@ __all__ = [
 
 
 def make_dqn_actor(
-    proof_environment: _EnvClass, cfg: DictConfig, device: torch.device
+    proof_environment: _EnvClass, cfg: "DictConfig", device: torch.device
 ) -> Actor:
     """
     DQN constructor helper function.
@@ -201,7 +200,7 @@ def make_dqn_actor(
 
 def make_ddpg_actor(
     proof_environment: _EnvClass,
-    cfg: DictConfig,
+    cfg: "DictConfig",
     actor_net_kwargs: Optional[dict] = None,
     value_net_kwargs: Optional[dict] = None,
     device: DEVICE_TYPING = "cpu",
@@ -404,7 +403,7 @@ def make_ddpg_actor(
 
 def make_ppo_model(
     proof_environment: _EnvClass,
-    cfg: DictConfig,
+    cfg: "DictConfig",
     device: DEVICE_TYPING,
     in_keys_actor: Optional[Sequence[str]] = None,
     observation_key=None,
@@ -709,7 +708,7 @@ def make_ppo_model(
 
 def make_sac_model(
     proof_environment: _EnvClass,
-    cfg: DictConfig,
+    cfg: "DictConfig",
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -947,7 +946,7 @@ def make_sac_model(
 
 def make_redq_model(
     proof_environment: _EnvClass,
-    cfg: DictConfig,
+    cfg: "DictConfig",
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,

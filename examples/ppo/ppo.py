@@ -10,7 +10,7 @@ from datetime import datetime
 import hydra
 import torch.cuda
 from hydra.core.config_store import ConfigStore
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
@@ -53,7 +53,7 @@ cs.store(name="config", node=Config)
 
 
 @hydra.main(version_base=None, config_path=None, config_name="config")
-def main(cfg: DictConfig):
+def main(cfg: "DictConfig"):
     from torch.utils.tensorboard import SummaryWriter
 
     if cfg.config_file is not None:

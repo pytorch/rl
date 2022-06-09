@@ -6,8 +6,6 @@
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Type, Union, Dict, Any
 
-from omegaconf import DictConfig
-
 from torchrl.collectors.collectors import (
     _DataCollector,
     _MultiDataCollector,
@@ -241,7 +239,7 @@ def _make_collector(
 def make_collector_offpolicy(
     make_env: Callable[[], _EnvClass],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    cfg: DictConfig,
+    cfg: "DictConfig",
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     """
@@ -306,7 +304,7 @@ def make_collector_offpolicy(
 def make_collector_onpolicy(
     make_env: Callable[[], _EnvClass],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    cfg: DictConfig,
+    cfg: "DictConfig",
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     collector_helper = sync_sync_collector

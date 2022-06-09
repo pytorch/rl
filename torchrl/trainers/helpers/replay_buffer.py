@@ -6,7 +6,6 @@
 from dataclasses import dataclass
 
 import torch
-from omegaconf import DictConfig
 
 from torchrl.data import (
     DEVICE_TYPING,
@@ -18,7 +17,7 @@ from torchrl.data import (
 __all__ = ["make_replay_buffer"]
 
 
-def make_replay_buffer(device: DEVICE_TYPING, cfg: DictConfig) -> ReplayBuffer:
+def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer:
     """Builds a replay buffer using the config built from ReplayArgsConfig."""
     device = torch.device(device)
     if not cfg.prb:

@@ -9,7 +9,7 @@ from warnings import warn
 
 from hydra import compose, initialize
 from hydra.core.config_store import ConfigStore
-from omegaconf import DictConfig, open_dict
+from omegaconf import open_dict
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
@@ -89,7 +89,7 @@ def make_trainer(
     ] = None,
     replay_buffer: Optional[ReplayBuffer] = None,
     writer: Optional["SummaryWriter"] = None,
-    cfg: DictConfig = None,
+    cfg: "DictConfig" = None,
 ) -> Trainer:
     """Creates a Trainer instance given its constituents.
 

@@ -5,8 +5,6 @@
 
 from dataclasses import dataclass
 
-from omegaconf import DictConfig
-
 __all__ = [
     "make_sac_loss",
     "make_dqn_loss",
@@ -39,7 +37,7 @@ from torchrl.objectives.returns.advantages import GAE
 
 
 def make_target_updater(
-    cfg: DictConfig, loss_module: _LossModule
+    cfg: "DictConfig", loss_module: _LossModule
 ) -> Optional[_TargetNetUpdate]:
     """Builds a target network weight update object."""
     if cfg.loss == "double":
