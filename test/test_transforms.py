@@ -823,12 +823,19 @@ class TestTransforms:
             )
 
     @pytest.mark.parametrize("random", [True, False])
-    def test_noop_reset_env(self, random):
+    @pytest.mark.parametrize("compose", [True, False])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_noop_reset_env(self, random, device, compose):
         torch.manual_seed(0)
         env = ContinuousActionVecMockEnv()
         env.set_seed(100)
-        noop_reset_env = NoopResetEnv(env=env, random=random)
-        transformed_env = TransformedEnv(env, noop_reset_env)
+        noop_reset_env = NoopResetEnv(random=random)
+        if compose:
+            transformed_env = TransformedEnv(env)
+            transformed_env.append_transform(noop_reset_env)
+        else:
+            transformed_env = TransformedEnv(env, noop_reset_env)
+        transformed_env = transformed_env.to(device)
         transformed_env.reset()
         if random:
             assert transformed_env.step_count > 0
