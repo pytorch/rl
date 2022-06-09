@@ -1281,6 +1281,29 @@ class ContinuousModelConfig:
 
 
 @dataclass
+class DDPGModelConfig:
+    annealing_frames: int = 1000000
+    # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
+    noisy: bool = False
+    # whether to use NoisyLinearLayers in the value network.
+    ou_exploration: bool = False
+    # wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for
+    # efficient entropy-based exploration, this should be left for experimentation only.
+    ou_sigma: float = 0.2
+    # Ornstein-Uhlenbeck sigma
+    ou_theta: float = 0.15
+    # Aimed at superseeding --ou_exploration.
+    distributional: bool = False
+    # whether a distributional loss should be used (TODO: not implemented yet).
+    atoms: int = 51
+    # number of atoms used for the distributional loss (TODO)
+    gSDE: bool = False
+    # if True, exploration is achieved using the gSDE technique.
+    activation: str = "tanh"
+    # activation function, either relu or elu or tanh, Default=tanh
+
+
+@dataclass
 class DiscreteModelConfig:
     annealing_frames: int = 1000000
     # Number of frames used for annealing of the EGreedy exploration. Default=1e6.
