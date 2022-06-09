@@ -241,7 +241,7 @@ def _make_collector(
 def make_collector_offpolicy(
     make_env: Callable[[], _EnvClass],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    args: DictConfig,
+    cfg: DictConfig,
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     """
@@ -250,19 +250,19 @@ def make_collector_offpolicy(
     Args:
         make_env (Callable): environment creator
         actor_model_explore (TensorDictModule): Model instance used for evaluation and exploration update
-        args (Namespace): argument namespace built from the parser constructor
+        cfg (DictConfig): config containing user-defined arguments
         make_env_kwargs (dict): kwargs for the env creator
 
     """
-    if args.async_collection:
+    if cfg.async_collection:
         collector_helper = sync_async_collector
     else:
         collector_helper = sync_sync_collector
 
-    if args.multi_step:
+    if cfg.multi_step:
         ms = MultiStep(
-            gamma=args.gamma,
-            n_steps_max=args.n_steps_return,
+            gamma=cfg.gamma,
+            n_steps_max=cfg.n_steps_return,
         )
     else:
         ms = None
@@ -272,41 +272,41 @@ def make_collector_offpolicy(
         env_kwargs.update(make_env_kwargs)
     elif make_env_kwargs is not None:
         env_kwargs = make_env_kwargs
-    args.collector_devices = (
-        args.collector_devices
-        if len(args.collector_devices) > 1
-        else args.collector_devices[0]
+    cfg.collector_devices = (
+        cfg.collector_devices
+        if len(cfg.collector_devices) > 1
+        else cfg.collector_devices[0]
     )
     collector_helper_kwargs = {
         "env_fns": make_env,
         "env_kwargs": env_kwargs,
         "policy": actor_model_explore,
-        "max_frames_per_traj": args.max_frames_per_traj,
-        "frames_per_batch": args.frames_per_batch,
-        "total_frames": args.total_frames,
+        "max_frames_per_traj": cfg.max_frames_per_traj,
+        "frames_per_batch": cfg.frames_per_batch,
+        "total_frames": cfg.total_frames,
         "postproc": ms,
         "num_env_per_collector": 1,
         # we already took care of building the make_parallel_env function
-        "num_collectors": -args.num_workers // -args.env_per_collector,
-        "devices": args.collector_devices,
-        "passing_devices": args.collector_devices,
-        "init_random_frames": args.init_random_frames,
-        "pin_memory": args.pin_memory,
+        "num_collectors": -cfg.num_workers // -cfg.env_per_collector,
+        "devices": cfg.collector_devices,
+        "passing_devices": cfg.collector_devices,
+        "init_random_frames": cfg.init_random_frames,
+        "pin_memory": cfg.pin_memory,
         "split_trajs": ms is not None,
         # trajectories must be separated if multi-step is used
-        "init_with_lag": args.init_with_lag,
-        "exploration_mode": args.exploration_mode,
+        "init_with_lag": cfg.init_with_lag,
+        "exploration_mode": cfg.exploration_mode,
     }
 
     collector = collector_helper(**collector_helper_kwargs)
-    collector.set_seed(args.seed)
+    collector.set_seed(cfg.seed)
     return collector
 
 
 def make_collector_onpolicy(
     make_env: Callable[[], _EnvClass],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    args: DictConfig,
+    cfg: DictConfig,
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     collector_helper = sync_sync_collector
@@ -318,33 +318,33 @@ def make_collector_onpolicy(
         env_kwargs.update(make_env_kwargs)
     elif make_env_kwargs is not None:
         env_kwargs = make_env_kwargs
-    args.collector_devices = (
-        args.collector_devices
-        if len(args.collector_devices) > 1
-        else args.collector_devices[0]
+    cfg.collector_devices = (
+        cfg.collector_devices
+        if len(cfg.collector_devices) > 1
+        else cfg.collector_devices[0]
     )
     collector_helper_kwargs = {
         "env_fns": make_env,
         "env_kwargs": env_kwargs,
         "policy": actor_model_explore,
-        "max_frames_per_traj": args.max_frames_per_traj,
-        "frames_per_batch": args.frames_per_batch,
-        "total_frames": args.total_frames,
+        "max_frames_per_traj": cfg.max_frames_per_traj,
+        "frames_per_batch": cfg.frames_per_batch,
+        "total_frames": cfg.total_frames,
         "postproc": ms,
         "num_env_per_collector": 1,
         # we already took care of building the make_parallel_env function
-        "num_collectors": -args.num_workers // -args.env_per_collector,
-        "devices": args.collector_devices,
-        "passing_devices": args.collector_devices,
-        "pin_memory": args.pin_memory,
+        "num_collectors": -cfg.num_workers // -cfg.env_per_collector,
+        "devices": cfg.collector_devices,
+        "passing_devices": cfg.collector_devices,
+        "pin_memory": cfg.pin_memory,
         "split_trajs": True,
         # trajectories must be separated in online settings
-        "init_with_lag": args.init_with_lag,
-        "exploration_mode": args.exploration_mode,
+        "init_with_lag": cfg.init_with_lag,
+        "exploration_mode": cfg.exploration_mode,
     }
 
     collector = collector_helper(**collector_helper_kwargs)
-    collector.set_seed(args.seed)
+    collector.set_seed(cfg.seed)
     return collector
 
 

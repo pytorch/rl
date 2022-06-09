@@ -89,7 +89,7 @@ def make_trainer(
     ] = None,
     replay_buffer: Optional[ReplayBuffer] = None,
     writer: Optional["SummaryWriter"] = None,
-    args: DictConfig = None,
+    cfg: DictConfig = None,
 ) -> Trainer:
     """Creates a Trainer instance given its constituents.
 
@@ -103,11 +103,11 @@ def make_trainer(
             updates (should be synced with the learnt policy).
         replay_buffer (ReplayBuffer, optional): a replay buffer to be used to collect data.
         writer (SummaryWriter, optional): a tensorboard SummaryWriter to be used for logging.
-        args (argparse.Namespace, optional): a Namespace containing the arguments of the script. If None, the default
+        cfg (DictConfig, optional): a DictConfig containing the arguments of the script. If None, the default
             arguments are used.
 
     Returns:
-        A trainer built with the input objects. The optimizer is built by this helper function using the args provided.
+        A trainer built with the input objects. The optimizer is built by this helper function using the cfg provided.
 
     Examples:
         >>> import torch
@@ -143,37 +143,37 @@ def make_trainer(
         >>> print(trainer)
 
     """
-    if args is None:
+    if cfg is None:
         warn(
-            "Getting default args for the trainer. "
+            "Getting default cfg for the trainer. "
             "This should be only used for debugging."
         )
         with initialize(config_path="."):
-            args = compose(config_name="trainer")
-            with open_dict(args):
-                args.frame_skip = 1
-                args.total_frames = 1000
-                args.record_frames = 10
-                args.record_interval = 10
+            cfg = compose(config_name="trainer")
+            with open_dict(cfg):
+                cfg.frame_skip = 1
+                cfg.total_frames = 1000
+                cfg.record_frames = 10
+                cfg.record_interval = 10
 
-    optimizer_kwargs = {} if args.optimizer != "adam" else {"betas": (0.0, 0.9)}
-    optimizer = OPTIMIZERS[args.optimizer](
+    optimizer_kwargs = {} if cfg.optimizer != "adam" else {"betas": (0.0, 0.9)}
+    optimizer = OPTIMIZERS[cfg.optimizer](
         loss_module.parameters(),
-        lr=args.lr,
-        weight_decay=args.weight_decay,
+        lr=cfg.lr,
+        weight_decay=cfg.weight_decay,
         **optimizer_kwargs,
     )
-    if args.lr_scheduler == "cosine":
+    if cfg.lr_scheduler == "cosine":
         optim_scheduler = CosineAnnealingLR(
             optimizer,
             T_max=int(
-                args.total_frames / args.frames_per_batch * args.optim_steps_per_batch
+                cfg.total_frames / cfg.frames_per_batch * cfg.optim_steps_per_batch
             ),
         )
-    elif args.lr_scheduler == "":
+    elif cfg.lr_scheduler == "":
         optim_scheduler = None
     else:
-        raise NotImplementedError(f"lr scheduler {args.lr_scheduler}")
+        raise NotImplementedError(f"lr scheduler {cfg.lr_scheduler}")
 
     print(
         f"collector = {collector}; \n"
@@ -183,37 +183,37 @@ def make_trainer(
         f"policy_exploration = {policy_exploration}; \n"
         f"replay_buffer = {replay_buffer}; \n"
         f"writer = {writer}; \n"
-        f"args = {args}; \n"
+        f"cfg = {cfg}; \n"
     )
 
     if writer is not None:
         # log hyperparams
-        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(args).items())])
+        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(cfg).items())])
         writer.add_text("hparams", txt)
 
     trainer = Trainer(
         collector=collector,
-        frame_skip=args.frame_skip,
-        total_frames=args.total_frames * args.frame_skip,
+        frame_skip=cfg.frame_skip,
+        total_frames=cfg.total_frames * cfg.frame_skip,
         loss_module=loss_module,
         optimizer=optimizer,
         writer=writer,
-        optim_steps_per_batch=args.optim_steps_per_batch,
-        clip_grad_norm=args.clip_grad_norm,
-        clip_norm=args.clip_norm,
+        optim_steps_per_batch=cfg.optim_steps_per_batch,
+        clip_grad_norm=cfg.clip_grad_norm,
+        clip_norm=cfg.clip_norm,
     )
 
-    if hasattr(args, "noisy") and args.noisy:
+    if hasattr(cfg, "noisy") and cfg.noisy:
         trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
 
     trainer.register_op("batch_process", lambda batch: batch.cpu())
-    if args.selected_keys:
-        trainer.register_op("batch_process", SelectKeys(args.selected_keys))
+    if cfg.selected_keys:
+        trainer.register_op("batch_process", SelectKeys(cfg.selected_keys))
 
     if replay_buffer is not None:
         # replay buffer is used 2 or 3 times: to register data, to sample
         # data and to update priorities
-        rb_trainer = ReplayBufferTrainer(replay_buffer, args.batch_size)
+        rb_trainer = ReplayBufferTrainer(replay_buffer, cfg.batch_size)
         trainer.register_op("batch_process", rb_trainer.extend)
         trainer.register_op("process_optim_batch", rb_trainer.sample)
         trainer.register_op("post_loss", rb_trainer.update_priority)
@@ -221,7 +221,7 @@ def make_trainer(
         trainer.register_op("batch_process", mask_batch)
         trainer.register_op(
             "process_optim_batch",
-            BatchSubSampler(batch_size=args.batch_size, sub_traj_len=args.sub_traj_len),
+            BatchSubSampler(batch_size=cfg.batch_size, sub_traj_len=cfg.sub_traj_len),
         )
 
     if optim_scheduler is not None:
@@ -230,40 +230,40 @@ def make_trainer(
     if target_net_updater is not None:
         trainer.register_op("post_optim", target_net_updater.step)
 
-    if args.normalize_rewards_online:
+    if cfg.normalize_rewards_online:
         # if used the running statistics of the rewards are computed and the
         # rewards used for training will be normalized based on these.
-        reward_normalizer = RewardNormalizer(scale=args.normalize_rewards_online_scale)
+        reward_normalizer = RewardNormalizer(scale=cfg.normalize_rewards_online_scale)
         trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
         trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 
     if policy_exploration is not None and hasattr(policy_exploration, "step"):
         trainer.register_op(
-            "post_steps", policy_exploration.step, frames=args.frames_per_batch
+            "post_steps", policy_exploration.step, frames=cfg.frames_per_batch
         )
 
     trainer.register_op(
-        "post_steps_log", lambda *args: {"lr": optimizer.param_groups[0]["lr"]}
+        "post_steps_log", lambda *cfg: {"lr": optimizer.param_groups[0]["lr"]}
     )
 
     if recorder is not None:
         recorder_obj = Recorder(
-            record_frames=args.record_frames,
-            frame_skip=args.frame_skip,
+            record_frames=cfg.record_frames,
+            frame_skip=cfg.frame_skip,
             policy_exploration=policy_exploration,
             recorder=recorder,
-            record_interval=args.record_interval,
+            record_interval=cfg.record_interval,
         )
         trainer.register_op(
             "post_steps_log",
             recorder_obj,
         )
         recorder_obj_explore = Recorder(
-            record_frames=args.record_frames,
-            frame_skip=args.frame_skip,
+            record_frames=cfg.record_frames,
+            frame_skip=cfg.frame_skip,
             policy_exploration=policy_exploration,
             recorder=recorder,
-            record_interval=args.record_interval,
+            record_interval=cfg.record_interval,
             exploration_mode="random",
             suffix="exploration",
             out_key="r_evaluation_exploration",
@@ -275,6 +275,6 @@ def make_trainer(
     trainer.register_op("post_steps", UpdateWeights(collector, 1))
 
     trainer.register_op("pre_steps_log", LogReward())
-    trainer.register_op("pre_steps_log", CountFramesLog(frame_skip=args.frame_skip))
+    trainer.register_op("pre_steps_log", CountFramesLog(frame_skip=cfg.frame_skip))
 
     return trainer

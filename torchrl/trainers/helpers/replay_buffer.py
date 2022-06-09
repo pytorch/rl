@@ -18,19 +18,19 @@ from torchrl.data import (
 __all__ = ["make_replay_buffer"]
 
 
-def make_replay_buffer(device: DEVICE_TYPING, args: DictConfig) -> ReplayBuffer:
-    """Builds a replay buffer using the arguments build from the parser returned by ReplayArgsConfig."""
+def make_replay_buffer(device: DEVICE_TYPING, cfg: DictConfig) -> ReplayBuffer:
+    """Builds a replay buffer using the config built from ReplayArgsConfig."""
     device = torch.device(device)
-    if not args.prb:
+    if not cfg.prb:
         buffer = TensorDictReplayBuffer(
-            args.buffer_size,
+            cfg.buffer_size,
             # collate_fn=InPlaceSampler(device),
             pin_memory=device != torch.device("cpu"),
             prefetch=3,
         )
     else:
         buffer = TensorDictPrioritizedReplayBuffer(
-            args.buffer_size,
+            cfg.buffer_size,
             alpha=0.7,
             beta=0.5,
             # collate_fn=InPlaceSampler(device),

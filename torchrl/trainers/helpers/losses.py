@@ -39,22 +39,22 @@ from torchrl.objectives.returns.advantages import GAE
 
 
 def make_target_updater(
-    args: DictConfig, loss_module: _LossModule
+    cfg: DictConfig, loss_module: _LossModule
 ) -> Optional[_TargetNetUpdate]:
     """Builds a target network weight update object."""
-    if args.loss == "double":
-        if not args.hard_update:
+    if cfg.loss == "double":
+        if not cfg.hard_update:
             target_net_updater = SoftUpdate(
-                loss_module, 1 - 1 / args.value_network_update_interval
+                loss_module, 1 - 1 / cfg.value_network_update_interval
             )
         else:
             target_net_updater = HardUpdate(
-                loss_module, args.value_network_update_interval
+                loss_module, cfg.value_network_update_interval
             )
         # assert len(target_net_updater.net_pairs) == 3, "length of target_net_updater nets should be 3"
         target_net_updater.init_()
     else:
-        if args.hard_update:
+        if cfg.hard_update:
             raise RuntimeError(
                 "hard/soft-update are supposed to be used with double SAC loss. "
                 "Consider using --loss=double or discarding the hard_update flag."
@@ -63,22 +63,22 @@ def make_target_updater(
     return target_net_updater
 
 
-def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
+def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
     """Builds the SAC loss module."""
     loss_kwargs = {}
-    if hasattr(args, "distributional") and args.distributional:
+    if hasattr(cfg, "distributional") and cfg.distributional:
         raise NotImplementedError
     else:
-        loss_kwargs.update({"loss_function": args.loss_function})
+        loss_kwargs.update({"loss_function": cfg.loss_function})
         loss_kwargs.update(
             {
-                "target_entropy": args.target_entropy
-                if args.target_entropy is not None
+                "target_entropy": cfg.target_entropy
+                if cfg.target_entropy is not None
                 else "auto"
             }
         )
         loss_class = SACLoss
-        if args.loss == "double":
+        if cfg.loss == "double":
             loss_kwargs.update(
                 {
                     "delay_actor": False,
@@ -86,7 +86,7 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
                     "delay_value": True,
                 }
             )
-        elif args.loss == "single":
+        elif cfg.loss == "single":
             loss_kwargs.update(
                 {
                     "delay_actor": False,
@@ -96,7 +96,7 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
             )
         else:
             raise NotImplementedError(
-                f"args.loss {args.loss} unsupported. Consider chosing from 'double' or 'single'"
+                f"cfg.loss {cfg.loss} unsupported. Consider chosing from 'double' or 'single'"
             )
 
     actor_model, qvalue_model, value_model = model
@@ -105,22 +105,22 @@ def make_sac_loss(model, args) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
         actor_network=actor_model,
         qvalue_network=qvalue_model,
         value_network=value_model,
-        num_qvalue_nets=args.num_q_values,
-        gamma=args.gamma,
+        num_qvalue_nets=cfg.num_q_values,
+        gamma=cfg.gamma,
         **loss_kwargs,
     )
-    target_net_updater = make_target_updater(args, loss_module)
+    target_net_updater = make_target_updater(cfg, loss_module)
     return loss_module, target_net_updater
 
 
-def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
+def make_redq_loss(model, cfg) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
     """Builds the REDQ loss module."""
     loss_kwargs = {}
-    if hasattr(args, "distributional") and args.distributional:
+    if hasattr(cfg, "distributional") and cfg.distributional:
         raise NotImplementedError
     else:
-        loss_kwargs.update({"loss_function": args.loss_function})
-        loss_kwargs.update({"delay_qvalue": args.loss == "double"})
+        loss_kwargs.update({"loss_function": cfg.loss_function})
+        loss_kwargs.update({"delay_qvalue": cfg.loss == "double"})
         loss_class = REDQLoss
     if isinstance(model, ActorValueOperator):
         actor_model = model.get_policy_operator()
@@ -138,50 +138,50 @@ def make_redq_loss(model, args) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
     loss_module = loss_class(
         actor_network=actor_model,
         qvalue_network=qvalue_model,
-        num_qvalue_nets=args.num_q_values,
-        gamma=args.gamma,
-        gSDE=args.gSDE,
+        num_qvalue_nets=cfg.num_q_values,
+        gamma=cfg.gamma,
+        gSDE=cfg.gSDE,
         **loss_kwargs,
     )
-    target_net_updater = make_target_updater(args, loss_module)
+    target_net_updater = make_target_updater(cfg, loss_module)
     return loss_module, target_net_updater
 
 
-def make_ddpg_loss(model, args) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
+def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
     """Builds the DDPG loss module."""
     actor, value_net = model
     loss_kwargs = {}
-    if args.distributional:
+    if cfg.distributional:
         raise NotImplementedError
     else:
-        loss_kwargs.update({"loss_function": args.loss_function})
+        loss_kwargs.update({"loss_function": cfg.loss_function})
         loss_class = DDPGLoss
-    if args.loss not in ("single", "double"):
+    if cfg.loss not in ("single", "double"):
         raise NotImplementedError
-    double_loss = args.loss == "double"
+    double_loss = cfg.loss == "double"
     loss_kwargs.update({"delay_actor": double_loss, "delay_value": double_loss})
-    loss_module = loss_class(actor, value_net, gamma=args.gamma, **loss_kwargs)
-    target_net_updater = make_target_updater(args, loss_module)
+    loss_module = loss_class(actor, value_net, gamma=cfg.gamma, **loss_kwargs)
+    target_net_updater = make_target_updater(cfg, loss_module)
     return loss_module, target_net_updater
 
 
-def make_dqn_loss(model, args) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
+def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
     """Builds the DQN loss module."""
     loss_kwargs = {}
-    if args.distributional:
+    if cfg.distributional:
         loss_class = DistributionalDQNLoss
     else:
-        loss_kwargs.update({"loss_function": args.loss_function})
+        loss_kwargs.update({"loss_function": cfg.loss_function})
         loss_class = DQNLoss
-    if args.loss not in ("single", "double"):
+    if cfg.loss not in ("single", "double"):
         raise NotImplementedError
-    loss_kwargs.update({"delay_value": args.loss == "double"})
-    loss_module = loss_class(model, gamma=args.gamma, **loss_kwargs)
-    target_net_updater = make_target_updater(args, loss_module)
+    loss_kwargs.update({"delay_value": cfg.loss == "double"})
+    loss_module = loss_class(model, gamma=cfg.gamma, **loss_kwargs)
+    target_net_updater = make_target_updater(cfg, loss_module)
     return loss_module, target_net_updater
 
 
-def make_ppo_loss(model, args) -> PPOLoss:
+def make_ppo_loss(model, cfg) -> PPOLoss:
     """Builds the PPO loss module."""
     loss_dict = {
         "clip": ClipPPOLoss,
@@ -193,18 +193,18 @@ def make_ppo_loss(model, args) -> PPOLoss:
     critic_model = model.get_value_operator()
 
     advantage = GAE(
-        args.gamma,
-        args.lmbda,
+        cfg.gamma,
+        cfg.lmbda,
         value_network=critic_model,
         average_rewards=True,
         gradient_mode=False,
     )
-    loss_module = loss_dict[args.loss](
+    loss_module = loss_dict[cfg.loss](
         actor=actor_model,
         critic=critic_model,
         advantage_module=advantage,
-        loss_critic_type=args.loss_function,
-        entropy_coef=args.entropy_coef,
+        loss_critic_type=cfg.loss_function,
+        entropy_coef=cfg.entropy_coef,
     )
     return loss_module
 
@@ -220,7 +220,7 @@ class LossConfig:
     value_network_update_interval: int = 1000
     # how often the target value network weights are updated (in number of updates).
     # If soft-updates are used, the value is translated into a moving average decay by using
-    # the formula decay=1-1/args.value_network_update_interval. Default=1000
+    # the formula decay=1-1/cfg.value_network_update_interval. Default=1000
     gamma: float = 0.99
     # Decay factor for return computation. Default=0.99.
     num_q_values: int = 2

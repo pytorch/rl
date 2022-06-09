@@ -45,7 +45,7 @@ LIBS = {
 }
 
 
-def correct_for_frame_skip(args: DictConfig) -> DictConfig:
+def correct_for_frame_skip(cfg: DictConfig) -> DictConfig:
     """
     Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the
     frame_skip.
@@ -53,16 +53,16 @@ def correct_for_frame_skip(args: DictConfig) -> DictConfig:
     of 1M but actually collecting frame_skip * 1M frames.
 
     Args:
-        args (argparse.Namespace): Namespace containing some frame-counting argument, including:
+        cfg (DictConfig): DictConfig containing some frame-counting argument, including:
             "max_frames_per_traj", "total_frames", "frames_per_batch", "record_frames", "annealing_frames",
             "init_random_frames", "init_env_steps"
 
     Returns:
-         the input Namespace, modified in-place.
+         the input DictConfig, modified in-place.
 
     """
     # Adapt all frame counts wrt frame_skip
-    if args.frame_skip != 1:
+    if cfg.frame_skip != 1:
         fields = [
             "max_frames_per_traj",
             "total_frames",
@@ -74,14 +74,14 @@ def correct_for_frame_skip(args: DictConfig) -> DictConfig:
             "noops",
         ]
         for field in fields:
-            if hasattr(args, field):
-                setattr(args, field, getattr(args, field) // args.frame_skip)
-    return args
+            if hasattr(cfg, field):
+                setattr(cfg, field, getattr(cfg, field) // cfg.frame_skip)
+    return cfg
 
 
 def make_env_transforms(
     env,
-    args,
+    cfg,
     video_tag,
     writer,
     env_name,
@@ -94,15 +94,15 @@ def make_env_transforms(
 ):
     env = TransformedEnv(env)
 
-    from_pixels = args.from_pixels
-    vecnorm = args.vecnorm
-    norm_rewards = vecnorm and args.norm_rewards
+    from_pixels = cfg.from_pixels
+    vecnorm = cfg.vecnorm
+    norm_rewards = vecnorm and cfg.norm_rewards
     _norm_obs_only = norm_obs_only or not norm_rewards
-    reward_scaling = args.reward_scaling
-    reward_loc = args.reward_loc
+    reward_scaling = cfg.reward_scaling
+    reward_loc = cfg.reward_loc
 
     if len(video_tag):
-        center_crop = args.center_crop
+        center_crop = cfg.center_crop
         if center_crop:
             center_crop = center_crop[0]
         env.append_transform(
@@ -113,22 +113,22 @@ def make_env_transforms(
             ),
         )
 
-    if args.noops:
-        env.append_transform(NoopResetEnv(env, args.noops))
+    if cfg.noops:
+        env.append_transform(NoopResetEnv(env, cfg.noops))
     if from_pixels:
-        if not args.catframes:
+        if not cfg.catframes:
             raise RuntimeError(
                 "this env builder currently only accepts positive catframes values"
                 "when pixels are being used."
             )
         env.append_transform(ToTensorImage())
-        if args.center_crop:
-            env.append_transform(CenterCrop(*args.center_crop))
+        if cfg.center_crop:
+            env.append_transform(CenterCrop(*cfg.center_crop))
         env.append_transform(Resize(84, 84))
-        if args.grayscale:
+        if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(first_dim=batch_dims))
-        env.append_transform(CatFrames(N=args.catframes, keys=["next_pixels"]))
+        env.append_transform(CatFrames(N=cfg.catframes, keys=["next_pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
         else:
@@ -178,15 +178,15 @@ def make_env_transforms(
         double_to_float_list.append(out_key)
         env.append_transform(DoubleToFloat(keys=double_to_float_list))
 
-        if hasattr(args, "catframes") and args.catframes:
+        if hasattr(cfg, "catframes") and cfg.catframes:
             env.append_transform(
-                CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1)
+                CatFrames(N=cfg.catframes, keys=[out_key], cat_dim=-1)
             )
 
     else:
         env.append_transform(DoubleToFloat(keys=double_to_float_list))
 
-    if hasattr(args, "gSDE") and args.gSDE:
+    if hasattr(cfg, "gSDE") and cfg.gSDE:
         env.append_transform(
             gSDENoise(action_dim=action_dim_gsde, state_dim=state_dim_gsde)
         )
@@ -196,7 +196,7 @@ def make_env_transforms(
 
 
 def transformed_env_constructor(
-    args: DictConfig,
+    cfg: DictConfig,
     video_tag: str = "",
     writer: Optional["SummaryWriter"] = None,
     stats: Optional[dict] = None,
@@ -213,7 +213,7 @@ def transformed_env_constructor(
     Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
-        args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
+        cfg (DictConfig): 
         video_tag (str, optional): video tag to be passed to the SummaryWriter object
         writer (SummaryWriter, optional): tensorboard writer associated with the script
         stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
@@ -241,11 +241,11 @@ def transformed_env_constructor(
     """
 
     def make_transformed_env(**kwargs) -> TransformedEnv:
-        env_name = args.env_name
-        env_task = args.env_task
-        env_library = LIBS[args.env_library]
-        frame_skip = args.frame_skip
-        from_pixels = args.from_pixels
+        env_name = cfg.env_name
+        env_task = cfg.env_task
+        env_library = LIBS[cfg.env_library]
+        frame_skip = cfg.frame_skip
+        from_pixels = cfg.from_pixels
 
         if custom_env is None and custom_env_maker is None:
             env_kwargs = {
@@ -271,7 +271,7 @@ def transformed_env_constructor(
 
         return make_env_transforms(
             env,
-            args,
+            cfg,
             video_tag,
             writer,
             env_name,
@@ -289,33 +289,33 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(
-    args: DictConfig, **kwargs
+    cfg: DictConfig, **kwargs
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
-        args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
+        cfg (DictConfig): config containing user-defined arguments
         kwargs: keyword arguments for the `transformed_env_constructor` method.
     """
-    batch_transform = args.batch_transform
-    if args.env_per_collector == 1:
-        kwargs.update({"args": args, "use_env_creator": True})
+    batch_transform = cfg.batch_transform
+    if cfg.env_per_collector == 1:
+        kwargs.update({"cfg": cfg, "use_env_creator": True})
         make_transformed_env = transformed_env_constructor(**kwargs)
         return make_transformed_env
-    kwargs.update({"args": args, "use_env_creator": True})
+    kwargs.update({"cfg": cfg, "use_env_creator": True})
     make_transformed_env = transformed_env_constructor(
         return_transformed_envs=not batch_transform, **kwargs
     )
     parallel_env = ParallelEnv(
-        num_workers=args.env_per_collector,
+        num_workers=cfg.env_per_collector,
         create_env_fn=make_transformed_env,
         create_env_kwargs=None,
-        pin_memory=args.pin_memory,
+        pin_memory=cfg.pin_memory,
     )
     if batch_transform:
         kwargs.update(
             {
-                "args": args,
+                "cfg": cfg,
                 "use_env_creator": False,
                 "custom_env": parallel_env,
                 "batch_dims": 1,
@@ -327,16 +327,16 @@ def parallel_env_constructor(
 
 
 def get_stats_random_rollout(
-    args: DictConfig, proof_environment: _EnvClass, key: Optional[str] = None
+    cfg: DictConfig, proof_environment: _EnvClass, key: Optional[str] = None
 ):
     print("computing state stats")
-    if not hasattr(args, "init_env_steps"):
+    if not hasattr(cfg, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
     n = 0
     td_stats = []
-    while n < args.init_env_steps:
-        _td_stats = proof_environment.rollout(max_steps=args.init_env_steps)
+    while n < cfg.init_env_steps:
+        _td_stats = proof_environment.rollout(max_steps=cfg.init_env_steps)
         n += _td_stats.numel()
         td_stats.append(_td_stats)
     td_stats = torch.cat(td_stats, 0)
@@ -349,7 +349,7 @@ def get_stats_random_rollout(
                 f"More than one key exists in the observation_specs: {[key] + keys} were found, "
                 "thus get_stats_random_rollout cannot infer which to compute the stats of."
             )
-    if args.from_pixels:
+    if cfg.from_pixels:
         m = td_stats.get(key).mean()
         s = td_stats.get(key).std().clamp_min(1e-5)
     else:
