@@ -72,9 +72,9 @@ DEFAULT_REWARD_SCALING = {
 def main(cfg: "DictConfig"):
     from torch.utils.tensorboard import SummaryWriter
 
-    if cfg.config_file is not None:
-        overriding_cfg = OmegaConf.load(cfg.config_file)
-        cfg = OmegaConf.merge(cfg, overriding_cfg)
+    # if cfg.config_file is not None:
+    #     overriding_cfg = OmegaConf.load(cfg.config_file)
+    #     cfg = OmegaConf.merge(cfg, overriding_cfg)
 
     cfg = correct_for_frame_skip(cfg)
 

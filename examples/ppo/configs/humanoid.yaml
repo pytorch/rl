@@ -11,3 +11,31 @@ lr: 3e-4
 entropy_coef: 1e-4
 frame_skip: 4
 tanh_loc: True
+
+defaults:
+  - override hydra/launcher: submitit_slurm
+  - _self_
+
+hydra:
+  # job_logging:
+    # root:
+    #   handlers: []
+    # disable_existing_loggers: True
+  run:
+    dir: ppo_logging/hydra/${now:%Y-%m-%d_%H-%M-%S}
+
+  launcher:
+    timeout_min: 4300
+    cpus_per_task: 10
+    gpus_per_node: 1
+    tasks_per_node: 1
+    mem_gb: 128
+    nodes: 1
+    submitit_folder: /private/home/bbreddy/rl/logs/submitit/%j
+    partition: devlab # learnlab prioritylab, devlab
+    signal_delay_s: 120
+    max_num_timeout: 3
+    # constraint: volta32gb
+    # additional_parameters:
+      # open-mode: append
+    # comment: neurips deadline
