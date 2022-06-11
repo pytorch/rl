@@ -7,9 +7,14 @@ from dataclasses import dataclass
 from typing import Optional, Union, List
 from warnings import warn
 
-from hydra import compose, initialize
-from hydra.core.config_store import ConfigStore
-from omegaconf import open_dict
+try: 
+    from hydra import compose, initialize
+    from hydra.core.config_store import ConfigStore
+    from omegaconf import open_dict
+    _has_hydra = True
+except ImportError: 
+    _has_hydra = False
+
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
@@ -74,9 +79,9 @@ class TrainerConfig:
     sub_traj_len: int = -1
     # length of the trajectories that sub-samples must have in online settings.
 
-
-cs = ConfigStore.instance()
-cs.store(name="trainer", node=TrainerConfig)
+if _has_hydra: 
+    cs = ConfigStore.instance()
+    cs.store(name="trainer", node=TrainerConfig)
 
 
 def make_trainer(
@@ -148,13 +153,20 @@ def make_trainer(
             "Getting default cfg for the trainer. "
             "This should be only used for debugging."
         )
-        with initialize(config_path="."):
-            cfg = compose(config_name="trainer")
-            with open_dict(cfg):
-                cfg.frame_skip = 1
-                cfg.total_frames = 1000
-                cfg.record_frames = 10
-                cfg.record_interval = 10
+        if _has_hydra: 
+            with initialize(config_path=None):
+                cfg = compose(config_name="trainer")
+                with open_dict(cfg):
+                    cfg.frame_skip = 1
+                    cfg.total_frames = 1000
+                    cfg.record_frames = 10
+                    cfg.record_interval = 10
+        else: 
+            cfg = TrainerConfig()
+            cfg.frame_skip = 1
+            cfg.total_frames = 1000
+            cfg.record_frames = 10
+            cfg.record_interval = 10
 
     optimizer_kwargs = {} if cfg.optimizer != "adam" else {"betas": (0.0, 0.9)}
     optimizer = OPTIMIZERS[cfg.optimizer](
