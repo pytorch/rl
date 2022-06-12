@@ -19,7 +19,7 @@ from torchrl.data import (
     UnboundedContinuousTensorSpec,
 )
 from ...data.utils import numpy_to_torch_dtype_dict
-from ..common import GymLikeEnv
+from ..gym_like import GymLikeEnv
 from ..utils import classproperty
 
 try:

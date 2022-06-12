@@ -18,7 +18,7 @@ from torchrl.data import (
     TensorSpec,
 )
 from ...data.utils import numpy_to_torch_dtype_dict, DEVICE_TYPING
-from ..common import GymLikeEnv
+from ..gym_like import GymLikeEnv
 
 if torch.has_cuda and torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
@@ -170,7 +170,7 @@ class DMControlEnv(GymLikeEnv):
 
     def _set_seed(self, _seed: Optional[int]) -> Optional[int]:
         self._env = self._build_env(
-            self.envname, self.taskname, _seed=_seed, **self.constructor_kwargs
+            self.envname, self.taskname, _seed=_seed, **self._constructor_kwargs
         )
         self.reset()
         return _seed
