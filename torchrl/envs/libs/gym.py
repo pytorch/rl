@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import warnings
 from types import ModuleType
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Dict
 
 import torch
 from packaging import version
@@ -130,6 +130,27 @@ class GymEnv(GymLikeEnv):
     @property
     def lib(self) -> ModuleType:
         return gym
+
+    def __init__(self, env_name, task_name=None, **kwargs):
+        kwargs["env_name"] = env_name
+        kwargs["task_name"] = task_name
+        super().__init__(**kwargs)
+
+    def _check_kwargs(self, kwargs: Dict):
+        if "env_name" in kwargs:
+            env_name = kwargs["env_name"]
+            task_name = kwargs.get("task_name", None)
+            if not (
+                (env_name in self.available_envs)
+                and (
+                    task_name in self.available_envs[env_name]
+                    if isinstance(self.available_envs, dict)
+                    else True
+                )
+            ):
+                raise RuntimeError(
+                    f"{env_name} with task {task_name} is unknown in {self.libname}"
+                )
 
     def _set_seed(self, seed: int) -> int:
         if version.parse(gym.__version__) < version.parse("0.19.0"):

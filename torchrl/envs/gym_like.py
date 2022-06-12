@@ -40,21 +40,7 @@ class GymLikeEnv(_EnvWrapper):
         super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):
-        if "env_name" in kwargs:
-            env_name = kwargs["env_name"]
-            task_name = kwargs.get("task_name", None)
-            if not (
-                (env_name in self.available_envs)
-                and (
-                    task_name in self.available_envs[env_name]
-                    if isinstance(self.available_envs, dict)
-                    else True
-                )
-            ):
-                raise RuntimeError(
-                    f"{env_name} with task {task_name} is unknown in {self.libname}"
-                )
-
+        pass
 
     def _step(self, tensordict: _TensorDict) -> _TensorDict:
         action = tensordict.get("action")
