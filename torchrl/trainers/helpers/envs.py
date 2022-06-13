@@ -248,14 +248,14 @@ def transformed_env_constructor(
 
         if custom_env is None and custom_env_maker is None:
             env_kwargs = {
-                "envname": env_name,
+                "env_name": env_name,
                 "device": "cpu",
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,
             }
             if env_library is DMControlEnv:
-                env_kwargs.update({"taskname": env_task})
+                env_kwargs.update({"task_name": env_task})
             env_kwargs.update(kwargs)
             env = env_library(**env_kwargs)
         elif custom_env is None and custom_env_maker is not None:

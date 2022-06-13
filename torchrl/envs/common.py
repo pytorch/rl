@@ -549,7 +549,7 @@ class _EnvClass:
         return self
 
 
-class _EnvWrapper(_EnvClass):
+class _EnvWrapper(_EnvClass, metaclass=abc.ABCMeta):
     """Abstract environment wrapper class.
 
     Unlike _EnvClass, _EnvWrapper comes with a `_build_env` private method that will be called upon instantiation.
@@ -586,13 +586,16 @@ class _EnvWrapper(_EnvClass):
             )
 
         frame_skip = kwargs.get("frame_skip", 1)
+        if "frame_skip" in kwargs:
+            del kwargs["frame_skip"]
         self.frame_skip = frame_skip
         # this value can be changed if frame_skip is passed during env construction
         self.wrapper_frame_skip = frame_skip
 
         self._constructor_kwargs = kwargs
         self._check_kwargs(kwargs)
-        self._build_env(**kwargs)  # writes the self._env attribute
+        self._env = self._build_env(**kwargs)  # writes the self._env attribute
+        self._make_specs(self._env)  # writes the self._env attribute
         self.is_closed = False
         self._init_env()  # runs all the steps to have a ready-to-use env
 
@@ -635,14 +638,16 @@ class _EnvWrapper(_EnvClass):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _build_env(
-        self, **kwargs
-    ) -> None:
+    def _build_env(self, **kwargs) -> "gym.Env":
         """Creates an environment from the target library and stores it with the `_env` attribute.
 
         When overwritten, this function should pass all the required kwargs to the env instantiation method.
 
         """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _make_specs(self, env: "gym.Env") -> None:
         raise NotImplementedError
 
     def close(self) -> None:
@@ -652,6 +657,19 @@ class _EnvWrapper(_EnvClass):
             self._env.close()
         except AttributeError:
             pass
+
+    def set_seed(self, seed: Optional[int] = None) -> Optional[int]:
+        if seed is not None:
+            torch.manual_seed(seed)
+        self._set_seed(seed)
+        if seed is not None:
+            new_seed = seed_generator(seed)
+            seed = new_seed
+        return seed
+
+    @abc.abstractmethod
+    def _set_seed(self, seed: Optional[int]):
+        raise NotImplementedError
 
 
 def make_tensordict(

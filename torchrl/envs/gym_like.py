@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import Optional, Union, Tuple, Dict
+from typing import Optional, Union, Tuple
 
 import numpy as np
 import torch
 
-from torchrl import seed_generator
 from torchrl.data import TensorDict
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.common import _EnvWrapper
@@ -33,14 +32,6 @@ class GymLikeEnv(_EnvWrapper):
 
     It is also expected that env.reset() returns an observation similar to the one observed after a step is completed.
     """
-
-    def __init__(self, env_name, task_name=None, **kwargs):
-        kwargs["env_name"] = env_name
-        kwargs["task_name"] = task_name
-        super().__init__(**kwargs)
-
-    def _check_kwargs(self, kwargs: Dict):
-        pass
 
     def _step(self, tensordict: _TensorDict) -> _TensorDict:
         action = tensordict.get("action")
@@ -77,18 +68,6 @@ class GymLikeEnv(_EnvWrapper):
         self.current_tensordict = step_tensordict(tensordict_out)
         return tensordict_out
 
-    def set_seed(self, seed: Optional[int] = None) -> Optional[int]:
-        if seed is not None:
-            torch.manual_seed(seed)
-        self._set_seed(seed)
-        if seed is not None:
-            new_seed = seed_generator(seed)
-            seed = new_seed
-        return seed
-
-    def _set_seed(self, seed: Optional[int]):
-        raise NotImplementedError
-
     def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs) -> _TensorDict:
         obs, *_ = self._output_transform((self._env.reset(**kwargs),))
         tensordict_out = TensorDict(
@@ -104,7 +83,8 @@ class GymLikeEnv(_EnvWrapper):
         if isinstance(observations, dict):
             observations = {"next_" + key: value for key, value in observations.items()}
         if not isinstance(observations, (TensorDict, dict)):
-            observations = {"next_observation": observations}
+            key = list(self.observation_spec.keys())[0]
+            observations = {key: observations}
         observations = self.observation_spec.encode(observations)
         return observations
 

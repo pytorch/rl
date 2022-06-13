@@ -51,7 +51,7 @@ try:
 except ImportError:
     _has_retro = False
 
-__all__ = ["GymEnv", "RetroEnv"]
+__all__ = ["GymWrapper", "GymEnv", "RetroEnv"]
 
 
 def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec:
@@ -99,22 +99,31 @@ def _get_gym():
         return None
 
 
-def _is_from_pixels(observation_space):
-    return (
-        isinstance(observation_space, gym.spaces.Box)
-        and (observation_space.low == 0).all()
-        and (observation_space.high == 255).all()
-        and observation_space.low.shape[-1] == 3
-        and observation_space.low.ndim == 3
-    )
+def _is_from_pixels(env):
+    observation_spec = env.observation_space
+    if isinstance(observation_spec, (Dict, gym.spaces.dict.Dict)):
+        if "pixels" in set(observation_spec.keys()):
+            return True
+    elif (
+        isinstance(observation_spec, gym.spaces.Box)
+        and (observation_spec.low == 0).all()
+        and (observation_spec.high == 255).all()
+        and observation_spec.low.shape[-1] == 3
+        and observation_spec.low.ndim == 3
+    ):
+        return True
+    elif isinstance(env, PixelObservationWrapper):
+        return True
+    return False
 
 
-class GymEnv(GymLikeEnv):
+class GymWrapper(GymLikeEnv):
     """
     OpenAI Gym environment wrapper.
 
     Examples:
-        >>> env = GymEnv(envname="Pendulum-v0", frame_skip=4)
+        >>> env = gym.make("Pendulum-v0")
+        >>> env = GymWrapper(env)
         >>> td = env.rand_step()
         >>> print(td)
         >>> print(env.available_envs)
@@ -122,6 +131,38 @@ class GymEnv(GymLikeEnv):
 
     git_url = "https://github.com/openai/gym"
     libname = "gym"
+
+    def __init__(self, env=None, **kwargs):
+        if env is not None:
+            kwargs["env"] = env
+        super().__init__(**kwargs)
+
+    def _check_kwargs(self, kwargs: Dict):
+        if "env" not in kwargs:
+            raise TypeError("Could not find environment key 'env' in kwargs.")
+        env = kwargs["env"]
+        if not isinstance(env, gym.Env):
+            raise TypeError("env is not of type 'gym.Env'.")
+
+    def _build_env(
+        self,
+        env,
+        from_pixels: bool = False,
+        pixels_only: bool = False,
+        **kwargs,
+    ) -> "gym.core.Env":
+        env_from_pixels = _is_from_pixels(env)
+        from_pixels = from_pixels or env_from_pixels
+        self.from_pixels = from_pixels
+        self.pixels_only = pixels_only
+        if from_pixels and not env_from_pixels:
+            if isinstance(env, PixelObservationWrapper):
+                raise TypeError(
+                    "PixelObservationWrapper cannot be used to wrap an environment"
+                    "that is already a PixelObservationWrapper instance."
+                )
+            env = PixelObservationWrapper(env, pixels_only=pixels_only)
+        return env
 
     @classproperty
     def available_envs(cls) -> List[str]:
@@ -131,27 +172,6 @@ class GymEnv(GymLikeEnv):
     def lib(self) -> ModuleType:
         return gym
 
-    def __init__(self, env_name, task_name=None, **kwargs):
-        kwargs["env_name"] = env_name
-        kwargs["task_name"] = task_name
-        super().__init__(**kwargs)
-
-    def _check_kwargs(self, kwargs: Dict):
-        if "env_name" in kwargs:
-            env_name = kwargs["env_name"]
-            task_name = kwargs.get("task_name", None)
-            if not (
-                (env_name in self.available_envs)
-                and (
-                    task_name in self.available_envs[env_name]
-                    if isinstance(self.available_envs, dict)
-                    else True
-                )
-            ):
-                raise RuntimeError(
-                    f"{env_name} with task {task_name} is unknown in {self.libname}"
-                )
-
     def _set_seed(self, seed: int) -> int:
         if version.parse(gym.__version__) < version.parse("0.19.0"):
             self._env.seed(seed=seed)
@@ -159,51 +179,20 @@ class GymEnv(GymLikeEnv):
             self.reset(seed=seed)
         return seed
 
-    def _build_env(
-        self,
-        envname: str,
-        taskname: str,
-        from_pixels: bool = False,
-        pixels_only: bool = False,
-        **kwargs,
-    ) -> "gym.core.Env":
-        self.pixels_only = pixels_only
-        if not _has_gym:
-            raise RuntimeError(
-                f"gym not found, unable to create {envname}. "
-                f"Consider downloading and installing dm_control from"
-                f" {self.git_url}"
-            )
-        if not ((taskname == "") or (taskname is None)):
-            raise ValueError(
-                f"gym does not support taskname, received {taskname} instead."
-            )
-        try:
-            env = self.lib.make(envname, frameskip=self.frame_skip, **kwargs)
-            self.wrapper_frame_skip = 1
-        except TypeError as err:
-            if "unexpected keyword argument 'frameskip" not in str(err):
-                raise TypeError(err)
-            env = self.lib.make(envname)
-            self.wrapper_frame_skip = self.frame_skip
-        self._env = env
-
-        from_pixels = from_pixels or _is_from_pixels(self._env.observation_space)
-        self.from_pixels = from_pixels
-        if from_pixels:
-            self._env.reset()
-            self._env = PixelObservationWrapper(self._env, pixels_only)
-
+    def _make_specs(self, env: "gym.Env") -> None:
         self.action_spec = _gym_to_torchrl_spec_transform(
-            self._env.action_space, device=self.device
+            env.action_space, device=self.device
         )
         self.observation_spec = _gym_to_torchrl_spec_transform(
-            self._env.observation_space, device=self.device
+            env.observation_space, device=self.device
         )
         if not isinstance(self.observation_spec, CompositeSpec):
-            self.observation_spec = CompositeSpec(
-                next_observation=self.observation_spec
-            )
+            if self.from_pixels:
+                self.observation_spec = CompositeSpec(next_pixels=self.observation_spec)
+            else:
+                self.observation_spec = CompositeSpec(
+                    next_observation=self.observation_spec
+                )
         self.reward_spec = UnboundedContinuousTensorSpec(
             device=self.device,
         )
@@ -211,6 +200,70 @@ class GymEnv(GymLikeEnv):
     def _init_env(self):
         self.reset()  # make sure that _current_observation and
         # _is_done are populated
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(env={self._env}, batch_size={self.batch_size})"
+        )
+
+
+class GymEnv(GymWrapper):
+    """
+    OpenAI Gym environment wrapper.
+
+    Examples:
+        >>> env = GymEnv(env_name="Pendulum-v0", frame_skip=4)
+        >>> td = env.rand_step()
+        >>> print(td)
+        >>> print(env.available_envs)
+
+    """
+
+    def __init__(self, env_name, **kwargs):
+        kwargs["env_name"] = env_name
+        super().__init__(**kwargs)
+
+    def _build_env(
+        self,
+        env_name: str,
+        **kwargs,
+    ) -> "gym.core.Env":
+        if not _has_gym:
+            raise RuntimeError(
+                f"gym not found, unable to create {env_name}. "
+                f"Consider downloading and installing dm_control from"
+                f" {self.git_url}"
+            )
+        from_pixels = kwargs.get("from_pixels", False)
+        if "from_pixels" in kwargs:
+            del kwargs["from_pixels"]
+        pixels_only = kwargs.get("pixels_only", True)
+        if "pixels_only" in kwargs:
+            del kwargs["pixels_only"]
+        try:
+            with warnings.catch_warnings(record=True) as w:
+                env = self.lib.make(env_name, frameskip=self.frame_skip, **kwargs)
+                if len(w) and "frameskip" in str(w[-1].message):
+                    raise TypeError("unexpected keyword argument 'frameskip'")
+            self.wrapper_frame_skip = 1
+        except TypeError as err:
+            if "unexpected keyword argument 'frameskip'" not in str(err):
+                raise TypeError(err)
+            env = self.lib.make(env_name)
+            self.wrapper_frame_skip = self.frame_skip
+        self.env_name = env_name
+        return super()._build_env(
+            env, pixels_only=pixels_only, from_pixels=from_pixels, **kwargs
+        )
+
+    def _check_kwargs(self, kwargs: Dict):
+        if "env_name" in kwargs:
+            env_name = kwargs["env_name"]
+            if env_name not in self.available_envs:
+                raise TypeError(f"{env_name} is unknown in {self.libname}")
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(env={self.env_name}, batch_size={self.batch_size})"
 
 
 def _get_retro_envs() -> Sequence:
