@@ -6,9 +6,9 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 if [[ $OSTYPE == 'darwin'* ]]; then
-  PRIVATE_MUJOCO_GL=glfw
+  PRIVATE_MUJOCO_GL=egl
 else
-  PRIVATE_MUJOCO_GL=glfw
+  PRIVATE_MUJOCO_GL=egl
 fi
 
 export PYTORCH_TEST_WITH_SLOW='1'
