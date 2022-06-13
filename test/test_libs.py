@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 
-import gym
 import numpy as np
 import pytest
 import torch
@@ -12,6 +11,7 @@ from torchrl.envs.libs.dm_control import _has_dmc
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
 
 if _has_gym:
+    import gym
     from gym.wrappers.pixel_observation import PixelObservationWrapper
 if _has_dmc:
     from dm_control import suite
