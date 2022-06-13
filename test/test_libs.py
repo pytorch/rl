@@ -8,12 +8,17 @@ import gym
 import numpy as np
 import pytest
 import torch
-from dm_control import suite
-from dm_control.suite.wrappers import pixels
-from gym.wrappers.pixel_observation import PixelObservationWrapper
+from torchrl.envs.libs.dm_control import _has_dmc
+from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
+
+if _has_gym:
+    from gym.wrappers.pixel_observation import PixelObservationWrapper
+if _has_dmc:
+    from dm_control import suite
+    from dm_control.suite.wrappers import pixels
+
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.envs import GymEnv, GymWrapper, DMControlEnv, DMControlWrapper
-from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
@@ -92,7 +97,7 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
     assert_allclose_td(rollout0, rollout2)
 
 
-@pytest.mark.skipif(not _has_gym, reason="no gym library found")
+@pytest.mark.skipif(not _has_dmc, reason="no dm_control library found")
 @pytest.mark.parametrize("env_name,task", [["cheetah", "run"], ["humanoid", "walk"]])
 @pytest.mark.parametrize("frame_skip", [1, 3])
 @pytest.mark.parametrize(
