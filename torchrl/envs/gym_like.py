@@ -97,4 +97,6 @@ class GymLikeEnv(_EnvWrapper):
         return step_outputs_tuple
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(env={self._env}, batch_size={self.batch_size})"
+        return (
+            f"{self.__class__.__name__}(env={self._env}, batch_size={self.batch_size})"
+        )
