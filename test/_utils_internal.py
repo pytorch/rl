@@ -8,6 +8,7 @@ import os
 # Get relative file path
 # this returns relative path from current file.
 import torch.cuda
+from torchrl import seed_generator
 
 
 def get_relative_path(curr_file, *path_components):
@@ -21,3 +22,11 @@ def get_available_devices():
         for i in range(n_cuda):
             devices += [torch.device(f"cuda:{i}")]
     return devices
+
+
+def generate_seeds(seed, repeat):
+    seeds = [seed]
+    for _ in range(repeat - 1):
+        seed = seed_generator(seed)
+        seeds.append(seed)
+    return seeds

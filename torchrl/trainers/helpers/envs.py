@@ -114,6 +114,7 @@ def make_env_transforms(
 
     if cfg.noops:
         env.append_transform(NoopResetEnv(env, cfg.noops))
+
     if from_pixels:
         if not cfg.catframes:
             raise RuntimeError(
@@ -346,7 +347,8 @@ def get_stats_random_rollout(
                 f"More than one key exists in the observation_specs: {[key] + keys} were found, "
                 "thus get_stats_random_rollout cannot infer which to compute the stats of."
             )
-    if cfg.from_pixels:
+
+    if key == "next_pixels":
         m = td_stats.get(key).mean()
         s = td_stats.get(key).std().clamp_min(1e-5)
     else:

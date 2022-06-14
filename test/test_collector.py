@@ -8,6 +8,7 @@ import argparse
 import numpy as np
 import pytest
 import torch
+from _utils_internal import generate_seeds
 from mocking_classes import (
     DiscreteActionConvMockEnv,
     DiscreteActionVecMockEnv,
@@ -16,6 +17,7 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
 )
 from torch import nn
+from torchrl import seed_generator
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.collectors.collectors import (
     RandomPolicy,
@@ -252,7 +254,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
             env = ParallelEnv(
                 num_workers=num_env,
                 create_env_fn=make_make_env(env_name),
-                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+                create_env_kwargs=[{"seed": s} for s in generate_seeds(seed, num_env)],
             )
             return env
 
@@ -420,15 +422,23 @@ def test_collector_vecnorm_envcreator():
     """
     from torchrl.envs import GymEnv
 
+    num_envs = 4
     env_make = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
-    env_make = ParallelEnv(4, env_make)
+    env_make = ParallelEnv(num_envs, env_make)
 
     policy = RandomPolicy(env_make.action_spec)
+    num_data_collectors = 2
     c = MultiSyncDataCollector(
-        [env_make, env_make], policy=policy, total_frames=int(1e6)
+        [env_make] * num_data_collectors, policy=policy, total_frames=int(1e6)
     )
-    final_seed = c.set_seed(0)
-    assert final_seed == 7
+
+    init_seed = 0
+    new_seed = c.set_seed(init_seed)
+
+    seed = init_seed
+    for i in range(num_envs * num_data_collectors):
+        seed = seed_generator(seed)
+    assert new_seed == seed
 
     c_iter = iter(c)
     next(c_iter)

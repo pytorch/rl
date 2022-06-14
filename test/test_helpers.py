@@ -11,6 +11,7 @@ import torch
 from _utils_internal import get_available_devices
 from hydra import initialize, compose
 from hydra.core.config_store import ConfigStore
+
 from mocking_classes import (
     ContinuousActionConvMockEnvNumpy,
     ContinuousActionVecMockEnv,
@@ -33,7 +34,6 @@ from torchrl.trainers.helpers.models import (
     SACModelConfig,
     REDQModelConfig,
 )
-
 
 ## these tests aren't truly unitary but setting up a fake env for the
 # purpose of building a model with args is a lot of unstable scaffoldings
@@ -490,6 +490,29 @@ def test_redq_make(device, from_pixels, gsde, exploration):
             raise
         proof_environment.close()
         del proof_environment
+
+
+@pytest.mark.parametrize("initial_seed", range(5))
+def test_seed_generator(initial_seed):
+    num_seeds = 100
+    prev_seeds = []
+
+    # Check unique seed generation
+    if initial_seed == 0:
+        with pytest.raises(ValueError) as e:
+            seeds0 = generate_seeds(initial_seed - 1, num_seeds)
+        return
+    else:
+        seeds0 = generate_seeds(initial_seed - 1, num_seeds)
+    seeds1 = generate_seeds(initial_seed, num_seeds)
+    assert len(seeds1) == num_seeds
+    assert len(seeds1) == len(set(seeds1))
+    assert len(set(seeds0).intersection(set(seeds1))) == 0
+
+    # Check deterministic seed generation
+    seeds0 = generate_seeds(initial_seed, num_seeds)
+    seeds1 = generate_seeds(initial_seed, num_seeds)
+    assert seeds0 == seeds1
 
 
 if __name__ == "__main__":
