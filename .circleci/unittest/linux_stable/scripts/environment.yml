@@ -26,4 +26,4 @@ dependencies:
     - dm_control
     - mujoco_py
     - pyrender
-    - PyOpenGL==3.1.0
+    - pyopengl==3.1.6

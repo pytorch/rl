@@ -259,8 +259,8 @@ class GymEnv(GymWrapper):
     def _check_kwargs(self, kwargs: Dict):
         if "env_name" in kwargs:
             env_name = kwargs["env_name"]
-            if env_name not in self.available_envs:
-                raise TypeError(f"{env_name} is unknown in {self.libname}")
+            # if env_name not in self.available_envs:
+            #     raise TypeError(f"{env_name} is unknown in {self.libname}")
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(env={self.env_name}, batch_size={self.batch_size})"
