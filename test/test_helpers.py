@@ -8,7 +8,7 @@ import dataclasses
 
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from _utils_internal import get_available_devices, generate_seeds
 from hydra import initialize, compose
 from hydra.core.config_store import ConfigStore
 from mocking_classes import (
