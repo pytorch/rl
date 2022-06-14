@@ -213,7 +213,7 @@ class Transform(nn.Module):
                     "A transform parent must be either another Compose transform or an environment object."
                 )
             out = TransformedEnv(
-                parent.parent,
+                parent.parent.env,
             )
             for transform in parent.transforms:
                 if transform is self:
