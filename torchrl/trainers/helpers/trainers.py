@@ -168,13 +168,13 @@ def make_trainer(
     if hasattr(args, "noisy") and args.noisy:
         trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
 
-    trainer.register_op("batch_process", lambda batch: batch.cpu())
     if args.selected_keys:
         trainer.register_op("batch_process", SelectKeys(args.selected_keys))
+    trainer.register_op("batch_process", lambda batch: batch.cpu())
 
     if replay_buffer is not None:
         # replay buffer is used 2 or 3 times: to register data, to sample
-        # data and to update priorities
+        # data and possibly to update priorities
         rb_trainer = ReplayBufferTrainer(replay_buffer, args.batch_size)
         trainer.register_op("batch_process", rb_trainer.extend)
         trainer.register_op("process_optim_batch", rb_trainer.sample)
@@ -234,7 +234,9 @@ def make_trainer(
             "post_steps_log",
             recorder_obj_explore,
         )
-    trainer.register_op("post_steps", UpdateWeights(collector, 1))
+    trainer.register_op(
+        "post_steps", UpdateWeights(collector, update_weights_interval=1)
+    )
 
     trainer.register_op("pre_steps_log", LogReward())
     trainer.register_op("pre_steps_log", CountFramesLog(frame_skip=args.frame_skip))
