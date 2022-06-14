@@ -43,7 +43,11 @@ git submodule sync && git submodule update --init --recursive
 if [ "${CU_VERSION:-}" == cpu ] ; then
     # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
     # use pip to install pytorch as conda can frequently pick older release
-    pip3 install torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
+    if [[ $OSTYPE == 'darwin'* ]]; then
+      pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+    else
+      pip3 install torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
+    fi
 else
     pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cu102
 fi
