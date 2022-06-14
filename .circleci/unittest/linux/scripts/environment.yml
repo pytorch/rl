@@ -25,4 +25,3 @@ dependencies:
     - dm_control
     - mujoco_py
     - pyrender
-    - pyopengl==3.1.0  # solves AttributeError: 'NoneType' object has no attribute 'eglQueryString'
