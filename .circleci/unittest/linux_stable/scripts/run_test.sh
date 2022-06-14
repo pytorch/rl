@@ -4,11 +4,13 @@ set -e
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
+# solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/project/env/lib
 
 if [[ $OSTYPE == 'darwin'* ]]; then
-  PRIVATE_MUJOCO_GL=egl
+  PRIVATE_MUJOCO_GL=osmesa
 else
-  PRIVATE_MUJOCO_GL=egl
+  PRIVATE_MUJOCO_GL=glfw
 fi
 
 export PYTORCH_TEST_WITH_SLOW='1'

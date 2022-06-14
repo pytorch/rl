@@ -41,7 +41,11 @@ from torchrl.envs import GymEnv, GymWrapper, DMControlEnv, DMControlWrapper
 def test_gym(env_name, frame_skip, from_pixels, pixels_only):
     if env_name == "ALE/Pong-v5" and not from_pixels:
         raise pytest.skip("already pixel")
-    elif env_name == "Pendulum-v1" and from_pixels and (not torch.has_cuda or not torch.cuda.device_count()):
+    elif (
+        env_name == "Pendulum-v1"
+        and from_pixels
+        and (not torch.has_cuda or not torch.cuda.device_count())
+    ):
         raise pytest.skip("no cuda device")
 
     env0 = GymEnv(
