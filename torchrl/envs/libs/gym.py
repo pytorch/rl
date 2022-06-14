@@ -210,6 +210,7 @@ class GymWrapper(GymLikeEnv):
         self._env = self._build_env(**self._constructor_kwargs)
         self._make_specs(self._env)
 
+
 class GymEnv(GymWrapper):
     """
     OpenAI Gym environment wrapper.
@@ -255,9 +256,7 @@ class GymEnv(GymWrapper):
             env = self.lib.make(env_name, **kwargs)
             self.wrapper_frame_skip = self.frame_skip
         self.env_name = env_name
-        return super()._build_env(
-            env, pixels_only=pixels_only, from_pixels=from_pixels
-        )
+        return super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
 
     def _check_kwargs(self, kwargs: Dict):
         if "env_name" not in kwargs:
