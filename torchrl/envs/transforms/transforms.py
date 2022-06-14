@@ -756,8 +756,8 @@ class Resize(ObservationTransform):
         if keys is None:
             keys = IMAGE_KEYS  # default
         super().__init__(keys=keys)
-        self.w = w
-        self.h = h
+        self.w = int(w)
+        self.h = int(h)
         self.interpolation = interpolation
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
@@ -802,7 +802,7 @@ class Resize(ObservationTransform):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
-            f"w={float(self.w):4.4f}, h={float(self.h):4.4f}, "
+            f"w={int(self.w)}, h={int(self.h)}, "
             f"interpolation={self.interpolation}, keys={self.keys})"
         )
 
@@ -933,7 +933,7 @@ class FlattenObservation(ObservationTransform):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
-            f"first_dim={float(self.first_dim):4.4f}, last_dim={float(self.last_dim):4.4f}, "
+            f"first_dim={int(self.first_dim)}, last_dim={int(self.last_dim)})"
         )
 
 
