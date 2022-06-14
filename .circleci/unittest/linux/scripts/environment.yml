@@ -3,6 +3,8 @@ channels:
   - defaults
 dependencies:
   - pip
+  - ninja
+  - libgcc
   - cmake >= 3.18
   - protobuf
   - pip:

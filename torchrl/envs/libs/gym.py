@@ -149,7 +149,6 @@ class GymWrapper(GymLikeEnv):
         env,
         from_pixels: bool = False,
         pixels_only: bool = False,
-        **kwargs,
     ) -> "gym.core.Env":
         env_from_pixels = _is_from_pixels(env)
         from_pixels = from_pixels or env_from_pixels
@@ -206,6 +205,10 @@ class GymWrapper(GymLikeEnv):
             f"{self.__class__.__name__}(env={self._env}, batch_size={self.batch_size})"
         )
 
+    def rebuild_with_kwargs(self, **new_kwargs):
+        self._constructor_kwargs.update(new_kwargs)
+        self._env = self._build_env(**self._constructor_kwargs)
+        self._make_specs(self._env)
 
 class GymEnv(GymWrapper):
     """
@@ -249,11 +252,11 @@ class GymEnv(GymWrapper):
         except TypeError as err:
             if "unexpected keyword argument 'frameskip'" not in str(err):
                 raise TypeError(err)
-            env = self.lib.make(env_name)
+            env = self.lib.make(env_name, **kwargs)
             self.wrapper_frame_skip = self.frame_skip
         self.env_name = env_name
         return super()._build_env(
-            env, pixels_only=pixels_only, from_pixels=from_pixels, **kwargs
+            env, pixels_only=pixels_only, from_pixels=from_pixels
         )
 
     def _check_kwargs(self, kwargs: Dict):

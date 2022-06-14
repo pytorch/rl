@@ -515,9 +515,7 @@ class _EnvClass:
                     raise Exception(
                         "dtype must be a numpy-compatible dtype. Got {dtype}"
                     )
-            value = torch.from_numpy(value)
-            if device != "cpu":
-                value = value.to(device)
+            value = torch.as_tensor(value, device=device)
         else:
             value = value.to(device)
         # if dtype is not None:

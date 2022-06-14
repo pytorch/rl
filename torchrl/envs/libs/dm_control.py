@@ -299,6 +299,11 @@ class DMControlEnv(DMControlWrapper):
             env, from_pixels=from_pixels, pixels_only=pixels_only, **kwargs
         )
 
+    def rebuild_with_kwargs(self, **new_kwargs):
+        self._constructor_kwargs.update(new_kwargs)
+        self._env = self._build_env()
+        self._make_specs(self._env)
+
     def _check_kwargs(self, kwargs: Dict):
         if "env_name" in kwargs:
             env_name = kwargs["env_name"]

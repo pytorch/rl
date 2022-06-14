@@ -8,7 +8,7 @@ conda activate ./env
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/project/env/lib
 
 if [[ $OSTYPE == 'darwin'* ]]; then
-  PRIVATE_MUJOCO_GL=osmesa
+  PRIVATE_MUJOCO_GL=glfw
 else
   PRIVATE_MUJOCO_GL=glfw
 fi
