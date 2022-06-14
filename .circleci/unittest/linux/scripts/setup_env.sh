@@ -63,7 +63,7 @@ conda env update --file "${this_dir}/environment.yml" --prune
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
 else
-  PRIVATE_MUJOCO_GL=egl
+  PRIVATE_MUJOCO_GL=glfw
 fi
 
 conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \

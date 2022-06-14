@@ -52,5 +52,3 @@ printf "g++ version: "
 gcc --version
 
 python setup.py install
-
-pip install pyopengl==3.1.0

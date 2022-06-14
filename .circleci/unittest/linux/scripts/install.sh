@@ -57,5 +57,3 @@ python -c "import functorch"
 
 printf "* Installing torchrl\n"
 python setup.py develop
-
-pip install pyopengl==3.1.0
