@@ -32,14 +32,7 @@ esac
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-#printf "Installing PyTorch with %s\n" "${cudatoolkit}"
-#if [ "${os}" == "MacOSX" ]; then
-#    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch "${cudatoolkit}" pytest
-#else
-#    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}" pytest
-#fi
-
-#printf "Installing PyTorch with %s\n" "${CU_VERSION}"
+printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
     # use pip to install pytorch as conda can frequently pick older release
@@ -65,6 +58,7 @@ python setup.py develop
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
 else
+  conda install -y -c conda-forge mesa
   conda install -y -c menpo osmesa
   PRIVATE_MUJOCO_GL=osmesa
 fi

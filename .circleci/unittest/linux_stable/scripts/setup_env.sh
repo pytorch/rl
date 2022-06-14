@@ -53,9 +53,9 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
-conda install -y -c conda-forge glfw
-conda install -y -c conda-forge mesa
-#conda install -y -c menpo osmesa
-conda install -y -c conda-forge glew
+#conda install -y -c conda-forge glfw
+#conda install -y -c conda-forge mesa
+##conda install -y -c menpo osmesa
+#conda install -y -c conda-forge glew
 
 conda env update --file "${this_dir}/environment.yml" --prune
