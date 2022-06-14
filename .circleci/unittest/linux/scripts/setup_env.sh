@@ -64,6 +64,4 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   DISPLAY=unix:0.0 \
   MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
-  # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir \
   MUJOCO_GL=glfw
