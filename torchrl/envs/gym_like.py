@@ -24,7 +24,8 @@ class GymLikeEnv(_EnvWrapper):
         ``env.step(action: np.ndarray) -> Tuple[Union[np.ndarray, dict], double, bool, *info]``
 
     where the outputs are the observation, reward and done state respectively.
-    In this implementation, the info output is discarded.
+    In this implementation, the info output is discarded (but specific keys can be read
+    by updating the `"info_keys"` class attribute).
 
     By default, the first output is written at the "next_observation" key-value pair in the output tensordict, unless
     the first output is a dictionary. In that case, each observation output will be put at the corresponding
