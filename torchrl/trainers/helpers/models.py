@@ -1239,48 +1239,6 @@ class SACModelConfig:
 
 
 @dataclass
-class ContinuousModelConfig:
-    annealing_frames: int = 1000000
-    # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
-    noisy: bool = False
-    # whether to use NoisyLinearLayers in the value network.
-    ou_exploration: bool = False
-    # wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for
-    # efficient entropy-based exploration, this should be left for experimentation only.
-    ou_sigma: float = 0.2
-    # Ornstein-Uhlenbeck sigma
-    ou_theta: float = 0.15
-    # Aimed at superseeding --ou_exploration.
-    distributional: bool = False
-    # whether a distributional loss should be used (TODO: not implemented yet).
-    atoms: int = 51
-    # number of atoms used for the distributional loss (TODO)
-    gSDE: bool = False
-    # if True, exploration is achieved using the gSDE technique.
-    tanh_loc: bool = False
-    # if True, uses a Tanh-Normal transform for the policy location of the form
-    # upscale * tanh(loc/upscale) (only available with TanhTransform and TruncatedGaussian distributions)
-    default_policy_scale: float = 1.0
-    # Default policy scale parameter
-    distribution: str = "tanh_normal"
-    # if True, uses a Tanh-Normal-Tanh distribution for the policy
-    lstm: bool = False
-    # if True, uses an LSTM for the policy.
-    shared_mapping: bool = False
-    # if True, the first layers of the actor-critic are shared.
-    actor_cells: int = 256
-    # cells of the actor
-    qvalue_cells: int = 256
-    # cells of the qvalue net
-    scale_lb: float = 0.1
-    # min value of scale
-    value_cells: int = 256
-    # cells of the value net
-    activation: str = "tanh"
-    # activation function, either relu or elu or tanh, Default=tanh
-
-
-@dataclass
 class DDPGModelConfig:
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
@@ -1340,6 +1298,47 @@ class REDQModelConfig:
     activation: str = "tanh"
     # activation function, either relu or elu or tanh, Default=tanh
 
+
+@dataclass
+class ContinuousModelConfig:
+    annealing_frames: int = 1000000
+    # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
+    noisy: bool = False
+    # whether to use NoisyLinearLayers in the value network.
+    ou_exploration: bool = False
+    # wraps the policy in an OU exploration wrapper, similar to DDPG. SAC being designed for
+    # efficient entropy-based exploration, this should be left for experimentation only.
+    ou_sigma: float = 0.2
+    # Ornstein-Uhlenbeck sigma
+    ou_theta: float = 0.15
+    # Aimed at superseeding --ou_exploration.
+    distributional: bool = False
+    # whether a distributional loss should be used (TODO: not implemented yet).
+    atoms: int = 51
+    # number of atoms used for the distributional loss (TODO)
+    gSDE: bool = False
+    # if True, exploration is achieved using the gSDE technique.
+    tanh_loc: bool = False
+    # if True, uses a Tanh-Normal transform for the policy location of the form
+    # upscale * tanh(loc/upscale) (only available with TanhTransform and TruncatedGaussian distributions)
+    default_policy_scale: float = 1.0
+    # Default policy scale parameter
+    distribution: str = "tanh_normal"
+    # if True, uses a Tanh-Normal-Tanh distribution for the policy
+    lstm: bool = False
+    # if True, uses an LSTM for the policy.
+    shared_mapping: bool = False
+    # if True, the first layers of the actor-critic are shared.
+    actor_cells: int = 256
+    # cells of the actor
+    qvalue_cells: int = 256
+    # cells of the qvalue net
+    scale_lb: float = 0.1
+    # min value of scale
+    value_cells: int = 256
+    # cells of the value net
+    activation: str = "tanh"
+    # activation function, either relu or elu or tanh, Default=tanh
 
 @dataclass
 class DiscreteModelConfig:

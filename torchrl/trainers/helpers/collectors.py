@@ -248,7 +248,7 @@ def make_collector_offpolicy(
     Args:
         make_env (Callable): environment creator
         actor_model_explore (TensorDictModule): Model instance used for evaluation and exploration update
-        cfg (DictConfig): config containing user-defined arguments
+        cfg (DictConfig): config for creating collector object
         make_env_kwargs (dict): kwargs for the env creator
 
     """
