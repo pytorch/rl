@@ -5,6 +5,7 @@
 from typing import Optional
 
 import torch
+from torchrl import seed_generator
 from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
     NdBoundedTensorSpec,
@@ -65,12 +66,12 @@ class _MockEnv(_EnvClass):
 
     @property
     def maxstep(self):
-        return self.counter
+        return 100
 
     def set_seed(self, seed: int) -> int:
         self.seed = seed
-        self.counter = seed - 1
-        return seed
+        self.counter = seed % 17  # make counter a small number
+        return seed_generator(seed)
 
     def custom_fun(self):
         return 0
@@ -97,9 +98,9 @@ class MockSerialEnv(_EnvClass):
     def set_seed(self, seed: int) -> int:
         assert seed >= 1
         self.seed = seed
-        self.counter = seed
-        self.max_val = self.seed * 2
-        return seed
+        self.counter = seed % 17  # make counter a small number
+        self.max_val = max(self.counter + 100, self.counter * 2)
+        return seed_generator(seed)
 
     def _step(self, tensordict):
         self.counter += 1
@@ -109,6 +110,8 @@ class MockSerialEnv(_EnvClass):
         return TensorDict({"reward": n, "done": done, "next_observation": n}, [])
 
     def _reset(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
+        self.max_val = max(self.counter + 100, self.counter * 2)
+
         n = torch.tensor([self.counter]).to(self.device).to(torch.get_default_dtype())
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
@@ -161,7 +164,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
         tensordict.set("next_" + self.out_key, self._get_out_obs(obs))
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
         reward = done.any(-1).unsqueeze(-1)
-        done = done.all(-1).unsqueeze(-1)
+        # set done to False
+        done = torch.zeros_like(done).all(-1).unsqueeze(-1)
         tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
         return tensordict
