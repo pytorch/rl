@@ -21,3 +21,4 @@ record_video
 num_workers=4
 env_per_collector=2
 init_random_frames=7
+catframes=4

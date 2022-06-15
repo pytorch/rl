@@ -87,7 +87,7 @@ def _main():
             "utils": [
                 "tqdm",
                 "configargparse",
-                "hydra-core",
+                "hydra-core>=1.1",
                 "hydra-submitit-launcher",
             ],
         },

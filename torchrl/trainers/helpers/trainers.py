@@ -7,9 +7,6 @@ from dataclasses import dataclass
 from typing import Optional, Union, List
 from warnings import warn
 
-from hydra import compose, initialize
-from hydra.core.config_store import ConfigStore
-from omegaconf import open_dict
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
@@ -73,10 +70,6 @@ class TrainerConfig:
     # Final value of the normalized rewards.
     sub_traj_len: int = -1
     # length of the trajectories that sub-samples must have in online settings.
-
-
-cs = ConfigStore.instance()
-cs.store(name="trainer", node=TrainerConfig)
 
 
 def make_trainer(
@@ -148,13 +141,11 @@ def make_trainer(
             "Getting default cfg for the trainer. "
             "This should be only used for debugging."
         )
-        with initialize(config_path="."):
-            cfg = compose(config_name="trainer")
-            with open_dict(cfg):
-                cfg.frame_skip = 1
-                cfg.total_frames = 1000
-                cfg.record_frames = 10
-                cfg.record_interval = 10
+        cfg = TrainerConfig()
+        cfg.frame_skip = 1
+        cfg.total_frames = 1000
+        cfg.record_frames = 10
+        cfg.record_interval = 10
 
     optimizer_kwargs = {} if cfg.optimizer != "adam" else {"betas": (0.0, 0.9)}
     optimizer = OPTIMIZERS[cfg.optimizer](
@@ -206,14 +197,15 @@ def make_trainer(
     if hasattr(cfg, "noisy") and cfg.noisy:
         trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
 
-    trainer.register_op("batch_process", lambda batch: batch.cpu())
     if cfg.selected_keys:
         trainer.register_op("batch_process", SelectKeys(cfg.selected_keys))
+    trainer.register_op("batch_process", lambda batch: batch.cpu())
 
     if replay_buffer is not None:
         # replay buffer is used 2 or 3 times: to register data, to sample
         # data and to update priorities
         rb_trainer = ReplayBufferTrainer(replay_buffer, cfg.batch_size)
+
         trainer.register_op("batch_process", rb_trainer.extend)
         trainer.register_op("process_optim_batch", rb_trainer.sample)
         trainer.register_op("post_loss", rb_trainer.update_priority)
@@ -272,7 +264,9 @@ def make_trainer(
             "post_steps_log",
             recorder_obj_explore,
         )
-    trainer.register_op("post_steps", UpdateWeights(collector, 1))
+    trainer.register_op(
+        "post_steps", UpdateWeights(collector, update_weights_interval=1)
+    )
 
     trainer.register_op("pre_steps_log", LogReward())
     trainer.register_op("pre_steps_log", CountFramesLog(frame_skip=cfg.frame_skip))
