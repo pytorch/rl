@@ -206,13 +206,24 @@ class Transform(nn.Module):
         if not hasattr(self, "_parent"):
             raise AttributeError("transform parent uninitialized")
         parent = self._parent
-        while not isinstance(parent, _EnvClass):
-            if not isinstance(parent, Transform):
+        if not isinstance(parent, _EnvClass):
+            # if it's not an env, it should be a Compose transform
+            if not isinstance(parent, Compose):
                 raise ValueError(
-                    "A transform parent must be either another transform or an environment object."
+                    "A transform parent must be either another Compose transform or an environment object."
                 )
-            parent = parent.parent
-        return parent
+            out = TransformedEnv(
+                parent.parent,
+            )
+            for transform in parent.transforms:
+                if transform is self:
+                    break
+                out.append_transform(transform)
+        elif isinstance(parent, TransformedEnv):
+            out = TransformedEnv(parent.env)
+        else:
+            raise ValueError(f"parent is of type {type(parent)}")
+        return out
 
     def empty_cache(self):
         if self.parent is not None:
@@ -257,7 +268,6 @@ class TransformedEnv(_EnvClass):
         else:
             transform = transform.to(device)
         self.transform = transform
-        transform.set_parent(self)  # allows to find env specs from the transform
 
         self._last_obs = None
         self.cache_specs = cache_specs
@@ -420,6 +430,31 @@ class TransformedEnv(_EnvClass):
             self._observation_spec = None
             self._reward_spec = None
         return self
+
+    def _current_tensordict_get(self) -> _TensorDict:
+        try:
+            return super().current_tensordict
+        except RuntimeError:
+            current_obs = self.env.current_tensordict
+            # for key in self.env.observation_spec:
+            #     current_obs.rename_key(key[5:], key)
+            return self.transform(current_obs)
+
+    current_tensordict = property(
+        _current_tensordict_get, _EnvClass._current_tensordict_set
+    )
+
+    def __setattr__(self, key, value):
+        propobj = getattr(self.__class__, key, None)
+
+        if isinstance(value, Transform):
+            value.set_parent(self)
+        if isinstance(propobj, property):
+            if propobj.fset is None:
+                raise AttributeError(f"can't set attribute {key}")
+            return propobj.fset(self, value)
+        else:
+            return super().__setattr__(key, value)
 
 
 class ObservationTransform(Transform):
@@ -721,8 +756,8 @@ class Resize(ObservationTransform):
         if keys is None:
             keys = IMAGE_KEYS  # default
         super().__init__(keys=keys)
-        self.w = w
-        self.h = h
+        self.w = int(w)
+        self.h = int(h)
         self.interpolation = interpolation
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
@@ -767,7 +802,7 @@ class Resize(ObservationTransform):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
-            f"w={float(self.w):4.4f}, h={float(self.h):4.4f}, "
+            f"w={int(self.w)}, h={int(self.h)}, "
             f"interpolation={self.interpolation}, keys={self.keys})"
         )
 
@@ -898,7 +933,7 @@ class FlattenObservation(ObservationTransform):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
-            f"first_dim={float(self.first_dim):4.4f}, last_dim={float(self.last_dim):4.4f}, "
+            f"first_dim={int(self.first_dim)}, last_dim={int(self.last_dim)})"
         )
 
 
@@ -1361,11 +1396,13 @@ class CatTensors(Transform):
         spec0 = observation_spec[keys[0]]
         out_key = self.out_key
         shape = list(spec0.shape)
+        device = spec0.device
         shape[self.dim] = sum_shape
         shape = torch.Size(shape)
         observation_spec[out_key] = NdUnboundedContinuousTensorSpec(
             shape=shape,
             dtype=spec0.dtype,
+            device=device,
         )
         if self.del_keys:
             for key in self.keys:
@@ -1462,14 +1499,17 @@ class NoopResetEnv(Transform):
 
     inplace = True
 
-    def __init__(self, env: _EnvClass, noops: int = 30, random: bool = True):
+    def __init__(self, noops: int = 30, random: bool = True):
         """Sample initial states by taking random number of no-ops on reset.
         No-op is assumed to be action 0.
         """
         super().__init__([])
-        self.env = env
         self.noops = noops
         self.random = random
+
+    @property
+    def env(self):
+        return self.parent
 
     def reset(self, tensordict: _TensorDict) -> _TensorDict:
         """Do no-op action for a number of steps in [1, noop_max]."""
