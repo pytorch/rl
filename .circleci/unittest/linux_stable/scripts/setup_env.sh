@@ -13,6 +13,7 @@ git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
+lib_dir="${env_dir}/lib"
 
 cd "${root_dir}"
 
@@ -51,12 +52,10 @@ cd $this_dir
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
+
+#conda install -y -c conda-forge glfw
+#conda install -y -c conda-forge mesa
+##conda install -y -c menpo osmesa
+#conda install -y -c conda-forge glew
+
 conda env update --file "${this_dir}/environment.yml" --prune
-
-conda install -y -c conda-forge glfw
-conda install -y -c conda-forge glew
-
-#yum makecache
-#yum -y install glfw-devel
-#yum -y install libGLEW
-#yum -y install gcc-c++

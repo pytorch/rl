@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import collections
 import os
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, Dict
 
 import numpy as np
 import torch
@@ -18,7 +18,7 @@ from torchrl.data import (
     TensorSpec,
 )
 from ...data.utils import numpy_to_torch_dtype_dict, DEVICE_TYPING
-from ..common import GymLikeEnv
+from ..gym_like import GymLikeEnv
 
 if torch.has_cuda and torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
@@ -27,6 +27,7 @@ if torch.has_cuda and torch.cuda.device_count() > 1:
 
 try:
 
+    import dm_control
     import dm_env
     from dm_control import suite
     from dm_control.suite.wrappers import pixels
@@ -36,7 +37,7 @@ try:
 except ImportError:
     _has_dmc = False
 
-__all__ = ["DMControlEnv"]
+__all__ = ["DMControlEnv", "DMControlWrapper"]
 
 
 def _dmcontrol_to_torchrl_spec_transform(
@@ -77,11 +78,11 @@ def _get_envs(to_dict: bool = True) -> dict:
         return tuple(suite.BENCHMARKING) + tuple(suite.EXTRA)
     d = dict()
     for tup in suite.BENCHMARKING:
-        envname = tup[0]
-        d.setdefault(envname, []).append(tup[1])
+        env_name = tup[0]
+        d.setdefault(env_name, []).append(tup[1])
     for tup in suite.EXTRA:
-        envname = tup[0]
-        d.setdefault(envname, []).append(tup[1])
+        env_name = tup[0]
+        d.setdefault(env_name, []).append(tup[1])
     return d
 
 
@@ -92,18 +93,17 @@ def _robust_to_tensor(array: Union[float, np.ndarray]) -> torch.Tensor:
         return torch.tensor(array)
 
 
-class DMControlEnv(GymLikeEnv):
+class DMControlWrapper(GymLikeEnv):
     """
     DeepMind Control lab environment wrapper.
 
     Args:
-        envname (str): name of the environment
-        taskname (str): name of the task
-        seed (int, optional): seed to use for the environment
+        env (dm_control.suite env): environment instance
         from_pixels (bool): if True, the observation
 
     Examples:
-        >>> env = DMControlEnv(envname="cheetah", taskname="run",
+        >>> env = dm_control.suite.load("cheetah", "run")
+        >>> env = DMControlWrapper(env,
         ...    from_pixels=True, frame_skip=4)
         >>> td = env.rand_step()
         >>> print(td)
@@ -114,29 +114,23 @@ class DMControlEnv(GymLikeEnv):
     libname = "dm_control"
     available_envs = _get_envs()
 
+    def __init__(self, env=None, **kwargs):
+        if env is not None:
+            kwargs["env"] = env
+        super().__init__(**kwargs)
+
     def _build_env(
         self,
-        envname: str,
-        taskname: str,
+        env,
         _seed: Optional[int] = None,
         from_pixels: bool = False,
         render_kwargs: Optional[dict] = None,
         pixels_only: bool = False,
         **kwargs,
     ):
-        if not _has_dmc:
-            raise RuntimeError(
-                f"dm_control not found, unable to create {envname}:"
-                f" {taskname}. Consider downloading and installing "
-                f"dm_control from {self.git_url}"
-            )
         self.from_pixels = from_pixels
         self.pixels_only = pixels_only
 
-        if _seed is not None:
-            random_state = np.random.RandomState(_seed)
-            kwargs = {"random": random_state}
-        env = suite.load(envname, taskname, task_kwargs=kwargs)
         if from_pixels:
             self._set_egl_device(self.device)
             self.render_kwargs = {"camera_id": 0}
@@ -147,8 +141,20 @@ class DMControlEnv(GymLikeEnv):
                 pixels_only=self.pixels_only,
                 render_kwargs=self.render_kwargs,
             )
-        self._env = env
         return env
+
+    def _make_specs(self, env: "gym.Env") -> None:
+        # specs are defined when first called
+        return
+
+    def _check_kwargs(self, kwargs: Dict):
+        if "env" not in kwargs:
+            raise TypeError("Could not find environment key 'env' in kwargs.")
+        env = kwargs["env"]
+        if not isinstance(env, (dm_control.rl.control.Environment, pixels.Wrapper)):
+            raise TypeError(
+                "env is not of type 'dm_control.rl.control.Environment' or `dm_control.suite.wrappers.pixels.Wrapper`."
+            )
 
     def _set_egl_device(self, device: DEVICE_TYPING):
         # Deprecated as lead to unreliable rendering
@@ -169,9 +175,17 @@ class DMControlEnv(GymLikeEnv):
         return seed
 
     def _set_seed(self, _seed: Optional[int]) -> Optional[int]:
-        self._env = self._build_env(
-            self.envname, self.taskname, _seed=_seed, **self.constructor_kwargs
-        )
+        if _seed is None:
+            return None
+        random_state = np.random.RandomState(_seed)
+        if isinstance(self._env, pixels.Wrapper):
+            if not hasattr(self._env._env.task, "_random"):
+                raise RuntimeError("self._env._env.task._random does not exist")
+            self._env._env.task._random = random_state
+        else:
+            if not hasattr(self._env.task, "_random"):
+                raise RuntimeError("self._env._env.task._random does not exist")
+            self._env.task._random = random_state
         self.reset()
         return _seed
 
@@ -221,3 +235,98 @@ class DMControlEnv(GymLikeEnv):
     @reward_spec.setter
     def reward_spec(self, value: TensorSpec) -> None:
         self._reward_spec = value
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(env={self._env}, batch_size={self.batch_size})"
+        )
+
+
+class DMControlEnv(DMControlWrapper):
+    """
+    DeepMind Control lab environment wrapper.
+
+    Args:
+        env_name (str): name of the environment
+        task_name (str): name of the task
+        seed (int, optional): seed to use for the environment
+        from_pixels (bool, optional): if True, the observation will be returned
+            as an image.
+            Default is False.
+
+    Examples:
+        >>> env = DMControlEnv(env_name="cheetah", task_name="run",
+        ...    from_pixels=True, frame_skip=4)
+        >>> td = env.rand_step()
+        >>> print(td)
+        >>> print(env.available_envs)
+    """
+
+    def __init__(self, env_name, task_name, **kwargs):
+        kwargs["env_name"] = env_name
+        kwargs["task_name"] = task_name
+        super().__init__(**kwargs)
+
+    def _build_env(
+        self,
+        env_name: str,
+        task_name: str,
+        _seed: Optional[int] = None,
+        **kwargs,
+    ):
+        self.env_name = env_name
+        self.task_name = task_name
+
+        from_pixels = kwargs.get("from_pixels")
+        if "from_pixels" in kwargs:
+            del kwargs["from_pixels"]
+        pixels_only = kwargs.get("pixels_only")
+        if "pixels_only" in kwargs:
+            del kwargs["pixels_only"]
+
+        if not _has_dmc:
+            raise RuntimeError(
+                f"dm_control not found, unable to create {env_name}:"
+                f" {task_name}. Consider downloading and installing "
+                f"dm_control from {self.git_url}"
+            )
+
+        if _seed is not None:
+            random_state = np.random.RandomState(_seed)
+            kwargs = {"random": random_state}
+        env = suite.load(env_name, task_name, task_kwargs=kwargs)
+        return super()._build_env(
+            env, from_pixels=from_pixels, pixels_only=pixels_only, **kwargs
+        )
+
+    def rebuild_with_kwargs(self, **new_kwargs):
+        self._constructor_kwargs.update(new_kwargs)
+        self._env = self._build_env()
+        self._make_specs(self._env)
+
+    def _check_kwargs(self, kwargs: Dict):
+        if "env_name" in kwargs:
+            env_name = kwargs["env_name"]
+            if "task_name" in kwargs:
+                task_name = kwargs["task_name"]
+                if (
+                    env_name not in self.available_envs
+                    or task_name not in self.available_envs[env_name]
+                ):
+                    raise RuntimeError(
+                        f"{env_name} with task {task_name} is unknown in {self.libname}"
+                    )
+            else:
+                raise TypeError("dm_control requires task_name to be specified")
+        else:
+            raise TypeError("dm_control requires env_name to be specified")
+
+    # def _set_seed(self, _seed: int) -> int:
+    #     self._env = self._build_env(
+    #         _seed=_seed, **self._constructor_kwargs
+    #     )
+    #     self.reset()
+    #     return _seed
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(env={self.env_name}, task={self.task_name}, batch_size={self.batch_size})"
