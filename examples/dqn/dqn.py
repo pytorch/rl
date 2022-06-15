@@ -7,7 +7,6 @@ import uuid
 from datetime import datetime
 
 from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.utils import set_exploration_mode
 from torchrl.record import VideoRecorder
 
 try:
