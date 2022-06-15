@@ -129,12 +129,13 @@ class _EnvClass:
 
     from_pixels: bool
     device = torch.device("cpu")
-    batch_size = torch.Size([])
+
 
     def __init__(
         self,
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
+        batch_size: torch.Size=torch.Size([]),
     ):
         if device is not None:
             self.device = torch.device(device)
@@ -150,6 +151,7 @@ class _EnvClass:
             self._observation_spec = None
         if "_current_tensordict" not in self.__dir__():
             self._current_tensordict = None
+        self.batch_size = batch_size
 
     @property
     def action_spec(self) -> TensorSpec:
@@ -571,11 +573,13 @@ class _EnvWrapper(_EnvClass, metaclass=abc.ABCMeta):
         *args,
         dtype: Optional[np.dtype] = None,
         device: DEVICE_TYPING = "cpu",
+        batch_size=torch.Size([]),
         **kwargs,
     ):
         super().__init__(
             device=device,
             dtype=dtype,
+            batch_size=batch_size,
         )
         if len(args):
             raise ValueError(

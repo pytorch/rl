@@ -46,7 +46,7 @@ class GymLikeEnv(_EnvWrapper):
             if _reward is None:
                 _reward = 0.0
             reward += _reward
-            if done:
+            if done.all():  # or any?
                 break
 
         obs_dict = self._read_obs(obs)
@@ -76,7 +76,7 @@ class GymLikeEnv(_EnvWrapper):
             batch_size=self.batch_size,
             device=self.device,
         )
-        self._is_done = torch.zeros(1, dtype=torch.bool)
+        self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
         tensordict_out.set("done", self._is_done)
         return tensordict_out
 
