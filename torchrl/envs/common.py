@@ -418,6 +418,7 @@ class _EnvClass:
         callback: Optional[Callable[[_TensorDict, ...], _TensorDict]] = None,
         auto_reset: bool = True,
         auto_cast_to_device: bool = False,
+        break_when_any_done: bool = True,
     ) -> _TensorDict:
         """Executes a rollout in the environment.
 
@@ -436,6 +437,7 @@ class _EnvClass:
                 Default is `True`.
             auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
                 policy device before the policy is used. Default is `False`.
+            break_when_any_done (bool): breaks if any of the done state is True. Default is True.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -468,7 +470,9 @@ class _EnvClass:
                     tensordict = tensordict.to(env_device)
                 tensordict = self.step(tensordict)
                 tensordicts.append(tensordict.clone())
-                if tensordict.get("done").any() or i == max_steps - 1:
+                if (
+                    break_when_any_done and tensordict.get("done").any()
+                ) or i == max_steps - 1:
                     break
                 tensordict = step_tensordict(tensordict, keep_other=True)
 
