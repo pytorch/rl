@@ -544,7 +544,7 @@ class _EnvClass:
             self._current_tensordict = None
             self.current_tensordict = current_tensordict
         self.is_done = self.is_done.to(device)
-        self.device = torch.device(device)
+        self.device = device
         return self
 
 
