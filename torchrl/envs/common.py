@@ -5,10 +5,11 @@
 
 from __future__ import annotations
 
+import abc
 import math
 from collections import OrderedDict
 from numbers import Number
-from typing import Any, Callable, Iterator, Optional, Tuple, Union
+from typing import Any, Callable, Iterator, Optional, Union, Dict
 
 import numpy as np
 import torch
@@ -32,7 +33,7 @@ dtype_map = {
     torch.bool: bool,
 }
 
-__all__ = ["Specs", "GymLikeEnv", "make_tensordict"]
+__all__ = ["Specs", "make_tensordict"]
 
 
 class Specs:
@@ -514,9 +515,7 @@ class _EnvClass:
                     raise Exception(
                         "dtype must be a numpy-compatible dtype. Got {dtype}"
                     )
-            value = torch.from_numpy(value)
-            if device != "cpu":
-                value = value.to(device)
+            value = torch.as_tensor(value, device=device)
         else:
             value = value.to(device)
         # if dtype is not None:
@@ -548,7 +547,7 @@ class _EnvClass:
         return self
 
 
-class _EnvWrapper(_EnvClass):
+class _EnvWrapper(_EnvClass, metaclass=abc.ABCMeta):
     """Abstract environment wrapper class.
 
     Unlike _EnvClass, _EnvWrapper comes with a `_build_env` private method that will be called upon instantiation.
@@ -569,9 +568,7 @@ class _EnvWrapper(_EnvClass):
 
     def __init__(
         self,
-        envname: str,
-        taskname: str = "",
-        frame_skip: int = 1,
+        *args,
         dtype: Optional[np.dtype] = None,
         device: DEVICE_TYPING = "cpu",
         **kwargs,
@@ -580,27 +577,29 @@ class _EnvWrapper(_EnvClass):
             device=device,
             dtype=dtype,
         )
-        self.envname = envname
-        self.taskname = taskname
+        if len(args):
+            raise ValueError(
+                "`_EnvWrapper.__init__` received a non-empty args list of arguments."
+                "Make sure only keywords arguments are used when calling `super().__init__`."
+            )
 
+        frame_skip = kwargs.get("frame_skip", 1)
+        if "frame_skip" in kwargs:
+            del kwargs["frame_skip"]
         self.frame_skip = frame_skip
-        self.wrapper_frame_skip = frame_skip  # this value can be changed if frame_skip is passed during env construction
+        # this value can be changed if frame_skip is passed during env construction
+        self.wrapper_frame_skip = frame_skip
 
-        self.constructor_kwargs = kwargs
-        if not (
-            (envname in self.available_envs)
-            and (
-                taskname in self.available_envs[envname]
-                if isinstance(self.available_envs, dict)
-                else True
-            )
-        ):
-            raise RuntimeError(
-                f"{envname} with task {taskname} is unknown in {self.libname}"
-            )
-        self._build_env(envname, taskname, **kwargs)  # writes the self._env attribute
+        self._constructor_kwargs = kwargs
+        self._check_kwargs(kwargs)
+        self._env = self._build_env(**kwargs)  # writes the self._env attribute
+        self._make_specs(self._env)  # writes the self._env attribute
         self.is_closed = False
         self._init_env()  # runs all the steps to have a ready-to-use env
+
+    @abc.abstractmethod
+    def _check_kwargs(self, kwargs: Dict):
+        raise NotImplementedError
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
@@ -636,19 +635,17 @@ class _EnvWrapper(_EnvClass):
         """
         raise NotImplementedError
 
-    def _build_env(
-        self, envname: str, taskname: Optional[str] = None, **kwargs
-    ) -> None:
+    @abc.abstractmethod
+    def _build_env(self, **kwargs) -> "gym.Env":
         """Creates an environment from the target library and stores it with the `_env` attribute.
 
         When overwritten, this function should pass all the required kwargs to the env instantiation method.
 
-        Args:
-            envname (str): name of the environment
-            taskname: (str, optional): task to be performed, if any.
-
-
         """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _make_specs(self, env: "gym.Env") -> None:
         raise NotImplementedError
 
     def close(self) -> None:
@@ -659,64 +656,6 @@ class _EnvWrapper(_EnvClass):
         except AttributeError:
             pass
 
-
-class GymLikeEnv(_EnvWrapper):
-    info_keys = []
-
-    """
-    A gym-like env is an environment whose behaviour is similar to gym environments in what
-    common methods (specifically reset and step) are expected to do.
-
-
-    A `GymLikeEnv` has a `.step()` method with the following signature:
-
-        ``env.step(action: np.ndarray) -> Tuple[Union[np.ndarray, dict], double, bool, *info]``
-
-    where the outputs are the observation, reward and done state respectively.
-    In this implementation, the info output is discarded.
-
-    By default, the first output is written at the "next_observation" key-value pair in the output tensordict, unless
-    the first output is a dictionary. In that case, each observation output will be put at the corresponding
-    "next_observation_{key}" location.
-
-    It is also expected that env.reset() returns an observation similar to the one observed after a step is completed.
-    """
-
-    def _step(self, tensordict: _TensorDict) -> _TensorDict:
-        action = tensordict.get("action")
-        action_np = self.action_spec.to_numpy(action, safe=False)
-
-        reward = 0.0
-        for _ in range(self.wrapper_frame_skip):
-            obs, _reward, done, *info = self._output_transform(
-                self._env.step(action_np)
-            )
-            if _reward is None:
-                _reward = 0.0
-            reward += _reward
-            if done:
-                break
-
-        obs_dict = self._read_obs(obs)
-
-        if reward is None:
-            reward = np.nan
-        reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
-        done = self._to_tensor(done, dtype=torch.bool)
-        self.is_done = done
-
-        tensordict_out = TensorDict(
-            obs_dict, batch_size=tensordict.batch_size, device=self.device
-        )
-        tensordict_out.set("reward", reward)
-        tensordict_out.set("done", done)
-        for key in self.info_keys:
-            data = info[0][key]
-            tensordict_out.set(key, data)
-
-        self.current_tensordict = step_tensordict(tensordict_out)
-        return tensordict_out
-
     def set_seed(self, seed: Optional[int] = None) -> Optional[int]:
         if seed is not None:
             torch.manual_seed(seed)
@@ -726,38 +665,9 @@ class GymLikeEnv(_EnvWrapper):
             seed = new_seed
         return seed
 
+    @abc.abstractmethod
     def _set_seed(self, seed: Optional[int]):
         raise NotImplementedError
-
-    def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs) -> _TensorDict:
-        obs, *_ = self._output_transform((self._env.reset(**kwargs),))
-        tensordict_out = TensorDict(
-            source=self._read_obs(obs),
-            batch_size=self.batch_size,
-            device=self.device,
-        )
-        self._is_done = torch.zeros(1, dtype=torch.bool)
-        tensordict_out.set("done", self._is_done)
-        return tensordict_out
-
-    def _read_obs(self, observations: Union[dict, torch.Tensor, np.ndarray]) -> dict:
-        if isinstance(observations, dict):
-            observations = {"next_" + key: value for key, value in observations.items()}
-        if not isinstance(observations, (TensorDict, dict)):
-            observations = {"next_observation": observations}
-        observations = self.observation_spec.encode(observations)
-        return observations
-
-    def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
-        """To be overwritten when step_outputs differ from Tuple[Observation: Union[np.ndarray, dict], reward: Number, done:Bool]"""
-        if not isinstance(step_outputs_tuple, tuple):
-            raise TypeError(
-                f"Expected step_outputs_tuple type to be Tuple but got {type(step_outputs_tuple)}"
-            )
-        return step_outputs_tuple
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(env={self.envname}, task={self.taskname if self.taskname else None}, batch_size={self.batch_size})"
 
 
 def make_tensordict(

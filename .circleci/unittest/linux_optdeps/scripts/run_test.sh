@@ -15,4 +15,4 @@ export MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210
 export DISPLAY=unix:0.0
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/project/.mujoco/mujoco210/bin
 #MUJOCO_GL=glfw pytest --cov=torchrl --junitxml=test-results/junit.xml -v --durations 20
-MUJOCO_GL=glfw pytest -v --durations 20
+MUJOCO_GL=egl pytest -v --durations 20
