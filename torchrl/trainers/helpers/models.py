@@ -1340,6 +1340,7 @@ class ContinuousModelConfig:
     activation: str = "tanh"
     # activation function, either relu or elu or tanh, Default=tanh
 
+
 @dataclass
 class DiscreteModelConfig:
     annealing_frames: int = 1000000
