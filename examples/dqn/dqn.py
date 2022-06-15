@@ -116,14 +116,7 @@ def main(args):
     model_explore = EGreedyWrapper(model, annealing_num_steps=args.annealing_frames).to(
         device
     )
-    if args.gSDE:
-        with torch.no_grad(), set_exploration_mode("random"):
-            # get dimensions to build the parallel env
-            proof_td = model(proof_env.reset().to(device))
-        action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]
-        del proof_td
-    else:
-        action_dim_gsde, state_dim_gsde = None, None
+    action_dim_gsde, state_dim_gsde = None, None
     proof_env.close()
     create_env_fn = parallel_env_constructor(
         args=args,
