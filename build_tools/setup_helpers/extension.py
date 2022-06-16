@@ -103,6 +103,7 @@ class CMakeBuild(build_ext):
             f"-DUSE_CUDA:BOOL={'ON' if _USE_CUDA else 'OFF'}",
         ]
         build_args = ["--target", "install"]
+        print("ho")
         # Pass CUDA architecture to cmake
         if _TORCH_CUDA_ARCH_LIST is not None:
             # Convert MAJOR.MINOR[+PTX] list to new style one
@@ -112,6 +113,7 @@ class CMakeBuild(build_ext):
                 arch[:-4] if arch.endswith("+PTX") else f"{arch}-real"
                 for arch in _arches
             ]
+            print("hey: ", _arches)
             cmake_args += [f"-DCMAKE_CUDA_ARCHITECTURES={';'.join(_arches)}"]
 
         # Default to Ninja
