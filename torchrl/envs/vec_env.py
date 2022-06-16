@@ -267,6 +267,8 @@ class _BatchedEnv(_EnvClass):
 
     @property
     def batch_size(self) -> TensorSpec:
+        if "_batch_size" not in self.__dir__():
+            raise AttributeError("_batch_size is not initialized")
         if self._batch_size is None:
             self._set_properties()
         return self._batch_size

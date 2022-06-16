@@ -328,7 +328,16 @@ def parallel_env_constructor(
 def get_stats_random_rollout(
     args: Namespace, proof_environment: _EnvClass, key: Optional[str] = None
 ):
-    print("computing state stats")
+    if key is None:
+        keys = list(proof_environment.observation_spec.keys())
+        key = keys.pop()
+        if len(keys):
+            raise RuntimeError(
+                f"More than one key exists in the observation_specs: {[key] + keys} were found, "
+                "thus get_stats_random_rollout cannot infer which to compute the stats of."
+            )
+
+    print(f"computing {key} stats")
     if not hasattr(args, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
@@ -340,14 +349,6 @@ def get_stats_random_rollout(
         td_stats.append(_td_stats)
     td_stats = torch.cat(td_stats, 0)
 
-    if key is None:
-        keys = list(proof_environment.observation_spec.keys())
-        key = keys.pop()
-        if len(keys):
-            raise RuntimeError(
-                f"More than one key exists in the observation_specs: {[key] + keys} were found, "
-                "thus get_stats_random_rollout cannot infer which to compute the stats of."
-            )
     if key == "next_pixels":
         m = td_stats.get(key).mean()
         s = td_stats.get(key).std().clamp_min(1e-5)

@@ -142,7 +142,7 @@ class GymWrapper(GymLikeEnv):
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
-        if not isinstance(env, gym.Env):
+        if not (hasattr(env, "action_space") and hasattr(env, "observation_space")):
             raise TypeError("env is not of type 'gym.Env'.")
 
     def _build_env(
@@ -240,8 +240,9 @@ class GymEnv(GymWrapper):
 
     """
 
-    def __init__(self, env_name, **kwargs):
+    def __init__(self, env_name, disable_env_checker=True, **kwargs):
         kwargs["env_name"] = env_name
+        kwargs["disable_env_checker"] = disable_env_checker
         super().__init__(**kwargs)
 
     def _build_env(
