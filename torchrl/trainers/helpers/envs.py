@@ -114,6 +114,7 @@ def make_env_transforms(
 
     if cfg.noops:
         env.append_transform(NoopResetEnv(cfg.noops))
+  
     if from_pixels:
         if not cfg.catframes:
             raise RuntimeError(
