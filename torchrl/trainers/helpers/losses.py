@@ -14,7 +14,7 @@ __all__ = [
     "make_redq_loss",
 ]
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 
 from torchrl.modules import ActorValueOperator, ActorCriticOperator
 from torchrl.objectives import (
@@ -226,7 +226,7 @@ class LossConfig:
     # use two (or more!) different qvalue networks trained independently and choose the lowest value
     # predicted to predict the state action value. This can be disabled by using this flag.
     # REDQ uses an arbitrary number of Q-value functions to speed up learning in MF contexts.
-    target_entropy: float = None
+    target_entropy: Any = None
     # Target entropy for the policy distribution. Default is None (auto calculated as the `target_entropy = -action_dim`)
 
 
