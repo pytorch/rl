@@ -182,6 +182,7 @@ class GymWrapper(GymLikeEnv):
                 try:
                     self.reset(seed=seed)
                     skip = True
+                    self._seed_calls_reset = True
                 except TypeError as err:
                     warnings.warn(
                         f"reset with seed kwarg returned an exception: {err}.\n"
