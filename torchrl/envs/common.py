@@ -222,13 +222,13 @@ class _EnvClass:
             obs = tensordict_out.get(key)
             self.observation_spec.type_check(obs, key)
 
-        if tensordict_out.get("reward").dtype is not self.reward_spec.dtype:
+        if tensordict_out._get_meta("reward").dtype is not self.reward_spec.dtype:
             raise TypeError(
                 f"expected reward.dtype to be {self.reward_spec.dtype} "
                 f"but got {tensordict_out.get('reward').dtype}"
             )
 
-        if tensordict_out.get("done").dtype is not torch.bool:
+        if tensordict_out._get_meta("done").dtype is not torch.bool:
             raise TypeError(
                 f"expected done.dtype to be torch.bool but got {tensordict_out.get('done').dtype}"
             )
@@ -384,7 +384,7 @@ class _EnvClass:
             self._is_done = torch.zeros(self.batch_size, device=self.device)
         return self._is_done.all()
 
-    def is_done_set_fn(self, val: bool) -> None:
+    def is_done_set_fn(self, val: torch.Tensor) -> None:
         self._is_done = val
 
     is_done = property(is_done_get_fn, is_done_set_fn)

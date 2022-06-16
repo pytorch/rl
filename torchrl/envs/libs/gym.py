@@ -135,6 +135,7 @@ class GymWrapper(GymLikeEnv):
     def __init__(self, env=None, **kwargs):
         if env is not None:
             kwargs["env"] = env
+        self._seed_calls_reset = None
         super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):
@@ -172,10 +173,26 @@ class GymWrapper(GymLikeEnv):
         return gym
 
     def _set_seed(self, seed: int) -> int:
-        if version.parse(gym.__version__) < version.parse("0.19.0"):
-            self._env.seed(seed=seed)
-        else:
+        skip = False
+        if self._seed_calls_reset is None:
+            if version.parse(gym.__version__) < version.parse("0.19.0"):
+                self._seed_calls_reset = False
+                self._env.seed(seed=seed)
+            else:
+                try:
+                    self.reset(seed=seed)
+                    skip = True
+                    self._seed_calls_reset = True
+                except TypeError as err:
+                    warnings.warn(
+                        f"reset with seed kwarg returned an exception: {err}.\n"
+                        f"Calling env.seed from now on."
+                    )
+                    self._seed_calls_reset = False
+        if self._seed_calls_reset and not skip:
             self.reset(seed=seed)
+        elif not self._seed_calls_reset:
+            self._env.seed(seed=seed)
         return seed
 
     def _make_specs(self, env: "gym.Env") -> None:

@@ -324,7 +324,7 @@ class TransformedEnv(_EnvClass):
         selected_keys = [key for key in tensordict.keys() if "action" in key]
         tensordict_in = tensordict.select(*selected_keys).clone()
         tensordict_in = self.transform.inv(tensordict_in)
-        tensordict_out = self.env._step(tensordict_in)
+        tensordict_out = self.env.step(tensordict_in)
         # tensordict should already have been processed by the transforms
         # for logging purposes
         tensordict_out = self.transform(tensordict_out)
@@ -362,6 +362,16 @@ class TransformedEnv(_EnvClass):
     @is_closed.setter
     def is_closed(self, value: bool):
         self.env.is_closed = value
+
+    def is_done_get_fn(self) -> bool:
+        if self._is_done is None:
+            return self.env.is_done
+        return self._is_done.all()
+
+    def is_done_set_fn(self, val: torch.Tensor) -> None:
+        self._is_done = val
+
+    is_done = property(is_done_get_fn, is_done_set_fn)
 
     def close(self):
         self.env.close()
