@@ -1546,9 +1546,6 @@ class NoopResetEnv(Transform):
         for k in keys:
             if k not in td.keys():
                 td.set(k, tensordict.get(k))
-        if tensordict["done"] and not self.env.is_done:
-            self.env.is_done
-            print("env isn't done but td is")
         return td
 
     def __repr__(self) -> str:
