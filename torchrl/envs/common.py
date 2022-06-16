@@ -130,12 +130,11 @@ class _EnvClass:
     from_pixels: bool
     device = torch.device("cpu")
 
-
     def __init__(
         self,
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
-        batch_size: torch.Size=torch.Size([]),
+        batch_size: Optional[torch.Size] = None,
     ):
         if device is not None:
             self.device = torch.device(device)
@@ -151,7 +150,12 @@ class _EnvClass:
             self._observation_spec = None
         if "_current_tensordict" not in self.__dir__():
             self._current_tensordict = None
-        self.batch_size = batch_size
+        if batch_size is not None:
+            # we want an error to be raised if we pass batch_size but
+            # it's already been set
+            self.batch_size = batch_size
+        elif not hasattr(self, "batch_size"):
+            self.batch_size = torch.Size([])
 
     @property
     def action_spec(self) -> TensorSpec:
@@ -577,7 +581,7 @@ class _EnvWrapper(_EnvClass, metaclass=abc.ABCMeta):
         *args,
         dtype: Optional[np.dtype] = None,
         device: DEVICE_TYPING = "cpu",
-        batch_size=torch.Size([]),
+        batch_size: Optional[torch.Size] = None,
         **kwargs,
     ):
         super().__init__(

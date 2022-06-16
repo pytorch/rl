@@ -717,10 +717,6 @@ class _MultiDataCollector(_DataCollector):
         self.total_frames = total_frames if total_frames > 0 else float("inf")
         self.reset_at_each_iter = reset_at_each_iter
         self.postprocs = postproc
-        # if postproc is not None:
-        #     for _device in self.passing_devices:
-        #         if _device not in self.postprocs:
-        #             self.postprocs[_device] = deepcopy(postproc).to(_device)
         self.max_frames_per_traj = max_frames_per_traj
         self.frames_per_batch = frames_per_batch
         self.seed = seed
@@ -987,7 +983,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             else:
                 frames += math.prod(out.shape)
             if self.postprocs:
-                self.postprocs.to(out.device)
+                self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
@@ -1013,6 +1009,13 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         super().__init__(*args, **kwargs)
         self.out_tensordicts = dict()
         self.running = False
+
+        if self.postprocs is not None:
+            postproc = self.postprocs
+            self.postprocs = dict()
+            for _device in self.passing_devices:
+                if _device not in self.postprocs:
+                    self.postprocs[_device] = deepcopy(postproc).to(_device)
 
     @property
     def frames_per_batch_worker(self):
