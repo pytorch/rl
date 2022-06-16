@@ -154,7 +154,9 @@ class _EnvClass:
             # we want an error to be raised if we pass batch_size but
             # it's already been set
             self.batch_size = batch_size
-        elif not hasattr(self, "batch_size"):
+        elif ("batch_size" not in self.__dir__()) and (
+            "batch_size" not in self.__class__.__dict__
+        ):
             self.batch_size = torch.Size([])
 
     @property
