@@ -25,3 +25,4 @@ dependencies:
     - dm_control
     - mujoco_py
     - hydra-core
+    - pyrender

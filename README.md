@@ -88,9 +88,11 @@ pip install "git+https://github.com/pytorch/functorch.git"
 Go to the directory where you have cloned the torchrl repo and install it
 ```
 cd /path/to/torchrl/
-python setup.py install
+python setup.py develop
 ```
-To run a quick sanity check, leave that directory and try to import the library.
+As the library is at an early stage, it may be wise to install it in develop mode (`python setup.py develop` instead of `install`) as this will make it possible to pull the latest changes and benefit from them immediately. 
+
+To run a quick sanity check, leave that directory (e.g. by executing `cd ~/`) and try to import the library.
 ```
 python -c "import torchrl"
 ```
@@ -117,7 +119,7 @@ pip install pytest
 
 Alternatively, extra dependencies can be installed using
 ```
-pip install ".[atari,dm_control,gym_continuous,rendering,tests,utils]"
+pip install -e ".[atari,dm_control,gym_continuous,rendering,tests,utils]"
 ```
 or a selection of these.
 
