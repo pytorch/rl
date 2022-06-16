@@ -3,9 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import argparse
-from argparse import ArgumentParser, Namespace
-from typing import Optional, Union
+from dataclasses import dataclass
+from typing import Optional, Union, List
 from warnings import warn
 
 from torch import optim
@@ -38,8 +37,39 @@ OPTIMIZERS = {
 
 __all__ = [
     "make_trainer",
-    "parser_trainer_args",
 ]
+
+
+@dataclass
+class TrainerConfig:
+    optim_steps_per_batch: int = 500
+    # Number of optimization steps in between two collection of data. See frames_per_batch below.
+    optimizer: str = "adam"
+    # Optimizer to be used.
+    lr_scheduler: str = "cosine"
+    # LR scheduler.
+    selected_keys: Optional[List] = None
+    # a list of strings that indicate the data that should be kept from the data collector. Since storing and
+    # retrieving information from the replay buffer does not come for free, limiting the amount of data
+    # passed to it can improve the algorithm performance.
+    batch_size: int = 256
+    # batch size of the TensorDict retrieved from the replay buffer. Default=256.
+    log_interval: int = 10000
+    # logging interval, in terms of optimization steps. Default=10000.
+    lr: float = 3e-4
+    # Learning rate used for the optimizer. Default=3e-4.
+    weight_decay: float = 0.0
+    # Weight-decay to be used with the optimizer. Default=0.0.
+    clip_norm: float = 1000.0
+    # value at which the total gradient norm / single derivative should be clipped. Default=1000.0
+    clip_grad_norm: bool = False
+    # if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient values will be clipped to the desired threshold.
+    normalize_rewards_online: bool = False
+    # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
+    normalize_rewards_online_scale: float = 1.0
+    # Final value of the normalized rewards.
+    sub_traj_len: int = -1
+    # length of the trajectories that sub-samples must have in online settings.
 
 
 def make_trainer(
@@ -52,7 +82,7 @@ def make_trainer(
     ] = None,
     replay_buffer: Optional[ReplayBuffer] = None,
     writer: Optional["SummaryWriter"] = None,
-    args: Optional[Namespace] = None,
+    cfg: "DictConfig" = None,
 ) -> Trainer:
     """Creates a Trainer instance given its constituents.
 
@@ -66,11 +96,11 @@ def make_trainer(
             updates (should be synced with the learnt policy).
         replay_buffer (ReplayBuffer, optional): a replay buffer to be used to collect data.
         writer (SummaryWriter, optional): a tensorboard SummaryWriter to be used for logging.
-        args (argparse.Namespace, optional): a Namespace containing the arguments of the script. If None, the default
+        cfg (DictConfig, optional): a DictConfig containing the arguments of the script. If None, the default
             arguments are used.
 
     Returns:
-        A trainer built with the input objects. The optimizer is built by this helper function using the args provided.
+        A trainer built with the input objects. The optimizer is built by this helper function using the cfg provided.
 
     Examples:
         >>> import torch
@@ -106,36 +136,35 @@ def make_trainer(
         >>> print(trainer)
 
     """
-    if args is None:
+    if cfg is None:
         warn(
-            "Getting default args for the trainer. "
+            "Getting default cfg for the trainer. "
             "This should be only used for debugging."
         )
-        parser = parser_trainer_args(argparse.ArgumentParser())
-        parser.add_argument("--frame_skip", default=1)
-        parser.add_argument("--total_frames", default=1000)
-        parser.add_argument("--record_frames", default=10)
-        parser.add_argument("--record_interval", default=10)
-        args = parser.parse_args([])
+        cfg = TrainerConfig()
+        cfg.frame_skip = 1
+        cfg.total_frames = 1000
+        cfg.record_frames = 10
+        cfg.record_interval = 10
 
-    optimizer_kwargs = {} if args.optimizer != "adam" else {"betas": (0.0, 0.9)}
-    optimizer = OPTIMIZERS[args.optimizer](
+    optimizer_kwargs = {} if cfg.optimizer != "adam" else {"betas": (0.0, 0.9)}
+    optimizer = OPTIMIZERS[cfg.optimizer](
         loss_module.parameters(),
-        lr=args.lr,
-        weight_decay=args.weight_decay,
+        lr=cfg.lr,
+        weight_decay=cfg.weight_decay,
         **optimizer_kwargs,
     )
-    if args.lr_scheduler == "cosine":
+    if cfg.lr_scheduler == "cosine":
         optim_scheduler = CosineAnnealingLR(
             optimizer,
             T_max=int(
-                args.total_frames / args.frames_per_batch * args.optim_steps_per_batch
+                cfg.total_frames / cfg.frames_per_batch * cfg.optim_steps_per_batch
             ),
         )
-    elif args.lr_scheduler == "":
+    elif cfg.lr_scheduler == "":
         optim_scheduler = None
     else:
-        raise NotImplementedError(f"lr scheduler {args.lr_scheduler}")
+        raise NotImplementedError(f"lr scheduler {cfg.lr_scheduler}")
 
     print(
         f"collector = {collector}; \n"
@@ -145,37 +174,38 @@ def make_trainer(
         f"policy_exploration = {policy_exploration}; \n"
         f"replay_buffer = {replay_buffer}; \n"
         f"writer = {writer}; \n"
-        f"args = {args}; \n"
+        f"cfg = {cfg}; \n"
     )
 
     if writer is not None:
         # log hyperparams
-        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(args).items())])
+        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(cfg).items())])
         writer.add_text("hparams", txt)
 
     trainer = Trainer(
         collector=collector,
-        frame_skip=args.frame_skip,
-        total_frames=args.total_frames * args.frame_skip,
+        frame_skip=cfg.frame_skip,
+        total_frames=cfg.total_frames * cfg.frame_skip,
         loss_module=loss_module,
         optimizer=optimizer,
         writer=writer,
-        optim_steps_per_batch=args.optim_steps_per_batch,
-        clip_grad_norm=args.clip_grad_norm,
-        clip_norm=args.clip_norm,
+        optim_steps_per_batch=cfg.optim_steps_per_batch,
+        clip_grad_norm=cfg.clip_grad_norm,
+        clip_norm=cfg.clip_norm,
     )
 
-    if hasattr(args, "noisy") and args.noisy:
+    if hasattr(cfg, "noisy") and cfg.noisy:
         trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
 
-    if args.selected_keys:
-        trainer.register_op("batch_process", SelectKeys(args.selected_keys))
+    if cfg.selected_keys:
+        trainer.register_op("batch_process", SelectKeys(cfg.selected_keys))
     trainer.register_op("batch_process", lambda batch: batch.cpu())
 
     if replay_buffer is not None:
         # replay buffer is used 2 or 3 times: to register data, to sample
-        # data and possibly to update priorities
-        rb_trainer = ReplayBufferTrainer(replay_buffer, args.batch_size)
+        # data and to update priorities
+        rb_trainer = ReplayBufferTrainer(replay_buffer, cfg.batch_size)
+
         trainer.register_op("batch_process", rb_trainer.extend)
         trainer.register_op("process_optim_batch", rb_trainer.sample)
         trainer.register_op("post_loss", rb_trainer.update_priority)
@@ -183,7 +213,7 @@ def make_trainer(
         trainer.register_op("batch_process", mask_batch)
         trainer.register_op(
             "process_optim_batch",
-            BatchSubSampler(batch_size=args.batch_size, sub_traj_len=args.sub_traj_len),
+            BatchSubSampler(batch_size=cfg.batch_size, sub_traj_len=cfg.sub_traj_len),
         )
 
     if optim_scheduler is not None:
@@ -192,40 +222,40 @@ def make_trainer(
     if target_net_updater is not None:
         trainer.register_op("post_optim", target_net_updater.step)
 
-    if args.normalize_rewards_online:
+    if cfg.normalize_rewards_online:
         # if used the running statistics of the rewards are computed and the
         # rewards used for training will be normalized based on these.
-        reward_normalizer = RewardNormalizer(scale=args.normalize_rewards_online_scale)
+        reward_normalizer = RewardNormalizer(scale=cfg.normalize_rewards_online_scale)
         trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
         trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 
     if policy_exploration is not None and hasattr(policy_exploration, "step"):
         trainer.register_op(
-            "post_steps", policy_exploration.step, frames=args.frames_per_batch
+            "post_steps", policy_exploration.step, frames=cfg.frames_per_batch
         )
 
     trainer.register_op(
-        "post_steps_log", lambda *args: {"lr": optimizer.param_groups[0]["lr"]}
+        "post_steps_log", lambda *cfg: {"lr": optimizer.param_groups[0]["lr"]}
     )
 
     if recorder is not None:
         recorder_obj = Recorder(
-            record_frames=args.record_frames,
-            frame_skip=args.frame_skip,
+            record_frames=cfg.record_frames,
+            frame_skip=cfg.frame_skip,
             policy_exploration=policy_exploration,
             recorder=recorder,
-            record_interval=args.record_interval,
+            record_interval=cfg.record_interval,
         )
         trainer.register_op(
             "post_steps_log",
             recorder_obj,
         )
         recorder_obj_explore = Recorder(
-            record_frames=args.record_frames,
-            frame_skip=args.frame_skip,
+            record_frames=cfg.record_frames,
+            frame_skip=cfg.frame_skip,
             policy_exploration=policy_exploration,
             recorder=recorder,
-            record_interval=args.record_interval,
+            record_interval=cfg.record_interval,
             exploration_mode="random",
             suffix="exploration",
             out_key="r_evaluation_exploration",
@@ -239,109 +269,6 @@ def make_trainer(
     )
 
     trainer.register_op("pre_steps_log", LogReward())
-    trainer.register_op("pre_steps_log", CountFramesLog(frame_skip=args.frame_skip))
+    trainer.register_op("pre_steps_log", CountFramesLog(frame_skip=cfg.frame_skip))
 
     return trainer
-
-
-def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
-    """
-    Populates the argument parser to build the trainer.
-
-    Args:
-        parser (ArgumentParser): parser to be populated.
-
-    """
-    parser.add_argument(
-        "--optim_steps_per_batch",
-        "--optim-steps-per-batch",
-        type=int,
-        default=1,
-        help="Number of optimization steps in between two collection of data. See frames_per_batch "
-        "below. "
-        "Default=1",
-    )
-    parser.add_argument(
-        "--optimizer", type=str, default="adam", help="Optimizer to be used."
-    )
-    parser.add_argument(
-        "--lr_scheduler",
-        "--lr-scheduler",
-        type=str,
-        default="cosine",
-        choices=["cosine", ""],
-        help="LR scheduler.",
-    )
-    parser.add_argument(
-        "--selected_keys",
-        "--selected-keys",
-        nargs="+",
-        default=None,
-        help="a list of strings that indicate the data that should be kept from the data collector. Since storing and "
-        "retrieving information from the replay buffer does not come for free, limiting the amount of data "
-        "passed to it can improve the algorithm performance."
-        "Default is None, i.e. all keys are kept.",
-    )
-
-    parser.add_argument(
-        "--batch_size",
-        "--batch-size",
-        type=int,
-        default=256,
-        help="batch size of the TensorDict retrieved from the replay buffer. Default=64.",
-    )
-    parser.add_argument(
-        "--log_interval",
-        "--log-interval",
-        type=int,
-        default=10000,
-        help="logging interval, in terms of optimization steps. Default=1000.",
-    )
-    parser.add_argument(
-        "--lr",
-        type=float,
-        default=3e-4,
-        help="Learning rate used for the optimizer. Default=2e-4.",
-    )
-    parser.add_argument(
-        "--weight_decay",
-        "--weight-decay",
-        type=float,
-        default=0.0,
-        help="Weight-decay to be used with the optimizer. Default=0.0.",
-    )
-    parser.add_argument(
-        "--clip_norm",
-        "--clip-norm",
-        type=float,
-        default=1000.0,
-        help="value at which the total gradient norm / single derivative should be clipped. Default=1000.0",
-    )
-    parser.add_argument(
-        "--clip_grad_norm",
-        action="store_true",
-        help="if called, the gradient will be clipped based on its L2 norm. Otherwise, single gradient "
-        "values will be clipped to the desired threshold.",
-    )
-    parser.add_argument(
-        "--normalize_rewards_online",
-        "--normalize-rewards-online",
-        action="store_true",
-        help="Computes the running statistics of the rewards and normalizes them before they are "
-        "passed to the loss module.",
-    )
-    parser.add_argument(
-        "--normalize_rewards_online_scale",
-        "--normalize-rewards-online-scale",
-        default=1.0,
-        type=float,
-        help="Final value of the normalized rewards.",
-    )
-    parser.add_argument(
-        "--sub_traj_len",
-        "--sub-traj-len",
-        type=int,
-        default=-1,
-        help="length of the trajectories that sub-samples must have in online settings.",
-    )
-    return parser

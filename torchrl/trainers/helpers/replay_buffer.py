@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from argparse import ArgumentParser, Namespace
+from dataclasses import dataclass
 
 import torch
 
@@ -14,22 +14,22 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 
-__all__ = ["make_replay_buffer", "parser_replay_args"]
+__all__ = ["make_replay_buffer"]
 
 
-def make_replay_buffer(device: DEVICE_TYPING, args: Namespace) -> ReplayBuffer:
-    """Builds a replay buffer using the arguments build from the parser returned by parser_replay_args."""
+def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer:
+    """Builds a replay buffer using the config built from ReplayArgsConfig."""
     device = torch.device(device)
-    if not args.prb:
+    if not cfg.prb:
         buffer = TensorDictReplayBuffer(
-            args.buffer_size,
+            cfg.buffer_size,
             # collate_fn=InPlaceSampler(device),
             pin_memory=device != torch.device("cpu"),
             prefetch=3,
         )
     else:
         buffer = TensorDictPrioritizedReplayBuffer(
-            args.buffer_size,
+            cfg.buffer_size,
             alpha=0.7,
             beta=0.5,
             # collate_fn=InPlaceSampler(device),
@@ -39,25 +39,9 @@ def make_replay_buffer(device: DEVICE_TYPING, args: Namespace) -> ReplayBuffer:
     return buffer
 
 
-def parser_replay_args(parser: ArgumentParser) -> ArgumentParser:
-    """
-    Populates the argument parser to build a replay buffer.
-
-    Args:
-        parser (ArgumentParser): parser to be populated.
-
-    """
-
-    parser.add_argument(
-        "--buffer_size",
-        "--buffer-size",
-        type=int,
-        default=1000000,
-        help="buffer size, in number of frames stored. Default=1e6",
-    )
-    parser.add_argument(
-        "--prb",
-        action="store_true",
-        help="whether a Prioritized replay buffer should be used instead of a more basic circular one.",
-    )
-    return parser
+@dataclass
+class ReplayArgsConfig:
+    buffer_size: int = 1000000
+    # buffer size, in number of frames stored. Default=1e6
+    prb: bool = False
+    # whether a Prioritized replay buffer should be used instead of a more basic circular one.
