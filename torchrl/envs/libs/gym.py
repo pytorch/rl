@@ -191,7 +191,7 @@ class GymWrapper(GymLikeEnv):
                     self._seed_calls_reset = False
         if self._seed_calls_reset and not skip:
             self.reset(seed=seed)
-        else:
+        elif not self._seed_calls_reset:
             self._env.seed(seed=seed)
         return seed
 
