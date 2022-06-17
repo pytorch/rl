@@ -76,7 +76,7 @@ class VideoRecorder(ObservationTransform):
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         if not (observation.shape[-1] == 3 or observation.ndimension() == 2):
             raise RuntimeError(f"Invalid observation shape, got: {observation.shape}")
-        observation_trsf = observation
+        observation_trsf = observation.clone()
         self.count += 1
         if self.count % self.skip == 0:
             if observation.ndimension() == 2:
@@ -105,7 +105,7 @@ class VideoRecorder(ObservationTransform):
                         "Make sure torchvision is installed in your environment."
                     )
                 observation_trsf = make_grid(observation_trsf)
-            self.obs.append(observation_trsf.cpu().to(torch.uint8))
+            self.obs.append(observation_trsf.to(torch.uint8))
         return observation
 
     def dump(self, suffix: Optional[str] = None) -> None:
@@ -118,12 +118,15 @@ class VideoRecorder(ObservationTransform):
             tag = self.tag
         else:
             tag = "_".join([self.tag, suffix])
+        obs = torch.stack(self.obs, 0).unsqueeze(0).cpu()
+        del self.obs
         self.writer.add_video(
             tag=tag,
-            vid_tensor=torch.stack(self.obs, 0).unsqueeze(0),
+            vid_tensor=obs,
             global_step=self.iter,
             **self.video_kwargs,
         )
+        del obs
         self.iter += 1
         self.count = 0
         self.obs = []

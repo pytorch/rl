@@ -839,7 +839,7 @@ class Recorder:
         self.suffix = suffix
         self.log_pbar = log_pbar
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def __call__(self, batch: _TensorDict) -> Dict:
         out = None
         if self._count % self.record_interval == 0:
@@ -854,7 +854,7 @@ class Recorder:
                     max_steps=self.record_frames,
                     auto_reset=True,
                     auto_cast_to_device=True,
-                )
+                ).clone()
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.train()
                 self.recorder.train()

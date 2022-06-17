@@ -47,7 +47,9 @@ class GymLikeEnv(_EnvWrapper):
                 _reward = 0.0
             reward += _reward
             # TODO: check how to deal with np arrays
-            if (isinstance(done, torch.Tensor) and done.all()) or done:  # or any?
+            if (isinstance(done, torch.Tensor) and done.all()) or (
+                not isinstance(done, torch.Tensor) and done
+            ):  # or any?
                 break
 
         obs_dict = self._read_obs(obs)
