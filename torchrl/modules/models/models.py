@@ -11,6 +11,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from torchrl.data import DEVICE_TYPING
 from torchrl.modules.models.utils import (
     _find_depth,
     LazyMapping,
@@ -162,6 +163,7 @@ class MLP(nn.Sequential):
         layer_class: Type = nn.Linear,
         layer_kwargs: Optional[dict] = None,
         activate_last_layer: bool = False,
+        device: DEVICE_TYPING = "cpu",
     ):
         if out_features is None:
             raise ValueError("out_feature must be specified for MLP.")
@@ -186,11 +188,13 @@ class MLP(nn.Sequential):
             activation_kwargs if activation_kwargs is not None else dict()
         )
         self.norm_class = norm_class
+        self.device = torch.device(device)
         self.norm_kwargs = norm_kwargs if norm_kwargs is not None else dict()
         self.bias_last_layer = bias_last_layer
         self.single_bias_last_layer = single_bias_last_layer
         self.layer_class = layer_class
         self.layer_kwargs = layer_kwargs if layer_kwargs is not None else dict()
+        self.layer_kwargs.update({"device": self.device})
         self.activate_last_layer = activate_last_layer
         if single_bias_last_layer:
             raise NotImplementedError
@@ -347,6 +351,7 @@ class ConvNet(nn.Sequential):
         aggregator_class: Type = SquashDims,
         aggregator_kwargs: Optional[dict] = None,
         squeeze_output: bool = False,
+        device: DEVICE_TYPING = "cpu",
     ):
 
         self.in_features = in_features
@@ -362,6 +367,7 @@ class ConvNet(nn.Sequential):
             aggregator_kwargs if aggregator_kwargs is not None else {"ndims_in": 3}
         )
         self.squeeze_output = squeeze_output
+        self.device = torch.device(device)
         # self.single_bias_last_layer = single_bias_last_layer
 
         depth = _find_depth(depth, num_cells, kernel_sizes, strides, paddings)
@@ -416,6 +422,7 @@ class ConvNet(nn.Sequential):
                         stride=_stride,
                         bias=_bias,
                         padding=_padding,
+                        device=self.device,
                     )
                 )
             else:
@@ -426,6 +433,7 @@ class ConvNet(nn.Sequential):
                         stride=_stride,
                         bias=_bias,
                         padding=_padding,
+                        device=self.device,
                     )
                 )
 
