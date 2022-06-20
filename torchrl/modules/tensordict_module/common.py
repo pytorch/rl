@@ -22,7 +22,6 @@ from functorch import FunctionalModule, FunctionalModuleWithBuffers, vmap
 from functorch._src.make_functional import _swap_state
 from torch import nn, Tensor
 
-from torchrl import timeit
 from torchrl.data import (
     DEVICE_TYPING,
     TensorSpec,
@@ -305,7 +304,7 @@ class TensorDictModule(nn.Module):
         if isinstance(self.module, (FunctionalModule, FunctionalModuleWithBuffers)):
             _vmap = self._make_vmap(kwargs, len(tensors))
             if _vmap:
-                module = timeit("vmap")(vmap(self.module, _vmap))
+                module = vmap(self.module, _vmap)
             else:
                 module = self.module
 
@@ -381,7 +380,7 @@ class TensorDictModule(nn.Module):
         return torch.device("cpu")
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> TensorDictModule:
-        if self.spec is not None:
+        if hasattr(self, "spec") and self.spec is not None:
             self.spec = self.spec.to(dest)
         out = super().to(dest)
         return out
