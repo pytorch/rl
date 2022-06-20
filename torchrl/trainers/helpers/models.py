@@ -1351,5 +1351,3 @@ class DiscreteModelConfig:
     # whether a distributional loss should be used.
     atoms: int = 51
     # number of atoms used for the distributional loss
-    gSDE: bool = False
-    # if True, exploration is achieved using the gSDE technique.

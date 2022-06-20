@@ -12,8 +12,6 @@ import torch.cuda
 from hydra.core.config_store import ConfigStore
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import EGreedyWrapper
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
@@ -103,17 +101,8 @@ def main(cfg: "DictConfig"):
     )
 
     loss_module, target_net_updater = make_dqn_loss(model, cfg)
-    model_explore = EGreedyWrapper(model, annealing_num_steps=cfg.annealing_frames).to(
-        device
-    )
-    if cfg.gSDE:
-        with torch.no_grad(), set_exploration_mode("random"):
-            # get dimensions to build the parallel env
-            proof_td = model(proof_env.reset().to(device))
-        action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]
-        del proof_td
-    else:
-        action_dim_gsde, state_dim_gsde = None, None
+
+    action_dim_gsde, state_dim_gsde = None, None
     proof_env.close()
     create_env_fn = parallel_env_constructor(
         cfg=cfg,
@@ -124,7 +113,7 @@ def main(cfg: "DictConfig"):
 
     collector = make_collector_offpolicy(
         make_env=create_env_fn,
-        actor_model_explore=model_explore,
+        actor_model_explore=model,
         cfg=cfg,
         # make_env_kwargs=[
         #     {"device": device} if device >= 0 else {}
@@ -169,7 +158,7 @@ def main(cfg: "DictConfig"):
         loss_module,
         recorder,
         target_net_updater,
-        model_explore,
+        model,
         replay_buffer,
         writer,
         cfg,
