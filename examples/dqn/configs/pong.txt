@@ -17,3 +17,4 @@ record_frames=50000
 normalize_rewards_online
 from_pixels
 record_video
+catframes=4

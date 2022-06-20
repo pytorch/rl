@@ -113,7 +113,7 @@ def make_env_transforms(
         )
 
     if args.noops:
-        env.append_transform(NoopResetEnv(env, args.noops))
+        env.append_transform(NoopResetEnv(args.noops))
     if from_pixels:
         if not args.catframes:
             raise RuntimeError(
@@ -248,14 +248,14 @@ def transformed_env_constructor(
 
         if custom_env is None and custom_env_maker is None:
             env_kwargs = {
-                "envname": env_name,
+                "env_name": env_name,
                 "device": "cpu",
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,
             }
             if env_library is DMControlEnv:
-                env_kwargs.update({"taskname": env_task})
+                env_kwargs.update({"task_name": env_task})
             env_kwargs.update(kwargs)
             env = env_library(**env_kwargs)
         elif custom_env is None and custom_env_maker is not None:
@@ -328,18 +328,6 @@ def parallel_env_constructor(
 def get_stats_random_rollout(
     args: Namespace, proof_environment: _EnvClass, key: Optional[str] = None
 ):
-    print("computing state stats")
-    if not hasattr(args, "init_env_steps"):
-        raise AttributeError("init_env_steps missing from arguments.")
-
-    n = 0
-    td_stats = []
-    while n < args.init_env_steps:
-        _td_stats = proof_environment.rollout(max_steps=args.init_env_steps)
-        n += _td_stats.numel()
-        td_stats.append(_td_stats)
-    td_stats = torch.cat(td_stats, 0)
-
     if key is None:
         keys = list(proof_environment.observation_spec.keys())
         key = keys.pop()
@@ -348,18 +336,29 @@ def get_stats_random_rollout(
                 f"More than one key exists in the observation_specs: {[key] + keys} were found, "
                 "thus get_stats_random_rollout cannot infer which to compute the stats of."
             )
-    if key == "next_pixels":
-        m = td_stats.get(key).mean()
-        s = td_stats.get(key).std().clamp_min(1e-5)
-    else:
-        m = td_stats.get(key).mean(dim=0)
-        s = td_stats.get(key).std(dim=0).clamp_min(1e-5)
 
-    print(
-        f"stats computed for {td_stats.numel()} steps. Got: \n"
-        f"loc = {m}, \n"
-        f"scale: {s}"
-    )
+    print(f"computing {key} stats on device {proof_environment.device}")
+    if not hasattr(args, "init_env_steps"):
+        raise AttributeError("init_env_steps missing from arguments.")
+
+    n = 0
+    td_stats = []
+    while n < args.init_env_steps:
+        _td_stats = proof_environment.rollout(max_steps=args.init_env_steps)
+        n += _td_stats.numel()
+        td_stats.append(_td_stats.clone().select(key))
+    td_stats = torch.cat(td_stats, 0)
+
+    if key == "next_pixels":
+        m = td_stats.get(key).mean().cpu()
+        s = td_stats.get(key).std().clamp_min(1e-5).cpu()
+    else:
+        m = td_stats.get(key).mean(dim=0).cpu()
+        s = td_stats.get(key).std(dim=0).clamp_min(1e-2).cpu()
+
+    del td_stats
+
+    print(f"stats computed for {n} steps. Got: \n" f"loc = {m}, \n" f"scale: {s}")
     if not torch.isfinite(m).all():
         raise RuntimeError("non-finite values found in mean")
     if not torch.isfinite(s).all():

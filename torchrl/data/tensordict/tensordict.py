@@ -1284,8 +1284,11 @@ dtype=torch.float32)},
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
 
         if return_simple_view and not self.is_memmap():
+            # We exclude memmap tensordicts such that indexing is achieved only when needed
+            #  as  SubTenssorDicts are lazy objects
             return TensorDict(
                 source={key: item[idx] for key, item in self.items()},
+                _meta_source={key: item[idx] for key, item in self.items_meta()},
                 batch_size=_getitem_batch_size(self.batch_size, idx),
                 device=self._device_safe(),
             )
@@ -1805,7 +1808,7 @@ class TensorDict(_TensorDict):
         return self
 
     def memmap_(self) -> _TensorDict:
-        if self.is_shared():
+        if self.is_shared() and self.device == torch.device("cpu"):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
@@ -2193,6 +2196,7 @@ torch.Size([3, 2])
                 f"got {type(source)}"
             )
         self._source = source
+        self._meta_dict = dict()
         if not isinstance(idx, (tuple, list)):
             idx = (idx,)
         else:
@@ -2322,7 +2326,9 @@ torch.Size([3, 2])
         return self._source.get_at(key, self.idx, default=default)
 
     def _get_meta(self, key: str) -> MetaTensor:
-        return self._source._get_meta(key)[self.idx]
+        if key not in self._meta_dict:
+            self._meta_dict[key] = self._source._get_meta(key)[self.idx]
+        return self._meta_dict[key]
 
     def set_at_(
         self,
@@ -2734,12 +2740,17 @@ class LazyStackedTensorDict(_TensorDict):
         return False
 
     def contiguous(self) -> _TensorDict:
-        return TensorDict(
-            source={key: value for key, value in self.items()},
-            batch_size=self.batch_size,
-            _meta_source={k: value for k, value in self.items_meta()},
-            device=self._device_safe(),
+        source = {key: value for key, value in self.items()}
+        batch_size = self.batch_size
+        meta_source = {k: value for k, value in self.items_meta()}
+        device = self._device_safe()
+        out = TensorDict(
+            source=source,
+            batch_size=batch_size,
+            _meta_source=meta_source,
+            device=device,
         )
+        return out
 
     def clone(self, recursive: bool = True) -> _TensorDict:
         if recursive:

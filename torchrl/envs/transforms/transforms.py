@@ -206,13 +206,24 @@ class Transform(nn.Module):
         if not hasattr(self, "_parent"):
             raise AttributeError("transform parent uninitialized")
         parent = self._parent
-        while not isinstance(parent, _EnvClass):
-            if not isinstance(parent, Transform):
+        if not isinstance(parent, _EnvClass):
+            # if it's not an env, it should be a Compose transform
+            if not isinstance(parent, Compose):
                 raise ValueError(
-                    "A transform parent must be either another transform or an environment object."
+                    "A transform parent must be either another Compose transform or an environment object."
                 )
-            parent = parent.parent
-        return parent
+            out = TransformedEnv(
+                parent.parent.base_env,
+            )
+            for transform in parent.transforms:
+                if transform is self:
+                    break
+                out.append_transform(transform)
+        elif isinstance(parent, TransformedEnv):
+            out = TransformedEnv(parent.base_env)
+        else:
+            raise ValueError(f"parent is of type {type(parent)}")
+        return out
 
     def empty_cache(self):
         if self.parent is not None:
@@ -251,13 +262,13 @@ class TransformedEnv(_EnvClass):
     ):
         kwargs.setdefault("device", env.device)
         device = kwargs["device"]
-        self.env = env.to(device)
+        self.base_env = env.to(device)
         if transform is None:
             transform = Compose()
+            transform.set_parent(self)
         else:
             transform = transform.to(device)
         self.transform = transform
-        transform.set_parent(self)  # allows to find env specs from the transform
 
         self._last_obs = None
         self.cache_specs = cache_specs
@@ -265,7 +276,7 @@ class TransformedEnv(_EnvClass):
         self._action_spec = None
         self._reward_spec = None
         self._observation_spec = None
-        self.batch_size = self.env.batch_size
+        self.batch_size = self.base_env.batch_size
 
         super().__init__(**kwargs)
 
@@ -274,7 +285,7 @@ class TransformedEnv(_EnvClass):
         """Observation spec of the transformed_in environment"""
         if self._observation_spec is None or not self.cache_specs:
             observation_spec = self.transform.transform_observation_spec(
-                deepcopy(self.env.observation_spec)
+                deepcopy(self.base_env.observation_spec)
             )
             if self.cache_specs:
                 self._observation_spec = observation_spec
@@ -288,7 +299,7 @@ class TransformedEnv(_EnvClass):
 
         if self._action_spec is None or not self.cache_specs:
             action_spec = self.transform.transform_action_spec(
-                deepcopy(self.env.action_spec)
+                deepcopy(self.base_env.action_spec)
             )
             if self.cache_specs:
                 self._action_spec = action_spec
@@ -302,7 +313,7 @@ class TransformedEnv(_EnvClass):
 
         if self._reward_spec is None or not self.cache_specs:
             reward_spec = self.transform.transform_reward_spec(
-                deepcopy(self.env.reward_spec)
+                deepcopy(self.base_env.reward_spec)
             )
             if self.cache_specs:
                 self._reward_spec = reward_spec
@@ -314,7 +325,7 @@ class TransformedEnv(_EnvClass):
         selected_keys = [key for key in tensordict.keys() if "action" in key]
         tensordict_in = tensordict.select(*selected_keys).clone()
         tensordict_in = self.transform.inv(tensordict_in)
-        tensordict_out = self.env._step(tensordict_in)
+        tensordict_out = self.base_env.step(tensordict_in)
         # tensordict should already have been processed by the transforms
         # for logging purposes
         tensordict_out = self.transform(tensordict_out)
@@ -322,10 +333,12 @@ class TransformedEnv(_EnvClass):
 
     def set_seed(self, seed: int) -> int:
         """Set the seeds of the environment"""
-        return self.env.set_seed(seed)
+        return self.base_env.set_seed(seed)
 
     def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs):
-        out_tensordict = self.env.reset(execute_step=False, **kwargs).to(self.device)
+        out_tensordict = self.base_env.reset(execute_step=False, **kwargs).to(
+            self.device
+        )
         out_tensordict = self.transform.reset(out_tensordict)
         out_tensordict = self.transform(out_tensordict)
         return out_tensordict
@@ -347,14 +360,24 @@ class TransformedEnv(_EnvClass):
 
     @property
     def is_closed(self) -> bool:
-        return self.env.is_closed
+        return self.base_env.is_closed
 
     @is_closed.setter
     def is_closed(self, value: bool):
-        self.env.is_closed = value
+        self.base_env.is_closed = value
+
+    def is_done_get_fn(self) -> bool:
+        if self._is_done is None:
+            return self.base_env.is_done
+        return self._is_done.all()
+
+    def is_done_set_fn(self, val: torch.Tensor) -> None:
+        self._is_done = val
+
+    is_done = property(is_done_get_fn, is_done_set_fn)
 
     def close(self):
-        self.env.close()
+        self.base_env.close()
         self.is_closed = True
 
     def empty_cache(self):
@@ -386,16 +409,16 @@ class TransformedEnv(_EnvClass):
                 f"not permitted with type {type(self)}. "
                 f"Got attribute {attr}."
             )
-        elif "env" in self.__dir__():
-            env = self.__getattribute__("env")
-            return getattr(env, attr)
+        elif "base_env" in self.__dir__():
+            base_env = self.__getattribute__("base_env")
+            return getattr(base_env, attr)
 
         raise AttributeError(
             f"env not set in {self.__class__.__name__}, cannot access {attr}"
         )
 
     def __repr__(self) -> str:
-        return f"TransformedEnv(env={self.env}, transform={self.transform})"
+        return f"TransformedEnv(env={self.base_env}, transform={self.transform})"
 
     def _erase_metadata(self):
         self._current_tensordict = None
@@ -405,7 +428,7 @@ class TransformedEnv(_EnvClass):
             self._reward_spec = None
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
-        self.env.to(device)
+        self.base_env.to(device)
         self.device = torch.device(device)
         self.transform.to(device)
 
@@ -420,6 +443,31 @@ class TransformedEnv(_EnvClass):
             self._observation_spec = None
             self._reward_spec = None
         return self
+
+    def _current_tensordict_get(self) -> _TensorDict:
+        try:
+            return super().current_tensordict
+        except RuntimeError:
+            current_obs = self.base_env.current_tensordict
+            # for key in self.env.observation_spec:
+            #     current_obs.rename_key(key[5:], key)
+            return self.transform(current_obs)
+
+    current_tensordict = property(
+        _current_tensordict_get, _EnvClass._current_tensordict_set
+    )
+
+    def __setattr__(self, key, value):
+        propobj = getattr(self.__class__, key, None)
+
+        if isinstance(value, Transform):
+            value.set_parent(self)
+        if isinstance(propobj, property):
+            if propobj.fset is None:
+                raise AttributeError(f"can't set attribute {key}")
+            return propobj.fset(self, value)
+        else:
+            return super().__setattr__(key, value)
 
 
 class ObservationTransform(Transform):
@@ -721,8 +769,8 @@ class Resize(ObservationTransform):
         if keys is None:
             keys = IMAGE_KEYS  # default
         super().__init__(keys=keys)
-        self.w = w
-        self.h = h
+        self.w = int(w)
+        self.h = int(h)
         self.interpolation = interpolation
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
@@ -767,7 +815,7 @@ class Resize(ObservationTransform):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
-            f"w={float(self.w):4.4f}, h={float(self.h):4.4f}, "
+            f"w={int(self.w)}, h={int(self.h)}, "
             f"interpolation={self.interpolation}, keys={self.keys})"
         )
 
@@ -898,7 +946,7 @@ class FlattenObservation(ObservationTransform):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
-            f"first_dim={float(self.first_dim):4.4f}, last_dim={float(self.last_dim):4.4f}, "
+            f"first_dim={int(self.first_dim)}, last_dim={int(self.last_dim)})"
         )
 
 
@@ -1464,14 +1512,17 @@ class NoopResetEnv(Transform):
 
     inplace = True
 
-    def __init__(self, env: _EnvClass, noops: int = 30, random: bool = True):
+    def __init__(self, noops: int = 30, random: bool = True):
         """Sample initial states by taking random number of no-ops on reset.
         No-op is assumed to be action 0.
         """
         super().__init__([])
-        self.env = env
         self.noops = noops
         self.random = random
+
+    @property
+    def base_env(self):
+        return self.parent
 
     def reset(self, tensordict: _TensorDict) -> _TensorDict:
         """Do no-op action for a number of steps in [1, noop_max]."""
@@ -1483,16 +1534,16 @@ class NoopResetEnv(Transform):
         trial = 0
         while i < noops:
             i += 1
-            tensordict = self.env.rand_step()
-            if self.env.is_done:
-                self.env.reset()
+            tensordict = self.base_env.rand_step()
+            if self.base_env.is_done:
+                self.base_env.reset()
                 i = 0
                 trial += 1
                 if trial > _MAX_NOOPS_TRIALS:
-                    self.env.reset()
-                    tensordict = self.env.rand_step()
+                    self.base_env.reset()
+                    tensordict = self.base_env.rand_step()
                     break
-        if self.env.is_done:
+        if self.base_env.is_done:
             raise RuntimeError("NoopResetEnv concluded with done environment")
         td = step_tensordict(tensordict).select(*keys)
         for k in keys:

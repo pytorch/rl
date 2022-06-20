@@ -232,7 +232,7 @@ def test_recorder():
         args.env_library = "gym"
         args.frame_skip = 1
         args.center_crop = []
-        args.from_pixels = False
+        args.from_pixels = True
         args.vecnorm = False
         args.norm_rewards = False
         args.reward_scaling = 1.0
@@ -240,6 +240,7 @@ def test_recorder():
         args.noops = 0
         args.record_frames = 24 // args.frame_skip
         args.record_interval = 2
+        args.catframes = 4
 
         N = 8
 
