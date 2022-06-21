@@ -28,11 +28,15 @@ class EGreedyWrapper(TensorDictModuleWrapper):
 
     Args:
         policy (TensorDictModule): a deterministic policy.
-        eps_init (scalar): initial epsilon value.
+        eps_init (scalar, optional): initial epsilon value.
             default: 1.0
-        eps_end (scalar): final epsilon value.
+        eps_end (scalar, optional): final epsilon value.
             default: 0.1
-        annealing_num_steps (int): number of steps it will take for epsilon to reach the eps_end value
+        annealing_num_steps (int, optional): number of steps it will take for epsilon to reach the eps_end value
+        action_key (str, optional): if the policy module has more than one output key,
+            its output spec will be of type CompositeSpec. One needs to know where to
+            find the action spec.
+            Default is "action".
 
     Examples:
         >>> from torchrl.modules import EGreedyWrapper, Actor
@@ -64,6 +68,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
+        action_key: str = "action",
     ):
         super().__init__(policy)
         self.register_buffer("eps_init", torch.tensor([eps_init]))
@@ -72,6 +77,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
             raise RuntimeError("eps should decrease over time or be constant")
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
+        self.action_key = action_key
 
     def step(self, frames: int = 1) -> None:
         """A step of epsilon decay.
@@ -98,10 +104,10 @@ class EGreedyWrapper(TensorDictModuleWrapper):
                 out.dtype
             )
             cond = expand_as_right(cond, out)
-            out = (
-                cond * self.td_module.spec.rand(tensordict.shape).to(out.device)
-                + (1 - cond) * out
-            )
+            spec = self.td_module.spec
+            if isinstance(spec, CompositeSpec):
+                spec = spec[self.action_key]
+            out = cond * spec.rand(tensordict.shape).to(out.device) + (1 - cond) * out
             tensordict.set(self.td_module.out_keys[0], out)
         return tensordict
 
