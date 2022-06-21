@@ -536,7 +536,6 @@ class _EnvClass:
 
     def close(self):
         self.is_closed = True
-        pass
 
     def __del__(self):
         if not self.is_closed:
