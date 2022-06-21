@@ -232,11 +232,15 @@ class MemmapTensor(object):
         stored on the desired device.
 
         """
-        return self._tensor.clone()
+        return self._tensor
 
     @property
     def device(self) -> torch.device:
         return self._device
+
+    @device.setter
+    def device(self, device):
+        self._device = torch.device(device)
 
     @property
     def dtype(self) -> torch.dtype:
@@ -247,7 +251,22 @@ class MemmapTensor(object):
         return self._shape
 
     def cpu(self) -> torch.Tensor:
-        return self._tensor.cpu()
+        """Defines the device of the MemmapTensor as "cpu"
+
+        Returns: a MemmapTensor where device has been modified in-place
+
+        """
+        self.device = torch.device("cpu")
+        return self
+
+    def cuda(self) -> torch.Tensor:
+        """Defines the device of the MemmapTensor as "cuda"
+
+        Returns: a MemmapTensor where device has been modified in-place
+
+        """
+        self.device = torch.device("cuda")
+        return self
 
     def numpy(self) -> np.ndarray:
         return self._tensor.numpy()
@@ -294,18 +313,10 @@ class MemmapTensor(object):
                 attr
             )  # make sure that appropriate exceptions are raised
 
-        # elif attr.startswith('__'):
-        #     raise AttributeError('passing built-in private methods is '
-        #                          f'not permitted with type {type(self)}. '
-        #                          f'Got attribute {attr}.')
         if attr not in self.__getattribute__("_tensor_dir"):
             raise AttributeError(f"{attr} not found")
         _tensor = self.__getattribute__("_tensor")
         return getattr(_tensor, attr)
-
-        # if not hasattr(torch.Tensor, attr):
-        #     raise AttributeError(attr)
-        # return getattr(self._tensor, attr)
 
     def is_shared(self) -> bool:
         return False
@@ -343,7 +354,8 @@ class MemmapTensor(object):
 
     def __getitem__(self, item: INDEX_TYPING) -> torch.Tensor:
         # return self._load_item(memmap_array=self.memmap_array[item])#[item]
-        return self._load_item()[item]
+        # return self._load_item()[item]
+        return self._load_item(idx=item)
 
     def __setitem__(self, idx: INDEX_TYPING, value: torch.Tensor):
         # self.memmap_array[idx] = to_numpy(value)
@@ -389,7 +401,8 @@ class MemmapTensor(object):
         """
         if isinstance(dest, (int, str, torch.device)):
             dest = torch.device(dest)
-            return self._tensor.to(dest)
+            self.device = dest
+            return self
         elif isinstance(dest, torch.dtype):
             return MemmapTensor(self._tensor.to(dest))
         else:
