@@ -7,7 +7,8 @@ import uuid
 from copy import deepcopy
 from datetime import datetime
 
-from torchrl.envs import ParallelEnv, EnvCreator, Compose, ObservationNorm
+from torchrl.envs import ParallelEnv, EnvCreator, Compose, ObservationNorm, \
+    NoopResetEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.envs import LIBS
@@ -134,7 +135,7 @@ def main(args):
     if not args.vecnorm and args.norm_stats:
         print("Creating proof env without stats: ", end="\t")
         proof_env = transformed_env_constructor(
-            args=args, use_env_creator=False, device=device
+            args=args, use_env_creator=False, device="cuda:1"
         )()
         print(proof_env)
         if args.from_pixels:
@@ -162,7 +163,7 @@ def main(args):
         use_env_creator=False,
         stats_pixels=stats_pixels,
         stats_state=stats_state,
-        device=device,
+        device="cuda:1",
     )()
     print(proof_env)
 
@@ -209,6 +210,8 @@ def main(args):
 
     print("Creating loss: ", end="\t")
     loss_module, target_net_updater = make_redq_loss(model, args)
+    del model
+
     print(loss_module, target_net_updater)
     if args.ou_exploration:
         if args.gSDE:
@@ -266,7 +269,7 @@ def main(args):
         stats_pixels=stats_pixels,
         writer=writer,
         use_env_creator=False,
-        device=device,
+        device="cuda:1",
     )()
 
     # remove video recorder from recorder to have matching state_dict keys
@@ -290,6 +293,7 @@ def main(args):
         if isinstance(t, RewardScaling):
             t.scale.fill_(1.0)
             t.loc.fill_(0.0)
+    recorder.transform = Compose(*[t for t in recorder.transform if not isinstance(t, NoopResetEnv)])
 
     # recorder = ParallelEnv(1, recorder)
     # recorder = TransformedEnv(
