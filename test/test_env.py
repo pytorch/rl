@@ -596,7 +596,6 @@ class TestParallel:
         out = env_parallel.rollout(max_steps=20)
         assert out.device == torch.device(device)
 
-
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", get_available_devices())
