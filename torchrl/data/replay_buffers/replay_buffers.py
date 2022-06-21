@@ -34,7 +34,11 @@ __all__ = [
     "create_prioritized_replay_buffer",
 ]
 
-from torchrl.data.tensordict.tensordict import _TensorDict, stack as stack_td
+from torchrl.data.tensordict.tensordict import (
+    _TensorDict,
+    stack as stack_td,
+    LazyStackedTensorDict,
+)
 from torchrl.data.utils import DEVICE_TYPING
 
 
