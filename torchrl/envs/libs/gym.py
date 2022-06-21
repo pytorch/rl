@@ -284,7 +284,7 @@ class GymEnv(GymWrapper):
             raise TypeError("Expected 'env_name' to be part of kwargs")
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(env={self.env_name}, batch_size={self.batch_size})"
+        return f"{self.__class__.__name__}(env={self.env_name}, batch_size={self.batch_size}, device={self.device})"
 
 
 def _get_retro_envs() -> Sequence:

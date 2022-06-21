@@ -15,6 +15,8 @@ import numpy as np
 import torch.nn
 from torch import nn, optim
 
+from torchrl import KeyDependentDefaultDict
+
 try:
     from tqdm import tqdm
 
@@ -29,7 +31,7 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.data.utils import expand_right
+from torchrl.data.utils import expand_right, DEVICE_TYPING
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
@@ -112,7 +114,6 @@ class Trainer:
     _last_log: dict = {}
     _last_save: int = 0
     _log_interval: int = 10000
-    _reward_stats: dict = {"decay": 0.999}
 
     def __init__(
         self,
@@ -171,13 +172,13 @@ class Trainer:
         self._process_optim_batch_ops = []
         self._post_optim_ops = []
 
-    def save_trainer(self) -> None:
-        _save = False
+    def save_trainer(self, force_save: bool = False) -> None:
+        _save = force_save
         if self.save_trainer_file is not None:
             if (self._collected_frames - self._last_save) > self.save_trainer_interval:
                 self._last_save = self._collected_frames
                 _save = True
-        if _save:
+        if _save and self.save_trainer_file:
             torch.save(self.state_dict(), self.save_trainer_file)
 
     def load_from_file(self, file: Union[str, pathlib.Path]) -> Trainer:
@@ -369,6 +370,7 @@ class Trainer:
 
             if self.collected_frames > self.total_frames:
                 break
+        self.save_trainer(force_save=True)
 
     def __del__(self):
         self.collector.shutdown()
@@ -515,6 +517,10 @@ class ReplayBufferTrainer:
         replay_buffer (ReplayBuffer): replay buffer to be used.
         batch_size (int): batch size when sampling data from the
             latest collection or from the replay buffer.
+        memmap (bool, optional): if True, a memmap tensordict is created.
+            Default is False.
+        device (device, optional): device where the samples must be placed.
+            Default is cpu.
 
     Examples:
         >>> rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
@@ -524,9 +530,17 @@ class ReplayBufferTrainer:
 
     """
 
-    def __init__(self, replay_buffer: ReplayBuffer, batch_size: int) -> None:
+    def __init__(
+        self,
+        replay_buffer: ReplayBuffer,
+        batch_size: int,
+        memmap: bool = False,
+        device: DEVICE_TYPING = "cpu",
+    ) -> None:
         self.replay_buffer = replay_buffer
         self.batch_size = batch_size
+        self.memmap = memmap
+        self.device = device
 
     def extend(self, batch: _TensorDict) -> _TensorDict:
         if "mask" in batch.keys():
@@ -535,10 +549,16 @@ class ReplayBufferTrainer:
             batch = batch.reshape(-1)
         # reward_training = batch.get("reward").mean().item()
         batch = batch.cpu()
+        if self.memmap:
+            # We can already place the tensords on the device if they're memmap,
+            # as this is a lazy op
+            batch = batch.memmap_().to(self.device)
         self.replay_buffer.extend(batch)
 
     def sample(self, batch: _TensorDict) -> _TensorDict:
-        return self.replay_buffer.sample(self.batch_size)
+        sample = self.replay_buffer.sample(self.batch_size)
+        sample = sample.contiguous()
+        return sample.to(self.device)
 
     def update_priority(self, batch: _TensorDict) -> None:
         if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
@@ -660,6 +680,7 @@ def mask_batch(batch: _TensorDict) -> _TensorDict:
     if "mask" in batch.keys():
         mask = batch.get("mask")
         return batch[mask.squeeze(-1)]
+    return batch
 
 
 class BatchSubSampler:
@@ -823,7 +844,8 @@ class Recorder:
         policy_exploration: TensorDictModule,
         recorder: _EnvClass,
         exploration_mode: str = "mode",
-        out_key: str = "r_evaluation",
+        log_keys: Optional[List[str]] = None,
+        out_keys: Optional[Dict[str, str]] = None,
         suffix: Optional[str] = None,
         log_pbar: bool = False,
     ) -> None:
@@ -835,7 +857,13 @@ class Recorder:
         self._count = 0
         self.record_interval = record_interval
         self.exploration_mode = exploration_mode
-        self.out_key = out_key
+        if log_keys is None:
+            log_keys = ["reward"]
+        if out_keys is None:
+            out_keys = KeyDependentDefaultDict()
+            out_keys["reward"] = "r_evaluation"
+        self.log_keys = log_keys
+        self.out_keys = out_keys
         self.suffix = suffix
         self.log_pbar = log_pbar
 
@@ -858,10 +886,19 @@ class Recorder:
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.train()
                 self.recorder.train()
-                reward = td_record.get("reward").mean() / self.frame_skip
                 self.recorder.transform.dump(suffix=self.suffix)
-                out = {self.out_key: reward, "log_pbar": self.log_pbar}
+
+                out = dict()
+                for key in self.log_keys:
+                    value = td_record.get(key).float().mean()
+                    if key == "reward":
+                        value = value / self.frame_skip
+                    if key == "solved":
+                        value = value.any().float()
+                    out[self.out_keys[key]] = value
+                out["log_pbar"] = self.log_pbar
         self._count += 1
+        self.recorder.close()
         return out
 
 

@@ -39,6 +39,14 @@ def parser_recorder_args(parser: ArgumentParser) -> ArgumentParser:
         "A date and uuid will be joined to account for multiple experiments with the same name.",
     )
     parser.add_argument(
+        "--recorder_log_keys",
+        "--recorder-log-keys",
+        nargs="+",
+        type=str,
+        default=["reward"],
+        help="Keys to log in the recorder.",
+    )
+    parser.add_argument(
         "--record_interval",
         "--record-interval",
         type=int,
