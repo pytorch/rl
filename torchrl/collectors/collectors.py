@@ -955,6 +955,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 if workers_frames[idx] >= self.total_frames:
                     print(f"{idx} is done!")
                     dones[idx] = True
+            # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
                 traj_ids = out_tensordicts_shared[idx].get("traj_ids")
                 if max_traj_idx is not None:
@@ -1028,7 +1029,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             self.out_tensordicts[idx] = data
         else:
             idx = new_data
-        out = self.out_tensordicts[idx]
+        # we clone the data to make sure that we'll be working with a fixed copy
+        out = self.out_tensordicts[idx].clone()
         return idx, j, out
 
     @property
@@ -1077,7 +1079,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 out = out.exclude(*excluded_keys)
-            yield out.clone()
+            yield out
 
         self._shutdown_main()
         self.running = False
