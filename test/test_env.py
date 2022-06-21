@@ -129,7 +129,6 @@ def test_env_seed(env_name, frame_skip, seed=0):
         assert_allclose_td(td0a, td0c.select(*td0a.keys()))
     with pytest.raises(AssertionError):
         assert_allclose_td(td1a, td1c)
-    env.close()
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
@@ -158,7 +157,6 @@ def test_rollout(env_name, frame_skip, seed=0):
     rollout3 = env.rollout(max_steps=100)
     with pytest.raises(AssertionError):
         assert_allclose_td(rollout1, rollout3)
-    env.close()
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -317,9 +315,6 @@ class TestParallel:
         assert (
             td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
         ), f"{td.shape}, {td.get('done').sum(1)}"
-        env_parallel.close()
-        # env_serial.close()  # never opened
-        env0.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", ["Pendulum-v1"])
@@ -401,9 +396,6 @@ class TestParallel:
         assert (
             td.shape == torch.Size([N, T]) or td.get("done").sum(1).all()
         ), f"{td.shape}, {td.get('done').sum(1)}"
-        env_parallel.close()
-        # env_serial.close()
-        env0.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize(
@@ -414,14 +406,12 @@ class TestParallel:
         ],
     )
     @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [False])
-    @pytest.mark.parametrize("transformed_out", [True])
-    # @pytest.mark.parametrize("transformed_in", [False, True])
-    # @pytest.mark.parametrize("transformed_out", [True, False])
+    @pytest.mark.parametrize("transformed_in", [False, True])
+    @pytest.mark.parametrize("transformed_out", [True, False])
     def test_parallel_env_seed(
         self, env_name, frame_skip, transformed_in, transformed_out
     ):
-        env_parallel, env_serial, env0 = _make_envs(
+        env_parallel, env_serial, _ = _make_envs(
             env_name, frame_skip, transformed_in, transformed_out, 5
         )
 
@@ -451,9 +441,6 @@ class TestParallel:
         assert_allclose_td(td_serial[:, 0], td_parallel[:, 0])  # first step
         assert_allclose_td(td_serial[:, 1], td_parallel[:, 1])  # second step
         assert_allclose_td(td_serial, td_parallel)
-        # env_parallel.close()
-        # env_serial.close()
-        # env0.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     def test_parallel_env_shutdown(self):
@@ -483,7 +470,6 @@ class TestParallel:
         assert all(result == 0 for result in env.custom_fun())
         assert all(result == 1 for result in env.custom_attr)
         assert all(result == 2 for result in env.custom_prop)  # to be fixed
-        env.close()
 
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda to test on")
     @pytest.mark.skipif(not _has_gym, reason="no gym")
@@ -574,9 +560,6 @@ class TestParallel:
         assert td_device.device == torch.device(device), env_serial
         td_device = env_parallel.current_tensordict
         assert td_device.device == torch.device(device), env_parallel
-        env_parallel.close()
-        env_serial.close()
-        env0.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
@@ -613,9 +596,6 @@ class TestParallel:
         out = env_parallel.rollout(max_steps=20)
         assert out.device == torch.device(device)
 
-        env_parallel.close()
-        env_serial.close()
-        env0.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
@@ -649,7 +629,6 @@ class TestParallel:
         env0.current_tensordict = current_tensordict.clone()
         current_tensordict2 = env0.current_tensordict
         assert (current_tensordict2 == current_tensordict).all()
-        env0.close()
 
         out = env_serial.rollout(max_steps=20)
         current_tensordict_art = step_tensordict(out[:, -1], exclude_done=False)
@@ -661,7 +640,6 @@ class TestParallel:
         env_serial.current_tensordict = current_tensordict.clone()
         current_tensordict2 = env_serial.current_tensordict
         assert (current_tensordict2 == current_tensordict).all()
-        env_serial.close()
 
         out = env_parallel.rollout(max_steps=20)
         current_tensordict_art = step_tensordict(out[:, -1], exclude_done=False)
@@ -673,7 +651,6 @@ class TestParallel:
         env_parallel.current_tensordict = current_tensordict.clone()
         current_tensordict2 = env_parallel.current_tensordict
         assert (current_tensordict2 == current_tensordict).all()
-        env_parallel.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
@@ -703,8 +680,6 @@ class TestParallel:
         env_parallel_out.set_seed(0)
         r_out = env_parallel_out.rollout(max_steps=20)
         assert_allclose_td(r_in, r_out)
-        env_parallel_in.close()
-        env_parallel_out.close()
 
         torch.manual_seed(0)
         env_serial_in.set_seed(0)
@@ -713,8 +688,6 @@ class TestParallel:
         env_serial_out.set_seed(0)
         r_out = env_serial_out.rollout(max_steps=20)
         assert_allclose_td(r_in, r_out)
-        env_serial_in.close()
-        env_serial_out.close()
 
         torch.manual_seed(0)
         env0_in.set_seed(0)
@@ -723,8 +696,6 @@ class TestParallel:
         env0_out.set_seed(0)
         r_out = env0_out.rollout(max_steps=20)
         assert_allclose_td(r_in, r_out)
-        env0_in.close()
-        env0_in.close()
 
     @pytest.mark.parametrize("parallel", [True, False])
     def test_parallel_env_kwargs_set(self, parallel):
@@ -763,9 +734,6 @@ class TestParallel:
         env2.start()
         for c1, c2 in zip(env1.counter, env2.counter):
             assert c1 == c2
-
-        env1.close()
-        env2.close()
 
 
 class TestSpec:
