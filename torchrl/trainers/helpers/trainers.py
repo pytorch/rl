@@ -125,6 +125,7 @@ def make_trainer(
         weight_decay=args.weight_decay,
         **optimizer_kwargs,
     )
+    device = next(loss_module.parameters()).device
     if args.lr_scheduler == "cosine":
         optim_scheduler = CosineAnnealingLR(
             optimizer,
@@ -223,6 +224,7 @@ def make_trainer(
             "post_steps_log",
             recorder_obj,
         )
+        recorder_obj(None)
         recorder_obj_explore = Recorder(
             record_frames=args.record_frames,
             frame_skip=args.frame_skip,
@@ -237,6 +239,8 @@ def make_trainer(
             "post_steps_log",
             recorder_obj_explore,
         )
+        recorder_obj_explore(None)
+
     trainer.register_op(
         "post_steps", UpdateWeights(collector, update_weights_interval=1)
     )
