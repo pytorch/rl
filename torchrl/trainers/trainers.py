@@ -15,6 +15,8 @@ import numpy as np
 import torch.nn
 from torch import nn, optim
 
+from torchrl import KeyDependentDefaultDict
+
 try:
     from tqdm import tqdm
 
@@ -824,7 +826,8 @@ class Recorder:
         policy_exploration: TensorDictModule,
         recorder: _EnvClass,
         exploration_mode: str = "mode",
-        out_key: str = "r_evaluation",
+        log_keys: Optional[List[str]] = None,
+        out_keys: Optional[Dict[str, str]] = None,
         suffix: Optional[str] = None,
         log_pbar: bool = False,
     ) -> None:
@@ -836,7 +839,13 @@ class Recorder:
         self._count = 0
         self.record_interval = record_interval
         self.exploration_mode = exploration_mode
-        self.out_key = out_key
+        if log_keys is None:
+            log_keys = ["reward"]
+        if out_keys is None:
+            out_keys = KeyDependentDefaultDict()
+            out_keys["reward"] = "r_evaluation"
+        self.log_keys = log_keys
+        self.out_keys = out_keys
         self.suffix = suffix
         self.log_pbar = log_pbar
 
@@ -859,10 +868,19 @@ class Recorder:
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.train()
                 self.recorder.train()
-                reward = td_record.get("reward").mean() / self.frame_skip
                 self.recorder.transform.dump(suffix=self.suffix)
-                out = {self.out_key: reward, "log_pbar": self.log_pbar}
+
+                out = dict()
+                for key in self.log_keys:
+                    value = td_record.get(key).float().mean()
+                    if key == "reward":
+                        value = value / self.frame_skip
+                    if key == "solved":
+                        value = value.any().float()
+                    out[self.out_keys[key]] = value
+                out["log_pbar"] = self.log_pbar
         self._count += 1
+        self.recorder.close()
         return out
 
 
