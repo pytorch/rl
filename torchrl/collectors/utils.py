@@ -45,6 +45,8 @@ def split_trajectories(rollout_tensordict: _TensorDict) -> _TensorDict:
                 dtype=torch.bool,
             ),
         )
+        if rollout_tensordict.ndimension() == 1:
+            rollout_tensordict = rollout_tensordict.unsqueeze(0).to_tensordict()
         return rollout_tensordict
     try:
         out_splits = {
