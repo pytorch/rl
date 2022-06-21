@@ -6,7 +6,8 @@
 from argparse import Namespace
 from typing import Callable, Optional, Union
 
-from torchrl.envs import DMControlEnv, GymEnv, RetroEnv, ParallelEnv
+from torchrl.data import DEVICE_TYPING
+from torchrl.envs import DMControlEnv, ParallelEnv
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.env_creator import env_creator, EnvCreator
 from torchrl.envs.transforms import (
@@ -106,33 +107,30 @@ def make_env_transforms(
         selected_keys = [
             key for key in env.observation_spec.keys() if "pixels" not in key
         ]
+        assert len(selected_keys), f"got keys {env.observation_spec.keys()}"
 
         # even if there is a single tensor, it'll be renamed in "next_observation_vector"
         out_key = "next_observation_vector"
         env.append_transform(CatTensors(keys=selected_keys, out_key=out_key))
+        double_to_float_list.append(out_key)
+        env.append_transform(DoubleToFloat(keys=double_to_float_list))
 
         if hasattr(args, "catframes") and args.catframes:
             env.append_transform(
                 CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1)
             )
 
-        if not vecnorm:
-            if stats_states is None:
-                obs_stats = {"loc": 0.0, "scale": 1.0}
-            else:
-                obs_stats = stats_states
+        if not vecnorm and (stats_states is not None):
+            obs_stats = stats_states
             obs_stats["standard_normal"] = True
             env.append_transform(ObservationNorm(**obs_stats, keys=[out_key]))
-        else:
+        elif vecnorm:
             env.append_transform(
                 VecNorm(
                     keys=[out_key, "reward"] if not _norm_obs_only else [out_key],
                     decay=0.9999,
                 )
             )
-
-        double_to_float_list.append(out_key)
-        env.append_transform(DoubleToFloat(keys=double_to_float_list))
 
     else:
         env.append_transform(DoubleToFloat(keys=double_to_float_list))
@@ -160,6 +158,7 @@ def transformed_env_constructor(
     action_dim_gsde: Optional[int] = None,
     state_dim_gsde: Optional[int] = None,
     batch_dims: Optional[int] = 0,
+    device: DEVICE_TYPING = "cpu",
 ) -> Union[Callable, EnvCreator]:
     """
     Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
@@ -191,6 +190,7 @@ def transformed_env_constructor(
         batch_dims (int, optional): number of dimensions of a batch of data. If a single env is
             used, it should be 0 (default). If multiple envs are being transformed in parallel,
             it should be set to 1 (or the number of dims of the batch).
+        device (torch.device, optional): device of the env.
     """
 
     def make_transformed_env(**kwargs) -> TransformedEnv:
@@ -202,14 +202,14 @@ def transformed_env_constructor(
 
         if custom_env is None and custom_env_maker is None:
             env_kwargs = {
-                "envname": env_name,
-                "device": "cpu",
+                "env_name": env_name,
+                "device": device,
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
-                "pixels_only": from_pixels,
+                "pixels_only": from_pixels and not args.include_state,
             }
             if env_library is DMControlEnv:
-                env_kwargs.update({"taskname": env_task})
+                env_kwargs.update({"task_name": env_task})
             env_kwargs.update(kwargs)
             env = env_library(**env_kwargs)
         elif custom_env is None and custom_env_maker is not None:
@@ -220,7 +220,7 @@ def transformed_env_constructor(
             raise RuntimeError("cannot provive both custom_env and custom_env_maker")
 
         if not return_transformed_envs:
-            return env
+            return env.to(device)
 
         return make_env_transforms(
             env,
@@ -235,7 +235,7 @@ def transformed_env_constructor(
             action_dim_gsde,
             state_dim_gsde,
             batch_dims=batch_dims,
-        )
+        ).to(device)
 
     if use_env_creator:
         return env_creator(make_transformed_env)

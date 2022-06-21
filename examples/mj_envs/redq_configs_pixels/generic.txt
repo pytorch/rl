@@ -6,8 +6,8 @@ tanh_loc
 clip_norm 1000.0
 lr_scheduler=
 
-num_workers=4
-env_per_collector=1
+num_workers=6
+env_per_collector=2
 
 frame_skip=1
 frames_per_batch=500
@@ -27,7 +27,11 @@ normalize_rewards_online_scale=10.0
 multi_step
 include_state
 
-
 frames_per_batch=50
 optim_steps_per_batch=8
 batch_transform
+
+use_avg_pooling
+shared_mapping
+
+reward_scaling=1.0

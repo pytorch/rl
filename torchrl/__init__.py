@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import collections
 import time
 from warnings import warn
 
@@ -98,3 +99,13 @@ def seed_generator(seed):
     rng = np.random.default_rng(seed)
     seed = int.from_bytes(rng.bytes(8), "big")
     return seed % max_seed_val
+
+
+class KeyDependentDefaultDict(collections.defaultdict):
+    def __init__(self, fun=lambda x: x):
+        self.fun = fun
+        super().__init__()
+
+    def __missing__(self, key):
+        value = self.fun(key)
+        return value

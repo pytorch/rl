@@ -39,12 +39,13 @@ class StatePixelModule(nn.Module):
         common_mlp_kwargs=None,
         use_avg_pooling=False,
         make_common=True,
+        device="cpu",
     ):
         super().__init__()
         out_dim_cnn = hidden_dim if use_avg_pooling else 64
         conv_net_default_kwargs = {
             "in_features": None,
-            "num_cells": [32, 64, out_dim_cnn],
+            "num_cells": [32, 32, out_dim_cnn],
             "kernel_sizes": [8, 4, 3],
             "strides": [4, 2, 1],
             "paddings": [0, 0, 1],
@@ -57,6 +58,7 @@ class StatePixelModule(nn.Module):
             if not use_avg_pooling
             else {"output_size": (1, 1)},
             "squeeze_output": use_avg_pooling,
+            "device": device,
         }
         self.use_avg_pooling = use_avg_pooling
         conv_net_kwargs = cnn_kwargs if cnn_kwargs is not None else dict()
@@ -66,9 +68,11 @@ class StatePixelModule(nn.Module):
         mlp_net_default_kwargs = {
             "in_features": None,
             "out_features": hidden_dim,
-            "num_cells": [200, 200],
+            "num_cells": [64, 64],
             "activation_class": nn.ELU,
             "bias_last_layer": True,
+            "activate_last_layer": True,
+            "device": device,
         }
         mlp_net_kwargs = mlp_kwargs if mlp_kwargs is not None else dict()
         mlp_net_default_kwargs.update(mlp_net_kwargs)
@@ -79,9 +83,10 @@ class StatePixelModule(nn.Module):
             common_mlp_net_default_kwargs = {
                 "in_features": None,
                 "out_features": out_dim,
-                "num_cells": [200, 200],
+                "num_cells": [64, 64],
                 "activation_class": nn.ELU,
                 "bias_last_layer": True,
+                "device": device,
             }
             common_mlp_net_kwargs = (
                 common_mlp_kwargs if common_mlp_kwargs is not None else dict()
