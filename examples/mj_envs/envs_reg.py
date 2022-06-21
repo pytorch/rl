@@ -44,30 +44,6 @@ for site in KitchenFrankaFixed.OBJ_INTERACTION_SITES:
 
 # Kitchen
 register(
-    id="visual_kitchen-v3",
-    entry_point=ENTRY_POINT,
-    max_episode_steps=280,
-    kwargs={
-        "model_path": MODEL_PATH,
-        "config_path": CONFIG_PATH,
-        "obj_goal": {},
-        "obj_init": {
-            "knob1_joint": 0,
-            "knob2_joint": 0,
-            "knob3_joint": 0,
-            "knob4_joint": 0,
-            "lightswitch_joint": 0,
-            "slidedoor_joint": 0,
-            "micro0joint": 0,
-            "rightdoorhinge": 0,
-            "leftdoorhinge": 0,
-        },
-        "obs_keys_wt": obs_keys_wt,
-    },
-)
-
-# Kitchen
-register(
     id="visual_kitchen_close-v3",
     entry_point=ENTRY_POINT,
     max_episode_steps=50,

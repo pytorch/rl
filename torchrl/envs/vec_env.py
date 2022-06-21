@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import traceback
 from collections import OrderedDict
 from copy import deepcopy
 from logging import warn
@@ -436,6 +437,7 @@ class _BatchedEnv(_EnvClass):
     def to(self, device: DEVICE_TYPING):
         device = torch.device(device)
         if device == self.device:
+            print("returning self")
             return self
         self._device = device
         if not self.is_closed:

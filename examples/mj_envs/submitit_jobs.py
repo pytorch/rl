@@ -12,8 +12,8 @@ executor = submitit.AutoExecutor(folder="REDQ_log")
 executor.update_parameters(
     timeout_min=2880,
     slurm_partition="scavenge",
-    gpus_per_node=4,
-    cpus_per_task=47
+    gpus_per_node=8,
+    cpus_per_task=94
     # timeout_min = 2880, gpus_per_node = 4, cpus_per_task = 47, mem = 524288,
 )
 jobs = []
@@ -41,7 +41,7 @@ for _shared_mapping in shared_mapping:
                 use_avg_pooling_str = ["avg_pooling"] if _use_avg_pooling else []
                 shared_mapping_str = ["shared_mapping"] if _shared_mapping else []
                 exp_name = "-".join(
-                    ["SUBMITIT", "oldbindings", env, "seed", str(seed)]
+                    ["SUBMITIT", "8g", env, "seed", str(seed)]
                     + use_avg_pooling_str
                     + shared_mapping_str
                 )
@@ -58,6 +58,14 @@ for _shared_mapping in shared_mapping:
                     "cuda:1",
                     "cuda:2",
                     "cuda:3",
+                    "cuda:4",
+                    "cuda:5",
+                    "cuda:6",
+                    "cuda:7",
+                    "--num_workers",
+                    "14",
+                    "--env_per_collector",
+                    "2",
                     "--recorder_log_keys",
                     "reward",
                     "solved",
@@ -77,13 +85,6 @@ for _shared_mapping in shared_mapping:
 
                 config = parser_redq.parse_args(flags)
 
-                # dep = ""
-                # if env in deps:
-                #     dep = f"--dependency=afterany:{deps[env]}"
-                #     executor.update_parameters(slurm_srun_args=dep)
-                # elif "slurm_srun_args" in executor.parameters:
-                #     del executor.parameters["slurm_srun_args"]
-
                 job = executor.submit(main_redq, config)
                 print(
                     "flags:",
@@ -99,6 +100,19 @@ for _shared_mapping in shared_mapping:
                 jobs.append(job)
                 exp_names.append(exp_name)
                 time.sleep(3)
+
+                while len(jobs) >= 6:
+                    print("waiting for job to complete")
+                    job = jobs[0]
+                    exp_name = exp_names[0]
+                    output = job.result()  # waits for completion and returns output
+                    try:
+                        folder = output[0]
+                        torch.save(output[1:], path.join(folder, f"dump_{exp_name}.t"))
+                    except:
+                        print("failed to save results")
+                    jobs = jobs[1:]
+                    exp_name = exp_names[1:]
 
 for job, exp_name in zip(jobs, exp_names):
     output = job.result()  # waits for completion and returns output

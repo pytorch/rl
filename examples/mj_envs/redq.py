@@ -24,6 +24,8 @@ except ImportError:
 
     _configargparse = False
 
+import warnings
+
 import torch.cuda
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
@@ -54,6 +56,15 @@ from utils_redq import (
     make_redq_model_state_pixels,
     make_redq_model_state_pixels_shared,
 )
+
+warnings.filterwarnings(
+    "ignore", message="Using the default interaction site of end-effector."
+)
+warnings.filterwarnings("ignore", message="Unused kwargs found.")
+warnings.filterwarnings(
+    "ignore", message="In future, it will be an error for 'np.bool_'"
+)
+warnings.filterwarnings("ignore", message="is deprecated and will be removed in Pillow")
 
 
 def make_args():

@@ -336,12 +336,31 @@ class TransformedEnv(_EnvClass):
         return self.base_env.set_seed(seed)
 
     def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs):
-        out_tensordict = self.base_env.reset(execute_step=False, **kwargs).to(
-            self.device
-        )
+        out_tensordict = self.base_env.reset(execute_step=False, **kwargs)
         out_tensordict = self.transform.reset(out_tensordict)
         out_tensordict = self.transform(out_tensordict)
         return out_tensordict
+
+    def _current_tensordict_get(self) -> _TensorDict:
+        current_tensordict = self._current_tensordict
+        if current_tensordict is None:
+            # get current tensordict from base env
+            current_tensordict = self.base_env.current_tensordict
+            # replace the next_ prefix
+            for out_key in self.observation_spec:
+                current_tensordict.rename_key(out_key[5:], out_key)
+            current_tensordict = self.transform(current_tensordict)
+            current_tensordict = step_tensordict(
+                current_tensordict,
+                exclude_done=False,
+                exclude_action=False,
+                exclude_reward=False,
+            )
+        return current_tensordict
+
+    current_tensordict = property(
+        _current_tensordict_get, _EnvClass._current_tensordict_set
+    )
 
     def state_dict(self) -> OrderedDict:
         state_dict = self.transform.state_dict()
@@ -444,19 +463,6 @@ class TransformedEnv(_EnvClass):
             self._reward_spec = None
         return self
 
-    def _current_tensordict_get(self) -> _TensorDict:
-        try:
-            return super().current_tensordict
-        except RuntimeError:
-            current_obs = self.base_env.current_tensordict
-            # for key in self.env.observation_spec:
-            #     current_obs.rename_key(key[5:], key)
-            return self.transform(current_obs)
-
-    current_tensordict = property(
-        _current_tensordict_get, _EnvClass._current_tensordict_set
-    )
-
     def __setattr__(self, key, value):
         propobj = getattr(self.__class__, key, None)
 
@@ -468,6 +474,11 @@ class TransformedEnv(_EnvClass):
             return propobj.fset(self, value)
         else:
             return super().__setattr__(key, value)
+
+    def __del__(self):
+        # we may delete a TransformedEnv that contains an env contained by another
+        # transformed env and that we don't want to close
+        pass
 
 
 class ObservationTransform(Transform):
@@ -1526,6 +1537,7 @@ class NoopResetEnv(Transform):
 
     def reset(self, tensordict: _TensorDict) -> _TensorDict:
         """Do no-op action for a number of steps in [1, noop_max]."""
+        parent = self.parent
         keys = tensordict.keys()
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
@@ -1534,16 +1546,16 @@ class NoopResetEnv(Transform):
         trial = 0
         while i < noops:
             i += 1
-            tensordict = self.base_env.rand_step()
-            if self.base_env.is_done:
-                self.base_env.reset()
+            tensordict = parent.rand_step()
+            if parent.is_done:
+                parent.reset()
                 i = 0
                 trial += 1
                 if trial > _MAX_NOOPS_TRIALS:
-                    self.base_env.reset()
-                    tensordict = self.base_env.rand_step()
+                    parent.reset()
+                    tensordict = parent.rand_step()
                     break
-        if self.base_env.is_done:
+        if parent.is_done:
             raise RuntimeError("NoopResetEnv concluded with done environment")
         td = step_tensordict(tensordict).select(*keys)
         for k in keys:
@@ -1552,10 +1564,10 @@ class NoopResetEnv(Transform):
         return td
 
     def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}(noops={self.noops}, random"
-            f"={self.random}, keys={self.keys})"
-        )
+        random = self.random
+        noops = self.noops
+        class_name = self.__class__.__name__
+        return f"{class_name}(noops={noops}, random={random})"
 
 
 class PinMemoryTransform(Transform):

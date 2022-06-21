@@ -29,7 +29,6 @@ include_state
 
 frames_per_batch=50
 optim_steps_per_batch=8
-batch_transform
 
 use_avg_pooling
 shared_mapping
