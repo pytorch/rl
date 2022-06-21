@@ -660,6 +660,7 @@ def mask_batch(batch: _TensorDict) -> _TensorDict:
     if "mask" in batch.keys():
         mask = batch.get("mask")
         return batch[mask.squeeze(-1)]
+    return batch
 
 
 class BatchSubSampler:
