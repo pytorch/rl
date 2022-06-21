@@ -634,18 +634,6 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
             if self.priority_key in tensordicts.keys():
                 priorities = tensordicts.get(self.priority_key)
             else:
-                tensordicts.set(
-                    "index",
-                    torch.zeros(
-                        tensordicts.shape,
-                        device=tensordicts.device,
-                        dtype=torch.long,
-                    ),
-                )
-                tensordicts.set(
-                    self.priority_key,
-                    torch.zeros(tensordicts.shape, device=tensordicts.device),
-                )
                 priorities = None
 
             if tensordicts.batch_dims > 1:
@@ -659,7 +647,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         else:
             stacked_td = tensordicts
         idx = super().extend(tensordicts, priorities)
-        stacked_td.set_("index", idx)
+        stacked_td.set("index", idx, inplace=True)
         return idx
 
     def update_priority(self, tensordict: _TensorDict) -> None:
