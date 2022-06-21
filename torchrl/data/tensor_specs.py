@@ -1003,7 +1003,11 @@ dtype=torch.float32)},
 
     def rand(self, shape=torch.Size([])):
         return TensorDict(
-            {key: value.rand(shape) for key, value in self._specs.items()},
+            {
+                key: value.rand(shape)
+                for key, value in self._specs.items()
+                if value is not None
+            },
             batch_size=shape,
         )
 
