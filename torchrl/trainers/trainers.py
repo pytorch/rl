@@ -112,7 +112,6 @@ class Trainer:
     _last_log: dict = {}
     _last_save: int = 0
     _log_interval: int = 10000
-    _reward_stats: dict = {"decay": 0.999}
 
     def __init__(
         self,
@@ -171,13 +170,13 @@ class Trainer:
         self._process_optim_batch_ops = []
         self._post_optim_ops = []
 
-    def save_trainer(self) -> None:
-        _save = False
+    def save_trainer(self, force_save: bool = False) -> None:
+        _save = force_save
         if self.save_trainer_file is not None:
             if (self._collected_frames - self._last_save) > self.save_trainer_interval:
                 self._last_save = self._collected_frames
                 _save = True
-        if _save:
+        if _save and self.save_trainer_file:
             torch.save(self.state_dict(), self.save_trainer_file)
 
     def load_from_file(self, file: Union[str, pathlib.Path]) -> Trainer:
@@ -369,6 +368,7 @@ class Trainer:
 
             if self.collected_frames > self.total_frames:
                 break
+        self.save_trainer(force_save=True)
 
     def __del__(self):
         self.collector.shutdown()
@@ -660,6 +660,7 @@ def mask_batch(batch: _TensorDict) -> _TensorDict:
     if "mask" in batch.keys():
         mask = batch.get("mask")
         return batch[mask.squeeze(-1)]
+    return batch
 
 
 class BatchSubSampler:
