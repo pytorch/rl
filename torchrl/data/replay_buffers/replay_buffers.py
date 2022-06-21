@@ -629,22 +629,32 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         tensordict.set("index", index)
         return index
 
-    def extend(self, tensordicts: _TensorDict) -> torch.Tensor:
+    def extend(
+        self, tensordicts: Union[_TensorDict, List[_TensorDict]]
+    ) -> torch.Tensor:
         if isinstance(tensordicts, _TensorDict):
             if self.priority_key in tensordicts.keys():
                 priorities = tensordicts.get(self.priority_key)
             else:
                 priorities = None
+
             if tensordicts.batch_dims > 1:
-                tensordicts = tensordicts.clone(recursive=False)
+                # we want the tensordict to have one dimension only. The batch size
+                # of the sampled tensordicts can be changed thereafter
+                if not isinstance(tensordicts, LazyStackedTensorDict):
+                    tensordicts = tensordicts.clone(recursive=False)
+                else:
+                    tensordicts = tensordicts.contiguous()
                 tensordicts.batch_size = tensordicts.batch_size[:1]
+            # we split the tensordict such that the setting of the "index" key herebelow results in a change in
+            # the tensordicts stored in the buffer
             tensordicts = list(tensordicts.unbind(0))
         else:
             priorities = [self._get_priority(td) for td in tensordicts]
 
         stacked_td = torch.stack(tensordicts, 0)
         idx = super().extend(tensordicts, priorities)
-        stacked_td.set("index", idx)
+        stacked_td.set("index", idx, inplace=True)
         return idx
 
     def update_priority(self, tensordict: _TensorDict) -> None:
