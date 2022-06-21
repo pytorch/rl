@@ -217,6 +217,7 @@ def make_trainer(
             policy_exploration=policy_exploration,
             recorder=recorder,
             record_interval=args.record_interval,
+            log_keys=args.recorder_log_keys,
         )
         trainer.register_op(
             "post_steps_log",
@@ -230,7 +231,7 @@ def make_trainer(
             record_interval=args.record_interval,
             exploration_mode="random",
             suffix="exploration",
-            out_key="r_evaluation_exploration",
+            out_keys={"reward": "r_evaluation_exploration"},
         )
         trainer.register_op(
             "post_steps_log",

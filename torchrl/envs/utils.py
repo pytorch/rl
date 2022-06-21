@@ -79,7 +79,8 @@ def step_tensordict(
     keys = [key for key in tensordict.keys() if key.startswith("next_")]
     if len(keys) == 0:
         raise RuntimeError(
-            "There was no key starting with 'next_' in the provided TensorDict"
+            "There was no key starting with 'next_' in the provided TensorDict: ",
+            tensordict,
         )
     new_keys = [key[5:] for key in keys]
     if keep_other:

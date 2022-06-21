@@ -329,9 +329,15 @@ class _EnvClass:
 
     def _current_tensordict_set(self, value: Union[_TensorDict, dict]):
         if isinstance(self._current_tensordict, _TensorDict):
-            self._current_tensordict.update_(
-                value.select(*self._current_tensordict.keys())
-            )
+            # # we get rid of the next_ keys if they don't appear in value
+            # value_keys = set(value.keys())
+            # self._current_tensordict = self._current_tensordict.exclude(
+            #     *[key for key in self._current_tensordict.keys() if (key == "action" or key.startswith("next_")) and key not in value_keys]
+            # )
+            # self._current_tensordict.update_(
+            #     value.select(*self._current_tensordict.keys())
+            # )
+            self._current_tensordict = value
             return
         if isinstance(value, dict):
             value = TensorDict(value, self.batch_size)
