@@ -1539,11 +1539,13 @@ class NoopResetEnv(Transform):
         """Do no-op action for a number of steps in [1, noop_max]."""
         parent = self.parent
         keys = tensordict.keys()
+        keys = [key for key in keys if not key.startswith("next_")]
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
         i = 0
         trial = 0
+
         while i < noops:
             i += 1
             tensordict = parent.rand_step()
@@ -1557,10 +1559,24 @@ class NoopResetEnv(Transform):
                     break
         if parent.is_done:
             raise RuntimeError("NoopResetEnv concluded with done environment")
-        td = step_tensordict(tensordict).select(*keys)
+        td = step_tensordict(
+            tensordict,
+            exclude_done=False,
+            exclude_reward=True,
+            exclude_action=True
+        )
+        # td2 = parent.current_tensordict
+        # print("compare tds: ", td, td2)
+
         for k in keys:
             if k not in td.keys():
+                print(f"{k} is missing!!")
                 td.set(k, tensordict.get(k))
+
+        # replace the next_ prefix
+        for out_key in parent.observation_spec:
+            td.rename_key(out_key[5:], out_key)
+
         return td
 
     def __repr__(self) -> str:
