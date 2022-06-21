@@ -381,7 +381,7 @@ class TensorDictModule(nn.Module):
         return torch.device("cpu")
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> TensorDictModule:
-        if self.spec is not None:
+        if hasattr(self, "spec") and self.spec is not None:
             self.spec = self.spec.to(dest)
         out = super().to(dest)
         return out
