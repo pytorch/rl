@@ -175,7 +175,9 @@ def make_trainer(
     if replay_buffer is not None:
         # replay buffer is used 2 or 3 times: to register data, to sample
         # data and possibly to update priorities
-        rb_trainer = ReplayBufferTrainer(replay_buffer, args.batch_size)
+        rb_trainer = ReplayBufferTrainer(
+            replay_buffer, args.batch_size, memmap=False, device=device
+        )
         trainer.register_op("batch_process", rb_trainer.extend)
         trainer.register_op("process_optim_batch", rb_trainer.sample)
         trainer.register_op("post_loss", rb_trainer.update_priority)
