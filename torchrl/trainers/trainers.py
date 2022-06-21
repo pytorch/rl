@@ -31,7 +31,7 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.data.tensordict.tensordict import _TensorDict
-from torchrl.data.utils import expand_right, DEVICE_TYPING
+from torchrl.data.utils import expand_right
 from torchrl.envs.common import _EnvClass
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
