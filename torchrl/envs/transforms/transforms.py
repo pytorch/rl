@@ -1562,8 +1562,6 @@ class NoopResetEnv(Transform):
         td = step_tensordict(
             tensordict, exclude_done=False, exclude_reward=True, exclude_action=True
         )
-        # td2 = parent.current_tensordict
-        # print("compare tds: ", td, td2)
 
         for k in keys:
             if k not in td.keys():

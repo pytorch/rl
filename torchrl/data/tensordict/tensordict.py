@@ -2196,7 +2196,6 @@ torch.Size([3, 2])
                 f"got {type(source)}"
             )
         self._source = source
-        self._meta_dict = dict()
         if not isinstance(idx, (tuple, list)):
             idx = (idx,)
         else:
@@ -2326,9 +2325,7 @@ torch.Size([3, 2])
         return self._source.get_at(key, self.idx, default=default)
 
     def _get_meta(self, key: str) -> MetaTensor:
-        if key not in self._meta_dict:
-            self._meta_dict[key] = self._source._get_meta(key)[self.idx]
-        return self._meta_dict[key]
+        return self._source._get_meta(key)[self.idx]
 
     def set_at_(
         self,
