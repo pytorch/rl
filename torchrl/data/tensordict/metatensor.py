@@ -165,6 +165,7 @@ class MetaTensor:
             device=self.device,
             requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
+            _is_memmap=self.is_memmap(),
         )
 
     @classmethod
