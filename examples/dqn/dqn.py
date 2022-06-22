@@ -12,6 +12,7 @@ import torch.cuda
 from hydra.core.config_store import ConfigStore
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
+from torchrl.modules import EGreedyWrapper
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
@@ -57,6 +58,7 @@ cs.store(name="config", node=Config)
 
 @hydra.main(version_base=None, config_path=None, config_name="config")
 def main(cfg: "DictConfig"):
+
     from torch.utils.tensorboard import SummaryWriter
 
     cfg = correct_for_frame_skip(cfg)
@@ -101,6 +103,9 @@ def main(cfg: "DictConfig"):
     )
 
     loss_module, target_net_updater = make_dqn_loss(model, cfg)
+    model_explore = EGreedyWrapper(model, annealing_num_steps=cfg.annealing_frames).to(
+        device
+    )
 
     action_dim_gsde, state_dim_gsde = None, None
     proof_env.close()
@@ -113,7 +118,7 @@ def main(cfg: "DictConfig"):
 
     collector = make_collector_offpolicy(
         make_env=create_env_fn,
-        actor_model_explore=model,
+        actor_model_explore=model_explore,
         cfg=cfg,
         # make_env_kwargs=[
         #     {"device": device} if device >= 0 else {}

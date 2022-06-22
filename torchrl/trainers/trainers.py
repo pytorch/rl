@@ -9,7 +9,7 @@ import pathlib
 import warnings
 from collections import OrderedDict, defaultdict
 from textwrap import indent
-from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type, List
+from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type
 
 import numpy as np
 import torch.nn
