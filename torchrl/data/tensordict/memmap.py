@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import functools
 import tempfile
+from math import prod
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -97,7 +98,65 @@ class MemmapTensor(object):
     def __init__(
         self,
         elem: Union[torch.Tensor, MemmapTensor],
+        *size: int,
+        device: DEVICE_TYPING = None,
+        dtype: torch.dtype = None,
         transfer_ownership: bool = False,
+    ):
+        self.idx = None
+        self._memmap_array = None
+        self.file = tempfile.NamedTemporaryFile()
+        self.filename = self.file.name
+
+        if isinstance(elem, (torch.Tensor, MemmapTensor)):
+            if device is not None:
+                raise TypeError(
+                    "device cannot be passed when creating a MemmapTensor from a tensor"
+                )
+            if dtype is not None:
+                raise TypeError(
+                    "dtype cannot be passed when creating a MemmapTensor from a tensor"
+                )
+            return self._init_tensor(elem, transfer_ownership)
+        else:
+            if not isinstance(elem, int) and size:
+                raise TypeError(
+                    "Valid init methods for MemmapTensor are: "
+                    "\n- MemmapTensor(tensor, ...)"
+                    "\n- MemmapTensor(size, ...)"
+                    "\n- MemmapTensor(*size, ...)"
+                )
+            shape = (
+                torch.Size([elem] + list(size))
+                if isinstance(elem, int)
+                else torch.Size(elem)
+            )
+            device = device if device is not None else torch.device("cpu")
+            dtype = dtype if dtype is not None else torch.get_default_dtype()
+            return self._init_shape(shape, device, dtype, transfer_ownership)
+
+    def _init_shape(
+        self,
+        shape: torch.Size,
+        device: DEVICE_TYPING,
+        dtype: torch.dtype,
+        transfer_ownership: bool,
+    ):
+        self._device = device
+        self._shape = shape
+        self.transfer_ownership = transfer_ownership
+        self.np_shape = tuple(self._shape)
+        self._dtype = dtype
+        self._ndim = len(shape)
+        self._numel = prod(shape)
+        self.mode = "r+"
+        self._has_ownership = True
+
+        self._tensor_dir = torch.zeros(1, device=device, dtype=dtype).__dir__()
+        self._save_item(shape)
+
+    def _init_tensor(
+        self, elem: Union[torch.Tensor, MemmapTensor], transfer_ownership: bool
     ):
         if not isinstance(elem, (torch.Tensor, MemmapTensor)):
             raise TypeError(
@@ -110,10 +169,6 @@ class MemmapTensor(object):
                 "Consider calling tensor.detach() first."
             )
 
-        self.idx = None
-        self._memmap_array = None
-        self.file = tempfile.NamedTemporaryFile()
-        self.filename = self.file.name
         self._device = elem.device
         self._shape = elem.shape
         self.transfer_ownership = transfer_ownership
@@ -138,12 +193,14 @@ class MemmapTensor(object):
 
     def _get_memmap_array(self) -> np.memmap:
         if self._memmap_array is None:
+            print("creating memmap")
             self._memmap_array = np.memmap(
                 self.filename,
                 dtype=torch_to_numpy_dtype_dict[self.dtype],
                 mode=self.mode,
                 shape=self.np_shape,
             )
+            print("created")
         return self._memmap_array
 
     def _set_memmap_array(self, value: np.memmap) -> None:
@@ -153,11 +210,15 @@ class MemmapTensor(object):
 
     def _save_item(
         self,
-        value: Union[torch.Tensor, MemmapTensor, np.ndarray],
+        value: Union[torch.Tensor, torch.Size, MemmapTensor, np.ndarray],
         idx: Optional[int] = None,
     ):
         if isinstance(value, (torch.Tensor,)):
             np_array = value.cpu().numpy()
+        elif isinstance(value, torch.Size):
+            # create the memmap array on disk
+            _ = self.memmap_array
+            return
         else:
             np_array = value
         memmap_array = self.memmap_array
