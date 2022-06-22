@@ -789,7 +789,11 @@ class _MultiDataCollector(_DataCollector):
         self.closed = False
 
     def __del__(self):
-        self.shutdown()
+        if not self.closed:
+            raise RuntimeError(
+                "Multi data collector must be explicitely shutdown before "
+                "it is deleted or turns out of scope."
+            )
 
     def shutdown(self) -> None:
         """Shuts down all processes. This operation is irreversible."""
