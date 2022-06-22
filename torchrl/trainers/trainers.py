@@ -370,6 +370,7 @@ class Trainer:
 
             if self.collected_frames > self.total_frames:
                 break
+        self.collector.shutdown()
         self.save_trainer(force_save=True)
 
     def __del__(self):
