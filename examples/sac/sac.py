@@ -173,7 +173,7 @@ def main(args):
 
     # remove video recorder from recorder to have matching state_dict keys
     if args.record_video:
-        recorder_rm = TransformedEnv(recorder.env)
+        recorder_rm = TransformedEnv(recorder.base_env)
         for transform in recorder.transform:
             if not isinstance(transform, VideoRecorder):
                 recorder_rm.append_transform(transform)

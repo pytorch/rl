@@ -39,18 +39,20 @@ def split_trajectories(rollout_tensordict: _TensorDict) -> _TensorDict:
     if len(set(splits)) == 1:
         rollout_tensordict.set(
             "mask",
-            torch.ones(rollout_tensordict.shape, device=rollout_tensordict.device, dtype=torch.bool)
+            torch.ones(
+                rollout_tensordict.shape,
+                device=rollout_tensordict.device,
+                dtype=torch.bool,
+            ),
         )
+        if rollout_tensordict.ndimension() == 1:
+            rollout_tensordict = rollout_tensordict.unsqueeze(0).to_tensordict()
         return rollout_tensordict
-    try:
-        out_splits = {
-            key: _d.contiguous().view(-1, *_d.shape[ndim:]).split(splits, 0)
-            for key, _d in rollout_tensordict.items()
-            # if key not in ("step_count", "traj_ids")
-        }
-    except RuntimeError as err:
-        torch.save({"td": rollout_tensordict, "err": err}, "dump.t")
-        raise err
+    out_splits = {
+        key: _d.contiguous().view(-1, *_d.shape[ndim:]).split(splits, 0)
+        for key, _d in rollout_tensordict.items()
+        # if key not in ("step_count", "traj_ids")
+    }
 
     # select complete rollouts
     dones = out_splits["done"]
