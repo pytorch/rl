@@ -42,6 +42,7 @@ _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
 _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 10))
 
+
 class RandomPolicy:
     def __init__(self, action_spec: TensorSpec):
         """Random policy for a given action_spec.
