@@ -870,7 +870,7 @@ class TestTransforms:
         assert len(env.transform) == 1
         obs_spec = env.observation_spec
         obs_spec = obs_spec[key]
-        assert obs_spec.shape[-1] == 4 * env.env.observation_spec[key].shape[-1]
+        assert obs_spec.shape[-1] == 4 * env.base_env.observation_spec[key].shape[-1]
 
 
 if __name__ == "__main__":

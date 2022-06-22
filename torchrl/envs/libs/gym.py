@@ -135,13 +135,14 @@ class GymWrapper(GymLikeEnv):
     def __init__(self, env=None, **kwargs):
         if env is not None:
             kwargs["env"] = env
+        self._seed_calls_reset = None
         super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
-        if not isinstance(env, gym.Env):
+        if not (hasattr(env, "action_space") and hasattr(env, "observation_space")):
             raise TypeError("env is not of type 'gym.Env'.")
 
     def _build_env(
@@ -172,10 +173,26 @@ class GymWrapper(GymLikeEnv):
         return gym
 
     def _set_seed(self, seed: int) -> int:
-        if version.parse(gym.__version__) < version.parse("0.19.0"):
-            self._env.seed(seed=seed)
-        else:
+        skip = False
+        if self._seed_calls_reset is None:
+            if version.parse(gym.__version__) < version.parse("0.19.0"):
+                self._seed_calls_reset = False
+                self._env.seed(seed=seed)
+            else:
+                try:
+                    self.reset(seed=seed)
+                    skip = True
+                    self._seed_calls_reset = True
+                except TypeError as err:
+                    warnings.warn(
+                        f"reset with seed kwarg returned an exception: {err}.\n"
+                        f"Calling env.seed from now on."
+                    )
+                    self._seed_calls_reset = False
+        if self._seed_calls_reset and not skip:
             self.reset(seed=seed)
+        elif not self._seed_calls_reset:
+            self._env.seed(seed=seed)
         return seed
 
     def _make_specs(self, env: "gym.Env") -> None:
@@ -223,8 +240,9 @@ class GymEnv(GymWrapper):
 
     """
 
-    def __init__(self, env_name, **kwargs):
+    def __init__(self, env_name, disable_env_checker=True, **kwargs):
         kwargs["env_name"] = env_name
+        kwargs["disable_env_checker"] = disable_env_checker
         super().__init__(**kwargs)
 
     def _build_env(
@@ -266,7 +284,7 @@ class GymEnv(GymWrapper):
             raise TypeError("Expected 'env_name' to be part of kwargs")
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(env={self.env_name}, batch_size={self.batch_size})"
+        return f"{self.__class__.__name__}(env={self.env_name}, batch_size={self.batch_size}, device={self.device})"
 
 
 def _get_retro_envs() -> Sequence:

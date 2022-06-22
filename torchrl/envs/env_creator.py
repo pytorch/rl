@@ -95,7 +95,6 @@ class EnvCreator:
         for key, item in list(state_dict.items()):
             if isinstance(item, (_TensorDict,)):
                 if not item.is_shared():
-                    print(f"{self.env_type}: sharing mem of {item}")
                     item.share_memory_()
                 else:
                     print(

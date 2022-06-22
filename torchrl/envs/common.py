@@ -129,12 +129,12 @@ class _EnvClass:
 
     from_pixels: bool
     device = torch.device("cpu")
-    batch_size = torch.Size([])
 
     def __init__(
         self,
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
+        batch_size: Optional[torch.Size] = None,
     ):
         if device is not None:
             self.device = torch.device(device)
@@ -150,6 +150,14 @@ class _EnvClass:
             self._observation_spec = None
         if "_current_tensordict" not in self.__dir__():
             self._current_tensordict = None
+        if batch_size is not None:
+            # we want an error to be raised if we pass batch_size but
+            # it's already been set
+            self.batch_size = batch_size
+        elif ("batch_size" not in self.__dir__()) and (
+            "batch_size" not in self.__class__.__dict__
+        ):
+            self.batch_size = torch.Size([])
 
     @property
     def action_spec(self) -> TensorSpec:
@@ -214,13 +222,13 @@ class _EnvClass:
             obs = tensordict_out.get(key)
             self.observation_spec.type_check(obs, key)
 
-        if tensordict_out.get("reward").dtype is not self.reward_spec.dtype:
+        if tensordict_out._get_meta("reward").dtype is not self.reward_spec.dtype:
             raise TypeError(
                 f"expected reward.dtype to be {self.reward_spec.dtype} "
                 f"but got {tensordict_out.get('reward').dtype}"
             )
 
-        if tensordict_out.get("done").dtype is not torch.bool:
+        if tensordict_out._get_meta("done").dtype is not torch.bool:
             raise TypeError(
                 f"expected done.dtype to be torch.bool but got {tensordict_out.get('done').dtype}"
             )
@@ -321,9 +329,15 @@ class _EnvClass:
 
     def _current_tensordict_set(self, value: Union[_TensorDict, dict]):
         if isinstance(self._current_tensordict, _TensorDict):
-            self._current_tensordict.update_(
-                value.select(*self._current_tensordict.keys())
-            )
+            # # we get rid of the next_ keys if they don't appear in value
+            # value_keys = set(value.keys())
+            # self._current_tensordict = self._current_tensordict.exclude(
+            #     *[key for key in self._current_tensordict.keys() if (key == "action" or key.startswith("next_")) and key not in value_keys]
+            # )
+            # self._current_tensordict.update_(
+            #     value.select(*self._current_tensordict.keys())
+            # )
+            self._current_tensordict = value
             return
         if isinstance(value, dict):
             value = TensorDict(value, self.batch_size)
@@ -376,7 +390,7 @@ class _EnvClass:
             self._is_done = torch.zeros(self.batch_size, device=self.device)
         return self._is_done.all()
 
-    def is_done_set_fn(self, val: bool) -> None:
+    def is_done_set_fn(self, val: torch.Tensor) -> None:
         self._is_done = val
 
     is_done = property(is_done_get_fn, is_done_set_fn)
@@ -416,6 +430,7 @@ class _EnvClass:
         callback: Optional[Callable[[_TensorDict, ...], _TensorDict]] = None,
         auto_reset: bool = True,
         auto_cast_to_device: bool = False,
+        break_when_any_done: bool = True,
     ) -> _TensorDict:
         """Executes a rollout in the environment.
 
@@ -434,6 +449,7 @@ class _EnvClass:
                 Default is `True`.
             auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
                 policy device before the policy is used. Default is `False`.
+            break_when_any_done (bool): breaks if any of the done state is True. Default is True.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -466,7 +482,9 @@ class _EnvClass:
                     tensordict = tensordict.to(env_device)
                 tensordict = self.step(tensordict)
                 tensordicts.append(tensordict.clone())
-                if tensordict.get("done").any() or i == max_steps - 1:
+                if (
+                    break_when_any_done and tensordict.get("done").any()
+                ) or i == max_steps - 1:
                     break
                 tensordict = step_tensordict(tensordict, keep_other=True)
 
@@ -543,7 +561,7 @@ class _EnvClass:
             self._current_tensordict = None
             self.current_tensordict = current_tensordict
         self.is_done = self.is_done.to(device)
-        self.device = torch.device(device)
+        self.device = device
         return self
 
 
@@ -571,11 +589,13 @@ class _EnvWrapper(_EnvClass, metaclass=abc.ABCMeta):
         *args,
         dtype: Optional[np.dtype] = None,
         device: DEVICE_TYPING = "cpu",
+        batch_size: Optional[torch.Size] = None,
         **kwargs,
     ):
         super().__init__(
             device=device,
             dtype=dtype,
+            batch_size=batch_size,
         )
         if len(args):
             raise ValueError(
