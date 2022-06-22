@@ -107,7 +107,8 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
             break
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b2)
-    del collector
+    # del collector
+    # collector.shutdown()
 
     ccollector = aSyncDataCollector(
         create_env_fn=env_fn,
@@ -131,7 +132,8 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     assert_allclose_td(b1c, b1)
     assert_allclose_td(b2c, b2)
 
-    del ccollector
+    # del ccollector
+    ccollector.shutdown()
 
 
 @pytest.mark.parametrize("num_env", [1, 3])

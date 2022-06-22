@@ -792,7 +792,7 @@ class _MultiDataCollector(_DataCollector):
         if not self.closed:
             raise RuntimeError(
                 "Multi data collector must be explicitely shutdown before "
-                "it is deleted or turns out of scope."
+                "it turns out of scope."
             )
 
     def shutdown(self) -> None:
