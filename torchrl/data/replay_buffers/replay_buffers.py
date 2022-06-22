@@ -313,9 +313,14 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         collate_fn=None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
+        storage: Optional[Storage] = None,
     ) -> None:
         super(PrioritizedReplayBuffer, self).__init__(
-            size, collate_fn, pin_memory, prefetch
+            size,
+            collate_fn,
+            pin_memory,
+            prefetch,
+            storage=storage,
         )
         if alpha <= 0:
             raise ValueError(
@@ -542,13 +547,14 @@ class TensorDictReplayBuffer(ReplayBuffer):
         collate_fn: Optional[Callable] = None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
+        storage: Optional[Storage] = None,
     ):
         if collate_fn is None:
 
             def collate_fn(x):
                 return stack_td(x, 0, contiguous=True)
 
-        super().__init__(size, collate_fn, pin_memory, prefetch)
+        super().__init__(size, collate_fn, pin_memory, prefetch, storage=storage)
 
     def sample(self, size: int) -> Any:
         return super(TensorDictReplayBuffer, self).sample(size)
@@ -590,6 +596,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         collate_fn=None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
+        storage: Optional[Storage] = None,
     ) -> None:
         if collate_fn is None:
 
@@ -604,6 +611,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
             collate_fn=collate_fn,
             pin_memory=pin_memory,
             prefetch=prefetch,
+            storage=storage,
         )
         self.priority_key = priority_key
 
