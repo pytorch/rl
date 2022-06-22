@@ -108,7 +108,7 @@ class MemmapTensor(object):
         self.file = tempfile.NamedTemporaryFile()
         self.filename = self.file.name
 
-        if isinstance(elem, (torch.Tensor, MemmapTensor)):
+        if isinstance(elem, (torch.Tensor, MemmapTensor, np.ndarray)):
             if device is not None:
                 raise TypeError(
                     "device cannot be passed when creating a MemmapTensor from a tensor"
@@ -193,14 +193,12 @@ class MemmapTensor(object):
 
     def _get_memmap_array(self) -> np.memmap:
         if self._memmap_array is None:
-            print("creating memmap")
             self._memmap_array = np.memmap(
                 self.filename,
                 dtype=torch_to_numpy_dtype_dict[self.dtype],
                 mode=self.mode,
                 shape=self.np_shape,
             )
-            print("created")
         return self._memmap_array
 
     def _set_memmap_array(self, value: np.memmap) -> None:
