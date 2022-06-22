@@ -154,6 +154,7 @@ def make_trainer(
         weight_decay=cfg.weight_decay,
         **optimizer_kwargs,
     )
+    device = next(loss_module.parameters()).device
     if cfg.lr_scheduler == "cosine":
         optim_scheduler = CosineAnnealingLR(
             optimizer,
@@ -204,7 +205,9 @@ def make_trainer(
     if replay_buffer is not None:
         # replay buffer is used 2 or 3 times: to register data, to sample
         # data and to update priorities
-        rb_trainer = ReplayBufferTrainer(replay_buffer, cfg.batch_size)
+        rb_trainer = ReplayBufferTrainer(
+            replay_buffer, cfg.batch_size, memmap=False, device=device
+        )
 
         trainer.register_op("batch_process", rb_trainer.extend)
         trainer.register_op("process_optim_batch", rb_trainer.sample)
@@ -250,6 +253,7 @@ def make_trainer(
             "post_steps_log",
             recorder_obj,
         )
+        recorder_obj(None)
         recorder_obj_explore = Recorder(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
@@ -264,6 +268,8 @@ def make_trainer(
             "post_steps_log",
             recorder_obj_explore,
         )
+        recorder_obj_explore(None)
+
     trainer.register_op(
         "post_steps", UpdateWeights(collector, update_weights_interval=1)
     )

@@ -10,7 +10,6 @@ from datetime import datetime
 import hydra
 import torch.cuda
 from hydra.core.config_store import ConfigStore
-from omegaconf import OmegaConf
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
@@ -71,10 +70,6 @@ DEFAULT_REWARD_SCALING = {
 @hydra.main(version_base=None, config_path=None, config_name="config")
 def main(cfg: "DictConfig"):
     from torch.utils.tensorboard import SummaryWriter
-
-    if cfg.config_file is not None:
-        overriding_cfg = OmegaConf.load(cfg.config_file)
-        cfg = OmegaConf.merge(cfg, overriding_cfg)
 
     cfg = correct_for_frame_skip(cfg)
 
@@ -168,7 +163,7 @@ def main(cfg: "DictConfig"):
 
     # remove video recorder from recorder to have matching state_dict keys
     if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.env)
+        recorder_rm = TransformedEnv(recorder.base_env)
         for transform in recorder.transform:
             if not isinstance(transform, VideoRecorder):
                 recorder_rm.append_transform(transform)
