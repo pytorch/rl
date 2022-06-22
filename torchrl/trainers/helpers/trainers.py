@@ -275,7 +275,7 @@ def parser_trainer_args(parser: ArgumentParser) -> ArgumentParser:
         "--lr_scheduler",
         "--lr-scheduler",
         type=str,
-        default="cosine",
+        default="",
         choices=["cosine", ""],
         help="LR scheduler.",
     )
