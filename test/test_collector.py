@@ -133,8 +133,9 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
 
     ccollector.shutdown()
 
+
 @pytest.mark.parametrize("should_shutdown", [True, False])
-def test_shutdown_collector(should_shutdown, num_env=3, env_name='vec', seed=40):
+def test_shutdown_collector(should_shutdown, num_env=3, env_name="vec", seed=40):
     def env_fn(seed):
         env = ParallelEnv(
             num_workers=num_env,
