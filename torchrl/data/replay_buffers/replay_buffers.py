@@ -199,8 +199,6 @@ class ReplayBuffer:
         """
         if not len(data):
             raise Exception("extending with empty data is not supported")
-        if not isinstance(data, list):
-            data = list(data)
         with self._replay_lock:
             cur_size = len(self._storage)
             batch_size = len(data)
@@ -234,6 +232,7 @@ class ReplayBuffer:
                 # for i, v in enumerate(data[d:]):
                 #     storage[i] = v
                 self._cursor = batch_size - d
+            # storage must convert the data to the appropriate format if needed
             self._storage[index] = data
             return index
 

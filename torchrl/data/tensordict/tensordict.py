@@ -34,6 +34,7 @@ from warnings import warn
 import numpy as np
 import torch
 
+from torchrl import KeyDependentDefaultDict
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.metatensor import MetaTensor
 from torchrl.data.tensordict.utils import (
@@ -187,22 +188,12 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         return max(1, math.prod(self.batch_size))
 
     def _check_batch_size(self) -> None:
-        bs = [value.shape[: self.batch_dims] for key, value in self.items_meta()]
-        if len(bs):
-            if bs[0] != self.batch_size:
-                raise RuntimeError(
-                    "batch_size provided during initialization violates "
-                    "batch size of registered tensors, "
-                    f"got self._batch_size={self.batch_size} and "
-                    f"tensor.shape[:batch_dim]={bs[0]}"
-                )
-        if len(bs) > 1:
-            for _bs in bs[1:]:
-                if _bs != bs[0]:
-                    raise RuntimeError(
-                        f"batch_size are incongruent, got {_bs} and {bs[0]} "
-                        f"-- expected {self.batch_size}"
-                    )
+        bs = [value.shape[: self.batch_dims] for key, value in self.items_meta()] + [self.batch_size]
+        if len(set(bs)) > 1:
+            raise RuntimeError(
+                f"batch_size are incongruent, got {list(set(bs))}, "
+                f"-- expected {self.batch_size}"
+            )
 
     def _check_is_shared(self) -> bool:
         raise NotImplementedError(f"{self.__class__.__name__}")
@@ -1751,9 +1742,9 @@ class TensorDict(_TensorDict):
             tensor_in[idx] = value
         # Recreate Meta in case of require_grad coming in value
         self._tensordict_meta[key] = MetaTensor(
-            tensor_in,
-            _is_memmap=self.is_memmap(),
-            _is_shared=self.is_shared(),
+           tensor_in,
+           _is_memmap=self.is_memmap(),
+           _is_shared=self.is_shared(),
         )
         return self
 
@@ -2047,19 +2038,27 @@ def stack(
                 )
     # check that all tensordict match
     keys = _check_keys(list_of_tensordicts)
-    batch_size = list(batch_size)
-    batch_size.insert(dim, len(list_of_tensordicts))
-    batch_size = torch.Size(batch_size)
 
-    if out is None:
+    if out is None and not contiguous:
         out = LazyStackedTensorDict(
             *list_of_tensordicts,
             stack_dim=dim,
         )
-        if contiguous:
-            out = out.contiguous()
+    elif contiguous:
+        out = TensorDict(
+            {key: torch.stack(
+                [
+                    _tensordict[key] for _tensordict in list_of_tensordicts
+                ]
+            ) for key in keys},
+            batch_size = LazyStackedTensorDict._compute_batch_size(batch_size, dim, len(list_of_tensordicts))
+        )
         return out
     else:
+        batch_size = list(batch_size)
+        batch_size.insert(dim, len(list_of_tensordicts))
+        batch_size = torch.Size(batch_size)
+
         if out.batch_size != batch_size:
             raise RuntimeError(
                 "out.batch_size and stacked batch size must match, "
@@ -2573,8 +2572,7 @@ class LazyStackedTensorDict(_TensorDict):
         self.stack_dim = stack_dim
         self._batch_size = self._compute_batch_size(_batch_size, stack_dim, N)
         self._update_valid_keys()
-        self._meta_dict = dict()
-        self._meta_dict.update({k: value for k, value in self.items_meta()})
+        self._meta_dict = KeyDependentDefaultDict(self._deduce_meta)
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
 
@@ -2625,7 +2623,8 @@ class LazyStackedTensorDict(_TensorDict):
         return all(are_memmap)
 
     def get_valid_keys(self) -> Set[str]:
-        self._update_valid_keys()
+        if self._valid_keys is None:
+            self._update_valid_keys()
         return self._valid_keys
 
     def set_valid_keys(self, keys: Sequence[str]) -> None:
@@ -2707,6 +2706,10 @@ class LazyStackedTensorDict(_TensorDict):
         default: Union[str, COMPATIBLE_TYPES] = "_no_default_",
     ) -> COMPATIBLE_TYPES:
         if not (key in self.valid_keys):
+            # first, let's try to update the valid keys
+            self._update_valid_keys()
+
+        if not (key in self.valid_keys):
             return self._default_get(key, default)
         tensors = [td.get(key, default=default) for td in self.tensordicts]
         shapes = set(tensor.shape for tensor in tensors)
@@ -2720,11 +2723,10 @@ class LazyStackedTensorDict(_TensorDict):
         return torch.stack(tensors, self.stack_dim)
 
     def _get_meta(self, key: str) -> MetaTensor:
-        if key in self._meta_dict:
-            return self._meta_dict[key]
         if key not in self.valid_keys:
             raise KeyError(f"key {key} not found in {self._valid_keys}")
-        return self._deduce_meta(key)
+        return self._meta_dict[key]
+        # return self._deduce_meta(key)
 
     def _deduce_meta(self, key: str) -> MetaTensor:
         return torch.stack(
@@ -2737,12 +2739,12 @@ class LazyStackedTensorDict(_TensorDict):
     def contiguous(self) -> _TensorDict:
         source = {key: value for key, value in self.items()}
         batch_size = self.batch_size
-        meta_source = {k: value for k, value in self.items_meta()}
         device = self._device_safe()
         out = TensorDict(
             source=source,
             batch_size=batch_size,
-            _meta_source=meta_source,
+            # we could probably just infer the items_meta by extending them
+            # _meta_source=meta_source,
             device=device,
         )
         return out
