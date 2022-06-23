@@ -87,7 +87,7 @@ def _check_for_faulty_process(processes):
             break
     if terminate:
         raise RuntimeError(
-            "At least on process failed. Check for more infos in the log."
+            "At least one process failed. Check for more infos in the log."
         )
 
 
