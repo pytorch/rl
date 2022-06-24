@@ -615,10 +615,10 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         self.priority_key = priority_key
 
     def _get_priority(self, tensordict: _TensorDict) -> torch.Tensor:
-        if tensordict.batch_dims:
-            tensordict = tensordict.clone(recursive=False)
-            tensordict.batch_size = []
         if self.priority_key in tensordict.keys():
+            if tensordict.batch_dims:
+                tensordict = tensordict.clone(recursive=False)
+                tensordict.batch_size = []
             try:
                 priority = tensordict.get(self.priority_key).item()
             except ValueError:
@@ -657,6 +657,12 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
             # # we split the tensordict such that the setting of the "index" key herebelow results in a change in
             # # the tensordicts stored in the buffer
             # tensordicts = list(tensordicts.unbind(0))
+            tensordicts.set(
+                "index",
+                torch.zeros(
+                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
+                ),
+            )
             tensordicts.set(
                 "index",
                 torch.zeros(

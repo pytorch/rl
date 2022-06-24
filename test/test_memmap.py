@@ -70,6 +70,7 @@ def test_memmap_del():
     with pytest.raises(AssertionError):
         assert os.path.isfile(filename)
 
+
 @pytest.mark.parametrize("transfer_ownership", [True, False])
 def test_memmap_ownership(transfer_ownership):
     t = torch.tensor([1])
@@ -135,9 +136,11 @@ def test_memmap_clone():
     assert isinstance(m2c, torch.Tensor)
     assert m2c == m1
 
+
 def test_memmap_tensor():
     t = torch.tensor([[1, 2, 3], [4, 5, 6]])
     assert (torch.tensor(t) == t).all()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

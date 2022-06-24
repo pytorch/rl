@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import functools
-import gc
 import os
 import tempfile
 from math import prod
@@ -267,7 +266,12 @@ class MemmapTensor(object):
         if idx is not None:
             memmap_array = memmap_array[idx]
         out = self._np_to_tensor(memmap_array)
-        if idx is not None and not (isinstance(idx, torch.Tensor) and idx.dtype is torch.bool): # and isinstance(idx, torch.Tensor) and len(idx) == 1:
+        if (
+            idx is not None
+            and not isinstance(idx, (int, np.integer))
+            and len(idx) == 1
+            and not (isinstance(idx, torch.Tensor) and idx.dtype is torch.bool)
+        ):  # and isinstance(idx, torch.Tensor) and len(idx) == 1:
             if _has_fake:
                 size = self._fake[idx].shape
             else:
@@ -475,7 +479,9 @@ class MemmapTensor(object):
         state["file"] = None
         state["_memmap_array"] = None
         state["_fake"] = None
-        state["_has_ownership"] = state["transfer_ownership"] and state["_had_ownership"]
+        state["_has_ownership"] = (
+            state["transfer_ownership"] and state["_had_ownership"]
+        )
         self._had_ownership = self._has_ownership
         # self._had_ownership = self._has_ownership = state["_had_ownership"]
         return state
