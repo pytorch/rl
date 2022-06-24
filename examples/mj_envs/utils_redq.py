@@ -116,7 +116,7 @@ class StatePixelModule(nn.Module):
 
 def make_redq_model_state(
     proof_environment: _EnvClass,
-    args: Namespace,
+    cfg: Namespace,
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -125,9 +125,9 @@ def make_redq_model_state(
     **kwargs,
 ) -> nn.ModuleList:
 
-    tanh_loc = args.tanh_loc
-    default_policy_scale = args.default_policy_scale
-    gSDE = args.gSDE
+    tanh_loc = cfg.tanh_loc
+    default_policy_scale = cfg.default_policy_scale
+    gSDE = cfg.gSDE
 
     action_spec = proof_environment.action_spec
 
@@ -143,18 +143,18 @@ def make_redq_model_state(
         in_keys_actor = in_keys
 
     actor_net_kwargs_default = {
-        "num_cells": [args.actor_cells, args.actor_cells],
+        "num_cells": [cfg.actor_cells, cfg.actor_cells],
         "out_features": out_features_actor,
-        "activation_class": ACTIVATIONS[args.activation],
+        "activation_class": ACTIVATIONS[cfg.activation],
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = MLP(**actor_net_kwargs_default)
     out_keys_actor = ["param"]
 
     qvalue_net_kwargs_default = {
-        "num_cells": [args.qvalue_cells, args.qvalue_cells],
+        "num_cells": [cfg.qvalue_cells, cfg.qvalue_cells],
         "out_features": 1,
-        "activation_class": ACTIVATIONS[args.activation],
+        "activation_class": ACTIVATIONS[cfg.activation],
     }
     qvalue_net_kwargs_default.update(qvalue_net_kwargs)
     qvalue_net = MLP(
@@ -172,7 +172,7 @@ def make_redq_model_state(
     actor_net = NormalParamWrapper(
         actor_net,
         scale_mapping=f"biased_softplus_{default_policy_scale}",
-        scale_lb=args.scale_lb,
+        scale_lb=cfg.scale_lb,
     )
     actor_module = TensorDictModule(
         actor_net,
@@ -207,7 +207,7 @@ def make_redq_model_state(
 
 def make_redq_model_pixels(
     proof_environment: _EnvClass,
-    args: Namespace,
+    cfg: Namespace,
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -215,9 +215,9 @@ def make_redq_model_pixels(
     observation_key=None,
     **kwargs,
 ) -> nn.ModuleList:
-    tanh_loc = args.tanh_loc
-    default_policy_scale = args.default_policy_scale
-    gSDE = args.gSDE
+    tanh_loc = cfg.tanh_loc
+    default_policy_scale = cfg.default_policy_scale
+    gSDE = cfg.gSDE
 
     action_spec = proof_environment.action_spec
 
@@ -226,7 +226,7 @@ def make_redq_model_pixels(
     if qvalue_net_kwargs is None:
         qvalue_net_kwargs = {}
 
-    linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
+    linear_layer_class = torch.nn.Linear if not cfg.noisy else NoisyLinear
 
     out_features_actor = (2 - gSDE) * action_spec.shape[-1]
     if in_keys is None:
@@ -236,10 +236,10 @@ def make_redq_model_pixels(
     actor_net_kwargs_default = {
         "mlp_net_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
-        "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
-        "use_avg_pooling": args.use_avg_pooling,
+        "conv_net_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
+        "use_avg_pooling": cfg.use_avg_pooling,
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = DdpgCnnActor(out_features_actor, **actor_net_kwargs_default)
@@ -248,10 +248,10 @@ def make_redq_model_pixels(
     value_net_default_kwargs = {
         "mlp_net_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
-        "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
-        "use_avg_pooling": args.use_avg_pooling,
+        "conv_net_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
+        "use_avg_pooling": cfg.use_avg_pooling,
     }
     value_net_default_kwargs.update(qvalue_net_kwargs)
 
@@ -268,7 +268,7 @@ def make_redq_model_pixels(
     actor_net = NormalParamWrapper(
         actor_net,
         scale_mapping=f"biased_softplus_{default_policy_scale}",
-        scale_lb=args.scale_lb,
+        scale_lb=cfg.scale_lb,
     )
     actor_module = TensorDictModule(
         actor_net,
@@ -303,7 +303,7 @@ def make_redq_model_pixels(
 
 def make_redq_model_state_pixels(
     proof_environment: _EnvClass,
-    args: Namespace,
+    cfg: Namespace,
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -311,8 +311,8 @@ def make_redq_model_state_pixels(
     observation_key=None,
     **kwargs,
 ) -> nn.ModuleList:
-    tanh_loc = args.tanh_loc
-    default_policy_scale = args.default_policy_scale
+    tanh_loc = cfg.tanh_loc
+    default_policy_scale = cfg.default_policy_scale
 
     action_spec = proof_environment.action_spec
 
@@ -321,20 +321,20 @@ def make_redq_model_state_pixels(
     if qvalue_net_kwargs is None:
         qvalue_net_kwargs = {}
 
-    linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
+    linear_layer_class = torch.nn.Linear if not cfg.noisy else NoisyLinear
 
     out_features_actor = 2 * action_spec.shape[-1]
     actor_net_kwargs_default = {
         "mlp_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
         "common_mlp_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
-        "cnn_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
-        "use_avg_pooling": args.use_avg_pooling,
+        "cnn_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
+        "use_avg_pooling": cfg.use_avg_pooling,
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = StatePixelModule(out_features_actor, **actor_net_kwargs_default)
@@ -347,14 +347,14 @@ def make_redq_model_state_pixels(
     value_net_default_kwargs = {
         "mlp_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
         "common_mlp_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
-        "cnn_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
-        "use_avg_pooling": args.use_avg_pooling,
+        "cnn_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
+        "use_avg_pooling": cfg.use_avg_pooling,
     }
     value_net_default_kwargs.update(qvalue_net_kwargs)
     qvalue_net = StatePixelModule(1, **value_net_default_kwargs)
@@ -370,7 +370,7 @@ def make_redq_model_state_pixels(
     actor_net = NormalParamWrapper(
         actor_net,
         scale_mapping=f"biased_softplus_{default_policy_scale}",
-        scale_lb=args.scale_lb,
+        scale_lb=cfg.scale_lb,
     )
     actor_module = TensorDictModule(
         actor_net,
@@ -405,7 +405,7 @@ def make_redq_model_state_pixels(
 
 def make_redq_model_pixels_shared(
     proof_environment: _EnvClass,
-    args: Namespace,
+    cfg: Namespace,
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -413,8 +413,8 @@ def make_redq_model_pixels_shared(
     observation_key=None,
     **kwargs,
 ) -> nn.ModuleList:
-    tanh_loc = args.tanh_loc
-    gSDE = args.gSDE
+    tanh_loc = cfg.tanh_loc
+    gSDE = cfg.gSDE
 
     action_spec = proof_environment.action_spec
 
@@ -423,16 +423,16 @@ def make_redq_model_pixels_shared(
     if qvalue_net_kwargs is None:
         qvalue_net_kwargs = {}
 
-    linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
+    linear_layer_class = torch.nn.Linear if not cfg.noisy else NoisyLinear
 
     out_features_actor = (2 - gSDE) * action_spec.shape[-1]
     actor_net_kwargs_default = {
         "mlp_net_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
-        "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
-        "use_avg_pooling": args.use_avg_pooling,
+        "conv_net_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
+        "use_avg_pooling": cfg.use_avg_pooling,
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = DdpgCnnActor(out_features_actor, **actor_net_kwargs_default)
@@ -470,10 +470,10 @@ def make_redq_model_pixels_shared(
     value_net_default_kwargs = {
         "mlp_net_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
-        "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
-        "use_avg_pooling": args.use_avg_pooling,
+        "conv_net_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
+        "use_avg_pooling": cfg.use_avg_pooling,
     }
     value_net_default_kwargs.update(qvalue_net_kwargs)
 
@@ -501,7 +501,7 @@ def make_redq_model_pixels_shared(
 
 def make_redq_model_state_pixels_shared(
     proof_environment: _EnvClass,
-    args: Namespace,
+    cfg: Namespace,
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -510,8 +510,8 @@ def make_redq_model_state_pixels_shared(
     observation_key=None,
     **kwargs,
 ) -> nn.ModuleList:
-    tanh_loc = args.tanh_loc
-    default_policy_scale = args.default_policy_scale
+    tanh_loc = cfg.tanh_loc
+    default_policy_scale = cfg.default_policy_scale
 
     action_spec = proof_environment.action_spec
 
@@ -522,16 +522,16 @@ def make_redq_model_state_pixels_shared(
     if qvalue_net_kwargs is None:
         qvalue_net_kwargs = {}
 
-    linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
+    linear_layer_class = torch.nn.Linear if not cfg.noisy else NoisyLinear
 
     # Common
     common_net_kwargs_default = {
         "mlp_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
-        "cnn_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
-        "use_avg_pooling": args.use_avg_pooling,
+        "cnn_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
+        "use_avg_pooling": cfg.use_avg_pooling,
         "make_common": False,
     }
     common_net_kwargs_default.update(common_net_kwargs)
@@ -542,14 +542,14 @@ def make_redq_model_state_pixels_shared(
     actor_net_kwargs_default = {
         "mlp_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
         "common_mlp_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
-        "cnn_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
-        "use_avg_pooling": args.use_avg_pooling,
+        "cnn_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
+        "use_avg_pooling": cfg.use_avg_pooling,
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_mapper = StatePixelModule(
@@ -560,14 +560,14 @@ def make_redq_model_state_pixels_shared(
     value_net_default_kwargs = {
         "mlp_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
         "common_mlp_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
-        "cnn_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
-        "use_avg_pooling": args.use_avg_pooling,
+        "cnn_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
+        "use_avg_pooling": cfg.use_avg_pooling,
     }
     value_net_default_kwargs.update(qvalue_net_kwargs)
     qvalue_mapper = StatePixelModule(1, **value_net_default_kwargs).common_mlp
@@ -631,7 +631,7 @@ def make_redq_model_state_pixels_shared(
     actor_net = NormalParamWrapper(
         actor_net,
         scale_mapping=f"biased_softplus_{default_policy_scale}",
-        scale_lb=args.scale_lb,
+        scale_lb=cfg.scale_lb,
     )
     actor_module = TensorDictModule(
         actor_net,

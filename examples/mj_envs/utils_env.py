@@ -32,7 +32,7 @@ from torchrl.trainers.helpers.envs import LIBS
 
 def make_env_transforms(
     env,
-    args,
+    cfg,
     video_tag,
     writer,
     env_name,
@@ -46,15 +46,15 @@ def make_env_transforms(
 ):
     env = TransformedEnv(env)
 
-    from_pixels = args.from_pixels
-    vecnorm = args.vecnorm
-    norm_rewards = vecnorm and args.norm_rewards
+    from_pixels = cfg.from_pixels
+    vecnorm = cfg.vecnorm
+    norm_rewards = vecnorm and cfg.norm_rewards
     _norm_obs_only = norm_obs_only or not norm_rewards
-    reward_scaling = args.reward_scaling
-    reward_loc = args.reward_loc
+    reward_scaling = cfg.reward_scaling
+    reward_loc = cfg.reward_loc
 
     if len(video_tag):
-        center_crop = args.center_crop
+        center_crop = cfg.center_crop
         if center_crop:
             center_crop = center_crop[0]
         env.append_transform(
@@ -65,22 +65,22 @@ def make_env_transforms(
             ),
         )
 
-    if args.noops:
-        env.append_transform(NoopResetEnv(args.noops))
+    if cfg.noops:
+        env.append_transform(NoopResetEnv(cfg.noops))
     if from_pixels:
-        if not args.catframes:
+        if not cfg.catframes:
             raise RuntimeError(
                 "this env builder currently only accepts positive catframes values"
                 "when pixels are being used."
             )
         env.append_transform(ToTensorImage())
-        if args.center_crop:
-            env.append_transform(CenterCrop(*args.center_crop))
+        if cfg.center_crop:
+            env.append_transform(CenterCrop(*cfg.center_crop))
         env.append_transform(Resize(84, 84))
-        if args.grayscale:
+        if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(first_dim=batch_dims))
-        env.append_transform(CatFrames(N=args.catframes, keys=["next_pixels"]))
+        env.append_transform(CatFrames(N=cfg.catframes, keys=["next_pixels"]))
         if stats_pixels is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
         else:
@@ -103,7 +103,7 @@ def make_env_transforms(
             "action",
         ]  # DMControl requires double-precision
 
-    if not from_pixels or args.include_state:
+    if not from_pixels or cfg.include_state:
         selected_keys = [
             key for key in env.observation_spec.keys() if "pixels" not in key
         ]
@@ -115,9 +115,9 @@ def make_env_transforms(
         double_to_float_list.append(out_key)
         env.append_transform(DoubleToFloat(keys=double_to_float_list))
 
-        if hasattr(args, "catframes") and args.catframes:
+        if hasattr(cfg, "catframes") and cfg.catframes:
             env.append_transform(
-                CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1)
+                CatFrames(N=cfg.catframes, keys=[out_key], cat_dim=-1)
             )
 
         if not vecnorm and (stats_states is not None):
@@ -135,7 +135,7 @@ def make_env_transforms(
     else:
         env.append_transform(DoubleToFloat(keys=double_to_float_list))
 
-    if hasattr(args, "gSDE") and args.gSDE:
+    if hasattr(cfg, "gSDE") and cfg.gSDE:
         env.append_transform(
             gSDENoise(action_dim=action_dim_gsde, state_dim=state_dim_gsde)
         )
@@ -145,7 +145,7 @@ def make_env_transforms(
 
 
 def transformed_env_constructor(
-    args: Namespace,
+    cfg: Namespace,
     video_tag: str = "",
     writer: Optional["SummaryWriter"] = None,
     stats_pixels: Optional[dict] = None,
@@ -164,7 +164,7 @@ def transformed_env_constructor(
     Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
-        args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
+        cfg (argparse.Namespace): script arguments originating from the parser built with parser_env_cfg
         video_tag (str, optional): video tag to be passed to the SummaryWriter object
         writer (SummaryWriter, optional): tensorboard writer associated with the script
         stats_pixels (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform (pixels)
@@ -177,7 +177,7 @@ def transformed_env_constructor(
         custom_env_maker (callable, optional): if your env maker is not part
             of torchrl env wrappers, a custom callable
             can be passed instead. In this case it will override the
-            constructor retrieved from `args`.
+            constructor retrieved from `cfg`.
         custom_env (_EnvClass, optional): if an existing environment needs to be
             transformed_in, it can be passed directly to this helper. `custom_env_maker`
             and `custom_env` are exclusive features.
@@ -194,11 +194,11 @@ def transformed_env_constructor(
     """
 
     def make_transformed_env(**kwargs) -> TransformedEnv:
-        env_name = args.env_name
-        env_task = args.env_task
-        env_library = LIBS[args.env_library]
-        frame_skip = args.frame_skip
-        from_pixels = args.from_pixels
+        env_name = cfg.env_name
+        env_task = cfg.env_task
+        env_library = LIBS[cfg.env_library]
+        frame_skip = cfg.frame_skip
+        from_pixels = cfg.from_pixels
 
         if custom_env is None and custom_env_maker is None:
             env_kwargs = {
@@ -206,7 +206,7 @@ def transformed_env_constructor(
                 "device": device,
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
-                "pixels_only": from_pixels and not args.include_state,
+                "pixels_only": from_pixels and not cfg.include_state,
             }
             if env_library is DMControlEnv:
                 env_kwargs.update({"task_name": env_task})
@@ -224,7 +224,7 @@ def transformed_env_constructor(
 
         return make_env_transforms(
             env,
-            args,
+            cfg,
             video_tag,
             writer,
             env_name,
@@ -243,33 +243,33 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(
-    args: Namespace, **kwargs
+    cfg: Namespace, **kwargs
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
-        args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
+        cfg (argparse.Namespace): script arguments originating from the parser built with parser_env_cfg
         kwargs: keyword arguments for the `transformed_env_constructor` method.
     """
-    batch_transform = args.batch_transform
-    if args.env_per_collector == 1:
-        kwargs.update({"args": args, "use_env_creator": True})
+    batch_transform = cfg.batch_transform
+    if cfg.env_per_collector == 1:
+        kwargs.update({"cfg": cfg, "use_env_creator": True})
         make_transformed_env = transformed_env_constructor(**kwargs)
         return make_transformed_env
-    kwargs.update({"args": args, "use_env_creator": True})
+    kwargs.update({"cfg": cfg, "use_env_creator": True})
     make_transformed_env = transformed_env_constructor(
         return_transformed_envs=not batch_transform, **kwargs
     )
     parallel_env = ParallelEnv(
-        num_workers=args.env_per_collector,
+        num_workers=cfg.env_per_collector,
         create_env_fn=make_transformed_env,
         create_env_kwargs=None,
-        pin_memory=args.pin_memory,
+        pin_memory=cfg.pin_memory,
     )
     if batch_transform:
         kwargs.update(
             {
-                "args": args,
+                "cfg": cfg,
                 "use_env_creator": False,
                 "custom_env": parallel_env,
                 "batch_dims": 1,

@@ -71,7 +71,7 @@ from utils_redq import (
 warnings.filterwarnings(
     "ignore", message="Using the default interaction site of end-effector."
 )
-warnings.filterwarnings("ignore", message="Unused kwcfg found.")
+warnings.filterwarnings("ignore", message="Unused kwargs found.")
 warnings.filterwarnings(
     "ignore", message="In future, it will be an error for 'np.bool_'"
 )
