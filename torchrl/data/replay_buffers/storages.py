@@ -80,41 +80,42 @@ class ListStorage(Storage):
 
 
 class LazyMemmapStorage(Storage):
-    def __init__(self, size):
-        self.size = size
+    def __init__(self, size, scratch_dir=None, device=None):
+        self.size = int(size)
         self.initialized = False
+        self.scratch_dir = None
+        if scratch_dir is not None:
+            self.scratch_dir = str(scratch_dir)
+            if self.scratch_dir[-1] != "/":
+                self.scratch_dir += "/"
+        self.device = device if device else torch.device("cpu")
 
     def _init(self, data: Union[_TensorDict, torch.Tensor]) -> None:
         print("Creating a MemmapStorage...")
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
-            data = MemmapTensor(
-                self.size, *data.shape, device=data.device, dtype=data.dtype
+            out = MemmapTensor(
+                self.size, *data.shape, device=self.device, dtype=data.dtype
             )
-            filesize = os.path.getsize(data.filename) / 1024 / 1024
+            filesize = os.path.getsize(out.filename) / 1024 / 1024
             print(
-                f"The storage was created in {data.filename} and occupies {filesize} Mb of storage."
+                f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
             )
         else:
-            data = TensorDict(
-                {
-                    key: MemmapTensor(
-                        self.size,
-                        *tensor.shape,
-                        device=tensor.device,
-                        dtype=tensor.dtype,
-                    )
-                    for key, tensor in data.items()
-                },
-                [self.size, *data.shape],
-            )
-            print("The storage was created in : ")
-            for _key, _value in data.items():
+            out = TensorDict({}, [self.size, *data.shape])
+            print("The storage is being created: ")
+            for key, tensor in data.items():
+                out[key] = _value = MemmapTensor(
+                    self.size,
+                    *tensor.shape,
+                    device=self.device,
+                    dtype=tensor.dtype,
+                    prefix=self.scratch_dir,
+                )
                 filesize = os.path.getsize(_value.filename) / 1024 / 1024
-                print(f""
-                      f"\t{_key}: {_value.filename}, {filesize} Mb of storage.")
+                print(f"\t{key}: {_value.filename}, {filesize} Mb of storage.")
 
-        self._storage = data
+        self._storage = out
         self.initialized = True
 
     def set(
@@ -127,14 +128,19 @@ class LazyMemmapStorage(Storage):
                 self._init(data[0])
             else:
                 self._init(data)
+        # print("setting")
         self._storage[cursor] = data
+        # print("done")
 
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         if not self.initialized:
             raise RuntimeError(
                 "Cannot get an item from an unitialized LazyMemmapStorage"
             )
-        return self._storage[index]
+        # print("getting")
+        out = self._storage[index]
+        # print("done")
+        return out
 
     def __len__(self):
         return self.size
