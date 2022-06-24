@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import os
 from dataclasses import dataclass
 
 import torch
@@ -28,7 +28,11 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
             collate_fn=lambda x: x,
             pin_memory=device != torch.device("cpu"),
             prefetch=3,
-            storage=LazyMemmapStorage(cfg.buffer_size),
+            storage=LazyMemmapStorage(
+                cfg.buffer_size,
+                # SCRATCH_DIR may depend upon job id etc, hence we
+                scratch_dir=os.environ.get("SCRATCH_DIR", None),
+            ),
         )
     else:
         buffer = TensorDictPrioritizedReplayBuffer(
@@ -38,7 +42,10 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
             collate_fn=lambda x: x,
             pin_memory=device != torch.device("cpu"),
             prefetch=3,
-            storage=LazyMemmapStorage(cfg.buffer_size),
+            storage=LazyMemmapStorage(
+                cfg.buffer_size,
+                scratch_dir=os.environ.get("SCRATCH_DIR", None),
+            ),
         )
     return buffer
 

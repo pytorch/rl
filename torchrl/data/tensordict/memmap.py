@@ -60,7 +60,7 @@ class MemmapTensor(object):
     Supports (almost) all tensor operations.
 
     Args:
-        elem (torch.Tensor or MemmapTensor): Tensor to be stored on physical
+        elem (torch.Tensor or MemmapTensor): TODO // Tensor to be stored on physical
             storage. If MemmapTensor, a new MemmapTensor is created and the
             same data is stored in it.
         transfer_ownership: bool: affects the ownership after serialization:
@@ -68,6 +68,7 @@ class MemmapTensor(object):
             serialization. If False, the current process keeps the ownership
             of the temporary file.
             Default: False.
+        prefix: TODO
 
     Examples:
         >>> x = torch.ones(3,4)
@@ -102,10 +103,11 @@ class MemmapTensor(object):
         device: DEVICE_TYPING = None,
         dtype: torch.dtype = None,
         transfer_ownership: bool = False,
+        prefix: Optional[str] = None,
     ):
         self.idx = None
         self._memmap_array = None
-        self.file = tempfile.NamedTemporaryFile()
+        self.file = tempfile.NamedTemporaryFile(prefix=prefix)
         self.filename = self.file.name
 
         if isinstance(elem, (torch.Tensor, MemmapTensor, np.ndarray)):

@@ -80,15 +80,16 @@ class ListStorage(Storage):
 
 
 class LazyMemmapStorage(Storage):
-    def __init__(self, size):
+    def __init__(self, size, scratch_dir=None):
         self.size = size
         self.initialized = False
+        self.scratch_dir = scratch_dir
 
     def _init(self, data: Union[_TensorDict, torch.Tensor]) -> None:
         print("Creating a MemmapStorage...")
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
-            data = MemmapTensor(
+            out = MemmapTensor(
                 self.size, *data.shape, device=data.device, dtype=data.dtype
             )
             filesize = os.path.getsize(data.filename) / 1024 / 1024
@@ -96,25 +97,20 @@ class LazyMemmapStorage(Storage):
                 f"The storage was created in {data.filename} and occupies {filesize} Mb of storage."
             )
         else:
-            data = TensorDict(
-                {
-                    key: MemmapTensor(
-                        self.size,
-                        *tensor.shape,
-                        device=tensor.device,
-                        dtype=tensor.dtype,
-                    )
-                    for key, tensor in data.items()
-                },
-                [self.size, *data.shape],
-            )
+            out = TensorDict({}, [self.size, *data.shape])
             print("The storage was created in : ")
-            for _key, _value in data.items():
+            for key, tensor in data.items():
+                out[key] = _value = MemmapTensor(
+                    self.size,
+                    *tensor.shape,
+                    device=tensor.device,
+                    dtype=tensor.dtype,
+                    prefix=self.scratch_dir,
+                )
                 filesize = os.path.getsize(_value.filename) / 1024 / 1024
-                print(f""
-                      f"\t{_key}: {_value.filename}, {filesize} Mb of storage.")
+                print(f"\t{key}: {_value.filename}, {filesize} Mb of storage.")
 
-        self._storage = data
+        self._storage = out
         self.initialized = True
 
     def set(
