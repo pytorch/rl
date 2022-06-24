@@ -1785,7 +1785,7 @@ class TensorDict(_TensorDict):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
-        if not len(self._tensordict):
+        if not self._tensordict.keys():
             raise Exception(
                 "share_memory_ must be called when the TensorDict is ("
                 "partially) populated. Set a tensor first."
@@ -1810,7 +1810,7 @@ class TensorDict(_TensorDict):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
-        if not len(self._tensordict):
+        if not self._tensordict.keys():
             raise Exception(
                 "memmap_() must be called when the TensorDict is (partially) "
                 "populated. Set a tensor first."
@@ -3009,7 +3009,7 @@ class SavedTensorDict(_TensorDict):
             else source._device_safe()
             if (hasattr(source, "_device_safe") and source._device_safe() is not None)
             else source[list(source.keys())[0]].device
-            if len(source)
+            if source.keys()
             else None
         )
         td = source
