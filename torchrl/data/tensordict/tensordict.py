@@ -188,7 +188,9 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         return max(1, math.prod(self.batch_size))
 
     def _check_batch_size(self) -> None:
-        bs = [value.shape[: self.batch_dims] for key, value in self.items_meta()] + [self.batch_size]
+        bs = [value.shape[: self.batch_dims] for key, value in self.items_meta()] + [
+            self.batch_size
+        ]
         if len(set(bs)) > 1:
             raise RuntimeError(
                 f"batch_size are incongruent, got {list(set(bs))}, "
@@ -1742,9 +1744,9 @@ class TensorDict(_TensorDict):
             tensor_in[idx] = value
         # Recreate Meta in case of require_grad coming in value
         self._tensordict_meta[key] = MetaTensor(
-           tensor_in,
-           _is_memmap=self.is_memmap(),
-           _is_shared=self.is_shared(),
+            tensor_in,
+            _is_memmap=self.is_memmap(),
+            _is_shared=self.is_shared(),
         )
         return self
 
@@ -2046,12 +2048,15 @@ def stack(
         )
     elif contiguous:
         out = TensorDict(
-            {key: torch.stack(
-                [
-                    _tensordict[key] for _tensordict in list_of_tensordicts
-                ]
-            ) for key in keys},
-            batch_size = LazyStackedTensorDict._compute_batch_size(batch_size, dim, len(list_of_tensordicts))
+            {
+                key: torch.stack(
+                    [_tensordict[key] for _tensordict in list_of_tensordicts]
+                )
+                for key in keys
+            },
+            batch_size=LazyStackedTensorDict._compute_batch_size(
+                batch_size, dim, len(list_of_tensordicts)
+            ),
         )
         return out
     else:
