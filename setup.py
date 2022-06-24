@@ -84,7 +84,12 @@ def _main():
             "gym_continuous": ["mujoco-py", "mujoco"],
             "rendering": ["moviepy"],
             "tests": ["pytest", "pyyaml"],
-            "utils": ["tqdm", "configargparse"],
+            "utils": [
+                "tqdm",
+                "configargparse",
+                "hydra-core>=1.1",
+                "hydra-submitit-launcher",
+            ],
         },
     )
 
