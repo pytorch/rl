@@ -654,13 +654,22 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                 else:
                     tensordicts = tensordicts.contiguous()
                 tensordicts.batch_size = tensordicts.batch_size[:1]
-            # we split the tensordict such that the setting of the "index" key herebelow results in a change in
-            # the tensordicts stored in the buffer
-            tensordicts = list(tensordicts.unbind(0))
+            # # we split the tensordict such that the setting of the "index" key herebelow results in a change in
+            # # the tensordicts stored in the buffer
+            # tensordicts = list(tensordicts.unbind(0))
+            tensordicts.set(
+                "index",
+                torch.zeros(
+                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
+                ),
+            )
         else:
             priorities = [self._get_priority(td) for td in tensordicts]
 
-        stacked_td = torch.stack(tensordicts, 0)
+        if not isinstance(tensordicts, _TensorDict):
+            stacked_td = torch.stack(tensordicts, 0)
+        else:
+            stacked_td = tensordicts
         idx = super().extend(tensordicts, priorities)
         stacked_td.set("index", idx, inplace=True)
         return idx
