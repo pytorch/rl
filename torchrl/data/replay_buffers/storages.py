@@ -1,4 +1,5 @@
 import abc
+import os
 from typing import Any, Sequence, Union
 
 __all__ = ["Storage", "ListStorage", "LazyMemmapStorage"]
@@ -84,10 +85,15 @@ class LazyMemmapStorage(Storage):
         self.initialized = False
 
     def _init(self, data: Union[_TensorDict, torch.Tensor]) -> None:
+        print("Creating a MemmapStorage...")
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
             data = MemmapTensor(
                 self.size, *data.shape, device=data.device, dtype=data.dtype
+            )
+            filesize = os.path.getsize(data.filename) / 1024 / 1024
+            print(
+                f"The storage was created in {data.filename} and occupies {filesize} Mb of storage."
             )
         else:
             data = TensorDict(
@@ -102,6 +108,12 @@ class LazyMemmapStorage(Storage):
                 },
                 [self.size, *data.shape],
             )
+            print("The storage was created in : ")
+            for _key, _value in data.items():
+                filesize = os.path.getsize(_value.filename) / 1024 / 1024
+                print(f""
+                      f"\t{_key}: {_value.filename}, {filesize} Mb of storage.")
+
         self._storage = data
         self.initialized = True
 
