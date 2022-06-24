@@ -3,8 +3,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from argparse import ArgumentParser, Namespace
-from typing import Callable, Optional, Union
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
+from typing import Callable, Optional, Union, Any
 
 import torch
 
@@ -34,7 +35,6 @@ __all__ = [
     "transformed_env_constructor",
     "parallel_env_constructor",
     "get_stats_random_rollout",
-    "parser_env_args",
 ]
 
 LIBS = {
@@ -44,7 +44,7 @@ LIBS = {
 }
 
 
-def correct_for_frame_skip(args: Namespace) -> Namespace:
+def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":
     """
     Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the
     frame_skip.
@@ -52,16 +52,16 @@ def correct_for_frame_skip(args: Namespace) -> Namespace:
     of 1M but actually collecting frame_skip * 1M frames.
 
     Args:
-        args (argparse.Namespace): Namespace containing some frame-counting argument, including:
+        cfg (DictConfig): DictConfig containing some frame-counting argument, including:
             "max_frames_per_traj", "total_frames", "frames_per_batch", "record_frames", "annealing_frames",
             "init_random_frames", "init_env_steps"
 
     Returns:
-         the input Namespace, modified in-place.
+         the input DictConfig, modified in-place.
 
     """
     # Adapt all frame counts wrt frame_skip
-    if args.frame_skip != 1:
+    if cfg.frame_skip != 1:
         fields = [
             "max_frames_per_traj",
             "total_frames",
@@ -73,14 +73,14 @@ def correct_for_frame_skip(args: Namespace) -> Namespace:
             "noops",
         ]
         for field in fields:
-            if hasattr(args, field):
-                setattr(args, field, getattr(args, field) // args.frame_skip)
-    return args
+            if hasattr(cfg, field):
+                setattr(cfg, field, getattr(cfg, field) // cfg.frame_skip)
+    return cfg
 
 
 def make_env_transforms(
     env,
-    args,
+    cfg,
     video_tag,
     writer,
     env_name,
@@ -93,15 +93,15 @@ def make_env_transforms(
 ):
     env = TransformedEnv(env)
 
-    from_pixels = args.from_pixels
-    vecnorm = args.vecnorm
-    norm_rewards = vecnorm and args.norm_rewards
+    from_pixels = cfg.from_pixels
+    vecnorm = cfg.vecnorm
+    norm_rewards = vecnorm and cfg.norm_rewards
     _norm_obs_only = norm_obs_only or not norm_rewards
-    reward_scaling = args.reward_scaling
-    reward_loc = args.reward_loc
+    reward_scaling = cfg.reward_scaling
+    reward_loc = cfg.reward_loc
 
     if len(video_tag):
-        center_crop = args.center_crop
+        center_crop = cfg.center_crop
         if center_crop:
             center_crop = center_crop[0]
         env.append_transform(
@@ -112,22 +112,23 @@ def make_env_transforms(
             ),
         )
 
-    if args.noops:
-        env.append_transform(NoopResetEnv(args.noops))
+    if cfg.noops:
+        env.append_transform(NoopResetEnv(cfg.noops))
+
     if from_pixels:
-        if not args.catframes:
+        if not cfg.catframes:
             raise RuntimeError(
                 "this env builder currently only accepts positive catframes values"
                 "when pixels are being used."
             )
         env.append_transform(ToTensorImage())
-        if args.center_crop:
-            env.append_transform(CenterCrop(*args.center_crop))
+        if cfg.center_crop:
+            env.append_transform(CenterCrop(*cfg.center_crop))
         env.append_transform(Resize(84, 84))
-        if args.grayscale:
+        if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(first_dim=batch_dims))
-        env.append_transform(CatFrames(N=args.catframes, keys=["next_pixels"]))
+        env.append_transform(CatFrames(N=cfg.catframes, keys=["next_pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
         else:
@@ -177,15 +178,13 @@ def make_env_transforms(
         double_to_float_list.append(out_key)
         env.append_transform(DoubleToFloat(keys=double_to_float_list))
 
-        if hasattr(args, "catframes") and args.catframes:
-            env.append_transform(
-                CatFrames(N=args.catframes, keys=[out_key], cat_dim=-1)
-            )
+        if hasattr(cfg, "catframes") and cfg.catframes:
+            env.append_transform(CatFrames(N=cfg.catframes, keys=[out_key], cat_dim=-1))
 
     else:
         env.append_transform(DoubleToFloat(keys=double_to_float_list))
 
-    if hasattr(args, "gSDE") and args.gSDE:
+    if hasattr(cfg, "gSDE") and cfg.gSDE:
         env.append_transform(
             gSDENoise(action_dim=action_dim_gsde, state_dim=state_dim_gsde)
         )
@@ -195,7 +194,7 @@ def make_env_transforms(
 
 
 def transformed_env_constructor(
-    args: Namespace,
+    cfg: "DictConfig",
     video_tag: str = "",
     writer: Optional["SummaryWriter"] = None,
     stats: Optional[dict] = None,
@@ -212,7 +211,7 @@ def transformed_env_constructor(
     Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
-        args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
+        cfg (DictConfig): a DictConfig containing the arguments of the script.
         video_tag (str, optional): video tag to be passed to the SummaryWriter object
         writer (SummaryWriter, optional): tensorboard writer associated with the script
         stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
@@ -240,11 +239,11 @@ def transformed_env_constructor(
     """
 
     def make_transformed_env(**kwargs) -> TransformedEnv:
-        env_name = args.env_name
-        env_task = args.env_task
-        env_library = LIBS[args.env_library]
-        frame_skip = args.frame_skip
-        from_pixels = args.from_pixels
+        env_name = cfg.env_name
+        env_task = cfg.env_task
+        env_library = LIBS[cfg.env_library]
+        frame_skip = cfg.frame_skip
+        from_pixels = cfg.from_pixels
 
         if custom_env is None and custom_env_maker is None:
             env_kwargs = {
@@ -270,7 +269,7 @@ def transformed_env_constructor(
 
         return make_env_transforms(
             env,
-            args,
+            cfg,
             video_tag,
             writer,
             env_name,
@@ -288,33 +287,33 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(
-    args: Namespace, **kwargs
+    cfg: "DictConfig", **kwargs
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
-        args (argparse.Namespace): script arguments originating from the parser built with parser_env_args
+        cfg (DictConfig): config containing user-defined arguments
         kwargs: keyword arguments for the `transformed_env_constructor` method.
     """
-    batch_transform = args.batch_transform
-    if args.env_per_collector == 1:
-        kwargs.update({"args": args, "use_env_creator": True})
+    batch_transform = cfg.batch_transform
+    if cfg.env_per_collector == 1:
+        kwargs.update({"cfg": cfg, "use_env_creator": True})
         make_transformed_env = transformed_env_constructor(**kwargs)
         return make_transformed_env
-    kwargs.update({"args": args, "use_env_creator": True})
+    kwargs.update({"cfg": cfg, "use_env_creator": True})
     make_transformed_env = transformed_env_constructor(
         return_transformed_envs=not batch_transform, **kwargs
     )
     parallel_env = ParallelEnv(
-        num_workers=args.env_per_collector,
+        num_workers=cfg.env_per_collector,
         create_env_fn=make_transformed_env,
         create_env_kwargs=None,
-        pin_memory=args.pin_memory,
+        pin_memory=cfg.pin_memory,
     )
     if batch_transform:
         kwargs.update(
             {
-                "args": args,
+                "cfg": cfg,
                 "use_env_creator": False,
                 "custom_env": parallel_env,
                 "batch_dims": 1,
@@ -326,8 +325,20 @@ def parallel_env_constructor(
 
 
 def get_stats_random_rollout(
-    args: Namespace, proof_environment: _EnvClass, key: Optional[str] = None
+    cfg: "DictConfig", proof_environment: _EnvClass, key: Optional[str] = None
 ):
+    print("computing state stats")
+    if not hasattr(cfg, "init_env_steps"):
+        raise AttributeError("init_env_steps missing from arguments.")
+
+    n = 0
+    td_stats = []
+    while n < cfg.init_env_steps:
+        _td_stats = proof_environment.rollout(max_steps=cfg.init_env_steps)
+        n += _td_stats.numel()
+        td_stats.append(_td_stats)
+    td_stats = torch.cat(td_stats, 0)
+
     if key is None:
         keys = list(proof_environment.observation_spec.keys())
         key = keys.pop()
@@ -337,28 +348,18 @@ def get_stats_random_rollout(
                 "thus get_stats_random_rollout cannot infer which to compute the stats of."
             )
 
-    print(f"computing {key} stats on device {proof_environment.device}")
-    if not hasattr(args, "init_env_steps"):
-        raise AttributeError("init_env_steps missing from arguments.")
-
-    n = 0
-    td_stats = []
-    while n < args.init_env_steps:
-        _td_stats = proof_environment.rollout(max_steps=args.init_env_steps)
-        n += _td_stats.numel()
-        td_stats.append(_td_stats.clone().select(key))
-    td_stats = torch.cat(td_stats, 0)
-
     if key == "next_pixels":
-        m = td_stats.get(key).mean().cpu()
-        s = td_stats.get(key).std().clamp_min(1e-5).cpu()
+        m = td_stats.get(key).mean()
+        s = td_stats.get(key).std().clamp_min(1e-5)
     else:
-        m = td_stats.get(key).mean(dim=0).cpu()
-        s = td_stats.get(key).std(dim=0).clamp_min(1e-2).cpu()
+        m = td_stats.get(key).mean(dim=0)
+        s = td_stats.get(key).std(dim=0).clamp_min(1e-5)
 
-    del td_stats
-
-    print(f"stats computed for {n} steps. Got: \n" f"loc = {m}, \n" f"scale: {s}")
+    print(
+        f"stats computed for {td_stats.numel()} steps. Got: \n"
+        f"loc = {m}, \n"
+        f"scale: {s}"
+    )
     if not torch.isfinite(m).all():
         raise RuntimeError("non-finite values found in mean")
     if not torch.isfinite(s).all():
@@ -367,129 +368,42 @@ def get_stats_random_rollout(
     return stats
 
 
-def parser_env_args(parser: ArgumentParser) -> ArgumentParser:
-    """
-    Populates the argument parser to build an environment constructor.
-
-    Args:
-        parser (ArgumentParser): parser to be populated.
-
-    """
-
-    parser.add_argument(
-        "--env_library",
-        "--env-library",
-        type=str,
-        default="gym",
-        choices=list(LIBS.keys()),
-        help="env_library used for the simulated environment. Default=gym",
-    )
-    parser.add_argument(
-        "--env_name",
-        "--env-name",
-        type=str,
-        default="Humanoid-v2",
-        help="name of the environment to be created. Default=Humanoid-v2",
-    )
-    parser.add_argument(
-        "--env_task",
-        "--env-task",
-        type=str,
-        default="",
-        help="task (if any) for the environment. Default=run",
-    )
-    parser.add_argument(
-        "--from_pixels",
-        "--from-pixels",
-        action="store_true",
-        help="whether the environment output should be state vector(s) (default) or the pixels.",
-    )
-    parser.add_argument(
-        "--frame_skip",
-        "--frame-skip",
-        type=int,
-        default=1,
-        help="frame_skip for the environment. Note that this value does NOT impact the buffer size,"
-        "maximum steps per trajectory, frames per batch or any other factor in the algorithm,"
-        "e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4,"
-        "the actual number of frames retrieved will be 200e6. Default=1.",
-    )
-    parser.add_argument(
-        "--reward_scaling", "--reward-scaling", type=float, help="scale of the reward."
-    )
-    parser.add_argument(
-        "--reward_loc",
-        "--reward-loc",
-        type=float,
-        help="location of the reward.",
-        default=0.0,
-    )
-    parser.add_argument(
-        "--init_env_steps",
-        "--init-env-steps",
-        type=int,
-        default=1000,
-        help="number of random steps to compute normalizing constants",
-    )
-    parser.add_argument(
-        "--vecnorm",
-        action="store_true",
-        help="Normalizes the environment observation and reward outputs with the running statistics "
-        "obtained across processes.",
-    )
-    parser.add_argument(
-        "--norm_rewards",
-        "--norm-rewards",
-        action="store_true",
-        help="If True, rewards will be normalized on the fly. This may interfere with SAC update rule and "
-        "should be used cautiously.",
-    )
-    parser.add_argument(
-        "--no_norm_stats",
-        "--no-norm-stats",
-        action="store_false",
-        dest="norm_stats",
-        help="Deactivates the normalization based on random collection of data.",
-    )
-    parser.add_argument(
-        "--noops",
-        type=int,
-        default=0,
-        help="number of random steps to do after reset. Default is 0",
-    )
-    parser.add_argument(
-        "--catframes",
-        type=int,
-        default=0,
-        help="Number of frames to concatenate through time. Default is 0 (do not use CatFrames).",
-    )
-    parser.add_argument(
-        "--center_crop",
-        "--center-crop",
-        type=int,
-        nargs="+",
-        default=[],
-        help="center crop size.",
-    )
-    parser.add_argument(
-        "--no_grayscale",
-        "--no-grayscale",
-        action="store_false",
-        dest="grayscale",
-        help="Disables grayscale transform.",
-    )
-    parser.add_argument(
-        "--max_frames_per_traj",
-        "--max-frames-per-traj",
-        type=int,
-        default=1000,
-        help="Number of steps before a reset of the environment is called (if it has not been flagged as "
-        "done before). ",
-    )
-    parser.add_argument(
-        "--batch_transform",
-        "--batch-transform",
-        action="store_true",
-        help="if True, the transforms will be applied to the parallel env, and not to each individual env.",
-    )
-    return parser
+@dataclass
+class EnvConfig:
+    env_library: str = "gym"
+    # env_library used for the simulated environment. Default=gym
+    env_name: str = "Humanoid-v2"
+    # name of the environment to be created. Default=Humanoid-v2
+    env_task: str = ""
+    # task (if any) for the environment. Default=run
+    from_pixels: bool = False
+    # whether the environment output should be state vector(s) (default) or the pixels.
+    frame_skip: int = 1
+    # frame_skip for the environment. Note that this value does NOT impact the buffer size,
+    # maximum steps per trajectory, frames per batch or any other factor in the algorithm,
+    # e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4
+    # the actual number of frames retrieved will be 200e6. Default=1.
+    reward_scaling: Optional[float] = None
+    # scale of the reward.
+    reward_loc: float = 0.0
+    # location of the reward.
+    init_env_steps: int = 1000
+    # number of random steps to compute normalizing constants
+    vecnorm: bool = False
+    # Normalizes the environment observation and reward outputs with the running statistics obtained across processes.
+    norm_rewards: bool = False
+    # If True, rewards will be normalized on the fly. This may interfere with SAC update rule and should be used cautiously.
+    norm_stats: bool = True
+    # Deactivates the normalization based on random collection of data.
+    noops: int = 0
+    # number of random steps to do after reset. Default is 0
+    catframes: int = 0
+    # Number of frames to concatenate through time. Default is 0 (do not use CatFrames).
+    center_crop: Any = dataclass_field(default_factory=lambda: [])
+    # center crop size.
+    grayscale: bool = True
+    # Disables grayscale transform.
+    max_frames_per_traj: int = 1000
+    # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
+    batch_transform: bool = False
+    # if True, the transforms will be applied to the parallel env, and not to each individual env.
