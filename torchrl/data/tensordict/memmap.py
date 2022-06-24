@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import functools
+import gc
 import os
 import tempfile
 from math import prod
@@ -14,11 +15,24 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 import numpy as np
 import torch
 
+from torchrl.data.tensordict.utils import _getitem_batch_size
 from torchrl.data.utils import (
     DEVICE_TYPING,
     INDEX_TYPING,
     torch_to_numpy_dtype_dict,
 )
+
+# try:
+#     from torch.utils._python_dispatch import enable_torch_dispatch_mode
+#     from torch._subclasses.fake_tensor import (
+#         FakeTensor,
+#         FakeTensorMode,
+#         FakeTensorConverter,
+#         DynamicOutputShapeException,
+#     )
+#     _has_fake = True
+# except:
+_has_fake = False
 
 MEMMAP_HANDLED_FN = {}
 
@@ -123,7 +137,7 @@ class MemmapTensor(object):
                 raise TypeError(
                     "dtype cannot be passed when creating a MemmapTensor from a tensor"
                 )
-            return self._init_tensor(elem, transfer_ownership)
+            self._init_tensor(elem, transfer_ownership)
         else:
             if not isinstance(elem, int) and size:
                 raise TypeError(
@@ -139,7 +153,10 @@ class MemmapTensor(object):
             )
             device = device if device is not None else torch.device("cpu")
             dtype = dtype if dtype is not None else torch.get_default_dtype()
-            return self._init_shape(shape, device, dtype, transfer_ownership)
+            self._init_shape(shape, device, dtype, transfer_ownership)
+        if _has_fake:
+            with enable_torch_dispatch_mode(FakeTensorMode(inner=None)):
+                self._fake = torch.zeros(self.shape, device=self.device)
 
     def _init_shape(
         self,
@@ -249,7 +266,14 @@ class MemmapTensor(object):
             memmap_array = self.memmap_array
         if idx is not None:
             memmap_array = memmap_array[idx]
-        return self._np_to_tensor(memmap_array)
+        out = self._np_to_tensor(memmap_array)
+        if idx is not None and not (isinstance(idx, torch.Tensor) and idx.dtype is torch.bool): # and isinstance(idx, torch.Tensor) and len(idx) == 1:
+            if _has_fake:
+                size = self._fake[idx].shape
+            else:
+                size = _getitem_batch_size(self.shape, idx)
+            out = out.view(size)
+        return out
 
     def _np_to_tensor(self, memmap_array: np.ndarray) -> torch.Tensor:
         return torch.as_tensor(memmap_array, device=self.device)
@@ -385,6 +409,13 @@ class MemmapTensor(object):
         _tensor = self.__getattribute__("_tensor")
         return getattr(_tensor, attr)
 
+    def masked_fill_(self, mask: torch.Tensor, value: float):
+        self.memmap_array[mask.cpu().numpy()] = value
+        return self
+
+    def __len__(self):
+        return self.shape[0] if len(self.shape) else 0
+
     def is_shared(self) -> bool:
         return False
 
@@ -432,18 +463,20 @@ class MemmapTensor(object):
         if state["file"] is None:
             # state["_had_ownership"] = state["_had_ownership"]
             # state["_has_ownership"] = delete
-            # tmpfile = tempfile.NamedTemporaryFile(prefix=self.prefix, delete=False)
-            # tmpfile.name = state["filename"]
-            # tmpfile._closer.name = state["filename"]
-            state["file"] = None  # tmpfile
+            tmpfile = tempfile.NamedTemporaryFile(delete=False)
+            tmpfile.close()
+            tmpfile.name = state["filename"]
+            tmpfile._closer.name = state["filename"]
+            state["file"] = tmpfile
         self.__dict__.update(state)
 
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
         state["file"] = None
         state["_memmap_array"] = None
+        state["_fake"] = None
         state["_has_ownership"] = state["transfer_ownership"] and state["_had_ownership"]
-        self._had_ownership = False
+        self._had_ownership = self._has_ownership
         # self._had_ownership = self._has_ownership = state["_had_ownership"]
         return state
 
@@ -526,6 +559,9 @@ def cat(
     list_of_tensors = [
         a._tensor if isinstance(a, MemmapTensor) else a for a in list_of_memmap
     ]
+    print("mm: ", [t.shape for t in list_of_memmap])
+    print("tensors: ", [t.shape for t in list_of_tensors])
+    print("dim: ", dim, "shape: ", torch.cat(list_of_tensors, dim, out=out).shape)
     return torch.cat(list_of_tensors, dim, out=out)
 
 

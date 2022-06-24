@@ -12,7 +12,7 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from torch import multiprocessing as mp
-from torchrl.data import SavedTensorDict, TensorDict
+from torchrl.data import SavedTensorDict, TensorDict, MemmapTensor
 from torchrl.data.tensordict.tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
@@ -620,9 +620,7 @@ class TestTensorDicts:
         assert (td == td_td).all()
 
         td = getattr(self, td_name)
-        print("to saved td")
         td_saved = td.to(SavedTensorDict)
-        print("td_saved done")
         assert (td == td_saved).all()
 
     @pytest.mark.parametrize("call_del", [True, False])
@@ -765,7 +763,7 @@ class TestTensorDicts:
             torch.manual_seed(1)
             td = getattr(self, td_name)
             td_unbind = torch.unbind(td, dim=0)
-            assert (td == torch.stack(td_unbind, 0)).all()
+            assert (td == torch.stack(td_unbind, 0).contiguous()).all()
             assert (td[0] == td_unbind[0]).all()
 
     @pytest.mark.parametrize("squeeze_dim", [0, 1])
@@ -845,6 +843,10 @@ class TestTensorDicts:
         assert "a" not in td.keys()
 
         z = td.get("z")
+        if isinstance(a, MemmapTensor):
+            a = a._tensor
+        if isinstance(z, MemmapTensor):
+            z = z._tensor
         torch.testing.assert_allclose(a, z)
 
         new_z = torch.randn_like(z)
@@ -925,7 +927,7 @@ class TestTensorDicts:
     def test_getitem_string(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        assert isinstance(td["a"], torch.Tensor)
+        assert isinstance(td["a"], (MemmapTensor, torch.Tensor))
 
     def test_delitem(self, td_name):
         torch.manual_seed(1)

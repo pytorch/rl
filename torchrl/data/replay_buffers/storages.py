@@ -128,14 +128,19 @@ class LazyMemmapStorage(Storage):
                 self._init(data[0])
             else:
                 self._init(data)
+        # print("setting")
         self._storage[cursor] = data
+        # print("done")
 
     def get(self, index: Union[int, Sequence[int], slice]) -> Any:
         if not self.initialized:
             raise RuntimeError(
                 "Cannot get an item from an unitialized LazyMemmapStorage"
             )
-        return self._storage[index]
+        # print("getting")
+        out = self._storage[index]
+        # print("done")
+        return out
 
     def __len__(self):
         return self.size

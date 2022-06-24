@@ -1823,12 +1823,10 @@ class TensorDict(_TensorDict):
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             if isinstance(self, dest):
                 return self
-            print("to...")
             td = dest(
                 source=self,
                 **kwargs,
             )
-            print("to done")
             return td
         elif isinstance(dest, (torch.device, str, int)):
             # must be device
@@ -1937,6 +1935,10 @@ def assert_allclose_td(
             msg = "\t".join([default_msg, msg])
         else:
             msg = default_msg
+        if isinstance(input1, MemmapTensor):
+            input1 = input1._tensor
+        if isinstance(input2, MemmapTensor):
+            input2 = input2._tensor
         torch.testing.assert_allclose(
             input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=msg
         )
@@ -2004,7 +2006,8 @@ def cat(
     if out is None:
         out = TensorDict({}, device=device, batch_size=batch_size)
         for key in keys:
-            out.set(key, torch.cat([td.get(key) for td in list_of_tensordicts], dim))
+            tensor = torch.cat([td.get(key) for td in list_of_tensordicts], dim)
+            out.set(key, tensor)
         return out
     else:
         if out.batch_size != batch_size:
@@ -3017,8 +3020,8 @@ class SavedTensorDict(_TensorDict):
             )
         self.file = tempfile.NamedTemporaryFile()
         self.filename = self.file.name
-        if source.is_memmap():
-            source = source.clone()
+        # if source.is_memmap():
+        #     source = source.clone()
         self._device = (
             torch.device(device)
             if device is not None
@@ -3031,18 +3034,14 @@ class SavedTensorDict(_TensorDict):
         self._save(source)
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
-        print("saved td done")
 
     def _save(self, tensordict: _TensorDict) -> None:
-        print("saving preproc...")
         self._version = uuid.uuid1()
         self._keys = list(tensordict.keys())
         self._batch_size = tensordict.batch_size
         self._td_fields = _td_fields(tensordict)
         self._tensordict_meta = {key: value for key, value in tensordict.items_meta()}
-        print("saving...")
         torch.save(tensordict, self.filename)
-        print("saved")
 
     def _load(self) -> _TensorDict:
         return torch.load(self.filename, map_location=self._device_safe())
