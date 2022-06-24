@@ -5,6 +5,7 @@
 
 import abc
 import math
+import os
 import queue
 import time
 from collections import OrderedDict
@@ -39,6 +40,7 @@ from ..envs.vec_env import _BatchedEnv
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
+_MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 10))
 
 
 class RandomPolicy:
@@ -1251,9 +1253,11 @@ def _main_async_collector(
     j = 0
 
     has_timed_out = False
+    counter = 0
     while True:
         _timeout = _TIMEOUT if not has_timed_out else 1e-3
         if pipe_child.poll(_timeout):
+            counter = 0
             data_in, msg = pipe_child.recv()
             if verbose:
                 print(f"worker {idx} received {msg}")
@@ -1264,9 +1268,28 @@ def _main_async_collector(
             # this is expected to happen if queue_out reached the timeout, but no new msg was waiting in the pipe
             # in that case, the main process probably expects the worker to continue collect data
             if has_timed_out:
+                counter = 0
+                # has_timed_out is True if the process failed to send data, which will
+                # typically occur if main has taken another batch (i.e. the queue is Full).
+                # In this case, msg is the previous msg sent by main, which will typically be "continue"
+                # If it's not the case, it is not expected that has_timed_out is True.
                 if msg not in ("continue", "continue_random"):
                     raise RuntimeError(f"Unexpected message after time out: msg={msg}")
             else:
+                # if has_timed_out is False, then the time out does not come from the fact that the queue is Full.
+                # this means that our process has been waiting for a command from main in vain, while main was not
+                # receiving data.
+                # This will occur if main is busy doing something else (e.g. computing loss etc).
+                counter += _timeout
+                if counter >= (_MAX_IDLE_COUNT * _TIMEOUT):
+                    raise RuntimeError(
+                        f"This process waited for {counter} seconds "
+                        f"without receiving a command from main. Consider increasing the maximum idle count "
+                        f"if this is expected via the environment variable MAX_IDLE_COUNT "
+                        f"(current value is {_MAX_IDLE_COUNT})."
+                        f"\nIf this occurs at the end of a function, it means that your collector has not been "
+                        f"collected, consider calling `collector.shutdown()` or `del collector` at the end of the function."
+                    )
                 continue
         if msg in ("continue", "continue_random"):
             if msg == "continue_random":

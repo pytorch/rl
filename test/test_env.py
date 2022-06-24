@@ -419,7 +419,7 @@ class TestParallel:
     def test_parallel_env_seed(
         self, env_name, frame_skip, transformed_in, transformed_out
     ):
-        env_parallel, env_serial, env0 = _make_envs(
+        env_parallel, env_serial, _ = _make_envs(
             env_name, frame_skip, transformed_in, transformed_out, 5
         )
 
@@ -451,7 +451,6 @@ class TestParallel:
         assert_allclose_td(td_serial, td_parallel)
         env_parallel.close()
         env_serial.close()
-        env0.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     def test_parallel_env_shutdown(self):
