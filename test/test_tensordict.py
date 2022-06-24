@@ -480,6 +480,7 @@ TD_BATCH_SIZE = 4
         "sub_td",
         "idx_td",
         "saved_td",
+        "memmap_td",
         "unsqueezed_td",
         "td_reset_bs",
     ],
@@ -543,6 +544,10 @@ class TestTensorDicts:
     @property
     def saved_td(self):
         return SavedTensorDict(source=self.td)
+
+    @property
+    def memmap_td(self):
+        return self.td.memmap_()
 
     @property
     def unsqueezed_td(self):
@@ -615,7 +620,9 @@ class TestTensorDicts:
         assert (td == td_td).all()
 
         td = getattr(self, td_name)
+        print("to saved td")
         td_saved = td.to(SavedTensorDict)
+        print("td_saved done")
         assert (td == td_saved).all()
 
     @pytest.mark.parametrize("call_del", [True, False])

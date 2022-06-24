@@ -80,32 +80,35 @@ class ListStorage(Storage):
 
 
 class LazyMemmapStorage(Storage):
-    def __init__(self, size, scratch_dir=None):
-        self.size = size
+    def __init__(self, size, scratch_dir=None, device=None):
+        self.size = int(size)
         self.initialized = False
-        self.scratch_dir = str(scratch_dir)
-        if self.scratch_dir[-1] != "/":
-            self.scratch_dir += "/"
+        self.scratch_dir = None
+        if scratch_dir is not None:
+            self.scratch_dir = str(scratch_dir)
+            if self.scratch_dir[-1] != "/":
+                self.scratch_dir += "/"
+        self.device = device if device else torch.device("cpu")
 
     def _init(self, data: Union[_TensorDict, torch.Tensor]) -> None:
         print("Creating a MemmapStorage...")
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
             out = MemmapTensor(
-                self.size, *data.shape, device=data.device, dtype=data.dtype
+                self.size, *data.shape, device=self.device, dtype=data.dtype
             )
-            filesize = os.path.getsize(data.filename) / 1024 / 1024
+            filesize = os.path.getsize(out.filename) / 1024 / 1024
             print(
-                f"The storage was created in {data.filename} and occupies {filesize} Mb of storage."
+                f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
             )
         else:
             out = TensorDict({}, [self.size, *data.shape])
-            print("The storage was created in : ")
+            print("The storage is being created: ")
             for key, tensor in data.items():
                 out[key] = _value = MemmapTensor(
                     self.size,
                     *tensor.shape,
-                    device=tensor.device,
+                    device=self.device,
                     dtype=tensor.dtype,
                     prefix=self.scratch_dir,
                 )

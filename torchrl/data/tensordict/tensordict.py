@@ -1823,10 +1823,12 @@ class TensorDict(_TensorDict):
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             if isinstance(self, dest):
                 return self
+            print("to...")
             td = dest(
                 source=self,
                 **kwargs,
             )
+            print("to done")
             return td
         elif isinstance(dest, (torch.device, str, int)):
             # must be device
@@ -3026,18 +3028,21 @@ class SavedTensorDict(_TensorDict):
             if source.keys()
             else None
         )
-        td = source
-        self._save(td)
+        self._save(source)
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
+        print("saved td done")
 
     def _save(self, tensordict: _TensorDict) -> None:
+        print("saving preproc...")
         self._version = uuid.uuid1()
         self._keys = list(tensordict.keys())
         self._batch_size = tensordict.batch_size
         self._td_fields = _td_fields(tensordict)
         self._tensordict_meta = {key: value for key, value in tensordict.items_meta()}
+        print("saving...")
         torch.save(tensordict, self.filename)
+        print("saved")
 
     def _load(self) -> _TensorDict:
         return torch.load(self.filename, map_location=self._device_safe())

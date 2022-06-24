@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import functools
+import os
 import tempfile
 from math import prod
 from typing import Any, Callable, List, Optional, Tuple, Union
@@ -107,8 +108,11 @@ class MemmapTensor(object):
     ):
         self.idx = None
         self._memmap_array = None
-        self.file = tempfile.NamedTemporaryFile(prefix=prefix)
+        self.prefix = prefix
+        self.is_meta = False
+        self.file = tempfile.NamedTemporaryFile(prefix=prefix, delete=False)
         self.filename = self.file.name
+        self.file.close()  # we close the file for now, but don't delete it
 
         if isinstance(elem, (torch.Tensor, MemmapTensor, np.ndarray)):
             if device is not None:
@@ -181,6 +185,7 @@ class MemmapTensor(object):
         self._numel = elem.numel()
         self.mode = "r+"
         self._has_ownership = True
+        self._had_ownership = True
         if isinstance(elem, MemmapTensor):
             prev_filename = elem.filename
             self._copy_item(prev_filename)
@@ -359,8 +364,10 @@ class MemmapTensor(object):
         return self
 
     def __del__(self) -> None:
-        if hasattr(self, "file"):
-            self.file.close()
+        # if hasattr(self, "filename"):
+        if self._has_ownership:
+            os.unlink(self.filename)
+            # self.file.close()
 
     def __eq__(self, other: Any) -> torch.Tensor:
         if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
@@ -369,7 +376,6 @@ class MemmapTensor(object):
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
-            print(f"loading {attr} has raised an exception")
             return self.__getattribute__(
                 attr
             )  # make sure that appropriate exceptions are raised
@@ -424,25 +430,29 @@ class MemmapTensor(object):
 
     def __setstate__(self, state: dict) -> None:
         if state["file"] is None:
-            delete = state["transfer_ownership"] and state["_has_ownership"]
-            state["_has_ownership"] = delete
-            tmpfile = tempfile.NamedTemporaryFile(delete=delete)
-            tmpfile.name = state["filename"]
-            tmpfile._closer.name = state["filename"]
-            state["file"] = tmpfile
+            # state["_had_ownership"] = state["_had_ownership"]
+            # state["_has_ownership"] = delete
+            # tmpfile = tempfile.NamedTemporaryFile(prefix=self.prefix, delete=False)
+            # tmpfile.name = state["filename"]
+            # tmpfile._closer.name = state["filename"]
+            state["file"] = None  # tmpfile
         self.__dict__.update(state)
 
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
         state["file"] = None
         state["_memmap_array"] = None
-        self._has_ownership = self.file.delete
+        state["_has_ownership"] = state["transfer_ownership"] and state["_had_ownership"]
+        self._had_ownership = False
+        # self._had_ownership = self._has_ownership = state["_had_ownership"]
         return state
 
     def __reduce__(self, *args, **kwargs):
-        if self.transfer_ownership:
-            self.file.delete = False
-            self.file._closer.delete = False
+        if self.transfer_ownership and self._has_ownership:
+            self._has_ownership = False
+            # those values should already be False
+            # self.file.delete = False
+            # self.file._closer.delete = False
         return super(MemmapTensor, self).__reduce__(*args, **kwargs)
 
     def to(
