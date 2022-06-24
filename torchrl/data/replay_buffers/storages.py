@@ -83,7 +83,9 @@ class LazyMemmapStorage(Storage):
     def __init__(self, size, scratch_dir=None):
         self.size = size
         self.initialized = False
-        self.scratch_dir = scratch_dir
+        self.scratch_dir = str(scratch_dir)
+        if self.scratch_dir[-1] != "/":
+            self.scratch_dir += "/"
 
     def _init(self, data: Union[_TensorDict, torch.Tensor]) -> None:
         print("Creating a MemmapStorage...")
