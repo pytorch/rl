@@ -16,6 +16,8 @@ from torchrl.data import (
 
 __all__ = ["make_replay_buffer"]
 
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+
 
 def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer:
     """Builds a replay buffer using the config built from ReplayArgsConfig."""
@@ -26,6 +28,7 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
             # collate_fn=InPlaceSampler(device),
             pin_memory=device != torch.device("cpu"),
             prefetch=3,
+            storage=LazyMemmapStorage(cfg.buffer_size),
         )
     else:
         buffer = TensorDictPrioritizedReplayBuffer(
@@ -35,6 +38,7 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
             # collate_fn=InPlaceSampler(device),
             pin_memory=device != torch.device("cpu"),
             prefetch=3,
+            storage=LazyMemmapStorage(cfg.buffer_size),
         )
     return buffer
 

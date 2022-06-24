@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import os
-import traceback
 from collections import OrderedDict
 from copy import deepcopy
 from logging import warn
