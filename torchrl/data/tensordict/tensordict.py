@@ -2667,7 +2667,10 @@ class LazyStackedTensorDict(_TensorDict):
         proc_tensor = proc_tensor.unbind(self.stack_dim)
         for td, _item in zip(self.tensordicts, proc_tensor):
             td.set(key, _item, **kwargs)
-        self._meta_dict.update({key: self._deduce_meta(key)})
+        # self._meta_dict.update({key: self._deduce_meta(key)})
+        if key not in self._valid_keys:
+            self._valid_keys = sorted([*self._valid_keys, key])
+
         return self
 
     def set_(
@@ -2902,9 +2905,10 @@ class LazyStackedTensorDict(_TensorDict):
                 f"{item.__class__.__name__} is not supported yet"
             )
 
-    def del_(self, *args, **kwargs) -> _TensorDict:
+    def del_(self, key: str, **kwargs) -> _TensorDict:
         for td in self.tensordicts:
-            td.del_(*args, **kwargs)
+            td.del_(key, **kwargs)
+        self._valid_keys.remove(key)
         return self
 
     def share_memory_(self) -> _TensorDict:
@@ -2973,6 +2977,9 @@ class LazyStackedTensorDict(_TensorDict):
     def rename_key(self, old_key: str, new_key: str, safe: bool = False) -> _TensorDict:
         for td in self.tensordicts:
             td.rename_key(old_key, new_key, safe=safe)
+        self._valid_keys = sorted(
+            [key if key != old_key else new_key for key in self._valid_keys]
+        )
         return self
 
     def masked_fill_(

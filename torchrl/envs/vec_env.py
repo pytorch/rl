@@ -402,13 +402,6 @@ class _BatchedEnv(_EnvClass):
             f"\n\tbatch_size={self.batch_size})"
         )
 
-    def __del__(self) -> None:
-        if not self.is_closed:
-            raise RuntimeError(
-                "Batched environment must be explicitely closed before it "
-                "turns out of scope."
-            )
-
     def close(self) -> None:
         if self.is_closed:
             raise RuntimeError("trying to close a closed environment")

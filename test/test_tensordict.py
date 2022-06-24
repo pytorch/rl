@@ -618,10 +618,14 @@ class TestTensorDicts:
         td_saved = td.to(SavedTensorDict)
         assert (td == td_saved).all()
 
-    def test_remove(self, td_name):
+    @pytest.mark.parametrize("call_del", [True, False])
+    def test_remove(self, td_name, call_del):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        td = td.del_("a")
+        if call_del:
+            del td["a"]
+        else:
+            td = td.del_("a")
         assert td is not None
         assert "a" not in td.keys()
 
@@ -1467,12 +1471,19 @@ def test_stack_keys():
     td.set_("b", torch.randn(2, 10))  # b has been set before
 
     td1.set("c", torch.randn(4))
-    assert "c" in td.keys()  # now all tds have the key c
+    td[
+        "c"
+    ]  # we must first query that key for the stacked tensordict to update the list
+    assert "c" in td.keys(), list(td.keys())  # now all tds have the key c
     td.get("c")
 
     td1.set("d", torch.randn(6))
     with pytest.raises(RuntimeError):
         td.get("d")
+
+    td["e"] = torch.randn(2, 4)
+    assert "e" in td.keys()  # now all tds have the key c
+    td.get("e")
 
 
 def test_getitem_batch_size():

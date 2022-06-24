@@ -134,6 +134,42 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     ccollector.shutdown()
 
 
+# TODO: design a test that ensures that collectors are interrupted even if __del__ is not called
+# @pytest.mark.parametrize("should_shutdown", [True, False])
+# def test_shutdown_collector(should_shutdown, num_env=3, env_name="vec", seed=40):
+#     def env_fn(seed):
+#         env = ParallelEnv(
+#             num_workers=num_env,
+#             create_env_fn=make_make_env(env_name),
+#             create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+#         )
+#         return env
+#
+#     policy = make_policy(env_name)
+#
+#     ccollector = aSyncDataCollector(
+#         create_env_fn=env_fn,
+#         create_env_kwargs={"seed": seed},
+#         policy=policy,
+#         frames_per_batch=20,
+#         max_frames_per_traj=2000,
+#         total_frames=20000,
+#         pin_memory=False,
+#     )
+#     for i, d in enumerate(ccollector):
+#         if i == 0:
+#             b1c = d
+#         elif i == 1:
+#             b2c = d
+#         else:
+#             break
+#     with pytest.raises(AssertionError):
+#         assert_allclose_td(b1c, b2c)
+#
+#     if should_shutdown:
+#         ccollector.shutdown()
+
+
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
 def test_collector_batch_size(num_env, env_name, seed=100):
