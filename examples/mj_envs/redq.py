@@ -9,6 +9,8 @@ import uuid
 from copy import deepcopy
 from datetime import datetime
 
+from omegaconf import OmegaConf
+
 from torchrl.envs import ParallelEnv, EnvCreator, Compose, ObservationNorm, NoopResetEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.record import VideoRecorder
@@ -331,7 +333,7 @@ def main(cfg: "DictConfig"):
         cfg,
     )
     trainer.save_trainer_file = "/".join([writer.log_dir, "config.t"])
-    torch.save(cfg_copy, "/".join([writer.log_dir, "saved.t"]))
+    torch.save(OmegaConf.to_yaml(cfg_copy), "/".join([writer.log_dir, "saved.t"]))
 
     # def select_keys(batch):
     #     return batch.select(
