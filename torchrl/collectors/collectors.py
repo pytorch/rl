@@ -40,7 +40,7 @@ from ..envs.vec_env import _BatchedEnv
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
-_MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 10))
+_MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 1000))
 
 
 class RandomPolicy:
