@@ -23,7 +23,7 @@ weight_decay=1e-5
 catframes=4
 
 normalize_rewards_online
-normalize_rewards_online_scale=10.0
+normalize_rewards_online_scale=50.0
 multi_step
 include_state
 
