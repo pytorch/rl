@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 from dataclasses import dataclass
+from typing import Optional
 
 import torch
 
@@ -54,5 +55,5 @@ class ReplayArgsConfig:
     # buffer size, in number of frames stored. Default=1e6
     prb: bool = False
     # whether a Prioritized replay buffer should be used instead of a more basic circular one.
-    buffer_scratch_dir: str = None
-    # directory where the buffer data should be stored
+    buffer_scratch_dir: Optional[str] = None
+    # directory where the buffer data should be stored. If none is passed, they will be placed in /tmp/
