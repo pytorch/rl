@@ -121,6 +121,7 @@ DEFAULT_REWARD_SCALING = {
 
 @hydra.main(version_base=None, config_path=None, config_name="config")
 def main(cfg: "DictConfig"):
+    print("cfg: ", cfg)
     from torch.utils.tensorboard import SummaryWriter  # avoid loading on each process
 
     cfg_copy = deepcopy(cfg)
