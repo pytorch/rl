@@ -36,7 +36,7 @@ def split_trajectories(rollout_tensordict: _TensorDict) -> _TensorDict:
     splits = traj_ids.view(-1)
     splits = [(splits == i).sum().item() for i in splits.unique_consecutive()]
     # if all splits are identical then we can skip this function
-    if len(set(splits)) == 1:
+    if len(set(splits)) == 1 and splits[0] == traj_ids.shape[1]:
         rollout_tensordict.set(
             "mask",
             torch.ones(
