@@ -2055,7 +2055,8 @@ def stack(
         out = TensorDict(
             {
                 key: torch.stack(
-                    [_tensordict[key] for _tensordict in list_of_tensordicts]
+                    [_tensordict[key] for _tensordict in list_of_tensordicts],
+                    dim,
                 )
                 for key in keys
             },
