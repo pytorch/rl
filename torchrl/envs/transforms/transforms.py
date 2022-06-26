@@ -341,26 +341,26 @@ class TransformedEnv(_EnvClass):
         out_tensordict = self.transform(out_tensordict)
         return out_tensordict
 
-    def _current_tensordict_get(self) -> _TensorDict:
-        current_tensordict = self._current_tensordict
-        if current_tensordict is None:
-            # get current tensordict from base env
-            current_tensordict = self.base_env.current_tensordict
-            # replace the next_ prefix
-            for out_key in self.observation_spec:
-                current_tensordict.rename_key(out_key[5:], out_key)
-            current_tensordict = self.transform(current_tensordict)
-            current_tensordict = step_tensordict(
-                current_tensordict,
-                exclude_done=False,
-                exclude_action=False,
-                exclude_reward=False,
-            )
-        return current_tensordict
-
-    current_tensordict = property(
-        _current_tensordict_get, _EnvClass._current_tensordict_set
-    )
+    # def _current_tensordict_get(self) -> _TensorDict:
+    #     current_tensordict = self._current_tensordict
+    #     if current_tensordict is None:
+    #         # get current tensordict from base env
+    #         current_tensordict = self.base_env.current_tensordict
+    #         # replace the next_ prefix
+    #         for out_key in self.observation_spec:
+    #             current_tensordict.rename_key(out_key[5:], out_key)
+    #         current_tensordict = self.transform(current_tensordict)
+    #         current_tensordict = step_tensordict(
+    #             current_tensordict,
+    #             exclude_done=False,
+    #             exclude_action=False,
+    #             exclude_reward=False,
+    #         )
+    #     return current_tensordict
+    #
+    # current_tensordict = property(
+    #     _current_tensordict_get, _EnvClass._current_tensordict_set
+    # )
 
     def state_dict(self) -> OrderedDict:
         state_dict = self.transform.state_dict()
@@ -440,7 +440,7 @@ class TransformedEnv(_EnvClass):
         return f"TransformedEnv(env={self.base_env}, transform={self.transform})"
 
     def _erase_metadata(self):
-        self._current_tensordict = None
+        # self._current_tensordict = None
         if self.cache_specs:
             self._action_spec = None
             self._observation_spec = None
@@ -451,10 +451,10 @@ class TransformedEnv(_EnvClass):
         self.device = torch.device(device)
         self.transform.to(device)
 
-        if self._current_tensordict is not None:
-            current_tensordict = self.current_tensordict.to(device)
-            self._current_tensordict = None
-            self.current_tensordict = current_tensordict
+        # if self._current_tensordict is not None:
+        #     current_tensordict = self.current_tensordict.to(device)
+        #     self._current_tensordict = None
+        #     self.current_tensordict = current_tensordict
         self.is_done = self.is_done.to(device)
 
         if self.cache_specs:
