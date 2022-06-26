@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from textwrap import indent
 from typing import (
@@ -40,6 +41,8 @@ from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
+
+_NO_CHECK_SPEC_ENCODE = os.environ.get("NO_CHECK_SPEC_ENCODE", False)
 
 
 def _default_dtype_and_device(
@@ -214,7 +217,8 @@ class TensorSpec:
             ):
                 val = val.copy()
             val = torch.as_tensor(val, dtype=self.dtype, device=self.device)
-        self.assert_is_in(val)
+        if not _NO_CHECK_SPEC_ENCODE:
+            self.assert_is_in(val)
         return val
 
     def to_numpy(self, val: torch.Tensor, safe: bool = True) -> np.ndarray:
