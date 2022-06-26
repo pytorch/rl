@@ -36,18 +36,18 @@ def split_trajectories(rollout_tensordict: _TensorDict) -> _TensorDict:
     splits = traj_ids.view(-1)
     splits = [(splits == i).sum().item() for i in splits.unique_consecutive()]
     # if all splits are identical then we can skip this function
-    # if len(set(splits)) == 1:
-    #     rollout_tensordict.set(
-    #         "mask",
-    #         torch.ones(
-    #             rollout_tensordict.shape,
-    #             device=rollout_tensordict.device,
-    #             dtype=torch.bool,
-    #         ),
-    #     )
-    #     if rollout_tensordict.ndimension() == 1:
-    #         rollout_tensordict = rollout_tensordict.unsqueeze(0).to_tensordict()
-    #     return rollout_tensordict
+    if len(set(splits)) == 1 and splits[0] == traj_ids.shape[1]:
+        rollout_tensordict.set(
+            "mask",
+            torch.ones(
+                rollout_tensordict.shape,
+                device=rollout_tensordict.device,
+                dtype=torch.bool,
+            ),
+        )
+        if rollout_tensordict.ndimension() == 1:
+            rollout_tensordict = rollout_tensordict.unsqueeze(0).to_tensordict()
+        return rollout_tensordict
     out_splits = {
         key: _d.contiguous().view(-1, *_d.shape[ndim:]).split(splits, 0)
         for key, _d in rollout_tensordict.items()
