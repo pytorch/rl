@@ -2052,7 +2052,7 @@ def stack(
             stack_dim=dim,
         )
     elif contiguous:
-        out = TensorDict(
+        _out = TensorDict(
             {
                 key: torch.stack(
                     [_tensordict[key] for _tensordict in list_of_tensordicts],
@@ -2064,7 +2064,10 @@ def stack(
                 batch_size, dim, len(list_of_tensordicts)
             ),
         )
-        return out
+        if out is not None:
+            out.update(_out)
+            return out
+        return _out
     else:
         batch_size = list(batch_size)
         batch_size.insert(dim, len(list_of_tensordicts))
