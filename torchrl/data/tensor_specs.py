@@ -43,13 +43,13 @@ DEVICE_TYPING = Union[torch.device, str, int]
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
 _NO_CHECK_SPEC_ENCODE = os.environ.get("NO_CHECK_SPEC_ENCODE", False)
-if _NO_CHECK_SPEC_ENCODE in ("0", "False"):
+if _NO_CHECK_SPEC_ENCODE in ("0", "False", False):
     _NO_CHECK_SPEC_ENCODE = False
-elif _NO_CHECK_SPEC_ENCODE in ("1", "True"):
+elif _NO_CHECK_SPEC_ENCODE in ("1", "True", True):
     _NO_CHECK_SPEC_ENCODE = True
 else:
     raise NotImplementedError(
-        "NO_CHECK_SPEC_ENCODE should be in 'True', 'False', '0' or '1'."
+        "NO_CHECK_SPEC_ENCODE should be in 'True', 'False', '0' or '1'. "
         f"Got {_NO_CHECK_SPEC_ENCODE} instead."
     )
 
