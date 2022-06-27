@@ -50,7 +50,6 @@ def _test_vecnorm_subproc(idx, queue_out: mp.Queue, queue_in: mp.Queue):
     env = TransformedEnv(env, t)
     env.set_seed(1000 + idx)
     env.reset()
-    assert env.current_tensordict is not None
     for _ in range(10):
         env.rand_step()
     queue_out.put(True)

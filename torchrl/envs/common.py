@@ -213,7 +213,6 @@ class _EnvClass:
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
         self.is_done = tensordict_out.get("done")
-        tensordict = step_tensordict(tensordict_out, exclude_done=False)
 
         for key in self._select_observation_keys(tensordict_out):
             obs = tensordict_out.get(key)
@@ -289,12 +288,12 @@ class _EnvClass:
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
 
-        # self.current_tensordict = step_tensordict(
-        #     tensordict_reset,
-        #     exclude_done=False,
-        #     exclude_reward=True,
-        #     exclude_action=True,
-        # )
+        current_tensordict = step_tensordict(
+            tensordict_reset,
+            exclude_done=False,
+            exclude_reward=True,
+            exclude_action=True,
+        )
         self.is_done = tensordict_reset.get(
             "done",
             torch.zeros(self.batch_size, dtype=torch.bool, device=self.device),
@@ -304,7 +303,7 @@ class _EnvClass:
                 f"Env {self} was done after reset. This is (currently) not allowed."
             )
         if execute_step:
-            tensordict_reset = self.current_tensordict.clone()
+            tensordict_reset = current_tensordict
         if tensordict is not None:
             tensordict.update(tensordict_reset)
         else:
@@ -461,10 +460,9 @@ class _EnvClass:
         env_device = self.device
 
         if auto_reset:
-            self.reset()
-
-        tensordict = TensorDict({}, device=self.device, batch_size=self.batch_size)
-        # tensordict = self.current_tensordict
+            tensordict = self.reset()
+        else:
+            tensordict = TensorDict({}, device=self.device, batch_size=self.batch_size)
 
         if policy is None:
 

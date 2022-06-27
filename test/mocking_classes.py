@@ -208,7 +208,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         assert not self.is_done, "trying to execute step in done env"
 
         obs = self._obs_step(
-            self._get_in_obs(self.current_tensordict.get(self.out_key)), a
+            self._get_in_obs(tensordict.get(self.out_key)), a
         )
         tensordict = tensordict.select()  # empty tensordict
         tensordict.set("next_" + self.out_key, self._get_out_obs(obs))

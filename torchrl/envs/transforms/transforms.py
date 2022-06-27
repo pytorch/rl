@@ -92,9 +92,12 @@ class Transform(nn.Module):
 
     invertible = False
 
-    def __init__(self, keys: Sequence[str]):
+    def __init__(self, keys: Sequence[str], keys_inv: Sequence[str]=None):
         super().__init__()
         self.keys = keys
+        if keys_inv is None:
+            keys_inv = []
+        self.keys_inv = keys_inv
 
     def reset(self, tensordict: _TensorDict) -> _TensorDict:
         """Resets a tranform if it is stateful."""
@@ -143,7 +146,7 @@ class Transform(nn.Module):
     def _inv_call(self, tensordict: _TensorDict) -> _TensorDict:
         self._check_inplace()
         for _obs_key in tensordict.keys():
-            if _obs_key in self.keys:
+            if _obs_key in self.keys_inv:
                 observation = self._inv_apply_transform(tensordict.get(_obs_key))
                 tensordict.set(_obs_key, observation, inplace=self.inplace)
         return tensordict
@@ -322,9 +325,9 @@ class TransformedEnv(_EnvClass):
         return reward_spec
 
     def _step(self, tensordict: _TensorDict) -> _TensorDict:
-        selected_keys = [key for key in tensordict.keys() if "action" in key]
-        tensordict_in = tensordict.select(*selected_keys).clone()
-        tensordict_in = self.transform.inv(tensordict_in)
+        # selected_keys = [key for key in tensordict.keys() if "action" in key]
+        # tensordict_in = tensordict.select(*selected_keys).clone()
+        tensordict_in = self.transform.inv(tensordict.clone())
         tensordict_out = self.base_env.step(tensordict_in)
         # tensordict should already have been processed by the transforms
         # for logging purposes
@@ -1278,10 +1281,10 @@ class DoubleToFloat(Transform):
     invertible = True
     inplace = False
 
-    def __init__(self, keys: Optional[Sequence[str]] = None):
-        if keys is None:
-            keys = ["action"]
-        super().__init__(keys=keys)
+    def __init__(self, keys: Optional[Sequence[str]] = None, keys_inv: Optional[Sequence[str]] = None):
+        if keys_inv is None:
+            keys_inv = ["action"]
+        super().__init__(keys=keys, keys_inv=keys_inv)
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         return obs.to(torch.float)
@@ -1301,7 +1304,7 @@ class DoubleToFloat(Transform):
                 space.maximum = space.maximum.to(torch.float)
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
-        if "action" in self.keys:
+        if "action" in self.keys_inv:
             if action_spec.dtype is not torch.double:
                 raise TypeError("action_spec.dtype is not double")
             self._transform_spec(action_spec)
@@ -1548,14 +1551,15 @@ class NoopResetEnv(Transform):
 
         while i < noops:
             i += 1
-            tensordict = parent.rand_step()
+            print(tensordict)
+            tensordict = parent.rand_step(step_tensordict(tensordict))
             if parent.is_done:
                 parent.reset()
                 i = 0
                 trial += 1
                 if trial > _MAX_NOOPS_TRIALS:
-                    parent.reset()
-                    tensordict = parent.rand_step()
+                    tensordict = parent.reset(tensordict)
+                    tensordict = parent.rand_step(tensordict)
                     break
         if parent.is_done:
             raise RuntimeError("NoopResetEnv concluded with done environment")
