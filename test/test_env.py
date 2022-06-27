@@ -35,7 +35,6 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     RewardClipping,
 )
-from torchrl.envs.utils import step_tensordict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.modules import (
     ActorCriticOperator,
@@ -427,7 +426,9 @@ class TestParallel:
         td0_serial = env_serial.reset()
         torch.manual_seed(0)
 
-        td_serial = env_serial.rollout(max_steps=10, auto_reset=False).contiguous()
+        td_serial = env_serial.rollout(
+            max_steps=10, auto_reset=False, tensordict=td0_serial
+        ).contiguous()
         key = "pixels" if "pixels" in td_serial else "observation"
         torch.testing.assert_allclose(
             td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
@@ -438,7 +439,9 @@ class TestParallel:
 
         torch.manual_seed(0)
         assert out_seed_parallel == out_seed_serial
-        td_parallel = env_parallel.rollout(max_steps=10, auto_reset=False).contiguous()
+        td_parallel = env_parallel.rollout(
+            max_steps=10, auto_reset=False, tensordict=td0_parallel
+        ).contiguous()
         torch.testing.assert_allclose(
             td_parallel[:, 0].get("next_" + key), td_parallel[:, 1].get(key)
         )

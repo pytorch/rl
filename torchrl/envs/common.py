@@ -428,6 +428,7 @@ class _EnvClass:
         auto_reset: bool = True,
         auto_cast_to_device: bool = False,
         break_when_any_done: bool = True,
+        tensordict: Optional[_TensorDict] = None,
     ) -> _TensorDict:
         """Executes a rollout in the environment.
 
@@ -447,6 +448,8 @@ class _EnvClass:
             auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
                 policy device before the policy is used. Default is `False`.
             break_when_any_done (bool): breaks if any of the done state is True. Default is True.
+            tensordict (TensorDict, optional): if auto_reset is False, an initial
+                tensordict must be provided.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -460,9 +463,13 @@ class _EnvClass:
         env_device = self.device
 
         if auto_reset:
+            if tensordict is not None:
+                raise RuntimeError(
+                    "tensordict cannot be provided when auto_reset is True"
+                )
             tensordict = self.reset()
-        else:
-            tensordict = TensorDict({}, device=self.device, batch_size=self.batch_size)
+        elif tensordict is None:
+            raise RuntimeError("tensordict must be provided when auto_reset is False")
 
         if policy is None:
 

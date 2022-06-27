@@ -156,10 +156,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         assert (a.sum(-1) == 1).all()
         assert not self.is_done, "trying to execute step in done env"
 
-        obs = (
-            self._get_in_obs(self.current_tensordict.get(self.out_key))
-            + a / self.maxstep
-        )
+        obs = self._get_in_obs(tensordict.get(self.out_key)) + a / self.maxstep
         tensordict = tensordict.select()  # empty tensordict
         tensordict.set("next_" + self.out_key, self._get_out_obs(obs))
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
@@ -207,9 +204,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         a = tensordict.get("action")
         assert not self.is_done, "trying to execute step in done env"
 
-        obs = self._obs_step(
-            self._get_in_obs(tensordict.get(self.out_key)), a
-        )
+        obs = self._obs_step(self._get_in_obs(tensordict.get(self.out_key)), a)
         tensordict = tensordict.select()  # empty tensordict
         tensordict.set("next_" + self.out_key, self._get_out_obs(obs))
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))

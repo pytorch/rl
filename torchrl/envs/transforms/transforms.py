@@ -92,7 +92,7 @@ class Transform(nn.Module):
 
     invertible = False
 
-    def __init__(self, keys: Sequence[str], keys_inv: Sequence[str]=None):
+    def __init__(self, keys: Sequence[str], keys_inv: Sequence[str] = None):
         super().__init__()
         self.keys = keys
         if keys_inv is None:
@@ -1281,7 +1281,11 @@ class DoubleToFloat(Transform):
     invertible = True
     inplace = False
 
-    def __init__(self, keys: Optional[Sequence[str]] = None, keys_inv: Optional[Sequence[str]] = None):
+    def __init__(
+        self,
+        keys: Optional[Sequence[str]] = None,
+        keys_inv: Optional[Sequence[str]] = None,
+    ):
         if keys_inv is None:
             keys_inv = ["action"]
         super().__init__(keys=keys, keys_inv=keys_inv)
