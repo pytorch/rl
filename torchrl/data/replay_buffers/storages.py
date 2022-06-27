@@ -113,7 +113,9 @@ class LazyMemmapStorage(Storage):
                     prefix=self.scratch_dir,
                 )
                 filesize = os.path.getsize(_value.filename) / 1024 / 1024
-                print(f"\t{key}: {_value.filename}, {filesize} Mb of storage.")
+                print(
+                    f"\t{key}: {_value.filename}, {filesize} Mb of storage (size: {[self.size, *tensor.shape]})."
+                )
 
         self._storage = out
         self.initialized = True
