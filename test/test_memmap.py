@@ -160,6 +160,13 @@ def test_memmap_same_device_as_tensor(device):
     m = MemmapTensor(t)
     assert m.device == torch.device(device)
     for other_device in get_available_devices():
+        if other_device != device:
+            with pytest.raises(
+                RuntimeError,
+                match="Expected all tensors to be on the same device, "
+                + "but found at least two devices .*",
+            ):
+                assert torch.all(m + torch.ones([3, 4], device=other_device) == 1)
         m.to(other_device)
         assert m.device == torch.device(other_device)
 
@@ -171,17 +178,24 @@ def test_memmap_create_on_same_device(device):
     assert m.device == torch.device(device)
 
 
+@pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize(
     "value", [torch.zeros([3, 4]), MemmapTensor(torch.zeros([3, 4]))]
 )
-def test_memmap_zero_value(value):
+def test_memmap_zero_value(device, value):
     """
     Test if all entries are zeros when MemmapTensor is created with size.
     """
-    m = MemmapTensor(value)
-    expected_memmap_tensor = MemmapTensor([3, 4])
-    assert m.shape == (3, 4)
-    assert torch.all(m == expected_memmap_tensor)
+    value.to(device)
+    expected_memmap_tensor = MemmapTensor(value)
+    m1 = MemmapTensor([3, 4])
+    assert m1.shape == (3, 4)
+    assert torch.all(m1 == expected_memmap_tensor)
+    assert torch.all(m1 + torch.ones([3, 4]) == 1)
+    m2 = MemmapTensor(3, 4)
+    assert m2.shape == (3, 4)
+    assert torch.all(m2 == expected_memmap_tensor)
+    assert torch.all(m2 + torch.ones([3, 4]) == 1)
 
 
 if __name__ == "__main__":
