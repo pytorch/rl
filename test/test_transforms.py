@@ -339,7 +339,7 @@ class TestTransforms:
     def test_resize(self, interpolation, keys, nchannels, batch, device):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
-        resize = Resize(w=20, h=21, interpolation=interpolation, keys=keys)
+        resize = Resize(w=20, h=21, interpolation=interpolation, keys_in=keys)
         td = TensorDict(
             {
                 key: torch.randn(*batch, nchannels, 32, 32, device=device)
@@ -376,7 +376,7 @@ class TestTransforms:
     def test_centercrop(self, keys, h, nchannels, batch, device):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
-        cc = CenterCrop(w=20, h=h, keys=keys)
+        cc = CenterCrop(w=20, h=h, keys_in=keys)
         if h is None:
             h = 20
         td = TensorDict(
@@ -416,7 +416,7 @@ class TestTransforms:
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, *size, nchannels, 32, 32, device=device)
         start_dim = -3 - len(size)
-        flatten = FlattenObservation(start_dim, -3, keys=keys)
+        flatten = FlattenObservation(start_dim, -3, keys_in=keys)
         td = TensorDict(
             {
                 key: torch.randn(*batch, *size, nchannels, 32, 32, device=device)
@@ -454,7 +454,7 @@ class TestTransforms:
     def test_grayscale(self, keys, device):
         torch.manual_seed(0)
         nchannels = 3
-        gs = GrayScale(keys=keys)
+        gs = GrayScale(keys_in=keys)
         dont_touch = torch.randn(1, nchannels, 32, 32, device=device)
         td = TensorDict(
             {key: torch.randn(1, nchannels, 32, 32, device=device) for key in keys}, [1]
@@ -468,14 +468,14 @@ class TestTransforms:
         if len(keys) == 1:
             observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32))
             observation_spec = gs.transform_observation_spec(observation_spec)
-            assert observation_spec.shape == torch.Size([1, 32, 32])
+            assert observation_spec.shape == torch.Size([1, 3, 3])
         else:
             observation_spec = CompositeSpec(
                 **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32)) for key in keys}
             )
             observation_spec = gs.transform_observation_spec(observation_spec)
             for key in keys:
-                assert observation_spec[key].shape == torch.Size([1, 32, 32])
+                assert observation_spec[key].shape == torch.Size([1, 3, 3])
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
@@ -485,7 +485,7 @@ class TestTransforms:
     def test_totensorimage(self, keys, batch, device):
         torch.manual_seed(0)
         nchannels = 3
-        totensorimage = ToTensorImage(keys=keys)
+        totensorimage = ToTensorImage(keys_in=keys)
         dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
         td = TensorDict(
             {
@@ -528,7 +528,7 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_compose(self, keys, batch, device, nchannels=1, N=4):
         torch.manual_seed(0)
-        t1 = CatFrames(keys=keys, N=4)
+        t1 = CatFrames(keys_in=keys, N=4)
         t2 = FiniteTensorDictCheck()
         compose = Compose(t1, t2)
         dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
@@ -587,7 +587,7 @@ class TestTransforms:
             loc = loc.to(device)
         if isinstance(scale, Tensor):
             scale = scale.to(device)
-        on = ObservationNorm(loc, scale, keys=keys, standard_normal=standard_normal)
+        on = ObservationNorm(loc, scale, keys_in=keys, standard_normal=standard_normal)
         dont_touch = torch.randn(1, nchannels, 32, 32, device=device)
         td = TensorDict(
             {key: torch.zeros(1, nchannels, 32, 32, device=device) for key in keys}, [1]
@@ -636,13 +636,13 @@ class TestTransforms:
         key1 = "first key"
         key2 = "second key"
         keys = [key1, key2]
-        cat_frames = CatFrames(N=N, keys=keys)
+        cat_frames = CatFrames(N=N, keys_in=keys)
         mins = [0, 0.5]
         maxes = [0.5, 1]
         observation_spec = CompositeSpec(
             **{
                 key: NdBoundedTensorSpec(
-                    space_min, space_max, (1, 32, 32), dtype=torch.double
+                    space_min, space_max, (1, 3, 3), dtype=torch.double
                 )
                 for key, space_min, space_max in zip(keys, mins, maxes)
             }
@@ -652,7 +652,7 @@ class TestTransforms:
         observation_spec = CompositeSpec(
             **{
                 key: NdBoundedTensorSpec(
-                    space_min, space_max, (1, 32, 32), dtype=torch.double
+                    space_min, space_max, (1, 3, 3), dtype=torch.double
                 )
                 for key, space_min, space_max in zip(keys, mins, maxes)
             }
@@ -675,11 +675,11 @@ class TestTransforms:
         key2 = "second key"
         N = 4
         keys = [key1, key2]
-        key1_tensor = torch.zeros(1, 1, 32, 32, device=device)
-        key2_tensor = torch.ones(1, 1, 32, 32, device=device)
+        key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
+        key2_tensor = torch.ones(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1])
-        cat_frames = CatFrames(N=N, keys=keys)
+        cat_frames = CatFrames(N=N, keys_in=keys)
 
         cat_frames(td)
         latest_frame = td.get(key2)
@@ -695,11 +695,11 @@ class TestTransforms:
         key2 = "second key"
         N = 4
         keys = [key1, key2]
-        key1_tensor = torch.zeros(1, 1, 32, 32, device=device)
-        key2_tensor = torch.ones(1, 1, 32, 32, device=device)
+        key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
+        key2_tensor = torch.ones(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1])
-        cat_frames = CatFrames(N=N, keys=keys)
+        cat_frames = CatFrames(N=N, keys_in=keys)
 
         cat_frames(td)
         buffer_length1 = len(cat_frames.buffer)
@@ -713,7 +713,7 @@ class TestTransforms:
     def test_finitetensordictcheck(self, device):
         ftd = FiniteTensorDictCheck()
         td = TensorDict(
-            {key: torch.randn(1, 32, 32, device=device) for key in ["a", "b", "c"]}, [1]
+            {key: torch.randn(1, 3, 3, device=device) for key in ["a", "b", "c"]}, [1]
         )
         ftd(td)
         td.set("inf", torch.zeros(1, 3).fill_(float("inf")))
@@ -729,14 +729,23 @@ class TestTransforms:
             ["action"],
         ],
     )
-    def test_double2float(self, keys, device):
+    @pytest.mark.parametrize(
+        "keys_inv",
+        [
+            ["action", "some_other_key"],
+            ["action"],
+            [],
+        ],
+    )
+    def test_double2float(self, keys, keys_inv, device):
         torch.manual_seed(0)
-        double2float = DoubleToFloat(keys=keys)
-        dont_touch = torch.randn(1, 32, 32, dtype=torch.double, device=device)
+        keys_total = set(keys + keys_inv)
+        double2float = DoubleToFloat(keys_in=keys, keys_inv_in=keys_inv)
+        dont_touch = torch.randn(1, 3, 3, dtype=torch.double, device=device)
         td = TensorDict(
             {
-                key: torch.zeros(1, 32, 32, dtype=torch.double, device=device)
-                for key in keys
+                key: torch.zeros(1, 3, 3, dtype=torch.double, device=device)
+                for key in keys_total
             },
             [1],
         )
@@ -747,26 +756,24 @@ class TestTransforms:
         assert td.get("dont touch").dtype == torch.double
 
         double2float.inv(td)
-        for key in keys:
+        for key in keys_inv:
             assert td.get(key).dtype == torch.double
         assert td.get("dont touch").dtype == torch.double
 
-        if len(keys) == 1 and keys[0] == "action":
-            action_spec = NdBoundedTensorSpec(0, 1, (1, 32, 32), dtype=torch.double)
+        if len(keys_total) == 1 and len(keys_inv) and keys[0] == "action":
+            action_spec = NdBoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
             action_spec = double2float.transform_action_spec(action_spec)
             assert action_spec.dtype == torch.float
 
         elif len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(
-                0, 1, (1, 32, 32), dtype=torch.double
-            )
+            observation_spec = NdBoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
             observation_spec = double2float.transform_observation_spec(observation_spec)
             assert observation_spec.dtype == torch.float
 
         else:
             observation_spec = CompositeSpec(
                 **{
-                    key: NdBoundedTensorSpec(0, 1, (1, 32, 32), dtype=torch.double)
+                    key: NdBoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
                     for key in keys
                 }
             )
@@ -783,9 +790,9 @@ class TestTransforms:
         ],
     )
     def test_cattensors(self, keys, device):
-        cattensors = CatTensors(keys=keys, out_key="observation_out", dim=-2)
+        cattensors = CatTensors(keys_in=keys, out_key="observation_out", dim=-2)
 
-        dont_touch = torch.randn(1, 32, 32, dtype=torch.double, device=device)
+        dont_touch = torch.randn(1, 3, 3, dtype=torch.double, device=device)
         td = TensorDict(
             {
                 key: torch.full(
@@ -864,7 +871,7 @@ class TestTransforms:
         key = list(obs_spec.keys())[0]
 
         env = TransformedEnv(env)
-        env.append_transform(CatFrames(N=4, cat_dim=-1, keys=[key]))
+        env.append_transform(CatFrames(N=4, cat_dim=-1, keys_in=[key]))
         assert isinstance(env.transform, Compose)
         assert len(env.transform) == 1
         obs_spec = env.observation_spec

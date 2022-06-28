@@ -158,7 +158,7 @@ def make_dqn_actor(
             "mlp_kwargs_output": {"num_cells": 512, "layer_class": linear_layer_class},
         }
         # automatically infer in key
-        in_key = list(env_specs["observation_spec"].keys())[0].split("next_")[-1]
+        in_key = list(env_specs["observation_spec"])[0].split("next_")[-1]
 
     out_features = env_specs["action_spec"].shape[0]
     actor_class = QValueActor

@@ -29,7 +29,7 @@ class VideoRecorder(ObservationTransform):
         writer (SummaryWriter): a tb.SummaryWriter instance where the video
             should be written.
         tag (str): the video tag in the writer.
-        keys (Sequence[str], optional): keys to be read to produce the video.
+        keys_in (Sequence[str], optional): keys to be read to produce the video.
             Default is `"next_pixels"`.
         skip (int): frame interval in the output video.
             Default is 2.
@@ -43,16 +43,16 @@ class VideoRecorder(ObservationTransform):
         self,
         writer: "SummaryWriter",
         tag: str,
-        keys: Optional[Sequence[str]] = None,
+        keys_in: Optional[Sequence[str]] = None,
         skip: int = 2,
         center_crop: Optional[int] = None,
         make_grid: bool = True,
         **kwargs,
     ) -> None:
-        if keys is None:
-            keys = ["next_pixels"]
+        if keys_in is None:
+            keys_in = ["next_pixels"]
 
-        super().__init__(keys=keys)
+        super().__init__(keys_in=keys_in)
         video_kwargs = {"fps": 6}
         video_kwargs.update(kwargs)
         self.video_kwargs = video_kwargs
@@ -153,12 +153,12 @@ class TensorDictRecorder(Transform):
         out_file_base: str,
         skip_reset: bool = True,
         skip: int = 4,
-        keys: Optional[Sequence[str]] = None,
+        keys_in: Optional[Sequence[str]] = None,
     ) -> None:
-        if keys is None:
-            keys = []
+        if keys_in is None:
+            keys_in = []
 
-        super().__init__(keys=keys)
+        super().__init__(keys_in=keys_in)
         self.iter = 0
         self.out_file_base = out_file_base
         self.td = []
@@ -170,8 +170,8 @@ class TensorDictRecorder(Transform):
         self.count += 1
         if self.count % self.skip == 0:
             _td = td
-            if self.keys:
-                _td = td.select(*self.keys).clone()
+            if self.keys_in:
+                _td = td.select(*self.keys_in).clone()
             self.td.append(_td)
         return td
 

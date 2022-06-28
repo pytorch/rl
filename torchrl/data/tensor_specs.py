@@ -1044,3 +1044,6 @@ dtype=torch.float32)},
         if not isinstance(dest, torch.dtype):
             self.device = torch.device(dest)
         return self
+
+    def __delitem__(self, key):
+        del self._specs[key]

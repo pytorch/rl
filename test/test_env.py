@@ -209,7 +209,7 @@ def _make_envs(
             )
         else:
             t_in = Compose(
-                ObservationNorm(keys=["next_observation"], loc=0.5, scale=1.1),
+                ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
                 RewardClipping(0, 0.1),
             )
             create_env_fn = lambda: TransformedEnv(
@@ -228,7 +228,9 @@ def _make_envs(
             t_out = (
                 Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
                 if not transformed_in
-                else Compose(*[ObservationNorm(keys=["next_pixels"], loc=0, scale=1)])
+                else Compose(
+                    *[ObservationNorm(keys_in=["next_pixels"], loc=0, scale=1)]
+                )
             )
             env0 = TransformedEnv(
                 env0,
@@ -245,12 +247,12 @@ def _make_envs(
         else:
             t_out = (
                 Compose(
-                    ObservationNorm(keys=["next_observation"], loc=0.5, scale=1.1),
+                    ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
                     RewardClipping(0, 0.1),
                 )
                 if not transformed_in
                 else Compose(
-                    ObservationNorm(keys=["next_observation"], loc=1.0, scale=1.0)
+                    ObservationNorm(keys_in=["next_observation"], loc=1.0, scale=1.0)
                 )
             )
             env0 = TransformedEnv(
