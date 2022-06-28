@@ -2,13 +2,13 @@ import abc
 import os
 from typing import Any, Sequence, Union
 
-__all__ = ["Storage", "ListStorage", "LazyMemmapStorage"]
-
 import torch
 
 from torchrl.data.replay_buffers.utils import INT_CLASSES
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+
+__all__ = ["Storage", "ListStorage", "LazyMemmapStorage", "LazyTensorStorage"]
 
 
 class Storage:
@@ -79,7 +79,80 @@ class ListStorage(Storage):
         return len(self._storage)
 
 
-class LazyMemmapStorage(Storage):
+class LazyTensorStorage(Storage):
+    """A pre-allocated tensor storage for tensors and tensordicts.
+
+    Args:
+        size (int): size of the storage, i.e. maximum number of elements stored
+            in the buffer.
+        device (torch.device, optional): device where the sampled tensors will be
+            stored and sent. Default is `torch.device("cpu")`.
+    """
+
+    def __init__(self, size, scratch_dir=None, device=None):
+        self.size = int(size)
+        self.initialized = False
+        self.device = device if device else torch.device("cpu")
+
+    def _init(self, data: Union[_TensorDict, torch.Tensor]) -> None:
+        print("Creating a MemmapStorage...")
+        if isinstance(data, torch.Tensor):
+            # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
+            out = torch.empty(
+                self.size,
+                *data.shape,
+                device=self.device,
+                dtype=data.dtype,
+            )
+        else:
+            out = TensorDict({}, [self.size, *data.shape])
+            print("The storage is being created: ")
+            for key, tensor in data.items():
+                out[key] = torch.empty(
+                    self.size,
+                    *tensor.shape,
+                    device=self.device,
+                    dtype=tensor.dtype,
+                )
+
+        self._storage = out
+        self.initialized = True
+
+    def set(
+        self,
+        cursor: Union[int, Sequence[int], slice],
+        data: Union[_TensorDict, torch.Tensor],
+    ):
+        if not self.initialized:
+            if not isinstance(cursor, INT_CLASSES):
+                self._init(data[0])
+            else:
+                self._init(data)
+        self._storage[cursor] = data
+
+    def get(self, index: Union[int, Sequence[int], slice]) -> Any:
+        if not self.initialized:
+            raise RuntimeError(
+                "Cannot get an item from an unitialized LazyMemmapStorage"
+            )
+        out = self._storage[index]
+        return out
+
+    def __len__(self):
+        return self.size
+
+
+class LazyMemmapStorage(LazyTensorStorage):
+    """A memory-mapped storage for tensors and tensordicts.
+
+    Args:
+        size (int): size of the storage, i.e. maximum number of elements stored
+            in the buffer.
+        scratch_dir (str or path): directory where memmap-tensors will be written.
+        device (torch.device, optional): device where the sampled tensors will be
+            stored and sent. Default is `torch.device("cpu")`.
+    """
+
     def __init__(self, size, scratch_dir=None, device=None):
         self.size = int(size)
         self.initialized = False
@@ -119,30 +192,3 @@ class LazyMemmapStorage(Storage):
 
         self._storage = out
         self.initialized = True
-
-    def set(
-        self,
-        cursor: Union[int, Sequence[int], slice],
-        data: Union[_TensorDict, torch.Tensor],
-    ):
-        if not self.initialized:
-            if not isinstance(cursor, INT_CLASSES):
-                self._init(data[0])
-            else:
-                self._init(data)
-        # print("setting")
-        self._storage[cursor] = data
-        # print("done")
-
-    def get(self, index: Union[int, Sequence[int], slice]) -> Any:
-        if not self.initialized:
-            raise RuntimeError(
-                "Cannot get an item from an unitialized LazyMemmapStorage"
-            )
-        # print("getting")
-        out = self._storage[index]
-        # print("done")
-        return out
-
-    def __len__(self):
-        return self.size
