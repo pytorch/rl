@@ -614,9 +614,7 @@ dtype=torch.float32)},
         keys1 = set(self.keys())
         keys2 = set(other.keys())
         if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-            raise KeyError(
-                f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
-            )
+            raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
         d = dict()
         for (key, item1) in self.items():
             d[key] = item1 == other.get(key)
@@ -1240,10 +1238,10 @@ dtype=torch.float32)},
         """
 
         Returns:
-            Number of keys in _TensorDict instance.
+            Length of first dimension, if there is, otherwise 0.
 
         """
-        return len(list(self.keys()))
+        return self.shape[0] if self.batch_dims else 0
 
     def __getitem__(self, idx: INDEX_TYPING) -> _TensorDict:
         """Indexes all tensors according to idx and returns a new tensordict
@@ -1787,7 +1785,7 @@ class TensorDict(_TensorDict):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
-        if not len(self._tensordict):
+        if not self._tensordict.keys():
             raise Exception(
                 "share_memory_ must be called when the TensorDict is ("
                 "partially) populated. Set a tensor first."
@@ -1812,7 +1810,7 @@ class TensorDict(_TensorDict):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
-        if not len(self._tensordict):
+        if not self._tensordict.keys():
             raise Exception(
                 "memmap_() must be called when the TensorDict is (partially) "
                 "populated. Set a tensor first."
@@ -3011,7 +3009,7 @@ class SavedTensorDict(_TensorDict):
             else source._device_safe()
             if (hasattr(source, "_device_safe") and source._device_safe() is not None)
             else source[list(source.keys())[0]].device
-            if len(source)
+            if source.keys()
             else None
         )
         td = source
