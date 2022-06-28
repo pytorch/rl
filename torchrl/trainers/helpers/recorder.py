@@ -3,7 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -19,3 +20,5 @@ class RecorderConfig:
     # number of batch collections in between two collections of validation rollouts. Default=1000.
     record_frames: int = 1000
     # number of steps in validation rollouts. " "Default=1000.
+    recorder_log_keys: Any = field(default_factory=lambda: ["reward"])
+    # Keys to log in the recorder
