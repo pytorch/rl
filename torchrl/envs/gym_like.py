@@ -8,7 +8,6 @@ import torch
 from torchrl.data import TensorDict
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.common import _EnvWrapper
-from torchrl.envs.utils import step_tensordict
 
 
 class GymLikeEnv(_EnvWrapper):
@@ -69,7 +68,6 @@ class GymLikeEnv(_EnvWrapper):
             data = info[0][key]
             tensordict_out.set(key, data)
 
-        self.current_tensordict = step_tensordict(tensordict_out)
         return tensordict_out
 
     def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs) -> _TensorDict:

@@ -214,8 +214,7 @@ class GymWrapper(GymLikeEnv):
         )
 
     def _init_env(self):
-        self.reset()  # make sure that _current_observation and
-        # _is_done are populated
+        self.reset()  # make sure that _is_done is populated
 
     def __repr__(self) -> str:
         return (

@@ -295,8 +295,7 @@ class SyncDataCollector(_DataCollector):
         self.init_with_lag = init_with_lag and max_frames_per_traj > 0
         self.return_same_td = return_same_td
 
-        env.reset()
-        self._tensordict = env.current_tensordict
+        self._tensordict = env.reset()
         self._tensordict.set(
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
@@ -420,8 +419,8 @@ class SyncDataCollector(_DataCollector):
                 self._tensordict.set("reset_workers", done_or_terminated)
             else:
                 self._tensordict.zero_()
-            self.env.reset()
-            self._tensordict.update(self.env.current_tensordict, inplace=True)
+
+            self._tensordict.update(self.env.reset(), inplace=True)
             if self._tensordict.get("done").any():
                 raise RuntimeError(
                     f"Got {sum(self._tensordict.get('done'))} done envs after reset."
@@ -444,8 +443,7 @@ class SyncDataCollector(_DataCollector):
 
         """
         if self.reset_at_each_iter:
-            self.env.reset()
-            self._tensordict.update(self.env.current_tensordict, inplace=True)
+            self._tensordict.update(self.env.reset(), inplace=True)
             self._tensordict.fill_("step_count", 0)
 
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
@@ -504,9 +502,8 @@ class SyncDataCollector(_DataCollector):
 
         if td_in:
             self._tensordict.update(td_in, inplace=True)
-        self.env.reset(**kwargs)
 
-        self._tensordict.update(self.env.current_tensordict, inplace=True)
+        self._tensordict.update(self.env.reset(**kwargs), inplace=True)
         self._tensordict.fill_("step_count", 0)
 
     def shutdown(self) -> None:

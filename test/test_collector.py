@@ -274,7 +274,7 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
     ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [3, 1])
+@pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
     if num_env == 1:
@@ -320,9 +320,9 @@ def test_collector_consistency(num_env, env_name, seed=100):
         device="cpu",
         pin_memory=False,
     )
-    collector = iter(collector)
-    b1 = next(collector)
-    b2 = next(collector)
+    collector_iter = iter(collector)
+    b1 = next(collector_iter)
+    b2 = next(collector_iter)
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b2)
 
@@ -334,6 +334,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
     ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
 
     assert_allclose_td(rollout1a, b1.select(*rollout1a.keys()))
+    collector.shutdown()
 
 
 @pytest.mark.parametrize("num_env", [1, 3])

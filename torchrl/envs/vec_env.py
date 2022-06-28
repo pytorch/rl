@@ -25,6 +25,8 @@ from torchrl.envs.env_creator import EnvCreator
 
 __all__ = ["SerialEnv", "ParallelEnv"]
 
+from torchrl.envs.utils import step_tensordict
+
 
 def _check_start(fun):
     def decorated_fun(self: _BatchedEnv, *args, **kwargs):
@@ -407,8 +409,6 @@ class _BatchedEnv(_EnvClass):
             raise RuntimeError("trying to close a closed environment")
         if self._verbose:
             print(f"closing {self.__class__.__name__}")
-
-        self._current_tensordict = None
 
         self.action_spec = None
         self.observation_spec = None
@@ -826,10 +826,11 @@ def _run_worker_pipe_shared_mem(
 
     # make sure that process can be closed
     tensordict = None
-    current_tensordict = None
     _td = None
     data = None
-    current_tensordict_sent = False
+
+    reset_keys = None
+    step_keys = None
 
     while True:
         try:
@@ -867,11 +868,12 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
             _td = env.reset(execute_step=False, **reset_kwargs)
-            keys = set(_td.keys())
+            if reset_keys is None:
+                reset_keys = set(_td.keys())
             if pin_memory:
                 _td.pin_memory()
             tensordict.update_(_td)
-            child_pipe.send(("reset_obs", keys))
+            child_pipe.send(("reset_obs", reset_keys))
             just_reset = True
             if env.is_done:
                 raise RuntimeError(
@@ -882,26 +884,27 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            _td = tensordict.select(*action_keys).to(env.device).clone()
+            _td = step_tensordict(tensordict, exclude_action=False)
             if env.is_done:
                 raise RuntimeError(
                     f"calling step when env is done, just reset = {just_reset}"
                 )
             _td = env.step(_td)
-            keys = set(_td.keys()) - {key for key in action_keys}
+            if step_keys is None:
+                step_keys = set(_td.keys()) - {key for key in action_keys}
             if pin_memory:
                 _td.pin_memory()
-            tensordict.update_(_td.select(*keys))
+            tensordict.update_(_td.select(*step_keys))
             if _td.get("done"):
                 msg = "done"
             else:
                 msg = "step_result"
-            data = (msg, keys)
+            data = (msg, step_keys)
             child_pipe.send(data)
             just_reset = False
 
         elif cmd == "close":
-            del tensordict, _td, data, current_tensordict
+            del tensordict, _td, data
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
             env.close()
@@ -922,30 +925,6 @@ def _run_worker_pipe_shared_mem(
             state_dict = env.state_dict()
             msg = "state_dict"
             child_pipe.send((msg, state_dict))
-
-        elif cmd == "current_tensordict_get":
-            current_tensordict = env.current_tensordict
-            msg = "current_tensordict_get_out"
-            if not current_tensordict_sent:
-                if (
-                    not current_tensordict.is_shared()
-                    and not current_tensordict.is_memmap()
-                ):
-                    current_tensordict.share_memory_()
-                child_pipe.send((msg, current_tensordict))
-                current_tensordict_sent = True
-            else:
-                if not current_tensordict.is_shared():
-                    raise RuntimeError(
-                        "current_tensordict is not shared but has already been sent."
-                    )
-                child_pipe.send((msg, None))
-
-        elif cmd == "current_tensordict_set":
-            current_tensordict = data
-            msg = "current_tensordict_set_out"
-            env.current_tensordict = current_tensordict
-            child_pipe.send((msg, None))
 
         else:
             err_msg = f"{cmd} from env"

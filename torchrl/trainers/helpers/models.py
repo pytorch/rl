@@ -108,8 +108,7 @@ def make_dqn_actor(
         >>> with initialize(config_path=None):
         >>>     cfg = compose(config_name="config")
         >>> actor = make_dqn_actor(proof_environment, cfg, device)
-        >>> _ = proof_environment.reset()
-        >>> td = proof_environment.current_tensordict
+        >>> td = proof_environment.reset()
         >>> print(actor(td))
         TensorDict(
             fields={
@@ -246,8 +245,7 @@ def make_ddpg_actor(
         ...     proof_environment,
         ...     device=device,
         ...     cfg=cfg)
-        >>> _ = proof_environment.reset()
-        >>> td = proof_environment.current_tensordict
+        >>> td = proof_environment.reset()
         >>> print(actor(td))
         TensorDict(
             fields={
@@ -452,8 +450,7 @@ def make_ppo_model(
         ...     )
         >>> actor = actor_value.get_policy_operator()
         >>> value = actor_value.get_value_operator()
-        >>> _ = proof_environment.reset()
-        >>> td = proof_environment.current_tensordict
+        >>> td = proof_environment.reset()
         >>> print(actor(td.clone()))
         TensorDict(
             fields={
@@ -762,8 +759,7 @@ def make_sac_model(
         ...     cfg=cfg,
         ...     )
         >>> actor, qvalue, value = model
-        >>> _ = proof_environment.reset()
-        >>> td = proof_environment.current_tensordict
+        >>> td = proof_environment.reset()
         >>> print(actor(td))
         TensorDict(
             fields={
@@ -998,8 +994,7 @@ def make_redq_model(
         ...     cfg=cfg,
         ...     )
         >>> actor, qvalue = model
-        >>> _ = proof_environment.reset()
-        >>> td = proof_environment.current_tensordict
+        >>> td = proof_environment.reset()
         >>> print(actor(td))
         TensorDict(
             fields={
