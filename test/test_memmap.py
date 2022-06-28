@@ -10,9 +10,8 @@ import tempfile
 import numpy as np
 import pytest
 import torch
-from torchrl.data.tensordict.memmap import MemmapTensor
-
 from _utils_internal import get_available_devices
+from torchrl.data.tensordict.memmap import MemmapTensor
 
 
 def test_memmap_type():
@@ -37,12 +36,24 @@ def test_grad():
         MemmapTensor(t + 1)
 
 
-@pytest.mark.parametrize("dtype", [torch.half, torch.float, torch.double,
-                                   torch.int, torch.uint8, torch.long, torch.bool])
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        torch.half,
+        torch.float,
+        torch.double,
+        torch.int,
+        torch.uint8,
+        torch.long,
+        torch.bool,
+    ],
+)
 @pytest.mark.parametrize(
     "shape",
     [
-        [2, ],
+        [
+            2,
+        ],
         [1, 2],
     ],
 )
@@ -155,14 +166,14 @@ def test_memmap_same_device_as_tensor(device):
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_memmap_create_on_same_device(device):
-    """Test if the device arg for MemmapTensor init is respected.
-    """
+    """Test if the device arg for MemmapTensor init is respected."""
     m = MemmapTensor([3, 4], device=device)
     assert m.device == torch.device(device)
 
 
-@pytest.mark.parametrize("value", [torch.zeros([3, 4]),
-                                   MemmapTensor(torch.zeros([3, 4]))])
+@pytest.mark.parametrize(
+    "value", [torch.zeros([3, 4]), MemmapTensor(torch.zeros([3, 4]))]
+)
 def test_memmap_zero_value(value):
     """
     Test if all entries are zeros when MemmapTensor is created with size.
