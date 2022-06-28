@@ -164,7 +164,7 @@ def test_memmap_same_device_as_tensor(device):
             with pytest.raises(
                 RuntimeError,
                 match="Expected all tensors to be on the same device, "
-                + "but found at least two devices .*",
+                + "but found at least two devices",
             ):
                 assert torch.all(m + torch.ones([3, 4], device=other_device) == 1)
         m.to(other_device)
