@@ -199,8 +199,6 @@ class ReplayBuffer:
         """
         if not len(data):
             raise Exception("extending with empty data is not supported")
-        if not isinstance(data, list):
-            data = list(data)
         with self._replay_lock:
             cur_size = len(self._storage)
             batch_size = len(data)
@@ -234,6 +232,7 @@ class ReplayBuffer:
                 # for i, v in enumerate(data[d:]):
                 #     storage[i] = v
                 self._cursor = batch_size - d
+            # storage must convert the data to the appropriate format if needed
             self._storage[index] = data
             return index
 
@@ -616,10 +615,10 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         self.priority_key = priority_key
 
     def _get_priority(self, tensordict: _TensorDict) -> torch.Tensor:
-        if tensordict.batch_dims:
-            tensordict = tensordict.clone(recursive=False)
-            tensordict.batch_size = []
         if self.priority_key in tensordict.keys():
+            if tensordict.batch_dims:
+                tensordict = tensordict.clone(recursive=False)
+                tensordict.batch_size = []
             try:
                 priority = tensordict.get(self.priority_key).item()
             except ValueError:
@@ -655,13 +654,28 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                 else:
                     tensordicts = tensordicts.contiguous()
                 tensordicts.batch_size = tensordicts.batch_size[:1]
-            # we split the tensordict such that the setting of the "index" key herebelow results in a change in
-            # the tensordicts stored in the buffer
-            tensordicts = list(tensordicts.unbind(0))
+            # # we split the tensordict such that the setting of the "index" key herebelow results in a change in
+            # # the tensordicts stored in the buffer
+            # tensordicts = list(tensordicts.unbind(0))
+            tensordicts.set(
+                "index",
+                torch.zeros(
+                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
+                ),
+            )
+            tensordicts.set(
+                "index",
+                torch.zeros(
+                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
+                ),
+            )
         else:
             priorities = [self._get_priority(td) for td in tensordicts]
 
-        stacked_td = torch.stack(tensordicts, 0)
+        if not isinstance(tensordicts, _TensorDict):
+            stacked_td = torch.stack(tensordicts, 0)
+        else:
+            stacked_td = tensordicts
         idx = super().extend(tensordicts, priorities)
         stacked_td.set("index", idx, inplace=True)
         return idx

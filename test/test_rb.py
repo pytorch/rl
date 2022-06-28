@@ -16,8 +16,20 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.data.replay_buffers import TensorDictPrioritizedReplayBuffer
-from torchrl.data.replay_buffers.storages import ListStorage
+from torchrl.data.replay_buffers.storages import (
+    ListStorage,
+    LazyMemmapStorage,
+    LazyTensorStorage,
+)
 from torchrl.data.tensordict.tensordict import assert_allclose_td, _TensorDict
+
+
+collate_fn_dict = {
+    ListStorage: lambda x: torch.stack(x, 0),
+    LazyTensorStorage: lambda x: x,
+    LazyMemmapStorage: lambda x: x,
+    None: lambda x: torch.stack(x, 0),
+}
 
 
 @pytest.mark.parametrize(
@@ -39,8 +51,13 @@ class TestBuffers:
     _default_params_td_prb = {"alpha": 0.8, "beta": 0.9}
 
     def _get_rb(self, rbtype, size, storage, prefetch):
+        collate_fn = collate_fn_dict[storage]
         if storage is not None:
-            storage = storage()
+            storage = (
+                storage(size)
+                if storage in (LazyMemmapStorage, LazyTensorStorage)
+                else storage()
+            )
         if rbtype is ReplayBuffer:
             params = self._default_params_rb
         elif rbtype is PrioritizedReplayBuffer:
@@ -55,7 +72,7 @@ class TestBuffers:
             size=size,
             storage=storage,
             prefetch=prefetch,
-            collate_fn=lambda x: torch.stack(x, 0),
+            collate_fn=collate_fn,
             **params
         )
         return rb

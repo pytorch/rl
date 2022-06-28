@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import argparse
 import os.path
 import pickle
 import tempfile
@@ -71,27 +71,28 @@ def test_memmap_del():
         assert os.path.isfile(filename)
 
 
-@pytest.mark.parametrize("value", [True, False])
-def test_memmap_ownership(value):
+@pytest.mark.parametrize("transfer_ownership", [True, False])
+def test_memmap_ownership(transfer_ownership):
     t = torch.tensor([1])
-    m = MemmapTensor(t, transfer_ownership=value)
-    assert m.file.delete
+    m = MemmapTensor(t, transfer_ownership=transfer_ownership)
+    assert not m.file.delete
     with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp:
         pickle.dump(m, tmp)
+        assert m._has_ownership is not m.transfer_ownership
         m2 = pickle.load(open(tmp.name, "rb"))
         assert m2._memmap_array is None  # assert data is not actually loaded
         assert isinstance(m2, MemmapTensor)
         assert m2.filename == m.filename
-        assert m2.file.name == m2.filename
-        assert m2.file._closer.name == m2.filename
+        # assert m2.file.name == m2.filename
+        # assert m2.file._closer.name == m2.filename
         assert (
-            m.file.delete is not m2.file.delete
+            m._has_ownership is not m2._has_ownership
         )  # delete attributes must have changed
-        assert (
-            m.file._closer.delete is not m2.file._closer.delete
-        )  # delete attributes must have changed
+        # assert (
+        #     m.file._closer.delete is not m2.file._closer.delete
+        # )  # delete attributes must have changed
         del m
-        if value:
+        if transfer_ownership:
             assert os.path.isfile(m2.filename)
         else:
             # m2 should point to a non-existing file
@@ -136,5 +137,11 @@ def test_memmap_clone():
     assert m2c == m1
 
 
+def test_memmap_tensor():
+    t = torch.tensor([[1, 2, 3], [4, 5, 6]])
+    assert (torch.tensor(t) == t).all()
+
+
 if __name__ == "__main__":
-    pytest.main([__file__, "--capture", "no"])
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

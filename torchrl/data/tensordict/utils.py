@@ -8,6 +8,7 @@ from __future__ import annotations
 from numbers import Number
 from typing import Tuple, List, Union
 
+import numpy as np
 import torch
 
 from torchrl.data.utils import INDEX_TYPING
@@ -28,7 +29,7 @@ def _sub_index(tensor: torch.Tensor, idx: INDEX_TYPING) -> torch.Tensor:
 def _getitem_batch_size(
     shape: torch.Size,
     items: INDEX_TYPING,
-):
+) -> torch.Size:
     """
     Given an input shape and an index, returns the size of the resulting
     indexed tensor.
@@ -40,8 +41,21 @@ def _getitem_batch_size(
         items: Index of the hypothetical tensor
 
     Returns:
-
+        Size of the resulting object (tensor or tensordict)
     """
+    # let's start with simple cases
+    if isinstance(items, tuple) and len(items) == 1:
+        items = items[0]
+    if isinstance(items, int):
+        return shape[1:]
+    if (
+        isinstance(items, (torch.Tensor, np.ndarray)) and len(items.shape) <= 1
+    ) or isinstance(items, list):
+        if len(items):
+            return torch.Size([len(items), *shape[1:]])
+        else:
+            return shape[1:]
+
     if not isinstance(items, tuple):
         items = (items,)
     bs = []
@@ -62,7 +76,7 @@ def _getitem_batch_size(
         if isinstance(_item, slice):
             batch = next(iter_bs)
             v = len(range(*_item.indices(batch)))
-        elif isinstance(_item, (list, torch.Tensor)):
+        elif isinstance(_item, (list, torch.Tensor, np.ndarray)):
             batch = next(iter_bs)
             v = len(_item)
         elif _item is None:
