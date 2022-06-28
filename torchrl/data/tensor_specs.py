@@ -993,7 +993,9 @@ dtype=torch.float32)},
             selected_keys = [selected_keys]
 
         for _key in self:
-            if self[_key] is not None and (selected_keys is None or _key in selected_keys):
+            if self[_key] is not None and (
+                selected_keys is None or _key in selected_keys
+            ):
                 self._specs[_key].type_check(value[_key], _key)
 
     def is_in(self, val: Union[dict, _TensorDict]) -> bool:
@@ -1038,7 +1040,9 @@ dtype=torch.float32)},
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
         if not isinstance(dest, (str, int, torch.device)):
-            raise ValueError("Only device casting is allowed with specs of type CompositeSpec.")
+            raise ValueError(
+                "Only device casting is allowed with specs of type CompositeSpec."
+            )
 
         for value in self.values():
             if value is None:

@@ -3,6 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from unittest.mock import Mock
+
 import numpy as np
 import pytest
 import torch
@@ -18,7 +20,7 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import TensorDict
-from unittest.mock import Mock
+
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
 def test_bounded(dtype):
@@ -239,11 +241,14 @@ class TestComposite:
 
         return CompositeSpec(
             obs=NdBoundedTensorSpec(
-                torch.zeros(3, 32, 32), torch.ones(3, 32, 32), dtype=dtype, device=device
+                torch.zeros(3, 32, 32),
+                torch.ones(3, 32, 32),
+                dtype=dtype,
+                device=device,
             ),
-            act=NdUnboundedContinuousTensorSpec(
-                (7, ), dtype=dtype, device=device
-            ) if is_complete else None
+            act=NdUnboundedContinuousTensorSpec((7,), dtype=dtype, device=device)
+            if is_complete
+            else None,
         )
 
     def test_getitem(self, is_complete, device, dtype):
@@ -269,7 +274,9 @@ class TestComposite:
         bad_value.device = "ANOTHER_DEVICE"
         good_value.device = device
 
-        with pytest.raises(RuntimeError, match="All devices of CompositeSpec must match"):
+        with pytest.raises(
+            RuntimeError, match="All devices of CompositeSpec must match"
+        ):
             ts["bad"] = bad_value
 
         ts["good"] = good_value
