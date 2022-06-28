@@ -12,6 +12,8 @@ import pytest
 import torch
 from torchrl.data.tensordict.memmap import MemmapTensor
 
+from _utils_internal import get_available_devices
+
 
 def test_memmap_type():
     array = np.random.rand(1)
@@ -35,18 +37,18 @@ def test_grad():
         MemmapTensor(t + 1)
 
 
-@pytest.mark.parametrize("dtype", [torch.float, torch.int, torch.double, torch.bool])
+@pytest.mark.parametrize("dtype", [torch.half, torch.float, torch.double,
+                                   torch.int, torch.uint8, torch.long, torch.bool])
 @pytest.mark.parametrize(
     "shape",
     [
-        [
-            2,
-        ],
+        [2, ],
         [1, 2],
     ],
 )
-def test_memmap_metadata(dtype, shape):
-    t = torch.tensor([1, 0]).reshape(shape)
+def test_memmap_data_type(dtype, shape):
+    """Test that MemmapTensor can be created with a given data type and shape."""
+    t = torch.tensor([1, 0], dtype=dtype).reshape(shape)
     m = MemmapTensor(t)
     assert m.dtype == t.dtype
     assert (m == t).all()
@@ -134,6 +136,40 @@ def test_memmap_clone():
     m2c = m2.contiguous()
     assert isinstance(m2c, torch.Tensor)
     assert m2c == m1
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_memmap_same_device_as_tensor(device):
+    """
+    Created MemmapTensor should be on the same device as the input tensor.
+    Check if device is correct when .to(device) is called.
+    """
+    t = torch.tensor([1], device=device)
+    m = MemmapTensor(t)
+    assert m.device == torch.device(device)
+    for other_device in get_available_devices():
+        m.to(other_device)
+        assert m.device == torch.device(other_device)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_memmap_create_on_same_device(device):
+    """Test if the device arg for MemmapTensor init is respected.
+    """
+    m = MemmapTensor([3, 4], device=device)
+    assert m.device == torch.device(device)
+
+
+@pytest.mark.parametrize("value", [torch.zeros([3, 4]),
+                                   MemmapTensor(torch.zeros([3, 4]))])
+def test_memmap_zero_value(value):
+    """
+    Test if all entries are zeros when MemmapTensor is created with size.
+    """
+    m = MemmapTensor(value)
+    expected_memmap_tensor = MemmapTensor([3, 4])
+    assert m.shape == (3, 4)
+    assert torch.all(m == expected_memmap_tensor)
 
 
 if __name__ == "__main__":
