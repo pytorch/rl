@@ -60,7 +60,8 @@ class _MockEnv(_EnvClass):
         self.set_seed(seed)
         self.is_closed = False
 
-        self.observation_spec = self.observation_spec.to(torch.get_default_dtype())
+        for key, item in list(self.observation_spec.items()):
+            self.observation_spec[key] = item.to(torch.get_default_dtype())
         # self.action_spec = self.action_spec.to(torch.get_default_dtype())
         self.reward_spec = self.reward_spec.to(torch.get_default_dtype())
 
