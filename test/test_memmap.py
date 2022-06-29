@@ -182,20 +182,17 @@ def test_memmap_create_on_same_device(device):
 @pytest.mark.parametrize(
     "value", [torch.zeros([3, 4]), MemmapTensor(torch.zeros([3, 4]))]
 )
-def test_memmap_zero_value(device, value):
+@pytest.mark.parametrize("shape", [[3, 4], [[3, 4]]])
+def test_memmap_zero_value(device, value, shape):
     """
     Test if all entries are zeros when MemmapTensor is created with size.
     """
     value = value.to(device)
     expected_memmap_tensor = MemmapTensor(value)
-    m1 = MemmapTensor([3, 4], device=device)
-    assert m1.shape == (3, 4)
-    assert torch.all(m1 == expected_memmap_tensor)
-    assert torch.all(m1 + torch.ones([3, 4], device=device) == 1)
-    m2 = MemmapTensor(3, 4, device=device)
-    assert m2.shape == (3, 4)
-    assert torch.all(m2 == expected_memmap_tensor)
-    assert torch.all(m2 + torch.ones([3, 4], device=device) == 1)
+    m = MemmapTensor(*shape, device=device)
+    assert m.shape == (3, 4)
+    assert torch.all(m == expected_memmap_tensor)
+    assert torch.all(m + torch.ones([3, 4], device=device) == 1)
 
 
 if __name__ == "__main__":
