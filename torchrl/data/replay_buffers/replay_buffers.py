@@ -19,11 +19,19 @@ from torchrl._torchrl import (
     SumSegmentTreeFp32,
     SumSegmentTreeFp64,
 )
+from torchrl.data.replay_buffers.storages import Storage, ListStorage
+from torchrl.data.replay_buffers.utils import INT_CLASSES
 from torchrl.data.replay_buffers.utils import (
     cat_fields_to_device,
     to_numpy,
     to_torch,
 )
+from torchrl.data.tensordict.tensordict import (
+    _TensorDict,
+    stack as stack_td,
+    LazyStackedTensorDict,
+)
+from torchrl.data.utils import DEVICE_TYPING
 
 __all__ = [
     "ReplayBuffer",
@@ -33,13 +41,6 @@ __all__ = [
     "create_replay_buffer",
     "create_prioritized_replay_buffer",
 ]
-
-from torchrl.data.tensordict.tensordict import (
-    _TensorDict,
-    stack as stack_td,
-    LazyStackedTensorDict,
-)
-from torchrl.data.utils import DEVICE_TYPING
 
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
@@ -121,8 +122,11 @@ class ReplayBuffer:
         collate_fn: Optional[Callable] = None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
+        storage: Optional[Storage] = None,
     ):
-        self._storage = []
+        if storage is None:
+            storage = ListStorage()
+        self._storage = storage
         self._capacity = size
         self._cursor = 0
         if collate_fn is not None:
@@ -151,12 +155,9 @@ class ReplayBuffer:
         index = to_numpy(index)
 
         with self._replay_lock:
-            if isinstance(index, int):
-                data = self._storage[index]
-            else:
-                data = [self._storage[i] for i in index]
+            data = self._storage[index]
 
-        if isinstance(data, list):
+        if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         return data
 
@@ -180,10 +181,7 @@ class ReplayBuffer:
         """
         with self._replay_lock:
             ret = self._cursor
-            if self._cursor >= len(self._storage):
-                self._storage.append(data)
-            else:
-                self._storage[self._cursor] = data
+            self._storage[self._cursor] = data
             self._cursor = (self._cursor + 1) % self._capacity
             return ret
 
@@ -201,42 +199,41 @@ class ReplayBuffer:
         """
         if not len(data):
             raise Exception("extending with empty data is not supported")
-        if not isinstance(data, list):
-            data = list(data)
         with self._replay_lock:
             cur_size = len(self._storage)
             batch_size = len(data)
-            storage = self._storage
-            cursor = self._cursor
+            # storage = self._storage
+            # cursor = self._cursor
             if cur_size + batch_size <= self._capacity:
                 index = np.arange(cur_size, cur_size + batch_size)
-                self._storage += data
+                # self._storage += data
                 self._cursor = (self._cursor + batch_size) % self._capacity
             elif cur_size < self._capacity:
                 d = self._capacity - cur_size
                 index = np.empty(batch_size, dtype=np.int64)
                 index[:d] = np.arange(cur_size, self._capacity)
                 index[d:] = np.arange(batch_size - d)
-                storage += data[:d]
-                for i, v in enumerate(data[d:]):
-                    storage[i] = v
+                # storage += data[:d]
+                # for i, v in enumerate(data[d:]):
+                #     storage[i] = v
                 self._cursor = batch_size - d
             elif self._cursor + batch_size <= self._capacity:
                 index = np.arange(self._cursor, self._cursor + batch_size)
-                for i, v in enumerate(data):
-                    storage[cursor + i] = v
+                # for i, v in enumerate(data):
+                #     storage[cursor + i] = v
                 self._cursor = (self._cursor + batch_size) % self._capacity
             else:
                 d = self._capacity - self._cursor
                 index = np.empty(batch_size, dtype=np.int64)
                 index[:d] = np.arange(self._cursor, self._capacity)
                 index[d:] = np.arange(batch_size - d)
-                for i, v in enumerate(data[:d]):
-                    storage[cursor + i] = v
-                for i, v in enumerate(data[d:]):
-                    storage[i] = v
+                # for i, v in enumerate(data[:d]):
+                #     storage[cursor + i] = v
+                # for i, v in enumerate(data[d:]):
+                #     storage[i] = v
                 self._cursor = batch_size - d
-
+            # storage must convert the data to the appropriate format if needed
+            self._storage[index] = data
             return index
 
     @pin_memory_output
@@ -244,7 +241,7 @@ class ReplayBuffer:
         index = np.random.randint(0, len(self._storage), size=batch_size)
 
         with self._replay_lock:
-            data = [self._storage[i] for i in index]
+            data = self._storage[index]
 
         data = self._collate_fn(data)
         return data
@@ -315,9 +312,14 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         collate_fn=None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
+        storage: Optional[Storage] = None,
     ) -> None:
         super(PrioritizedReplayBuffer, self).__init__(
-            size, collate_fn, pin_memory, prefetch
+            size,
+            collate_fn,
+            pin_memory,
+            prefetch,
+            storage=storage,
         )
         if alpha <= 0:
             raise ValueError(
@@ -349,14 +351,13 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             p_min = self._min_tree.query(0, self._capacity)
             if p_min <= 0:
                 raise ValueError(f"p_min must be greater than 0, got p_min={p_min}")
-            if isinstance(index, int):
-                data = self._storage[index]
+            data = self._storage[index]
+            if isinstance(index, INT_CLASSES):
                 weight = np.array(self._sum_tree[index])
             else:
-                data = [self._storage[i] for i in index]
                 weight = self._sum_tree[index]
 
-        if isinstance(data, list):
+        if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         # weight = np.power(weight / (p_min + self._eps), -self._beta)
         weight = np.power(weight / p_min, -self._beta)
@@ -447,7 +448,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                 index.clamp_max_(len(self._storage) - 1)
             else:
                 index = np.clip(index, None, len(self._storage) - 1)
-            data = [self._storage[i] for i in index]
+            data = self._storage[index]
             weight = self._sum_tree[index]
 
         data = self._collate_fn(data)
@@ -507,7 +508,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 
         """
-        if isinstance(index, int):
+        if isinstance(index, INT_CLASSES):
             if not isinstance(priority, float):
                 if len(priority) != 1:
                     raise RuntimeError(
@@ -545,13 +546,14 @@ class TensorDictReplayBuffer(ReplayBuffer):
         collate_fn: Optional[Callable] = None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
+        storage: Optional[Storage] = None,
     ):
         if collate_fn is None:
 
             def collate_fn(x):
                 return stack_td(x, 0, contiguous=True)
 
-        super().__init__(size, collate_fn, pin_memory, prefetch)
+        super().__init__(size, collate_fn, pin_memory, prefetch, storage=storage)
 
     def sample(self, size: int) -> Any:
         return super(TensorDictReplayBuffer, self).sample(size)
@@ -593,6 +595,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         collate_fn=None,
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
+        storage: Optional[Storage] = None,
     ) -> None:
         if collate_fn is None:
 
@@ -607,14 +610,15 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
             collate_fn=collate_fn,
             pin_memory=pin_memory,
             prefetch=prefetch,
+            storage=storage,
         )
         self.priority_key = priority_key
 
     def _get_priority(self, tensordict: _TensorDict) -> torch.Tensor:
-        if tensordict.batch_dims:
-            tensordict = tensordict.clone(recursive=False)
-            tensordict.batch_size = []
         if self.priority_key in tensordict.keys():
+            if tensordict.batch_dims:
+                tensordict = tensordict.clone(recursive=False)
+                tensordict.batch_size = []
             try:
                 priority = tensordict.get(self.priority_key).item()
             except ValueError:
@@ -650,13 +654,28 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                 else:
                     tensordicts = tensordicts.contiguous()
                 tensordicts.batch_size = tensordicts.batch_size[:1]
-            # we split the tensordict such that the setting of the "index" key herebelow results in a change in
-            # the tensordicts stored in the buffer
-            tensordicts = list(tensordicts.unbind(0))
+            # # we split the tensordict such that the setting of the "index" key herebelow results in a change in
+            # # the tensordicts stored in the buffer
+            # tensordicts = list(tensordicts.unbind(0))
+            tensordicts.set(
+                "index",
+                torch.zeros(
+                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
+                ),
+            )
+            tensordicts.set(
+                "index",
+                torch.zeros(
+                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
+                ),
+            )
         else:
             priorities = [self._get_priority(td) for td in tensordicts]
 
-        stacked_td = torch.stack(tensordicts, 0)
+        if not isinstance(tensordicts, _TensorDict):
+            stacked_td = torch.stack(tensordicts, 0)
+        else:
+            stacked_td = tensordicts
         idx = super().extend(tensordicts, priorities)
         stacked_td.set("index", idx, inplace=True)
         return idx

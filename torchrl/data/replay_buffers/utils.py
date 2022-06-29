@@ -2,12 +2,16 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from typing import Union, get_args
 
 import numpy as np
 import torch
 
 # import tree
 from torch import Tensor
+
+INT_CLASSES_TYPING = Union[int, np.integer]
+INT_CLASSES = get_args(INT_CLASSES_TYPING)
 
 
 def fields_pin_memory(input):

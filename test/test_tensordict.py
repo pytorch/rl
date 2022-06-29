@@ -12,10 +12,11 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from torch import multiprocessing as mp
-from torchrl.data import SavedTensorDict, TensorDict
+from torchrl.data import SavedTensorDict, TensorDict, MemmapTensor
 from torchrl.data.tensordict.tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
+    stack as stack_td,
 )
 from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 
@@ -67,14 +68,14 @@ def test_tensordict_set(device):
 def test_stack(device):
     torch.manual_seed(1)
     tds_list = [TensorDict(source={}, batch_size=(4, 5)) for _ in range(3)]
-    tds = torch.stack(tds_list, 0)
+    tds = stack_td(tds_list, 0, contiguous=False)
     assert tds[0] is tds_list[0]
 
     td = TensorDict(
         source={"a": torch.randn(4, 5, 3, device=device)}, batch_size=(4, 5)
     )
     td_list = list(td)
-    td_reconstruct = torch.stack(td_list, 0)
+    td_reconstruct = stack_td(td_list, 0)
     assert td_reconstruct.batch_size == td.batch_size
     assert (td_reconstruct == td).all()
 
@@ -95,13 +96,13 @@ def test_tensordict_indexing(device):
     td_select = td[None, :2]
     td_select._check_batch_size()
 
-    td_reconstruct = torch.stack([_td for _td in td], 0)
+    td_reconstruct = stack_td([_td for _td in td], 0, contiguous=False)
     assert (
         td_reconstruct == td
     ).all(), f"td and td_reconstruct differ, got {td} and {td_reconstruct}"
 
-    superlist = [torch.stack([__td for __td in _td], 0) for _td in td]
-    td_reconstruct = torch.stack(superlist, 0)
+    superlist = [stack_td([__td for __td in _td], 0, contiguous=False) for _td in td]
+    td_reconstruct = stack_td(superlist, 0, contiguous=False)
     assert (
         td_reconstruct == td
     ).all(), f"td and td_reconstruct differ, got {td == td_reconstruct}"
@@ -342,8 +343,10 @@ def test_permute_with_tensordict_operations(device):
         "b": torch.randn(4, 5, 7, device=device),
         "c": torch.randn(4, 5, device=device),
     }
-    td1 = torch.stack(
-        [TensorDict(batch_size=(4, 5), source=d).clone() for _ in range(6)], 2
+    td1 = stack_td(
+        [TensorDict(batch_size=(4, 5), source=d).clone() for _ in range(6)],
+        2,
+        contiguous=False,
     ).permute(2, 1, 0)
     assert td1.shape == torch.Size((6, 5, 4))
 
@@ -370,7 +373,7 @@ def test_stacked_td(stack_dim, device):
     tensordicts3 = tensordicts[3]
     sub_td = LazyStackedTensorDict(*tensordicts, stack_dim=stack_dim)
 
-    std_bis = torch.stack(tensordicts, dim=stack_dim)
+    std_bis = stack_td(tensordicts, dim=stack_dim, contiguous=False)
     assert (sub_td == std_bis).all()
 
     item = tuple([*[slice(None) for _ in range(stack_dim)], 0])
@@ -426,7 +429,7 @@ def test_savedtensordict(device):
         )
         for i in range(4)
     ]
-    ss = torch.stack(ss_list, 0)
+    ss = stack_td(ss_list, 0)
     assert ss_list[1] is ss[1]
     torch.testing.assert_allclose(ss_list[1].get("a"), vals[1])
     torch.testing.assert_allclose(ss_list[1].get("a"), ss[1].get("a"))
@@ -480,6 +483,7 @@ TD_BATCH_SIZE = 4
         "sub_td",
         "idx_td",
         "saved_td",
+        "memmap_td",
         "unsqueezed_td",
         "td_reset_bs",
     ],
@@ -514,7 +518,7 @@ class TestTensorDicts:
             },
             batch_size=[4, 3, 1],
         )
-        return torch.stack([td1, td2], 2)
+        return stack_td([td1, td2], 2)
 
     @property
     def idx_td(self):
@@ -543,6 +547,10 @@ class TestTensorDicts:
     @property
     def saved_td(self):
         return SavedTensorDict(source=self.td)
+
+    @property
+    def memmap_td(self):
+        return self.td.memmap_()
 
     @property
     def unsqueezed_td(self):
@@ -618,10 +626,14 @@ class TestTensorDicts:
         td_saved = td.to(SavedTensorDict)
         assert (td == td_saved).all()
 
-    def test_remove(self, td_name):
+    @pytest.mark.parametrize("call_del", [True, False])
+    def test_remove(self, td_name, call_del):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        td = td.del_("a")
+        if call_del:
+            del td["a"]
+        else:
+            td = td.del_("a")
         assert td is not None
         assert "a" not in td.keys()
 
@@ -754,7 +766,7 @@ class TestTensorDicts:
             torch.manual_seed(1)
             td = getattr(self, td_name)
             td_unbind = torch.unbind(td, dim=0)
-            assert (td == torch.stack(td_unbind, 0)).all()
+            assert (td == stack_td(td_unbind, 0).contiguous()).all()
             assert (td[0] == td_unbind[0]).all()
 
     @pytest.mark.parametrize("squeeze_dim", [0, 1])
@@ -834,6 +846,10 @@ class TestTensorDicts:
         assert "a" not in td.keys()
 
         z = td.get("z")
+        if isinstance(a, MemmapTensor):
+            a = a._tensor
+        if isinstance(z, MemmapTensor):
+            z = z._tensor
         torch.testing.assert_allclose(a, z)
 
         new_z = torch.randn_like(z)
@@ -914,7 +930,7 @@ class TestTensorDicts:
     def test_getitem_string(self, td_name):
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        assert isinstance(td["a"], torch.Tensor)
+        assert isinstance(td["a"], (MemmapTensor, torch.Tensor))
 
     def test_delitem(self, td_name):
         torch.manual_seed(1)
@@ -1036,7 +1052,7 @@ class TestTensorDictsRequiresGrad:
 
     @property
     def stacked_td(self):
-        return torch.stack([self.td for _ in range(2)], 0)
+        return stack_td([self.td for _ in range(2)], 0)
 
     @property
     def idx_td(self):
@@ -1148,7 +1164,7 @@ def test_batchsize_reset():
     assert td.to_tensordict().batch_size == torch.Size([3])
 
     # test that lazy tds return an exception
-    td_stack = torch.stack([TensorDict({"a": torch.randn(3)}, [3]) for _ in range(2)])
+    td_stack = stack_td([TensorDict({"a": torch.randn(3)}, [3]) for _ in range(2)])
     td_stack.to_tensordict().batch_size = [2]
     with pytest.raises(
         RuntimeError,
@@ -1222,7 +1238,7 @@ def test_create_on_device():
     # stacked TensorDict
     td1 = TensorDict({}, [5])
     td2 = TensorDict({}, [5])
-    stackedtd = torch.stack([td1, td2], 0)
+    stackedtd = stack_td([td1, td2], 0)
     with pytest.raises(RuntimeError):
         stackedtd.device
     stackedtd.set("a", torch.randn(2, 5, device=device))
@@ -1232,7 +1248,7 @@ def test_create_on_device():
 
     td1 = TensorDict({}, [5], device="cuda:0")
     td2 = TensorDict({}, [5], device="cuda:0")
-    stackedtd = torch.stack([td1, td2], 0)
+    stackedtd = stack_td([td1, td2], 0)
     stackedtd.set("a", torch.randn(2, 5, 1))
     assert stackedtd.get("a").device == device
     assert td1.get("a").device == device
@@ -1417,7 +1433,7 @@ def test_mp(td_type):
     if td_type == "contiguous":
         tensordict = tensordict.share_memory_()
     elif td_type == "stack":
-        tensordict = torch.stack(
+        tensordict = stack_td(
             [
                 tensordict[0].clone().share_memory_(),
                 tensordict[1].clone().share_memory_(),
@@ -1429,7 +1445,7 @@ def test_mp(td_type):
     elif td_type == "memmap":
         tensordict = tensordict.memmap_()
     elif td_type == "memmap_stack":
-        tensordict = torch.stack(
+        tensordict = stack_td(
             [tensordict[0].clone().memmap_(), tensordict[1].clone().memmap_()], 0
         )
     else:
@@ -1457,7 +1473,7 @@ def test_stack_keys():
         },
         batch_size=[],
     )
-    td = torch.stack([td1, td2], 0)
+    td = stack_td([td1, td2], 0)
     assert "a" in td.keys()
     assert "b" not in td.keys()
     assert "b" in td[1].keys()
@@ -1467,12 +1483,19 @@ def test_stack_keys():
     td.set_("b", torch.randn(2, 10))  # b has been set before
 
     td1.set("c", torch.randn(4))
-    assert "c" in td.keys()  # now all tds have the key c
+    td[
+        "c"
+    ]  # we must first query that key for the stacked tensordict to update the list
+    assert "c" in td.keys(), list(td.keys())  # now all tds have the key c
     td.get("c")
 
     td1.set("d", torch.randn(6))
     with pytest.raises(RuntimeError):
         td.get("d")
+
+    td["e"] = torch.randn(2, 4)
+    assert "e" in td.keys()  # now all tds have the key c
+    td.get("e")
 
 
 def test_getitem_batch_size():

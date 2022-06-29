@@ -9,9 +9,160 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from torchrl.data import TensorDict
+from torchrl.data import (
+    TensorDict,
+    ReplayBuffer,
+    PrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
+)
 from torchrl.data.replay_buffers import TensorDictPrioritizedReplayBuffer
-from torchrl.data.tensordict.tensordict import assert_allclose_td
+from torchrl.data.replay_buffers.storages import (
+    ListStorage,
+    LazyMemmapStorage,
+    LazyTensorStorage,
+)
+from torchrl.data.tensordict.tensordict import assert_allclose_td, _TensorDict
+
+
+collate_fn_dict = {
+    ListStorage: lambda x: torch.stack(x, 0),
+    LazyTensorStorage: lambda x: x,
+    LazyMemmapStorage: lambda x: x,
+    None: lambda x: torch.stack(x, 0),
+}
+
+
+@pytest.mark.parametrize(
+    "rbtype",
+    [
+        ReplayBuffer,
+        PrioritizedReplayBuffer,
+        TensorDictReplayBuffer,
+        TensorDictPrioritizedReplayBuffer,
+    ],
+)
+@pytest.mark.parametrize("storage", [None, ListStorage])
+@pytest.mark.parametrize("size", [3, 100])
+@pytest.mark.parametrize("prefetch", [0])
+class TestBuffers:
+    _default_params_rb = {}
+    _default_params_td_rb = {}
+    _default_params_prb = {"alpha": 0.8, "beta": 0.9}
+    _default_params_td_prb = {"alpha": 0.8, "beta": 0.9}
+
+    def _get_rb(self, rbtype, size, storage, prefetch):
+        collate_fn = collate_fn_dict[storage]
+        if storage is not None:
+            storage = (
+                storage(size)
+                if storage in (LazyMemmapStorage, LazyTensorStorage)
+                else storage()
+            )
+        if rbtype is ReplayBuffer:
+            params = self._default_params_rb
+        elif rbtype is PrioritizedReplayBuffer:
+            params = self._default_params_prb
+        elif rbtype is TensorDictReplayBuffer:
+            params = self._default_params_td_rb
+        elif rbtype is TensorDictPrioritizedReplayBuffer:
+            params = self._default_params_td_prb
+        else:
+            raise NotImplementedError(rbtype)
+        rb = rbtype(
+            size=size,
+            storage=storage,
+            prefetch=prefetch,
+            collate_fn=collate_fn,
+            **params
+        )
+        return rb
+
+    def _get_datum(self, rbtype):
+        if rbtype is ReplayBuffer:
+            data = torch.randint(100, (1,))
+        elif rbtype is PrioritizedReplayBuffer:
+            data = torch.randint(100, (1,))
+        elif rbtype is TensorDictReplayBuffer:
+            data = TensorDict({"a": torch.randint(100, (1,))}, [])
+        elif rbtype is TensorDictPrioritizedReplayBuffer:
+            data = TensorDict({"a": torch.randint(100, (1,))}, [])
+        else:
+            raise NotImplementedError(rbtype)
+        return data
+
+    def _get_data(self, rbtype, size):
+        if rbtype is ReplayBuffer:
+            data = [torch.randint(100, (1,)) for _ in range(size)]
+        elif rbtype is PrioritizedReplayBuffer:
+            data = [torch.randint(100, (1,)) for _ in range(size)]
+        elif rbtype is TensorDictReplayBuffer:
+            data = TensorDict({"a": torch.randint(100, (size,))}, [size])
+        elif rbtype is TensorDictPrioritizedReplayBuffer:
+            data = TensorDict({"a": torch.randint(100, (size,))}, [size])
+        else:
+            raise NotImplementedError(rbtype)
+        return data
+
+    def test_add(self, rbtype, storage, size, prefetch):
+        torch.manual_seed(0)
+        rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
+        data = self._get_datum(rbtype)
+        rb.add(data)
+        assert (rb._storage[0] == data).all()
+
+    def test_extend(self, rbtype, storage, size, prefetch):
+        torch.manual_seed(0)
+        rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
+        data = self._get_data(rbtype, size=5)
+        rb.extend(data)
+        length = len(rb)
+        for d in data[-length:]:
+            found_similar = False
+            for b in rb._storage:
+                if isinstance(b, _TensorDict):
+                    b = b.select(*d.keys())
+                value = b == d
+                if isinstance(value, (torch.Tensor, _TensorDict)):
+                    value = value.all()
+                if value:
+                    found_similar = True
+                    break
+            assert found_similar
+
+    def test_sample(self, rbtype, storage, size, prefetch):
+        torch.manual_seed(0)
+        rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
+        data = self._get_data(rbtype, size=5)
+        rb.extend(data)
+        new_data = rb.sample(3)
+        if not isinstance(new_data, (torch.Tensor, _TensorDict)):
+            new_data = new_data[0]
+        for d in new_data:
+            found_similar = False
+            for b in data:
+                if isinstance(b, _TensorDict):
+                    d = d.select(*b.keys())
+                value = b == d
+                if isinstance(value, (torch.Tensor, _TensorDict)):
+                    value = value.all()
+                if value:
+                    found_similar = True
+                    break
+            assert found_similar, (d, data)
+
+    def test_index(self, rbtype, storage, size, prefetch):
+        torch.manual_seed(0)
+        rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
+        data = self._get_data(rbtype, size=5)
+        rb.extend(data)
+        d1 = rb[2]
+        d2 = rb._storage[2]
+        if type(d1) is not type(d2):
+            d1 = d1[0]
+        b = d1 == d2
+        if not isinstance(b, bool):
+            b = b.all()
+        assert b
 
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
