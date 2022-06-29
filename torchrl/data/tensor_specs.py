@@ -613,6 +613,10 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
             minimum = torch.as_tensor(minimum, dtype=dtype, device=device)
         if not isinstance(maximum, torch.Tensor):
             maximum = torch.as_tensor(maximum, dtype=dtype, device=device)
+        if maximum.device != device:
+            maximum = maximum.to(device)
+        if minimum.device != device:
+            minimum = minimum.to(device)
         if dtype is not None and minimum.dtype is not dtype:
             minimum = minimum.to(dtype)
         if dtype is not None and maximum.dtype is not dtype:
