@@ -13,6 +13,27 @@ from pathlib import Path
 from build_tools import setup_helpers
 from setuptools import setup, find_packages
 
+cwd = os.path.dirname(os.path.abspath(__file__))
+version_txt = os.path.join(cwd, 'version.txt')
+with open(version_txt, 'r') as f:
+    version = f.readline().strip()
+
+try:
+    sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=cwd).decode('ascii').strip()
+except Exception:
+    sha = 'Unknown'
+package_name = 'torchrl'
+
+if os.getenv('BUILD_VERSION'):
+    version = os.getenv('BUILD_VERSION')
+elif sha != 'Unknown':
+    version += '+' + sha[:7]
+
+def write_version_file():
+    version_path = os.path.join(cwd, 'torchrl', 'version.py')
+    with open(version_path, 'w') as f:
+        f.write("__version__ = '{}'\n".format(version))
+        f.write("git_version = {}\n".format(repr(sha)))
 
 def _get_pytorch_version():
     if "PYTORCH_VERSION" in os.environ:
@@ -95,4 +116,27 @@ def _main():
 
 
 if __name__ == "__main__":
+    print("Building wheel {}-{}".format(package_name, version))
     _main()
+
+
+if __name__ == '__main__':
+    write_version_file()
+    setup(
+        # Metadata
+        name=package_name,
+        version=version,
+        author='PyTorch Core Team',
+        url="https://github.com/pytorch/functorch",
+        description='JAX-like composable function transforms for PyTorch',
+        license='BSD',
+
+        # Package info
+        packages=find_packages(),
+        install_requires=requirements,
+        extras_require=extras,
+        ext_modules=get_extensions(),
+        cmdclass={
+            "build_ext": BuildExtension_.with_options(no_python_abi_suffix=True),
+            'clean': clean,
+        })
