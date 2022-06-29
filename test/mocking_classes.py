@@ -128,10 +128,14 @@ class DiscreteActionVecMockEnv(_MockEnv):
     )
     action_spec = OneHotDiscreteTensorSpec(7)
     reward_spec = UnboundedContinuousTensorSpec()
+
     from_pixels = False
 
     out_key = "observation"
     _out_key = "observation_orig"
+    input_spec = CompositeSpec(
+        **{_out_key: observation_spec["next_observation"], "action": action_spec}
+    )
 
     def _get_in_obs(self, obs):
         return obs
@@ -184,6 +188,9 @@ class ContinuousActionVecMockEnv(_MockEnv):
 
     out_key = "observation"
     _out_key = "observation_orig"
+    input_spec = CompositeSpec(
+        **{_out_key: observation_spec["next_observation"], "action": action_spec}
+    )
 
     def _get_in_obs(self, obs):
         return obs
@@ -255,6 +262,9 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
 
     out_key = "pixels"
     _out_key = "pixels_orig"
+    input_spec = CompositeSpec(
+        **{_out_key: observation_spec["next_pixels"], "action": action_spec}
+    )
 
     def _get_out_obs(self, obs):
         obs = torch.diag_embed(obs, 0, -2, -1).unsqueeze(0)
@@ -292,6 +302,9 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
 
     out_key = "pixels"
     _out_key = "pixels_orig"
+    input_spec = CompositeSpec(
+        **{_out_key: observation_spec["next_pixels"], "action": action_spec}
+    )
 
     def _get_out_obs(self, obs):
         obs = torch.diag_embed(obs, 0, -2, -1).unsqueeze(0)

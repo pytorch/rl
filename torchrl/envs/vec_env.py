@@ -108,7 +108,8 @@ class _BatchedEnv(_EnvClass):
             drastically decrease the IO burden when the tensordict is placed in shared memory / memory map.
             env_input_keys will typically contain "action" and if this list is not provided this object
             will look for corresponding keys. When working with stateless models, it is important to include the
-            state to be read by the environment.
+            state to be read by the environment. If none is provided, _BatchedEnv will use the `_EnvClass.input_spec`
+            keys as indicators of the keys to be sent to the env.
         pin_memory (bool): if True and device is "cpu", calls `pin_memory` on the tensordicts when created.
         selected_keys (list of str, optional): keys that have to be returned by the environment.
             When creating a batch of environment, it might be the case that only some of the keys are to be returned.
@@ -348,9 +349,7 @@ class _BatchedEnv(_EnvClass):
                     "keys need to be part of the selected keys for env.step() to be called."
                 )
         else:
-            self.env_input_keys = [
-                key for key in self.selected_keys if key.startswith("action")
-            ]
+            self.env_input_keys = sorted(list(self._dummy_env.input_spec.keys()))
             if not len(self.env_input_keys):
                 raise RuntimeError(
                     f"found 0 action keys in {sorted(list(self.selected_keys))}"

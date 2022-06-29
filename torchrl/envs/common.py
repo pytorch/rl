@@ -48,7 +48,13 @@ class Specs:
 
     """
 
-    _keys = {"action_spec", "observation_spec", "reward_spec", "from_pixels"}
+    _keys = {
+        "action_spec",
+        "observation_spec",
+        "reward_spec",
+        "input_spec",
+        "from_pixels",
+    }
 
     def __init__(self, env: _EnvClass):
         self.env = env
@@ -108,8 +114,9 @@ class _EnvClass:
     Abstract environment parent class for TorchRL.
 
     Properties:
-        - observation_spec (TensorSpec): sampling spec of the observations;
+        - observation_spec (CompositeSpec): sampling spec of the observations;
         - action_spec (TensorSpec): sampling spec of the actions;
+        - input_spec (CompositeSpec): sampling spec of the actions and/or other inputs;
         - reward_spec (TensorSpec): sampling spec of the rewards;
         - batch_size (torch.Size): number of environments contained in the instance;
         - device (torch.device): device where the env input and output are expected to live
@@ -144,6 +151,8 @@ class _EnvClass:
             self.is_closed = True
         if "_action_spec" not in self.__dir__():
             self._action_spec = None
+        if "_input_spec" not in self.__dir__():
+            self._input_spec = CompositeSpec(action=self._action_spec)
         if "_reward_spec" not in self.__dir__():
             self._reward_spec = None
         if "_observation_spec" not in self.__dir__():
@@ -164,6 +173,16 @@ class _EnvClass:
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
         self._action_spec = value
+
+    @property
+    def input_spec(self) -> TensorSpec:
+        if self._input_spec is None:
+            self._input_spec = CompositeSpec(action=self.action_spec)
+        return self._input_spec
+
+    @input_spec.setter
+    def input_spec(self, value: TensorSpec) -> None:
+        self._input_spec = value
 
     @property
     def reward_spec(self) -> TensorSpec:
@@ -522,6 +541,7 @@ class _EnvClass:
         self.action_spec = self.action_spec.to(device)
         self.reward_spec = self.reward_spec.to(device)
         self.observation_spec = self.observation_spec.to(device)
+        self.input_spec = self.input_spec.to(device)
 
         self.is_done = self.is_done.to(device)
         self.device = device
