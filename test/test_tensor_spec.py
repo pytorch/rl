@@ -297,9 +297,9 @@ class TestComposite:
 
         for _ in range(100):
             r = ts.rand()
-            raw_vals = {"obs": r["obs"].numpy()}
+            raw_vals = {"obs": r["obs"].cpu().numpy()}
             if is_complete:
-                raw_vals["act"] = r["act"].numpy()
+                raw_vals["act"] = r["act"].cpu().numpy()
             encoded_vals = ts.encode(raw_vals)
 
             assert encoded_vals["obs"].dtype == dtype
@@ -363,9 +363,9 @@ class TestComposite:
         cast_r = ts.rand()
 
         assert ts.device == dest
-        assert cast_r["obs"].get_device() == original_r["obs"].get_device()
+        assert cast_r["obs"].device == dest
         if is_complete:
-            assert cast_r["act"].get_device() == original_r["act"].get_device()
+            assert cast_r["act"].device == dest
 
     def test_type_check(self, is_complete, device, dtype):
         ts = self._composite_spec(is_complete, device, dtype)
