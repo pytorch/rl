@@ -49,9 +49,9 @@ def _test_vecnorm_subproc(idx, queue_out: mp.Queue, queue_in: mp.Queue):
     t = VecNorm(shared_td=td)
     env = TransformedEnv(env, t)
     env.set_seed(1000 + idx)
-    env.reset()
+    tensordict = env.reset()
     for _ in range(10):
-        env.rand_step()
+        env.rand_step(tensordict)
     queue_out.put(True)
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "all_done"
@@ -85,7 +85,9 @@ def test_vecnorm_parallel(nprc):
     if _has_gym:
         td = VecNorm.build_td_for_shared_vecnorm(GymEnv("Pendulum-v1"))
     else:
-        td = VecNorm.build_td_for_shared_vecnorm(ContinuousActionVecMockEnv())
+        td = VecNorm.build_td_for_shared_vecnorm(
+            ContinuousActionVecMockEnv(),
+        )
     with Lock() as lock:
         for idx in range(nprc):
             prc_queue_in = mp.Queue(1)
@@ -103,9 +105,11 @@ def test_vecnorm_parallel(nprc):
             prcs.append(p)
             queues.append((prc_queue_in, prc_queue_out))
 
+    with Lock() as lock:
         dones = [queue[0].get(timeout=TIMEOUT) for queue in queues]
         assert all(dones)
         msg = "all_done"
+    with Lock() as lock:
         for idx in range(nprc):
             queues[idx][1].put(msg)
 
@@ -149,9 +153,9 @@ def test_vecnorm_parallel(nprc):
 def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.Queue):
     env = make_env()
     env.set_seed(1000 + idx)
-    env.reset()
+    tensordict = env.reset()
     for _ in range(10):
-        env.rand_step()
+        tensordict = env.rand_step(tensordict)
     queue_out.put(True)
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "all_done"
@@ -204,6 +208,7 @@ def test_vecnorm_parallel_auto(nprc):
         dones = [queue[0].get() for queue in queues]
         assert all(dones)
         msg = "all_done"
+    with Lock() as lock:
         for idx in range(nprc):
             queues[idx][1].put(msg)
 
@@ -243,23 +248,23 @@ def test_vecnorm_parallel_auto(nprc):
                 _reward_ssq,
                 _reward_count,
             )
+    with Lock() as lock:
         msg = "all_done"
         for idx in range(nprc):
             queues[idx][1].put(msg)
 
 
 def _run_parallelenv(parallel_env, queue_in, queue_out):
-    parallel_env.reset()
-
+    tensordict = parallel_env.reset()
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "start"
     for _ in range(10):
-        parallel_env.rand_step()
+        tensordict = parallel_env.rand_step(tensordict)
     queue_out.put("first round")
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "start"
     for _ in range(10):
-        parallel_env.rand_step()
+        tensordict = parallel_env.rand_step(tensordict)
     queue_out.put("second round")
     parallel_env.close()
     del parallel_env
@@ -276,7 +281,9 @@ def test_parallelenv_vecnorm():
         parallel_env = ParallelEnv(3, make_env)
         queue_out = mp.Queue(1)
         queue_in = mp.Queue(1)
-        proc = mp.Process(target=_run_parallelenv, args=(parallel_env, queue_out, queue_in))
+        proc = mp.Process(
+            target=_run_parallelenv, args=(parallel_env, queue_out, queue_in)
+        )
         proc.start()
         parallel_sd = parallel_env.state_dict()
         assert "worker0" in parallel_sd
@@ -322,10 +329,10 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     env.set_seed(0)
     t = VecNorm(decay=1.0)
     env_t = TransformedEnv(env, t)
-    env_t.reset()
+    tensordict = env_t.reset()
     tds = []
     for _ in range(N):
-        td = env_t.rand_step()
+        td = env_t.rand_step(tensordict)
         if td.get("done").any():
             env_t.reset()
         tds.append(td)
