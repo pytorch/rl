@@ -3,8 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from unittest.mock import Mock
-
 import numpy as np
 import pytest
 import torch
@@ -267,26 +265,24 @@ class TestComposite:
             with pytest.raises(AttributeError, match="cannot be set"):
                 ts[key] = 42
 
-    def test_setitem_matches_device(self, is_complete, device, dtype):
+    @pytest.mark.parametrize("dest", get_available_devices())
+    def test_setitem_matches_device(self, is_complete, device, dtype, dest):
         ts = self._composite_spec(is_complete, device, dtype)
 
-        bad_value, good_value = Mock(), Mock()
-        bad_value.device = "ANOTHER_DEVICE"
-        good_value.device = device
-
-        with pytest.raises(
-            RuntimeError, match="All devices of CompositeSpec must match"
-        ):
-            ts["bad"] = bad_value
-
-        ts["good"] = good_value
-        assert ts["good"] == good_value
+        if dest == device:
+            ts["good"] = UnboundedContinuousTensorSpec(device=dest, dtype=dtype)
+            assert ts["good"].device == dest
+        else:
+            with pytest.raises(
+                RuntimeError, match="All devices of CompositeSpec must match"
+            ):
+                ts["bad"] = UnboundedContinuousTensorSpec(device=dest, dtype=dtype)
 
     def test_del(self, is_complete, device, dtype):
         ts = self._composite_spec(is_complete, device, dtype)
         assert "obs" in ts.keys()
         assert "act" in ts.keys()
-        ts.del_("obs")
+        del ts["obs"]
         assert "obs" not in ts.keys()
         assert "act" in ts.keys()
 

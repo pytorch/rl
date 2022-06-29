@@ -967,7 +967,7 @@ dtype=torch.float32)},
         for k in self._specs:
             yield k
 
-    def del_(self, key: str) -> None:
+    def __delitem__(self, key: str) -> None:
         del self._specs[key]
 
     def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
