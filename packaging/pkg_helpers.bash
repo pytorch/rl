@@ -138,14 +138,14 @@ setup_cuda() {
 # Populate build version if necessary, and add version suffix
 #
 # Inputs:
-#   BUILD_VERSION (e.g., 0.2.0 or empty)
+#   BUILD_VERSION (e.g., 0.1.0 or empty)
 #   VERSION_SUFFIX (e.g., +cpu)
 #
 # Outputs:
-#   BUILD_VERSION (e.g., 0.2.0.dev20190807+cpu)
+#   BUILD_VERSION (e.g., 0.1.0.dev20190807+cpu)
 #
 # Fill BUILD_VERSION if it doesn't exist already with a nightly string
-# Usage: setup_build_version 0.2.0
+# Usage: setup_build_version 0.1.0
 setup_build_version() {
   if [[ -z "$BUILD_VERSION" ]]; then
     export BUILD_VERSION="$1.dev$(date "+%Y%m%d")$VERSION_SUFFIX"
@@ -170,7 +170,7 @@ setup_macos() {
 
 # Top-level entry point for things every package will need to do
 #
-# Usage: setup_env 0.2.0
+# Usage: setup_env 0.1.0
 setup_env() {
   setup_cuda
   setup_build_version "$1"

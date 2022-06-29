@@ -13,7 +13,10 @@ from torch import multiprocessing as mp
 
 from ._extension import _init_extension
 
-__version__ = "0.1"
+try:
+    from .version import __version__
+except ImportError:
+    __version__ = None
 
 _init_extension()
 
