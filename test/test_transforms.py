@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import math
-from time import sleep
+from multiprocessing import Lock
 
 import pytest
 import torch
@@ -165,11 +165,11 @@ def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "all_done"
     env.close()
-    print("closed")
 
 
 @pytest.mark.parametrize("nprc", [2, 5])
 def test_vecnorm_parallel_auto(nprc):
+
     queues = []
     prcs = []
     if _has_gym:
@@ -180,60 +180,70 @@ def test_vecnorm_parallel_auto(nprc):
         make_env = EnvCreator(
             lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm(decay=1.0))
         )
-    for idx in range(nprc):
-        prc_queue_in = mp.Queue(1)
-        prc_queue_out = mp.Queue(1)
-        p = mp.Process(
-            target=_test_vecnorm_subproc_auto,
-            args=(
-                idx,
-                make_env,
-                prc_queue_in,
-                prc_queue_out,
-            ),
-        )
-        p.start()
-        prcs.append(p)
-        queues.append((prc_queue_in, prc_queue_out))
 
-    td = list(make_env.state_dict().values())[0]
-    dones = [queue[0].get() for queue in queues]
-    assert all(dones)
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
+    with Lock() as lock:
+        for idx in range(nprc):
+            prc_queue_in = mp.Queue(1)
+            prc_queue_out = mp.Queue(1)
+            p = mp.Process(
+                target=_test_vecnorm_subproc_auto,
+                args=(
+                    idx,
+                    make_env,
+                    prc_queue_in,
+                    prc_queue_out,
+                ),
+            )
+            p.start()
+            prcs.append(p)
+            queues.append((prc_queue_in, prc_queue_out))
 
-    sleep(0.01)
-    obs_sum = td.get("next_observation_sum").clone()
-    obs_ssq = td.get("next_observation_ssq").clone()
-    obs_count = td.get("next_observation_count").clone()
-    reward_sum = td.get("reward_sum").clone()
-    reward_ssq = td.get("reward_ssq").clone()
-    reward_count = td.get("reward_count").clone()
+        td = list(make_env.state_dict().values())[0]
+        dones = [queue[0].get() for queue in queues]
+        assert all(dones)
+        msg = "all_done"
+        for idx in range(nprc):
+            queues[idx][1].put(msg)
 
-    assert obs_count == nprc * 11 + 1  # 10 steps + reset + init
+        # sleep(0.01)
+        obs_sum = td.get("next_observation_sum").clone()
+        obs_ssq = td.get("next_observation_ssq").clone()
+        obs_count = td.get("next_observation_count").clone()
+        reward_sum = td.get("reward_sum").clone()
+        reward_ssq = td.get("reward_ssq").clone()
+        reward_count = td.get("reward_count").clone()
 
-    for idx in range(nprc):
-        tup = queues[idx][0].get(timeout=TIMEOUT)
-        _obs_sum, _obs_ssq, _obs_count, _reward_sum, _reward_ssq, _reward_count = tup
-        assert (obs_sum == _obs_sum).all(), "sum"
-        assert (obs_ssq == _obs_ssq).all(), "ssq"
-        assert (obs_count == _obs_count).all(), "count"
-        assert (reward_sum == _reward_sum).all(), "sum"
-        assert (reward_ssq == _reward_ssq).all(), "ssq"
-        assert (reward_count == _reward_count).all(), "count"
+    assert obs_count == nprc * 11 + 2  # 10 steps + reset + init
 
-        obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
-            _obs_sum,
-            _obs_ssq,
-            _obs_count,
-            _reward_sum,
-            _reward_ssq,
-            _reward_count,
-        )
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
+    with Lock() as lock:
+        for idx in range(nprc):
+            tup = queues[idx][0].get(timeout=TIMEOUT)
+            (
+                _obs_sum,
+                _obs_ssq,
+                _obs_count,
+                _reward_sum,
+                _reward_ssq,
+                _reward_count,
+            ) = tup
+            assert (obs_sum == _obs_sum).all(), "sum"
+            assert (obs_ssq == _obs_ssq).all(), "ssq"
+            assert (obs_count == _obs_count).all(), "count"
+            assert (reward_sum == _reward_sum).all(), "sum"
+            assert (reward_ssq == _reward_ssq).all(), "ssq"
+            assert (reward_count == _reward_count).all(), "count"
+
+            obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
+                _obs_sum,
+                _obs_ssq,
+                _obs_count,
+                _reward_sum,
+                _reward_ssq,
+                _reward_count,
+            )
+        msg = "all_done"
+        for idx in range(nprc):
+            queues[idx][1].put(msg)
 
 
 def _run_parallelenv(parallel_env, queue_in, queue_out):
@@ -338,11 +348,11 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_resize(self, interpolation, keys, nchannels, batch, device):
         torch.manual_seed(0)
-        dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
         resize = Resize(w=20, h=21, interpolation=interpolation, keys_in=keys)
         td = TensorDict(
             {
-                key: torch.randn(*batch, nchannels, 32, 32, device=device)
+                key: torch.randn(*batch, nchannels, 16, 16, device=device)
                 for key in keys
             },
             batch,
@@ -354,12 +364,12 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32))
+            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16))
             observation_spec = resize.transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([nchannels, 20, 21])
         else:
             observation_spec = CompositeSpec(
-                **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32)) for key in keys}
+                **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
             observation_spec = resize.transform_observation_spec(observation_spec)
             for key in keys:
@@ -375,13 +385,13 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_centercrop(self, keys, h, nchannels, batch, device):
         torch.manual_seed(0)
-        dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
         cc = CenterCrop(w=20, h=h, keys_in=keys)
         if h is None:
             h = 20
         td = TensorDict(
             {
-                key: torch.randn(*batch, nchannels, 32, 32, device=device)
+                key: torch.randn(*batch, nchannels, 16, 16, device=device)
                 for key in keys
             },
             batch,
@@ -393,12 +403,12 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32))
+            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16))
             observation_spec = cc.transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([nchannels, 20, h])
         else:
             observation_spec = CompositeSpec(
-                **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32)) for key in keys}
+                **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
             observation_spec = cc.transform_observation_spec(observation_spec)
             for key in keys:
@@ -414,12 +424,12 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_flatten(self, keys, size, nchannels, batch, device):
         torch.manual_seed(0)
-        dont_touch = torch.randn(*batch, *size, nchannels, 32, 32, device=device)
+        dont_touch = torch.randn(*batch, *size, nchannels, 16, 16, device=device)
         start_dim = -3 - len(size)
         flatten = FlattenObservation(start_dim, -3, keys_in=keys)
         td = TensorDict(
             {
-                key: torch.randn(*batch, *size, nchannels, 32, 32, device=device)
+                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
                 for key in keys
             },
             batch,
@@ -432,13 +442,13 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(-1, 1, (*size, nchannels, 32, 32))
+            observation_spec = NdBoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
             observation_spec = flatten.transform_observation_spec(observation_spec)
             assert observation_spec.shape[-3] == expected_size
         else:
             observation_spec = CompositeSpec(
                 **{
-                    key: NdBoundedTensorSpec(-1, 1, (*size, nchannels, 32, 32))
+                    key: NdBoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
                     for key in keys
                 }
             )
@@ -455,9 +465,9 @@ class TestTransforms:
         torch.manual_seed(0)
         nchannels = 3
         gs = GrayScale(keys_in=keys)
-        dont_touch = torch.randn(1, nchannels, 32, 32, device=device)
+        dont_touch = torch.randn(1, nchannels, 16, 16, device=device)
         td = TensorDict(
-            {key: torch.randn(1, nchannels, 32, 32, device=device) for key in keys}, [1]
+            {key: torch.randn(1, nchannels, 16, 16, device=device) for key in keys}, [1]
         )
         td.set("dont touch", dont_touch.clone())
         gs(td)
@@ -466,16 +476,16 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32))
+            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16))
             observation_spec = gs.transform_observation_spec(observation_spec)
-            assert observation_spec.shape == torch.Size([1, 3, 3])
+            assert observation_spec.shape == torch.Size([1, 16, 16])
         else:
             observation_spec = CompositeSpec(
-                **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32)) for key in keys}
+                **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
             observation_spec = gs.transform_observation_spec(observation_spec)
             for key in keys:
-                assert observation_spec[key].shape == torch.Size([1, 3, 3])
+                assert observation_spec[key].shape == torch.Size([1, 16, 16])
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
@@ -486,10 +496,10 @@ class TestTransforms:
         torch.manual_seed(0)
         nchannels = 3
         totensorimage = ToTensorImage(keys_in=keys)
-        dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
         td = TensorDict(
             {
-                key: torch.randint(255, (*batch, 32, 32, 3), device=device)
+                key: torch.randint(255, (*batch, 16, 16, 3), device=device)
                 for key in keys
             },
             batch,
@@ -497,27 +507,27 @@ class TestTransforms:
         td.set("dont touch", dont_touch.clone())
         totensorimage(td)
         for key in keys:
-            assert td.get(key).shape[-3:] == torch.Size([3, 32, 32])
+            assert td.get(key).shape[-3:] == torch.Size([3, 16, 16])
             assert td.get(key).device == device
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(0, 255, (32, 32, 3))
+            observation_spec = NdBoundedTensorSpec(0, 255, (16, 16, 3))
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
             )
-            assert observation_spec.shape == torch.Size([3, 32, 32])
+            assert observation_spec.shape == torch.Size([3, 16, 16])
             assert (observation_spec.space.minimum == 0).all()
             assert (observation_spec.space.maximum == 1).all()
         else:
             observation_spec = CompositeSpec(
-                **{key: NdBoundedTensorSpec(0, 255, (32, 32, 3)) for key in keys}
+                **{key: NdBoundedTensorSpec(0, 255, (16, 16, 3)) for key in keys}
             )
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
             )
             for key in keys:
-                assert observation_spec[key].shape == torch.Size([3, 32, 32])
+                assert observation_spec[key].shape == torch.Size([3, 16, 16])
                 assert (observation_spec[key].space.minimum == 0).all()
                 assert (observation_spec[key].space.maximum == 1).all()
 
@@ -531,10 +541,10 @@ class TestTransforms:
         t1 = CatFrames(keys_in=keys, N=4)
         t2 = FiniteTensorDictCheck()
         compose = Compose(t1, t2)
-        dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
         td = TensorDict(
             {
-                key: torch.randint(255, (*batch, nchannels, 32, 32), device=device)
+                key: torch.randint(255, (*batch, nchannels, 16, 16), device=device)
                 for key in keys
             },
             batch,
@@ -546,20 +556,20 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(0, 255, (nchannels, 32, 32))
+            observation_spec = NdBoundedTensorSpec(0, 255, (nchannels, 16, 16))
             observation_spec = compose.transform_observation_spec(observation_spec)
-            assert observation_spec.shape == torch.Size([nchannels * N, 32, 32])
+            assert observation_spec.shape == torch.Size([nchannels * N, 16, 16])
         else:
             observation_spec = CompositeSpec(
                 **{
-                    key: NdBoundedTensorSpec(0, 255, (nchannels, 32, 32))
+                    key: NdBoundedTensorSpec(0, 255, (nchannels, 16, 16))
                     for key in keys
                 }
             )
             observation_spec = compose.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].shape == torch.Size(
-                    [nchannels * N, 32, 32]
+                    [nchannels * N, 16, 16]
                 )
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
@@ -574,8 +584,8 @@ class TestTransforms:
         [
             (0, 1),
             (1, 2),
-            (torch.ones(32, 32), torch.ones(1)),
-            (torch.ones(1), torch.ones(32, 32)),
+            (torch.ones(16, 16), torch.ones(1)),
+            (torch.ones(1), torch.ones(16, 16)),
         ],
     )
     def test_observationnorm(
@@ -588,9 +598,9 @@ class TestTransforms:
         if isinstance(scale, Tensor):
             scale = scale.to(device)
         on = ObservationNorm(loc, scale, keys_in=keys, standard_normal=standard_normal)
-        dont_touch = torch.randn(1, nchannels, 32, 32, device=device)
+        dont_touch = torch.randn(1, nchannels, 16, 16, device=device)
         td = TensorDict(
-            {key: torch.zeros(1, nchannels, 32, 32, device=device) for key in keys}, [1]
+            {key: torch.zeros(1, nchannels, 16, 16, device=device) for key in keys}, [1]
         )
         td.set("dont touch", dont_touch.clone())
         on(td)
@@ -603,7 +613,7 @@ class TestTransforms:
 
         if len(keys) == 1:
             observation_spec = NdBoundedTensorSpec(
-                0, 1, (nchannels, 32, 32), device=device
+                0, 1, (nchannels, 16, 16), device=device
             )
             observation_spec = on.transform_observation_spec(observation_spec)
             if standard_normal:
@@ -616,7 +626,7 @@ class TestTransforms:
         else:
             observation_spec = CompositeSpec(
                 **{
-                    key: NdBoundedTensorSpec(0, 1, (nchannels, 32, 32), device=device)
+                    key: NdBoundedTensorSpec(0, 1, (nchannels, 16, 16), device=device)
                     for key in keys
                 }
             )
