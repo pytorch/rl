@@ -1054,6 +1054,3 @@ dtype=torch.float32)},
             value.to(dest)
         self.device = torch.device(dest)
         return self
-
-    def __delitem__(self, key):
-        del self._specs[key]
