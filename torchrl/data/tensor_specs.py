@@ -613,6 +613,10 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
             minimum = torch.as_tensor(minimum, dtype=dtype, device=device)
         if not isinstance(maximum, torch.Tensor):
             maximum = torch.as_tensor(maximum, dtype=dtype, device=device)
+        if maximum.device != device:
+            maximum = maximum.to(device)
+        if minimum.device != device:
+            minimum = minimum.to(device)
         if dtype is not None and minimum.dtype is not dtype:
             minimum = minimum.to(dtype)
         if dtype is not None and maximum.dtype is not dtype:
@@ -963,7 +967,7 @@ dtype=torch.float32)},
         for k in self._specs:
             yield k
 
-    def del_(self, key: str) -> None:
+    def __delitem__(self, key: str) -> None:
         del self._specs[key]
 
     def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
@@ -993,7 +997,9 @@ dtype=torch.float32)},
             selected_keys = [selected_keys]
 
         for _key in self:
-            if selected_keys is None or _key in selected_keys:
+            if self[_key] is not None and (
+                selected_keys is None or _key in selected_keys
+            ):
                 self._specs[_key].type_check(value[_key], _key)
 
     def is_in(self, val: Union[dict, _TensorDict]) -> bool:
@@ -1037,10 +1043,14 @@ dtype=torch.float32)},
         return len(self.keys())
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
+        if not isinstance(dest, (str, int, torch.device)):
+            raise ValueError(
+                "Only device casting is allowed with specs of type CompositeSpec."
+            )
+
         for value in self.values():
             if value is None:
                 continue
             value.to(dest)
-        if not isinstance(dest, torch.dtype):
-            self.device = torch.device(dest)
+        self.device = torch.device(dest)
         return self
