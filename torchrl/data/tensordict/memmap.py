@@ -21,18 +21,6 @@ from torchrl.data.utils import (
     torch_to_numpy_dtype_dict,
 )
 
-# try:
-#     from torch.utils._python_dispatch import enable_torch_dispatch_mode
-#     from torch._subclasses.fake_tensor import (
-#         FakeTensor,
-#         FakeTensorMode,
-#         FakeTensorConverter,
-#         DynamicOutputShapeException,
-#     )
-#     _has_fake = True
-# except:
-_has_fake = False
-
 MEMMAP_HANDLED_FN = {}
 
 __all__ = ["MemmapTensor", "set_transfer_ownership"]
@@ -74,15 +62,23 @@ class MemmapTensor(object):
     Supports (almost) all tensor operations.
 
     Args:
-        elem (torch.Tensor or MemmapTensor): TODO // Tensor to be stored on physical
-            storage. If MemmapTensor, a new MemmapTensor is created and the
-            same data is stored in it.
-        transfer_ownership: bool: affects the ownership after serialization:
+        *tensor_or_size (torch.Tensor, MemmapTensor, torch.Size or sequence of integers):
+            If a size is provided (with a sequence of integers, a torch.Size object
+            or a list/tuple of integers) it indicates the size of the MemmapTensor created.
+            If a te is provided, its content will be stored on physical storage.
+            If MemmapTensor, a new MemmapTensor is created and the same data is stored in it.
+        device (torch.device or equivalent, optional): device where the loaded
+            tensor will be sent. This should not be used with MemmapTensors
+            created from torch.Tensor objects. Default is "cpu".
+        dtype (torch.dtype, optional): dtype of the loaded tensor.
+            This should not be used with MemmapTensors created from torch.Tensor
+            objects. Default is `torch.get_default_dtype()`.
+        transfer_ownership (bool, optional): affects the ownership after serialization:
             if True, the current process looses ownership immediately after
             serialization. If False, the current process keeps the ownership
             of the temporary file.
             Default: False.
-        prefix: TODO
+        prefix (str or path, optional): prefix of the file location.
 
     Examples:
         >>> x = torch.ones(3,4)
@@ -153,9 +149,6 @@ class MemmapTensor(object):
             device = device if device is not None else torch.device("cpu")
             dtype = dtype if dtype is not None else torch.get_default_dtype()
             self._init_shape(shape, device, dtype, transfer_ownership)
-        if _has_fake:
-            with enable_torch_dispatch_mode(FakeTensorMode(inner=None)):
-                self._fake = torch.zeros(self.shape, device=self.device)
 
     def _init_shape(
         self,
@@ -272,10 +265,7 @@ class MemmapTensor(object):
             and len(idx) == 1
             and not (isinstance(idx, torch.Tensor) and idx.dtype is torch.bool)
         ):  # and isinstance(idx, torch.Tensor) and len(idx) == 1:
-            if _has_fake:
-                size = self._fake[idx].shape
-            else:
-                size = _getitem_batch_size(self.shape, idx)
+            size = _getitem_batch_size(self.shape, idx)
             out = out.view(size)
         return out
 

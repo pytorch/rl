@@ -114,6 +114,8 @@ class ReplayBuffer:
             samples.
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
+        storage (Storage, optional): the storage to be used. If none is provided,
+            a ListStorage will be instantiated.
     """
 
     def __init__(
@@ -300,6 +302,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             samples.
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
+        storage (Storage, optional): the storage to be used. If none is provided,
+            a ListStorage will be instantiated.
     """
 
     def __init__(
@@ -583,6 +587,8 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
             the rb samples. Default is `False`.
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
+        storage (Storage, optional): the storage to be used. If none is provided,
+            a ListStorage will be instantiated.
     """
 
     def __init__(
