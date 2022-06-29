@@ -167,7 +167,7 @@ def test_memmap_same_device_as_tensor(device):
                 + "but found at least two devices",
             ):
                 assert torch.all(m + torch.ones([3, 4], device=other_device) == 1)
-        m.to(other_device)
+        m = m.to(other_device)
         assert m.device == torch.device(other_device)
 
 
@@ -186,7 +186,7 @@ def test_memmap_zero_value(device, value):
     """
     Test if all entries are zeros when MemmapTensor is created with size.
     """
-    value.to(device)
+    value = value.to(device)
     expected_memmap_tensor = MemmapTensor(value)
     m1 = MemmapTensor([3, 4], device=device)
     assert m1.shape == (3, 4)
