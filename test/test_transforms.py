@@ -273,12 +273,14 @@ def _run_parallelenv(parallel_env, queue_in, queue_out):
 def test_parallelenv_vecnorm():
     if _has_gym:
         make_env = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
+        env_input_keys = None
     else:
         make_env = EnvCreator(
             lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
         )
+        env_input_keys = ["action", ContinuousActionVecMockEnv._out_key]
     with Lock() as lock:
-        parallel_env = ParallelEnv(3, make_env)
+        parallel_env = ParallelEnv(3, make_env, env_input_keys=env_input_keys)
         queue_out = mp.Queue(1)
         queue_in = mp.Queue(1)
         proc = mp.Process(

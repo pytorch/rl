@@ -25,8 +25,6 @@ from torchrl.envs.env_creator import EnvCreator
 
 __all__ = ["SerialEnv", "ParallelEnv"]
 
-from torchrl.envs.utils import step_tensordict
-
 
 def _check_start(fun):
     def decorated_fun(self: _BatchedEnv, *args, **kwargs):
@@ -104,10 +102,13 @@ class _BatchedEnv(_EnvClass):
         create_env_fn (callable or list of callables): function (or list of functions) to be used for the environment
             creation;
         create_env_kwargs (dict or list of dicts, optional): kwargs to be used with the environments being created;
-        action_keys (list of str, optional): list of keys that are to be considered policy-output. If the policy has it,
+        env_input_keys (list of str, optional): list of keys that are to be considered policy-output. If the policy has it,
             the attribute policy.out_keys can be used.
-            Providing the action_keys permit to select which keys to update after the policy is called, which can
+            Providing the env_input_keys permit to select which keys to update after the policy is called, which can
             drastically decrease the IO burden when the tensordict is placed in shared memory / memory map.
+            env_input_keys will typically contain "action" and if this list is not provided this object
+            will look for corresponding keys. When working with stateless models, it is important to include the
+            state to be read by the environment.
         pin_memory (bool): if True and device is "cpu", calls `pin_memory` on the tensordicts when created.
         selected_keys (list of str, optional): keys that have to be returned by the environment.
             When creating a batch of environment, it might be the case that only some of the keys are to be returned.
@@ -130,7 +131,6 @@ class _BatchedEnv(_EnvClass):
             tensordict will be used to pass data from process to process. The device can be
             changed after instantiation using `env.to(device)`.
 
-
     """
 
     _verbose: bool = False
@@ -148,7 +148,7 @@ class _BatchedEnv(_EnvClass):
             Callable[[], _EnvClass], Sequence[Callable[[], _EnvClass]]
         ],
         create_env_kwargs: Union[dict, Sequence[dict]] = None,
-        action_keys: Optional[Sequence[str]] = None,
+        env_input_keys: Optional[Sequence[str]] = None,
         pin_memory: bool = False,
         selected_keys: Optional[Sequence[str]] = None,
         excluded_keys: Optional[Sequence[str]] = None,
@@ -198,7 +198,7 @@ class _BatchedEnv(_EnvClass):
         self.num_workers = num_workers
         self.create_env_fn = create_env_fn
         self.create_env_kwargs = create_env_kwargs
-        self.action_keys = action_keys
+        self.env_input_keys = env_input_keys
         self.pin_memory = pin_memory
         self.selected_keys = selected_keys
         self.excluded_keys = excluded_keys
@@ -339,19 +339,19 @@ class _BatchedEnv(_EnvClass):
                 )
             else:
                 raise_no_selected_keys = True
-        if self.action_keys is not None:
+        if self.env_input_keys is not None:
             if not all(
-                action_key in self.selected_keys for action_key in self.action_keys
+                action_key in self.selected_keys for action_key in self.env_input_keys
             ):
                 raise KeyError(
                     "One of the action keys is not part of the selected keys or is part of the excluded keys. Action "
                     "keys need to be part of the selected keys for env.step() to be called."
                 )
         else:
-            self.action_keys = [
+            self.env_input_keys = [
                 key for key in self.selected_keys if key.startswith("action")
             ]
-            if not len(self.action_keys):
+            if not len(self.env_input_keys):
                 raise RuntimeError(
                     f"found 0 action keys in {sorted(list(self.selected_keys))}"
                 )
@@ -491,7 +491,7 @@ class SerialEnv(_BatchedEnv):
     ) -> TensorDict:
         self._assert_tensordict_shape(tensordict)
 
-        tensordict_in = tensordict.select(*self.action_keys)
+        tensordict_in = tensordict.select(*self.env_input_keys)
         tensordict_out = []
         for i in range(self.num_workers):
             _tensordict_out = self._envs[i].step(tensordict_in[i])
@@ -611,7 +611,7 @@ class ParallelEnv(_BatchedEnv):
                     env_fun,
                     self.create_env_kwargs[idx],
                     False,
-                    self.action_keys,
+                    self.env_input_keys,
                     self.device,
                 ),
             )
@@ -658,7 +658,7 @@ class ParallelEnv(_BatchedEnv):
     def _step(self, tensordict: _TensorDict) -> _TensorDict:
         self._assert_tensordict_shape(tensordict)
 
-        self.shared_tensordict_parent.update_(tensordict.select(*self.action_keys))
+        self.shared_tensordict_parent.update_(tensordict.select(*self.env_input_keys))
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
@@ -806,7 +806,7 @@ def _run_worker_pipe_shared_mem(
     env_fun: Union[_EnvClass, Callable],
     env_fun_kwargs: dict,
     pin_memory: bool,
-    action_keys: dict,
+    env_input_keys: dict,
     device: DEVICE_TYPING = "cpu",
     verbose: bool = False,
 ) -> None:
@@ -884,14 +884,14 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            _td = step_tensordict(tensordict, exclude_action=False)
+            _td = tensordict.select(*env_input_keys)
             if env.is_done:
                 raise RuntimeError(
                     f"calling step when env is done, just reset = {just_reset}"
                 )
             _td = env.step(_td)
             if step_keys is None:
-                step_keys = set(_td.keys()) - {key for key in action_keys}
+                step_keys = set(_td.keys()) - set(env_input_keys)
             if pin_memory:
                 _td.pin_memory()
             tensordict.update_(_td.select(*step_keys))

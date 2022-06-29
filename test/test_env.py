@@ -445,7 +445,7 @@ class TestParallel:
             max_steps=10, auto_reset=False, tensordict=td0_parallel
         ).contiguous()
         torch.testing.assert_allclose(
-            td_parallel[:, 0].get("next_" + key), td_parallel[:, 1].get(key)
+            td_parallel[:, :-1].get("next_" + key), td_parallel[:, 1:].get(key)
         )
 
         assert_allclose_td(td0_serial, td0_parallel)
@@ -805,6 +805,22 @@ def test_seed():
 
     assert_allclose_td(state0_1, state0_2)
     assert_allclose_td(state1_1, state1_2)
+
+    env1.set_seed(0)
+    torch.manual_seed(0)
+    rollout1 = env1.rollout(max_steps=30)
+
+    env2.set_seed(0)
+    torch.manual_seed(0)
+    rollout2 = env2.rollout(max_steps=30)
+
+    torch.testing.assert_allclose(
+        rollout1["observation"][1:], rollout1["next_observation"][:-1]
+    )
+    torch.testing.assert_allclose(
+        rollout2["observation"][1:], rollout2["next_observation"][:-1]
+    )
+    torch.testing.assert_allclose(rollout1["observation"], rollout2["observation"])
 
 
 if __name__ == "__main__":

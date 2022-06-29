@@ -62,7 +62,7 @@ __all__ = [
 ]
 
 IMAGE_KEYS = ["next_pixels"]
-IMAGE_KEYS_OUT = ["next_pixels_tensor"]
+IMAGE_KEYS_OUT = ["next_pixels"]
 _MAX_NOOPS_TRIALS = 10
 
 
@@ -283,6 +283,8 @@ class TransformedEnv(_EnvClass):
 
     """
 
+    _inplace_update: bool = True
+
     def __init__(
         self,
         env: _EnvClass,
@@ -292,7 +294,7 @@ class TransformedEnv(_EnvClass):
     ):
         kwargs.setdefault("device", env.device)
         device = kwargs["device"]
-        self.base_env = env.to(device)
+        self._set_env(env, device)
         if transform is None:
             transform = Compose()
             transform.set_parent(self)
@@ -309,6 +311,11 @@ class TransformedEnv(_EnvClass):
         self.batch_size = self.base_env.batch_size
 
         super().__init__(**kwargs)
+
+    def _set_env(self, env: _EnvClass, device) -> None:
+        self.base_env = env.to(device)
+        # updates need not be inplace, as transforms may modify values out-place
+        self.base_env._inplace_update = False
 
     @property
     def observation_spec(self) -> TensorSpec:

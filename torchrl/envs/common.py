@@ -128,6 +128,7 @@ class _EnvClass:
 
     from_pixels: bool
     device = torch.device("cpu")
+    _inplace_update: bool = True
 
     def __init__(
         self,
@@ -228,7 +229,7 @@ class _EnvClass:
             raise TypeError(
                 f"expected done.dtype to be torch.bool but got {tensordict_out.get('done').dtype}"
             )
-        tensordict.update(tensordict_out, inplace=True)
+        tensordict.update(tensordict_out, inplace=self._inplace_update)
 
         del tensordict_out
         return tensordict
