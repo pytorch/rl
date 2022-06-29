@@ -86,27 +86,28 @@ def test_vecnorm_parallel(nprc):
         td = VecNorm.build_td_for_shared_vecnorm(GymEnv("Pendulum-v1"))
     else:
         td = VecNorm.build_td_for_shared_vecnorm(ContinuousActionVecMockEnv())
-    for idx in range(nprc):
-        prc_queue_in = mp.Queue(1)
-        prc_queue_out = mp.Queue(1)
-        p = mp.Process(
-            target=_test_vecnorm_subproc,
-            args=(
-                idx,
-                prc_queue_in,
-                prc_queue_out,
-            ),
-        )
-        p.start()
-        prc_queue_out.put(td)
-        prcs.append(p)
-        queues.append((prc_queue_in, prc_queue_out))
+    with Lock() as lock:
+        for idx in range(nprc):
+            prc_queue_in = mp.Queue(1)
+            prc_queue_out = mp.Queue(1)
+            p = mp.Process(
+                target=_test_vecnorm_subproc,
+                args=(
+                    idx,
+                    prc_queue_in,
+                    prc_queue_out,
+                ),
+            )
+            p.start()
+            prc_queue_out.put(td)
+            prcs.append(p)
+            queues.append((prc_queue_in, prc_queue_out))
 
-    dones = [queue[0].get(timeout=TIMEOUT) for queue in queues]
-    assert all(dones)
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
+        dones = [queue[0].get(timeout=TIMEOUT) for queue in queues]
+        assert all(dones)
+        msg = "all_done"
+        for idx in range(nprc):
+            queues[idx][1].put(msg)
 
     obs_sum = td.get("next_observation_sum").clone()
     obs_ssq = td.get("next_observation_ssq").clone()
@@ -115,33 +116,34 @@ def test_vecnorm_parallel(nprc):
     reward_ssq = td.get("reward_ssq").clone()
     reward_count = td.get("reward_ssq").clone()
 
-    for idx in range(nprc):
-        td_out = queues[idx][0].get(timeout=TIMEOUT)
-        _obs_sum = td_out.get("obs_sum")
-        _obs_ssq = td_out.get("obs_ssq")
-        _obs_count = td_out.get("obs_count")
-        _reward_sum = td_out.get("reward_sum")
-        _reward_ssq = td_out.get("reward_ssq")
-        _reward_count = td_out.get("reward_count")
-        assert (obs_sum == _obs_sum).all()
-        assert (obs_ssq == _obs_ssq).all()
-        assert (obs_count == _obs_count).all()
-        assert (reward_sum == _reward_sum).all()
-        assert (reward_ssq == _reward_ssq).all()
-        assert (reward_count == _reward_count).all()
+    with Lock() as lock:
+        for idx in range(nprc):
+            td_out = queues[idx][0].get(timeout=TIMEOUT)
+            _obs_sum = td_out.get("obs_sum")
+            _obs_ssq = td_out.get("obs_ssq")
+            _obs_count = td_out.get("obs_count")
+            _reward_sum = td_out.get("reward_sum")
+            _reward_ssq = td_out.get("reward_ssq")
+            _reward_count = td_out.get("reward_count")
+            assert (obs_sum == _obs_sum).all()
+            assert (obs_ssq == _obs_ssq).all()
+            assert (obs_count == _obs_count).all()
+            assert (reward_sum == _reward_sum).all()
+            assert (reward_ssq == _reward_ssq).all()
+            assert (reward_count == _reward_count).all()
 
-        obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
-            _obs_sum,
-            _obs_ssq,
-            _obs_count,
-            _reward_sum,
-            _reward_ssq,
-            _reward_count,
-        )
+            obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
+                _obs_sum,
+                _obs_ssq,
+                _obs_count,
+                _reward_sum,
+                _reward_ssq,
+                _reward_count,
+            )
 
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
+        msg = "all_done"
+        for idx in range(nprc):
+            queues[idx][1].put(msg)
 
 
 def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.Queue):
@@ -270,31 +272,32 @@ def test_parallelenv_vecnorm():
         make_env = EnvCreator(
             lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
         )
-    parallel_env = ParallelEnv(3, make_env)
-    queue_out = mp.Queue(1)
-    queue_in = mp.Queue(1)
-    proc = mp.Process(target=_run_parallelenv, args=(parallel_env, queue_out, queue_in))
-    proc.start()
-    parallel_sd = parallel_env.state_dict()
-    assert "worker0" in parallel_sd
-    worker_sd = parallel_sd["worker0"]
-    td = list(worker_sd.values())[0]
-    queue_out.put("start")
-    msg = queue_in.get(timeout=TIMEOUT)
-    assert msg == "first round"
-    values = td.clone()
-    queue_out.put("start")
-    msg = queue_in.get(timeout=TIMEOUT)
-    assert msg == "second round"
-    new_values = td.clone()
-    for k, item in values.items():
-        if k in ["reward_sum", "reward_ssq"] and not _has_gym:
-            # mocking env rewards are sparse
-            continue
-        assert (item != new_values.get(k)).any(), k
-    proc.join()
-    if not parallel_env.is_closed:
-        parallel_env.close()
+    with Lock() as lock:
+        parallel_env = ParallelEnv(3, make_env)
+        queue_out = mp.Queue(1)
+        queue_in = mp.Queue(1)
+        proc = mp.Process(target=_run_parallelenv, args=(parallel_env, queue_out, queue_in))
+        proc.start()
+        parallel_sd = parallel_env.state_dict()
+        assert "worker0" in parallel_sd
+        worker_sd = parallel_sd["worker0"]
+        td = list(worker_sd.values())[0]
+        queue_out.put("start")
+        msg = queue_in.get(timeout=TIMEOUT)
+        assert msg == "first round"
+        values = td.clone()
+        queue_out.put("start")
+        msg = queue_in.get(timeout=TIMEOUT)
+        assert msg == "second round"
+        new_values = td.clone()
+        for k, item in values.items():
+            if k in ["reward_sum", "reward_ssq"] and not _has_gym:
+                # mocking env rewards are sparse
+                continue
+            assert (item != new_values.get(k)).any(), k
+        proc.join()
+        if not parallel_env.is_closed:
+            parallel_env.close()
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
