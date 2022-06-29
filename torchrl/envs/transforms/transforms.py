@@ -74,7 +74,7 @@ def _apply_to_composite(function):
                     d[key_out] = function(self, observation_spec[key_in])
             return CompositeSpec(**d)
         else:
-            return function(observation_spec)
+            return function(self, observation_spec)
 
     return new_fun
 

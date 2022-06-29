@@ -211,7 +211,7 @@ def test_vecnorm_parallel_auto(nprc):
     reward_ssq = td.get("reward_ssq").clone()
     reward_count = td.get("reward_count").clone()
 
-    assert obs_count == nprc * 11 + 2  # 10 steps + reset + init
+    assert obs_count == nprc * 11 + 1  # 10 steps + reset + init
 
     for idx in range(nprc):
         tup = queues[idx][0].get(timeout=TIMEOUT)
