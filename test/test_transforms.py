@@ -313,9 +313,9 @@ def test_parallelenv_vecnorm():
 @pytest.mark.parametrize(
     "parallel",
     [
-        True,
-        False,
         None,
+        False,
+        True,
     ],
 )
 def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
@@ -331,13 +331,13 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     env.set_seed(0)
     t = VecNorm(decay=1.0)
     env_t = TransformedEnv(env, t)
-    tensordict = env_t.reset()
+    td = env_t.reset()
     tds = []
     for _ in range(N):
-        td = env_t.rand_step(tensordict)
+        td = env_t.rand_step(td)
+        tds.append(td.clone())
         if td.get("done").any():
-            env_t.reset()
-        tds.append(td)
+            td = env_t.reset()
     tds = torch.stack(tds, 0)
     obs = tds.get("next_observation")
     obs = obs.view(-1, obs.shape[-1])

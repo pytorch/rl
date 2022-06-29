@@ -62,7 +62,6 @@ __all__ = [
 ]
 
 IMAGE_KEYS = ["next_pixels"]
-IMAGE_KEYS_OUT = ["next_pixels"]
 _MAX_NOOPS_TRIALS = 10
 
 
@@ -637,8 +636,6 @@ class ToTensorImage(ObservationTransform):
     ):
         if keys_in is None:
             keys_in = IMAGE_KEYS  # default
-        if keys_out is None:
-            keys_out = IMAGE_KEYS_OUT  # default
         super().__init__(keys_in=keys_in, keys_out=keys_out)
         self.unsqueeze = unsqueeze
         self.dtype = dtype if dtype is not None else torch.get_default_dtype()
@@ -792,7 +789,7 @@ class Resize(ObservationTransform):
                 "Consider installing this dependency."
             )
         if keys_in is None:
-            keys_in = IMAGE_KEYS_OUT  # default
+            keys_in = IMAGE_KEYS  # default
         super().__init__(keys_in=keys_in, keys_out=keys_out)
         self.w = int(w)
         self.h = int(h)
@@ -857,7 +854,7 @@ class CenterCrop(ObservationTransform):
                 "Consider installing this dependency."
             )
         if keys_in is None:
-            keys_in = IMAGE_KEYS_OUT  # default
+            keys_in = IMAGE_KEYS  # default
         super().__init__(keys_in=keys_in)
         self.w = w
         self.h = h if h else w
@@ -923,7 +920,7 @@ class FlattenObservation(ObservationTransform):
                 "Consider installing this dependency."
             )
         if keys_in is None:
-            keys_in = IMAGE_KEYS_OUT  # default
+            keys_in = IMAGE_KEYS  # default
         super().__init__(keys_in=keys_in)
         self.first_dim = first_dim
         self.last_dim = last_dim
@@ -962,7 +959,7 @@ class GrayScale(ObservationTransform):
 
     def __init__(self, keys_in: Optional[Sequence[str]] = None):
         if keys_in is None:
-            keys_in = IMAGE_KEYS_OUT
+            keys_in = IMAGE_KEYS
         super(GrayScale, self).__init__(keys_in=keys_in)
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
@@ -1105,7 +1102,7 @@ class CatFrames(ObservationTransform):
         keys_in: Optional[Sequence[str]] = None,
     ):
         if keys_in is None:
-            keys_in = IMAGE_KEYS_OUT
+            keys_in = IMAGE_KEYS
         super().__init__(keys_in=keys_in)
         self.N = N
         self.cat_dim = cat_dim
