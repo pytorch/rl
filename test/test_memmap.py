@@ -188,11 +188,11 @@ def test_memmap_zero_value(device, value):
     """
     value.to(device)
     expected_memmap_tensor = MemmapTensor(value)
-    m1 = MemmapTensor([3, 4])
+    m1 = MemmapTensor([3, 4], device=device)
     assert m1.shape == (3, 4)
     assert torch.all(m1 == expected_memmap_tensor)
     assert torch.all(m1 + torch.ones([3, 4], device=device) == 1)
-    m2 = MemmapTensor(3, 4)
+    m2 = MemmapTensor(3, 4, device=device)
     assert m2.shape == (3, 4)
     assert torch.all(m2 == expected_memmap_tensor)
     assert torch.all(m2 + torch.ones([3, 4], device=device) == 1)
