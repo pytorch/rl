@@ -10,6 +10,7 @@ import tempfile
 import numpy as np
 import pytest
 import torch
+from _utils_internal import get_available_devices
 from torchrl.data.tensordict.memmap import MemmapTensor
 
 
@@ -35,7 +36,18 @@ def test_grad():
         MemmapTensor(t + 1)
 
 
-@pytest.mark.parametrize("dtype", [torch.float, torch.int, torch.double, torch.bool])
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        torch.half,
+        torch.float,
+        torch.double,
+        torch.int,
+        torch.uint8,
+        torch.long,
+        torch.bool,
+    ],
+)
 @pytest.mark.parametrize(
     "shape",
     [
@@ -45,8 +57,9 @@ def test_grad():
         [1, 2],
     ],
 )
-def test_memmap_metadata(dtype, shape):
-    t = torch.tensor([1, 0]).reshape(shape)
+def test_memmap_data_type(dtype, shape):
+    """Test that MemmapTensor can be created with a given data type and shape."""
+    t = torch.tensor([1, 0], dtype=dtype).reshape(shape)
     m = MemmapTensor(t)
     assert m.dtype == t.dtype
     assert (m == t).all()
@@ -137,9 +150,49 @@ def test_memmap_clone():
     assert m2c == m1
 
 
-def test_memmap_tensor():
-    t = torch.tensor([[1, 2, 3], [4, 5, 6]])
-    assert (torch.tensor(t) == t).all()
+@pytest.mark.parametrize("device", get_available_devices())
+def test_memmap_same_device_as_tensor(device):
+    """
+    Created MemmapTensor should be on the same device as the input tensor.
+    Check if device is correct when .to(device) is called.
+    """
+    t = torch.tensor([1], device=device)
+    m = MemmapTensor(t)
+    assert m.device == torch.device(device)
+    for other_device in get_available_devices():
+        if other_device != device:
+            with pytest.raises(
+                RuntimeError,
+                match="Expected all tensors to be on the same device, "
+                + "but found at least two devices",
+            ):
+                assert torch.all(m + torch.ones([3, 4], device=other_device) == 1)
+        m = m.to(other_device)
+        assert m.device == torch.device(other_device)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_memmap_create_on_same_device(device):
+    """Test if the device arg for MemmapTensor init is respected."""
+    m = MemmapTensor([3, 4], device=device)
+    assert m.device == torch.device(device)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize(
+    "value", [torch.zeros([3, 4]), MemmapTensor(torch.zeros([3, 4]))]
+)
+@pytest.mark.parametrize("shape", [[3, 4], [[3, 4]]])
+def test_memmap_zero_value(device, value, shape):
+    """
+    Test if all entries are zeros when MemmapTensor is created with size.
+    """
+    value = value.to(device)
+    expected_memmap_tensor = MemmapTensor(value)
+    m = MemmapTensor(*shape, device=device)
+    assert m.shape == (3, 4)
+    assert torch.all(m == expected_memmap_tensor)
+    assert torch.all(m + torch.ones([3, 4], device=device) == 1)
 
 
 if __name__ == "__main__":
