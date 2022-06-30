@@ -224,6 +224,7 @@ jobs:
     environment:
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
+      CU_VERSION: << parameters.cu_version >>
 
     steps:
       - checkout
@@ -268,6 +269,7 @@ jobs:
       image_name: "pytorch/manylinux-cuda113"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
+      CU_VERSION: << parameters.cu_version >>
 
     steps:
       - checkout
@@ -320,6 +322,7 @@ jobs:
       image_name: "pytorch/manylinux-cuda113"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
+      CU_VERSION: << parameters.cu_version >>
 
     steps:
       - checkout
@@ -373,6 +376,7 @@ jobs:
     environment:
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
+      CU_VERSION: << parameters.cu_version >>
 
     steps:
       - checkout
@@ -418,6 +422,7 @@ jobs:
       image_name: "pytorch/manylinux-cuda113"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
+      CU_VERSION: << parameters.cu_version >>
 
     steps:
       - checkout
