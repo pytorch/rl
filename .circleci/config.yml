@@ -228,10 +228,10 @@ jobs:
     steps:
       - checkout
       - designate_upload_channel
-      - run:
-          name: Generate cache key
-          # This will refresh cache on Sundays, nightly build should generate new cache.
-          command: echo "$(date +"%Y-%U")" > .circleci-weekly
+#      - run:
+#          name: Generate cache key
+#          # This will refresh cache on Sundays, nightly build should generate new cache.
+#          command: echo "$(date +"%Y-%U")" > .circleci-weekly
 #      - restore_cache:
 #          keys:
 #            - env-v2-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
@@ -272,10 +272,10 @@ jobs:
     steps:
       - checkout
       - designate_upload_channel
-      - run:
-          name: Generate cache key
-          # This will refresh cache on Sundays, nightly build should generate new cache.
-          command: echo "$(date +"%Y-%U")" > .circleci-weekly
+#      - run:
+#          name: Generate cache key
+#          # This will refresh cache on Sundays, nightly build should generate new cache.
+#          command: echo "$(date +"%Y-%U")" > .circleci-weekly
 #      - restore_cache:
 #
 #          keys:
@@ -291,23 +291,23 @@ jobs:
 #          paths:
 #            - conda
 #            - env
-      - run:
-          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
-          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
-          # They're availble in all the other workflows (OSX and Windows).
-          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
-          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
-          name: export CIRCLECI env var
-          command: echo "CIRCLECI=true" >> ./env.list
+#      - run:
+#          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
+#          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
+#          # They're availble in all the other workflows (OSX and Windows).
+#          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
+#          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
+#          name: export CIRCLECI env var
+#          command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux/scripts/install.sh
+          command: .circleci/unittest/linux/scripts/install.sh
       - run:
           name: Run tests
-          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
+          command: .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Post Process
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/post_process.sh
+          command:  .circleci/unittest/linux/scripts/post_process.sh
       - store_test_results:
           path: test-results
 
@@ -324,10 +324,10 @@ jobs:
     steps:
       - checkout
       - designate_upload_channel
-      - run:
-          name: Generate cache key
-          # This will refresh cache on Sundays, nightly build should generate new cache.
-          command: echo "$(date +"%Y-%U")" > .circleci-weekly
+#      - run:
+#          name: Generate cache key
+#          # This will refresh cache on Sundays, nightly build should generate new cache.
+#          command: echo "$(date +"%Y-%U")" > .circleci-weekly
 #      - restore_cache:
 #
 #          keys:
@@ -335,7 +335,7 @@ jobs:
 
       - run:
           name: Setup
-          command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_optdeps/scripts/setup_env.sh
+          command: .circleci/unittest/linux_optdeps/scripts/setup_env.sh
 #      - save_cache:
 #
 #          key: env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_optdeps/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
@@ -343,23 +343,23 @@ jobs:
 #          paths:
 #            - conda
 #            - env
-      - run:
-          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
-          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
-          # They're availble in all the other workflows (OSX and Windows).
-          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
-          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
-          name: export CIRCLECI env var
-          command: echo "CIRCLECI=true" >> ./env.list
+#      - run:
+#          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
+#          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
+#          # They're availble in all the other workflows (OSX and Windows).
+#          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
+#          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
+#          name: export CIRCLECI env var
+#          command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_optdeps/scripts/install.sh
+          command: .circleci/unittest/linux_optdeps/scripts/install.sh
       - run:
           name: Run tests
-          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_optdeps/scripts/run_test.sh
+          command: .circleci/unittest/linux_optdeps/scripts/run_test.sh
       - run:
           name: Post Process
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_optdeps/scripts/post_process.sh
+          command: .circleci/unittest/linux_optdeps/scripts/post_process.sh
       - store_test_results:
           path: test-results
 
@@ -377,10 +377,10 @@ jobs:
     steps:
       - checkout
       - designate_upload_channel
-      - run:
-          name: Generate cache key
-          # This will refresh cache on Sundays, nightly build should generate new cache.
-          command: echo "$(date +"%Y-%U")" > .circleci-weekly
+#      - run:
+#          name: Generate cache key
+#          # This will refresh cache on Sundays, nightly build should generate new cache.
+#          command: echo "$(date +"%Y-%U")" > .circleci-weekly
 #      - restore_cache:
 #
 #          keys:
@@ -422,10 +422,10 @@ jobs:
     steps:
       - checkout
       - designate_upload_channel
-      - run:
-          name: Generate cache key
-          # This will refresh cache on Sundays, nightly build should generate new cache.
-          command: echo "$(date +"%Y-%U")" > .circleci-weekly
+#      - run:
+#          name: Generate cache key
+#          # This will refresh cache on Sundays, nightly build should generate new cache.
+#          command: echo "$(date +"%Y-%U")" > .circleci-weekly
 #      - restore_cache:
 #
 #          keys:
@@ -451,13 +451,13 @@ jobs:
           command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_stable/scripts/install.sh
+          command: .circleci/unittest/linux_stable/scripts/install.sh
       - run:
           name: Run tests
-          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_stable/scripts/run_test.sh
+          command: .circleci/unittest/linux_stable/scripts/run_test.sh
       - run:
           name: Post Process
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_stable/scripts/post_process.sh
+          command: .circleci/unittest/linux_stable/scripts/post_process.sh
       - store_test_results:
           path: test-results
 
@@ -474,10 +474,10 @@ jobs:
           name: Install wget
           command: HOMEBREW_NO_AUTO_UPDATE=1 brew install wget
           # Disable brew auto update which is very slow
-      - run:
-          name: Generate cache key
-          # This will refresh cache on Sundays, nightly build should generate new cache.
-          command: echo "$(date +"%Y-%U")" > .circleci-weekly
+#      - run:
+#          name: Generate cache key
+#          # This will refresh cache on Sundays, nightly build should generate new cache.
+#          command: echo "$(date +"%Y-%U")" > .circleci-weekly
 #      - restore_cache:
 #
 #          keys:

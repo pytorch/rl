@@ -13,6 +13,7 @@ conda activate ./env
 if [ "${CU_VERSION:-}" == cpu ] ; then
     cudatoolkit="cpuonly"
     version="cpu"
+    echo "Using cpu build"
 else
     if [[ ${#CU_VERSION} -eq 4 ]]; then
         CUDA_VERSION="${CU_VERSION:2:1}.${CU_VERSION:3:1}"
@@ -22,7 +23,7 @@ else
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
     cudatoolkit="cudatoolkit=${version}"
-    export PATH=$PATH:/usr/local/cuda-11/bin/nvcc/
+    export CUDACXX=/usr/local/cuda-11/bin/nvcc/
 fi
 
 case "$(uname -s)" in
