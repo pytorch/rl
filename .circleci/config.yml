@@ -293,14 +293,14 @@ jobs:
 #          paths:
 #            - conda
 #            - env
-#      - run:
-#          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
-#          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
-#          # They're availble in all the other workflows (OSX and Windows).
-#          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
-#          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
-#          name: export CIRCLECI env var
-#          command: echo "CIRCLECI=true" >> ./env.list
+      - run:
+          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
+          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
+          # They're available in all the other workflows (OSX and Windows).
+          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
+          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
+          name: export CIRCLECI env var
+          command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
           command: .circleci/unittest/linux/scripts/install.sh
@@ -346,14 +346,14 @@ jobs:
 #          paths:
 #            - conda
 #            - env
-#      - run:
-#          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
-#          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
-#          # They're availble in all the other workflows (OSX and Windows).
-#          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
-#          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
-#          name: export CIRCLECI env var
-#          command: echo "CIRCLECI=true" >> ./env.list
+      - run:
+          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
+          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
+          # They're available in all the other workflows (OSX and Windows).
+          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
+          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
+          name: export CIRCLECI env var
+          command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
           command: .circleci/unittest/linux_optdeps/scripts/install.sh
