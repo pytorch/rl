@@ -23,7 +23,6 @@ else
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
     cudatoolkit="cudatoolkit=${version}"
-    export PATH=$PATH:/usr/local/cuda-11.4/bin/nvcc
 fi
 
 case "$(uname -s)" in
