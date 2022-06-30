@@ -5,6 +5,7 @@ dependencies:
   - pip
   - cmake >= 3.18
   - protobuf
+  - gcc
   - pip:
     - hypothesis
     - future

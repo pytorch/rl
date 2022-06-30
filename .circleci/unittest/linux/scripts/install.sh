@@ -22,7 +22,7 @@ else
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
     cudatoolkit="cudatoolkit=${version}"
-#    export CUDACXX=/usr/local/cuda-11/bin/nvcc/
+    export CUDACXX=/usr/local/cuda-11/bin/nvcc
 fi
 
 case "$(uname -s)" in

@@ -4,6 +4,7 @@ channels:
 dependencies:
   - pip
   - cmake >= 3.18
+  - gcc
   - pip:
     - hypothesis
     - future

@@ -5,6 +5,7 @@ dependencies:
   - pip
   - ninja
   - cmake >= 3.18
+  - gcc
   - protobuf
   - pip:
     - hypothesis
