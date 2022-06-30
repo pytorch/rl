@@ -96,7 +96,7 @@ def _main():
 
     setup(
         name="torchrl",
-        version="0.1.0",
+        version="0.1.0b",
         author="torchrl contributors",
         author_email="vmoens@fb.com",
         packages=_get_packages(),
@@ -119,6 +119,7 @@ def _main():
                 "hydra-submitit-launcher",
             ],
         },
+        url="https://github.com/facebookresearch/rl",
     )
 
 
