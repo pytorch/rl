@@ -5,20 +5,17 @@
 
 
 import distutils.command.clean
+import glob
 import os
 import shutil
 import subprocess
 from pathlib import Path
 
-from build_tools import setup_helpers
 from setuptools import setup, find_packages
-
-import glob
 from torch.utils.cpp_extension import (
     CppExtension,
     BuildExtension,
 )
-
 
 
 def _get_pytorch_version():
@@ -71,12 +68,14 @@ def get_extensions():
     extension = CppExtension
 
     extra_link_args = []
-    extra_compile_args = {"cxx": [
-        "-O3",
-        "-std=c++14",
-        "-fdiagnostics-color=always",
-    ]}
-    debug_mode = os.getenv('DEBUG', '0') == '1'
+    extra_compile_args = {
+        "cxx": [
+            "-O3",
+            "-std=c++14",
+            "-fdiagnostics-color=always",
+        ]
+    }
+    debug_mode = os.getenv("DEBUG", "0") == "1"
     if debug_mode:
         print("Compiling in debug mode")
         extra_compile_args = {
@@ -86,7 +85,8 @@ def get_extensions():
                 "-g",
                 "-std=c++14",
                 "-fdiagnostics-color=always",
-            ]}
+            ]
+        }
         extra_link_args = ["-O0", "-g"]
 
     this_dir = os.path.dirname(os.path.abspath(__file__))
