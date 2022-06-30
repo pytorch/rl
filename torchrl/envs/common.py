@@ -135,7 +135,7 @@ class _EnvClass:
 
     from_pixels: bool
     device = torch.device("cpu")
-    _inplace_update: bool = True
+    _inplace_update: bool
 
     def __init__(
         self,
@@ -165,6 +165,10 @@ class _EnvClass:
             "batch_size" not in self.__class__.__dict__
         ):
             self.batch_size = torch.Size([])
+
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._inplace_update = True
 
     @property
     def action_spec(self) -> TensorSpec:

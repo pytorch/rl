@@ -282,7 +282,7 @@ class TransformedEnv(_EnvClass):
 
     """
 
-    _inplace_update: bool = True
+    _inplace_update: bool
 
     def __init__(
         self,

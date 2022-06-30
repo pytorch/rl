@@ -202,19 +202,17 @@ def _make_envs(
         create_env_fn = lambda: GymEnv(env_name, frame_skip=frame_skip, device=device)
     else:
         if env_name == "ALE/Pong-v5":
-            t_in = Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
             create_env_fn = lambda: TransformedEnv(
                 GymEnv(env_name, frame_skip=frame_skip, device=device),
-                t_in,
+                Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
             )
         else:
-            t_in = Compose(
-                ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
-                RewardClipping(0, 0.1),
-            )
             create_env_fn = lambda: TransformedEnv(
                 GymEnv(env_name, frame_skip=frame_skip, device=device),
-                t_in,
+                Compose(
+                    ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
+                    RewardClipping(0, 0.1),
+                ),
             )
     env0 = create_env_fn()
     env_parallel = ParallelEnv(
@@ -225,7 +223,7 @@ def _make_envs(
     )
     if transformed_out:
         if env_name == "ALE/Pong-v5":
-            t_out = (
+            t_out = lambda: (
                 Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
                 if not transformed_in
                 else Compose(
@@ -234,18 +232,18 @@ def _make_envs(
             )
             env0 = TransformedEnv(
                 env0,
-                t_out,
+                t_out(),
             )
             env_parallel = TransformedEnv(
                 env_parallel,
-                t_out,
+                t_out(),
             )
             env_serial = TransformedEnv(
                 env_serial,
-                t_out,
+                t_out(),
             )
         else:
-            t_out = (
+            t_out = lambda: (
                 Compose(
                     ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
                     RewardClipping(0, 0.1),
@@ -257,15 +255,15 @@ def _make_envs(
             )
             env0 = TransformedEnv(
                 env0,
-                t_out,
+                t_out(),
             )
             env_parallel = TransformedEnv(
                 env_parallel,
-                t_out,
+                t_out(),
             )
             env_serial = TransformedEnv(
                 env_serial,
-                t_out,
+                t_out(),
             )
 
     return env_parallel, env_serial, env0
@@ -490,9 +488,9 @@ class TestParallel:
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
     @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
-    @pytest.mark.parametrize("transformed_in", [True, True])
+    @pytest.mark.parametrize("transformed_in", [True, False])
     @pytest.mark.parametrize("transformed_out", [False, True])
-    @pytest.mark.parametrize("open_before", [True, False])
+    @pytest.mark.parametrize("open_before", [False, True])
     def test_parallel_env_cast(
         self,
         env_name,
@@ -515,49 +513,45 @@ class TestParallel:
         if open_before:
             td_cpu = env0.rollout(max_steps=10)
             assert td_cpu.device == torch.device("cpu")
-            td_cpu = env_serial.rollout(max_steps=10)
-            assert td_cpu.device == torch.device("cpu")
-            td_cpu = env_parallel.rollout(max_steps=10)
-            assert td_cpu.device == torch.device("cpu")
-
         env0 = env0.to(device)
-        env_serial = env_serial.to(device)
-        env_parallel = env_parallel.to(device)
-
         assert env0.observation_spec.device == torch.device(device)
         assert env0.action_spec.device == torch.device(device)
         assert env0.reward_spec.device == torch.device(device)
+        assert env0.device == torch.device(device)
+        td_device = env0.reset()
+        assert td_device.device == torch.device(device), env0
+        td_device = env0.rand_step()
+        assert td_device.device == torch.device(device), env0
+        td_device = env0.rollout(max_steps=10)
+        assert td_device.device == torch.device(device), env0
 
+        if open_before:
+            td_cpu = env_serial.rollout(max_steps=10)
+            assert td_cpu.device == torch.device("cpu")
+        env_serial = env_serial.to(device)
         assert env_serial.observation_spec.device == torch.device(device)
         assert env_serial.action_spec.device == torch.device(device)
         assert env_serial.reward_spec.device == torch.device(device)
+        assert env_serial.device == torch.device(device)
+        td_device = env_serial.reset()
+        assert td_device.device == torch.device(device), env_serial
+        td_device = env_serial.rand_step()
+        assert td_device.device == torch.device(device), env_serial
+        td_device = env_serial.rollout(max_steps=10)
+        assert td_device.device == torch.device(device), env_serial
 
+        if open_before:
+            td_cpu = env_parallel.rollout(max_steps=10)
+            assert td_cpu.device == torch.device("cpu")
+        env_parallel = env_parallel.to(device)
         assert env_parallel.observation_spec.device == torch.device(device)
         assert env_parallel.action_spec.device == torch.device(device)
         assert env_parallel.reward_spec.device == torch.device(device)
-
-        assert env0.device == torch.device(device)
-        assert env_serial.device == torch.device(device)
         assert env_parallel.device == torch.device(device)
-
-        td_device = env0.reset()
-        assert td_device.device == torch.device(device), env0
-        td_device = env_serial.reset()
-        assert td_device.device == torch.device(device), env_serial
         td_device = env_parallel.reset()
         assert td_device.device == torch.device(device), env_parallel
-
-        td_device = env0.rand_step()
-        assert td_device.device == torch.device(device), env0
-        td_device = env_serial.rand_step()
-        assert td_device.device == torch.device(device), env_serial
         td_device = env_parallel.rand_step()
         assert td_device.device == torch.device(device), env_parallel
-
-        td_device = env0.rollout(max_steps=10)
-        assert td_device.device == torch.device(device), env0
-        td_device = env_serial.rollout(max_steps=10)
-        assert td_device.device == torch.device(device), env_serial
         td_device = env_parallel.rollout(max_steps=10)
         assert td_device.device == torch.device(device), env_parallel
 
