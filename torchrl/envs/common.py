@@ -169,6 +169,7 @@ class _EnvClass:
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._inplace_update = True
+        return super().__new__(cls)
 
     @property
     def action_spec(self) -> TensorSpec:
