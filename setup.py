@@ -89,6 +89,7 @@ class clean(distutils.command.clean.clean):
 
 def _main():
     from build_tools.setup_helpers import CMakeBuild
+
     pytorch_package_dep = _get_pytorch_version()
     print("-- PyTorch dependency:", pytorch_package_dep)
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
