@@ -262,7 +262,7 @@ jobs:
   unittest_linux_gpu:
     <<: *binary_common
     machine:
-      image: ubuntu-1604-cuda-10.2:202012-01
+      image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
       image_name: "pytorch/manylinux-cuda113"
@@ -314,7 +314,7 @@ jobs:
   unittest_linux_optdeps_gpu:
     <<: *binary_common
     machine:
-      image: ubuntu-1604-cuda-10.2:202012-01
+      image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
       image_name: "pytorch/manylinux-cuda113"
@@ -412,7 +412,7 @@ jobs:
   unittest_linux_stable_gpu:
     <<: *binary_common
     machine:
-      image: ubuntu-1604-cuda-10.2:202012-01
+      image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
       image_name: "pytorch/manylinux-cuda113"
