@@ -81,6 +81,17 @@ class PPOLoss(_LossModule):
         self.loss_critic_type = loss_critic_type
         self.advantage_module = advantage_module
 
+    def make_functional_with_buffers(self):
+        self.actor, (
+            actor_params,
+            actor_buffers,
+        ) = self.actor.make_functional_with_buffers()
+        self.critic, (
+            critic_params,
+            critic_buffers,
+        ) = self.critic.make_functional_with_buffers()
+        return (actor_params, actor_buffers, critic_params, critic_buffers)
+
     def reset(self) -> None:
         pass
 
