@@ -206,7 +206,7 @@ jobs:
     steps:
       - checkout_merge
       - designate_upload_channel
-      - run: packaging/build_wheel.sh
+      - run: packaging/build_wheels.sh
       - store_artifacts:
           path: dist
       - persist_to_workspace:
