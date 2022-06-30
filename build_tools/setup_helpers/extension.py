@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 from subprocess import check_output, STDOUT, CalledProcessError
 
+import torch
 from setuptools import Extension
 from setuptools.command.build_ext import build_ext
 
@@ -45,9 +46,16 @@ _BUILD_KALDI = (
     False if platform.system() == "Windows" else _get_build("BUILD_KALDI", True)
 )
 _BUILD_RNNT = _get_build("BUILD_RNNT", True)
-_USE_ROCM = False
-_USE_CUDA = False
-_USE_OPENMP = False
+_USE_ROCM = _get_build(
+    "USE_ROCM", torch.cuda.is_available() and torch.version.hip is not None
+)
+_USE_CUDA = _get_build(
+    "USE_CUDA", torch.cuda.is_available() and torch.version.hip is None
+)
+_USE_OPENMP = (
+    _get_build("USE_OPENMP", True)
+    and "ATen parallel backend: OpenMP" in torch.__config__.parallel_info()
+)
 _TORCH_CUDA_ARCH_LIST = os.environ.get("TORCH_CUDA_ARCH_LIST", None)
 
 
@@ -87,7 +95,7 @@ class CMakeBuild(build_ext):
 
         cmake_args = [
             f"-DCMAKE_BUILD_TYPE={cfg}",
-            # f"-DCMAKE_PREFIX_PATH={torch.utils.cmake_prefix_path}",
+            f"-DCMAKE_PREFIX_PATH={torch.utils.cmake_prefix_path}",
             f"-DCMAKE_INSTALL_PREFIX={extdir}",
             "-DCMAKE_VERBOSE_MAKEFILE=ON",
             f"-DPython_INCLUDE_DIR={distutils.sysconfig.get_python_inc()}",
