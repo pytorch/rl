@@ -9,7 +9,7 @@ import abc
 import math
 from collections import OrderedDict
 from numbers import Number
-from typing import Any, Callable, Iterator, Optional, Union, Dict
+from typing import Any, Callable, Optional, Union, Dict
 
 import numpy as np
 import torch
@@ -218,9 +218,7 @@ class _EnvClass:
         self.is_done = tensordict_out.get("done")
         self.current_tensordict = step_tensordict(tensordict_out, exclude_done=False)
 
-        for key in self._select_observation_keys(tensordict_out):
-            obs = tensordict_out.get(key)
-            self.observation_spec.type_check(obs, key)
+        self.observation_spec.type_check(tensordict_out)
 
         if tensordict_out._get_meta("reward").dtype is not self.reward_spec.dtype:
             raise TypeError(
@@ -495,11 +493,6 @@ class _EnvClass:
 
         out_td = torch.stack(tensordicts, len(self.batch_size))
         return out_td
-
-    def _select_observation_keys(self, tensordict: _TensorDict) -> Iterator[str]:
-        for key in tensordict.keys():
-            if key.rfind("observation") >= 0:
-                yield key
 
     def _to_tensor(
         self,
