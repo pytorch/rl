@@ -10,7 +10,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from build_tools import setup_helpers
+from build_tools import setup_helpers as setup_h
 from setuptools import setup, find_packages
 
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -88,6 +88,7 @@ def _run_cmd(cmd):
 
 
 def _main():
+    from build_tools.setup_helpers import CMakeBuild
     pytorch_package_dep = _get_pytorch_version()
     print("-- PyTorch dependency:", pytorch_package_dep)
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
@@ -95,13 +96,13 @@ def _main():
 
     setup(
         name="torchrl",
-        version="0.1",
+        version="0.1.0",
         author="torchrl contributors",
         author_email="vmoens@fb.com",
         packages=_get_packages(),
-        ext_modules=setup_helpers.get_ext_modules(),
+        ext_modules=setup_h.get_ext_modules(),
         cmdclass={
-            "build_ext": setup_helpers.CMakeBuild,
+            "build_ext": CMakeBuild,
             "clean": clean,
         },
         install_requires=[pytorch_package_dep, "numpy", "tensorboard", "packaging"],
@@ -122,6 +123,7 @@ def _main():
 
 
 if __name__ == "__main__":
+
     write_version_file()
     print("Building wheel {}-{}".format(package_name, version))
     _main()

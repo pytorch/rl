@@ -1,0 +1,36 @@
+[tool.usort]
+
+first_party_detection = false
+
+[tool.black]
+
+line-length = 120
+target-version = ["py38"]
+
+[tool.ufmt]
+
+excludes = [
+    "gallery",
+    "tutorials",
+]
+
+[project]
+name = "torchrl"
+version = "0.1.0a"
+authors = [
+  { name="Vincent Moens", email="vmoens@fb.com" },
+  { name="torchrl contributors" },
+]
+description = "PyTorch RL Domain Library"
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+#    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/facebookresearch/rl"
+"Bug Tracker" = "https://github.com/facebookresearch/rl/issues"
