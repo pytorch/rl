@@ -54,7 +54,7 @@ pip install "git+https://github.com/pytorch/functorch.git"
 python -c "import functorch"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+pip install -e .
 
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw

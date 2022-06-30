@@ -53,7 +53,7 @@ printf "* Installing torchrl\n"
 printf "g++ version: "
 gcc --version
 
-python setup.py install
+pip install -e .
 
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
