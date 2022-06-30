@@ -110,7 +110,7 @@ binary_common: &binary_common
     wheel_docker_image:
       description: "Wheel only: what docker image to use"
       type: string
-      default: "pytorch/manylinux-cuda102"
+      default: "pytorch/manylinux-cuda113"
     conda_docker_image:
       description: "Conda only: what docker image to use"
       type: string
@@ -218,7 +218,7 @@ jobs:
     <<: *binary_common
 
     docker:
-      - image: "pytorch/manylinux-cuda102"
+      - image: "pytorch/manylinux-cuda113"
     resource_class: 2xlarge+
 
     environment:
@@ -265,7 +265,7 @@ jobs:
       image: ubuntu-1604-cuda-10.2:202012-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda102"
+      image_name: "pytorch/manylinux-cuda113"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
 
@@ -317,7 +317,7 @@ jobs:
       image: ubuntu-1604-cuda-10.2:202012-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda102"
+      image_name: "pytorch/manylinux-cuda113"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
 
@@ -367,7 +367,7 @@ jobs:
     <<: *binary_common
 
     docker:
-      - image: "pytorch/manylinux-cuda102"
+      - image: "pytorch/manylinux-cuda113"
     resource_class: 2xlarge+
 
     environment:
@@ -415,7 +415,7 @@ jobs:
       image: ubuntu-1604-cuda-10.2:202012-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda102"
+      image_name: "pytorch/manylinux-cuda113"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
 
@@ -526,12 +526,12 @@ workflows:
           python_version: '3.8'
 
       - unittest_linux_gpu:
-          cu_version: cu102
+          cu_version: cu113
           name: unittest_linux_gpu_py3.8
           python_version: '3.8'
 
       - unittest_linux_optdeps_gpu:
-          cu_version: cu102
+          cu_version: cu113
           name: unittest_linux_optdeps_gpu_py3.8
           python_version: '3.8'
 
@@ -541,6 +541,6 @@ workflows:
           python_version: '3.8'
 
       - unittest_linux_stable_gpu:
-          cu_version: cu102
+          cu_version: cu113
           name: unittest_linux_stable_gpu_py3.8
           python_version: '3.8'
