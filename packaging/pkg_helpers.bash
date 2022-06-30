@@ -196,11 +196,7 @@ setup_wheel_python() {
     conda env remove -n "env$PYTHON_VERSION" || true
     conda create ${CONDA_CHANNEL_FLAGS} -yn "env$PYTHON_VERSION" python="$PYTHON_VERSION"
     conda activate "env$PYTHON_VERSION"
-    # Install libpng from Anaconda (defaults)
-    conda install ${CONDA_CHANNEL_FLAGS} libpng "jpeg<=9b" -y
   else
-    # Install native CentOS libJPEG, freetype and GnuTLS
-    yum install -y libjpeg-turbo-devel freetype gnutls
     case "$PYTHON_VERSION" in
       3.7) python_abi=cp37-cp37m ;;
       3.8) python_abi=cp38-cp38 ;;
@@ -211,13 +207,6 @@ setup_wheel_python() {
         exit 1
         ;;
     esac
-    # Download all the dependencies required to compile image and video_reader
-    # extensions
-
-    mkdir -p ext_libraries
-    pushd ext_libraries
-    popd
-    export PATH="/opt/python/$python_abi/bin:$(pwd)/ext_libraries/bin:$PATH"
   fi
 }
 
@@ -385,30 +374,5 @@ setup_visual_studio_constraint() {
 setup_junit_results_folder() {
   if [[ "$CI" == "true" ]]; then
     export CONDA_PYTORCH_BUILD_RESULTS_DIRECTORY="${SOURCE_ROOT_DIR}/build_results/results.xml"
-  fi
-}
-
-
-download_copy_ffmpeg() {
-  if [[ "$OSTYPE" == "msys" ]]; then
-    # conda install -yq ffmpeg=4.2 -c pytorch
-    # curl -L -q https://anaconda.org/pytorch/ffmpeg/4.3/download/win-64/ffmpeg-4.3-ha925a31_0.tar.bz2 --output ffmpeg-4.3-ha925a31_0.tar.bz2
-    # bzip2 --decompress --stdout ffmpeg-4.3-ha925a31_0.tar.bz2 | tar -x --file=-
-    # cp Library/bin/*.dll ../torchvision
-    echo "FFmpeg is disabled currently on Windows"
-  else
-    if [[ "$(uname)" == Darwin ]]; then
-      conda install -yq ffmpeg=4.2 -c pytorch
-      conda install -yq wget
-    else
-      # pushd ext_libraries
-      # wget -q https://anaconda.org/pytorch/ffmpeg/4.2/download/linux-64/ffmpeg-4.2-hf484d3e_0.tar.bz2
-      # tar -xjvf ffmpeg-4.2-hf484d3e_0.tar.bz2
-      # rm -rf ffmpeg-4.2-hf484d3e_0.tar.bz2
-      # ldconfig
-      # which ffmpeg
-      # popd
-      echo "FFmpeg is disabled currently on Linux"
-    fi
   fi
 }

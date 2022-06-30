@@ -513,6 +513,15 @@ workflows:
       - lint_c
 #      - type_check_python
 
+  build:
+    jobs:
+      - binary_linux_wheel:
+          conda_docker_image: pytorch/conda-builder:cuda113
+          cu_version: cu113
+          name: binary_linux_wheel_py3.8_cu113
+          python_version: '3.8'
+          wheel_docker_image: pytorch/manylinux-cuda113
+
   unittest:
     jobs:
       - unittest_macos_cpu:
