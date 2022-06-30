@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-
 import distutils.command.clean
 import os
 import shutil
@@ -17,6 +16,10 @@ cwd = os.path.dirname(os.path.abspath(__file__))
 version_txt = os.path.join(cwd, "version.txt")
 with open(version_txt, "r") as f:
     version = f.readline().strip()
+
+
+ROOT_DIR = Path(__file__).parent.resolve()
+
 
 try:
     sha = (
@@ -58,9 +61,6 @@ def _get_packages():
     return find_packages(exclude=exclude)
 
 
-ROOT_DIR = Path(__file__).parent.resolve()
-
-
 class clean(distutils.command.clean.clean):
     def run(self):
         # Run default behavior first
@@ -80,11 +80,11 @@ class clean(distutils.command.clean.clean):
                 shutil.rmtree(str(path), ignore_errors=True)
 
 
-def _run_cmd(cmd):
-    try:
-        return subprocess.check_output(cmd, cwd=ROOT_DIR).decode("ascii").strip()
-    except Exception:
-        return None
+# def _run_cmd(cmd):
+#     try:
+#         return subprocess.check_output(cmd, cwd=ROOT_DIR).decode("ascii").strip()
+#     except Exception:
+#         return None
 
 
 def _main():
