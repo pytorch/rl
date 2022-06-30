@@ -42,7 +42,7 @@ if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
     fi
 else
-    pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cu102
+    pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 fi
 
 printf "Installing functorch\n"
@@ -53,7 +53,7 @@ pip install "git+https://github.com/pytorch/functorch.git"
 python -c "import functorch"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+pip install -e .
 
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
