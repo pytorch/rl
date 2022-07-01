@@ -48,7 +48,6 @@ def write_version_file():
         f.write("__version__ = '{}'\n".format(version))
         f.write("git_version = {}\n".format(repr(sha)))
 
-
 def _get_pytorch_version():
     if "PYTORCH_VERSION" in os.environ:
         return f"torch=={os.environ['PYTORCH_VERSION']}"
