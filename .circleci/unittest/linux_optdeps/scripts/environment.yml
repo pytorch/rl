@@ -3,7 +3,6 @@ channels:
   - defaults
 dependencies:
   - pip
-  - cmake >= 3.18
   - pip:
     - hypothesis
     - future
