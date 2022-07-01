@@ -5,13 +5,17 @@
 
 
 import distutils.command.clean
+import glob
 import os
 import shutil
 import subprocess
 from pathlib import Path
 
-from build_tools import setup_helpers
 from setuptools import setup, find_packages
+from torch.utils.cpp_extension import (
+    CppExtension,
+    BuildExtension,
+)
 
 
 def _get_pytorch_version():
@@ -60,6 +64,53 @@ def _run_cmd(cmd):
         return None
 
 
+def get_extensions():
+    extension = CppExtension
+
+    extra_link_args = []
+    extra_compile_args = {
+        "cxx": [
+            "-O3",
+            "-std=c++14",
+            "-fdiagnostics-color=always",
+        ]
+    }
+    debug_mode = os.getenv("DEBUG", "0") == "1"
+    if debug_mode:
+        print("Compiling in debug mode")
+        extra_compile_args = {
+            "cxx": [
+                "-O0",
+                "-fno-inline",
+                "-g",
+                "-std=c++14",
+                "-fdiagnostics-color=always",
+            ]
+        }
+        extra_link_args = ["-O0", "-g"]
+
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    extensions_dir = os.path.join(this_dir, "torchrl", "csrc")
+
+    extension_sources = set(
+        os.path.join(extensions_dir, p)
+        for p in glob.glob(os.path.join(extensions_dir, "*.cpp"))
+    )
+    sources = list(extension_sources)
+
+    ext_modules = [
+        extension(
+            "torchrl._torchrl",
+            sources,
+            include_dirs=[this_dir],
+            extra_compile_args=extra_compile_args,
+            extra_link_args=extra_link_args,
+        )
+    ]
+
+    return ext_modules
+
+
 def _main():
     pytorch_package_dep = _get_pytorch_version()
     print("-- PyTorch dependency:", pytorch_package_dep)
@@ -71,10 +122,10 @@ def _main():
         version="0.1",
         author="torchrl contributors",
         author_email="vmoens@fb.com",
-        packages=_get_packages(),
-        ext_modules=setup_helpers.get_ext_modules(),
+        packages=find_packages(),
+        ext_modules=get_extensions(),
         cmdclass={
-            "build_ext": setup_helpers.CMakeBuild,
+            "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
             "clean": clean,
         },
         install_requires=[pytorch_package_dep, "numpy", "tensorboard", "packaging"],

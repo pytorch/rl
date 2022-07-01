@@ -32,19 +32,17 @@ esac
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-#printf "Installing PyTorch with %s\n" "${cudatoolkit}"
-#if [ "${os}" == "MacOSX" ]; then
-#    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch "${cudatoolkit}" pytest
-#else
-#    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}" pytest
-#fi
-
-#printf "Installing PyTorch with %s\n" "${CU_VERSION}"
+printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
+    # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
     # use pip to install pytorch as conda can frequently pick older release
-    pip install torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
+    if [[ $OSTYPE == 'darwin'* ]]; then
+      pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+    else
+      pip3 install torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
+    fi
 else
-    conda install -y pytorch cudatoolkit=10.2 -c pytorch-nightly
+    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 fi
 
 printf "Installing functorch\n"
@@ -55,7 +53,7 @@ pip install "git+https://github.com/pytorch/functorch.git"
 python -c "import functorch"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+pip install -e .
 
 # smoke test
 python -c "import torchrl"
