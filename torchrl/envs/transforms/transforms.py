@@ -1245,8 +1245,6 @@ class DoubleToFloat(Transform):
         keys_in: Optional[Sequence[str]] = None,
         keys_inv_in: Optional[Sequence[str]] = None,
     ):
-        if keys_inv_in is None:
-            keys_inv_in = ["action"]
         super().__init__(keys_in=keys_in, keys_inv_in=keys_inv_in)
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
@@ -1285,6 +1283,13 @@ class DoubleToFloat(Transform):
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         self._transform_spec(observation_spec)
         return observation_spec
+
+    def __repr__(self) -> str:
+        s = (
+            f"{self.__class__.__name__}(keys_in={self.keys_in}, keys_out={self.keys_out},"
+            f"keys_inv_in={self.keys_inv_in}, keys_inv_out={self.keys_inv_out})"
+        )
+        return s
 
 
 class CatTensors(Transform):
