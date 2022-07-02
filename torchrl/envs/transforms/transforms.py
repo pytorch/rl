@@ -1285,8 +1285,10 @@ class DoubleToFloat(Transform):
         return observation_spec
 
     def __repr__(self) -> str:
-        s = f"{self.__class__.__name__}(keys_in={self.keys_in}, keys_out={self.keys_out}," \
+        s = (
+            f"{self.__class__.__name__}(keys_in={self.keys_in}, keys_out={self.keys_out},"
             f"keys_inv_in={self.keys_inv_in}, keys_inv_out={self.keys_inv_out})"
+        )
         return s
 
 

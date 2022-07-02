@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from typing import Optional, Union, Tuple
 
 import numpy as np
@@ -38,6 +39,11 @@ class default_info_dict_reader:
         self.keys = keys
 
     def __call__(self, info_dict: dict, tensordict: _TensorDict) -> _TensorDict:
+        if not isinstance(info_dict, dict) and len(self.keys):
+            warnings.warn(
+                f"Found an info_dict of type {type(info_dict)} "
+                f"but expected type or subtype `dict`."
+            )
         for key in self.keys:
             if key in info_dict:
                 tensordict[key] = info_dict[key]
