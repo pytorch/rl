@@ -103,7 +103,7 @@ class GymLikeEnv(_EnvWrapper):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
-        self.info_dict_reader(info, tensordict_out)
+        self.info_dict_reader(*info, tensordict_out)
 
         return tensordict_out
 
