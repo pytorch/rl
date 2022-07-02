@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import math
-from time import sleep
+from multiprocessing import Lock
 
 import pytest
 import torch
@@ -49,10 +49,9 @@ def _test_vecnorm_subproc(idx, queue_out: mp.Queue, queue_in: mp.Queue):
     t = VecNorm(shared_td=td)
     env = TransformedEnv(env, t)
     env.set_seed(1000 + idx)
-    env.reset()
-    assert env.current_tensordict is not None
+    tensordict = env.reset()
     for _ in range(10):
-        env.rand_step()
+        env.rand_step(tensordict)
     queue_out.put(True)
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "all_done"
@@ -86,28 +85,33 @@ def test_vecnorm_parallel(nprc):
     if _has_gym:
         td = VecNorm.build_td_for_shared_vecnorm(GymEnv("Pendulum-v1"))
     else:
-        td = VecNorm.build_td_for_shared_vecnorm(ContinuousActionVecMockEnv())
-    for idx in range(nprc):
-        prc_queue_in = mp.Queue(1)
-        prc_queue_out = mp.Queue(1)
-        p = mp.Process(
-            target=_test_vecnorm_subproc,
-            args=(
-                idx,
-                prc_queue_in,
-                prc_queue_out,
-            ),
+        td = VecNorm.build_td_for_shared_vecnorm(
+            ContinuousActionVecMockEnv(),
         )
-        p.start()
-        prc_queue_out.put(td)
-        prcs.append(p)
-        queues.append((prc_queue_in, prc_queue_out))
+    with Lock() as lock:
+        for idx in range(nprc):
+            prc_queue_in = mp.Queue(1)
+            prc_queue_out = mp.Queue(1)
+            p = mp.Process(
+                target=_test_vecnorm_subproc,
+                args=(
+                    idx,
+                    prc_queue_in,
+                    prc_queue_out,
+                ),
+            )
+            p.start()
+            prc_queue_out.put(td)
+            prcs.append(p)
+            queues.append((prc_queue_in, prc_queue_out))
 
-    dones = [queue[0].get(timeout=TIMEOUT) for queue in queues]
-    assert all(dones)
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
+    with Lock() as lock:
+        dones = [queue[0].get(timeout=TIMEOUT) for queue in queues]
+        assert all(dones)
+        msg = "all_done"
+    with Lock() as lock:
+        for idx in range(nprc):
+            queues[idx][1].put(msg)
 
     obs_sum = td.get("next_observation_sum").clone()
     obs_ssq = td.get("next_observation_ssq").clone()
@@ -116,41 +120,42 @@ def test_vecnorm_parallel(nprc):
     reward_ssq = td.get("reward_ssq").clone()
     reward_count = td.get("reward_ssq").clone()
 
-    for idx in range(nprc):
-        td_out = queues[idx][0].get(timeout=TIMEOUT)
-        _obs_sum = td_out.get("obs_sum")
-        _obs_ssq = td_out.get("obs_ssq")
-        _obs_count = td_out.get("obs_count")
-        _reward_sum = td_out.get("reward_sum")
-        _reward_ssq = td_out.get("reward_ssq")
-        _reward_count = td_out.get("reward_count")
-        assert (obs_sum == _obs_sum).all()
-        assert (obs_ssq == _obs_ssq).all()
-        assert (obs_count == _obs_count).all()
-        assert (reward_sum == _reward_sum).all()
-        assert (reward_ssq == _reward_ssq).all()
-        assert (reward_count == _reward_count).all()
+    with Lock() as lock:
+        for idx in range(nprc):
+            td_out = queues[idx][0].get(timeout=TIMEOUT)
+            _obs_sum = td_out.get("obs_sum")
+            _obs_ssq = td_out.get("obs_ssq")
+            _obs_count = td_out.get("obs_count")
+            _reward_sum = td_out.get("reward_sum")
+            _reward_ssq = td_out.get("reward_ssq")
+            _reward_count = td_out.get("reward_count")
+            assert (obs_sum == _obs_sum).all()
+            assert (obs_ssq == _obs_ssq).all()
+            assert (obs_count == _obs_count).all()
+            assert (reward_sum == _reward_sum).all()
+            assert (reward_ssq == _reward_ssq).all()
+            assert (reward_count == _reward_count).all()
 
-        obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
-            _obs_sum,
-            _obs_ssq,
-            _obs_count,
-            _reward_sum,
-            _reward_ssq,
-            _reward_count,
-        )
+            obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
+                _obs_sum,
+                _obs_ssq,
+                _obs_count,
+                _reward_sum,
+                _reward_ssq,
+                _reward_count,
+            )
 
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
+        msg = "all_done"
+        for idx in range(nprc):
+            queues[idx][1].put(msg)
 
 
 def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.Queue):
     env = make_env()
     env.set_seed(1000 + idx)
-    env.reset()
+    tensordict = env.reset()
     for _ in range(10):
-        env.rand_step()
+        tensordict = env.rand_step(tensordict)
     queue_out.put(True)
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "all_done"
@@ -166,11 +171,11 @@ def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "all_done"
     env.close()
-    print("closed")
 
 
 @pytest.mark.parametrize("nprc", [2, 5])
 def test_vecnorm_parallel_auto(nprc):
+
     queues = []
     prcs = []
     if _has_gym:
@@ -181,74 +186,85 @@ def test_vecnorm_parallel_auto(nprc):
         make_env = EnvCreator(
             lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm(decay=1.0))
         )
-    for idx in range(nprc):
-        prc_queue_in = mp.Queue(1)
-        prc_queue_out = mp.Queue(1)
-        p = mp.Process(
-            target=_test_vecnorm_subproc_auto,
-            args=(
-                idx,
-                make_env,
-                prc_queue_in,
-                prc_queue_out,
-            ),
-        )
-        p.start()
-        prcs.append(p)
-        queues.append((prc_queue_in, prc_queue_out))
 
-    td = list(make_env.state_dict().values())[0]
-    dones = [queue[0].get() for queue in queues]
-    assert all(dones)
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
+    with Lock() as lock:
+        for idx in range(nprc):
+            prc_queue_in = mp.Queue(1)
+            prc_queue_out = mp.Queue(1)
+            p = mp.Process(
+                target=_test_vecnorm_subproc_auto,
+                args=(
+                    idx,
+                    make_env,
+                    prc_queue_in,
+                    prc_queue_out,
+                ),
+            )
+            p.start()
+            prcs.append(p)
+            queues.append((prc_queue_in, prc_queue_out))
 
-    sleep(0.01)
-    obs_sum = td.get("next_observation_sum").clone()
-    obs_ssq = td.get("next_observation_ssq").clone()
-    obs_count = td.get("next_observation_count").clone()
-    reward_sum = td.get("reward_sum").clone()
-    reward_ssq = td.get("reward_ssq").clone()
-    reward_count = td.get("reward_count").clone()
+        td = list(make_env.state_dict().values())[0]
+        dones = [queue[0].get() for queue in queues]
+        assert all(dones)
+        msg = "all_done"
+    with Lock() as lock:
+        for idx in range(nprc):
+            queues[idx][1].put(msg)
+
+        # sleep(0.01)
+        obs_sum = td.get("next_observation_sum").clone()
+        obs_ssq = td.get("next_observation_ssq").clone()
+        obs_count = td.get("next_observation_count").clone()
+        reward_sum = td.get("reward_sum").clone()
+        reward_ssq = td.get("reward_ssq").clone()
+        reward_count = td.get("reward_count").clone()
 
     assert obs_count == nprc * 11 + 2  # 10 steps + reset + init
 
-    for idx in range(nprc):
-        tup = queues[idx][0].get(timeout=TIMEOUT)
-        _obs_sum, _obs_ssq, _obs_count, _reward_sum, _reward_ssq, _reward_count = tup
-        assert (obs_sum == _obs_sum).all(), "sum"
-        assert (obs_ssq == _obs_ssq).all(), "ssq"
-        assert (obs_count == _obs_count).all(), "count"
-        assert (reward_sum == _reward_sum).all(), "sum"
-        assert (reward_ssq == _reward_ssq).all(), "ssq"
-        assert (reward_count == _reward_count).all(), "count"
+    with Lock() as lock:
+        for idx in range(nprc):
+            tup = queues[idx][0].get(timeout=TIMEOUT)
+            (
+                _obs_sum,
+                _obs_ssq,
+                _obs_count,
+                _reward_sum,
+                _reward_ssq,
+                _reward_count,
+            ) = tup
+            assert (obs_sum == _obs_sum).all(), "sum"
+            assert (obs_ssq == _obs_ssq).all(), "ssq"
+            assert (obs_count == _obs_count).all(), "count"
+            assert (reward_sum == _reward_sum).all(), "sum"
+            assert (reward_ssq == _reward_ssq).all(), "ssq"
+            assert (reward_count == _reward_count).all(), "count"
 
-        obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
-            _obs_sum,
-            _obs_ssq,
-            _obs_count,
-            _reward_sum,
-            _reward_ssq,
-            _reward_count,
-        )
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
+            obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
+                _obs_sum,
+                _obs_ssq,
+                _obs_count,
+                _reward_sum,
+                _reward_ssq,
+                _reward_count,
+            )
+    with Lock() as lock:
+        msg = "all_done"
+        for idx in range(nprc):
+            queues[idx][1].put(msg)
 
 
 def _run_parallelenv(parallel_env, queue_in, queue_out):
-    parallel_env.reset()
-
+    tensordict = parallel_env.reset()
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "start"
     for _ in range(10):
-        parallel_env.rand_step()
+        tensordict = parallel_env.rand_step(tensordict)
     queue_out.put("first round")
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "start"
     for _ in range(10):
-        parallel_env.rand_step()
+        tensordict = parallel_env.rand_step(tensordict)
     queue_out.put("second round")
     parallel_env.close()
     del parallel_env
@@ -257,44 +273,49 @@ def _run_parallelenv(parallel_env, queue_in, queue_out):
 def test_parallelenv_vecnorm():
     if _has_gym:
         make_env = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
+        env_input_keys = None
     else:
         make_env = EnvCreator(
             lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
         )
-    parallel_env = ParallelEnv(3, make_env)
-    queue_out = mp.Queue(1)
-    queue_in = mp.Queue(1)
-    proc = mp.Process(target=_run_parallelenv, args=(parallel_env, queue_out, queue_in))
-    proc.start()
-    parallel_sd = parallel_env.state_dict()
-    assert "worker0" in parallel_sd
-    worker_sd = parallel_sd["worker0"]
-    td = list(worker_sd.values())[0]
-    queue_out.put("start")
-    msg = queue_in.get(timeout=TIMEOUT)
-    assert msg == "first round"
-    values = td.clone()
-    queue_out.put("start")
-    msg = queue_in.get(timeout=TIMEOUT)
-    assert msg == "second round"
-    new_values = td.clone()
-    for k, item in values.items():
-        if k in ["reward_sum", "reward_ssq"] and not _has_gym:
-            # mocking env rewards are sparse
-            continue
-        assert (item != new_values.get(k)).any(), k
-    proc.join()
-    if not parallel_env.is_closed:
-        parallel_env.close()
+        env_input_keys = ["action", ContinuousActionVecMockEnv._out_key]
+    with Lock() as lock:
+        parallel_env = ParallelEnv(3, make_env, env_input_keys=env_input_keys)
+        queue_out = mp.Queue(1)
+        queue_in = mp.Queue(1)
+        proc = mp.Process(
+            target=_run_parallelenv, args=(parallel_env, queue_out, queue_in)
+        )
+        proc.start()
+        parallel_sd = parallel_env.state_dict()
+        assert "worker0" in parallel_sd
+        worker_sd = parallel_sd["worker0"]
+        td = list(worker_sd.values())[0]
+        queue_out.put("start")
+        msg = queue_in.get(timeout=TIMEOUT)
+        assert msg == "first round"
+        values = td.clone()
+        queue_out.put("start")
+        msg = queue_in.get(timeout=TIMEOUT)
+        assert msg == "second round"
+        new_values = td.clone()
+        for k, item in values.items():
+            if k in ["reward_sum", "reward_ssq"] and not _has_gym:
+                # mocking env rewards are sparse
+                continue
+            assert (item != new_values.get(k)).any(), k
+        proc.join()
+        if not parallel_env.is_closed:
+            parallel_env.close()
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
 @pytest.mark.parametrize(
     "parallel",
     [
-        True,
-        False,
         None,
+        False,
+        True,
     ],
 )
 def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
@@ -310,13 +331,13 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     env.set_seed(0)
     t = VecNorm(decay=1.0)
     env_t = TransformedEnv(env, t)
-    env_t.reset()
+    td = env_t.reset()
     tds = []
     for _ in range(N):
-        td = env_t.rand_step()
+        td = env_t.rand_step(td)
+        tds.append(td.clone())
         if td.get("done").any():
-            env_t.reset()
-        tds.append(td)
+            td = env_t.reset()
     tds = torch.stack(tds, 0)
     obs = tds.get("next_observation")
     obs = obs.view(-1, obs.shape[-1])
@@ -339,11 +360,11 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_resize(self, interpolation, keys, nchannels, batch, device):
         torch.manual_seed(0)
-        dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
-        resize = Resize(w=20, h=21, interpolation=interpolation, keys=keys)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
+        resize = Resize(w=20, h=21, interpolation=interpolation, keys_in=keys)
         td = TensorDict(
             {
-                key: torch.randn(*batch, nchannels, 32, 32, device=device)
+                key: torch.randn(*batch, nchannels, 16, 16, device=device)
                 for key in keys
             },
             batch,
@@ -355,12 +376,12 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32))
+            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16))
             observation_spec = resize.transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([nchannels, 20, 21])
         else:
             observation_spec = CompositeSpec(
-                **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32)) for key in keys}
+                **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
             observation_spec = resize.transform_observation_spec(observation_spec)
             for key in keys:
@@ -376,13 +397,13 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_centercrop(self, keys, h, nchannels, batch, device):
         torch.manual_seed(0)
-        dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
-        cc = CenterCrop(w=20, h=h, keys=keys)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
+        cc = CenterCrop(w=20, h=h, keys_in=keys)
         if h is None:
             h = 20
         td = TensorDict(
             {
-                key: torch.randn(*batch, nchannels, 32, 32, device=device)
+                key: torch.randn(*batch, nchannels, 16, 16, device=device)
                 for key in keys
             },
             batch,
@@ -394,12 +415,12 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32))
+            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16))
             observation_spec = cc.transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([nchannels, 20, h])
         else:
             observation_spec = CompositeSpec(
-                **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32)) for key in keys}
+                **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
             observation_spec = cc.transform_observation_spec(observation_spec)
             for key in keys:
@@ -415,12 +436,12 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_flatten(self, keys, size, nchannels, batch, device):
         torch.manual_seed(0)
-        dont_touch = torch.randn(*batch, *size, nchannels, 32, 32, device=device)
+        dont_touch = torch.randn(*batch, *size, nchannels, 16, 16, device=device)
         start_dim = -3 - len(size)
-        flatten = FlattenObservation(start_dim, -3, keys=keys)
+        flatten = FlattenObservation(start_dim, -3, keys_in=keys)
         td = TensorDict(
             {
-                key: torch.randn(*batch, *size, nchannels, 32, 32, device=device)
+                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
                 for key in keys
             },
             batch,
@@ -433,13 +454,13 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(-1, 1, (*size, nchannels, 32, 32))
+            observation_spec = NdBoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
             observation_spec = flatten.transform_observation_spec(observation_spec)
             assert observation_spec.shape[-3] == expected_size
         else:
             observation_spec = CompositeSpec(
                 **{
-                    key: NdBoundedTensorSpec(-1, 1, (*size, nchannels, 32, 32))
+                    key: NdBoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
                     for key in keys
                 }
             )
@@ -455,10 +476,10 @@ class TestTransforms:
     def test_grayscale(self, keys, device):
         torch.manual_seed(0)
         nchannels = 3
-        gs = GrayScale(keys=keys)
-        dont_touch = torch.randn(1, nchannels, 32, 32, device=device)
+        gs = GrayScale(keys_in=keys)
+        dont_touch = torch.randn(1, nchannels, 16, 16, device=device)
         td = TensorDict(
-            {key: torch.randn(1, nchannels, 32, 32, device=device) for key in keys}, [1]
+            {key: torch.randn(1, nchannels, 16, 16, device=device) for key in keys}, [1]
         )
         td.set("dont touch", dont_touch.clone())
         gs(td)
@@ -467,16 +488,16 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32))
+            observation_spec = NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16))
             observation_spec = gs.transform_observation_spec(observation_spec)
-            assert observation_spec.shape == torch.Size([1, 32, 32])
+            assert observation_spec.shape == torch.Size([1, 16, 16])
         else:
             observation_spec = CompositeSpec(
-                **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 32, 32)) for key in keys}
+                **{key: NdBoundedTensorSpec(-1, 1, (nchannels, 16, 16)) for key in keys}
             )
             observation_spec = gs.transform_observation_spec(observation_spec)
             for key in keys:
-                assert observation_spec[key].shape == torch.Size([1, 32, 32])
+                assert observation_spec[key].shape == torch.Size([1, 16, 16])
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
@@ -486,11 +507,11 @@ class TestTransforms:
     def test_totensorimage(self, keys, batch, device):
         torch.manual_seed(0)
         nchannels = 3
-        totensorimage = ToTensorImage(keys=keys)
-        dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
+        totensorimage = ToTensorImage(keys_in=keys)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
         td = TensorDict(
             {
-                key: torch.randint(255, (*batch, 32, 32, 3), device=device)
+                key: torch.randint(255, (*batch, 16, 16, 3), device=device)
                 for key in keys
             },
             batch,
@@ -498,27 +519,27 @@ class TestTransforms:
         td.set("dont touch", dont_touch.clone())
         totensorimage(td)
         for key in keys:
-            assert td.get(key).shape[-3:] == torch.Size([3, 32, 32])
+            assert td.get(key).shape[-3:] == torch.Size([3, 16, 16])
             assert td.get(key).device == device
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(0, 255, (32, 32, 3))
+            observation_spec = NdBoundedTensorSpec(0, 255, (16, 16, 3))
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
             )
-            assert observation_spec.shape == torch.Size([3, 32, 32])
+            assert observation_spec.shape == torch.Size([3, 16, 16])
             assert (observation_spec.space.minimum == 0).all()
             assert (observation_spec.space.maximum == 1).all()
         else:
             observation_spec = CompositeSpec(
-                **{key: NdBoundedTensorSpec(0, 255, (32, 32, 3)) for key in keys}
+                **{key: NdBoundedTensorSpec(0, 255, (16, 16, 3)) for key in keys}
             )
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
             )
             for key in keys:
-                assert observation_spec[key].shape == torch.Size([3, 32, 32])
+                assert observation_spec[key].shape == torch.Size([3, 16, 16])
                 assert (observation_spec[key].space.minimum == 0).all()
                 assert (observation_spec[key].space.maximum == 1).all()
 
@@ -529,13 +550,13 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_compose(self, keys, batch, device, nchannels=1, N=4):
         torch.manual_seed(0)
-        t1 = CatFrames(keys=keys, N=4)
+        t1 = CatFrames(keys_in=keys, N=4)
         t2 = FiniteTensorDictCheck()
         compose = Compose(t1, t2)
-        dont_touch = torch.randn(*batch, nchannels, 32, 32, device=device)
+        dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
         td = TensorDict(
             {
-                key: torch.randint(255, (*batch, nchannels, 32, 32), device=device)
+                key: torch.randint(255, (*batch, nchannels, 16, 16), device=device)
                 for key in keys
             },
             batch,
@@ -547,20 +568,20 @@ class TestTransforms:
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(0, 255, (nchannels, 32, 32))
+            observation_spec = NdBoundedTensorSpec(0, 255, (nchannels, 16, 16))
             observation_spec = compose.transform_observation_spec(observation_spec)
-            assert observation_spec.shape == torch.Size([nchannels * N, 32, 32])
+            assert observation_spec.shape == torch.Size([nchannels * N, 16, 16])
         else:
             observation_spec = CompositeSpec(
                 **{
-                    key: NdBoundedTensorSpec(0, 255, (nchannels, 32, 32))
+                    key: NdBoundedTensorSpec(0, 255, (nchannels, 16, 16))
                     for key in keys
                 }
             )
             observation_spec = compose.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].shape == torch.Size(
-                    [nchannels * N, 32, 32]
+                    [nchannels * N, 16, 16]
                 )
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
@@ -575,8 +596,8 @@ class TestTransforms:
         [
             (0, 1),
             (1, 2),
-            (torch.ones(32, 32), torch.ones(1)),
-            (torch.ones(1), torch.ones(32, 32)),
+            (torch.ones(16, 16), torch.ones(1)),
+            (torch.ones(1), torch.ones(16, 16)),
         ],
     )
     def test_observationnorm(
@@ -588,10 +609,10 @@ class TestTransforms:
             loc = loc.to(device)
         if isinstance(scale, Tensor):
             scale = scale.to(device)
-        on = ObservationNorm(loc, scale, keys=keys, standard_normal=standard_normal)
-        dont_touch = torch.randn(1, nchannels, 32, 32, device=device)
+        on = ObservationNorm(loc, scale, keys_in=keys, standard_normal=standard_normal)
+        dont_touch = torch.randn(1, nchannels, 16, 16, device=device)
         td = TensorDict(
-            {key: torch.zeros(1, nchannels, 32, 32, device=device) for key in keys}, [1]
+            {key: torch.zeros(1, nchannels, 16, 16, device=device) for key in keys}, [1]
         )
         td.set("dont touch", dont_touch.clone())
         on(td)
@@ -604,7 +625,7 @@ class TestTransforms:
 
         if len(keys) == 1:
             observation_spec = NdBoundedTensorSpec(
-                0, 1, (nchannels, 32, 32), device=device
+                0, 1, (nchannels, 16, 16), device=device
             )
             observation_spec = on.transform_observation_spec(observation_spec)
             if standard_normal:
@@ -617,7 +638,7 @@ class TestTransforms:
         else:
             observation_spec = CompositeSpec(
                 **{
-                    key: NdBoundedTensorSpec(0, 1, (nchannels, 32, 32), device=device)
+                    key: NdBoundedTensorSpec(0, 1, (nchannels, 16, 16), device=device)
                     for key in keys
                 }
             )
@@ -637,13 +658,13 @@ class TestTransforms:
         key1 = "first key"
         key2 = "second key"
         keys = [key1, key2]
-        cat_frames = CatFrames(N=N, keys=keys)
+        cat_frames = CatFrames(N=N, keys_in=keys)
         mins = [0, 0.5]
         maxes = [0.5, 1]
         observation_spec = CompositeSpec(
             **{
                 key: NdBoundedTensorSpec(
-                    space_min, space_max, (1, 32, 32), dtype=torch.double
+                    space_min, space_max, (1, 3, 3), dtype=torch.double
                 )
                 for key, space_min, space_max in zip(keys, mins, maxes)
             }
@@ -653,7 +674,7 @@ class TestTransforms:
         observation_spec = CompositeSpec(
             **{
                 key: NdBoundedTensorSpec(
-                    space_min, space_max, (1, 32, 32), dtype=torch.double
+                    space_min, space_max, (1, 3, 3), dtype=torch.double
                 )
                 for key, space_min, space_max in zip(keys, mins, maxes)
             }
@@ -676,11 +697,11 @@ class TestTransforms:
         key2 = "second key"
         N = 4
         keys = [key1, key2]
-        key1_tensor = torch.zeros(1, 1, 32, 32, device=device)
-        key2_tensor = torch.ones(1, 1, 32, 32, device=device)
+        key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
+        key2_tensor = torch.ones(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1])
-        cat_frames = CatFrames(N=N, keys=keys)
+        cat_frames = CatFrames(N=N, keys_in=keys)
 
         cat_frames(td)
         latest_frame = td.get(key2)
@@ -696,11 +717,11 @@ class TestTransforms:
         key2 = "second key"
         N = 4
         keys = [key1, key2]
-        key1_tensor = torch.zeros(1, 1, 32, 32, device=device)
-        key2_tensor = torch.ones(1, 1, 32, 32, device=device)
+        key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
+        key2_tensor = torch.ones(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
         td = TensorDict(dict(zip(keys, key_tensors)), [1])
-        cat_frames = CatFrames(N=N, keys=keys)
+        cat_frames = CatFrames(N=N, keys_in=keys)
 
         cat_frames(td)
         buffer_length1 = len(cat_frames.buffer)
@@ -714,7 +735,7 @@ class TestTransforms:
     def test_finitetensordictcheck(self, device):
         ftd = FiniteTensorDictCheck()
         td = TensorDict(
-            {key: torch.randn(1, 32, 32, device=device) for key in ["a", "b", "c"]}, [1]
+            {key: torch.randn(1, 3, 3, device=device) for key in ["a", "b", "c"]}, [1]
         )
         ftd(td)
         td.set("inf", torch.zeros(1, 3).fill_(float("inf")))
@@ -730,14 +751,23 @@ class TestTransforms:
             ["action"],
         ],
     )
-    def test_double2float(self, keys, device):
+    @pytest.mark.parametrize(
+        "keys_inv",
+        [
+            ["action", "some_other_key"],
+            ["action"],
+            [],
+        ],
+    )
+    def test_double2float(self, keys, keys_inv, device):
         torch.manual_seed(0)
-        double2float = DoubleToFloat(keys=keys)
-        dont_touch = torch.randn(1, 32, 32, dtype=torch.double, device=device)
+        keys_total = set(keys + keys_inv)
+        double2float = DoubleToFloat(keys_in=keys, keys_inv_in=keys_inv)
+        dont_touch = torch.randn(1, 3, 3, dtype=torch.double, device=device)
         td = TensorDict(
             {
-                key: torch.zeros(1, 32, 32, dtype=torch.double, device=device)
-                for key in keys
+                key: torch.zeros(1, 3, 3, dtype=torch.double, device=device)
+                for key in keys_total
             },
             [1],
         )
@@ -748,26 +778,24 @@ class TestTransforms:
         assert td.get("dont touch").dtype == torch.double
 
         double2float.inv(td)
-        for key in keys:
+        for key in keys_inv:
             assert td.get(key).dtype == torch.double
         assert td.get("dont touch").dtype == torch.double
 
-        if len(keys) == 1 and keys[0] == "action":
-            action_spec = NdBoundedTensorSpec(0, 1, (1, 32, 32), dtype=torch.double)
+        if len(keys_total) == 1 and len(keys_inv) and keys[0] == "action":
+            action_spec = NdBoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
             action_spec = double2float.transform_action_spec(action_spec)
             assert action_spec.dtype == torch.float
 
         elif len(keys) == 1:
-            observation_spec = NdBoundedTensorSpec(
-                0, 1, (1, 32, 32), dtype=torch.double
-            )
+            observation_spec = NdBoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
             observation_spec = double2float.transform_observation_spec(observation_spec)
             assert observation_spec.dtype == torch.float
 
         else:
             observation_spec = CompositeSpec(
                 **{
-                    key: NdBoundedTensorSpec(0, 1, (1, 32, 32), dtype=torch.double)
+                    key: NdBoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
                     for key in keys
                 }
             )
@@ -784,9 +812,9 @@ class TestTransforms:
         ],
     )
     def test_cattensors(self, keys, device):
-        cattensors = CatTensors(keys=keys, out_key="observation_out", dim=-2)
+        cattensors = CatTensors(keys_in=keys, out_key="observation_out", dim=-2)
 
-        dont_touch = torch.randn(1, 32, 32, dtype=torch.double, device=device)
+        dont_touch = torch.randn(1, 3, 3, dtype=torch.double, device=device)
         td = TensorDict(
             {
                 key: torch.full(
@@ -865,7 +893,7 @@ class TestTransforms:
         key = list(obs_spec.keys())[0]
 
         env = TransformedEnv(env)
-        env.append_transform(CatFrames(N=4, cat_dim=-1, keys=[key]))
+        env.append_transform(CatFrames(N=4, cat_dim=-1, keys_in=[key]))
         assert isinstance(env.transform, Compose)
         assert len(env.transform) == 1
         obs_spec = env.observation_spec

@@ -54,7 +54,7 @@ def step_tensordict(
         >>> td_out = []
         >>> env = make_env()
         >>> policy = make_policy()
-        >>> td = env.current_tensordict
+        >>> td = env.reset()
         >>> for i in range(max_steps):
         >>>     td = env.step(td)
         >>>     next_td = step_tensordict(td)
