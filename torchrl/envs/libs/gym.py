@@ -19,7 +19,7 @@ from torchrl.data import (
     UnboundedContinuousTensorSpec,
 )
 from ...data.utils import numpy_to_torch_dtype_dict
-from ..gym_like import GymLikeEnv
+from ..gym_like import GymLikeEnv, default_info_dict_reader
 from ..utils import classproperty
 
 try:
@@ -225,6 +225,16 @@ class GymWrapper(GymLikeEnv):
         self._constructor_kwargs.update(new_kwargs)
         self._env = self._build_env(**self._constructor_kwargs)
         self._make_specs(self._env)
+
+    @property
+    def info_dict_reader(self):
+        if self._info_dict_reader is None:
+            self._info_dict_reader = default_info_dict_reader()
+        return self._info_dict_reader
+
+    @info_dict_reader.setter
+    def info_dict_reader(self, value: callable):
+        self._info_dict_reader = value
 
 
 class GymEnv(GymWrapper):

@@ -109,7 +109,8 @@ class GymLikeEnv(_EnvWrapper):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
-        self.info_dict_reader(*info, tensordict_out)
+        if self.info_dict_reader is not None:
+            self.info_dict_reader(*info, tensordict_out)
 
         return tensordict_out
 
@@ -167,17 +168,15 @@ class GymLikeEnv(_EnvWrapper):
         self.info_dict_reader = info_dict_reader
         return self
 
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(env={self._env}, batch_size={self.batch_size})"
+        )
+
     @property
     def info_dict_reader(self):
-        if self._info_dict_reader is None:
-            self._info_dict_reader = default_info_dict_reader()
         return self._info_dict_reader
 
     @info_dict_reader.setter
     def info_dict_reader(self, value: callable):
         self._info_dict_reader = value
-
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}(env={self._env}, batch_size={self.batch_size})"
-        )
