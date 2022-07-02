@@ -67,6 +67,11 @@ class GymLikeEnv(_EnvWrapper):
     It is also expected that env.reset() returns an observation similar to the one observed after a step is completed.
     """
 
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._info_dict_reader = None
+        return super().__new__(cls, *args, **kwargs)
+
     def _step(self, tensordict: _TensorDict) -> _TensorDict:
         action = tensordict.get("action")
         action_np = self.action_spec.to_numpy(action, safe=False)
@@ -158,7 +163,7 @@ class GymLikeEnv(_EnvWrapper):
 
     @property
     def info_dict_reader(self):
-        if "_info_dict_reader" not in self.__dir__():
+        if self._info_dict_reader is None:
             self._info_dict_reader = default_info_dict_reader()
         return self._info_dict_reader
 
