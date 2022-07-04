@@ -150,7 +150,7 @@ def _main():
 
     setup(
         name="torchrl",
-        version="0.1.0b",
+        version="0.0.1",
         author="torchrl contributors",
         author_email="vmoens@fb.com",
         packages=find_packages(),
