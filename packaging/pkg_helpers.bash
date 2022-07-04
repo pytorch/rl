@@ -225,7 +225,6 @@ pip_install() {
 # Install torch with pip, respecting PYTORCH_VERSION, and record the installed
 # version into PYTORCH_VERSION, if applicable
 setup_pip_pytorch_version() {
-  pip3 install auditwheel
   if [[ -z "$PYTORCH_VERSION" ]]; then
     # Install latest prerelease version of torch, per our nightlies, consistent
     # with the requested cuda version
