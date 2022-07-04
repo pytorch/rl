@@ -36,12 +36,12 @@ if [[ "$OSTYPE" == "msys" ]]; then
   echo "ERROR: Windows installation is not supported yet." && exit 100
 else
     python setup.py bdist_wheel
-    if [[ "$(uname)" != Darwin ]]; then
+#    if [[ "$(uname)" != Darwin ]]; then
 #      python -m auditwheel repair --plat manylinux1_x86_64 dist/torchrl-*.whl
-      python -m auditwheel repair --plat manylinux2014_x86_64 dist/torchrl-*.whl
-      ls -rtlh wheelhouse
-      mv wheelhouse/* dist/
-    fi
+#      python -m auditwheel repair --plat manylinux2014_x86_64 dist/torchrl-*.whl
+#      ls -rtlh wheelhouse
+#      mv wheelhouse/* dist/
+#    fi
 fi
 
 #if [[ "$(uname)" == Darwin ]]; then

@@ -50,8 +50,8 @@ def write_version_file():
 
 
 def _get_pytorch_version():
-    if "PYTORCH_VERSION" in os.environ:
-        return f"torch=={os.environ['PYTORCH_VERSION']}"
+    # if "PYTORCH_VERSION" in os.environ:
+    #     return f"torch=={os.environ['PYTORCH_VERSION']}"
     return "torch"
 
 
@@ -159,7 +159,7 @@ def _main():
             "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
             "clean": clean,
         },
-        install_requires=[pytorch_package_dep, "numpy", "tensorboard", "packaging"],
+        install_requires=[pytorch_package_dep, "numpy", "packaging"],
         extras_require={
             "atari": ["gym", "atari-py", "ale-py", "gym[accept-rom-license]", "pygame"],
             "dm_control": ["dm_control"],
@@ -167,6 +167,7 @@ def _main():
             "rendering": ["moviepy"],
             "tests": ["pytest", "pyyaml"],
             "utils": [
+                "tensorboard",
                 "tqdm",
                 "configargparse",
                 "hydra-core>=1.1",
