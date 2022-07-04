@@ -169,7 +169,6 @@ def _main():
             "utils": [
                 "tensorboard",
                 "tqdm",
-                "configargparse",
                 "hydra-core>=1.1",
                 "hydra-submitit-launcher",
             ],
