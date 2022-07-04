@@ -521,11 +521,11 @@ workflows:
   build:
     jobs:
       - binary_linux_wheel:
-          conda_docker_image: pytorch/conda-builder:cuda113
-          cu_version: cu113
-          name: binary_linux_wheel_py3.8_cu113
+          conda_docker_image: pytorch/conda-builder:cuda102
+          cu_version: cu102
+          name: binary_linux_wheel_py3.8_cu102
           python_version: '3.8'
-          wheel_docker_image: pytorch/manylinux-cuda113
+          wheel_docker_image: pytorch/manylinux-cuda102
 
   unittest:
     jobs:
