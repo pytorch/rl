@@ -214,24 +214,33 @@ def relocate_elf_library(patchelf, output_dir, output_library, binary):
                 new_dep = osp.basename(new_names[dep])
                 print(f"{library}: {dep} -> {new_dep}")
                 subprocess.check_output(
-                    [patchelf, "--replace-needed", dep, new_dep, new_library_name], cwd=new_libraries_path
+                    [patchelf, "--replace-needed", dep, new_dep, new_library_name],
+                    cwd=new_libraries_path,
                 )
 
             print("Updating library rpath")
-            subprocess.check_output([patchelf, "--set-rpath", "$ORIGIN", new_library_name], cwd=new_libraries_path)
+            subprocess.check_output(
+                [patchelf, "--set-rpath", "$ORIGIN", new_library_name],
+                cwd=new_libraries_path,
+            )
 
-            subprocess.check_output([patchelf, "--print-rpath", new_library_name], cwd=new_libraries_path)
+            subprocess.check_output(
+                [patchelf, "--print-rpath", new_library_name], cwd=new_libraries_path
+            )
 
     print("Update library dependencies")
     library_dependencies = binary_dependencies[binary]
     for dep in library_dependencies:
         new_dep = osp.basename(new_names[dep])
         print(f"{binary}: {dep} -> {new_dep}")
-        subprocess.check_output([patchelf, "--replace-needed", dep, new_dep, binary], cwd=output_library)
+        subprocess.check_output(
+            [patchelf, "--replace-needed", dep, new_dep, binary], cwd=output_library
+        )
 
     print("Update library rpath")
     subprocess.check_output(
-        [patchelf, "--set-rpath", "$ORIGIN:$ORIGIN/../torchvision.libs", binary_path], cwd=output_library
+        [patchelf, "--set-rpath", "$ORIGIN:$ORIGIN/../torchvision.libs", binary_path],
+        cwd=output_library,
     )
 
 
@@ -315,7 +324,9 @@ def patch_linux():
     # Get patchelf location
     patchelf = find_program("patchelf")
     if patchelf is None:
-        raise FileNotFoundError("Patchelf was not found in the system, please make sure that is available on the PATH.")
+        raise FileNotFoundError(
+            "Patchelf was not found in the system, please make sure that is available on the PATH."
+        )
 
     # Find wheel
     print("Finding wheels...")
@@ -351,7 +362,9 @@ def patch_win():
     # Get dumpbin location
     dumpbin = find_program("dumpbin")
     if dumpbin is None:
-        raise FileNotFoundError("Dumpbin was not found in the system, please make sure that is available on the PATH.")
+        raise FileNotFoundError(
+            "Dumpbin was not found in the system, please make sure that is available on the PATH."
+        )
 
     # Find wheel
     print("Finding wheels...")
@@ -388,4 +401,3 @@ if __name__ == "__main__":
         patch_linux()
     elif sys.platform == "win32":
         patch_win()
-
