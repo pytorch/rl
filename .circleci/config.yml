@@ -544,32 +544,32 @@ workflows:
   build:
     jobs:
       - binary_linux_wheel:
-          conda_docker_image: pytorch/conda-builder:builder
+          conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
           name: binary_linux_wheel_py3.7_cpu
           python_version: '3.7'
-          wheel_docker_image: pytorch/manylinux-builder
+          wheel_docker_image: pytorch/manylinux-cuda102
 
       - binary_linux_wheel:
-          conda_docker_image: pytorch/conda-builder:builder
+          conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
           name: binary_linux_wheel_py3.8_cpu
           python_version: '3.8'
-          wheel_docker_image: pytorch/manylinux-builder
+          wheel_docker_image: pytorch/manylinux-cuda102
 
       - binary_linux_wheel:
-          conda_docker_image: pytorch/conda-builder:builder
+          conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
           name: binary_linux_wheel_py3.9_cpu
           python_version: '3.9'
-          wheel_docker_image: pytorch/manylinux-builder
+          wheel_docker_image: pytorch/manylinux-cuda102
 
       - binary_linux_wheel:
-          conda_docker_image: pytorch/conda-builder:builder
+          conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
           name: binary_linux_wheel_py3.10_cpu
           python_version: '3.10'
-          wheel_docker_image: pytorch/manylinux-builder
+          wheel_docker_image: pytorch/manylinux-cuda102
 
       - binary_linux_wheel:
           conda_docker_image: pytorch/conda-builder:cuda102
