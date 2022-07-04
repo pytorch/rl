@@ -48,10 +48,11 @@ class EnvCreator:
         >>>
         >>> def test_env1(env_creator):
         >>>     env = env_creator()
+        >>>     tensordict = env.reset()
         >>>     for _ in range(10):
-        >>>         env.rand_step()
+        >>>         env.rand_step(tensordict)
         >>>         if env.is_done:
-        >>>             env.reset()
+        >>>             tensordict = env.reset(tensordict)
         >>>     print("env 1: ", env.transform._td.get("next_observation_count"))
         >>>
         >>> def test_env2(env_creator):
@@ -108,8 +109,8 @@ class EnvCreator:
 
     def init_(self) -> EnvCreator:
         shadow_env = self.create_env_fn(**self.create_env_kwargs)
-        shadow_env.reset()
-        shadow_env.rand_step()
+        tensordict = shadow_env.reset()
+        shadow_env.rand_step(tensordict)
         self.env_type = type(shadow_env)
         self._transform_state_dict = shadow_env.state_dict()
         if self._share_memory:

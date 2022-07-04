@@ -44,12 +44,11 @@ and many more to come!
 
 ## Installation
 Create a conda environment where the packages will be installed. 
-Before installing anything, make sure you have the latest version of `cmake` and `ninja` libraries:
+Before installing anything, make sure you have the latest version of the `ninja` library:
 
 ```
 conda create --name torch_rl python=3.9
 conda activate torch_rl
-conda install cmake -c conda-forge
 pip install ninja
 ```
 
@@ -133,8 +132,6 @@ cd ~/path/to/rl/repo
 python -c 'from torchrl.envs import GymEnv'
 ```
 If this is the case, consider executing torchrl from another location.
-
-This may also be caused by several dependency issues: cmake, gcc or ninja versioning, or absence of the CuDNN library when working in a CUDA environment. 
 
 On **MacOs**, we recommend installing XCode first. 
 With Apple Silicon M1 chips, make sure you are using the arm64-built python (e.g. [here](https://betterprogramming.pub/how-to-install-pytorch-on-apple-m1-series-512b3ad9bc6)). Running the following lines of code

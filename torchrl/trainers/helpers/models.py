@@ -108,8 +108,7 @@ def make_dqn_actor(
         >>> with initialize(config_path=None):
         >>>     cfg = compose(config_name="config")
         >>> actor = make_dqn_actor(proof_environment, cfg, device)
-        >>> _ = proof_environment.reset()
-        >>> td = proof_environment.current_tensordict
+        >>> td = proof_environment.reset()
         >>> print(actor(td))
         TensorDict(
             fields={
@@ -159,7 +158,7 @@ def make_dqn_actor(
             "mlp_kwargs_output": {"num_cells": 512, "layer_class": linear_layer_class},
         }
         # automatically infer in key
-        in_key = list(env_specs["observation_spec"].keys())[0].split("next_")[-1]
+        in_key = list(env_specs["observation_spec"])[0].split("next_")[-1]
 
     out_features = env_specs["action_spec"].shape[0]
     actor_class = QValueActor
@@ -246,8 +245,7 @@ def make_ddpg_actor(
         ...     proof_environment,
         ...     device=device,
         ...     cfg=cfg)
-        >>> _ = proof_environment.reset()
-        >>> td = proof_environment.current_tensordict
+        >>> td = proof_environment.reset()
         >>> print(actor(td))
         TensorDict(
             fields={
@@ -452,8 +450,7 @@ def make_ppo_model(
         ...     )
         >>> actor = actor_value.get_policy_operator()
         >>> value = actor_value.get_value_operator()
-        >>> _ = proof_environment.reset()
-        >>> td = proof_environment.current_tensordict
+        >>> td = proof_environment.reset()
         >>> print(actor(td.clone()))
         TensorDict(
             fields={
@@ -762,8 +759,7 @@ def make_sac_model(
         ...     cfg=cfg,
         ...     )
         >>> actor, qvalue, value = model
-        >>> _ = proof_environment.reset()
-        >>> td = proof_environment.current_tensordict
+        >>> td = proof_environment.reset()
         >>> print(actor(td))
         TensorDict(
             fields={
@@ -806,7 +802,6 @@ def make_sac_model(
     gSDE = cfg.gSDE
 
     proof_environment.reset()
-    td = proof_environment.current_tensordict
     action_spec = proof_environment.action_spec
     obs_spec = proof_environment.observation_spec
 
@@ -936,6 +931,7 @@ def make_sac_model(
 
     # init nets
     with torch.no_grad(), set_exploration_mode("random"):
+        td = proof_environment.reset()
         td = td.to(device)
         for net in model:
             net(td)
@@ -998,8 +994,7 @@ def make_redq_model(
         ...     cfg=cfg,
         ...     )
         >>> actor, qvalue = model
-        >>> _ = proof_environment.reset()
-        >>> td = proof_environment.current_tensordict
+        >>> td = proof_environment.reset()
         >>> print(actor(td))
         TensorDict(
             fields={

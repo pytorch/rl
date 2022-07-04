@@ -128,13 +128,13 @@ def make_env_transforms(
         if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(first_dim=batch_dims))
-        env.append_transform(CatFrames(N=cfg.catframes, keys=["next_pixels"]))
+        env.append_transform(CatFrames(N=cfg.catframes, keys_in=["next_pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
-        env.append_transform(ObservationNorm(**obs_stats, keys=["next_pixels"]))
+        env.append_transform(ObservationNorm(**obs_stats, keys_in=["next_pixels"]))
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0
@@ -145,11 +145,12 @@ def make_env_transforms(
         env.append_transform(RewardScaling(reward_loc, reward_scaling))
 
     double_to_float_list = []
+    double_to_float_inv_list = []
     if env_library is DMControlEnv:
         double_to_float_list += [
             "reward",
-            "action",
-        ]  # DMControl requires double-precision
+        ]
+        double_to_float_inv_list += ["action"]  # DMControl requires double-precision
     if not from_pixels:
         selected_keys = [
             key for key in env.observation_spec.keys() if "pixels" not in key
@@ -157,7 +158,7 @@ def make_env_transforms(
 
         # even if there is a single tensor, it'll be renamed in "next_observation_vector"
         out_key = "next_observation_vector"
-        env.append_transform(CatTensors(keys=selected_keys, out_key=out_key))
+        env.append_transform(CatTensors(keys_in=selected_keys, out_key=out_key))
 
         if not vecnorm:
             if stats is None:
@@ -165,24 +166,34 @@ def make_env_transforms(
             else:
                 _stats = stats
             env.append_transform(
-                ObservationNorm(**_stats, keys=[out_key], standard_normal=True)
+                ObservationNorm(**_stats, keys_in=[out_key], standard_normal=True)
             )
         else:
             env.append_transform(
                 VecNorm(
-                    keys=[out_key, "reward"] if not _norm_obs_only else [out_key],
+                    keys_in=[out_key, "reward"] if not _norm_obs_only else [out_key],
                     decay=0.9999,
                 )
             )
 
         double_to_float_list.append(out_key)
-        env.append_transform(DoubleToFloat(keys=double_to_float_list))
+        env.append_transform(
+            DoubleToFloat(
+                keys_in=double_to_float_list, keys_inv_in=double_to_float_inv_list
+            )
+        )
 
         if hasattr(cfg, "catframes") and cfg.catframes:
-            env.append_transform(CatFrames(N=cfg.catframes, keys=[out_key], cat_dim=-1))
+            env.append_transform(
+                CatFrames(N=cfg.catframes, keys_in=[out_key], cat_dim=-1)
+            )
 
     else:
-        env.append_transform(DoubleToFloat(keys=double_to_float_list))
+        env.append_transform(
+            DoubleToFloat(
+                keys_in=double_to_float_list, keys_inv_in=double_to_float_inv_list
+            )
+        )
 
     if hasattr(cfg, "gSDE") and cfg.gSDE:
         env.append_transform(

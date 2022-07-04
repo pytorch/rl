@@ -384,16 +384,16 @@ class BoundedTensorSpec(TensorSpec):
         dtype, device = _default_dtype_and_device(dtype, device)
         if not isinstance(minimum, torch.Tensor):
             minimum = torch.as_tensor(minimum, dtype=dtype, device=device)
-        elif minimum.dtype is not dtype:
+        if minimum.dtype is not dtype:
             minimum = minimum.to(dtype)
-        elif minimum.device != device:
+        if minimum.device != device:
             minimum = minimum.to(device)
 
         if not isinstance(maximum, torch.Tensor):
             maximum = torch.as_tensor(maximum, dtype=dtype, device=device)
-        elif maximum.dtype is not dtype:
+        if maximum.dtype is not dtype:
             maximum = maximum.to(dtype)
-        elif maximum.device != device:
+        if maximum.device != device:
             maximum = maximum.to(device)
         super().__init__(
             torch.Size(

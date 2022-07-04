@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from typing import Optional, Union, Tuple
 
 import numpy as np
@@ -8,7 +9,6 @@ import torch
 from torchrl.data import TensorDict
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.common import _EnvWrapper
-from torchrl.envs.utils import step_tensordict
 
 __all__ = ["GymLikeEnv", "default_info_dict_reader"]
 
@@ -39,6 +39,11 @@ class default_info_dict_reader:
         self.keys = keys
 
     def __call__(self, info_dict: dict, tensordict: _TensorDict) -> _TensorDict:
+        if not isinstance(info_dict, dict) and len(self.keys):
+            warnings.warn(
+                f"Found an info_dict of type {type(info_dict)} "
+                f"but expected type or subtype `dict`."
+            )
         for key in self.keys:
             if key in info_dict:
                 tensordict[key] = info_dict[key]
@@ -67,6 +72,11 @@ class GymLikeEnv(_EnvWrapper):
 
     It is also expected that env.reset() returns an observation similar to the one observed after a step is completed.
     """
+
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._info_dict_reader = None
+        return super().__new__(cls, *args, **kwargs)
 
     def _step(self, tensordict: _TensorDict) -> _TensorDict:
         action = tensordict.get("action")
@@ -99,9 +109,9 @@ class GymLikeEnv(_EnvWrapper):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
-        self.info_dict_reader(info, tensordict_out)
+        if self.info_dict_reader is not None:
+            self.info_dict_reader(*info, tensordict_out)
 
-        self.current_tensordict = step_tensordict(tensordict_out)
         return tensordict_out
 
     def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs) -> _TensorDict:
@@ -158,17 +168,15 @@ class GymLikeEnv(_EnvWrapper):
         self.info_dict_reader = info_dict_reader
         return self
 
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(env={self._env}, batch_size={self.batch_size})"
+        )
+
     @property
     def info_dict_reader(self):
-        if "_info_dict_reader" not in self.__dir__():
-            self._info_dict_reader = default_info_dict_reader()
         return self._info_dict_reader
 
     @info_dict_reader.setter
     def info_dict_reader(self, value: callable):
         self._info_dict_reader = value
-
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}(env={self._env}, batch_size={self.batch_size})"
-        )
