@@ -207,6 +207,13 @@ setup_wheel_python() {
         exit 1
         ;;
     esac
+    # Download all the dependencies required to compile image and video_reader
+    # extensions
+
+    mkdir -p ext_libraries
+    pushd ext_libraries
+    popd
+    export PATH="/opt/python/$python_abi/bin:$(pwd)/ext_libraries/bin:$PATH"
   fi
 }
 
