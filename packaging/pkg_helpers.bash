@@ -227,6 +227,7 @@ setup_wheel_python() {
     pushd ext_libraries
     popd
     export PATH="/opt/python/$python_abi/bin:$(pwd)/ext_libraries/bin:$PATH"
+    export LD_LIBRARY_PATH=/opt/python/$python_abi/lib/python$PYTHON_VERSION/site-packages/torch/lib/:LD_LIBRARY_PATH
   fi
 }
 

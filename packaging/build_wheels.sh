@@ -29,7 +29,7 @@ else
     pip_install auditwheel
 
     # Point to custom libraries
-    export LD_LIBRARY_PATH=$(pwd)/ext_libraries/lib:$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=$(pwd)/ext_libraries/lib:/opt/python/$python_abi/lib/python3.7/site-packages/torch/lib/lib:$LD_LIBRARY_PATH
 fi
 
 if [[ "$OSTYPE" == "msys" ]]; then
@@ -38,6 +38,7 @@ else
     python setup.py bdist_wheel
     python -m auditwheel repair --plat manylinux_2_24_x86_64 dist/torchrl-*.whl
     ls -rtlh wheelhouse
+    mv wheelhouse/* dist/
 fi
 
 #if [[ "$(uname)" == Darwin ]]; then
