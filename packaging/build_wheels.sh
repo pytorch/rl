@@ -38,7 +38,7 @@ else
     python setup.py bdist_wheel
     if [[ "$(uname)" != Darwin ]]; then
 #      python -m auditwheel repair --plat manylinux1_x86_64 dist/torchrl-*.whl
-      python -m auditwheel repair --plat manylinux2014_aarch64 dist/torchrl-*.whl
+      python -m auditwheel repair --plat manylinux2014_x86_64 dist/torchrl-*.whl
       ls -rtlh wheelhouse
       mv wheelhouse/* dist/
     fi
