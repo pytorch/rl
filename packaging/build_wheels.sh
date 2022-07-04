@@ -36,7 +36,7 @@ if [[ "$OSTYPE" == "msys" ]]; then
   echo "ERROR: Windows installation is not supported yet." && exit 100
 else
     python setup.py bdist_wheel
-    auditwheel repair --plat manylinux_2_24_x86_64 dist/torchrl-*.whl
+    python -m auditwheel repair --plat manylinux_2_24_x86_64 dist/torchrl-*.whl
     ls -rtlh wheelhouse
 fi
 
