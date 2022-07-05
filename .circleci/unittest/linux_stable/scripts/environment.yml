@@ -9,7 +9,6 @@ dependencies:
     - hypothesis
     - future
     - cloudpickle
-    - gym_retro
     - gym
     - pygame
     - gym[accept-rom-license]
@@ -25,5 +24,4 @@ dependencies:
     - dm_control
     - mujoco_py
     - hydra-core
-    - pyrender
     - tensorboard

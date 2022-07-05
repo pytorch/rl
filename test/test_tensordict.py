@@ -7,11 +7,11 @@ import argparse
 import os.path
 import re
 
-import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
 from torch import multiprocessing as mp
+from torchrl import prod
 from torchrl.data import SavedTensorDict, TensorDict, MemmapTensor
 from torchrl.data.tensordict.tensordict import (
     assert_allclose_td,
@@ -810,7 +810,7 @@ class TestTensorDicts:
         td = getattr(self, td_name)
         td_view = td.view(-1)
         tensor = td.get("a")
-        tensor = tensor.view(-1, tensor.numel() // np.prod(td.batch_size))
+        tensor = tensor.view(-1, tensor.numel() // prod(td.batch_size))
         tensor = torch.ones_like(tensor)
         if td_name == "sub_td":
             td_view.set_("a", tensor)

@@ -6,10 +6,10 @@
 from __future__ import annotations
 
 import functools
-import math
 from numbers import Number
 from typing import Callable, List, Optional, Sequence, Tuple, Union
 
+import numpy as np
 import torch
 
 from torchrl.data.utils import DEVICE_TYPING, INDEX_TYPING
@@ -92,7 +92,7 @@ class MetaTensor:
         self.dtype = dtype
         self.requires_grad = requires_grad
         self._ndim = len(shape)
-        self._numel = math.prod(shape)
+        self._numel = np.prod(shape)
         self._is_shared = bool(_is_shared)
         self._is_memmap = bool(_is_memmap)
         if _is_memmap:

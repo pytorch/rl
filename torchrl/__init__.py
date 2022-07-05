@@ -5,7 +5,10 @@
 
 import abc
 import collections
+import math
 import time
+import typing
+from typing import Optional, Type, Tuple
 from warnings import warn
 
 import numpy as np
@@ -112,3 +115,10 @@ class KeyDependentDefaultDict(collections.defaultdict):
     def __missing__(self, key):
         value = self.fun(key)
         return value
+
+
+def prod(sequence):
+    if hasattr(math, "prod"):
+        return math.prod(sequence)
+    else:
+        return int(np.prod(sequence))

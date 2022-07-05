@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import abc
-import math
 from collections import OrderedDict
 from numbers import Number
 from typing import Any, Callable, Iterator, Optional, Union, Dict
@@ -14,7 +13,7 @@ from typing import Any, Callable, Iterator, Optional, Union, Dict
 import numpy as np
 import torch
 
-from torchrl import seed_generator
+from torchrl import seed_generator, prod
 from torchrl.data import CompositeSpec, TensorDict, TensorSpec
 from ..data.tensordict.tensordict import _TensorDict
 from ..data.utils import DEVICE_TYPING
@@ -335,7 +334,7 @@ class _EnvClass:
         return tensordict
 
     def numel(self) -> int:
-        return math.prod(self.batch_size)
+        return prod(self.batch_size)
 
     def set_seed(self, seed: int) -> int:
         """Sets the seed of the environment and returns the next seed to be used (

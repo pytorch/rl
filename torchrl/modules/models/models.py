@@ -6,11 +6,11 @@
 from numbers import Number
 from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
 
-import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
 
+from torchrl import prod
 from torchrl.data import DEVICE_TYPING
 from torchrl.modules.models.utils import (
     _find_depth,
@@ -180,7 +180,7 @@ class MLP(nn.Sequential):
 
         _out_features_num = out_features
         if not isinstance(out_features, Number):
-            _out_features_num = np.prod(out_features)
+            _out_features_num = prod(out_features)
         self.out_features = out_features
         self._out_features_num = _out_features_num
         self.activation_class = activation_class
