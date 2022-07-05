@@ -8,7 +8,7 @@ from __future__ import annotations
 import functools
 import os
 import tempfile
-from math import prod
+from numpy import prod
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np

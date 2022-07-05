@@ -22,6 +22,7 @@ jobs:
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install torch==1.12 ${{ matrix.cuda_support[1] }}
+          python3 -mpip install "git+https://github.com/pytorch/functorch.git@release/0.2"
       - name: Build wheel
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
@@ -62,6 +63,7 @@ jobs:
       - name: Install PyTorch 1.12 RC
         run: |
           python3 -mpip install torch==1.12 --extra-index-url https://download.pytorch.org/whl/cpu
+          python3 -mpip install "git+https://github.com/pytorch/functorch.git@release/0.2"
       - name: Build wheel
         run: |
           export CC=clang CXX=clang++
