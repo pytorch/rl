@@ -36,13 +36,9 @@ printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
     # use pip to install pytorch as conda can frequently pick older release
-    if [[ $OSTYPE == 'darwin'* ]]; then
-      python -m pip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-    else
-      python -m pip install torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
-    fi
+    conda install pytorch cpuonly -c pytorch-nightly
 else
-    python -m pip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
+    conda install pytorch cudatoolkit=11.3 -c pytorch-nightly
 fi
 
 printf "Installing functorch\n"
@@ -53,7 +49,7 @@ python -m pip install "git+https://github.com/pytorch/functorch.git"
 python -c "import functorch"
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python -m pip install -e .
 
 # smoke test
 python -c "import torchrl"
