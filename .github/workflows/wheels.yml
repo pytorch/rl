@@ -69,6 +69,7 @@ jobs:
           export CC=clang CXX=clang++
           python3 -mpip install wheel
           python3 setup.py bdist_wheel
+          VERSION_TAG= python3 setup.py bdist_wheel
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
         with:
