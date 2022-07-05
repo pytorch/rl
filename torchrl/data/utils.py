@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import typing
 from typing import Any, Callable, List, Sequence, Tuple, Union
 
 import numpy as np
@@ -26,6 +27,10 @@ torch_to_numpy_dtype_dict = {
     value: key for key, value in numpy_to_torch_dtype_dict.items()
 }
 DEVICE_TYPING = Union[torch.device, str, int]
+if hasattr(typing, "get_args"):
+    DEVICE_TYPING_ARGS = typing.get_args(DEVICE_TYPING)
+else:
+    DEVICE_TYPING_ARGS = (torch.device, str, int)
 
 INDEX_TYPING = Union[None, int, slice, Tensor, List[Any], Tuple[Any, ...]]
 

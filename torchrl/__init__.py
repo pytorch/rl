@@ -6,6 +6,8 @@
 import abc
 import collections
 import time
+import typing
+from typing import Optional, Type, Tuple
 from warnings import warn
 
 import numpy as np

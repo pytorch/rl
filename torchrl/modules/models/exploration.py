@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
-from typing import Optional, Sequence, Union, get_args
+from typing import Optional, Sequence, Union
 
 import torch
 from torch import nn, distributions as d
@@ -13,7 +13,7 @@ from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
 
 __all__ = ["NoisyLinear", "NoisyLazyLinear", "reset_noise"]
 
-from torchrl.data.utils import DEVICE_TYPING
+from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.distributions.utils import _cast_transform_device
 from torchrl.modules.utils import inv_softplus
@@ -389,7 +389,7 @@ class gSDEModule(nn.Module):
         return mu, sigma, action, _eps_gSDE
 
     def to(self, device_or_dtype: Union[torch.dtype, DEVICE_TYPING]):
-        if isinstance(device_or_dtype, get_args(DEVICE_TYPING)):
+        if isinstance(device_or_dtype, DEVICE_TYPING_ARGS):
             self.transform = _cast_transform_device(self.transform, device_or_dtype)
         return super().to(device_or_dtype)
 

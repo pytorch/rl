@@ -98,6 +98,7 @@ jobs:
       - name: Install PyTorch 1.12 RC
         run: |
           python3 -mpip install torch==1.12 torchvision --extra-index-url https://download.pytorch.org/whl/cpu
+          python3 -mpip install "git+https://github.com/pytorch/functorch.git@release/0.2"
       - name: Upgrade pip
         run: |
           python3 -mpip install --upgrade pip
@@ -125,5 +126,5 @@ jobs:
           python -m torch.utils.collect_env
           python -c "import torchrl; print(torchrl.__version__)"
           EXIT_STATUS=0
-          find test \( -name test\*.py ! -name test_torchrl_lagging_op_db.py \) | xargs -I {} -n 1 python {} -v || EXIT_STATUS=$?
+          pytest test/smoke_test.py -v --durations 20
           exit $EXIT_STATUS
