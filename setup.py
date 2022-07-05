@@ -17,10 +17,41 @@ from torch.utils.cpp_extension import (
     BuildExtension,
 )
 
+cwd = os.path.dirname(os.path.abspath(__file__))
+version_txt = os.path.join(cwd, "version.txt")
+with open(version_txt, "r") as f:
+    version = f.readline().strip()
+
+
+ROOT_DIR = Path(__file__).parent.resolve()
+
+
+try:
+    sha = (
+        subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd)
+        .decode("ascii")
+        .strip()
+    )
+except Exception:
+    sha = "Unknown"
+package_name = "torchrl"
+
+if os.getenv("BUILD_VERSION"):
+    version = os.getenv("BUILD_VERSION")
+elif sha != "Unknown":
+    version += "+" + sha[:7]
+
+
+def write_version_file():
+    version_path = os.path.join(cwd, "torchrl", "version.py")
+    with open(version_path, "w") as f:
+        f.write("__version__ = '{}'\n".format(version))
+        f.write("git_version = {}\n".format(repr(sha)))
+
 
 def _get_pytorch_version():
-    if "PYTORCH_VERSION" in os.environ:
-        return f"torch=={os.environ['PYTORCH_VERSION']}"
+    # if "PYTORCH_VERSION" in os.environ:
+    #     return f"torch=={os.environ['PYTORCH_VERSION']}"
     return "torch"
 
 
@@ -57,11 +88,11 @@ class clean(distutils.command.clean.clean):
                 shutil.rmtree(str(path), ignore_errors=True)
 
 
-def _run_cmd(cmd):
-    try:
-        return subprocess.check_output(cmd, cwd=ROOT_DIR).decode("ascii").strip()
-    except Exception:
-        return None
+# def _run_cmd(cmd):
+#     try:
+#         return subprocess.check_output(cmd, cwd=ROOT_DIR).decode("ascii").strip()
+#     except Exception:
+#         return None
 
 
 def get_extensions():
@@ -119,7 +150,7 @@ def _main():
 
     setup(
         name="torchrl",
-        version="0.1",
+        version=version,
         author="torchrl contributors",
         author_email="vmoens@fb.com",
         packages=find_packages(),
@@ -128,7 +159,7 @@ def _main():
             "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
             "clean": clean,
         },
-        install_requires=[pytorch_package_dep, "numpy", "tensorboard", "packaging"],
+        install_requires=[pytorch_package_dep, "numpy", "packaging"],
         extras_require={
             "atari": ["gym", "atari-py", "ale-py", "gym[accept-rom-license]", "pygame"],
             "dm_control": ["dm_control"],
@@ -136,14 +167,23 @@ def _main():
             "rendering": ["moviepy"],
             "tests": ["pytest", "pyyaml"],
             "utils": [
+                "tensorboard",
                 "tqdm",
-                "configargparse",
                 "hydra-core>=1.1",
                 "hydra-submitit-launcher",
             ],
         },
+        url="https://github.com/facebookresearch/rl",
+        # classifiers = [
+        #    "Programming Language :: Python :: 3",
+        #    "License :: OSI Approved :: MIT License",
+        #    "Operating System :: OS Independent",
+        # ]
     )
 
 
 if __name__ == "__main__":
+
+    write_version_file()
+    print("Building wheel {}-{}".format(package_name, version))
     _main()
