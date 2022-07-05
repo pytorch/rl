@@ -37,12 +37,12 @@ if [ "${CU_VERSION:-}" == cpu ] ; then
     # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
     # use pip to install pytorch as conda can frequently pick older release
     if [[ $OSTYPE == 'darwin'* ]]; then
-      pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+      python -m pip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
     else
-      pip3 install torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
+      python -m pip install torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
     fi
 else
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
+    python -m pip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 fi
 
 printf "Installing functorch\n"
