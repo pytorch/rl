@@ -15,7 +15,6 @@ from collections.abc import Mapping
 from copy import copy, deepcopy
 from numbers import Number
 from textwrap import indent
-from types import NoneType
 from typing import (
     Callable,
     Dict,
@@ -242,7 +241,10 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def _stack_onto_(
-        self, key: str, list_item: List[COMPATIBLE_TYPES], dim: int,
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
     ) -> _TensorDict:
         """Stacks a list of values onto an existing key while keeping the original storage.
 
@@ -261,10 +263,13 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def _stack_onto_at_(
-        self, key: str, list_item: List[COMPATIBLE_TYPES], dim: int, idx: INDEX_TYPING,
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+        idx: INDEX_TYPING,
     ) -> _TensorDict:
-        """Similar to _stack_onto_ but on a specific index
-        """
+        """Similar to _stack_onto_ but on a specific index"""
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def _default_get(
@@ -1752,12 +1757,18 @@ class TensorDict(_TensorDict):
         return self
 
     def _stack_onto_at_(
-        self, key: str, list_item: List[COMPATIBLE_TYPES], dim: int, idx: INDEX_TYPING,
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+        idx: INDEX_TYPING,
     ) -> TensorDict:
         if isinstance(idx, tuple) and len(idx) == 1:
             idx = idx[0]
-        if isinstance(idx, (int, slice, NoneType)) or \
-            (isinstance(idx, tuple) and all(isinstance(_idx, (int, slice, NoneType)) for _idx in idx)):
+        if isinstance(idx, (int, slice)) or (
+            isinstance(idx, tuple)
+            and all(isinstance(idx, (int, slice)) for _idx in idx)
+        ):
             torch.stack(list_item, dim=dim, out=self._tensordict[key][idx])
         else:
             raise ValueError(
@@ -2095,28 +2106,26 @@ def stack(
     # check that all tensordict match
     keys = _check_keys(list_of_tensordicts)
 
-    if out is None and not contiguous:
-        out = LazyStackedTensorDict(
-            *list_of_tensordicts,
-            stack_dim=dim,
+    if out is None:
+        out = (
+            TensorDict(
+                {
+                    key: torch.stack(
+                        [_tensordict[key] for _tensordict in list_of_tensordicts],
+                        dim,
+                    )
+                    for key in keys
+                },
+                batch_size=LazyStackedTensorDict._compute_batch_size(
+                    batch_size, dim, len(list_of_tensordicts)
+                ),
+            )
+            if contiguous
+            else LazyStackedTensorDict(
+                *list_of_tensordicts,
+                stack_dim=dim,
+            )
         )
-    elif contiguous:
-        _out = TensorDict(
-            {
-                key: torch.stack(
-                    [_tensordict[key] for _tensordict in list_of_tensordicts],
-                    dim,
-                )
-                for key in keys
-            },
-            batch_size=LazyStackedTensorDict._compute_batch_size(
-                batch_size, dim, len(list_of_tensordicts)
-            ),
-        )
-        if out is not None:
-            out.update(_out)
-            return out
-        return _out
     else:
         batch_size = list(batch_size)
         batch_size.insert(dim, len(list_of_tensordicts))
@@ -2146,11 +2155,10 @@ def stack(
                 )
 
         for key in keys:
-            out.set(
-                key,
-                torch.stack([td.get(key) for td in list_of_tensordicts], dim),
-                inplace=True,
+            out._stack_onto_(
+                key, [_tensordict[key] for _tensordict in list_of_tensordicts], dim
             )
+
     return out
 
 
@@ -2348,6 +2356,15 @@ torch.Size([3, 2])
     ) -> TensorDict:
         self._source._stack_onto_at_(key, list_item, dim=dim, idx=self.idx)
         return self
+
+    def _stack_onto_at_(
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+        idx: INDEX_TYPING,
+    ) -> _TensorDict:
+        raise RuntimeError("Indexing tensors of type SubTensorDict is not allowed")
 
     def to(self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs) -> _TensorDict:
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
@@ -2763,20 +2780,6 @@ class LazyStackedTensorDict(_TensorDict):
             td.set_(key, _item)
         return self
 
-    def _stack_onto_(
-        self, key: str, list_item: List[COMPATIBLE_TYPES], dim: int,
-    ) -> _TensorDict:
-        if dim == self.stack_dim:
-            for source, tensordict_dest in zip(list_item, self.tensordicts):
-                tensordict_dest.set_(key, source)
-        return self
-
-    def _stack_onto_at_(
-        self, key: str, list_item: List[COMPATIBLE_TYPES], dim: int, idx: INDEX_TYPING,
-    ) -> _TensorDict:
-        # TODO
-        pass
-
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> _TensorDict:
@@ -2784,6 +2787,29 @@ class LazyStackedTensorDict(_TensorDict):
             raise RuntimeError("Cannot modify immutable TensorDict")
         sub_td = self[idx]
         sub_td.set_(key, value)
+        return self
+
+    def _stack_onto_(
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+    ) -> _TensorDict:
+        if dim == self.stack_dim:
+            for source, tensordict_dest in zip(list_item, self.tensordicts):
+                tensordict_dest.set_(key, source)
+        return self
+
+    def _stack_onto_at_(
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+        idx: INDEX_TYPING,
+    ) -> _TensorDict:
+        if dim == self.stack_dim:
+            for source, tensordict_dest in zip(list_item, self.tensordicts):
+                tensordict_dest.set_at_(key, source, idx)
         return self
 
     def get(
@@ -3185,6 +3211,33 @@ class SavedTensorDict(_TensorDict):
             return self
         return td.to(SavedTensorDict)
 
+    def _stack_onto_(
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+    ) -> _TensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
+        td = self._load()
+        td._stack_onto_(key, list_item, dim)
+        self._save(td)
+        return self
+
+    def _stack_onto_at_(
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+        idx: INDEX_TYPING,
+    ) -> _TensorDict:
+        if self.is_locked:
+            raise RuntimeError("Cannot modify immutable TensorDict")
+        td = self._load()
+        td._stack_onto_at_(key, list_item, dim, idx)
+        self._save(td)
+        return self
+
     def set_(
         self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
     ) -> _TensorDict:
@@ -3564,6 +3617,29 @@ class _CustomOpTensorDict(_TensorDict):
             )
         transformed_tensor[idx] = value
         return self
+
+    def _stack_onto_(
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+    ) -> _TensorDict:
+        raise RuntimeError(
+            f"stacking tensordicts is not allowed for type {type(self)}"
+            f"consider calling 'to_tensordict()` first"
+        )
+
+    def _stack_onto_at_(
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+        idx: INDEX_TYPING,
+    ) -> _TensorDict:
+        raise RuntimeError(
+            f"stacking tensordicts is not allowed for type {type(self)}"
+            f"consider calling 'to_tensordict()` first"
+        )
 
     def __repr__(self) -> str:
         custom_op_kwargs_str = ", ".join(

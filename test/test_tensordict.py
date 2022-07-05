@@ -938,6 +938,47 @@ class TestTensorDicts:
         del td["a"]
         assert "a" not in td.keys()
 
+    def test_stack_tds_on_subclass(self, td_name):
+        if td_name in ("memmap_td", "unsqueezed_td"):
+            pytest.mark.skip()
+            return
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        tds_count = list(td.batch_size)[0]
+        tds_batch_size = list(td.batch_size)[1:]
+        tds_list = [
+            TensorDict(
+                source={
+                    "a": torch.randn(*tds_batch_size, 5),
+                    "b": torch.randn(*tds_batch_size, 10),
+                    "c": torch.randint(10, (*tds_batch_size, 3)),
+                },
+                batch_size=tds_batch_size,
+            )
+            for _ in range(tds_count)
+        ]
+        stacked_td = stack_td(tds_list, 0, contiguous=True, out=td)
+        assert stacked_td.batch_size == td.batch_size
+        for key in ("a", "b", "c"):
+            assert (stacked_td[key] == td[key]).all()
+
+    def test_stack_subclasses_on_td(self, td_name):
+        torch.manual_seed(1)
+        batch_size = list(getattr(self, td_name).batch_size)
+        td = TensorDict(
+            source={
+                "a": torch.randn(3, *batch_size),
+                "b": torch.randn(3, *batch_size),
+                "c": torch.randint(10, (3, *batch_size)),
+            },
+            batch_size=(3, *batch_size),
+        )
+        tds_list = [getattr(self, td_name) for _ in range(3)]
+        stacked_td = stack_td(tds_list, 0, contiguous=True, out=td)
+        assert stacked_td.batch_size == td.batch_size
+        for key in ("a", "b", "c"):
+            assert (stacked_td[key] == td[key]).all()
+
     @pytest.mark.parametrize("dim", [0, 1])
     @pytest.mark.parametrize("chunks", [1, 2])
     def test_chunk(self, td_name, dim, chunks):
