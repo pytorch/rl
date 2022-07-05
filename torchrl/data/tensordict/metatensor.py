@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import functools
-import math
 from numbers import Number
 from typing import Callable, List, Optional, Sequence, Tuple, Union
 

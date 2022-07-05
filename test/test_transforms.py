@@ -3,16 +3,15 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
-import math
 from multiprocessing import Lock
 
-import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
 from mocking_classes import ContinuousActionVecMockEnv
 from torch import Tensor
 from torch import multiprocessing as mp
+from torchrl import prod
 from torchrl.data import NdBoundedTensorSpec, CompositeSpec
 from torchrl.data import TensorDict
 from torchrl.envs import EnvCreator, SerialEnv
@@ -449,7 +448,7 @@ class TestTransforms:
         )
         td.set("dont touch", dont_touch.clone())
         flatten(td)
-        expected_size = np.prod(size + [nchannels])
+        expected_size = prod(size + [nchannels])
         for key in keys:
             assert td.get(key).shape[-3] == expected_size
         assert (td.get("dont touch") == dont_touch).all()

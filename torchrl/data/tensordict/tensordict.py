@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import abc
 import functools
-import math
 import tempfile
 import textwrap
 import uuid
@@ -34,7 +33,7 @@ from warnings import warn
 import numpy as np
 import torch
 
-from torchrl import KeyDependentDefaultDict
+from torchrl import KeyDependentDefaultDict, prod
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.metatensor import MetaTensor
 from torchrl.data.tensordict.utils import (
@@ -185,7 +184,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
 
     def numel(self) -> int:
         """Total number of elements in the batch."""
-        return max(1, math.prod(self.batch_size))
+        return max(1, prod(self.batch_size))
 
     def _check_batch_size(self) -> None:
         bs = [value.shape[: self.batch_dims] for key, value in self.items_meta()] + [

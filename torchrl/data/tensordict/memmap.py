@@ -12,8 +12,8 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from numpy import prod
 
+from torchrl import prod
 from torchrl.data.tensordict.utils import _getitem_batch_size
 from torchrl.data.utils import (
     DEVICE_TYPING,

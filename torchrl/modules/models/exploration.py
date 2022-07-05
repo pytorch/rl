@@ -6,7 +6,6 @@
 import math
 from typing import Optional, Sequence, Union
 
-import numpy as np
 import torch
 from torch import nn, distributions as d
 from torch.nn.modules.lazy import LazyModuleMixin
@@ -14,6 +13,7 @@ from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
 
 __all__ = ["NoisyLinear", "NoisyLazyLinear", "reset_noise"]
 
+from torchrl import prod
 from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.distributions.utils import _cast_transform_device
@@ -362,7 +362,7 @@ class gSDEModule(nn.Module):
             )
         elif (_eps_gSDE is None and exploration_mode() == "random") or (
             _eps_gSDE is not None
-            and _eps_gSDE.numel() == np.prod(state.shape[:-1])
+            and _eps_gSDE.numel() == prod(state.shape[:-1])
             and (_eps_gSDE == 0).all()
         ):
             _eps_gSDE = torch.randn(
