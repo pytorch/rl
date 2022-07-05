@@ -37,7 +37,7 @@ if [[ "$OSTYPE" == "msys" ]]; then
 else
     python setup.py bdist_wheel
     if [[ "$(uname)" != Darwin ]]; then
-      rename "s/linux_x86_64/manylinux1_x86_64/g" dist/*.whl
+      rename "linux_x86_64" "manylinux1_x86_64" dist/*.whl
     fi
 fi
 
