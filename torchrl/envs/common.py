@@ -335,7 +335,7 @@ class _EnvClass:
         return tensordict
 
     def numel(self) -> int:
-        return math.prod(self.batch_size)
+        return np.prod(self.batch_size)
 
     def set_seed(self, seed: int) -> int:
         """Sets the seed of the environment and returns the next seed to be used (

@@ -1,9 +1,14 @@
 channels:
   - pytorch
   - defaults
+  - conda-forge
+  - anaconda
 dependencies:
   - pip
+  - ninja
   - protobuf
+  - pyrender
+  - pyopengl-accelerate
   - pip:
     - hypothesis
     - future
@@ -23,5 +28,4 @@ dependencies:
     - dm_control
     - mujoco_py
     - hydra-core
-    - pyrender
     - tensorboard

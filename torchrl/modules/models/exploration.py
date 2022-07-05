@@ -6,6 +6,7 @@
 import math
 from typing import Optional, Sequence, Union
 
+import numpy as np
 import torch
 from torch import nn, distributions as d
 from torch.nn.modules.lazy import LazyModuleMixin
@@ -361,7 +362,7 @@ class gSDEModule(nn.Module):
             )
         elif (_eps_gSDE is None and exploration_mode() == "random") or (
             _eps_gSDE is not None
-            and _eps_gSDE.numel() == math.prod(state.shape[:-1])
+            and _eps_gSDE.numel() == np.prod(state.shape[:-1])
             and (_eps_gSDE == 0).all()
         ):
             _eps_gSDE = torch.randn(

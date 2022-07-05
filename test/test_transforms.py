@@ -6,6 +6,7 @@ import argparse
 import math
 from multiprocessing import Lock
 
+import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
@@ -448,7 +449,7 @@ class TestTransforms:
         )
         td.set("dont touch", dont_touch.clone())
         flatten(td)
-        expected_size = math.prod(size + [nchannels])
+        expected_size = np.prod(size + [nchannels])
         for key in keys:
             assert td.get(key).shape[-3] == expected_size
         assert (td.get("dont touch") == dont_touch).all()

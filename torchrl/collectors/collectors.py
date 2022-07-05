@@ -981,7 +981,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 out = split_trajectories(out)
                 frames += out.get("mask").sum()
             else:
-                frames += math.prod(out.shape)
+                frames += np.prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
