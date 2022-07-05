@@ -52,7 +52,7 @@ printf "* Installing torchrl\n"
 printf "g++ version: "
 gcc --version
 
-python -m pip install -e ".[atari,dm_control,gym_continuous,rendering,tests,utils]"
+python -m pip install ".[atari,dm_control,gym_continuous,rendering,tests,utils]"
 
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
