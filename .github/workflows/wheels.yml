@@ -91,7 +91,7 @@ jobs:
         with:
           python-version: ${{ matrix.python_version }}
           architecture: x64
-      - name: Checkout functorch
+      - name: Checkout torchrl
         uses: actions/checkout@v2
       - name: Install PyTorch 1.12 RC
         run: |
@@ -105,23 +105,23 @@ jobs:
       - name: Download built wheels
         uses: actions/download-artifact@v2
         with:
-          name: functorch-${{ matrix.os[0] }}-${{ matrix.python_version }}.whl
+          name: torchrl-${{ matrix.os[0] }}-${{ matrix.python_version }}.whl
           path: /tmp/wheels
       - name: Install built wheels
         run: |
           python3 -mpip install /tmp/wheels/*
       - name: Log version string
         run: |
-          # Avoid ambiguity of "import functorch" by deleting the source files.
-          rm -rf functorch/
-          python -c "import functorch; print(functorch.__version__)"
+          # Avoid ambiguity of "import torchrl" by deleting the source files.
+          rm -rf torchrl/
+          python -c "import torchrl; print(torchrl.__version__)"
       - name: Run tests
         run: |
           set -e
           export IN_CI=1
           mkdir test-reports
           python -m torch.utils.collect_env
-          python -c "import functorch; print(functorch.__version__)"
+          python -c "import torchrl; print(torchrl.__version__)"
           EXIT_STATUS=0
-          find test \( -name test\*.py ! -name test_functorch_lagging_op_db.py \) | xargs -I {} -n 1 python {} -v || EXIT_STATUS=$?
+          find test \( -name test\*.py ! -name test_torchrl_lagging_op_db.py \) | xargs -I {} -n 1 python {} -v || EXIT_STATUS=$?
           exit $EXIT_STATUS
