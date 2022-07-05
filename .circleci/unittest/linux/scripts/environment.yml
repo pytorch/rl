@@ -8,6 +8,12 @@ dependencies:
     - hypothesis
     - future
     - cloudpickle
+    - gym_retro
+    - gym
+    - pygame
+    - gym[accept-rom-license]
+    - gym[atari]
+    - moviepy
     - tqdm
     - pytest
     - pytest-cov
@@ -15,4 +21,8 @@ dependencies:
     - expecttest
     - pyyaml
     - scipy
+    - dm_control
+    - mujoco_py
     - hydra-core
+    - pyrender
+    - tensorboard

@@ -9,6 +9,9 @@ dependencies:
     - hypothesis
     - future
     - cloudpickle
+    - gym
+    - gym[accept-rom-license]
+    - gym[atari]
     - tqdm
     - pytest
     - pytest-cov
@@ -17,3 +20,4 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
+    - tensorboard

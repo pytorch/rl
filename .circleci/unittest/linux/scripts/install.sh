@@ -49,7 +49,7 @@ python -m pip install "git+https://github.com/pytorch/functorch.git"
 python -c "import functorch"
 
 printf "* Installing torchrl\n"
-python -m pip install ".[atari,dm_control,gym_continuous,rendering,tests,utils]"
+python setup.py develop
 
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
