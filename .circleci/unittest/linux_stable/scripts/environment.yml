@@ -20,5 +20,6 @@ dependencies:
     - expecttest
     - pyyaml
     - scipy
+    - dm_control
     - hydra-core
     - tensorboard
