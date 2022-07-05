@@ -29,19 +29,16 @@ else
     pip_install auditwheel
 
     # Point to custom libraries
-    export LD_LIBRARY_PATH=$(pwd)/ext_libraries/lib:/opt/python/$python_abi/lib/python3.7/site-packages/torch/lib/lib:$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=$(pwd)/ext_libraries/lib:$LD_LIBRARY_PATH
 fi
 
 if [[ "$OSTYPE" == "msys" ]]; then
   echo "ERROR: Windows installation is not supported yet." && exit 100
 else
     python setup.py bdist_wheel
-#    if [[ "$(uname)" != Darwin ]]; then
-#      python -m auditwheel repair --plat manylinux1_x86_64 dist/torchrl-*.whl
-#      python -m auditwheel repair --plat manylinux2014_x86_64 dist/torchrl-*.whl
-#      ls -rtlh wheelhouse
-#      mv wheelhouse/* dist/
-#    fi
+    if [[ "$(uname)" != Darwin ]]; then
+      rename "s/linux_x86_64/manylinux1_x86_64/g" dist/*.whl
+    fi
 fi
 
 #if [[ "$(uname)" == Darwin ]]; then
