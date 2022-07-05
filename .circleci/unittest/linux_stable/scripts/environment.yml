@@ -23,4 +23,5 @@ dependencies:
     - scipy
     - dm_control
     - hydra-core
+    - pyrender
     - tensorboard
