@@ -46,14 +46,14 @@ else
 fi
 
 printf "Installing functorch\n"
-pip install ninja  # Makes the build go faster
-pip install "git+https://github.com/pytorch/functorch.git"
+python -m pip install ninja  # Makes the build go faster
+python -m pip install "git+https://github.com/pytorch/functorch.git"
 
 # smoke test
 python -c "import functorch"
 
 printf "* Installing torchrl\n"
-pip install -e ".[atari,dm_control,gym_continuous,rendering,tests,utils]"
+python -m pip install -e ".[atari,dm_control,gym_continuous,rendering,tests,utils]"
 
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
