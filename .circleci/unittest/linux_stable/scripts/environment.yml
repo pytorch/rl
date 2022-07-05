@@ -12,6 +12,7 @@ dependencies:
     - gym
     - gym[accept-rom-license]
     - gym[atari]
+    - moviepy
     - tqdm
     - pytest
     - pytest-cov
