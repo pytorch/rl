@@ -10,6 +10,7 @@ dependencies:
     - future
     - cloudpickle
     - gym
+    - pygame
     - gym[accept-rom-license]
     - gym[atari]
     - moviepy
