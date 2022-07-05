@@ -36,9 +36,9 @@ printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
     # use pip to install pytorch as conda can frequently pick older release
-    conda -y install pytorch cpuonly -c pytorch-nightly
+    conda install -y pytorch cpuonly -c pytorch-nightly
 else
-    conda -y install pytorch cudatoolkit=11.3 -c pytorch-nightly
+    conda install -y pytorch cudatoolkit=11.3 -c pytorch-nightly
 fi
 
 printf "Installing functorch\n"
