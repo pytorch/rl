@@ -88,6 +88,8 @@ You can install the latest release by using
 ```
 pip install torchrl
 ```
+This should work on linux and MacOs (not M1). For Windows and M1/M2 machines, one 
+should install the library locally (see below).
 
 Alternatively, as the library is at an early stage, it may be wise to install 
 it in develop mode as this will make it possible to pull the latest changes and 
