@@ -27,10 +27,9 @@ jobs:
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install wheel
-#          VERSION_TAG=${{ matrix.cuda_support[0] }} PYTORCH_CUDA_RESTRICTIONS=${{ matrix.cuda_support[2] }} python3 setup.py bdist_wheel
           BUILD_VERSION=0.0.1 python3 setup.py bdist_wheel
           # NB: wheels have the linux_x86_64 tag so we rename to manylinux1
-          find . -name 'dist/*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
+          # find . -name 'dist/*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
       # pretend that they're manylinux1 compliant so we do the same.
       - name: Show auditwheel output; confirm 2-17
