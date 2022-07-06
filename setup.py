@@ -148,8 +148,8 @@ def _main():
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
 
-    with open("README.md") as f:
-        readme = f.read()
+    this_directory = Path(__file__).parent
+    long_description = (this_directory / "README.md").read_text()
 
     setup(
         # Metadata
@@ -158,7 +158,8 @@ def _main():
         author="torchrl contributors",
         author_email="vmoens@fb.com",
         url="https://github.com/facebookresearch/rl",
-        long_description=readme,
+        long_description=long_description,
+        long_description_content_type='text/markdown',
         license="BSD",
         # Package info
         packages=find_packages(exclude=("test",)),
