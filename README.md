@@ -124,7 +124,7 @@ The following libraries can be installed depending on the usage one wants to
 make of torchrl:
 ```
 # diverse
-pip install tqdm tensorboard hydra-core>=1.1 hydra-submitit-launcher
+pip install tqdm tensorboard "hydra-core>=1.1" hydra-submitit-launcher
 
 # rendering
 pip install moviepy
@@ -133,7 +133,7 @@ pip install moviepy
 pip install dm_control 
 
 # gym, atari games
-pip install gym gym[accept-rom-license] pygame gym_retro
+pip install gym "gym[accept-rom-license]" pygame gym_retro
 
 # tests
 pip install pytest pyyaml pytest-instafail
