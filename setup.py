@@ -148,12 +148,20 @@ def _main():
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
 
+    with open("README.md") as f:
+        readme = f.read()
+
     setup(
+        # Metadata
         name="torchrl",
         version=version,
         author="torchrl contributors",
         author_email="vmoens@fb.com",
-        packages=find_packages(),
+        url="https://github.com/facebookresearch/rl",
+        long_description=readme,
+        license="BSD",
+        # Package info
+        packages=find_packages(exclude=("test",)),
         ext_modules=get_extensions(),
         cmdclass={
             "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
@@ -173,7 +181,7 @@ def _main():
                 "hydra-submitit-launcher",
             ],
         },
-        url="https://github.com/facebookresearch/rl",
+        zip_safe=False,
         # classifiers = [
         #    "Programming Language :: Python :: 3",
         #    "License :: OSI Approved :: MIT License",
