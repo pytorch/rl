@@ -186,5 +186,5 @@ if __name__ == "__main__":
 
     write_version_file()
     print("Building wheel {}-{}".format(package_name, version))
-    print(f"BUILD_VERSIOn is {os.getenv('BUILD_VERSION')}")
+    print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
     _main()
