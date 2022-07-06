@@ -159,7 +159,7 @@ def _main():
         author_email="vmoens@fb.com",
         url="https://github.com/facebookresearch/rl",
         long_description=long_description,
-        long_description_content_type='text/markdown',
+        long_description_content_type="text/markdown",
         license="BSD",
         # Package info
         packages=find_packages(exclude=("test",)),
