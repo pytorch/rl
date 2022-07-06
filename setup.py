@@ -38,10 +38,8 @@ package_name = "torchrl"
 
 if os.getenv("BUILD_VERSION"):
     version = os.getenv("BUILD_VERSION")
-    print(f"version is {version} as of BUILD_VERSION")
 elif sha != "Unknown":
     version += "+" + sha[:7]
-    print(f"version is {version} as of sha")
 
 
 def write_version_file():
@@ -188,4 +186,5 @@ if __name__ == "__main__":
 
     write_version_file()
     print("Building wheel {}-{}".format(package_name, version))
+    print(f"BUILD_VERSIOn is {os.getenv('BUILD_VERSION')}")
     _main()

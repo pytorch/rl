@@ -76,6 +76,9 @@ def _test_vecnorm_subproc(idx, queue_out: mp.Queue, queue_in: mp.Queue):
     queue_out.put(td_out)
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "all_done"
+    queue_in.close()
+    queue_out.close()
+    del queue_in, queue_out
 
 
 @pytest.mark.parametrize("nprc", [2, 5])
@@ -145,9 +148,11 @@ def test_vecnorm_parallel(nprc):
                 _reward_count,
             )
 
+    with Lock() as lock:
         msg = "all_done"
         for idx in range(nprc):
             queues[idx][1].put(msg)
+    del queues
 
 
 def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.Queue):
@@ -171,6 +176,9 @@ def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "all_done"
     env.close()
+    queue_out.close()
+    queue_in.close()
+    del queue_in, queue_out
 
 
 @pytest.mark.parametrize("nprc", [2, 5])
@@ -252,6 +260,7 @@ def test_vecnorm_parallel_auto(nprc):
         msg = "all_done"
         for idx in range(nprc):
             queues[idx][1].put(msg)
+    del queues
 
 
 def _run_parallelenv(parallel_env, queue_in, queue_out):
@@ -267,7 +276,9 @@ def _run_parallelenv(parallel_env, queue_in, queue_out):
         tensordict = parallel_env.rand_step(tensordict)
     queue_out.put("second round")
     parallel_env.close()
-    del parallel_env
+    queue_out.close()
+    queue_in.close()
+    del parallel_env, queue_out, queue_in
 
 
 def test_parallelenv_vecnorm():

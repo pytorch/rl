@@ -104,6 +104,8 @@ class TestStack:
                 tensordict.update_at_(td, i)
         time_spent = time.time() - t0
         command_pipe_child.send(time_spent)
+        command_pipe_child.close()
+        del command_pipe_child, command_pipe_parent
 
     @staticmethod
     def driver_func(td, stack):
