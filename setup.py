@@ -165,7 +165,7 @@ def _main():
             "dm_control": ["dm_control"],
             "gym_continuous": ["mujoco-py", "mujoco"],
             "rendering": ["moviepy"],
-            "tests": ["pytest", "pyyaml"],
+            "tests": ["pytest", "pyyaml", "pytest-instafail"],
             "utils": [
                 "tensorboard",
                 "tqdm",
