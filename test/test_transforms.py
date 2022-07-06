@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
-from multiprocessing import Lock
 
 import pytest
 import torch
@@ -284,9 +283,7 @@ def test_parallelenv_vecnorm():
     parallel_env = ParallelEnv(3, make_env, env_input_keys=env_input_keys)
     queue_out = mp.Queue(1)
     queue_in = mp.Queue(1)
-    proc = mp.Process(
-        target=_run_parallelenv, args=(parallel_env, queue_out, queue_in)
-    )
+    proc = mp.Process(target=_run_parallelenv, args=(parallel_env, queue_out, queue_in))
     proc.start()
     parallel_sd = parallel_env.state_dict()
     assert "worker0" in parallel_sd
