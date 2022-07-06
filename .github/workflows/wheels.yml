@@ -32,12 +32,10 @@ jobs:
           # find . -name 'dist/*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
       # pretend that they're manylinux1 compliant so we do the same.
-      - name: Show auditwheel output and twine check; confirm 2-17
+      - name: Show auditwheel output; confirm 2-17
         run: |
           python3 -mpip install auditwheel
-          python3 -m pip install --upgrade twine
           auditwheel show dist/*
-          twine check dist/*
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
         with:
@@ -71,10 +69,6 @@ jobs:
           export CC=clang CXX=clang++
           python3 -mpip install wheel
           BUILD_VERSION=0.0.1a0 python3 setup.py bdist_wheel
-      - name: twine check
-        run: |
-          python3 -m pip install --upgrade twine
-          twine check dist/*
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
         with:
