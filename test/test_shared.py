@@ -22,6 +22,8 @@ class TestShared:
         tensordict.zero_()
         print(f"zeroing time: {time.time() - t0}")
         command_pipe_child.send("done")
+        command_pipe_child.close()
+        del command_pipe_child, command_pipe_parent, tensordict
 
     @staticmethod
     def driver_func(subtd, td):
@@ -39,8 +41,8 @@ class TestShared:
 
         for key, item in td[0].items():
             assert (item == 0).all()
-        proc.join()
         command_pipe_parent.close()
+        proc.join()
 
     def test_shared(self):
         torch.manual_seed(0)
