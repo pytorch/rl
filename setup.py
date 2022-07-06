@@ -165,7 +165,7 @@ def _main():
             "dm_control": ["dm_control"],
             "gym_continuous": ["mujoco-py", "mujoco"],
             "rendering": ["moviepy"],
-            "tests": ["pytest", "pyyaml"],
+            "tests": ["pytest", "pyyaml", "pytest-instafail"],
             "utils": [
                 "tensorboard",
                 "tqdm",
@@ -186,4 +186,5 @@ if __name__ == "__main__":
 
     write_version_file()
     print("Building wheel {}-{}".format(package_name, version))
+    print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
     _main()
