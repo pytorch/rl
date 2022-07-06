@@ -990,7 +990,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
             yield out
 
         del out_tensordicts_shared
-        self._shutdown_main()
+        # We shall not call shutdown just yet as user may want to retrieve state_dict
+        # self._shutdown_main()
 
 
 class MultiaSyncDataCollector(_MultiDataCollector):
@@ -1079,7 +1080,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                 out = out.exclude(*excluded_keys)
             yield out
 
-        self._shutdown_main()
+        # We don't want to shutdown yet, the user may want to call state_dict before
+        # self._shutdown_main()
         self.running = False
 
     def _shutdown_main(self) -> None:

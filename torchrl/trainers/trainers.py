@@ -368,9 +368,10 @@ class Trainer:
                 self._pbar.update(current_frames)
                 self._pbar_description()
 
-            if self.collected_frames > self.total_frames:
+            if self.collected_frames >= self.total_frames:
+                self.save_trainer(force_save=True)
                 break
-        self.save_trainer(force_save=True)
+
         self.collector.shutdown()
 
     def __del__(self):
