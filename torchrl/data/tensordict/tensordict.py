@@ -2137,8 +2137,9 @@ def stack(
                 f"got out.batch_size={out.batch_size} and batch_size"
                 f"={batch_size}"
             )
+
+        out_keys = set(out.keys())
         if strict:
-            out_keys = set(out.keys())
             in_keys = set(keys)
             if len(out_keys - in_keys) > 0:
                 raise RuntimeError(
@@ -2155,10 +2156,18 @@ def stack(
                 )
 
         for key in keys:
-            out._stack_onto_(
-                key, [_tensordict[key] for _tensordict in list_of_tensordicts], dim
-            )
-
+            if key in out_keys:
+                out._stack_onto_(
+                    key, [_tensordict[key] for _tensordict in list_of_tensordicts], dim
+                )
+            else:
+                out.set(
+                    key,
+                    torch.stack(
+                        [_tensordict[key] for _tensordict in list_of_tensordicts], dim
+                    ),
+                    inplace=True,
+                )
     return out
 
 
