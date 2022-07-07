@@ -979,6 +979,22 @@ class TestTensorDicts:
         for key in ("a", "b", "c"):
             assert (stacked_td[key] == td[key]).all()
 
+    def test_stack_onto_at(self, td_name):
+        if td_name in ("memmap_td", "unsqueezed_td", "sub_td", "stacked_td"):
+            pytest.mark.skip()
+            return
+
+        td = getattr(self, td_name).zero_()
+        tensor_count = td["a"].shape[1]
+        tensor_size = td["a"].shape[2:]
+        tensors = [torch.ones(*tensor_size) for _ in range(tensor_count)]
+        td._stack_onto_at_("a", tensors, 0, 0)
+
+        expected_sum = np.prod(td["a"].shape[1:])
+        assert np.isclose(expected_sum, td["a"][0].sum())
+        assert np.isclose(0, td["a"][1].sum())
+        assert np.isclose(0, td["b"].sum())
+
     @pytest.mark.parametrize("dim", [0, 1])
     @pytest.mark.parametrize("chunks", [1, 2])
     def test_chunk(self, td_name, dim, chunks):
