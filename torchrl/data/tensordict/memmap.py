@@ -398,7 +398,9 @@ class MemmapTensor(object):
                 attr
             )  # make sure that appropriate exceptions are raised
 
-        if attr not in self.__getattribute__("_tensor_dir"):
+        if ("_tensor_dir" not in self.__dir__()) or (
+            attr not in self.__getattribute__("_tensor_dir")
+        ):
             raise AttributeError(f"{attr} not found")
         _tensor = self.__getattribute__("_tensor")
         return getattr(_tensor, attr)
