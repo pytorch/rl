@@ -383,7 +383,7 @@ class MemmapTensor(object):
 
     def __del__(self) -> None:
         # if hasattr(self, "filename"):
-        if self._has_ownership:
+        if "_has_ownership" in self.__dir__() and self._has_ownership:
             os.unlink(self.filename)
             # self.file.close()
 
