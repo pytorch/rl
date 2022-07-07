@@ -2272,7 +2272,7 @@ torch.Size([3, 2])
             device=self.device,
         )
 
-        if self.is_shared():
+        if self.is_shared() and self.device == torch.device("cpu"):
             tensor_expand.share_memory_()
         elif self.is_memmap():
             tensor_expand = MemmapTensor(tensor_expand)
