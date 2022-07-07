@@ -1556,6 +1556,50 @@ def test_requires_grad(device):
         td5 = SavedTensorDict(tensordicts[5])
 
 
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize(
+    "td_type", ["tensordict", "view", "unsqueeze", "squeeze", "saved", "stack"]
+)
+@pytest.mark.parametrize("update", [True, False])
+def test_filling_empty_tensordict(device, td_type, update):
+    if td_type == "tensordict":
+        td = TensorDict({}, batch_size=[16], device=device)
+    elif td_type == "view":
+        td = TensorDict({}, batch_size=[4, 4], device=device).view(-1)
+    elif td_type == "unsqueeze":
+        td = TensorDict({}, batch_size=[16], device=device).unsqueeze(-1)
+    elif td_type == "squeeze":
+        td = TensorDict({}, batch_size=[16, 1], device=device).squeeze(-1)
+    elif td_type == "saved":
+        td = TensorDict({}, batch_size=[16], device=device).to(SavedTensorDict)
+    elif td_type == "stack":
+        td = torch.stack([TensorDict({}, [], device=device) for _ in range(16)], 0)
+    else:
+        raise NotImplementedError
+
+    for i in range(16):
+        other_td = TensorDict({"a": torch.randn(10), "b": torch.ones(1)}, [])
+        if td_type == "unsqueeze":
+            other_td = other_td.unsqueeze(-1).to_tensordict()
+        if update:
+            subtd = td.get_sub_tensordict(i)
+            subtd.update(other_td, inplace=True)
+        else:
+            td[i] = other_td
+
+    assert td.device == device
+    assert td.get("a").device == device
+    assert (td.get("b") == 1).all()
+    if td_type == "view":
+        assert td._source["a"].shape == torch.Size([4, 4, 10])
+    elif td_type == "unsqueeze":
+        assert td._source["a"].shape == torch.Size([16, 10])
+    elif td_type == "squeeze":
+        assert td._source["a"].shape == torch.Size([16, 1, 10])
+    elif td_type == "stack":
+        assert (td[-1] == other_td).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
