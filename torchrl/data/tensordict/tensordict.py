@@ -2104,6 +2104,25 @@ def stack(
     return out
 
 
+def pad(tensordict: _TensorDict, pad_size: Sequence[int], value: float = 0.0):
+
+    reverse_pad = pad_size[::-1]
+    new_batch_size = list(tensordict.batch_size)
+    for i in range(len(new_batch_size)):
+        new_batch_size[i] += pad_size[i * 2] + pad_size[i * 2 + 1]
+
+    out = TensorDict({}, new_batch_size)
+    for key, tensor in tensordict.items():
+        cur_pad = reverse_pad
+        if len(pad_size) < len(tensor.shape) * 2:
+            cur_pad = [0] * (len(tensor.shape) * 2 - len(pad_size)) + reverse_pad
+
+        padded = torch.nn.functional.pad(tensordict[key], cur_pad, value=value)
+        out.set(key, padded)
+
+    return out
+
+
 # @implements_for_td(torch.nn.utils.rnn.pad_sequence)
 def pad_sequence_td(
     list_of_tensordicts: Sequence[_TensorDict],

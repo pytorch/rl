@@ -17,6 +17,7 @@ from torchrl.data.tensordict.tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
     stack as stack_td,
+    pad,
 )
 from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 
@@ -78,6 +79,23 @@ def test_stack(device):
     td_reconstruct = stack_td(td_list, 0)
     assert td_reconstruct.batch_size == td.batch_size
     assert (td_reconstruct == td).all()
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_pad(device):
+    torch.manual_seed(1)
+    dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2]
+    td = TensorDict(
+        {
+            "a": torch.ones(3, 4, 1, device=device),
+            "b": torch.zeros(3, 4, 1, 1, device=device),
+        },
+        batch_size=[3, 4],
+    )
+    padded_td = pad(td, [dim0_left, dim0_right, dim1_left, dim1_right], value=0.0)
+    assert padded_td["a"].shape == (4, 6, 1)
+    assert padded_td["b"].shape == (4, 6, 1, 1)
+    padded_td._check_batch_size()
 
 
 @pytest.mark.parametrize("device", get_available_devices())
