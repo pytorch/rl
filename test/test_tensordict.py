@@ -1597,7 +1597,7 @@ def test_filling_empty_tensordict(device, td_type, update):
     elif td_type == "squeeze":
         assert td._source["a"].shape == torch.Size([16, 1, 10])
     elif td_type == "stack":
-        assert (td[-1] == other_td).all()
+        assert (td[-1] == other_td.to(device)).all()
 
 
 if __name__ == "__main__":
