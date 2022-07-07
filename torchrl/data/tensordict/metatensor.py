@@ -70,7 +70,8 @@ class MetaTensor:
         _is_shared: Optional[bool] = None,
         _is_memmap: Optional[bool] = None,
     ):
-
+        _is_tensordict = False
+        _repr = None
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
             shape = tensor.shape
@@ -79,12 +80,20 @@ class MetaTensor:
             if _is_memmap is None:
                 _is_memmap = isinstance(tensor, MemmapTensor)
             device = tensor.device if not tensor.is_meta else device
-            dtype = tensor.dtype
+            if isinstance(tensor, (MemmapTensor, torch.Tensor)):
+                dtype = tensor.dtype
+            else:
+                _is_tensordict = True
+                tensordict_name = tensor.__class__.__name__
+                dtype = None
+                _repr = str(tensor)
+
             requires_grad = (
                 tensor.requires_grad
                 if isinstance(tensor, torch.Tensor)
                 else requires_grad
             )
+
         if not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
         self.shape = shape
@@ -95,7 +104,11 @@ class MetaTensor:
         self._numel = np.prod(shape)
         self._is_shared = bool(_is_shared)
         self._is_memmap = bool(_is_memmap)
-        if _is_memmap:
+        self._is_tensordict = _is_tensordict
+        self._repr = _repr
+        if _is_tensordict:
+            name = tensordict_name
+        elif _is_memmap:
             name = "MemmapTensor"
         elif _is_shared:
             name = "SharedTensor"
@@ -131,6 +144,9 @@ class MetaTensor:
 
     def is_memmap(self) -> bool:
         return self._is_memmap
+
+    def is_tensordict(self) -> bool:
+        return self._is_tensordict
 
     def numel(self) -> int:
         return self._numel

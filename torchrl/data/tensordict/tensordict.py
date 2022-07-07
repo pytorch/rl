@@ -56,7 +56,6 @@ COMPATIBLE_TYPES = Union[
     torch.Tensor,
     MemmapTensor,
 ]  # None? # leaves space for _TensorDict
-_accepted_classes = (torch.Tensor, MemmapTensor)
 
 
 class _TensorDict(Mapping, metaclass=abc.ABCMeta):
@@ -67,6 +66,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
 
     _safe = False
     _lazy = False
+    is_meta = False
 
     def __init__(self):
         raise NotImplementedError
@@ -100,6 +100,8 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
                 "tensordict fist by calling `td = td.to_tensordict()` before "
                 "resetting the batch size."
             )
+        if self.batch_size == new_batch_size:
+            return
         if not isinstance(new_batch_size, torch.Size):
             new_batch_size = torch.Size(new_batch_size)
         self._check_new_batch_size(new_batch_size)
@@ -477,14 +479,20 @@ dtype=torch.float32)},
             raise DeprecationWarning("check_shared is not authorized anymore")
 
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
-            raise RuntimeError(
-                f"batch dimension mismatch, got self.batch_size"
-                f"={self.batch_size} and tensor.shape[:self.batch_dims]"
-                f"={tensor.shape[: self.batch_dims]}"
-            )
+            # if TensorDict, let's try to map it to the desired shape
+            if isinstance(tensor, _TensorDict):
+                tensor.batch_size = self.shape
+            else:
+                raise RuntimeError(
+                    f"batch dimension mismatch, got self.batch_size"
+                    f"={self.batch_size} and tensor.shape[:self.batch_dims]"
+                    f"={tensor.shape[: self.batch_dims]}"
+                )
 
         # minimum ndimension is 1
-        if tensor.ndimension() - self.ndimension() == 0:
+        if tensor.ndimension() - self.ndimension() == 0 and not isinstance(
+            tensor, _TensorDict
+        ):
             tensor = tensor.unsqueeze(-1)
 
         return tensor
@@ -1518,6 +1526,8 @@ class TensorDict(_TensorDict):
                 if map_item_to_device:
                     value = value.to(device)
                 _meta_val = None if _meta_source is None else _meta_source[key]
+                if isinstance(value, _TensorDict):
+                    value.batch_size = self.batch_size
                 self.set(key, value, _meta_val=_meta_val, _run_checks=False)
 
         self._check_batch_size()
@@ -3716,6 +3726,8 @@ def _td_fields(td: _TensorDict) -> str:
             sorted(
                 [
                     f"{key}: {item.class_name}({item.shape}, dtype={item.dtype})"
+                    if not item.is_tensordict()
+                    else f"{key}: {item._repr}"
                     for key, item in td.items_meta()
                 ]
             )
@@ -3743,3 +3755,6 @@ def _check_keys(
                         f"incompatible"
                     )
     return keys
+
+
+_accepted_classes = (torch.Tensor, MemmapTensor, _TensorDict)
