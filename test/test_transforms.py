@@ -11,7 +11,11 @@ from mocking_classes import ContinuousActionVecMockEnv
 from torch import Tensor
 from torch import multiprocessing as mp
 from torchrl import prod
-from torchrl.data import NdBoundedTensorSpec, CompositeSpec
+from torchrl.data import (
+    NdBoundedTensorSpec,
+    CompositeSpec,
+    UnboundedContinuousTensorSpec,
+)
 from torchrl.data import TensorDict
 from torchrl.envs import EnvCreator, SerialEnv
 from torchrl.envs import GymEnv, ParallelEnv
@@ -26,6 +30,7 @@ from torchrl.envs import (
     DoubleToFloat,
     CatTensors,
     FlattenObservation,
+    RewardScaling,
 )
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import VecNorm, TransformedEnv
@@ -872,9 +877,39 @@ class TestTransforms:
     def test_binerized_reward(self, device):
         pass
 
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("scale", [0.1, 10])
+    @pytest.mark.parametrize("loc", [1, 5])
+    @pytest.mark.parametrize("keys", [None, ["reward_1"]])
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_reward_scaling(self, device):
-        pass
+    def test_reward_scaling(self, batch, scale, loc, keys, device):
+        torch.manual_seed(0)
+        if keys is None:
+            keys_total = set([])
+        else:
+            keys_total = set(keys)
+        reward_scaling = RewardScaling(keys_in=keys, scale=scale, loc=loc)
+        td = TensorDict(
+            {
+                **{key: torch.randn(*batch, 1, device=device) for key in keys_total},
+                "reward": torch.randn(*batch, 1, device=device),
+            },
+            batch,
+        )
+        td.set("dont touch", torch.randn(*batch, 1, device=device))
+        td_copy = td.clone()
+        reward_scaling(td)
+        for key in keys_total:
+            assert (td.get(key) == td_copy.get(key).mul_(scale).add_(loc)).all()
+        assert (td.get("dont touch") == td_copy.get("dont touch")).all()
+        if len(keys_total) == 0:
+            assert (
+                td.get("reward") == td_copy.get("reward").mul_(scale).add_(loc)
+            ).all()
+        elif len(keys_total) == 1:
+            reward_spec = UnboundedContinuousTensorSpec(device=device)
+            reward_spec = reward_scaling.transform_reward_spec(reward_spec)
+            assert reward_spec.shape == torch.Size([1])
 
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device found")
     @pytest.mark.parametrize("device", get_available_devices())
