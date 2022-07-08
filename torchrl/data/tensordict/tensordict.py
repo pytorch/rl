@@ -2106,10 +2106,21 @@ def stack(
 
 def pad(tensordict: _TensorDict, pad_size: Sequence[int], value: float = 0.0):
 
-    reverse_pad = pad_size[::-1]
+    if len(pad_size) > 2 * len(tensordict.batch_size):
+        raise RuntimeError(
+            "The length of pad_size must be <= 2 * the number of batch dimensions"
+        )
+
+    if len(pad_size) % 2:
+        raise RuntimeError("pad_size must have an even number of dimensions")
+
     new_batch_size = list(tensordict.batch_size)
-    for i in range(len(new_batch_size)):
-        new_batch_size[i] += pad_size[i * 2] + pad_size[i * 2 + 1]
+    for i in range(len(pad_size)):
+        new_batch_size[i // 2] += pad_size[i]
+
+    reverse_pad = pad_size[::-1]
+    for i in range(0, len(reverse_pad), 2):
+        reverse_pad[i], reverse_pad[i + 1] = reverse_pad[i + 1], reverse_pad[i]
 
     out = TensorDict({}, new_batch_size)
     for key, tensor in tensordict.items():
