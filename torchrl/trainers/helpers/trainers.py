@@ -14,7 +14,7 @@ from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import _EnvClass
 from torchrl.modules import TensorDictModule, TensorDictModuleWrapper, reset_noise
-from torchrl.objectives.costs.common import _LossModule
+from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 from torchrl.trainers.trainers import (
     Trainer,
@@ -74,7 +74,7 @@ class TrainerConfig:
 
 def make_trainer(
     collector: _DataCollector,
-    loss_module: _LossModule,
+    loss_module: LossModule,
     recorder: Optional[_EnvClass] = None,
     target_net_updater: Optional[_TargetNetUpdate] = None,
     policy_exploration: Optional[
@@ -88,7 +88,7 @@ def make_trainer(
 
     Args:
         collector (_DataCollector): A data collector to be used to collect data.
-        loss_module (_LossModule): A TorchRL loss module
+        loss_module (LossModule): A TorchRL loss module
         recorder (_EnvClass, optional): a recorder environment. If None, the trainer will train the policy without
             testing it.
         target_net_updater (_TargetNetUpdate, optional): A target network update object.
@@ -112,7 +112,7 @@ def make_trainer(
         >>> from torchrl.data import TensorDictReplayBuffer
         >>> from torchrl.envs import GymEnv
         >>> from torchrl.modules import TensorDictModuleWrapper, TensorDictModule, ValueOperator, EGreedyWrapper
-        >>> from torchrl.objectives.costs.common import _LossModule
+        >>> from torchrl.objectives.costs.common import LossModule
         >>> from torchrl.objectives.costs.utils import _TargetNetUpdate
         >>> from torchrl.objectives import DDPGLoss
         >>> env_maker = EnvCreator(lambda: GymEnv("Pendulum-v0"))

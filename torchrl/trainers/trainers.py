@@ -36,7 +36,7 @@ from torchrl.envs.common import _EnvClass
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule
-from torchrl.objectives.costs.common import _LossModule
+from torchrl.objectives.costs.common import LossModule
 
 REPLAY_BUFFER_CLASS = {
     "prioritized": TensorDictPrioritizedReplayBuffer,
@@ -79,7 +79,7 @@ class Trainer:
             data in a TensorDict form of shape [batch x time steps].
         total_frames (int): Total number of frames to be collected during
             training.
-        loss_module (_LossModule): A module that reads TensorDict batches
+        loss_module (LossModule): A module that reads TensorDict batches
             (possibly sampled from a replay buffer) and return a loss
             TensorDict where every key points to a different loss component.
         optimizer (optim.Optimizer): An optimizer that trains the parameters
@@ -120,7 +120,7 @@ class Trainer:
         collector: _DataCollector,
         total_frames: int,
         frame_skip: int,
-        loss_module: Union[_LossModule, Callable[[_TensorDict], _TensorDict]],
+        loss_module: Union[LossModule, Callable[[_TensorDict], _TensorDict]],
         optimizer: optim.Optimizer,
         writer: Optional["SummaryWriter"] = None,
         optim_steps_per_batch: int = 500,
