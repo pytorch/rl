@@ -383,7 +383,7 @@ class MemmapTensor(object):
 
     def __del__(self) -> None:
         # if hasattr(self, "filename"):
-        if self._has_ownership:
+        if "_has_ownership" in self.__dir__() and self._has_ownership:
             os.unlink(self.filename)
             # self.file.close()
 
@@ -398,7 +398,9 @@ class MemmapTensor(object):
                 attr
             )  # make sure that appropriate exceptions are raised
 
-        if attr not in self.__getattribute__("_tensor_dir"):
+        if ("_tensor_dir" not in self.__dir__()) or (
+            attr not in self.__getattribute__("_tensor_dir")
+        ):
             raise AttributeError(f"{attr} not found")
         _tensor = self.__getattribute__("_tensor")
         return getattr(_tensor, attr)

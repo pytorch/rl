@@ -17,6 +17,7 @@ from torchrl.data.tensordict.tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
     stack as stack_td,
+    pad,
 )
 from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 
@@ -62,6 +63,27 @@ def test_tensordict_set(device):
         inplace=False,
     )
     assert td._tensordict_meta["key1"].shape == td._tensordict["key1"].shape
+
+
+def test_pad():
+    dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2]
+    td = TensorDict(
+        {
+            "a": torch.ones(3, 4, 1),
+            "b": torch.zeros(3, 4, 1, 1),
+        },
+        batch_size=[3, 4],
+    )
+
+    padded_td = pad(td, [dim0_left, dim0_right, dim1_left, dim1_right], value=0.0)
+
+    expected_a = torch.cat([torch.ones(3, 4, 1), torch.zeros(1, 4, 1)], dim=0)
+    expected_a = torch.cat([expected_a, torch.zeros(4, 2, 1)], dim=1)
+
+    assert padded_td["a"].shape == (4, 6, 1)
+    assert padded_td["b"].shape == (4, 6, 1, 1)
+    assert torch.equal(padded_td["a"], expected_a)
+    padded_td._check_batch_size()
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -486,6 +508,7 @@ TD_BATCH_SIZE = 4
         "memmap_td",
         "unsqueezed_td",
         "td_reset_bs",
+        "permute_td",
     ],
 )
 class TestTensorDicts:
@@ -553,6 +576,17 @@ class TestTensorDicts:
         return self.td.memmap_()
 
     @property
+    def permute_td(self):
+        return TensorDict(
+            source={
+                "a": torch.randn(3, 4, 2, 1, 5),
+                "b": torch.randn(3, 4, 2, 1, 10),
+                "c": torch.randint(10, (3, 4, 2, 1, 3)),
+            },
+            batch_size=[3, 4, 2, 1],
+        ).permute(1, 0, 2, 3)
+
+    @property
     def unsqueezed_td(self):
         td = TensorDict(
             source={
@@ -576,6 +610,12 @@ class TestTensorDicts:
         )
         td.batch_size = torch.Size([4, 3, 2, 1])
         return td
+
+    def test_to_tensordict(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        td2 = td.to_tensordict()
+        assert (td2 == td).all()
 
     def test_select(self, td_name):
         torch.manual_seed(1)
@@ -805,7 +845,41 @@ class TestTensorDicts:
         assert (td_squeeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
+    def test_pad(self, td_name):
+        td = getattr(self, td_name)
+        paddings = [
+            [0, 1, 0, 2],
+            [1, 0, 0, 2],
+            [1, 0, 2, 1],
+        ]
+
+        for pad_size in paddings:
+            padded_td = pad(td, pad_size)
+            padded_td._check_batch_size()
+            amount_expanded = [0] * (len(pad_size) // 2)
+            for i in range(0, len(pad_size), 2):
+                amount_expanded[i // 2] = pad_size[i] + pad_size[i + 1]
+
+            for key in padded_td.keys():
+                expected_dims = tuple(
+                    sum(p)
+                    for p in zip(
+                        td[key].shape,
+                        amount_expanded
+                        + [0] * (len(td[key].shape) - len(amount_expanded)),
+                    )
+                )
+                assert padded_td[key].shape == expected_dims
+
+        with pytest.raises(RuntimeError):
+            pad(td, [0] * 100)
+
+        with pytest.raises(RuntimeError):
+            pad(td, [0])
+
     def test_view(self, td_name):
+        if td_name == "permute_td":
+            pytest.skip("cannot view a permuted tensor")
         torch.manual_seed(1)
         td = getattr(self, td_name)
         td_view = td.view(-1)
@@ -828,7 +902,13 @@ class TestTensorDicts:
         td = getattr(self, td_name)
         assert (torch.clone(td) == td).all()
         assert td.batch_size == torch.clone(td).batch_size
-        if td_name in ("stacked_td", "saved_td", "unsqueezed_td", "sub_td"):
+        if td_name in (
+            "stacked_td",
+            "saved_td",
+            "unsqueezed_td",
+            "sub_td",
+            "permute_td",
+        ):
             with pytest.raises(AssertionError):
                 assert td.clone(recursive=False).get("a") is td.get("a")
         else:
@@ -1554,6 +1634,50 @@ def test_requires_grad(device):
         ),
     ):
         td5 = SavedTensorDict(tensordicts[5])
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize(
+    "td_type", ["tensordict", "view", "unsqueeze", "squeeze", "saved", "stack"]
+)
+@pytest.mark.parametrize("update", [True, False])
+def test_filling_empty_tensordict(device, td_type, update):
+    if td_type == "tensordict":
+        td = TensorDict({}, batch_size=[16], device=device)
+    elif td_type == "view":
+        td = TensorDict({}, batch_size=[4, 4], device=device).view(-1)
+    elif td_type == "unsqueeze":
+        td = TensorDict({}, batch_size=[16], device=device).unsqueeze(-1)
+    elif td_type == "squeeze":
+        td = TensorDict({}, batch_size=[16, 1], device=device).squeeze(-1)
+    elif td_type == "saved":
+        td = TensorDict({}, batch_size=[16], device=device).to(SavedTensorDict)
+    elif td_type == "stack":
+        td = torch.stack([TensorDict({}, [], device=device) for _ in range(16)], 0)
+    else:
+        raise NotImplementedError
+
+    for i in range(16):
+        other_td = TensorDict({"a": torch.randn(10), "b": torch.ones(1)}, [])
+        if td_type == "unsqueeze":
+            other_td = other_td.unsqueeze(-1).to_tensordict()
+        if update:
+            subtd = td.get_sub_tensordict(i)
+            subtd.update(other_td, inplace=True)
+        else:
+            td[i] = other_td
+
+    assert td.device == device
+    assert td.get("a").device == device
+    assert (td.get("b") == 1).all()
+    if td_type == "view":
+        assert td._source["a"].shape == torch.Size([4, 4, 10])
+    elif td_type == "unsqueeze":
+        assert td._source["a"].shape == torch.Size([16, 10])
+    elif td_type == "squeeze":
+        assert td._source["a"].shape == torch.Size([16, 1, 10])
+    elif td_type == "stack":
+        assert (td[-1] == other_td.to(device)).all()
 
 
 if __name__ == "__main__":
