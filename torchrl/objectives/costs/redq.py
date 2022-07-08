@@ -14,7 +14,7 @@ from torch import Tensor
 from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
 from torchrl.modules import TensorDictModule
-from torchrl.objectives.costs.common import _LossModule
+from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import (
     distance_loss,
     hold_out_params,
@@ -24,7 +24,7 @@ from torchrl.objectives.costs.utils import (
 __all__ = ["REDQLoss"]
 
 
-class REDQLoss(_LossModule):
+class REDQLoss(LossModule):
     """
     REDQ Loss module.
 

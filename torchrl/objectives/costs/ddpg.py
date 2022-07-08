@@ -18,10 +18,10 @@ from torchrl.objectives.costs.utils import (
     next_state_value,
 )
 from ...envs.utils import set_exploration_mode
-from .common import _LossModule
+from .common import LossModule
 
 
-class DDPGLoss(_LossModule):
+class DDPGLoss(LossModule):
     """
     The DDPG Loss class.
     Args:

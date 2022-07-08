@@ -17,10 +17,10 @@ from ...modules.tensordict_module import ProbabilisticTensorDictModule
 __all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
 
 from torchrl.objectives.costs.utils import distance_loss
-from .common import _LossModule
+from .common import LossModule
 
 
-class PPOLoss(_LossModule):
+class PPOLoss(LossModule):
     """
     A parent PPO loss class.
 
@@ -69,8 +69,10 @@ class PPOLoss(_LossModule):
         advantage_module: Optional[Callable[[_TensorDict], _TensorDict]] = None,
     ):
         super().__init__()
-        self.actor = actor
-        self.critic = critic
+        self.convert_to_functional(actor, "actor")
+        # we want to make sure there are no duplicates in the params: the
+        # params of critic must be refs to actor if they're shared
+        self.convert_to_functional(critic, "critic", compare_against=self.actor_params)
         self.advantage_key = advantage_key
         self.advantage_diff_key = advantage_diff_key
         self.samples_mc_entropy = samples_mc_entropy
@@ -80,17 +82,6 @@ class PPOLoss(_LossModule):
         self.gamma = gamma
         self.loss_critic_type = loss_critic_type
         self.advantage_module = advantage_module
-
-    def make_functional_with_buffers(self):
-        self.actor, (
-            actor_params,
-            actor_buffers,
-        ) = self.actor.make_functional_with_buffers()
-        self.critic, (
-            critic_params,
-            critic_buffers,
-        ) = self.critic.make_functional_with_buffers()
-        return (actor_params, actor_buffers, critic_params, critic_buffers)
 
     def reset(self) -> None:
         pass
@@ -112,7 +103,9 @@ class PPOLoss(_LossModule):
             raise RuntimeError("tensordict stored action requires grad.")
         tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
 
-        dist, *_ = self.actor.get_dist(tensordict_clone)
+        dist, *_ = self.actor.get_dist(
+            tensordict_clone, params=self.actor_params, buffers=self.actor_buffers
+        )
         log_prob = dist.log_prob(action)
         log_prob = log_prob.unsqueeze(-1)
 
@@ -139,10 +132,16 @@ class PPOLoss(_LossModule):
             with torch.no_grad():
                 reward = tensordict.get("reward")
                 next_td = step_tensordict(tensordict)
-                next_value = self.critic(next_td).get("state_value")
+                next_value = self.critic(
+                    next_td, params=self.critic_params, buffers=self.critic_buffers
+                ).get("state_value")
                 value_target = reward + next_value * self.gamma
             tensordict_select = tensordict.select(*self.critic.in_keys).clone()
-            value = self.critic(tensordict_select).get("state_value")
+            value = self.critic(
+                tensordict_select,
+                params=self.critic_params,
+                buffers=self.critic_buffers,
+            ).get("state_value")
             loss_value = distance_loss(
                 value, value_target, loss_function=self.loss_critic_type
             )
@@ -365,7 +364,9 @@ class KLPENPPOLoss(PPOLoss):
         ).clone()
 
         previous_dist = self.actor.build_dist_from_params(tensordict_clone)
-        current_dist, *_ = self.actor.get_dist(tensordict_clone)
+        current_dist, *_ = self.actor.get_dist(
+            tensordict_clone, params=self.actor_params, buffers=self.actor_buffers
+        )
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
