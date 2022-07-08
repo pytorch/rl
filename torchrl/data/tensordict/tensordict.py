@@ -2119,6 +2119,9 @@ def pad(tensordict: _TensorDict, pad_size: Sequence[int], value: float = 0.0):
             pad_size must be even and less than or equal to twice the number of batch dimensions.
          value (float, optional): The fill value to pad by, default 0.0
 
+    Returns:
+        A new TensorDict padded along the batch dimensions
+
     Examples:
         >>> from torchrl.data import TensorDict, pad
         >>> import torch
