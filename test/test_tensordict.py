@@ -508,6 +508,7 @@ TD_BATCH_SIZE = 4
         "memmap_td",
         "unsqueezed_td",
         "td_reset_bs",
+        "permute_td",
     ],
 )
 class TestTensorDicts:
@@ -575,6 +576,17 @@ class TestTensorDicts:
         return self.td.memmap_()
 
     @property
+    def permute_td(self):
+        return TensorDict(
+            source={
+                "a": torch.randn(3, 4, 2, 1, 5),
+                "b": torch.randn(3, 4, 2, 1, 10),
+                "c": torch.randint(10, (3, 4, 2, 1, 3)),
+            },
+            batch_size=[3, 4, 2, 1],
+        ).permute(1, 0, 2, 3)
+
+    @property
     def unsqueezed_td(self):
         td = TensorDict(
             source={
@@ -598,6 +610,12 @@ class TestTensorDicts:
         )
         td.batch_size = torch.Size([4, 3, 2, 1])
         return td
+
+    def test_to_tensordict(self, td_name):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)
+        td2 = td.to_tensordict()
+        assert (td2 == td).all()
 
     def test_select(self, td_name):
         torch.manual_seed(1)
@@ -860,6 +878,8 @@ class TestTensorDicts:
             pad(td, [0])
 
     def test_view(self, td_name):
+        if td_name == "permute_td":
+            pytest.skip("cannot view a permuted tensor")
         torch.manual_seed(1)
         td = getattr(self, td_name)
         td_view = td.view(-1)
@@ -882,7 +902,13 @@ class TestTensorDicts:
         td = getattr(self, td_name)
         assert (torch.clone(td) == td).all()
         assert td.batch_size == torch.clone(td).batch_size
-        if td_name in ("stacked_td", "saved_td", "unsqueezed_td", "sub_td"):
+        if td_name in (
+            "stacked_td",
+            "saved_td",
+            "unsqueezed_td",
+            "sub_td",
+            "permute_td",
+        ):
             with pytest.raises(AssertionError):
                 assert td.clone(recursive=False).get("a") is td.get("a")
         else:
