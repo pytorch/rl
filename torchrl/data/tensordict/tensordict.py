@@ -2129,11 +2129,11 @@ def pad(tensordict: _TensorDict, pad_size: Sequence[int], value: float = 0.0):
         ...     'b': torch.ones(3, 4, 1, 1)}, batch_size=[3, 4])
         >>> dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2]
         >>> padded_td = pad(td, [dim0_left, dim0_right, dim1_left, dim1_right], value=0.0)
-        >>> print(td.batch_size)
-        torch.Size([4, 5])
-        >>> print(td.get("a").shape)
+        >>> print(padded_td.batch_size)
+        torch.Size([4, 6])
+        >>> print(padded_td.get("a").shape)
         torch.Size([4, 6, 1])
-        >>> print(td.get("b").shape)
+        >>> print(padded_td.get("b").shape)
         torch.Size([4, 6, 1, 1])
     """
 
