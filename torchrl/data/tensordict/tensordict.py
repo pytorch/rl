@@ -2105,6 +2105,34 @@ def stack(
 
 
 def pad(tensordict: _TensorDict, pad_size: Sequence[int], value: float = 0.0):
+    """Pads all tensors in a tensordict along the batch dimensions with a constant value,
+    returning a new tensordict
+
+    Args:
+         tensordict (TensorDict): The tensordict to pad
+         pad_size (Sequence[int]): The padding size by which to pad some batch
+            dimensions of the tensordict, starting from the first dimension and
+            moving forward. [len(pad_size) / 2] dimensions of the batch size will
+            be padded. For example to pad only the first dimension, pad has the form
+            (padding_left, padding_right). To pad two dimensions,
+            (padding_left, padding_right, padding_top, padding_bottom) and so on.
+            pad_size must be even and less than or equal to twice the number of batch dimensions.
+         value (float, optional): The fill value to pad by, default 0.0
+
+    Examples:
+        >>> from torchrl.data import TensorDict, pad
+        >>> import torch
+        >>> td = TensorDict({'a': torch.ones(3, 4, 1),
+        ...     'b': torch.ones(3, 4, 1, 1)}, batch_size=[3, 4])
+        >>> dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2]
+        >>> padded_td = pad(td, [dim0_left, dim0_right, dim1_left, dim1_right], value=0.0)
+        >>> print(td.batch_size)
+        torch.Size([4, 5])
+        >>> print(td.get("a").shape)
+        torch.Size([4, 6, 1])
+        >>> print(td.get("b").shape)
+        torch.Size([4, 6, 1, 1])
+    """
 
     if len(pad_size) > 2 * len(tensordict.batch_size):
         raise RuntimeError(
