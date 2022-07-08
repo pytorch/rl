@@ -41,7 +41,12 @@ from torchrl.data.tensordict.utils import (
     _sub_index,
     convert_ellipsis_to_idx,
 )
-from torchrl.data.utils import DEVICE_TYPING, expand_as_right, INDEX_TYPING
+from torchrl.data.utils import (
+    DEVICE_TYPING,
+    expand_right,
+    expand_as_right,
+    INDEX_TYPING,
+)
 
 __all__ = [
     "TensorDict",
@@ -3554,7 +3559,7 @@ class _CustomOpTensorDict(_TensorDict):
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             if isinstance(self, dest):
                 return self
-            return dest(source=self.contiguous().clone())
+            return dest(source=self)
         elif isinstance(dest, (torch.device, str, int)):
             if self._device_safe() is not None and torch.device(dest) == self.device:
                 return self
@@ -3580,10 +3585,13 @@ class _CustomOpTensorDict(_TensorDict):
     ) -> _TensorDict:
         for key, item in self.items():
             # source_meta_tensor = self._get_meta(key)
-            mask_proc_inv = getattr(mask, self.inv_op)(
+            val = self._source.get(key)
+            mask_exp = expand_right(
+                mask, list(mask.shape) + list(val.shape[self._source.batch_dims :])
+            )
+            mask_proc_inv = getattr(mask_exp, self.inv_op)(
                 **self._update_inv_op_kwargs(item)
             )
-            val = self._source.get(key)
             val[mask_proc_inv] = value
             self._source.set(key, val)
         return self
