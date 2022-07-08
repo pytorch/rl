@@ -32,24 +32,18 @@ esac
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-#printf "Installing PyTorch with %s\n" "${cudatoolkit}"
-#if [ "${os}" == "MacOSX" ]; then
-#    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch "${cudatoolkit}" pytest
-#else
-#    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}" pytest
-#fi
-
-#printf "Installing PyTorch with %s\n" "${CU_VERSION}"
+printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
+    # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
     # use pip to install pytorch as conda can frequently pick older release
-    pip install torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
+    conda install -y pytorch cpuonly -c pytorch-nightly
 else
-    conda install -y pytorch cudatoolkit=10.2 -c pytorch-nightly
+    conda install -y pytorch cudatoolkit=11.3 -c pytorch-nightly
 fi
 
 printf "Installing functorch\n"
-pip install ninja  # Makes the build go faster
-pip install "git+https://github.com/pytorch/functorch.git"
+python -m pip install ninja  # Makes the build go faster
+python -m pip install "git+https://github.com/pytorch/functorch.git"
 
 # smoke test
 python -c "import functorch"

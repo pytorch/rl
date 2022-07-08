@@ -42,9 +42,9 @@ from torchrl.trainers.helpers.models import (
 def _assert_keys_match(td, expeceted_keys):
     td_keys = list(td.keys())
     d = set(td_keys) - set(expeceted_keys)
-    assert len(d) == 0, f"{d} is in tensordict but unexpected"
+    assert len(d) == 0, f"{d} is in tensordict but unexpected: {td.keys()}"
     d = set(expeceted_keys) - set(td_keys)
-    assert len(d) == 0, f"{d} is expected but not in tensordict"
+    assert len(d) == 0, f"{d} is expected but not in tensordict: {td.keys()}"
     assert len(td_keys) == len(expeceted_keys)
 
 
@@ -85,9 +85,9 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
 
         expected_keys = ["done", "action", "action_value"]
         if from_pixels:
-            expected_keys += ["pixels"]
+            expected_keys += ["pixels", "pixels_orig"]
         else:
-            expected_keys += ["observation_vector"]
+            expected_keys += ["observation_orig", "observation_vector"]
 
         if not distributional:
             expected_keys += ["chosen_action_value"]
@@ -140,9 +140,9 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
             actor(td)
         expected_keys = ["done", "action", "param"]
         if from_pixels:
-            expected_keys += ["pixels", "hidden"]
+            expected_keys += ["pixels", "hidden", "pixels_orig"]
         else:
-            expected_keys += ["observation_vector"]
+            expected_keys += ["observation_vector", "observation_orig"]
 
         if cfg.gSDE:
             expected_keys += ["scale", "loc", "_eps_gSDE"]
@@ -231,6 +231,7 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
         expected_keys = [
             "done",
             "pixels" if len(from_pixels) else "observation_vector",
+            "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
             "sample_log_prob",
             "loc",
@@ -267,6 +268,7 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
         expected_keys = [
             "done",
             "pixels" if len(from_pixels) else "observation_vector",
+            "pixels_orig" if len(from_pixels) else "observation_orig",
             "state_value",
         ]
         if shared_mapping:
@@ -340,6 +342,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
         expected_keys = [
             "done",
             "pixels" if len(from_pixels) else "observation_vector",
+            "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
             "loc",
             "scale",
@@ -365,6 +368,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
         expected_keys = [
             "done",
             "observation_vector",
+            "observation_orig",
             "action",
             "state_action_value",
             "loc",
@@ -380,7 +384,12 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             raise
 
         value(td)
-        expected_keys = ["done", "observation_vector", "state_value"]
+        expected_keys = [
+            "done",
+            "observation_vector",
+            "observation_orig",
+            "state_value",
+        ]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
 
@@ -449,9 +458,9 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
         if from_pixels:
-            expected_keys += ["hidden", "pixels"]
+            expected_keys += ["hidden", "pixels", "pixels_orig"]
         else:
-            expected_keys += ["observation_vector"]
+            expected_keys += ["observation_vector", "observation_orig"]
 
         try:
             _assert_keys_match(td, expected_keys)
@@ -479,9 +488,9 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
         if from_pixels:
-            expected_keys += ["hidden", "pixels"]
+            expected_keys += ["hidden", "pixels", "pixels_orig"]
         else:
-            expected_keys += ["observation_vector"]
+            expected_keys += ["observation_vector", "observation_orig"]
         try:
             _assert_keys_match(td, expected_keys)
         except AssertionError:

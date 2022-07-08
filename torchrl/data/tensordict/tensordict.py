@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import abc
 import functools
-import math
 import tempfile
 import textwrap
 import uuid
@@ -34,7 +33,7 @@ from warnings import warn
 import numpy as np
 import torch
 
-from torchrl import KeyDependentDefaultDict
+from torchrl import KeyDependentDefaultDict, prod
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.metatensor import MetaTensor
 from torchrl.data.tensordict.utils import (
@@ -185,7 +184,7 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
 
     def numel(self) -> int:
         """Total number of elements in the batch."""
-        return max(1, math.prod(self.batch_size))
+        return max(1, prod(self.batch_size))
 
     def _check_batch_size(self) -> None:
         bs = [value.shape[: self.batch_dims] for key, value in self.items_meta()] + [
@@ -1300,8 +1299,14 @@ dtype=torch.float32)},
                     f"(batch_size = {self.batch_size}, index={index}), "
                     f"which differs from the source batch size {value.batch_size}"
                 )
+            keys = set(self.keys())
+            if not all(key in keys for key in value.keys()):
+                subtd = self.get_sub_tensordict(index)
             for key, item in value.items():
-                self.set_at_(key, item, index)
+                if key in keys:
+                    self.set_at_(key, item, index)
+                else:
+                    subtd.set(key, item)
 
     def __delitem__(self, index: INDEX_TYPING) -> _TensorDict:
         if isinstance(index, str):
@@ -2247,9 +2252,10 @@ torch.Size([3, 2])
     ) -> _TensorDict:
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
-        if inplace and key in self.keys():
+        keys = set(self.keys())
+        if inplace and key in keys:
             return self.set_(key, tensor)
-        elif key in self.keys():
+        elif key in keys:
             raise RuntimeError(
                 "Calling `SubTensorDict.set(key, value, inplace=False)` is prohibited for existing tensors. "
                 "Consider calling `SubTensorDict.set_(...)` or cloning your tensordict first."
@@ -2266,7 +2272,7 @@ torch.Size([3, 2])
             device=self.device,
         )
 
-        if self.is_shared():
+        if self.is_shared() and self.device == torch.device("cpu"):
             tensor_expand.share_memory_()
         elif self.is_memmap():
             tensor_expand = MemmapTensor(tensor_expand)

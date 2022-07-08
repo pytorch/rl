@@ -5,7 +5,10 @@
 
 import abc
 import collections
+import math
 import time
+import typing
+from typing import Optional, Type, Tuple
 from warnings import warn
 
 import numpy as np
@@ -13,7 +16,10 @@ from torch import multiprocessing as mp
 
 from ._extension import _init_extension
 
-__version__ = "0.1"
+try:
+    from .version import __version__
+except ImportError:
+    __version__ = None
 
 _init_extension()
 
@@ -109,3 +115,10 @@ class KeyDependentDefaultDict(collections.defaultdict):
     def __missing__(self, key):
         value = self.fun(key)
         return value
+
+
+def prod(sequence):
+    if hasattr(math, "prod"):
+        return math.prod(sequence)
+    else:
+        return int(np.prod(sequence))

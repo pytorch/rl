@@ -2,16 +2,20 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Union, get_args
+# import tree
+import typing
+from typing import Union
 
 import numpy as np
 import torch
-
-# import tree
 from torch import Tensor
 
 INT_CLASSES_TYPING = Union[int, np.integer]
-INT_CLASSES = get_args(INT_CLASSES_TYPING)
+if hasattr(typing, "get_args"):
+    INT_CLASSES = typing.get_args(INT_CLASSES_TYPING)
+else:
+    # python 3.7
+    INT_CLASSES = (int, np.integer)
 
 
 def fields_pin_memory(input):
@@ -41,13 +45,7 @@ def stack_tensors(input):
     if not len(input):
         raise RuntimeError("input length must be non-null")
     if isinstance(input[0], torch.Tensor):
-        size = input[0].size()
-        if len(size) == 0:
-            return torch.stack(input)
-        else:
-            # torch.cat is much faster than torch.stack
-            # https://github.com/pytorch/pytorch/issues/22462
-            return torch.cat(input).view(-1, *size)
+        return torch.stack(input)
     else:
         return np.stack(input)
 
@@ -60,7 +58,6 @@ def stack_fields(input):
 
 def first_field(data) -> Tensor:
     raise NotImplementedError
-    # return next(iter(tree.flatten(data)))
 
 
 def to_torch(

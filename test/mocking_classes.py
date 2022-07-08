@@ -129,9 +129,14 @@ class DiscreteActionVecMockEnv(_MockEnv):
     )
     action_spec = OneHotDiscreteTensorSpec(7)
     reward_spec = UnboundedContinuousTensorSpec()
+
     from_pixels = False
 
     out_key = "observation"
+    _out_key = "observation_orig"
+    input_spec = CompositeSpec(
+        **{_out_key: observation_spec["next_observation"], "action": action_spec}
+    )
 
     def _get_in_obs(self, obs):
         return obs
@@ -145,6 +150,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         tensordict = tensordict.select().set(
             "next_" + self.out_key, self._get_out_obs(state)
         )
+        tensordict = tensordict.set("next_" + self._out_key, self._get_out_obs(state))
         tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
         return tensordict
 
@@ -157,12 +163,12 @@ class DiscreteActionVecMockEnv(_MockEnv):
         assert (a.sum(-1) == 1).all()
         assert not self.is_done, "trying to execute step in done env"
 
-        obs = (
-            self._get_in_obs(self.current_tensordict.get(self.out_key))
-            + a / self.maxstep
-        )
+        obs = self._get_in_obs(tensordict.get(self._out_key)) + a / self.maxstep
         tensordict = tensordict.select()  # empty tensordict
+
         tensordict.set("next_" + self.out_key, self._get_out_obs(obs))
+        tensordict.set("next_" + self._out_key, self._get_out_obs(obs))
+
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
         reward = done.any(-1).unsqueeze(-1)
         # set done to False
@@ -182,6 +188,10 @@ class ContinuousActionVecMockEnv(_MockEnv):
     from_pixels = False
 
     out_key = "observation"
+    _out_key = "observation_orig"
+    input_spec = CompositeSpec(
+        **{_out_key: observation_spec["next_observation"], "action": action_spec}
+    )
 
     def _get_in_obs(self, obs):
         return obs
@@ -193,9 +203,9 @@ class ContinuousActionVecMockEnv(_MockEnv):
         self.counter += 1
         self.step_count = 0
         state = torch.zeros(self.size) + self.counter
-        tensordict = tensordict.select().set(
-            "next_" + self.out_key, self._get_out_obs(state)
-        )
+        tensordict = tensordict.select()
+        tensordict.set("next_" + self.out_key, self._get_out_obs(state))
+        tensordict.set("next_" + self._out_key, self._get_out_obs(state))
         tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
         return tensordict
 
@@ -208,11 +218,12 @@ class ContinuousActionVecMockEnv(_MockEnv):
         a = tensordict.get("action")
         assert not self.is_done, "trying to execute step in done env"
 
-        obs = self._obs_step(
-            self._get_in_obs(self.current_tensordict.get(self.out_key)), a
-        )
+        obs = self._obs_step(self._get_in_obs(tensordict.get(self._out_key)), a)
         tensordict = tensordict.select()  # empty tensordict
+
         tensordict.set("next_" + self.out_key, self._get_out_obs(obs))
+        tensordict.set("next_" + self._out_key, self._get_out_obs(obs))
+
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
         reward = done.any(-1).unsqueeze(-1)
         done = done.all(-1).unsqueeze(-1)
@@ -251,6 +262,10 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
     from_pixels = True
 
     out_key = "pixels"
+    _out_key = "pixels_orig"
+    input_spec = CompositeSpec(
+        **{_out_key: observation_spec["next_pixels"], "action": action_spec}
+    )
 
     def _get_out_obs(self, obs):
         obs = torch.diag_embed(obs, 0, -2, -1).unsqueeze(0)
@@ -287,6 +302,10 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
     from_pixels = True
 
     out_key = "pixels"
+    _out_key = "pixels_orig"
+    input_spec = CompositeSpec(
+        **{_out_key: observation_spec["next_pixels"], "action": action_spec}
+    )
 
     def _get_out_obs(self, obs):
         obs = torch.diag_embed(obs, 0, -2, -1).unsqueeze(0)

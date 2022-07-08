@@ -44,12 +44,11 @@ and many more to come!
 
 ## Installation
 Create a conda environment where the packages will be installed. 
-Before installing anything, make sure you have the latest version of `cmake` and `ninja` libraries:
+Before installing anything, make sure you have the latest version of the `ninja` library:
 
 ```
 conda create --name torch_rl python=3.9
 conda activate torch_rl
-conda install cmake -c conda-forge
 pip install ninja
 ```
 
@@ -61,9 +60,9 @@ Depending on the use of functorch that you want to make, you may want to install
 # For CUDA 10.2
 conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
 # For CUDA 11.3
-conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+conda install pytorch torchvision cudatoolkit=11.3 -c pytorch
 # For CPU-only build
-conda install pytorch torchvision torchaudio cpuonly -c pytorch
+conda install pytorch torchvision cpuonly -c pytorch
 
 pip install functorch
 ```
@@ -71,11 +70,11 @@ pip install functorch
 **Nightly**
 ```
 # For CUDA 10.2
-pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cu102
+pip3 install --pre torch torchvision --extra-index-url https://download.pytorch.org/whl/nightly/cu102
 # For CUDA 11.3
-pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cu113
+pip3 install --pre torch torchvision --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 # For CPU-only build
-pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+pip3 install --pre torch torchvision --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 ```
 
 and functorch
@@ -85,24 +84,47 @@ pip install "git+https://github.com/pytorch/functorch.git"
 
 **Torchrl**
 
+You can install the latest release by using
+```
+pip install torchrl
+```
+This should work on linux and MacOs (not M1). For Windows and M1/M2 machines, one 
+should install the library locally (see below).
+
+To install extra dependencies, call
+```
+pip install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils]"
+```
+or a subset of these.
+
+Alternatively, as the library is at an early stage, it may be wise to install 
+it in develop mode as this will make it possible to pull the latest changes and 
+benefit from them immediately. 
+Start by cloning the repo:
+```
+git clone https://github.com/facebookresearch/rl
+```
+
 Go to the directory where you have cloned the torchrl repo and install it
 ```
 cd /path/to/torchrl/
 python setup.py develop
 ```
-As the library is at an early stage, it may be wise to install it in develop mode (`python setup.py develop` instead of `install`) as this will make it possible to pull the latest changes and benefit from them immediately. 
 
-To run a quick sanity check, leave that directory (e.g. by executing `cd ~/`) and try to import the library.
+To run a quick sanity check, leave that directory (e.g. by executing `cd ~/`) 
+and try to import the library.
 ```
 python -c "import torchrl"
 ```
+This should not return any warning or error.
 
 **Optional dependencies**
 
-The following libraries can be installed depending on the usage one wants to make of torchrl:
+The following libraries can be installed depending on the usage one wants to 
+make of torchrl:
 ```
 # diverse
-pip install tqdm pyyaml configargparse
+pip install tqdm tensorboard "hydra-core>=1.1" hydra-submitit-launcher
 
 # rendering
 pip install moviepy
@@ -110,34 +132,29 @@ pip install moviepy
 # deepmind control suite
 pip install dm_control 
 
-# gym, atari games
-pip install gym gym[accept-rom-license] pygame gym_retro
+# gym, atari games
+pip install gym "gym[accept-rom-license]" pygame gym_retro
 
 # tests
-pip install pytest
+pip install pytest pyyaml pytest-instafail
 ```
-
-Alternatively, extra dependencies can be installed using
-```
-pip install -e ".[atari,dm_control,gym_continuous,rendering,tests,utils]"
-```
-or a selection of these.
-
 
 **Troubleshooting**
 
-If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs, it means that the C++ extensions were not installed or not found. 
-One common reason might be that you are trying to import torchrl from within the git repo location. Indeed the following code snippet should return an error if torchrl has not been installed in `develop` mode:
+If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs, 
+it means that the C++ extensions were not installed or not found. 
+One common reason might be that you are trying to import torchrl from within the 
+git repo location. Indeed the following code snippet should return an error if 
+torchrl has not been installed in `develop` mode:
 ```
 cd ~/path/to/rl/repo
 python -c 'from torchrl.envs import GymEnv'
 ```
 If this is the case, consider executing torchrl from another location.
 
-This may also be caused by several dependency issues: cmake, gcc or ninja versioning, or absence of the CuDNN library when working in a CUDA environment. 
-
 On **MacOs**, we recommend installing XCode first. 
-With Apple Silicon M1 chips, make sure you are using the arm64-built python (e.g. [here](https://betterprogramming.pub/how-to-install-pytorch-on-apple-m1-series-512b3ad9bc6)). Running the following lines of code
+With Apple Silicon M1 chips, make sure you are using the arm64-built python 
+(e.g. [here](https://betterprogramming.pub/how-to-install-pytorch-on-apple-m1-series-512b3ad9bc6)). Running the following lines of code
 
 ```
 wget https://raw.githubusercontent.com/pytorch/pytorch/master/torch/utils/collect_env.py

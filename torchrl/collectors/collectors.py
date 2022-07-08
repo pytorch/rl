@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-import math
 import os
 import queue
 import time
@@ -20,7 +19,7 @@ from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
-from .. import _check_for_faulty_process
+from .. import _check_for_faulty_process, prod
 from ..modules.tensordict_module import ProbabilisticTensorDictModule
 from .utils import split_trajectories
 
@@ -295,8 +294,7 @@ class SyncDataCollector(_DataCollector):
         self.init_with_lag = init_with_lag and max_frames_per_traj > 0
         self.return_same_td = return_same_td
 
-        env.reset()
-        self._tensordict = env.current_tensordict
+        self._tensordict = env.reset()
         self._tensordict.set(
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
@@ -420,8 +418,8 @@ class SyncDataCollector(_DataCollector):
                 self._tensordict.set("reset_workers", done_or_terminated)
             else:
                 self._tensordict.zero_()
-            self.env.reset()
-            self._tensordict.update(self.env.current_tensordict, inplace=True)
+
+            self._tensordict.update(self.env.reset(), inplace=True)
             if self._tensordict.get("done").any():
                 raise RuntimeError(
                     f"Got {sum(self._tensordict.get('done'))} done envs after reset."
@@ -444,8 +442,7 @@ class SyncDataCollector(_DataCollector):
 
         """
         if self.reset_at_each_iter:
-            self.env.reset()
-            self._tensordict.update(self.env.current_tensordict, inplace=True)
+            self._tensordict.update(self.env.reset(), inplace=True)
             self._tensordict.fill_("step_count", 0)
 
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
@@ -487,7 +484,7 @@ class SyncDataCollector(_DataCollector):
         """Resets the environments to a new initial state."""
         if index is not None:
             # check that the env supports partial reset
-            if np.prod(self.env.batch_size) == 0:
+            if prod(self.env.batch_size) == 0:
                 raise RuntimeError("resetting unique env with index is not permitted.")
             reset_workers = torch.zeros(
                 *self.env.batch_size,
@@ -504,9 +501,8 @@ class SyncDataCollector(_DataCollector):
 
         if td_in:
             self._tensordict.update(td_in, inplace=True)
-        self.env.reset(**kwargs)
 
-        self._tensordict.update(self.env.current_tensordict, inplace=True)
+        self._tensordict.update(self.env.reset(**kwargs), inplace=True)
         self._tensordict.fill_("step_count", 0)
 
     def shutdown(self) -> None:
@@ -984,7 +980,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 out = split_trajectories(out)
                 frames += out.get("mask").sum()
             else:
-                frames += math.prod(out.shape)
+                frames += prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
@@ -994,7 +990,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
             yield out
 
         del out_tensordicts_shared
-        self._shutdown_main()
+        # We shall not call shutdown just yet as user may want to retrieve state_dict
+        # self._shutdown_main()
 
 
 class MultiaSyncDataCollector(_MultiDataCollector):
@@ -1083,7 +1080,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                 out = out.exclude(*excluded_keys)
             yield out
 
-        self._shutdown_main()
+        # We don't want to shutdown yet, the user may want to call state_dict before
+        # self._shutdown_main()
         self.running = False
 
     def _shutdown_main(self) -> None:

@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import abc
-import math
 from collections import OrderedDict
 from numbers import Number
 from typing import Any, Callable, Iterator, Optional, Union, Dict
@@ -14,7 +13,7 @@ from typing import Any, Callable, Iterator, Optional, Union, Dict
 import numpy as np
 import torch
 
-from torchrl import seed_generator
+from torchrl import seed_generator, prod
 from torchrl.data import CompositeSpec, TensorDict, TensorSpec
 from ..data.tensordict.tensordict import _TensorDict
 from ..data.utils import DEVICE_TYPING
@@ -48,7 +47,13 @@ class Specs:
 
     """
 
-    _keys = {"action_spec", "observation_spec", "reward_spec", "from_pixels"}
+    _keys = {
+        "action_spec",
+        "observation_spec",
+        "reward_spec",
+        "input_spec",
+        "from_pixels",
+    }
 
     def __init__(self, env: _EnvClass):
         self.env = env
@@ -108,14 +113,14 @@ class _EnvClass:
     Abstract environment parent class for TorchRL.
 
     Properties:
-        - observation_spec (TensorSpec): sampling spec of the observations;
+        - observation_spec (CompositeSpec): sampling spec of the observations;
         - action_spec (TensorSpec): sampling spec of the actions;
+        - input_spec (CompositeSpec): sampling spec of the actions and/or other inputs;
         - reward_spec (TensorSpec): sampling spec of the rewards;
         - batch_size (torch.Size): number of environments contained in the instance;
         - device (torch.device): device where the env input and output are expected to live
         - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the
             last reset
-        - current_tensordict (_TensorDict): last tensordict returned by `reset` or `step`.
 
     Methods:
         step (_TensorDict -> _TensorDict): step in the environment
@@ -129,6 +134,7 @@ class _EnvClass:
 
     from_pixels: bool
     device = torch.device("cpu")
+    _inplace_update: bool
 
     def __init__(
         self,
@@ -144,12 +150,12 @@ class _EnvClass:
             self.is_closed = True
         if "_action_spec" not in self.__dir__():
             self._action_spec = None
+        if "_input_spec" not in self.__dir__():
+            self._input_spec = CompositeSpec(action=self._action_spec)
         if "_reward_spec" not in self.__dir__():
             self._reward_spec = None
         if "_observation_spec" not in self.__dir__():
             self._observation_spec = None
-        if "_current_tensordict" not in self.__dir__():
-            self._current_tensordict = None
         if batch_size is not None:
             # we want an error to be raised if we pass batch_size but
             # it's already been set
@@ -159,6 +165,11 @@ class _EnvClass:
         ):
             self.batch_size = torch.Size([])
 
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._inplace_update = True
+        return super().__new__(cls)
+
     @property
     def action_spec(self) -> TensorSpec:
         return self._action_spec
@@ -166,6 +177,16 @@ class _EnvClass:
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
         self._action_spec = value
+
+    @property
+    def input_spec(self) -> TensorSpec:
+        if self._input_spec is None:
+            self._input_spec = CompositeSpec(action=self.action_spec)
+        return self._input_spec
+
+    @input_spec.setter
+    def input_spec(self, value: TensorSpec) -> None:
+        self._input_spec = value
 
     @property
     def reward_spec(self) -> TensorSpec:
@@ -216,7 +237,6 @@ class _EnvClass:
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
         self.is_done = tensordict_out.get("done")
-        self.current_tensordict = step_tensordict(tensordict_out, exclude_done=False)
 
         for key in self._select_observation_keys(tensordict_out):
             obs = tensordict_out.get(key)
@@ -232,7 +252,7 @@ class _EnvClass:
             raise TypeError(
                 f"expected done.dtype to be torch.bool but got {tensordict_out.get('done').dtype}"
             )
-        tensordict.update(tensordict_out, inplace=True)
+        tensordict.update(tensordict_out, inplace=self._inplace_update)
 
         del tensordict_out
         return tensordict
@@ -292,12 +312,6 @@ class _EnvClass:
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
 
-        self.current_tensordict = step_tensordict(
-            tensordict_reset,
-            exclude_done=False,
-            exclude_reward=True,
-            exclude_action=True,
-        )
         self.is_done = tensordict_reset.get(
             "done",
             torch.zeros(self.batch_size, dtype=torch.bool, device=self.device),
@@ -307,50 +321,20 @@ class _EnvClass:
                 f"Env {self} was done after reset. This is (currently) not allowed."
             )
         if execute_step:
-            tensordict_reset = self.current_tensordict.clone()
+            tensordict_reset = step_tensordict(
+                tensordict_reset,
+                exclude_done=False,
+                exclude_reward=True,
+                exclude_action=True,
+            )
         if tensordict is not None:
             tensordict.update(tensordict_reset)
         else:
             tensordict = tensordict_reset
         return tensordict
 
-    def _current_tensordict_get(self) -> _TensorDict:
-        """Returns the last tensordict encountered after calling `reset` or `step`."""
-        try:
-            td = self._current_tensordict
-            if td is None:
-                raise RuntimeError(
-                    "env.current_tensordict returned None. make sure env has been reset."
-                )
-            return td.clone()
-        except AttributeError:
-            msg = f"env {self} does not have a _current_tensordict attribute. Consider calling reset() before querying it."
-            raise AttributeError(msg)
-
-    def _current_tensordict_set(self, value: Union[_TensorDict, dict]):
-        if isinstance(self._current_tensordict, _TensorDict):
-            # # we get rid of the next_ keys if they don't appear in value
-            # value_keys = set(value.keys())
-            # self._current_tensordict = self._current_tensordict.exclude(
-            #     *[key for key in self._current_tensordict.keys() if (key == "action" or key.startswith("next_")) and key not in value_keys]
-            # )
-            # self._current_tensordict.update_(
-            #     value.select(*self._current_tensordict.keys())
-            # )
-            self._current_tensordict = value
-            return
-        if isinstance(value, dict):
-            value = TensorDict(value, self.batch_size)
-        if not isinstance(value, _TensorDict):
-            raise RuntimeError(
-                f"current_tensordict setter got an object of type {type(value)} but a TensorDict was expected"
-            )
-        self._current_tensordict = value
-
-    current_tensordict = property(_current_tensordict_get, _current_tensordict_set)
-
     def numel(self) -> int:
-        return math.prod(self.batch_size)
+        return prod(self.batch_size)
 
     def set_seed(self, seed: int) -> int:
         """Sets the seed of the environment and returns the next seed to be used (
@@ -407,7 +391,7 @@ class _EnvClass:
 
         """
         if tensordict is None:
-            tensordict = self.current_tensordict
+            tensordict = TensorDict({}, device=self.device, batch_size=self.batch_size)
         action = self.action_spec.rand(self.batch_size)
         tensordict.set("action", action)
         return self.step(tensordict)
@@ -431,6 +415,7 @@ class _EnvClass:
         auto_reset: bool = True,
         auto_cast_to_device: bool = False,
         break_when_any_done: bool = True,
+        tensordict: Optional[_TensorDict] = None,
     ) -> _TensorDict:
         """Executes a rollout in the environment.
 
@@ -450,6 +435,8 @@ class _EnvClass:
             auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
                 policy device before the policy is used. Default is `False`.
             break_when_any_done (bool): breaks if any of the done state is True. Default is True.
+            tensordict (TensorDict, optional): if auto_reset is False, an initial
+                tensordict must be provided.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -463,9 +450,13 @@ class _EnvClass:
         env_device = self.device
 
         if auto_reset:
-            self.reset()
-
-        tensordict = self.current_tensordict
+            if tensordict is not None:
+                raise RuntimeError(
+                    "tensordict cannot be provided when auto_reset is True"
+                )
+            tensordict = self.reset()
+        elif tensordict is None:
+            raise RuntimeError("tensordict must be provided when auto_reset is False")
 
         if policy is None:
 
@@ -554,11 +545,8 @@ class _EnvClass:
         self.action_spec = self.action_spec.to(device)
         self.reward_spec = self.reward_spec.to(device)
         self.observation_spec = self.observation_spec.to(device)
+        self.input_spec = self.input_spec.to(device)
 
-        if self._current_tensordict is not None:
-            current_tensordict = self.current_tensordict.to(device)
-            self._current_tensordict = None
-            self.current_tensordict = current_tensordict
         self.is_done = self.is_done.to(device)
         self.device = device
         return self
