@@ -93,6 +93,8 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
+        if new_batch_size == self.batch_size:
+            return
         if self._lazy:
             raise RuntimeError(
                 "modifying the batch size of a lazy repesentation of a "
@@ -480,7 +482,8 @@ dtype=torch.float32)},
 
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
             # if TensorDict, let's try to map it to the desired shape
-            if isinstance(tensor, _TensorDict):
+            if isinstance(tensor, _TensorDict) and tensor.batch_size != self.batch_size:
+                tensor = tensor.clone(recursive=False)
                 tensor.batch_size = self.shape
             else:
                 raise RuntimeError(
@@ -606,11 +609,13 @@ dtype=torch.float32)},
             tensors of the same shape as the original tensors.
 
         """
-        if not isinstance(other, _TensorDict):
+        if not isinstance(other, (_TensorDict, float, int)):
             raise TypeError(
                 f"TensorDict comparision requires both objects to be "
                 f"_TensorDict subclass, got {type(other)}"
             )
+        if not isinstance(other, _TensorDict):
+            return TensorDict({key: value == other for key, value in self.items()}, self.batch_size)
         keys1 = set(self.keys())
         keys2 = set(other.keys())
         if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -862,7 +867,12 @@ dtype=torch.float32)},
     def _check_new_batch_size(self, new_size: torch.Size):
         n = len(new_size)
         for key, meta_tensor in self.items_meta():
-            if (meta_tensor.ndimension() < n) or (meta_tensor.shape[:n] != new_size):
+            if (meta_tensor.ndimension() <= n) or (meta_tensor.shape[:n] != new_size):
+                if meta_tensor.ndimension() == n and meta_tensor.shape[:n] == new_size:
+                    raise RuntimeError(
+                        "TensorDict requires tensor that have at least one more "
+                        "dimension than the batch_size"
+                    )
                 raise RuntimeError(
                     f"the tensor {key} has shape {meta_tensor.shape} which "
                     f"is incompatible with the new shape {new_size}"
@@ -1353,8 +1363,13 @@ dtype=torch.float32)},
         shape = meta_tensor.shape
         device = meta_tensor.device
         dtype = meta_tensor.dtype
-        value = torch.full(shape, value, device=device, dtype=dtype)
-        self.set_(key, value)
+        if meta_tensor.is_tensordict():
+            tensordict = self.get(key)
+            tensordict.apply_(lambda x: x.fill_(value))
+            self.set_(key, tensordict)
+        else:
+            tensor = torch.full(shape, value, device=device, dtype=dtype)
+            self.set_(key, tensor)
         return self
 
     def empty(self) -> _TensorDict:
@@ -1526,7 +1541,7 @@ class TensorDict(_TensorDict):
                 if map_item_to_device:
                     value = value.to(device)
                 _meta_val = None if _meta_source is None else _meta_source[key]
-                if isinstance(value, _TensorDict):
+                if isinstance(value, _TensorDict) and value.batch_size != self.batch_size:
                     value.batch_size = self.batch_size
                 self.set(key, value, _meta_val=_meta_val, _run_checks=False)
 
@@ -1671,6 +1686,7 @@ class TensorDict(_TensorDict):
                 proc_value,
                 _is_memmap=self.is_memmap(),
                 _is_shared=self.is_shared(),
+                _is_tensordict=isinstance(proc_value, _TensorDict),
             )
             if _meta_val is None
             else _meta_val
@@ -1762,6 +1778,7 @@ class TensorDict(_TensorDict):
             tensor_in,
             _is_memmap=self.is_memmap(),
             _is_shared=self.is_shared(),
+            _is_tensordict=isinstance(value, _TensorDict),
         )
         return self
 
@@ -1942,6 +1959,10 @@ def assert_allclose_td(
     for key in keys:
         input1 = actual.get(key)
         input2 = expected.get(key)
+        if isinstance(input1, _TensorDict):
+            assert_allclose_td(input1, input2, rtol=rtol, atol=atol)
+            continue
+
         mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
         mse = mse.div(input1.numel()).sqrt().item()
 
@@ -2263,6 +2284,8 @@ torch.Size([3, 2])
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         keys = set(self.keys())
+        if isinstance(tensor, _TensorDict) and tensor.batch_size != self.batch_size:
+            tensor.batch_size = self.batch_size
         if inplace and key in keys:
             return self.set_(key, tensor)
         elif key in keys:
@@ -2275,18 +2298,28 @@ torch.Size([3, 2])
             tensor, check_device=False, check_tensor_shape=False
         )
         parent = self.get_parent_tensordict()
-        tensor_expand = torch.zeros(
-            *parent.batch_size,
-            *tensor.shape[self.batch_dims :],
-            dtype=tensor.dtype,
-            device=self.device,
-        )
 
-        if self.is_shared() and self.device == torch.device("cpu"):
-            tensor_expand.share_memory_()
-        elif self.is_memmap():
-            tensor_expand = MemmapTensor(tensor_expand)
 
+        if isinstance(tensor, _TensorDict):
+            tensor_expand = TensorDict(
+                {key: torch.zeros(
+                *parent.batch_size,
+                *_tensor.shape[self.batch_dims:],
+                dtype=_tensor.dtype,
+                device=self.device,
+            ) for key, _tensor in tensor.items()}, parent.batch_size,
+            )
+        else:
+            tensor_expand = torch.zeros(
+                *parent.batch_size,
+                *tensor.shape[self.batch_dims:],
+                dtype=tensor.dtype,
+                device=self.device,
+            )
+            if self.is_shared() and self.device == torch.device("cpu"):
+                tensor_expand.share_memory_()
+            elif self.is_memmap():
+                tensor_expand = MemmapTensor(tensor_expand)
         parent.set(key, tensor_expand, _run_checks=_run_checks)
         self.set_(key, tensor)
         return self
@@ -2677,6 +2710,8 @@ class LazyStackedTensorDict(_TensorDict):
     def set(self, key: str, tensor: COMPATIBLE_TYPES, **kwargs) -> _TensorDict:
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
+        if isinstance(tensor, _TensorDict):
+            tensor.batch_size = self.clone(recursive=False).batch_size
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes "
@@ -2701,6 +2736,8 @@ class LazyStackedTensorDict(_TensorDict):
         if not no_check:
             if self.is_locked:
                 raise RuntimeError("Cannot modify immutable TensorDict")
+            if isinstance(tensor, _TensorDict):
+                tensor.batch_size = self.clone(recursive=False).batch_size
             if self.batch_size != tensor.shape[: self.batch_dims]:
                 raise RuntimeError(
                     "Setting tensor to tensordict failed because the shapes "
@@ -3463,19 +3500,15 @@ class _CustomOpTensorDict(_TensorDict):
         proc_value = self._process_tensor(
             value, check_device=False, check_tensor_shape=False
         )
-        # if key in self.keys():
-        #     source_meta_tensor = self._source._get_meta(key)
-        # else:
-        #     source_meta_tensor = MetaTensor(
-        #         proc_value,
-        #         device=proc_value.device,
-        #         dtype=proc_value.dtype,
-        #         _is_memmap=self.is_memmap(),
-        #         _is_shared=self.is_shared(),
-        #     )
+        if isinstance(proc_value, _TensorDict):
+            print("pre")
+            print(proc_value)
         proc_value = getattr(proc_value, self.inv_op)(
             **self._update_inv_op_kwargs(proc_value)
         )
+        if isinstance(proc_value, _TensorDict):
+            print("post", self.inv_op, self._update_inv_op_kwargs(proc_value))
+            print(proc_value)
         self._source.set(key, proc_value, **kwargs)
         return self
 

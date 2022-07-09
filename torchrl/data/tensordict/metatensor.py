@@ -69,8 +69,8 @@ class MetaTensor:
         requires_grad: bool = False,
         _is_shared: Optional[bool] = None,
         _is_memmap: Optional[bool] = None,
+        _is_tensordict: Optional[bool] = None,
     ):
-        _is_tensordict = False
         _repr = None
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
@@ -80,11 +80,11 @@ class MetaTensor:
             if _is_memmap is None:
                 _is_memmap = isinstance(tensor, MemmapTensor)
             device = tensor.device if not tensor.is_meta else device
+            if _is_tensordict is None:
+                _is_tensordict = not isinstance(tensor, (MemmapTensor, torch.Tensor))
             if isinstance(tensor, (MemmapTensor, torch.Tensor)):
                 dtype = tensor.dtype
             else:
-                _is_tensordict = True
-                tensordict_name = tensor.__class__.__name__
                 dtype = None
                 _repr = str(tensor)
 
@@ -104,10 +104,10 @@ class MetaTensor:
         self._numel = np.prod(shape)
         self._is_shared = bool(_is_shared)
         self._is_memmap = bool(_is_memmap)
-        self._is_tensordict = _is_tensordict
+        self._is_tensordict = bool(_is_tensordict)
         self._repr = _repr
         if _is_tensordict:
-            name = tensordict_name
+            name = "TensorDict"
         elif _is_memmap:
             name = "MemmapTensor"
         elif _is_shared:
@@ -168,6 +168,7 @@ class MetaTensor:
             requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
+            _is_tensordict=self.is_tensordict(),
         )
 
     def _to_meta(self) -> torch.Tensor:
@@ -182,6 +183,7 @@ class MetaTensor:
             requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
+            _is_tensordict=self.is_tensordict(),
         )
 
     @classmethod
@@ -271,6 +273,7 @@ class MetaTensor:
             requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
+            _is_tensordict=self.is_tensordict(),
         )
 
 

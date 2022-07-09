@@ -486,6 +486,7 @@ TD_BATCH_SIZE = 4
         "memmap_td",
         "unsqueezed_td",
         "td_reset_bs",
+        "nested_td",
     ],
 )
 class TestTensorDicts:
@@ -496,6 +497,18 @@ class TestTensorDicts:
                 "a": torch.randn(4, 3, 2, 1, 5),
                 "b": torch.randn(4, 3, 2, 1, 10),
                 "c": torch.randint(10, (4, 3, 2, 1, 3)),
+            },
+            batch_size=[4, 3, 2, 1],
+        )
+
+    @property
+    def nested_td(self):
+        return TensorDict(
+            source={
+                "a": torch.randn(4, 3, 2, 1, 5),
+                "b": torch.randn(4, 3, 2, 1, 10),
+                "c": torch.randint(10, (4, 3, 2, 1, 3)),
+                "my_nested_td": TensorDict({"inner": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]),
             },
             batch_size=[4, 3, 2, 1],
         )
@@ -593,8 +606,10 @@ class TestTensorDicts:
         td = getattr(self, td_name)
         td2 = td.exclude("a")
         assert td2 is not td
-        assert len(list(td2.keys())) == 2 and "a" not in td2.keys()
-        assert len(list(td2.clone().keys())) == 2 and "a" not in td2.clone().keys()
+        assert len(list(td2.keys())) == len(list(td.keys()))-1 and \
+               "a" not in td2.keys()
+        assert len(list(td2.clone().keys())) == len(list(td.keys()))-1 and \
+               "a" not in td2.clone().keys()
 
         td2 = td.exclude("a", inplace=True)
         assert td2 is td
@@ -1026,6 +1041,19 @@ class TestTensorDicts:
         assert td.get("a").requires_grad
         assert td._get_meta("a").requires_grad
 
+    def test_nested_td_emptyshape(self, td_name):
+        td = getattr(self, td_name)
+        tdin = TensorDict({"inner": torch.randn(*td.shape, 1)}, [])
+        td["inner_td"] = tdin
+        # tdin.batch_size = td.batch_size
+        print(td["inner_td"].to_tensordict(), tdin)
+        assert (td["inner_td"] == tdin).all()
+
+    def test_nested_td(self, td_name):
+        td = getattr(self, td_name)
+        tdin = TensorDict({"inner": torch.randn(td.shape)}, td.shape)
+        td.set("inner_td", tdin)
+        assert (td["inner_td"] == tdin).all()
 
 @pytest.mark.parametrize(
     "td_name",
