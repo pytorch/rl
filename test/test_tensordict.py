@@ -1647,6 +1647,32 @@ def test_filling_empty_tensordict(device, td_type, update):
         assert (td[-1] == other_td.to(device)).all()
 
 
+def test_getitem_nested():
+    tensor = torch.randn(4, 5, 6, 7)
+    tensordict = TensorDict({}, [4])
+    sub_tensordict = TensorDict({}, [4, 5])
+    sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
+    with pytest.raises(RuntimeError, match="The nested tensordict had not device"):
+        tensordict["a"] = sub_tensordict
+    sub_tensordict["b"] = sub_sub_tensordict
+    tensordict["a"] = sub_tensordict
+
+    # check that content match
+    assert tensordict["a"] is sub_tensordict
+    assert tensordict["a", "b"] is sub_sub_tensordict
+    assert tensordict["a", "b", "c"] is tensor
+
+    # check that shapes are kept
+    assert tensordict.shape == torch.Size([4])
+    assert sub_tensordict.shape == torch.Size([4, 5])
+    assert sub_sub_tensordict.shape == torch.Size([4, 5, 6])
+
+    # check that device are tracked
+    assert tensordict.device == torch.device("cpu")
+    assert sub_tensordict.device == torch.device("cpu")
+    assert sub_sub_tensordict.device == torch.device("cpu")
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
