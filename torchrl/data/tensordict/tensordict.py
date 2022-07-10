@@ -615,7 +615,9 @@ dtype=torch.float32)},
                 f"_TensorDict subclass, got {type(other)}"
             )
         if not isinstance(other, _TensorDict):
-            return TensorDict({key: value == other for key, value in self.items()}, self.batch_size)
+            return TensorDict(
+                {key: value == other for key, value in self.items()}, self.batch_size
+            )
         keys1 = set(self.keys())
         keys2 = set(other.keys())
         if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -868,14 +870,15 @@ dtype=torch.float32)},
         n = len(new_size)
         for key, meta_tensor in self.items_meta():
             if (meta_tensor.ndimension() <= n) or (meta_tensor.shape[:n] != new_size):
-                if meta_tensor.ndimension() == n and meta_tensor.shape[:n] == new_size:
+                if meta_tensor.ndimension() == n and meta_tensor.shape == new_size:
                     raise RuntimeError(
-                        "TensorDict requires tensor that have at least one more "
-                        "dimension than the batch_size"
+                        "TensorDict requires tensors that have at least one more "
+                        f'dimension than the batch_size. The tensor "{key}" has shape '
+                        f"{meta_tensor.shape} which is the same as the new size."
                     )
                 raise RuntimeError(
                     f"the tensor {key} has shape {meta_tensor.shape} which "
-                    f"is incompatible with the new shape {new_size}"
+                    f"is incompatible with the new shape {new_size}."
                 )
 
     @abc.abstractmethod
@@ -1541,7 +1544,10 @@ class TensorDict(_TensorDict):
                 if map_item_to_device:
                     value = value.to(device)
                 _meta_val = None if _meta_source is None else _meta_source[key]
-                if isinstance(value, _TensorDict) and value.batch_size != self.batch_size:
+                if (
+                    isinstance(value, _TensorDict)
+                    and value.batch_size != self.batch_size
+                ):
                     value.batch_size = self.batch_size
                 self.set(key, value, _meta_val=_meta_val, _run_checks=False)
 
@@ -2299,20 +2305,23 @@ torch.Size([3, 2])
         )
         parent = self.get_parent_tensordict()
 
-
         if isinstance(tensor, _TensorDict):
             tensor_expand = TensorDict(
-                {key: torch.zeros(
-                *parent.batch_size,
-                *_tensor.shape[self.batch_dims:],
-                dtype=_tensor.dtype,
-                device=self.device,
-            ) for key, _tensor in tensor.items()}, parent.batch_size,
+                {
+                    key: torch.zeros(
+                        *parent.batch_size,
+                        *_tensor.shape[self.batch_dims :],
+                        dtype=_tensor.dtype,
+                        device=self.device,
+                    )
+                    for key, _tensor in tensor.items()
+                },
+                parent.batch_size,
             )
         else:
             tensor_expand = torch.zeros(
                 *parent.batch_size,
-                *tensor.shape[self.batch_dims:],
+                *tensor.shape[self.batch_dims :],
                 dtype=tensor.dtype,
                 device=self.device,
             )
@@ -3498,7 +3507,9 @@ class _CustomOpTensorDict(_TensorDict):
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         proc_value = self._process_tensor(
-            value, check_device=False, check_tensor_shape=False
+            value,
+            check_device=False,
+            check_tensor_shape=True,
         )
         if isinstance(proc_value, _TensorDict):
             print("pre")

@@ -508,7 +508,9 @@ class TestTensorDicts:
                 "a": torch.randn(4, 3, 2, 1, 5),
                 "b": torch.randn(4, 3, 2, 1, 10),
                 "c": torch.randint(10, (4, 3, 2, 1, 3)),
-                "my_nested_td": TensorDict({"inner": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]),
+                "my_nested_td": TensorDict(
+                    {"inner": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]
+                ),
             },
             batch_size=[4, 3, 2, 1],
         )
@@ -606,10 +608,13 @@ class TestTensorDicts:
         td = getattr(self, td_name)
         td2 = td.exclude("a")
         assert td2 is not td
-        assert len(list(td2.keys())) == len(list(td.keys()))-1 and \
-               "a" not in td2.keys()
-        assert len(list(td2.clone().keys())) == len(list(td.keys()))-1 and \
-               "a" not in td2.clone().keys()
+        assert (
+            len(list(td2.keys())) == len(list(td.keys())) - 1 and "a" not in td2.keys()
+        )
+        assert (
+            len(list(td2.clone().keys())) == len(list(td.keys())) - 1
+            and "a" not in td2.clone().keys()
+        )
 
         td2 = td.exclude("a", inplace=True)
         assert td2 is td
@@ -1055,6 +1060,7 @@ class TestTensorDicts:
         td.set("inner_td", tdin)
         assert (td["inner_td"] == tdin).all()
 
+
 @pytest.mark.parametrize(
     "td_name",
     [
@@ -1175,7 +1181,16 @@ def test_batchsize_reset():
     td = TensorDict(
         {"a": torch.randn(3, 4, 5, 6), "b": torch.randn(3, 4, 5)}, batch_size=[3, 4]
     )
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "TensorDict requires tensors that have at least one more dimension than the batch_size"
+        ),
+    ):
+        td.batch_size = torch.Size([3, 4, 5])
+    del td["b"]
     td.batch_size = torch.Size([3, 4, 5])
+
     td.set("c", torch.randn(3, 4, 5, 6))
     with pytest.raises(
         RuntimeError,
