@@ -1060,6 +1060,10 @@ class TestTensorDicts:
         td.set("inner_td", tdin)
         assert (td["inner_td"] == tdin).all()
 
+    def test_repr(self, td_name):
+        td = getattr(self, td_name)
+        _ = str(td)
+
 
 @pytest.mark.parametrize(
     "td_name",
