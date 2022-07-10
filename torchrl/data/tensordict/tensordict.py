@@ -1647,7 +1647,9 @@ class TensorDict(_TensorDict):
     def pin_memory(self) -> _TensorDict:
         if self.device == torch.device("cpu"):
             for key, value in self.items():
-                if value.dtype in (torch.half, torch.float, torch.double):
+                if isinstance(value, _TensorDict) or (
+                    value.dtype in (torch.half, torch.float, torch.double)
+                ):
                     self.set(key, value.pin_memory(), inplace=False)
         return self
 
