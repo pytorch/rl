@@ -3769,14 +3769,7 @@ def _td_fields(td: _TensorDict) -> str:
     return indent(
         "\n"
         + ",\n".join(
-            sorted(
-                [
-                    f"{key}: {item.class_name}({item.shape}, dtype={item.dtype})"
-                    if not item.is_tensordict()
-                    else f"{key}: {item._repr}"
-                    for key, item in td.items_meta()
-                ]
-            )
+            sorted([f"{key}: {item.get_repr()}" for key, item in td.items_meta()])
         ),
         4 * " ",
     )

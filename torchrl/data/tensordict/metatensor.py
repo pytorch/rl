@@ -71,7 +71,7 @@ class MetaTensor:
         _is_memmap: Optional[bool] = None,
         _is_tensordict: Optional[bool] = None,
     ):
-        _repr = None
+        _repr_tensordict = None
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
             shape = tensor.shape
@@ -86,7 +86,7 @@ class MetaTensor:
                 dtype = tensor.dtype
             else:
                 dtype = None
-                _repr = str(tensor)
+                _repr_tensordict = str(tensor)
 
             requires_grad = (
                 tensor.requires_grad
@@ -105,7 +105,7 @@ class MetaTensor:
         self._is_shared = bool(_is_shared)
         self._is_memmap = bool(_is_memmap)
         self._is_tensordict = bool(_is_tensordict)
-        self._repr = _repr
+        self._repr_tensordict = _repr_tensordict
         if _is_tensordict:
             name = "TensorDict"
         elif _is_memmap:
@@ -115,6 +115,12 @@ class MetaTensor:
         else:
             name = "Tensor"
         self.class_name = name
+
+    def get_repr(self):
+        if self.is_tensordict():
+            return self._repr_tensordict
+        else:
+            return f"{self.class_name}({self.shape}, dtype={self.dtype})"
 
     def memmap_(self) -> MetaTensor:
         """Changes the storage of the MetaTensor to memmap.
