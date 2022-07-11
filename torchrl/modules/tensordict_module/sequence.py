@@ -118,27 +118,18 @@ class TensorDictSequence(TensorDictModule):
         in_keys = []
         out_keys = []
         for module in modules:
-            in_keys += module.in_keys
+            # we sometimes use in_keys to select keys of a tensordict that are
+            # necessary to run a TensorDictModule. If a key is an intermediary in
+            # the chain, there is no reason why it should belong to the input
+            # TensorDict.
+            in_keys += [key for key in module.in_keys if key not in out_keys + in_keys]
             out_keys += module.out_keys
-        # in_keys = []
-        # for in_key in in_keys_tmp:
-        #     if (in_key not in in_keys) and (in_key not in out_keys):
-        #         in_keys.append(in_key)
-        # if not len(in_keys):
-        #     raise RuntimeError(
-        #         "in_keys empty. Please ensure that there is at least one input "
-        #         "key that is not part of the output key set."
-        #     )
+
         out_keys = [
             out_key
             for i, out_key in enumerate(out_keys)
             if out_key not in out_keys[i + 1 :]
         ]
-        # we sometimes use in_keys to select keys of a tensordict that are
-        # necessary to run a TensorDictModule. If a key is an intermediary in
-        # the chain, there is not reason why it should belong to the input
-        # TensorDict.
-        in_keys = [in_key for in_key in in_keys if in_key not in out_keys]
 
         super().__init__(
             spec=None,

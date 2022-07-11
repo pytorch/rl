@@ -12,7 +12,7 @@ from torchrl.modules import (
     QValueActor,
 )
 from ...data.tensordict.tensordict import _TensorDict
-from .common import _LossModule
+from .common import LossModule
 from .utils import distance_loss, next_state_value
 
 __all__ = [
@@ -21,7 +21,7 @@ __all__ = [
 ]
 
 
-class DQNLoss(_LossModule):
+class DQNLoss(LossModule):
     """
     The DQN Loss class.
     Args:
@@ -125,7 +125,7 @@ class DQNLoss(_LossModule):
         return TensorDict({"loss": loss.mean()}, [])
 
 
-class DistributionalDQNLoss(_LossModule):
+class DistributionalDQNLoss(LossModule):
     """
     A distributional DQN loss class.
     Distributional DQN uses a value network that outputs a distribution of
