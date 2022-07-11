@@ -18,6 +18,7 @@ from torchrl.data.tensordict.tensordict import (
     LazyStackedTensorDict,
     stack as stack_td,
     pad,
+    _TensorDict,
 )
 from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 
@@ -1174,6 +1175,62 @@ class TestTensorDicts:
             assert (
                 td["sub_td"]["sub_sub_td"]["b"] == td["sub_td", "sub_sub_td", "b"]
             ).all()
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    @pytest.mark.parametrize("separator", [",", "-"])
+    def test_flatten_keys(self, td_name, inplace, separator):
+        td = getattr(self, td_name)
+        nested_nested_tensordict = TensorDict(
+            {
+                "a": torch.zeros(*td.shape, 2, 3),
+            },
+            [*td.shape, 2],
+        )
+        nested_tensordict = TensorDict(
+            {
+                "a": torch.zeros(*td.shape, 2),
+                "nested_nested_tensordict": nested_nested_tensordict,
+            },
+            td.shape,
+        )
+        td["nested_tensordict"] = nested_tensordict
+
+        td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
+        for key, value in td_flatten.items():
+            assert not isinstance(value, _TensorDict)
+        assert (
+            separator.join(["nested_tensordict", "nested_nested_tensordict", "a"])
+            in td_flatten.keys()
+        )
+        if inplace:
+            assert td_flatten is td
+        else:
+            assert td_flatten is not td
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    @pytest.mark.parametrize("separator", [",", "-"])
+    def test_unflatten_keys(self, td_name, inplace, separator):
+        td = getattr(self, td_name)
+        nested_nested_tensordict = TensorDict(
+            {
+                "a": torch.zeros(*td.shape, 2, 3),
+            },
+            [*td.shape, 2],
+        )
+        nested_tensordict = TensorDict(
+            {
+                "a": torch.zeros(*td.shape, 2),
+                "nested_nested_tensordict": nested_nested_tensordict,
+            },
+            td.shape,
+        )
+        td["nested_tensordict"] = nested_tensordict
+
+        td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
+        td_unflatten = td_flatten.unflatten_keys(inplace=inplace, separator=separator)
+        assert (td == td_unflatten).all()
+        if inplace:
+            assert td is td_unflatten
 
     def test_repr(self, td_name):
         td = getattr(self, td_name)
