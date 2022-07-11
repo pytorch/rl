@@ -62,6 +62,8 @@ COMPATIBLE_TYPES = Union[
     MemmapTensor,
 ]  # None? # leaves space for _TensorDict
 
+_STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
+
 
 class _TensorDict(Mapping, metaclass=abc.ABCMeta):
     """
@@ -480,16 +482,31 @@ dtype=torch.float32)},
             device = self.device
             tensor = tensor.to(device)
         elif self._device_safe() is None:
-            self.device = tensor.device
+            if isinstance(tensor, _TensorDict):
+                device = tensor._device_safe()
+                if device is not None:
+                    self.device = device
+                else:
+                    raise RuntimeError(
+                        "The nested tensordict had not device. "
+                        "When nesting tensordicts, the nested tensordict must have "
+                        "a defined device (either by specifying it upon creation or "
+                        "by populating it with at tensor)."
+                    )
+            else:
+                self.device = tensor.device
 
         if check_shared:
             raise DeprecationWarning("check_shared is not authorized anymore")
 
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
             # if TensorDict, let's try to map it to the desired shape
-            if isinstance(tensor, _TensorDict) and tensor.batch_size != self.batch_size:
+            if (
+                isinstance(tensor, _TensorDict)
+                and tensor.batch_size[: self.batch_dims] != self.batch_size
+            ):
                 tensor = tensor.clone(recursive=False)
-                tensor.batch_size = self.shape
+                tensor.batch_size = self.batch_size
             else:
                 raise RuntimeError(
                     f"batch dimension mismatch, got self.batch_size"
@@ -498,7 +515,7 @@ dtype=torch.float32)},
                 )
 
         # minimum ndimension is 1
-        if tensor.ndimension() - self.ndimension() == 0 and not isinstance(
+        if tensor.ndimension() == self.ndimension() and not isinstance(
             tensor, _TensorDict
         ):
             tensor = tensor.unsqueeze(-1)
@@ -1314,8 +1331,20 @@ dtype=torch.float32)},
         """
         if isinstance(idx, str):
             return self.get(idx)
-        if isinstance(idx, Number):
+        if isinstance(idx, tuple) and sum(
+            isinstance(_idx, str) for _idx in idx
+        ) not in [len(idx), 0]:
+            raise IndexError(_STR_MIXED_INDEX_ERROR)
+        elif isinstance(idx, Number):
             idx = (idx,)
+        elif isinstance(idx, tuple) and all(
+            isinstance(sub_idx, str) for sub_idx in idx
+        ):
+            out = self.get(idx[0])
+            if len(idx) > 1:
+                return out[idx[1:]]
+            else:
+                return out
         elif isinstance(idx, torch.Tensor) and idx.dtype == torch.bool:
             return self.masked_select(idx)
 
@@ -1348,8 +1377,31 @@ dtype=torch.float32)},
     def __setitem__(self, index: INDEX_TYPING, value: _TensorDict) -> None:
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
+        if isinstance(index, tuple) and sum(
+            isinstance(_index, str) for _index in index
+        ) not in [len(index), 0]:
+            raise IndexError(_STR_MIXED_INDEX_ERROR)
         if isinstance(index, str):
             self.set(index, value, inplace=False)
+        elif isinstance(index, tuple) and all(
+            isinstance(sub_index, str) for sub_index in index
+        ):
+            try:
+                if len(index) == 1:
+                    return self.set(
+                        index[0], value, inplace=isinstance(self, SubTensorDict)
+                    )
+                self[index[:-1]] = self[index[:-1]].set(
+                    index[-1], value, inplace=isinstance(self, SubTensorDict)
+                )
+            except AttributeError as err:
+                if "for populating tensordict with new key-value pair" in str(err):
+                    raise RuntimeError(
+                        "Trying to replace an existing nested tensordict with "
+                        "another one with non-matching keys. This leads to "
+                        "unspecified behaviours and is prohibited."
+                    )
+                raise err
         else:
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if value.batch_size != indexed_bs:
@@ -1584,7 +1636,7 @@ class TensorDict(_TensorDict):
                 _meta_val = None if _meta_source is None else _meta_source[key]
                 if (
                     isinstance(value, _TensorDict)
-                    and value.batch_size != self.batch_size
+                    and value.batch_size[: self.batch_dims] != self.batch_size
                 ):
                     value.batch_size = self.batch_size
                 self.set(key, value, _meta_val=_meta_val, _run_checks=False)
@@ -2412,11 +2464,8 @@ torch.Size([3, 2])
         if isinstance(tensor, _TensorDict):
             tensor_expand = TensorDict(
                 {
-                    key: torch.zeros(
-                        *parent.batch_size,
-                        *_tensor.shape[self.batch_dims :],
-                        dtype=_tensor.dtype,
-                        device=self.device,
+                    key: _expand_to_match_shape(
+                        parent.batch_size, _tensor, self.batch_dims, self.device
                     )
                     for key, _tensor in tensor.items()
                 },
@@ -2824,7 +2873,8 @@ class LazyStackedTensorDict(_TensorDict):
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         if isinstance(tensor, _TensorDict):
-            tensor.batch_size = self.clone(recursive=False).batch_size
+            if tensor.batch_size[: self.batch_dims] != self.batch_size:
+                tensor.batch_size = self.clone(recursive=False).batch_size
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes "
@@ -2850,7 +2900,8 @@ class LazyStackedTensorDict(_TensorDict):
             if self.is_locked:
                 raise RuntimeError("Cannot modify immutable TensorDict")
             if isinstance(tensor, _TensorDict):
-                tensor.batch_size = self.clone(recursive=False).batch_size
+                if tensor.batch_size[: self.batch_dims] != self.batch_size:
+                    tensor.batch_size = self.clone(recursive=False).batch_size
             if self.batch_size != tensor.shape[: self.batch_dims]:
                 raise RuntimeError(
                     "Setting tensor to tensordict failed because the shapes "
@@ -3012,9 +3063,20 @@ class LazyStackedTensorDict(_TensorDict):
     def __getitem__(self, item: INDEX_TYPING) -> _TensorDict:
         if item is Ellipsis or (isinstance(item, tuple) and Ellipsis in item):
             item = convert_ellipsis_to_idx(item, self.batch_size)
-
+        if isinstance(item, tuple) and sum(
+            isinstance(_item, str) for _item in item
+        ) not in [len(item), 0]:
+            raise IndexError(_STR_MIXED_INDEX_ERROR)
         if isinstance(item, str):
             return self.get(item)
+        elif isinstance(item, tuple) and all(
+            isinstance(sub_item, str) for sub_item in item
+        ):
+            out = self.get(item[0])
+            if len(item) > 1:
+                return out[item[1:]]
+            else:
+                return out
         elif isinstance(item, torch.Tensor) and item.dtype == torch.bool:
             return self.masked_select(item)
         elif (
@@ -3459,8 +3521,21 @@ class SavedTensorDict(_TensorDict):
         if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
 
+        if isinstance(idx, tuple) and sum(
+            isinstance(_idx, str) for _idx in idx
+        ) not in [len(idx), 0]:
+            raise IndexError(_STR_MIXED_INDEX_ERROR)
+
         if isinstance(idx, str):
             return self.get(idx)
+        elif isinstance(idx, tuple) and all(
+            isinstance(sub_idx, str) for sub_idx in idx
+        ):
+            out = self.get(idx[0])
+            if len(idx) > 1:
+                return out[idx[1:]]
+            else:
+                return out
         elif isinstance(idx, Number):
             idx = (idx,)
         elif isinstance(idx, torch.Tensor) and idx.dtype == torch.bool:
@@ -3896,3 +3971,21 @@ def _check_keys(
 
 
 _accepted_classes = (torch.Tensor, MemmapTensor, _TensorDict)
+
+
+def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_device):
+    if hasattr(tensor, "dtype"):
+        return torch.zeros(
+            *parent_batch_size,
+            *tensor.shape[self_batch_dims:],
+            dtype=tensor.dtype,
+            device=self_device,
+        )
+    else:
+        # tensordict
+        out = TensorDict(
+            {},
+            [*parent_batch_size, *tensor.shape[self_batch_dims:]],
+            device=self_device,
+        )
+        return out
