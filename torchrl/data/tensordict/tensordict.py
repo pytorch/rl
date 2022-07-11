@@ -1264,6 +1264,9 @@ dtype=torch.float32)},
         for i in range(length):
             yield self[i]
 
+    def flatten_keys(self, separator=",", inplace: bool = True) -> _TensorDict:
+        return flatten_keys(self, separator=separator, inplace=inplace)
+
     def __len__(self) -> int:
         """
 
@@ -3884,3 +3887,35 @@ def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_devi
             device=self_device,
         )
         return out
+
+
+def flatten_keys(
+    tensordict: _TensorDict, separator: str = ",", inplace: bool = True
+) -> _TensorDict:
+    to_flatten = []
+    for key, meta_value in tensordict.items_meta():
+        if meta_value.is_tensordict():
+            to_flatten.append(key)
+
+    if inplace:
+        for key in to_flatten:
+            inner_tensordict = flatten_keys(tensordict.get(key), separator=separator)
+            for inner_key, inner_item in inner_tensordict.items():
+                tensordict.set(separator.join([key, inner_key]), inner_item)
+        for key in to_flatten:
+            del tensordict[key]
+        return tensordict
+    else:
+        tensordict_out = TensorDict(
+            {}, batch_size=tensordict.batch_size, device=tensordict.device
+        )
+        for key, value in tensordict.items():
+            if key in to_flatten:
+                inner_tensordict = flatten_keys(
+                    tensordict.get(key), separator=separator
+                )
+                for inner_key, inner_item in inner_tensordict.items():
+                    tensordict_out.set(separator.join([key, inner_key]), inner_item)
+            else:
+                tensordict_out.set(key, value)
+        return tensordict_out
