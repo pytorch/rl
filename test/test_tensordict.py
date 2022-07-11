@@ -1051,7 +1051,6 @@ class TestTensorDicts:
         tdin = TensorDict({"inner": torch.randn(*td.shape, 1)}, [])
         td["inner_td"] = tdin
         # tdin.batch_size = td.batch_size
-        print(td["inner_td"].to_tensordict(), tdin)
         assert (td["inner_td"] == tdin).all()
 
     def test_nested_td(self, td_name):
@@ -1059,6 +1058,42 @@ class TestTensorDicts:
         tdin = TensorDict({"inner": torch.randn(td.shape)}, td.shape)
         td.set("inner_td", tdin)
         assert (td["inner_td"] == tdin).all()
+
+    def test_nested_td_index(self, td_name):
+        td = getattr(self, td_name)
+
+        sub_td = TensorDict({}, [*td.shape, 2])
+        a = torch.zeros([*td.shape, 2, 2])
+        sub_sub_td = TensorDict({"a": a}, [*td.shape, 2, 2])
+        sub_td.set("sub_sub_td", sub_sub_td)
+        td.set("sub_td", sub_td)
+        assert (td["sub_td", "sub_sub_td", "a"] == 0).all()
+        assert (
+            td["sub_td"]["sub_sub_td"]["a"] == td["sub_td", "sub_sub_td", "a"]
+        ).all()
+
+        a = torch.ones_like(a)
+        other_sub_sub_td = TensorDict({"a": a}, [*td.shape, 2, 2])
+        td["sub_td", "sub_sub_td"] = other_sub_sub_td
+        assert (td["sub_td", "sub_sub_td", "a"] == 1).all()
+        assert (
+            td["sub_td"]["sub_sub_td"]["a"] == td["sub_td", "sub_sub_td", "a"]
+        ).all()
+
+        b = torch.ones_like(a)
+        other_sub_sub_td = TensorDict({"b": b}, [*td.shape, 2, 2])
+
+        if td_name == "sub_td":
+            with pytest.raises(
+                RuntimeError, match="with another one with non-matching keys"
+            ):
+                td["sub_td", "sub_sub_td"] = other_sub_sub_td
+        else:
+            td["sub_td", "sub_sub_td"] = other_sub_sub_td
+            assert (td["sub_td", "sub_sub_td", "b"] == 1).all()
+            assert (
+                td["sub_td"]["sub_sub_td"]["b"] == td["sub_td", "sub_sub_td", "b"]
+            ).all()
 
     def test_repr(self, td_name):
         td = getattr(self, td_name)
@@ -1671,6 +1706,22 @@ def test_getitem_nested():
     assert tensordict.device == torch.device("cpu")
     assert sub_tensordict.device == torch.device("cpu")
     assert sub_sub_tensordict.device == torch.device("cpu")
+
+
+def test_setitem_nested():
+    tensor = torch.randn(4, 5, 6, 7)
+    tensor2 = torch.ones(4, 5, 6, 7)
+    tensordict = TensorDict({}, [4])
+    sub_tensordict = TensorDict({}, [4, 5])
+    sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
+    sub_sub_tensordict2 = TensorDict({"c": tensor2}, [4, 5, 6])
+    sub_tensordict["b"] = sub_sub_tensordict
+    tensordict["a"] = sub_tensordict
+    assert tensordict["a", "b"] is sub_sub_tensordict
+
+    tensordict["a", "b"] = sub_sub_tensordict2
+    assert tensordict["a", "b"] is sub_sub_tensordict2
+    assert (tensordict["a", "b", "c"] == 1).all()
 
 
 if __name__ == "__main__":

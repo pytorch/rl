@@ -1335,6 +1335,25 @@ dtype=torch.float32)},
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if isinstance(index, str):
             self.set(index, value, inplace=False)
+        elif isinstance(index, tuple) and all(
+            isinstance(sub_index, str) for sub_index in index
+        ):
+            try:
+                if len(index) == 1:
+                    return self.set(
+                        index[0], value, inplace=isinstance(self, SubTensorDict)
+                    )
+                self[index[:-1]] = self[index[:-1]].set(
+                    index[-1], value, inplace=isinstance(self, SubTensorDict)
+                )
+            except AttributeError as err:
+                if "for populating tensordict with new key-value pair" in str(err):
+                    raise RuntimeError(
+                        "Trying to replace an existing nested tensordict with "
+                        "another one with non-matching keys. This leads to "
+                        "unspecified behaviours and is prohibited."
+                    )
+                raise err
         else:
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if value.batch_size != indexed_bs:
@@ -1569,7 +1588,7 @@ class TensorDict(_TensorDict):
                 _meta_val = None if _meta_source is None else _meta_source[key]
                 if (
                     isinstance(value, _TensorDict)
-                    and value.batch_size != self.batch_size
+                    and value.batch_size[: self.batch_dims] != self.batch_size
                 ):
                     value.batch_size = self.batch_size
                 self.set(key, value, _meta_val=_meta_val, _run_checks=False)
@@ -2333,11 +2352,8 @@ torch.Size([3, 2])
         if isinstance(tensor, _TensorDict):
             tensor_expand = TensorDict(
                 {
-                    key: torch.zeros(
-                        *parent.batch_size,
-                        *_tensor.shape[self.batch_dims :],
-                        dtype=_tensor.dtype,
-                        device=self.device,
+                    key: _expand_to_match_shape(
+                        parent.batch_size, _tensor, self.batch_dims, self.device
                     )
                     for key, _tensor in tensor.items()
                 },
@@ -2745,7 +2761,7 @@ class LazyStackedTensorDict(_TensorDict):
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         if isinstance(tensor, _TensorDict):
-            if tensor.batch_dims[: self.batch_dims] != self.batch_size:
+            if tensor.batch_size[: self.batch_dims] != self.batch_size:
                 tensor.batch_size = self.clone(recursive=False).batch_size
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
@@ -3553,15 +3569,9 @@ class _CustomOpTensorDict(_TensorDict):
             check_device=False,
             check_tensor_shape=True,
         )
-        if isinstance(proc_value, _TensorDict):
-            print("pre")
-            print(proc_value)
         proc_value = getattr(proc_value, self.inv_op)(
             **self._update_inv_op_kwargs(proc_value)
         )
-        if isinstance(proc_value, _TensorDict):
-            print("post", self.inv_op, self._update_inv_op_kwargs(proc_value))
-            print(proc_value)
         self._source.set(key, proc_value, **kwargs)
         return self
 
@@ -3837,3 +3847,21 @@ def _check_keys(
 
 
 _accepted_classes = (torch.Tensor, MemmapTensor, _TensorDict)
+
+
+def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_device):
+    if hasattr(tensor, "dtype"):
+        return torch.zeros(
+            *parent_batch_size,
+            *tensor.shape[self_batch_dims:],
+            dtype=tensor.dtype,
+            device=self_device,
+        )
+    else:
+        # tensordict
+        out = TensorDict(
+            {},
+            [*parent_batch_size, *tensor.shape[self_batch_dims:]],
+            device=self_device,
+        )
+        return out
