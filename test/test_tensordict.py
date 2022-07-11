@@ -1130,7 +1130,7 @@ class TestTensorDicts:
         td = getattr(self, td_name)
         tdin = TensorDict({"inner": torch.randn(*td.shape, 1)}, [])
         td["inner_td"] = tdin
-        # tdin.batch_size = td.batch_size
+        tdin.batch_size = td.batch_size
         assert (td["inner_td"] == tdin).all()
 
     def test_nested_td(self, td_name):

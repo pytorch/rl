@@ -1,4 +1,4 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
+#pad_size, value Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
@@ -1155,28 +1155,61 @@ dtype=torch.float32)},
 
     def permute(
         self,
-        *dims: int,
+        *dims_list: int,
+        dims=None,
     ) -> _TensorDict:
         """Returns a view of a tensordict with the batch dimensions permuted according to dims
 
         Args:
-            *dims (int): the new ordering of the batch dims of the tensordict.
+            *dims_list (int): the new ordering of the batch dims of the tensordict. Alternatively,
+                a single iterable of integers can be provided.
+            dims (list of int): alternative way of calling permute(...).
 
         Returns:
             a new tensordict with the batch dimensions in the desired order.
 
         Examples:
-            >>> TODO
+            >>> tensordict = TensorDict({"a": torch.randn(3, 4, 5)}, [3, 4])
+            >>> print(tensordict.permute([1, 0]))
+            PermutedTensorDict(
+                source=TensorDict(
+                    fields={
+                        a: Tensor(torch.Size([3, 4, 5]), dtype=torch.float32)},
+                    batch_size=torch.Size([3, 4]),
+                    device=cpu,
+                    is_shared=False),
+                op=permute(dims=[1, 0]))
+            >>> print(tensordict.permute(1, 0))
+            PermutedTensorDict(
+                source=TensorDict(
+                    fields={
+                        a: Tensor(torch.Size([3, 4, 5]), dtype=torch.float32)},
+                    batch_size=torch.Size([3, 4]),
+                    device=cpu,
+                    is_shared=False),
+                op=permute(dims=[1, 0]))
+            >>> print(tensordict.permute(dims=[1, 0]))
+            PermutedTensorDict(
+                source=TensorDict(
+                    fields={
+                        a: Tensor(torch.Size([3, 4, 5]), dtype=torch.float32)},
+                    batch_size=torch.Size([3, 4]),
+                    device=cpu,
+                    is_shared=False),
+                op=permute(dims=[1, 0]))
         """
-
-        if len(dims) != len(self.shape):
+        if len(dims_list) == 0:
+            dims_list = dims
+        elif len(dims_list) == 1 and not isinstance(dims_list[0], int):
+            dims_list = dims_list[0]
+        if len(dims_list) != len(self.shape):
             raise RuntimeError(
-                f"number of dims don't match in permute (got {len(dims)}, expected {len(self.shape)}"
+                f"number of dims don't match in permute (got {len(dims_list)}, expected {len(self.shape)}"
             )
 
         min_dim, max_dim = -self.batch_dims, self.batch_dims - 1
         seen = [False for dim in range(max_dim + 1)]
-        for idx in dims:
+        for idx in dims_list:
             if idx < min_dim or idx > max_dim:
                 raise IndexError(
                     f"dimension out of range (expected to be in range of [{min_dim}, {max_dim}], but got {idx})"
@@ -1189,8 +1222,8 @@ dtype=torch.float32)},
             source=self,
             custom_op="permute",
             inv_op="permute",
-            custom_op_kwargs={"dims": dims},
-            inv_op_kwargs={"dims": dims},
+            custom_op_kwargs={"dims": dims_list},
+            inv_op_kwargs={"dims": dims_list},
         )
 
     def __repr__(self) -> str:
@@ -2255,13 +2288,16 @@ def pad(tensordict: _TensorDict, pad_size: Sequence[int], value: float = 0.0):
     for i in range(0, len(reverse_pad), 2):
         reverse_pad[i], reverse_pad[i + 1] = reverse_pad[i + 1], reverse_pad[i]
 
-    out = TensorDict({}, new_batch_size)
+    out = TensorDict({}, new_batch_size, device=tensordict.device)
     for key, tensor in tensordict.items():
         cur_pad = reverse_pad
         if len(pad_size) < len(tensor.shape) * 2:
             cur_pad = [0] * (len(tensor.shape) * 2 - len(pad_size)) + reverse_pad
 
-        padded = torch.nn.functional.pad(tensordict[key], cur_pad, value=value)
+        if isinstance(tensor, _TensorDict):
+            padded = pad(tensor, pad_size, value)
+        else:
+            padded = torch.nn.functional.pad(tensor, cur_pad, value=value)
         out.set(key, padded)
 
     return out
