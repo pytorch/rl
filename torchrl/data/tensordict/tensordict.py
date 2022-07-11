@@ -57,6 +57,8 @@ COMPATIBLE_TYPES = Union[
     MemmapTensor,
 ]  # None? # leaves space for _TensorDict
 
+_STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
+
 
 class _TensorDict(Mapping, metaclass=abc.ABCMeta):
     """
@@ -1291,6 +1293,10 @@ dtype=torch.float32)},
         """
         if isinstance(idx, str):
             return self.get(idx)
+        if isinstance(idx, tuple) and sum(
+            isinstance(_idx, str) for _idx in idx
+        ) not in [len(idx), 0]:
+            raise IndexError(_STR_MIXED_INDEX_ERROR)
         elif isinstance(idx, Number):
             idx = (idx,)
         elif isinstance(idx, tuple) and all(
@@ -1333,6 +1339,10 @@ dtype=torch.float32)},
     def __setitem__(self, index: INDEX_TYPING, value: _TensorDict) -> None:
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
+        if isinstance(index, tuple) and sum(
+            isinstance(_index, str) for _index in index
+        ) not in [len(index), 0]:
+            raise IndexError(_STR_MIXED_INDEX_ERROR)
         if isinstance(index, str):
             self.set(index, value, inplace=False)
         elif isinstance(index, tuple) and all(
@@ -2951,6 +2961,10 @@ class LazyStackedTensorDict(_TensorDict):
     def __getitem__(self, item: INDEX_TYPING) -> _TensorDict:
         if item is Ellipsis or (isinstance(item, tuple) and Ellipsis in item):
             item = convert_ellipsis_to_idx(item, self.batch_size)
+        if isinstance(item, tuple) and sum(
+            isinstance(_item, str) for _item in item
+        ) not in [len(item), 0]:
+            raise IndexError(_STR_MIXED_INDEX_ERROR)
         if isinstance(item, str):
             return self.get(item)
         elif isinstance(item, tuple) and all(
@@ -3404,6 +3418,11 @@ class SavedTensorDict(_TensorDict):
     def __getitem__(self, idx: INDEX_TYPING) -> _TensorDict:
         if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
+
+        if isinstance(idx, tuple) and sum(
+            isinstance(_idx, str) for _idx in idx
+        ) not in [len(idx), 0]:
+            raise IndexError(_STR_MIXED_INDEX_ERROR)
 
         if isinstance(idx, str):
             return self.get(idx)
