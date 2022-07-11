@@ -10,6 +10,7 @@ import functools
 import tempfile
 import textwrap
 import uuid
+from collections import defaultdict
 from collections.abc import Mapping
 from copy import copy, deepcopy
 from numbers import Number
@@ -1310,7 +1311,9 @@ dtype=torch.float32)},
 
         if inplace:
             for key in to_flatten:
-                inner_tensordict = self.get(key).flatten_keys(separator=separator)
+                inner_tensordict = self.get(key).flatten_keys(
+                    separator=separator, inplace=inplace
+                )
                 for inner_key, inner_item in inner_tensordict.items():
                     self.set(separator.join([key, inner_key]), inner_item)
             for key in to_flatten:
@@ -1322,12 +1325,44 @@ dtype=torch.float32)},
             )
             for key, value in self.items():
                 if key in to_flatten:
-                    inner_tensordict = self.get(key).flatten_keys(separator=separator)
+                    inner_tensordict = self.get(key).flatten_keys(
+                        separator=separator, inplace=inplace
+                    )
                     for inner_key, inner_item in inner_tensordict.items():
                         tensordict_out.set(separator.join([key, inner_key]), inner_item)
                 else:
                     tensordict_out.set(key, value)
             return tensordict_out
+
+    def unflatten_keys(self, separator: str = ",", inplace: bool = True) -> _TensorDict:
+        to_unflatten = defaultdict(lambda: list())
+        for key in self.keys():
+            if separator in key[1:-1]:
+                split_key = key.split(separator)
+                to_unflatten[split_key[0]].append((key, separator.join(split_key[1:])))
+
+        if not inplace:
+            out = TensorDict(
+                {
+                    key: value
+                    for key, value in self.items()
+                    if separator not in key[1:-1]
+                },
+                batch_size=self.batch_size,
+                device=self.device,
+            )
+        else:
+            out = self
+
+        for key, list_of_keys in to_unflatten.items():
+            tensordict = TensorDict({}, batch_size=self.batch_size, device=self.device)
+            for (old_key, new_key) in list_of_keys:
+                value = self[old_key]
+                tensordict[new_key] = value
+                if inplace:
+                    del self[old_key]
+            out.set(key, tensordict.unflatten_keys(separator=separator))
+        return out
 
     def __len__(self) -> int:
         """
