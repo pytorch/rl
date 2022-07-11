@@ -508,7 +508,7 @@ dtype=torch.float32)},
                 )
 
         # minimum ndimension is 1
-        if tensor.ndimension() - self.ndimension() == 0 and not isinstance(
+        if tensor.ndimension() == self.ndimension() and not isinstance(
             tensor, _TensorDict
         ):
             tensor = tensor.unsqueeze(-1)
