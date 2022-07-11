@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-__all__ = ["_LossModule"]
+__all__ = ["LossModule"]
 
 from typing import Iterator, Optional, Tuple, List, Union
 
@@ -19,10 +19,10 @@ from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.modules import TensorDictModule
 
 
-class _LossModule(nn.Module):
+class LossModule(nn.Module):
     """
     A parent class for RL losses.
-    _LossModule inherits from nn.Module. It is designed to read an input TensorDict and return another tensordict
+    LossModule inherits from nn.Module. It is designed to read an input TensorDict and return another tensordict
     with loss keys named "loss_*".
     Splitting the loss in its component can then be used by the trainer to log the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
@@ -277,20 +277,20 @@ class _LossModule(nn.Module):
                     list_of_params[i] = self._param_maps[param].data.expand_as(param)
         return out
 
-    def cuda(self, device: Optional[Union[int, device]] = None) -> _LossModule:
+    def cuda(self, device: Optional[Union[int, device]] = None) -> LossModule:
         if device is None:
             return self.to("cuda")
         else:
             return self.to(device)
 
-    def double(self) -> _LossModule:
+    def double(self) -> LossModule:
         return self.to(torch.double)
 
-    def float(self) -> _LossModule:
+    def float(self) -> LossModule:
         return self.to(torch.float)
 
-    def half(self) -> _LossModule:
+    def half(self) -> LossModule:
         return self.to(torch.half)
 
-    def cpu(self) -> _LossModule:
+    def cpu(self) -> LossModule:
         return self.to(torch.device("cpu"))

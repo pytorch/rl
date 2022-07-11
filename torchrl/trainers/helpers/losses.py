@@ -28,7 +28,7 @@ from torchrl.objectives import (
     SACLoss,
     SoftUpdate,
 )
-from torchrl.objectives.costs.common import _LossModule
+from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.redq import REDQLoss
 
 # from torchrl.objectives.costs.redq import REDQLoss
@@ -37,7 +37,7 @@ from torchrl.objectives.returns.advantages import GAE
 
 
 def make_target_updater(
-    cfg: "DictConfig", loss_module: _LossModule
+    cfg: "DictConfig", loss_module: LossModule
 ) -> Optional[_TargetNetUpdate]:
     """Builds a target network weight update object."""
     if cfg.loss == "double":

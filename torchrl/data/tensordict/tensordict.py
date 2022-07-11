@@ -41,7 +41,12 @@ from torchrl.data.tensordict.utils import (
     _sub_index,
     convert_ellipsis_to_idx,
 )
-from torchrl.data.utils import DEVICE_TYPING, expand_as_right, INDEX_TYPING
+from torchrl.data.utils import (
+    DEVICE_TYPING,
+    expand_right,
+    expand_as_right,
+    INDEX_TYPING,
+)
 
 __all__ = [
     "TensorDict",
@@ -2149,6 +2154,67 @@ def stack(
     return out
 
 
+def pad(tensordict: _TensorDict, pad_size: Sequence[int], value: float = 0.0):
+    """Pads all tensors in a tensordict along the batch dimensions with a constant value,
+    returning a new tensordict
+
+    Args:
+         tensordict (TensorDict): The tensordict to pad
+         pad_size (Sequence[int]): The padding size by which to pad some batch
+            dimensions of the tensordict, starting from the first dimension and
+            moving forward. [len(pad_size) / 2] dimensions of the batch size will
+            be padded. For example to pad only the first dimension, pad has the form
+            (padding_left, padding_right). To pad two dimensions,
+            (padding_left, padding_right, padding_top, padding_bottom) and so on.
+            pad_size must be even and less than or equal to twice the number of batch dimensions.
+         value (float, optional): The fill value to pad by, default 0.0
+
+    Returns:
+        A new TensorDict padded along the batch dimensions
+
+    Examples:
+        >>> from torchrl.data import TensorDict, pad
+        >>> import torch
+        >>> td = TensorDict({'a': torch.ones(3, 4, 1),
+        ...     'b': torch.ones(3, 4, 1, 1)}, batch_size=[3, 4])
+        >>> dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2]
+        >>> padded_td = pad(td, [dim0_left, dim0_right, dim1_left, dim1_right], value=0.0)
+        >>> print(padded_td.batch_size)
+        torch.Size([4, 6])
+        >>> print(padded_td.get("a").shape)
+        torch.Size([4, 6, 1])
+        >>> print(padded_td.get("b").shape)
+        torch.Size([4, 6, 1, 1])
+    """
+
+    if len(pad_size) > 2 * len(tensordict.batch_size):
+        raise RuntimeError(
+            "The length of pad_size must be <= 2 * the number of batch dimensions"
+        )
+
+    if len(pad_size) % 2:
+        raise RuntimeError("pad_size must have an even number of dimensions")
+
+    new_batch_size = list(tensordict.batch_size)
+    for i in range(len(pad_size)):
+        new_batch_size[i // 2] += pad_size[i]
+
+    reverse_pad = pad_size[::-1]
+    for i in range(0, len(reverse_pad), 2):
+        reverse_pad[i], reverse_pad[i + 1] = reverse_pad[i + 1], reverse_pad[i]
+
+    out = TensorDict({}, new_batch_size)
+    for key, tensor in tensordict.items():
+        cur_pad = reverse_pad
+        if len(pad_size) < len(tensor.shape) * 2:
+            cur_pad = [0] * (len(tensor.shape) * 2 - len(pad_size)) + reverse_pad
+
+        padded = torch.nn.functional.pad(tensordict[key], cur_pad, value=value)
+        out.set(key, padded)
+
+    return out
+
+
 # @implements_for_td(torch.nn.utils.rnn.pad_sequence)
 def pad_sequence_td(
     list_of_tensordicts: Sequence[_TensorDict],
@@ -3610,7 +3676,7 @@ class _CustomOpTensorDict(_TensorDict):
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             if isinstance(self, dest):
                 return self
-            return dest(source=self.contiguous().clone())
+            return dest(source=self)
         elif isinstance(dest, (torch.device, str, int)):
             if self._device_safe() is not None and torch.device(dest) == self.device:
                 return self
@@ -3636,10 +3702,13 @@ class _CustomOpTensorDict(_TensorDict):
     ) -> _TensorDict:
         for key, item in self.items():
             # source_meta_tensor = self._get_meta(key)
-            mask_proc_inv = getattr(mask, self.inv_op)(
+            val = self._source.get(key)
+            mask_exp = expand_right(
+                mask, list(mask.shape) + list(val.shape[self._source.batch_dims :])
+            )
+            mask_proc_inv = getattr(mask_exp, self.inv_op)(
                 **self._update_inv_op_kwargs(item)
             )
-            val = self._source.get(key)
             val[mask_proc_inv] = value
             self._source.set(key, val)
         return self
