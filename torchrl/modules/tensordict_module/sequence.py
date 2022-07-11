@@ -122,7 +122,7 @@ class TensorDictSequence(TensorDictModule):
             # necessary to run a TensorDictModule. If a key is an intermediary in
             # the chain, there is no reason why it should belong to the input
             # TensorDict.
-            in_keys += [key for key in module.in_keys if key not in out_keys]
+            in_keys += [key for key in module.in_keys if key not in out_keys + in_keys]
             out_keys += module.out_keys
 
         out_keys = [
