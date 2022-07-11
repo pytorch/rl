@@ -15,10 +15,10 @@ from torchrl.objectives import (
     next_state_value as get_next_state_value,
     distance_loss,
 )
-from torchrl.objectives.costs.common import _LossModule
+from torchrl.objectives.costs.common import LossModule
 
 
-class REDQLoss_deprecated(_LossModule):
+class REDQLoss_deprecated(LossModule):
     """
     REDQ Loss module.
     REDQ (RANDOMIZED ENSEMBLED DOUBLE Q-LEARNING: LEARNING FAST WITHOUT A MODEL

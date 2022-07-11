@@ -768,6 +768,20 @@ class TestTDModule:
 
 
 class TestTDSequence:
+    def test_key_exclusion(self):
+        module1 = TensorDictModule(
+            nn.Linear(3, 4), in_keys=["key1", "key2"], out_keys=["foo1"]
+        )
+        module2 = TensorDictModule(
+            nn.Linear(3, 4), in_keys=["key1", "key3"], out_keys=["key1"]
+        )
+        module3 = TensorDictModule(
+            nn.Linear(3, 4), in_keys=["foo1", "key3"], out_keys=["key2"]
+        )
+        seq = TensorDictSequence(module1, module2, module3)
+        assert set(seq.in_keys) == {"key1", "key2", "key3"}
+        assert set(seq.out_keys) == {"foo1", "key1", "key2"}
+
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     @pytest.mark.parametrize("lazy", [True, False])
