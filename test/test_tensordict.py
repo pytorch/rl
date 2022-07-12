@@ -787,13 +787,14 @@ class TestTensorDicts:
             _device = torch.device(device_cast)
             assert td_device.device == _device
             assert td_device.clone().device == _device
-            assert td_device is not td
+            if device_cast != device:
+                assert td_device is not td
             for k, item in td_device.items():
                 assert item.device == _device
             for k, item in td_device.clone().items():
                 assert item.device == _device
             # assert type(td_device) is type(td)
-            assert_allclose_td(td, td_device.to("cpu"))
+            assert_allclose_td(td, td_device.to(device))
         else:
             with pytest.raises(
                 RuntimeError,
@@ -821,11 +822,10 @@ class TestTensorDicts:
             f"td_device first tensor device is " f"{next(td_device.items())[1].device}"
         )
         assert td_device.clone().device == device_cast
-        if device != td.device:
+        if device_cast != td.device:
             assert td_device is not td
-        assert td_device.to(device) is td_device
+        assert td_device.to(device_cast) is td_device
         assert td.to(device) is td
-        # assert type(td_device) is type(td)
         assert_allclose_td(td, td_device.to(device))
 
     @pytest.mark.skipif(

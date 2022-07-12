@@ -257,6 +257,8 @@ class MemmapTensor(object):
         if memmap_array is None:
             memmap_array = self.memmap_array
         if idx is not None:
+            if isinstance(idx, torch.Tensor):
+                idx = idx.cpu()
             memmap_array = memmap_array[idx]
         out = self._np_to_tensor(memmap_array)
         if (
