@@ -3798,7 +3798,7 @@ class UnsqueezedTensorDict(_CustomOpTensorDict):
         idx: INDEX_TYPING,
     ) -> _TensorDict:
         unsqueezed_dim = self.custom_op_kwargs["dim"]
-        if isinstance(idx) and len(idx) > unsqueezed_dim:
+        if isinstance(idx, tuple) and len(idx) > unsqueezed_dim:
             # e.g. unsqueezed_dim=1 and idx = (0, 1)
             if idx[unsqueezed_dim] not in (slice(None), 0):
                 raise RuntimeError(
@@ -3838,15 +3838,34 @@ class SqueezedTensorDict(_CustomOpTensorDict):
         list_item: List[COMPATIBLE_TYPES],
         dim: int,
     ) -> _TensorDict:
-        raise RuntimeError
+        squeezed_dim = self.custom_op_kwargs["dim"]
+        # dim=0, squeezed_dim=2, [3, 4, 5] [3, 4, 1, 5] [[4, 5], [4, 5], [4, 5]] => unsq 1
+        # dim=1, squeezed_dim=2, [3, 4, 5] [3, 4, 1, 5] [[3, 5], [3, 5], [3, 5], [3, 4]] => unsq 1
+        # dim=2, squeezed_dim=2, [3, 4, 5] [3, 4, 1, 5] [[3, 4], [3, 4], ...] => unsq 2
+        diff_to_apply = 1 if dim < squeezed_dim else 0
+        list_item_unsqueeze = [item.unsqueeze(squeezed_dim - diff_to_apply) for item in list_item]
+        return self._source._stack_onto_(key, list_item_unsqueeze, dim)
 
     def _stack_onto_at_(
         self,
         key: str,
         list_item: List[COMPATIBLE_TYPES],
         dim: int,
+        idx: INDEX_TYPING,
     ) -> _TensorDict:
-        raise RuntimeError
+        squeezed_dim = self.custom_op_kwargs["dim"]
+        # we may have to insert a (0,) in a tuple, or unsqueeze a tensor index
+        if isinstance(idx, int) and squeezed_dim == 0:
+            idx = (slice(None), idx)
+        elif isinstance(idx, tuple) and len(idx) > squeezed_dim:
+            # e.g. squeezed_dim=1 and idx = (0, 1)
+            n = len(idx)
+            idx = list(idx)
+            idx.insert(squeezed_dim, slice(None))
+        elif isinstance(idx, torch.Tensor) and idx.ndimension() > squeezed_dim:
+            idx = idx.unsqueeze(dim)
+        list_item_unsqueeze = [item.squeeze(squeezed_dim) for item in squeezed_dim]
+        return self._source._stack_onto_at_(key, list_item_unsqueeze, dim, idx)
 
 class ViewedTensorDict(_CustomOpTensorDict):
     def _update_custom_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:
