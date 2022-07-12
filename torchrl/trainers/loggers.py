@@ -17,6 +17,7 @@ class Logger:
 class TensorboardLogger(Logger):
     def __init__(self, exp_name: str):
         super().__init__(exp_name=exp_name)
+        self.log_dir = self.experiment.log_dir
 
         self._has_imported_moviepy = False
         
@@ -30,18 +31,18 @@ class TensorboardLogger(Logger):
     def log_scalar(self, name: str, value: float, step: int=None):
         self.experiment.add_scalar(name, value, global_step=step)
     
-    def log_videos(self, name: str, video: Tensor, step: int=None, **kwargs):
-        if not self._has_moviepy:
+    def log_video(self, name: str, video: Tensor, step: int=None, **kwargs):
+        if not self._has_imported_moviepy:
             try:
                 import moviepy  # noqa
-                self._has_moviepy = True
+                self._has_imported_moviepy = True
             except ImportError:
                 raise Exception("moviepy not found, videos cannot be logged with TensorboardLogger")
         self.experiment.add_video(
             tag=name,
             vid_tensor=video,
-            global_step=self,
-            **self.kwargs,
+            global_step=step,
+            **kwargs,
         )
     def log_hparams(self, cfg: "DictConfig"):
         txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(cfg).items())])

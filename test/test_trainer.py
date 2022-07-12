@@ -262,7 +262,7 @@ def test_recorder():
         )
 
         for _ in range(N):
-            recorder(None)
+            out = recorder(None)
 
         for (dirpath, dirnames, filenames) in walk(folder):
             break
