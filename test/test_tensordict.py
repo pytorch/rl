@@ -784,15 +784,15 @@ class TestTensorDicts:
         if td_name != "saved_td":
             td.pin_memory()
             td_device = td.to(device_cast)
-            _device = torch.device(device_cast)
-            assert td_device.device == _device
-            assert td_device.clone().device == _device
-            if device_cast != device:
+            _device_cast = torch.device(device_cast)
+            assert td_device.device == _device_cast
+            assert td_device.clone().device == _device_cast
+            if device != _device_cast:
                 assert td_device is not td
             for k, item in td_device.items():
-                assert item.device == _device
+                assert item.device == _device_cast
             for k, item in td_device.clone().items():
-                assert item.device == _device
+                assert item.device == _device_cast
             # assert type(td_device) is type(td)
             assert_allclose_td(td, td_device.to(device))
         else:
