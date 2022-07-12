@@ -1,14 +1,15 @@
+from torch import Tensor
 class Logger:
     def __init__(self, exp_name: str):
         self.exp_name = exp_name
         self.experiment = self._create_experiment()
     def _create_experiment(self):
         pass
-    def log_scalar(self, name, value, step=None):
+    def log_scalar(self, name: str, value: float, step: int=None):
         pass
-    def log_video(self):
+    def log_video(self, name: str, video: Tensor, step: int=None, **kwargs):
         pass
-    def log_hparams(self):
+    def log_hparams(self, cfg):
         pass
     def __repr__(self) -> str:
         return self.experiment.__repr__()
@@ -26,10 +27,10 @@ class TensorboardLogger(Logger):
             raise ImportError("torch.utils.tensorboard could not be imported")
         return SummaryWriter(log_dir = self.exp_name)
 
-    def log_scalar(self, name: str, value: float, step=None):
+    def log_scalar(self, name: str, value: float, step: int=None):
         self.experiment.add_scalar(name, value, global_step=step)
     
-    def log_videos(self, name, video, step=None, **kwargs):
+    def log_videos(self, name: str, video: Tensor, step: int=None, **kwargs):
         if not self._has_moviepy:
             try:
                 import moviepy  # noqa
