@@ -13,7 +13,7 @@ import torch
 
 try:
     from tensorboard.backend.event_processing import event_accumulator
-    from torch.utils.tensorboard import SummaryWriter
+    from torchrl.trainers.loggers import TensorboardLogger
 
     _has_tb = True
 except ImportError:
@@ -224,7 +224,7 @@ def test_subsampler():
 @pytest.mark.skipif(not _has_tb, reason="No tensorboard library")
 def test_recorder():
     with tempfile.TemporaryDirectory() as folder:
-        writer = SummaryWriter(log_dir=folder)
+        logger = TensorboardLogger(exp_name=folder)
         args = Namespace()
         args.env_name = "ALE/Pong-v5"
         args.env_task = ""
@@ -249,7 +249,7 @@ def test_recorder():
             video_tag="tmp",
             norm_obs_only=True,
             stats={"loc": 0, "scale": 1},
-            writer=writer,
+            logger=logger,
         )()
 
         recorder = Recorder(

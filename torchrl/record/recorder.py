@@ -15,6 +15,7 @@ except ImportError:
 
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.envs.transforms import ObservationTransform, Transform
+from torchrl.trainers.loggers import Logger
 
 __all__ = ["VideoRecorder", "TensorDictRecorder"]
 
@@ -23,12 +24,12 @@ class VideoRecorder(ObservationTransform):
     """
     Video Recorder transform.
     Will record a series of observations from an environment and write them
-    to a TensorBoard SummaryWriter object when needed.
+    to a Logger object when needed.
 
     Args:
-        writer (SummaryWriter): a tb.SummaryWriter instance where the video
+        logger (Logger): a Logger instance where the video
             should be written.
-        tag (str): the video tag in the writer.
+        tag (str): the video tag in the logger.
         keys_in (Sequence[str], optional): keys to be read to produce the video.
             Default is `"next_pixels"`.
         skip (int): frame interval in the output video.
@@ -41,7 +42,7 @@ class VideoRecorder(ObservationTransform):
 
     def __init__(
         self,
-        writer: "SummaryWriter",
+        logger: Logger,
         tag: str,
         keys_in: Optional[Sequence[str]] = None,
         skip: int = 2,
@@ -58,7 +59,7 @@ class VideoRecorder(ObservationTransform):
         self.video_kwargs = video_kwargs
         self.iter = 0
         self.skip = skip
-        self.writer = writer
+        self.logger = logger
         self.tag = tag
         self.count = 0
         self.center_crop = center_crop
@@ -68,10 +69,6 @@ class VideoRecorder(ObservationTransform):
                 "Could not load center_crop from torchvision. Make sure torchvision is installed."
             )
         self.obs = []
-        try:
-            import moviepy  # noqa
-        except ImportError:
-            raise Exception("moviepy not found, VideoRecorder cannot be created")
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         if not (observation.shape[-1] == 3 or observation.ndimension() == 2):
@@ -109,7 +106,7 @@ class VideoRecorder(ObservationTransform):
         return observation
 
     def dump(self, suffix: Optional[str] = None) -> None:
-        """Writes the video to the self.writer attribute.
+        """Writes the video to the self.logger attribute.
 
         Args:
             suffix (str, optional): a suffix for the video to be recorded
@@ -120,10 +117,10 @@ class VideoRecorder(ObservationTransform):
             tag = "_".join([self.tag, suffix])
         obs = torch.stack(self.obs, 0).unsqueeze(0).cpu()
         del self.obs
-        self.writer.add_video(
-            tag=tag,
+        self.logger.log_video(
+            name=tag,
             vid_tensor=obs,
-            global_step=self.iter,
+            step=self.iter,
             **self.video_kwargs,
         )
         del obs

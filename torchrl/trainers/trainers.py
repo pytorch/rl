@@ -30,6 +30,7 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
+from torchrl.trainers.loggers import Logger
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.utils import expand_right, DEVICE_TYPING
 from torchrl.envs.common import _EnvClass
@@ -43,9 +44,9 @@ REPLAY_BUFFER_CLASS = {
     "circular": TensorDictReplayBuffer,
 }
 
-WRITER_METHODS = {
-    "grad_norm": "add_scalar",
-    "loss": "add_scalar",
+LOGGER_METHODS = {
+    "grad_norm": "log_scalar",
+    "loss": "log_scalar",
 }
 
 __all__ = [
@@ -84,8 +85,7 @@ class Trainer:
             TensorDict where every key points to a different loss component.
         optimizer (optim.Optimizer): An optimizer that trains the parameters
             of the model.
-        writer (SummaryWriter, optional): a Tensorboard summary writer for
-            logging purposes.
+        logger (Logger, optional): a Logger that will handle the logging.
         optim_steps_per_batch (int, optional): number of optimization steps
             per collection of data. An trainer works as follows: a main loop
             collects batches of data (epoch loop), and a sub-loop (training
@@ -122,7 +122,7 @@ class Trainer:
         frame_skip: int,
         loss_module: Union[LossModule, Callable[[_TensorDict], _TensorDict]],
         optimizer: optim.Optimizer,
-        writer: Optional["SummaryWriter"] = None,
+        logger: Optional[Logger] = None,
         optim_steps_per_batch: int = 500,
         clip_grad_norm: bool = True,
         clip_norm: float = 100.0,
@@ -137,7 +137,7 @@ class Trainer:
         self.collector = collector
         self.loss_module = loss_module
         self.optimizer = optimizer
-        self.writer = writer
+        self.logger = logger
         self._params = []
         for p in self.optimizer.param_groups:
             self._params += p["params"]
@@ -440,10 +440,10 @@ class Trainer:
                 _log = True
             else:
                 _log = False
-            method = WRITER_METHODS.get(key, "add_scalar")
-            if _log and self.writer is not None:
-                getattr(self.writer, method)(key, item, global_step=collected_frames)
-            if method == "add_scalar" and self.progress_bar and log_pbar:
+            method = LOGGER_METHODS.get(key, "log_scalar")
+            if _log and self.log_scalar is not None:
+                getattr(self.log_scalar, method)(key, item, step=collected_frames)
+            if method == "log_scalar" and self.progress_bar and log_pbar:
                 if isinstance(item, torch.Tensor):
                     item = item.item()
                 self._pbar_str[key] = item
@@ -463,14 +463,14 @@ class Trainer:
         loss_str = indent(f"loss={self.loss_module}", 4 * " ")
         collector_str = indent(f"collector={self.collector}", 4 * " ")
         optimizer_str = indent(f"optimizer={self.optimizer}", 4 * " ")
-        writer = indent(f"writer={self.writer}", 4 * " ")
+        logger = indent(f"logger={self.logger}", 4 * " ")
 
         string = "\n".join(
             [
                 loss_str,
                 collector_str,
                 optimizer_str,
-                writer,
+                logger,
             ]
         )
         string = f"Trainer(\n{string})"

@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from asyncio.log import logger
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import Callable, Optional, Union, Any
@@ -29,6 +30,7 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.transforms.transforms import gSDENoise, FlattenObservation
 from torchrl.record.recorder import VideoRecorder
+from torchrl.trainers.loggers import Logger
 
 __all__ = [
     "correct_for_frame_skip",
@@ -82,7 +84,7 @@ def make_env_transforms(
     env,
     cfg,
     video_tag,
-    writer,
+    logger,
     env_name,
     stats,
     norm_obs_only,
@@ -106,7 +108,7 @@ def make_env_transforms(
             center_crop = center_crop[0]
         env.append_transform(
             VideoRecorder(
-                writer=writer,
+                logger=logger,
                 tag=f"{video_tag}_{env_name}_video",
                 center_crop=center_crop,
             ),
@@ -207,7 +209,7 @@ def make_env_transforms(
 def transformed_env_constructor(
     cfg: "DictConfig",
     video_tag: str = "",
-    writer: Optional["SummaryWriter"] = None,
+    logger: Optional[Logger] = None,
     stats: Optional[dict] = None,
     norm_obs_only: bool = False,
     use_env_creator: bool = True,
@@ -223,8 +225,8 @@ def transformed_env_constructor(
 
     Args:
         cfg (DictConfig): a DictConfig containing the arguments of the script.
-        video_tag (str, optional): video tag to be passed to the SummaryWriter object
-        writer (SummaryWriter, optional): tensorboard writer associated with the script
+        video_tag (str, optional): video tag to be passed to the Logger object
+        logger (Logger, optional): logger associated with the script
         stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.
@@ -282,7 +284,7 @@ def transformed_env_constructor(
             env,
             cfg,
             video_tag,
-            writer,
+            logger,
             env_name,
             stats,
             norm_obs_only,
