@@ -8,12 +8,12 @@ from __future__ import annotations
 import functools
 import os
 import tempfile
-from math import prod
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 
+from torchrl import prod
 from torchrl.data.tensordict.utils import _getitem_batch_size
 from torchrl.data.utils import (
     DEVICE_TYPING,
@@ -257,6 +257,8 @@ class MemmapTensor(object):
         if memmap_array is None:
             memmap_array = self.memmap_array
         if idx is not None:
+            if isinstance(idx, torch.Tensor):
+                idx = idx.cpu()
             memmap_array = memmap_array[idx]
         out = self._np_to_tensor(memmap_array)
         if (
@@ -382,10 +384,8 @@ class MemmapTensor(object):
         return self
 
     def __del__(self) -> None:
-        # if hasattr(self, "filename"):
-        if self._has_ownership:
+        if "_has_ownership" in self.__dir__() and self._has_ownership:
             os.unlink(self.filename)
-            # self.file.close()
 
     def __eq__(self, other: Any) -> torch.Tensor:
         if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
@@ -398,7 +398,9 @@ class MemmapTensor(object):
                 attr
             )  # make sure that appropriate exceptions are raised
 
-        if attr not in self.__getattribute__("_tensor_dir"):
+        if ("_tensor_dir" not in self.__dir__()) or (
+            attr not in self.__getattribute__("_tensor_dir")
+        ):
             raise AttributeError(f"{attr} not found")
         _tensor = self.__getattribute__("_tensor")
         return getattr(_tensor, attr)
@@ -450,8 +452,10 @@ class MemmapTensor(object):
         return self._load_item(idx=item)
 
     def __setitem__(self, idx: INDEX_TYPING, value: torch.Tensor):
-        # self.memmap_array[idx] = to_numpy(value)
-        self._load_item()[idx] = value
+        if self.device == torch.device("cpu"):
+            self._load_item()[idx] = value
+        else:
+            self.memmap_array[idx] = to_numpy(value)
 
     def __setstate__(self, state: dict) -> None:
         if state["file"] is None:

@@ -6,6 +6,7 @@
 import argparse
 from copy import deepcopy
 
+import functorch
 import numpy as np
 import pytest
 import torch
@@ -42,7 +43,7 @@ from torchrl.objectives import (
     ClipPPOLoss,
     KLPENPPOLoss,
 )
-from torchrl.objectives.costs.common import _LossModule
+from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.deprecated import (
     REDQLoss_deprecated,
     DoubleREDQLoss_deprecated,
@@ -1392,6 +1393,64 @@ class TestPPO:
                 assert "critic" in name
         actor.zero_grad()
 
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    @pytest.mark.parametrize("gradient_mode", (True, False))
+    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda"))
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_ppo_diff(self, loss_class, device, gradient_mode, advantage):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_ppo(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        if advantage == "gae":
+            advantage = GAE(
+                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        elif advantage == "td":
+            advantage = TDEstimate(
+                gamma=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        elif advantage == "td_lambda":
+            advantage = TDLambdaEstimate(
+                gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
+            )
+        else:
+            raise NotImplementedError
+
+        loss_fn = loss_class(
+            actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
+        )
+        floss_fn, params, buffers = functorch.make_functional_with_buffers(loss_fn)
+
+        loss = floss_fn(params, buffers, td)
+        loss_critic = loss["loss_critic"]
+        loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
+        loss_critic.backward(retain_graph=True)
+        # check that grads are independent and non null
+        named_parameters = loss_fn.named_parameters()
+        for (name, _), p in zip(named_parameters, params):
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" not in name
+                assert "critic" in name
+            if p.grad is None:
+                assert "actor" in name
+                assert "critic" not in name
+
+        for param in params:
+            param.grad = None
+        loss_objective.backward()
+        named_parameters = loss_fn.named_parameters()
+        for (name, _), p in zip(named_parameters, params):
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "critic" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "critic" in name
+        for param in params:
+            param.grad = None
+
 
 class TestReinforce:
     @pytest.mark.parametrize("delay_value", [True, False])
@@ -1547,7 +1606,7 @@ def test_updater(mode, value_network_update_interval, device):
         elif mode == "soft":
             upd = SoftUpdate(module, 1 - 1 / value_network_update_interval)
 
-    class custom_module(_LossModule):
+    class custom_module(LossModule):
         def __init__(self):
             super().__init__()
             module1 = torch.nn.BatchNorm2d(10).eval()
@@ -1705,7 +1764,7 @@ def test_shared_params(dest, expected_dtype, expected_device):
     )
     td_module = ActorValueOperator(td_module_hidden, td_module_action, td_module_value)
 
-    class MyLoss(_LossModule):
+    class MyLoss(LossModule):
         def __init__(self, actor_network, qvalue_network):
             super().__init__()
             self.convert_to_functional(

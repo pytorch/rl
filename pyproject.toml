@@ -1,0 +1,10 @@
+#[tool.usort]
+
+first_party_detection = false
+
+target-version = ["py38"]
+
+excludes = [
+    "gallery",
+    "tutorials",
+]

@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-import math
 import os
 import queue
 import time
@@ -20,7 +19,7 @@ from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
-from .. import _check_for_faulty_process
+from .. import _check_for_faulty_process, prod
 from ..modules.tensordict_module import ProbabilisticTensorDictModule
 from .utils import split_trajectories
 
@@ -485,7 +484,7 @@ class SyncDataCollector(_DataCollector):
         """Resets the environments to a new initial state."""
         if index is not None:
             # check that the env supports partial reset
-            if np.prod(self.env.batch_size) == 0:
+            if prod(self.env.batch_size) == 0:
                 raise RuntimeError("resetting unique env with index is not permitted.")
             reset_workers = torch.zeros(
                 *self.env.batch_size,
@@ -981,7 +980,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 out = split_trajectories(out)
                 frames += out.get("mask").sum()
             else:
-                frames += math.prod(out.shape)
+                frames += prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
@@ -991,7 +990,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
             yield out
 
         del out_tensordicts_shared
-        self._shutdown_main()
+        # We shall not call shutdown just yet as user may want to retrieve state_dict
+        # self._shutdown_main()
 
 
 class MultiaSyncDataCollector(_MultiDataCollector):
@@ -1080,7 +1080,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                 out = out.exclude(*excluded_keys)
             yield out
 
-        self._shutdown_main()
+        # We don't want to shutdown yet, the user may want to call state_dict before
+        # self._shutdown_main()
         self.running = False
 
     def _shutdown_main(self) -> None:
