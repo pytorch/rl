@@ -1022,7 +1022,7 @@ class TestTensorDicts:
         actual_td = td_clone[idx].clone().zero_()
 
         for key in actual_td.keys():
-            assert (actual_td[idx].get(key) == 0).all()
+            assert (actual_td.get(key) == 0).all()
         td_clone[idx] = actual_td
         for key in td_clone.keys():
             assert (td_clone[idx].get(key) == 0).all()
