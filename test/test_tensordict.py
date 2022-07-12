@@ -940,6 +940,7 @@ class TestTensorDicts:
             "stacked_td",
             "saved_td",
             "unsqueezed_td",
+            "squeezed_td",
             "sub_td",
             "permute_td",
         ):
