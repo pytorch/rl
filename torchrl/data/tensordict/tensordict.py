@@ -261,7 +261,6 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
-    @abc.abstractmethod
     def _stack_onto_at_(
         self,
         key: str,
@@ -269,8 +268,13 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         dim: int,
         idx: INDEX_TYPING,
     ) -> _TensorDict:
-        """Similar to _stack_onto_ but on a specific index"""
-        raise NotImplementedError(f"{self.__class__.__name__}")
+        """Similar to _stack_onto_ but on a specific index. Only works with regular TensorDicts."""
+        raise RuntimeError(
+            f"Cannot call _stack_onto_at_ with {self.__class__.__name__}. "
+            "This error is probably caused by a call to a lazy operation before stacking. "
+            "Make sure your sub-classed tensordicts are turned into regular tensordicts by calling to_tensordict() "
+            "before calling __getindex__ and stack."
+        )
 
     def _default_get(
         self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
@@ -2366,15 +2370,6 @@ torch.Size([3, 2])
         self._source._stack_onto_at_(key, list_item, dim=dim, idx=self.idx)
         return self
 
-    def _stack_onto_at_(
-        self,
-        key: str,
-        list_item: List[COMPATIBLE_TYPES],
-        dim: int,
-        idx: INDEX_TYPING,
-    ) -> _TensorDict:
-        raise RuntimeError("Indexing tensors of type SubTensorDict is not allowed")
-
     def to(self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs) -> _TensorDict:
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             if isinstance(self, dest):
@@ -2812,18 +2807,6 @@ class LazyStackedTensorDict(_TensorDict):
             self.set_(key, torch.stack(list_item, dim))
         return self
 
-    def _stack_onto_at_(
-        self,
-        key: str,
-        list_item: List[COMPATIBLE_TYPES],
-        dim: int,
-        idx: INDEX_TYPING,
-    ) -> _TensorDict:
-        if dim == self.stack_dim:
-            for source, tensordict_dest in zip(list_item, self.tensordicts):
-                tensordict_dest.set_at_(key, source, idx)
-        return self
-
     def get(
         self,
         key: str,
@@ -3236,20 +3219,6 @@ class SavedTensorDict(_TensorDict):
         self._save(td)
         return self
 
-    def _stack_onto_at_(
-        self,
-        key: str,
-        list_item: List[COMPATIBLE_TYPES],
-        dim: int,
-        idx: INDEX_TYPING,
-    ) -> _TensorDict:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
-        td = self._load()
-        td._stack_onto_at_(key, list_item, dim, idx)
-        self._save(td)
-        return self
-
     def set_(
         self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
     ) -> _TensorDict:
@@ -3641,18 +3610,6 @@ class _CustomOpTensorDict(_TensorDict):
             f"consider calling 'to_tensordict()` first"
         )
 
-    def _stack_onto_at_(
-        self,
-        key: str,
-        list_item: List[COMPATIBLE_TYPES],
-        dim: int,
-        idx: INDEX_TYPING,
-    ) -> _TensorDict:
-        raise RuntimeError(
-            f"stacking tensordicts is not allowed for type {type(self)}"
-            f"consider calling 'to_tensordict()` first"
-        )
-
     def __repr__(self) -> str:
         custom_op_kwargs_str = ", ".join(
             [f"{key}={value}" for key, value in self.custom_op_kwargs.items()]
@@ -3787,33 +3744,10 @@ class UnsqueezedTensorDict(_CustomOpTensorDict):
     ) -> _TensorDict:
         unsqueezed_dim = self.custom_op_kwargs["dim"]
         diff_to_apply = 1 if dim < unsqueezed_dim else 0
-        list_item_unsqueeze = [item.squeeze(unsqueezed_dim - diff_to_apply) for item in list_item]
+        list_item_unsqueeze = [
+            item.squeeze(unsqueezed_dim - diff_to_apply) for item in list_item
+        ]
         return self._source._stack_onto_(key, list_item_unsqueeze, dim)
-
-    def _stack_onto_at_(
-        self,
-        key: str,
-        list_item: List[COMPATIBLE_TYPES],
-        dim: int,
-        idx: INDEX_TYPING,
-    ) -> _TensorDict:
-        unsqueezed_dim = self.custom_op_kwargs["dim"]
-        if isinstance(idx, tuple) and len(idx) > unsqueezed_dim:
-            # e.g. unsqueezed_dim=1 and idx = (0, 1)
-            if idx[unsqueezed_dim] not in (slice(None), 0):
-                raise RuntimeError(
-                    f"Cannot index a tensordict with shapre {self.batch_size} with index {idx}"
-                )
-            idx = [_idx for i, _idx in enumerate(idx) if i != unsqueezed_dim]
-        elif isinstance(idx, torch.Tensor) and idx.ndimension() > unsqueezed_dim:
-            if idx.shape[unsqueezed_dim] != 1 or idx[unsqueezed_dim] != 0:
-                raise RuntimeError(
-                    f"Cannot index a tensordict with shapre {self.batch_size} with index {idx}"
-                )
-            idx = idx.squeeze(dim)
-        unsqueezed_dim = self.custom_op_kwargs["dim"]
-        list_item_unsqueeze = [item.squeeze(unsqueezed_dim) for item in unsqueezed_dim]
-        return self._source._stack_onto_at_(key, list_item_unsqueeze, dim, idx)
 
 
 class SqueezedTensorDict(_CustomOpTensorDict):
@@ -3843,29 +3777,11 @@ class SqueezedTensorDict(_CustomOpTensorDict):
         # dim=1, squeezed_dim=2, [3, 4, 5] [3, 4, 1, 5] [[3, 5], [3, 5], [3, 5], [3, 4]] => unsq 1
         # dim=2, squeezed_dim=2, [3, 4, 5] [3, 4, 1, 5] [[3, 4], [3, 4], ...] => unsq 2
         diff_to_apply = 1 if dim < squeezed_dim else 0
-        list_item_unsqueeze = [item.unsqueeze(squeezed_dim - diff_to_apply) for item in list_item]
+        list_item_unsqueeze = [
+            item.unsqueeze(squeezed_dim - diff_to_apply) for item in list_item
+        ]
         return self._source._stack_onto_(key, list_item_unsqueeze, dim)
 
-    def _stack_onto_at_(
-        self,
-        key: str,
-        list_item: List[COMPATIBLE_TYPES],
-        dim: int,
-        idx: INDEX_TYPING,
-    ) -> _TensorDict:
-        squeezed_dim = self.custom_op_kwargs["dim"]
-        # we may have to insert a (0,) in a tuple, or unsqueeze a tensor index
-        if isinstance(idx, int) and squeezed_dim == 0:
-            idx = (slice(None), idx)
-        elif isinstance(idx, tuple) and len(idx) > squeezed_dim:
-            # e.g. squeezed_dim=1 and idx = (0, 1)
-            n = len(idx)
-            idx = list(idx)
-            idx.insert(squeezed_dim, slice(None))
-        elif isinstance(idx, torch.Tensor) and idx.ndimension() > squeezed_dim:
-            idx = idx.unsqueeze(dim)
-        list_item_unsqueeze = [item.squeeze(squeezed_dim) for item in squeezed_dim]
-        return self._source._stack_onto_at_(key, list_item_unsqueeze, dim, idx)
 
 class ViewedTensorDict(_CustomOpTensorDict):
     def _update_custom_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:
