@@ -1,6 +1,10 @@
 from torch import Tensor
 
 
+__all__ = [
+    "TensorboardLogger"
+]
+
 class Logger:
     """
         A template for loggers
