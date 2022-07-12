@@ -238,17 +238,18 @@ class MetaTensor:
 
     def squeeze(self, dim: Optional[int] = None) -> MetaTensor:
         clone = self.clone()
-        shape = [i for i in clone.shape]
+        shape = clone.shape
         if dim is None:
             new_shape = [i for i in shape if i != 1]
         else:
             new_shape = []
-        for i in range(len(shape)):
-            if i == dim and shape[0] == 1:
-                continue
-            else:
-                new_shape.append(shape[0])
-            shape = shape[1:]
+            for i in range(len(shape)):
+                if i == dim and shape[0] == 1:
+                    shape = shape[1:]
+                    continue
+                else:
+                    new_shape.append(shape[0])
+                    shape = shape[1:]
         clone.shape = torch.Size(new_shape)
         return clone
 
