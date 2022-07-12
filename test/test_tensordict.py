@@ -508,6 +508,7 @@ TD_BATCH_SIZE = 4
         "saved_td",
         "memmap_td",
         "unsqueezed_td",
+        "squeezed_td",
         "td_reset_bs",
         "nested_td",
         "permute_td",
@@ -613,6 +614,18 @@ class TestTensorDicts:
             batch_size=[4, 3, 2],
         )
         return td.unsqueeze(-1)
+
+    @property
+    def squeezed_td(self):
+        td = TensorDict(
+            source={
+                "a": torch.randn(4, 3, 1, 2, 1, 5),
+                "b": torch.randn(4, 3, 1, 2, 1, 10),
+                "c": torch.randint(10, (4, 3, 1, 2, 1, 3)),
+            },
+            batch_size=[4, 3, 1, 2, 1],
+        )
+        return td.squeeze(2)
 
     @property
     def td_reset_bs(self):
@@ -927,6 +940,7 @@ class TestTensorDicts:
             "stacked_td",
             "saved_td",
             "unsqueezed_td",
+            "squeezed_td",
             "sub_td",
             "permute_td",
         ):
