@@ -631,7 +631,7 @@ class TestTensorDicts:
         return td.squeeze(2)
 
     def td_reset_bs(self, device):
-        td = td = TensorDict(
+        td = TensorDict(
             source={
                 "a": torch.randn(4, 3, 2, 1, 5, device=device),
                 "b": torch.randn(4, 3, 2, 1, 10, device=device),
@@ -729,7 +729,7 @@ class TestTensorDicts:
     def test_masked_fill_(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        mask = torch.zeros(td.shape, dtype=torch.bool).bernoulli_()
+        mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
         new_td = td.masked_fill_(mask, -10.0)
         assert new_td is td
         for k, item in td.items():
@@ -738,7 +738,7 @@ class TestTensorDicts:
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        mask = torch.zeros(td.shape, dtype=torch.bool).bernoulli_()
+        mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
         new_td = td.masked_fill(mask, -10.0)
         assert new_td is not td
         for k, item in new_td.items():
@@ -755,7 +755,7 @@ class TestTensorDicts:
     def test_from_empty(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        new_td = TensorDict({}, batch_size=td.batch_size)
+        new_td = TensorDict({}, batch_size=td.batch_size, device=device)
         for key, item in td.items():
             new_td.set(key, item)
         assert_allclose_td(td, new_td)
@@ -765,7 +765,9 @@ class TestTensorDicts:
     def test_masking(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        mask = torch.zeros(td.batch_size, dtype=torch.bool).bernoulli_(0.8)
+        mask = torch.zeros(td.batch_size, dtype=torch.bool, device=device).bernoulli_(
+            0.8
+        )
         td_masked = td[mask]
         td_masked2 = torch.masked_select(td, mask)
         assert_allclose_td(td_masked, td_masked2)
@@ -777,13 +779,12 @@ class TestTensorDicts:
     )
     @pytest.mark.parametrize("device_cast", [0, "cuda:0", torch.device("cuda:0")])
     def test_pin_memory(self, td_name, device_cast, device):
-        device = device_cast
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         if td_name != "saved_td":
             td.pin_memory()
-            td_device = td.to(device)
-            _device = torch.device(device)
+            td_device = td.to(device_cast)
+            _device = torch.device(device_cast)
             assert td_device.device == _device
             assert td_device.clone().device == _device
             assert td_device is not td
@@ -805,28 +806,27 @@ class TestTensorDicts:
     )
     @pytest.mark.parametrize("device_cast", get_available_devices())
     def test_cast_device(self, td_name, device, device_cast):
-        device = device_cast
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td_device = td.to(device)
+        td_device = td.to(device_cast)
 
         for k, item in td_device.items_meta():
-            assert item.device == device
+            assert item.device == device_cast
         for k, item in td_device.items():
-            assert item.device == device
+            assert item.device == device_cast
         for k, item in td_device.clone().items():
-            assert item.device == device
+            assert item.device == device_cast
 
-        assert td_device.device == device, (
+        assert td_device.device == device_cast, (
             f"td_device first tensor device is " f"{next(td_device.items())[1].device}"
         )
-        assert td_device.clone().device == device
+        assert td_device.clone().device == device_cast
         if device != td.device:
             assert td_device is not td
         assert td_device.to(device) is td_device
-        assert td.to("cpu") is td
+        assert td.to(device) is td
         # assert type(td_device) is type(td)
-        assert_allclose_td(td, td_device.to("cpu"))
+        assert_allclose_td(td, td_device.to(device))
 
     @pytest.mark.skipif(
         torch.cuda.device_count() == 0, reason="No cuda device detected"
@@ -988,7 +988,7 @@ class TestTensorDicts:
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         r = torch.randn_like(td.get("a"))
-        td.set("numpy", r.numpy())
+        td.set("numpy", r.cpu().numpy())
         torch.testing.assert_allclose(td.get("numpy"), r)
 
     @pytest.mark.parametrize(
@@ -1020,8 +1020,10 @@ class TestTensorDicts:
         idx = actual_index
         td_clone = td.clone()
         actual_td = td_clone[idx].clone().zero_()
-        td_clone[idx] = actual_td
 
+        for key in actual_td.keys():
+            assert (actual_td[idx].get(key) == 0).all()
+        td_clone[idx] = actual_td
         for key in td_clone.keys():
             assert (td_clone[idx].get(key) == 0).all()
 
@@ -1148,23 +1150,23 @@ class TestTensorDicts:
 
     def test_nested_td_emptyshape(self, td_name, device):
         td = getattr(self, td_name)(device)
-        tdin = TensorDict({"inner": torch.randn(*td.shape, 1)}, [])
+        tdin = TensorDict({"inner": torch.randn(*td.shape, 1)}, [], device=device)
         td["inner_td"] = tdin
         tdin.batch_size = td.batch_size
         assert (td["inner_td"] == tdin).all()
 
     def test_nested_td(self, td_name, device):
         td = getattr(self, td_name)(device)
-        tdin = TensorDict({"inner": torch.randn(td.shape)}, td.shape)
+        tdin = TensorDict({"inner": torch.randn(td.shape)}, td.shape, device=device)
         td.set("inner_td", tdin)
         assert (td["inner_td"] == tdin).all()
 
     def test_nested_td_index(self, td_name, device):
         td = getattr(self, td_name)(device)
 
-        sub_td = TensorDict({}, [*td.shape, 2])
-        a = torch.zeros([*td.shape, 2, 2])
-        sub_sub_td = TensorDict({"a": a}, [*td.shape, 2, 2])
+        sub_td = TensorDict({}, [*td.shape, 2], device=device)
+        a = torch.zeros([*td.shape, 2, 2], device=device)
+        sub_sub_td = TensorDict({"a": a}, [*td.shape, 2, 2], device=device)
         sub_td.set("sub_sub_td", sub_sub_td)
         td.set("sub_td", sub_td)
         assert (td["sub_td", "sub_sub_td", "a"] == 0).all()
