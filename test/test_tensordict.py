@@ -515,9 +515,7 @@ TD_BATCH_SIZE = 4
         "permute_td",
     ],
 )
-@pytest.mark.parametrize(
-    "device", get_available_devices()
-)
+@pytest.mark.parametrize("device", get_available_devices())
 class TestTensorDicts:
     def td(self, device):
         return TensorDict(
@@ -587,7 +585,7 @@ class TestTensorDicts:
         td = TensorDict(
             source={
                 "a": torch.randn(4, 2, 3, 2, 1, 5, device=device),
-                "b": torch.randn(4, 2,3, 2, 1, 10, device=device),
+                "b": torch.randn(4, 2, 3, 2, 1, 10, device=device),
                 "c": torch.randint(10, (4, 2, 3, 2, 1, 3), device=device),
             },
             batch_size=[4, 2, 3, 2, 1],
