@@ -620,11 +620,14 @@ dtype=torch.float32)},
             >>> assert td_expand.shape == torch.Size([10, 3, 4])
             >>> assert td_expand.get("a").shape == torch.Size([10, 3, 4, 5])
         """
-
+        d = dict()
+        for key, value in self.items():
+            if isinstance(value, _TensorDict):
+                d[key] = value.expand(*shape)
+            else:
+                d[key] = value.expand(*shape, *value.shape)
         return TensorDict(
-            source={
-                key: value.expand(*shape, *value.shape) for key, value in self.items()
-            },
+            source=d,
             batch_size=[*shape, *self.batch_size],
             device=self._device_safe(),
         )
@@ -1847,7 +1850,12 @@ class TensorDict(_TensorDict):
         same tensordict with new tensors with expanded shapes.
         """
         _batch_size = torch.Size([*shape, *self.batch_size])
-        d = {key: value.expand(*shape, *value.shape) for key, value in self.items()}
+        d = dict()
+        for key, value in self.items():
+            if isinstance(value, _TensorDict):
+                d[key] = value.expand(*shape)
+            else:
+                d[key] = value.expand(*shape, *value.shape)
         return TensorDict(source=d, batch_size=_batch_size, device=self._device_safe())
 
     def set(
@@ -1962,12 +1970,12 @@ class TensorDict(_TensorDict):
             idx = idx[0]
         if isinstance(idx, (int, slice)) or (
             isinstance(idx, tuple)
-            and all(isinstance(idx, (int, slice)) for _idx in idx)
+            and all(isinstance(_idx, (int, slice)) for _idx in idx)
         ):
             torch.stack(list_item, dim=dim, out=self._tensordict[key][idx])
         else:
             raise ValueError(
-                f"Cannot stack onto an indexed tensor with index of type {type(idx)} "
+                f"Cannot stack onto an indexed tensor with index {idx} "
                 f"as its storage differs."
             )
         return self
@@ -4140,8 +4148,30 @@ class PermutedTensorDict(_CustomOpTensorDict):
             self.custom_op_kwargs["dims"],
         )
         kwargs = deepcopy(self.custom_op_kwargs)
-        kwargs.update({"dims": new_dims})
+        kwargs.update({"dims": tuple(np.argsort(new_dims))})
         return kwargs
+
+    def _stack_onto_(
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+    ) -> _TensorDict:
+
+        permute_dims = self.custom_op_kwargs["dims"]
+        inv_permute_dims = np.argsort(permute_dims)
+        new_dim = [i for i, v in enumerate(inv_permute_dims) if v == dim][0]
+        inv_permute_dims = [p for p in inv_permute_dims if p != dim]
+        inv_permute_dims = np.argsort(np.argsort(inv_permute_dims))
+
+        list_permuted_items = []
+        for item in list_item:
+            perm = list(inv_permute_dims) + list(
+                range(self.batch_dims - 1, item.ndimension())
+            )
+            list_permuted_items.append(item.permute(*perm))
+        self._source._stack_onto_(key, list_permuted_items, new_dim)
+        return self
 
 
 def _td_fields(td: _TensorDict) -> str:

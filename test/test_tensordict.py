@@ -601,12 +601,20 @@ class TestTensorDicts:
     def permute_td(self, device):
         return TensorDict(
             source={
-                "a": torch.randn(3, 4, 2, 1, 5, device=device),
-                "b": torch.randn(3, 4, 2, 1, 10, device=device),
-                "c": torch.randint(10, (3, 4, 2, 1, 3), device=device),
+                "a": torch.randn(3, 1, 4, 2, 5, device=device),
+                "b": torch.randn(3, 1, 4, 2, 10, device=device),
+                "c": torch.randint(10, (3, 1, 4, 2, 3), device=device),
             },
-            batch_size=[3, 4, 2, 1],
-        ).permute(1, 0, 2, 3)
+            batch_size=[3, 1, 4, 2],
+        ).permute(2, 0, 3, 1)
+        # return TensorDict(
+        #     source={
+        #         "a": torch.randn(3, 1, 2, 4, 5, device=device),
+        #         "b": torch.randn(3, 1, 2, 4, 10, device=device),
+        #         "c": torch.randint(10, (3, 1, 2, 4, 3), device=device),
+        #     },
+        #     batch_size=[3, 1, 2, 4],
+        # ).permute(2, 0, 1, 3)
 
     def unsqueezed_td(self, device):
         td = TensorDict(
@@ -1060,6 +1068,7 @@ class TestTensorDicts:
         del td["a"]
         assert "a" not in td.keys()
 
+    @pytest.mark.filterwarnings("error")
     def test_stack_tds_on_subclass(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
