@@ -485,6 +485,7 @@ TD_BATCH_SIZE = 4
         "saved_td",
         "memmap_td",
         "unsqueezed_td",
+        "squeezed_td",
         "td_reset_bs",
     ],
 )
@@ -565,8 +566,20 @@ class TestTensorDicts:
         return td.unsqueeze(-1)
 
     @property
+    def squeezed_td(self):
+        td = TensorDict(
+            source={
+                "a": torch.randn(4, 3, 1, 2, 1, 5),
+                "b": torch.randn(4, 3, 1, 2, 1, 10),
+                "c": torch.randint(10, (4, 3, 1, 2, 1, 3)),
+            },
+            batch_size=[4, 3, 1, 2, 1],
+        )
+        return td.squeeze(2)
+
+    @property
     def td_reset_bs(self):
-        td = td = TensorDict(
+        td = TensorDict(
             source={
                 "a": torch.randn(4, 3, 2, 1, 5),
                 "b": torch.randn(4, 3, 2, 1, 10),
@@ -939,28 +952,26 @@ class TestTensorDicts:
         assert "a" not in td.keys()
 
     def test_stack_tds_on_subclass(self, td_name):
-        if td_name in ("memmap_td", "unsqueezed_td"):
-            pytest.mark.skip()
-            return
         torch.manual_seed(1)
         td = getattr(self, td_name)
-        tds_count = list(td.batch_size)[0]
-        tds_batch_size = list(td.batch_size)[1:]
+        tds_count = td.batch_size[0]
+        tds_batch_size = td.batch_size[1:]
         tds_list = [
             TensorDict(
                 source={
-                    "a": torch.randn(*tds_batch_size, 5),
-                    "b": torch.randn(*tds_batch_size, 10),
-                    "c": torch.randint(10, (*tds_batch_size, 3)),
+                    "a": torch.ones(*tds_batch_size, 5),
+                    "b": torch.ones(*tds_batch_size, 10),
+                    "c": torch.ones(*tds_batch_size, 3, dtype=torch.long),
                 },
                 batch_size=tds_batch_size,
             )
             for _ in range(tds_count)
         ]
-        stacked_td = stack_td(tds_list, 0, contiguous=True, out=td)
+        stacked_td = torch.stack(tds_list, 0, out=td)
         assert stacked_td.batch_size == td.batch_size
+        assert stacked_td is td
         for key in ("a", "b", "c"):
-            assert (stacked_td[key] == td[key]).all()
+            assert (stacked_td[key] == 1).all()
 
     def test_stack_subclasses_on_td(self, td_name):
         torch.manual_seed(1)

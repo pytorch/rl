@@ -2807,6 +2807,9 @@ class LazyStackedTensorDict(_TensorDict):
         if dim == self.stack_dim:
             for source, tensordict_dest in zip(list_item, self.tensordicts):
                 tensordict_dest.set_(key, source)
+        else:
+            # we must stack and unbind, there is no way to make it more efficient
+            self.set_(key, torch.stack(list_item, dim))
         return self
 
     def _stack_onto_at_(
@@ -3776,6 +3779,42 @@ class UnsqueezedTensorDict(_CustomOpTensorDict):
             return self._source
         return super().squeeze(dim)
 
+    def _stack_onto_(
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+    ) -> _TensorDict:
+        unsqueezed_dim = self.custom_op_kwargs["dim"]
+        diff_to_apply = 1 if dim < unsqueezed_dim else 0
+        list_item_unsqueeze = [item.squeeze(unsqueezed_dim - diff_to_apply) for item in list_item]
+        return self._source._stack_onto_(key, list_item_unsqueeze, dim)
+
+    def _stack_onto_at_(
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+        idx: INDEX_TYPING,
+    ) -> _TensorDict:
+        unsqueezed_dim = self.custom_op_kwargs["dim"]
+        if isinstance(idx) and len(idx) > unsqueezed_dim:
+            # e.g. unsqueezed_dim=1 and idx = (0, 1)
+            if idx[unsqueezed_dim] not in (slice(None), 0):
+                raise RuntimeError(
+                    f"Cannot index a tensordict with shapre {self.batch_size} with index {idx}"
+                )
+            idx = [_idx for i, _idx in enumerate(idx) if i != unsqueezed_dim]
+        elif isinstance(idx, torch.Tensor) and idx.ndimension() > unsqueezed_dim:
+            if idx.shape[unsqueezed_dim] != 1 or idx[unsqueezed_dim] != 0:
+                raise RuntimeError(
+                    f"Cannot index a tensordict with shapre {self.batch_size} with index {idx}"
+                )
+            idx = idx.squeeze(dim)
+        unsqueezed_dim = self.custom_op_kwargs["dim"]
+        list_item_unsqueeze = [item.squeeze(unsqueezed_dim) for item in unsqueezed_dim]
+        return self._source._stack_onto_at_(key, list_item_unsqueeze, dim, idx)
+
 
 class SqueezedTensorDict(_CustomOpTensorDict):
     """
@@ -3793,6 +3832,21 @@ class SqueezedTensorDict(_CustomOpTensorDict):
             return self._source
         return super().unsqueeze(dim)
 
+    def _stack_onto_(
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+    ) -> _TensorDict:
+        raise RuntimeError
+
+    def _stack_onto_at_(
+        self,
+        key: str,
+        list_item: List[COMPATIBLE_TYPES],
+        dim: int,
+    ) -> _TensorDict:
+        raise RuntimeError
 
 class ViewedTensorDict(_CustomOpTensorDict):
     def _update_custom_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:

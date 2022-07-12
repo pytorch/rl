@@ -538,7 +538,10 @@ def stack(
     list_of_tensors = [
         a._tensor if isinstance(a, MemmapTensor) else a for a in list_of_memmap
     ]
-    return torch.stack(list_of_tensors, dim, out=out)
+    if isinstance(out, MemmapTensor):
+        return torch.stack(list_of_tensors, dim, out=out._tensor)
+    else:
+        return torch.stack(list_of_tensors, dim, out=out)
 
 
 @implements_for_memmap(torch.unbind)
