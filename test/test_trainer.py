@@ -224,6 +224,7 @@ def test_subsampler():
 @pytest.mark.skipif(not _has_tb, reason="No tensorboard library")
 def test_recorder():
     with tempfile.TemporaryDirectory() as folder:
+        print(folder)
         logger = TensorboardLogger(exp_name=folder)
         args = Namespace()
         args.env_name = "ALE/Pong-v5"

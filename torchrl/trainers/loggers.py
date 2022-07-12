@@ -16,7 +16,7 @@ class Logger:
 
 class TensorboardLogger(Logger):
     def __init__(self, exp_name: str):
-        super().__init__(self, exp_name)
+        super().__init__(exp_name=exp_name)
 
         self._has_imported_moviepy = False
         
@@ -43,6 +43,6 @@ class TensorboardLogger(Logger):
             global_step=self,
             **self.kwargs,
         )
-    def log_hparams(self, cfg):
+    def log_hparams(self, cfg: "DictConfig"):
         txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(cfg).items())])
         self.experiment.add_text("hparams", txt)
