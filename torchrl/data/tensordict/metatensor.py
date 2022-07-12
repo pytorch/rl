@@ -69,8 +69,9 @@ class MetaTensor:
         requires_grad: bool = False,
         _is_shared: Optional[bool] = None,
         _is_memmap: Optional[bool] = None,
+        _is_tensordict: Optional[bool] = None,
     ):
-
+        _repr_tensordict = None
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
             shape = tensor.shape
@@ -79,12 +80,20 @@ class MetaTensor:
             if _is_memmap is None:
                 _is_memmap = isinstance(tensor, MemmapTensor)
             device = tensor.device if not tensor.is_meta else device
-            dtype = tensor.dtype
+            if _is_tensordict is None:
+                _is_tensordict = not isinstance(tensor, (MemmapTensor, torch.Tensor))
+            if isinstance(tensor, (MemmapTensor, torch.Tensor)):
+                dtype = tensor.dtype
+            else:
+                dtype = None
+                _repr_tensordict = str(tensor)
+
             requires_grad = (
                 tensor.requires_grad
                 if isinstance(tensor, torch.Tensor)
                 else requires_grad
             )
+
         if not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
         self.shape = shape
@@ -95,13 +104,23 @@ class MetaTensor:
         self._numel = np.prod(shape)
         self._is_shared = bool(_is_shared)
         self._is_memmap = bool(_is_memmap)
-        if _is_memmap:
+        self._is_tensordict = bool(_is_tensordict)
+        self._repr_tensordict = _repr_tensordict
+        if _is_tensordict:
+            name = "TensorDict"
+        elif _is_memmap:
             name = "MemmapTensor"
         elif _is_shared:
             name = "SharedTensor"
         else:
             name = "Tensor"
         self.class_name = name
+
+    def get_repr(self):
+        if self.is_tensordict():
+            return self._repr_tensordict
+        else:
+            return f"{self.class_name}({self.shape}, dtype={self.dtype})"
 
     def memmap_(self) -> MetaTensor:
         """Changes the storage of the MetaTensor to memmap.
@@ -132,6 +151,9 @@ class MetaTensor:
     def is_memmap(self) -> bool:
         return self._is_memmap
 
+    def is_tensordict(self) -> bool:
+        return self._is_tensordict
+
     def numel(self) -> int:
         return self._numel
 
@@ -152,6 +174,7 @@ class MetaTensor:
             requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
+            _is_tensordict=self.is_tensordict(),
         )
 
     def _to_meta(self) -> torch.Tensor:
@@ -166,6 +189,7 @@ class MetaTensor:
             requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
+            _is_tensordict=self.is_tensordict(),
         )
 
     @classmethod
@@ -255,6 +279,7 @@ class MetaTensor:
             requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
+            _is_tensordict=self.is_tensordict(),
         )
 
 

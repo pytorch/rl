@@ -382,10 +382,8 @@ class MemmapTensor(object):
         return self
 
     def __del__(self) -> None:
-        # if hasattr(self, "filename"):
         if "_has_ownership" in self.__dir__() and self._has_ownership:
             os.unlink(self.filename)
-            # self.file.close()
 
     def __eq__(self, other: Any) -> torch.Tensor:
         if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
