@@ -841,7 +841,7 @@ class TestTensorDicts:
         td = getattr(self, td_name)
         assert (torch.clone(td) == td).all()
         assert td.batch_size == torch.clone(td).batch_size
-        if td_name in ("stacked_td", "saved_td", "unsqueezed_td", "sub_td"):
+        if td_name in ("stacked_td", "saved_td", "unsqueezed_td", "squeezed_td", "sub_td"):
             with pytest.raises(AssertionError):
                 assert td.clone(recursive=False).get("a") is td.get("a")
         else:
