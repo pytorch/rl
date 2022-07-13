@@ -601,12 +601,20 @@ class TestTensorDicts:
     def permute_td(self, device):
         return TensorDict(
             source={
-                "a": torch.randn(3, 4, 2, 1, 5, device=device),
-                "b": torch.randn(3, 4, 2, 1, 10, device=device),
-                "c": torch.randint(10, (3, 4, 2, 1, 3), device=device),
+                "a": torch.randn(3, 1, 4, 2, 5, device=device),
+                "b": torch.randn(3, 1, 4, 2, 10, device=device),
+                "c": torch.randint(10, (3, 1, 4, 2, 3), device=device),
             },
-            batch_size=[3, 4, 2, 1],
-        ).permute(1, 0, 2, 3)
+            batch_size=[3, 1, 4, 2],
+        ).permute(2, 0, 3, 1)
+        # return TensorDict(
+        #     source={
+        #         "a": torch.randn(3, 1, 2, 4, 5, device=device),
+        #         "b": torch.randn(3, 1, 2, 4, 10, device=device),
+        #         "c": torch.randint(10, (3, 1, 2, 4, 3), device=device),
+        #     },
+        #     batch_size=[3, 1, 2, 4],
+        # ).permute(2, 0, 1, 3)
 
     def unsqueezed_td(self, device):
         td = TensorDict(
@@ -1059,6 +1067,41 @@ class TestTensorDicts:
         td = getattr(self, td_name)(device)
         del td["a"]
         assert "a" not in td.keys()
+
+    @pytest.mark.filterwarnings("error")
+    def test_stack_tds_on_subclass(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        tds_count = td.batch_size[0]
+        tds_batch_size = td.batch_size[1:]
+        tds_list = [
+            TensorDict(
+                source={
+                    "a": torch.ones(*tds_batch_size, 5),
+                    "b": torch.ones(*tds_batch_size, 10),
+                    "c": torch.ones(*tds_batch_size, 3, dtype=torch.long),
+                },
+                batch_size=tds_batch_size,
+                device=device,
+            )
+            for _ in range(tds_count)
+        ]
+        stacked_td = torch.stack(tds_list, 0, out=td)
+        assert stacked_td.batch_size == td.batch_size
+        assert stacked_td is td
+        for key in ("a", "b", "c"):
+            assert (stacked_td[key] == 1).all()
+
+    @pytest.mark.filterwarnings("error")
+    def test_stack_subclasses_on_td(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td = td.expand(3).to_tensordict().clone().zero_()
+        tds_list = [getattr(self, td_name)(device) for _ in range(3)]
+        stacked_td = stack_td(tds_list, 0, out=td)
+        assert stacked_td.batch_size == td.batch_size
+        for key in ("a", "b", "c"):
+            assert (stacked_td[key] == td[key]).all()
 
     @pytest.mark.parametrize("dim", [0, 1])
     @pytest.mark.parametrize("chunks", [1, 2])
