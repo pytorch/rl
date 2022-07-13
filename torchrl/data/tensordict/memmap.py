@@ -253,6 +253,7 @@ class MemmapTensor(object):
         self,
         idx: Optional[int] = None,
         memmap_array: Optional[np.ndarray] = None,
+        from_numpy: bool = False,
     ) -> torch.Tensor:
         if memmap_array is None:
             memmap_array = self.memmap_array
@@ -260,7 +261,7 @@ class MemmapTensor(object):
             if isinstance(idx, torch.Tensor):
                 idx = idx.cpu()
             memmap_array = memmap_array[idx]
-        out = self._np_to_tensor(memmap_array)
+        out = self._np_to_tensor(memmap_array, from_numpy=from_numpy)
         if (
             idx is not None
             and not isinstance(idx, (int, np.integer))
@@ -271,7 +272,9 @@ class MemmapTensor(object):
             out = out.view(size)
         return out
 
-    def _np_to_tensor(self, memmap_array: np.ndarray) -> torch.Tensor:
+    def _np_to_tensor(self, memmap_array: np.ndarray, from_numpy: bool) -> torch.Tensor:
+        if from_numpy:
+            return torch.from_numpy(memmap_array)
         return torch.as_tensor(memmap_array, device=self.device)
 
     @classmethod
@@ -294,6 +297,11 @@ class MemmapTensor(object):
     @property
     def _tensor(self) -> torch.Tensor:
         return self._load_item()
+
+    @property
+    def _tensor_from_numpy(self) -> torch.Tensor:
+        # a tensor created with `from_numpy` to make sure that changes are done in-place
+        return self._load_item(from_numpy=True)
 
     def ndimension(self) -> int:
         return self._ndim
@@ -543,7 +551,8 @@ def stack(
         a._tensor if isinstance(a, MemmapTensor) else a for a in list_of_memmap
     ]
     if isinstance(out, MemmapTensor):
-        return torch.stack(list_of_tensors, dim, out=out._tensor)
+        list_of_tensors = [tensor.cpu() for tensor in list_of_tensors]
+        return torch.stack(list_of_tensors, dim, out=out._tensor_from_numpy)
     else:
         return torch.stack(list_of_tensors, dim, out=out)
 
