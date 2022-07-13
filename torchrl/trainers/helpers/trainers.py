@@ -16,6 +16,7 @@ from torchrl.envs.common import _EnvClass
 from torchrl.modules import TensorDictModule, TensorDictModuleWrapper, reset_noise
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
+from torchrl.trainers.loggers import Logger
 from torchrl.trainers.trainers import (
     Trainer,
     SelectKeys,
@@ -28,7 +29,6 @@ from torchrl.trainers.trainers import (
     Recorder,
     CountFramesLog,
 )
-from torchrl.trainers.loggers import Logger
 
 OPTIMIZERS = {
     "adam": optim.Adam,

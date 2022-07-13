@@ -1,28 +1,34 @@
 from torch import Tensor
 
 
-__all__ = [
-    "TensorboardLogger"
-]
+__all__ = ["TensorboardLogger"]
+
 
 class Logger:
     """
-        A template for loggers
+    A template for loggers
 
     """
+
     def __init__(self, exp_name: str):
         self.exp_name = exp_name
         self.experiment = self._create_experiment()
+
     def _create_experiment(self):
         pass
-    def log_scalar(self, name: str, value: float, step: int=None):
+
+    def log_scalar(self, name: str, value: float, step: int = None):
         pass
-    def log_video(self, name: str, video: Tensor, step: int=None, **kwargs):
+
+    def log_video(self, name: str, video: Tensor, step: int = None, **kwargs):
         pass
+
     def log_hparams(self, cfg):
         pass
+
     def __repr__(self) -> str:
         return self.experiment.__repr__()
+
 
 class TensorboardLogger(Logger):
     """
@@ -31,12 +37,13 @@ class TensorboardLogger(Logger):
     exp_name: str. The name given to the experiment.
     Will also be used as the log_dir
     """
+
     def __init__(self, exp_name: str):
         super().__init__(exp_name=exp_name)
         self.log_dir = self.experiment.log_dir
 
         self._has_imported_moviepy = False
-        
+
     def _create_experiment(self):
         """
         Creates the SummaryWriter items
@@ -45,9 +52,9 @@ class TensorboardLogger(Logger):
             from torch.utils.tensorboard import SummaryWriter
         except ImportError:
             raise ImportError("torch.utils.tensorboard could not be imported")
-        return SummaryWriter(log_dir = self.exp_name)
+        return SummaryWriter(log_dir=self.exp_name)
 
-    def log_scalar(self, name: str, value: float, step: int=None):
+    def log_scalar(self, name: str, value: float, step: int = None):
         """
         Function to log scalar inputs
 
@@ -56,8 +63,8 @@ class TensorboardLogger(Logger):
         step: int. Optionnal. Default is None. Allows to specify the step at which the data is logged
         """
         self.experiment.add_scalar(name, value, global_step=step)
-    
-    def log_video(self, name: str, video: Tensor, step: int=None, **kwargs):
+
+    def log_video(self, name: str, video: Tensor, step: int = None, **kwargs):
         """
         Function to log videos inputs
 
@@ -68,15 +75,19 @@ class TensorboardLogger(Logger):
         if not self._has_imported_moviepy:
             try:
                 import moviepy  # noqa
+
                 self._has_imported_moviepy = True
             except ImportError:
-                raise Exception("moviepy not found, videos cannot be logged with TensorboardLogger")
+                raise Exception(
+                    "moviepy not found, videos cannot be logged with TensorboardLogger"
+                )
         self.experiment.add_video(
             tag=name,
             vid_tensor=video,
             global_step=step,
             **kwargs,
         )
+
     def log_hparams(self, cfg: "DictConfig"):
         """
         Function to log hparams.

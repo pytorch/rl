@@ -30,7 +30,6 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.trainers.loggers import Logger
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.data.utils import expand_right, DEVICE_TYPING
 from torchrl.envs.common import _EnvClass
@@ -38,6 +37,7 @@ from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
+from torchrl.trainers.loggers import Logger
 
 REPLAY_BUFFER_CLASS = {
     "prioritized": TensorDictPrioritizedReplayBuffer,
