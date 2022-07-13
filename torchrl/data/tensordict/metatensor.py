@@ -6,10 +6,10 @@
 from __future__ import annotations
 
 import functools
-import math
 from numbers import Number
 from typing import Callable, List, Optional, Sequence, Tuple, Union
 
+import numpy as np
 import torch
 
 from torchrl.data.utils import DEVICE_TYPING, INDEX_TYPING
@@ -69,8 +69,9 @@ class MetaTensor:
         requires_grad: bool = False,
         _is_shared: Optional[bool] = None,
         _is_memmap: Optional[bool] = None,
+        _is_tensordict: Optional[bool] = None,
     ):
-
+        _repr_tensordict = None
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
             shape = tensor.shape
@@ -79,12 +80,20 @@ class MetaTensor:
             if _is_memmap is None:
                 _is_memmap = isinstance(tensor, MemmapTensor)
             device = tensor.device if not tensor.is_meta else device
-            dtype = tensor.dtype
+            if _is_tensordict is None:
+                _is_tensordict = not isinstance(tensor, (MemmapTensor, torch.Tensor))
+            if isinstance(tensor, (MemmapTensor, torch.Tensor)):
+                dtype = tensor.dtype
+            else:
+                dtype = None
+                _repr_tensordict = str(tensor)
+
             requires_grad = (
                 tensor.requires_grad
                 if isinstance(tensor, torch.Tensor)
                 else requires_grad
             )
+
         if not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
         self.shape = shape
@@ -92,16 +101,26 @@ class MetaTensor:
         self.dtype = dtype
         self.requires_grad = requires_grad
         self._ndim = len(shape)
-        self._numel = math.prod(shape)
+        self._numel = np.prod(shape)
         self._is_shared = bool(_is_shared)
         self._is_memmap = bool(_is_memmap)
-        if _is_memmap:
+        self._is_tensordict = bool(_is_tensordict)
+        self._repr_tensordict = _repr_tensordict
+        if _is_tensordict:
+            name = "TensorDict"
+        elif _is_memmap:
             name = "MemmapTensor"
         elif _is_shared:
             name = "SharedTensor"
         else:
             name = "Tensor"
         self.class_name = name
+
+    def get_repr(self):
+        if self.is_tensordict():
+            return self._repr_tensordict
+        else:
+            return f"{self.class_name}({self.shape}, dtype={self.dtype})"
 
     def memmap_(self) -> MetaTensor:
         """Changes the storage of the MetaTensor to memmap.
@@ -132,6 +151,9 @@ class MetaTensor:
     def is_memmap(self) -> bool:
         return self._is_memmap
 
+    def is_tensordict(self) -> bool:
+        return self._is_tensordict
+
     def numel(self) -> int:
         return self._numel
 
@@ -152,6 +174,7 @@ class MetaTensor:
             requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
+            _is_tensordict=self.is_tensordict(),
         )
 
     def _to_meta(self) -> torch.Tensor:
@@ -166,6 +189,7 @@ class MetaTensor:
             requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
+            _is_tensordict=self.is_tensordict(),
         )
 
     @classmethod
@@ -214,17 +238,18 @@ class MetaTensor:
 
     def squeeze(self, dim: Optional[int] = None) -> MetaTensor:
         clone = self.clone()
-        shape = [i for i in clone.shape]
+        shape = clone.shape
         if dim is None:
             new_shape = [i for i in shape if i != 1]
         else:
             new_shape = []
-        for i in range(len(shape)):
-            if i == dim and shape[0] == 1:
-                continue
-            else:
-                new_shape.append(shape[0])
-            shape = shape[1:]
+            for i in range(len(shape)):
+                if i == dim and shape[0] == 1:
+                    shape = shape[1:]
+                    continue
+                else:
+                    new_shape.append(shape[0])
+                    shape = shape[1:]
         clone.shape = torch.Size(new_shape)
         return clone
 
@@ -255,6 +280,7 @@ class MetaTensor:
             requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
+            _is_tensordict=self.is_tensordict(),
         )
 
 
@@ -268,6 +294,7 @@ def _stack_meta(
 ) -> MetaTensor:
     if not len(list_of_meta_tensors):
         raise RuntimeError("empty list of meta tensors is not supported")
+    is_tensordict = list_of_meta_tensors[0].is_tensordict()
     shape = list_of_meta_tensors[0].shape
     if safe:
         for tensor in list_of_meta_tensors:
@@ -276,6 +303,11 @@ def _stack_meta(
                     f"Stacking meta tensors of different shapes is not "
                     f"allowed, got shapes {shape} and {tensor.shape}"
                 )
+            if is_tensordict and not tensor.is_tensordict():
+                raise RuntimeError(
+                    "Stacking meta tensors from tensordict and non-tensordict "
+                    "inputs is not allowed."
+                )
             if tensor.dtype != dtype:
                 raise TypeError(
                     f"Stacking meta tensors of different dtype is not "
@@ -283,7 +315,13 @@ def _stack_meta(
                 )
     shape = [s for s in shape]
     shape.insert(dim, len(list_of_meta_tensors))
-    return MetaTensor(*shape, dtype=dtype, device=device, requires_grad=requires_grad)
+    return MetaTensor(
+        *shape,
+        dtype=dtype,
+        device=device,
+        _is_tensordict=is_tensordict,
+        requires_grad=requires_grad,
+    )
 
 
 @implements_for_meta(torch.stack)
