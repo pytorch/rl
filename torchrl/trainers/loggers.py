@@ -32,7 +32,7 @@ class Logger:
 
 class TensorboardLogger(Logger):
     """
-    Wrapper for the Tensoarboard logger.
+    Wrapper for the Tensoarboard logger.ngrjivjffig
 
     exp_name: str. The name given to the experiment.
     Will also be used as the log_dir
