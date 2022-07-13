@@ -2366,13 +2366,13 @@ def stack(
         for key in keys:
             if key in out_keys:
                 out._stack_onto_(
-                    key, [_tensordict[key] for _tensordict in list_of_tensordicts], dim
+                    key, [_tensordict.get(key) for _tensordict in list_of_tensordicts], dim
                 )
             else:
                 out.set(
                     key,
                     torch.stack(
-                        [_tensordict[key] for _tensordict in list_of_tensordicts], dim
+                        [_tensordict.get(key) for _tensordict in list_of_tensordicts], dim
                     ),
                     inplace=True,
                 )
