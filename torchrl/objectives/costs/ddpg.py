@@ -246,7 +246,9 @@ class vecDDPGLoss(LossModule):
         )
         pred_val = td_copy.get("state_action_value").squeeze(-1)
 
-        with set_exploration_mode("mode"), hold_out_params(self.value_network_params) as value_net_actor_loss_params:
+        with set_exploration_mode("mode"), hold_out_params(
+            self.value_network_params
+        ) as value_net_actor_loss_params:
             actor_loss_params = list(self.actor_network_params) + list(
                 value_net_actor_loss_params
             )

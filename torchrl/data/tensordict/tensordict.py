@@ -1917,7 +1917,12 @@ class TensorDict(_TensorDict):
 
         if safe and (new_key in self.keys()):
             raise KeyError(f"key {new_key} already present in TensorDict.")
-        self.set(new_key, self.get(old_key))
+        self.set(
+            new_key,
+            self.get(old_key),
+            _meta_val=self._get_meta(old_key),
+            _run_checks=False,
+        )
         self.del_(old_key)
         return self
 
