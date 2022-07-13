@@ -20,8 +20,8 @@ from torchrl.modules import ActorValueOperator, ActorCriticOperator
 from torchrl.objectives import (
     DistributionalDQNLoss,
     ClipPPOLoss,
-    # vec as DDPGLoss,
-    DDPGLoss,
+    vecDDPGLoss as DDPGLoss,
+    # DDPGLoss,
     DQNLoss,
     HardUpdate,
     KLPENPPOLoss,
