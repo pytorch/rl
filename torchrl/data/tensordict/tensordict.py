@@ -1874,11 +1874,13 @@ class TensorDict(_TensorDict):
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
-        if key in self._tensordict and value is self._tensordict[key]:
+        present = key in self._tensordict
+        if present and value is self._tensordict[key]:
             return self
 
-        if key in self._tensordict and inplace:
+        if present and inplace:
             return self.set_(key, value)
+
         proc_value = self._process_tensor(
             value,
             check_tensor_shape=_run_checks,

@@ -9,12 +9,15 @@ from datetime import datetime
 
 import hydra
 import torch.cuda
+import tqdm
 from hydra.core.config_store import ConfigStore
+from torch import optim
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 from torchrl.record import VideoRecorder
+from torchrl.trainers import Recorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     OffPolicyCollectorConfig,
@@ -36,7 +39,7 @@ from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
     ReplayArgsConfig,
 )
-from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
+from torchrl.trainers.helpers.trainers import TrainerConfig
 
 config_fields = [
     (config_field.name, config_field.type, config_field)
@@ -188,35 +191,73 @@ def main(cfg: "DictConfig"):
             t.scale.fill_(1.0)
             t.loc.fill_(0.0)
 
-    trainer = make_trainer(
-        collector,
-        loss_module,
-        recorder,
-        target_net_updater,
-        actor_model_explore,
-        replay_buffer,
-        writer,
-        cfg,
+    recorder_obj = Recorder(
+        record_frames=cfg.record_frames,
+        frame_skip=cfg.frame_skip,
+        policy_exploration=actor_model_explore,
+        recorder=recorder,
+        record_interval=cfg.record_interval,
+        log_keys=cfg.recorder_log_keys,
     )
 
-    # def select_keys(batch):
-    #     return batch.select(
-    #         "reward",
-    #         "done",
-    #         "steps_to_next_obs",
-    #         "pixels",
-    #         "next_pixels",
-    #         "observation_vector",
-    #         "next_observation_vector",
-    #         "action",
-    #     )
-    # trainer.register_op("batch_process", select_keys)
+    optimizer = optim.Adam(
+        loss_module.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay
+    )
 
-    final_seed = collector.set_seed(cfg.seed)
-    print(f"init seed: {cfg.seed}, final seed: {final_seed}")
+    collected_frames = 0
+    pbar = tqdm.tqdm(total=cfg.total_frames)
+    for i, tensordict in enumerate(collector):
+        pbar.update(tensordict.numel())
+        # extend the replay buffer with the new data
+        if "mask" in tensordict.keys():
+            # if multi-step, a mask is present to help filter padded values
+            collected_frames += tensordict["mask"].sum()
+            tensordict = tensordict[tensordict.get("mask").squeeze(-1)]
+        else:
+            collected_frames += tensordict.numel()
+        replay_buffer.extend(tensordict.cpu())
 
-    trainer.train()
-    return (writer.log_dir, trainer._log_dict, trainer.state_dict())
+        if collected_frames >= cfg.init_random_frames:
+            for j in range(cfg.optim_steps_per_batch):
+                # sample from replay buffer
+                sampled_tensordict = replay_buffer.sample(cfg.batch_size)
+
+                # compute loss
+                loss_td = loss_module(sampled_tensordict)
+
+                # update the target net
+                target_net_updater.step()
+
+                # update priority
+                if cfg.prb:
+                    replay_buffer.update_priority(sampled_tensordict)
+
+                # step
+                optimizer.zero_grad()
+                loss = sum(
+                    [
+                        loss_td.get(key)
+                        for key in loss_td.keys()
+                        if key.startswith("loss_")
+                    ]
+                )
+                loss.backward()
+                optimizer.step()
+
+                if j == cfg.optim_steps_per_batch - 1:
+                    for key in loss_td.keys():
+                        writer.add_scalar(
+                            key, loss_td.get(key).mean(), global_step=collected_frames
+                        )
+
+        # some logging
+        writer.add_scalar(
+            "r_training", tensordict.get("reward").mean(), global_step=collected_frames
+        )
+        recorder_obj(None)
+
+        # update weights of the inference policy
+        collector.update_policy_weights_()
 
 
 if __name__ == "__main__":

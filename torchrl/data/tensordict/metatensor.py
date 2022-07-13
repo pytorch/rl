@@ -65,7 +65,7 @@ class MetaTensor:
         self,
         *shape: Union[int, torch.Tensor, "MemmapTensor"],
         device: Optional[DEVICE_TYPING] = "cpu",
-        dtype: torch.dtype = torch.get_default_dtype(),
+        dtype: torch.dtype = None,
         requires_grad: bool = False,
         _is_shared: Optional[bool] = None,
         _is_memmap: Optional[bool] = None,
@@ -97,11 +97,11 @@ class MetaTensor:
         if not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
         self.shape = shape
-        self.device = torch.device(device)
-        self.dtype = dtype
+        self.device = device
+        self.dtype = dtype if dtype is not None else torch.get_default_dtype()
         self.requires_grad = requires_grad
         self._ndim = len(shape)
-        self._numel = np.prod(shape)
+        self._numel = None
         self._is_shared = bool(_is_shared)
         self._is_memmap = bool(_is_memmap)
         self._is_tensordict = bool(_is_tensordict)
@@ -155,6 +155,8 @@ class MetaTensor:
         return self._is_tensordict
 
     def numel(self) -> int:
+        if self._numel is None:
+            self._numel = np.prod(self.shape)
         return self._numel
 
     def ndimension(self) -> int:

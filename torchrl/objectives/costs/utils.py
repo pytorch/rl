@@ -340,3 +340,9 @@ def next_state_value(
     rewards = rewards.to(torch.float)
     target_value = rewards + (gamma ** steps_to_next_obs) * target_value
     return target_value
+
+
+def transpose_stack(tuple_of_tuple_of_tensors):
+    tuple_of_tuple_of_tensors = tuple(zip(*tuple_of_tuple_of_tensors))
+    results = tuple(torch.stack(shards) for shards in tuple_of_tuple_of_tensors)
+    return results
