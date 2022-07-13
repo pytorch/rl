@@ -1082,6 +1082,7 @@ class TestTensorDicts:
                     "c": torch.ones(*tds_batch_size, 3, dtype=torch.long),
                 },
                 batch_size=tds_batch_size,
+                device=device,
             )
             for _ in range(tds_count)
         ]
