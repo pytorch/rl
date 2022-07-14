@@ -77,6 +77,10 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
     is_meta = False
 
     def __init__(self):
+        self._dict_meta = KeyDependentDefaultDict(self._make_meta)
+
+    @abc.abstractmethod
+    def _make_meta(self, key: str) -> MetaTensor:
         raise NotImplementedError
 
     @property
@@ -99,6 +103,10 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
 
         """
         raise NotImplementedError
+
+    @property
+    def requires_grad(self):
+        return any(v.requires_grad for v in self._dict_meta.values())
 
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
         if new_batch_size == self.batch_size:
@@ -317,7 +325,16 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def _get_meta(self, key) -> MetaTensor:
-        raise NotImplementedError(f"{self.__class__.__name__}")
+        if not isinstance(key, str):
+            raise TypeError(f"Expected key to be a string but found {type(key)}")
+
+        try:
+            return self._dict_meta[key]
+        except KeyError:
+            raise KeyError(
+                f"key {key} not found in {self.__class__.__name__} with keys"
+                f" {sorted(list(self.keys()))}"
+            )
 
     def apply_(self, fn: Callable) -> _TensorDict:
         """Applies a callable to all values stored in the tensordict and
@@ -586,22 +603,27 @@ dtype=torch.float32)},
         for k in self.keys():
             yield self.get(k)
 
-    def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
+    def items_meta(self, make_unset: bool = True) -> Iterator[Tuple[str, MetaTensor]]:
         """Returns a generator of key-value pairs for the tensordict, where the
         values are MetaTensor instances corresponding to the stored tensors.
 
         """
-        for k in self.keys():
-            yield k, self._get_meta(k)
+        if make_unset:
+            for k in self.keys():
+                yield k, self._get_meta(k)
+        else:
+            return self._dict_meta.items()
 
-    def values_meta(self) -> Iterator[MetaTensor]:
+    def values_meta(self, make_unset: bool = True) -> Iterator[MetaTensor]:
         """Returns a generator representing the values for the tensordict, those
         values are MetaTensor instances corresponding to the stored tensors.
 
         """
-
-        for k in self.keys():
-            yield self._get_meta(k)
+        if make_unset:
+            for k in self.keys():
+                yield self._get_meta(k)
+        else:
+            return self._dict_meta.values()
 
     @abc.abstractmethod
     def keys(self) -> KeysView:
@@ -826,7 +848,12 @@ dtype=torch.float32)},
             a new TensorDict object containing the same values.
 
         """
-        return self.to(TensorDict)
+        return self.to(
+            TensorDict,
+            batch_size=self.batch_size,
+            device=self.device,
+            _meta_source=self._dict_meta,
+        )
 
     def zero_(self) -> _TensorDict:
         """Zeros all tensors in the tensordict in-place."""
@@ -1553,7 +1580,6 @@ dtype=torch.float32)},
             self
 
         """
-
         meta_tensor = self._get_meta(key)
         shape = meta_tensor.shape
         device = meta_tensor.device
@@ -1674,15 +1700,26 @@ class TensorDict(_TensorDict):
     _safe = True
     _lazy = False
 
+    def __getstate__(self) -> dict:
+        state = self.__dict__.copy()
+        del state["_dict_meta"]
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        state["_dict_meta"] = KeyDependentDefaultDict(self._make_meta)
+        self.__dict__.update(state)
+
     def __init__(
         self,
         source: Union[_TensorDict, dict],
         batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
         device: Optional[DEVICE_TYPING] = None,
         _meta_source: Optional[dict] = None,
+        _run_checks: bool = True,
     ) -> object:
+        super().__init__()
+
         self._tensordict: Dict = dict()
-        self._tensordict_meta: Dict = dict()
 
         self._is_shared = None
         self._is_memmap = None
@@ -1735,7 +1772,11 @@ class TensorDict(_TensorDict):
                     )
                 if map_item_to_device:
                     value = value.to(device)
-                _meta_val = None if _meta_source is None else _meta_source[key]
+                _meta_val = (
+                    None
+                    if _meta_source is None or key not in _meta_source
+                    else _meta_source[key]
+                )
                 if (
                     isinstance(value, _TensorDict)
                     and value.batch_size[: self.batch_dims] != self.batch_size
@@ -1743,8 +1784,25 @@ class TensorDict(_TensorDict):
                     value.batch_size = self.batch_size
                 self.set(key, value, _meta_val=_meta_val, _run_checks=False)
 
-        self._check_batch_size()
-        self._check_device()
+        if _run_checks:
+            self._check_batch_size()
+            self._check_device()
+
+    def _make_meta(self, key: str) -> MetaTensor:
+        proc_value = self._tensordict[key]
+        is_memmap = (
+            self._is_memmap
+            if self._is_memmap is not None
+            else isinstance(proc_value, MemmapTensor)
+        )
+        return MetaTensor(
+            proc_value,
+            _is_memmap=is_memmap,
+            _is_shared=self._is_shared
+            if self._is_shared is not None
+            else proc_value.is_shared(),
+            _is_tensordict=isinstance(proc_value, _TensorDict),
+        )
 
     @property
     def batch_dims(self) -> int:
@@ -1874,10 +1932,16 @@ class TensorDict(_TensorDict):
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
-        if key in self._tensordict and value is self._tensordict[key]:
+        if self._is_shared is None:
+            self._is_shared = value.is_shared()
+        if self._is_memmap is None:
+            self._is_memmap = isinstance(value, MemmapTensor)
+
+        present = key in self._tensordict
+        if present and value is self._tensordict[key]:
             return self
 
-        if key in self._tensordict and inplace:
+        if present and inplace:
             return self.set_(key, value)
         proc_value = self._process_tensor(
             value,
@@ -1886,21 +1950,16 @@ class TensorDict(_TensorDict):
             check_device=_run_checks,
         )  # check_tensor_shape=_run_checks
         self._tensordict[key] = proc_value
-        self._tensordict_meta[key] = (
-            MetaTensor(
-                proc_value,
-                _is_memmap=self.is_memmap(),
-                _is_shared=self.is_shared(),
-                _is_tensordict=isinstance(proc_value, _TensorDict),
-            )
-            if _meta_val is None
-            else _meta_val
-        )
+        if _meta_val:
+            self._dict_meta[key] = _meta_val
+        elif present and key in self._dict_meta:
+            del self._dict_meta[key]
         return self
 
     def del_(self, key: str) -> _TensorDict:
         del self._tensordict[key]
-        del self._tensordict_meta[key]
+        if key in self._dict_meta:
+            del self._dict_meta[key]
         return self
 
     def rename_key(self, old_key: str, new_key: str, safe: bool = False) -> _TensorDict:
@@ -1945,6 +2004,8 @@ class TensorDict(_TensorDict):
                 proc_value = value
             if proc_value is not self._tensordict[key]:
                 self._tensordict[key].copy_(proc_value)
+                if key in self._dict_meta:
+                    self._dict_meta[key].requires_grad = proc_value.requires_grad
         else:
             raise AttributeError(
                 f'key "{key}" not found in tensordict, '
@@ -2005,13 +2066,9 @@ class TensorDict(_TensorDict):
             tensor_in.copy_(value)
         else:
             tensor_in[idx] = value
-        # Recreate Meta in case of require_grad coming in value
-        self._tensordict_meta[key] = MetaTensor(
-            tensor_in,
-            _is_memmap=self.is_memmap(),
-            _is_shared=self.is_shared(),
-            _is_tensordict=isinstance(value, _TensorDict),
-        )
+        if key in self._dict_meta:
+            # change Meta in case of require_grad coming in value
+            self._dict_meta[key].requires_grad = tensor_in.requires_grad
         return self
 
     def get(
@@ -2024,18 +2081,6 @@ class TensorDict(_TensorDict):
             return self._tensordict[key]
         else:
             return self._default_get(key, default)
-
-    def _get_meta(self, key: str) -> MetaTensor:
-        if not isinstance(key, str):
-            raise TypeError(f"Expected key to be a string but found {type(key)}")
-
-        try:
-            return self._tensordict_meta[key]
-        except KeyError:
-            raise KeyError(
-                f"key {key} not found in {self.__class__.__name__} with keys"
-                f" {sorted(list(self.keys()))}"
-            )
 
     def share_memory_(self) -> _TensorDict:
         if self.is_memmap():
@@ -2072,7 +2117,7 @@ class TensorDict(_TensorDict):
                 "memmap_() must be called when the TensorDict is (partially) "
                 "populated. Set a tensor first."
             )
-        if any(val.requires_grad for val in self._tensordict_meta.values()):
+        if any(val.requires_grad for val in self._dict_meta.values()):
             raise Exception(
                 "memmap is not compatible with gradients, one of Tensors has requires_grad equals True"
             )
@@ -2142,9 +2187,7 @@ class TensorDict(_TensorDict):
         d_meta = {key: value for (key, value) in self.items_meta() if key in keys}
         if inplace:
             self._tensordict = d
-            self._tensordict_meta = {
-                key: value for (key, value) in self.items_meta() if key in keys
-            }
+            self._dict_meta = d_meta
             return self
         return TensorDict(
             device=self._device_safe(),
@@ -2154,7 +2197,7 @@ class TensorDict(_TensorDict):
         )
 
     def keys(self) -> KeysView:
-        return self._tensordict_meta.keys()  # _tensordict_meta is ordered
+        return self._tensordict.keys()
 
 
 def implements_for_td(torch_function: Callable) -> Callable:
@@ -2539,6 +2582,7 @@ torch.Size([3, 2])
         idx: INDEX_TYPING,
         batch_size: Optional[Sequence[int]] = None,
     ):
+        super().__init__()
         self._is_shared = None
         self._is_memmap = None
 
@@ -2556,6 +2600,9 @@ torch.Size([3, 2])
         self._batch_size = _getitem_batch_size(self._source.batch_size, self.idx)
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
+
+    def _make_meta(self, key: str) -> MetaTensor:
+        return self._source._get_meta(key)[self.idx]
 
     @property
     def batch_size(self) -> torch.Size:
@@ -2627,6 +2674,8 @@ torch.Size([3, 2])
                 tensor_expand = MemmapTensor(tensor_expand)
         parent.set(key, tensor_expand, _run_checks=_run_checks)
         self.set_(key, tensor)
+        if key in self._dict_meta:
+            self._dict_meta[key].requires_grad = tensor.requires_grad
         return self
 
     def keys(self) -> KeysView:
@@ -2646,6 +2695,9 @@ torch.Size([3, 2])
                     f"self.batch_size={self.batch_size} mismatch"
                 )
         self._source.set_at_(key, tensor, self.idx)
+        if key in self._dict_meta:
+            self._dict_meta[key].requires_grad = tensor.requires_grad
+
         return self
 
     def _stack_onto_(
@@ -2695,9 +2747,6 @@ torch.Size([3, 2])
     ) -> COMPATIBLE_TYPES:
         return self._source.get_at(key, self.idx, default=default)
 
-    def _get_meta(self, key: str) -> MetaTensor:
-        return self._source._get_meta(key)[self.idx]
-
     def set_at_(
         self,
         key: str,
@@ -2715,7 +2764,8 @@ torch.Size([3, 2])
             tensor = self._source.get_at(key, self.idx)
             tensor[idx] = value
             self._source.set_at_(key, tensor, self.idx)
-            # self._source.set_at_(key, value, (self.idx, idx))
+        if key in self._dict_meta:
+            self._dict_meta[key].requires_grad = value.requires_grad
         return self
 
     def get_at(
@@ -2903,6 +2953,7 @@ class LazyStackedTensorDict(_TensorDict):
         stack_dim: int = 0,
         batch_size: Optional[Sequence[int]] = None,  # TODO: remove
     ):
+        super().__init__()
 
         self._is_shared = None
         self._is_memmap = None
@@ -2946,7 +2997,6 @@ class LazyStackedTensorDict(_TensorDict):
         self.stack_dim = stack_dim
         self._batch_size = self._compute_batch_size(_batch_size, stack_dim, N)
         self._update_valid_keys()
-        self._meta_dict = KeyDependentDefaultDict(self._deduce_meta)
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
 
@@ -3036,10 +3086,10 @@ class LazyStackedTensorDict(_TensorDict):
         proc_tensor = proc_tensor.unbind(self.stack_dim)
         for td, _item in zip(self.tensordicts, proc_tensor):
             td.set(key, _item, **kwargs)
-        # self._meta_dict.update({key: self._deduce_meta(key)})
         if key not in self._valid_keys:
             self._valid_keys = sorted([*self._valid_keys, key])
-
+        if key in self._dict_meta:
+            del self._dict_meta[key]
         return self
 
     def set_(
@@ -3119,13 +3169,7 @@ class LazyStackedTensorDict(_TensorDict):
             )
         return torch.stack(tensors, self.stack_dim)
 
-    def _get_meta(self, key: str) -> MetaTensor:
-        if key not in self.valid_keys:
-            raise KeyError(f"key {key} not found in {self._valid_keys}")
-        return self._meta_dict[key]
-        # return self._deduce_meta(key)
-
-    def _deduce_meta(self, key: str) -> MetaTensor:
+    def _make_meta(self, key: str) -> MetaTensor:
         return torch.stack(
             [td._get_meta(key) for td in self.tensordicts], self.stack_dim
         )
@@ -3402,6 +3446,7 @@ class SavedTensorDict(_TensorDict):
         device: Optional[torch.device] = None,
         batch_size: Optional[Sequence[int]] = None,
     ):
+        super().__init__()
 
         if not isinstance(source, _TensorDict):
             raise TypeError(
@@ -3435,14 +3480,14 @@ class SavedTensorDict(_TensorDict):
         self._keys = list(tensordict.keys())
         self._batch_size = tensordict.batch_size
         self._td_fields = _td_fields(tensordict)
-        self._tensordict_meta = {key: value for key, value in tensordict.items_meta()}
+        self._dict_meta = {key: value for key, value in tensordict.items_meta()}
         torch.save(tensordict, self.filename)
+
+    def _make_meta(self, key: str) -> MetaTensor:
+        return self._dict_meta[key]
 
     def _load(self) -> _TensorDict:
         return torch.load(self.filename, map_location=self._device_safe())
-
-    def _get_meta(self, key: str) -> MetaTensor:
-        return self._tensordict_meta.get(key)
 
     @property
     def batch_size(self) -> torch.Size:
@@ -3604,12 +3649,6 @@ class SavedTensorDict(_TensorDict):
                 raise RuntimeError("The SavedTensorDict changed while querying values.")
             yield v
 
-    def items_meta(self) -> Iterator[Tuple[str, MetaTensor]]:
-        return self._tensordict_meta.items()
-
-    def values_meta(self) -> Iterator[MetaTensor]:
-        return self._tensordict_meta.values()
-
     def is_contiguous(self) -> bool:
         return False
 
@@ -3736,6 +3775,8 @@ class SavedTensorDict(_TensorDict):
 
 
 class _CustomOpTensorDict(_TensorDict):
+    """Encodes lazy operations on tensors contained in a TensorDict."""
+
     _lazy = True
 
     def __init__(
@@ -3747,7 +3788,7 @@ class _CustomOpTensorDict(_TensorDict):
         inv_op_kwargs: Optional[dict] = None,
         batch_size: Optional[Sequence[int]] = None,
     ):
-        """Encodes lazy operations on tensors contained in a TensorDict."""
+        super().__init__()
 
         self._is_shared = None
         self._is_memmap = None
@@ -3807,9 +3848,12 @@ class _CustomOpTensorDict(_TensorDict):
     def _device_safe(self) -> Union[None, torch.device]:
         return self._source._device_safe()
 
-    def _get_meta(self, key: str) -> MetaTensor:
+    def _make_meta(self, key: str) -> MetaTensor:
         item = self._source._get_meta(key)
         return getattr(item, self.custom_op)(**self._update_custom_op_kwargs(item))
+
+    def _get_meta(self, key) -> MetaTensor:
+        return self._make_meta(key)
 
     @property
     def batch_size(self) -> torch.Size:
