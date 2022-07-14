@@ -1882,9 +1882,7 @@ class TensorDict(_TensorDict):
     def _check_device(self) -> None:
         devices = set(value.device for value in self.values_meta())
         if len(devices) > 1:
-            raise RuntimeError(
-                f"Found more than one device: {devices}"
-            )
+            raise RuntimeError(f"Found more than one device: {devices}")
 
     def pin_memory(self) -> _TensorDict:
         if self.device == torch.device("cpu"):
