@@ -342,7 +342,10 @@ def next_state_value(
     return target_value
 
 
-def transpose_stack(tuple_of_tuple_of_tensors):
+def zip_stack(tuple_of_tuple_of_tensors, out=None):
     tuple_of_tuple_of_tensors = tuple(zip(*tuple_of_tuple_of_tensors))
-    results = tuple(torch.stack(shards) for shards in tuple_of_tuple_of_tensors)
+    if out is None:
+        results = tuple(torch.stack(shards) for shards in tuple_of_tuple_of_tensors)
+    else:
+        results = tuple(torch.stack(shards, out=_out) for shards, _out in zip(tuple_of_tuple_of_tensors, out))
     return results

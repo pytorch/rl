@@ -81,8 +81,8 @@ class MetaTensor:
                 _is_memmap = isinstance(tensor, MemmapTensor)
             device = tensor.device if not tensor.is_meta else device
             if _is_tensordict is None:
-                _is_tensordict = not isinstance(tensor, (MemmapTensor, torch.Tensor))
-            if isinstance(tensor, (MemmapTensor, torch.Tensor)):
+                _is_tensordict = not _is_memmap and not isinstance(tensor, torch.Tensor)
+            if not _is_tensordict:
                 dtype = tensor.dtype
             else:
                 dtype = None

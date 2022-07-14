@@ -17,7 +17,7 @@ from torchrl.objectives.costs.utils import (
     distance_loss,
     hold_out_params,
     next_state_value,
-    transpose_stack,
+    zip_stack,
 )
 from .common import LossModule
 
@@ -262,11 +262,11 @@ class vecDDPGLoss(LossModule):
                 0,
             ).to_tensordict()
 
-            actor_params = transpose_stack((actor_loss_params_an, value_loss_target_params_an))
-            actor_buffers = transpose_stack((actor_loss_buffers_an, value_loss_target_buffers_an))
+            actor_params = zip_stack((actor_loss_params_an, value_loss_target_params_an))
+            actor_buffers = zip_stack((actor_loss_buffers_an, value_loss_target_buffers_an))
 
-            value_params = transpose_stack((actor_loss_params_vn, value_loss_target_params_vn, value_loss_params_vn))
-            value_buffers = transpose_stack((actor_loss_buffers_vn, value_loss_target_buffers_vn, value_loss_buffers_vn))
+            value_params = zip_stack((actor_loss_params_vn, value_loss_target_params_vn, value_loss_params_vn))
+            value_buffers = zip_stack((actor_loss_buffers_vn, value_loss_target_buffers_vn, value_loss_buffers_vn))
 
             tensordict = self.actor_network(
                 tensordict, params=actor_params, buffers=actor_buffers, vmap=(0, 0, 0)
@@ -274,7 +274,7 @@ class vecDDPGLoss(LossModule):
             tensordict = torch.cat([
                 tensordict.select(*self.value_network.in_keys),
                 input_tensordict.select(*self.value_network.in_keys).unsqueeze(0)
-            ], 0).to_tensordict()
+            ], 0)
             tensordict = self.value_network(
                 tensordict, params=value_params, buffers=value_buffers, vmap=(0, 0, 0)
             )
@@ -311,4 +311,6 @@ class vecDDPGLoss(LossModule):
                 "target_value_max": target_value.max().detach(),
             },
             batch_size=[],
+            device=self.device,
+            _run_checks=False,
         )
