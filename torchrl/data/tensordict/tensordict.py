@@ -76,6 +76,15 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
     _lazy = False
     is_meta = False
 
+    def __getstate__(self) -> dict:
+        state = self.__dict__.copy()
+        del state["_dict_meta"]
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        state["_dict_meta"] = KeyDependentDefaultDict(self._make_meta)
+        self.__dict__.update(state)
+
     def __init__(self):
         self._dict_meta = KeyDependentDefaultDict(self._make_meta)
 
@@ -1695,15 +1704,6 @@ class TensorDict(_TensorDict):
         True
 
     """
-
-    def __getstate__(self) -> dict:
-        state = self.__dict__.copy()
-        del state["_dict_meta"]
-        return state
-
-    def __setstate__(self, state: dict) -> None:
-        state["_dict_meta"] = KeyDependentDefaultDict(self._make_meta)
-        self.__dict__.update(state)
 
     @classmethod
     def __new__(cls, *args, **kwargs):
