@@ -3694,6 +3694,7 @@ class SavedTensorDict(_TensorDict):
                 return self
             td = dest(
                 source=self.to_dict(),
+                batch_size=self.batch_size,
                 **kwargs,
             )
             return td
