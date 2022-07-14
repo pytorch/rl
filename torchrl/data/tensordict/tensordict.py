@@ -3493,7 +3493,7 @@ class SavedTensorDict(_TensorDict):
     def _make_meta(self, key: str) -> MetaTensor:
         if key not in self._dict_meta:
             raise RuntimeError(
-                f"the key \"{key}\" was not found in SavedTensorDict._dict_meta (keys: {self._dict_meta.keys()}."
+                f'the key "{key}" was not found in SavedTensorDict._dict_meta (keys: {self._dict_meta.keys()}.'
             )
         return self._dict_meta["key"]
 
