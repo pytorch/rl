@@ -852,7 +852,8 @@ dtype=torch.float32)},
             TensorDict,
             batch_size=self.batch_size,
             device=self.device,
-            _meta_source=self._dict_meta,
+            _meta_source=dict(self._dict_meta),
+            _run_checks=False,
         )
 
     def zero_(self) -> _TensorDict:
@@ -1696,10 +1697,6 @@ class TensorDict(_TensorDict):
 
     """
 
-    #     TODO: split, transpose, permute
-    _safe = True
-    _lazy = False
-
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
         del state["_dict_meta"]
@@ -1708,6 +1705,14 @@ class TensorDict(_TensorDict):
     def __setstate__(self, state: dict) -> None:
         state["_dict_meta"] = KeyDependentDefaultDict(self._make_meta)
         self.__dict__.update(state)
+
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._safe = True
+        cls._lazy = False
+        cls._is_shared = None
+        cls._is_memmap = None
+        return _TensorDict.__new__(cls)
 
     def __init__(
         self,
@@ -1795,12 +1800,15 @@ class TensorDict(_TensorDict):
             if self._is_memmap is not None
             else isinstance(proc_value, MemmapTensor)
         )
+        is_shared = (
+            self._is_shared
+            if self._is_shared is not None
+            else proc_value.is_shared()
+        )
         return MetaTensor(
             proc_value,
             _is_memmap=is_memmap,
-            _is_shared=self._is_shared
-            if self._is_shared is not None
-            else proc_value.is_shared(),
+            _is_shared=is_shared,
             _is_tensordict=isinstance(proc_value, _TensorDict),
         )
 
@@ -1974,7 +1982,12 @@ class TensorDict(_TensorDict):
 
         if safe and (new_key in self.keys()):
             raise KeyError(f"key {new_key} already present in TensorDict.")
-        self.set(new_key, self.get(old_key))
+        self.set(
+            new_key,
+            self.get(old_key),
+            _meta_val=self._get_meta(old_key) if old_key in self._dict_meta else None,
+            _run_checks=False,
+        )
         self.del_(old_key)
         return self
 
@@ -2184,10 +2197,12 @@ class TensorDict(_TensorDict):
 
     def select(self, *keys: str, inplace: bool = False) -> _TensorDict:
         d = {key: value for (key, value) in self.items() if key in keys}
-        d_meta = {key: value for (key, value) in self.items_meta() if key in keys}
+        d_meta = {key: value for (key, value) in self.items_meta(make_unset=False) if key in keys}
         if inplace:
             self._tensordict = d
-            self._dict_meta = d_meta
+            for key in list(self._dict_meta.keys()):
+                if key not in keys:
+                    del self._dict_meta[key]
             return self
         return TensorDict(
             device=self._device_safe(),
@@ -2315,10 +2330,10 @@ def cat(
     # check that all tensordict match
     keys = _check_keys(list_of_tensordicts, strict=True)
     if out is None:
-        out = TensorDict({}, device=device, batch_size=batch_size)
+        out = dict()
         for key in keys:
-            tensor = torch.cat([td.get(key) for td in list_of_tensordicts], dim)
-            out.set(key, tensor)
+            out[key] = torch.cat([td.get(key) for td in list_of_tensordicts], dim)
+        out = TensorDict(out, device=device, batch_size=batch_size, _run_checks=False)
         return out
     else:
         if out.batch_size != batch_size:
@@ -2358,11 +2373,12 @@ def stack(
     keys = _check_keys(list_of_tensordicts)
 
     if out is None:
+        device = list_of_tensordicts[0]._device_safe()
         out = (
             TensorDict(
                 {
                     key: torch.stack(
-                        [_tensordict[key] for _tensordict in list_of_tensordicts],
+                        [_tensordict.get(key) for _tensordict in list_of_tensordicts],
                         dim,
                     )
                     for key in keys
@@ -2370,6 +2386,8 @@ def stack(
                 batch_size=LazyStackedTensorDict._compute_batch_size(
                     batch_size, dim, len(list_of_tensordicts)
                 ),
+                device=device,
+                _run_checks=False,
             )
             if contiguous
             else LazyStackedTensorDict(
@@ -2660,6 +2678,7 @@ torch.Size([3, 2])
                     for key, _tensor in tensor.items()
                 },
                 parent.batch_size,
+                _run_checks=False,
             )
         else:
             tensor_expand = torch.zeros(
@@ -3119,8 +3138,10 @@ class LazyStackedTensorDict(_TensorDict):
                 check_tensor_shape=False,
                 check_shared=False,
             )
-        tensor = tensor.unbind(self.stack_dim)
-        for td, _item in zip(self.tensordicts, tensor):
+        if key in self._dict_meta:
+            self._dict_meta[key].requires_grad = tensor.requires_grad
+        tensors = tensor.unbind(self.stack_dim)
+        for td, _item in zip(self.tensordicts, tensors):
             td.set_(key, _item)
         return self
 
