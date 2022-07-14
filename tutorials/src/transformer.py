@@ -25,15 +25,9 @@ class SplitHeads(nn.Module):
         batch_size, to_num, latent_dim = Q.shape
         _, from_num, _ = K.shape
         d_tensor = latent_dim // self.num_heads
-        Q = Q.reshape(
-            batch_size, to_num, self.num_heads, d_tensor
-        ).transpose(1, 2)
-        K = K.reshape(
-            batch_size, from_num, self.num_heads, d_tensor
-        ).transpose(1, 2)
-        V = V.reshape(
-            batch_size, from_num, self.num_heads, d_tensor
-        ).transpose(1, 2)
+        Q = Q.reshape(batch_size, to_num, self.num_heads, d_tensor).transpose(1, 2)
+        K = K.reshape(batch_size, from_num, self.num_heads, d_tensor).transpose(1, 2)
+        V = V.reshape(batch_size, from_num, self.num_heads, d_tensor).transpose(1, 2)
         return Q, K, V
 
 
@@ -47,11 +41,7 @@ class Attention(nn.Module):
         batch_size, n_heads, to_num, d_in = Q.shape
         attn = self.softmax(Q @ K.transpose(2, 3) / d_in)
         out = attn @ V
-        out = self.out(
-            out.transpose(1, 2).reshape(
-                batch_size, to_num, n_heads * d_in
-            )
-        )
+        out = self.out(out.transpose(1, 2).reshape(batch_size, to_num, n_heads * d_in))
         return out, attn
 
 
