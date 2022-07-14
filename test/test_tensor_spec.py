@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import argparse
 
 import numpy as np
 import pytest
@@ -17,7 +18,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import TensorDict
+from torchrl.data.tensordict.tensordict import TensorDict, _TensorDict
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
@@ -371,6 +372,17 @@ class TestComposite:
         if is_complete:
             ts.type_check(rand_td["act"], "act")
 
+    def test_nested_composite_spec(self, is_complete, device, dtype):
+        ts = self._composite_spec(is_complete, device, dtype)
+        ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
+        td = ts.rand()
+        assert isinstance(td["nested_cp"], _TensorDict)
+        keys = list(td.keys())
+        for key in keys:
+            if key != "nested_cp":
+                assert key in td["nested_cp"].keys()
+
 
 if __name__ == "__main__":
-    pytest.main([__file__])
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

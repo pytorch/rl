@@ -238,17 +238,18 @@ class MetaTensor:
 
     def squeeze(self, dim: Optional[int] = None) -> MetaTensor:
         clone = self.clone()
-        shape = [i for i in clone.shape]
+        shape = clone.shape
         if dim is None:
             new_shape = [i for i in shape if i != 1]
         else:
             new_shape = []
-        for i in range(len(shape)):
-            if i == dim and shape[0] == 1:
-                continue
-            else:
-                new_shape.append(shape[0])
-            shape = shape[1:]
+            for i in range(len(shape)):
+                if i == dim and shape[0] == 1:
+                    shape = shape[1:]
+                    continue
+                else:
+                    new_shape.append(shape[0])
+                    shape = shape[1:]
         clone.shape = torch.Size(new_shape)
         return clone
 
@@ -293,6 +294,7 @@ def _stack_meta(
 ) -> MetaTensor:
     if not len(list_of_meta_tensors):
         raise RuntimeError("empty list of meta tensors is not supported")
+    is_tensordict = list_of_meta_tensors[0].is_tensordict()
     shape = list_of_meta_tensors[0].shape
     if safe:
         for tensor in list_of_meta_tensors:
@@ -301,6 +303,11 @@ def _stack_meta(
                     f"Stacking meta tensors of different shapes is not "
                     f"allowed, got shapes {shape} and {tensor.shape}"
                 )
+            if is_tensordict and not tensor.is_tensordict():
+                raise RuntimeError(
+                    "Stacking meta tensors from tensordict and non-tensordict "
+                    "inputs is not allowed."
+                )
             if tensor.dtype != dtype:
                 raise TypeError(
                     f"Stacking meta tensors of different dtype is not "
@@ -308,7 +315,13 @@ def _stack_meta(
                 )
     shape = [s for s in shape]
     shape.insert(dim, len(list_of_meta_tensors))
-    return MetaTensor(*shape, dtype=dtype, device=device, requires_grad=requires_grad)
+    return MetaTensor(
+        *shape,
+        dtype=dtype,
+        device=device,
+        _is_tensordict=is_tensordict,
+        requires_grad=requires_grad,
+    )
 
 
 @implements_for_meta(torch.stack)
