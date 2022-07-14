@@ -347,5 +347,8 @@ def zip_stack(tuple_of_tuple_of_tensors, out=None):
     if out is None:
         results = tuple(torch.stack(shards) for shards in tuple_of_tuple_of_tensors)
     else:
-        results = tuple(torch.stack(shards, out=_out) for shards, _out in zip(tuple_of_tuple_of_tensors, out))
+        results = tuple(
+            torch.stack(shards, out=_out)
+            for shards, _out in zip(tuple_of_tuple_of_tensors, out)
+        )
     return results

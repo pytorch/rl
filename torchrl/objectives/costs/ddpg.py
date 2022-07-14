@@ -262,23 +262,44 @@ class vecDDPGLoss(LossModule):
                 0,
             ).to_tensordict()
 
-            actor_params = zip_stack((actor_loss_params_an, value_loss_target_params_an))
-            actor_buffers = zip_stack((actor_loss_buffers_an, value_loss_target_buffers_an))
+            actor_params = zip_stack(
+                (actor_loss_params_an, value_loss_target_params_an)
+            )
+            actor_buffers = zip_stack(
+                (actor_loss_buffers_an, value_loss_target_buffers_an)
+            )
 
-            value_params = zip_stack((actor_loss_params_vn, value_loss_target_params_vn, value_loss_params_vn))
-            value_buffers = zip_stack((actor_loss_buffers_vn, value_loss_target_buffers_vn, value_loss_buffers_vn))
+            value_params = zip_stack(
+                (
+                    actor_loss_params_vn,
+                    value_loss_target_params_vn,
+                    value_loss_params_vn,
+                )
+            )
+            value_buffers = zip_stack(
+                (
+                    actor_loss_buffers_vn,
+                    value_loss_target_buffers_vn,
+                    value_loss_buffers_vn,
+                )
+            )
 
             tensordict = self.actor_network(
                 tensordict, params=actor_params, buffers=actor_buffers, vmap=(0, 0, 0)
             )
-            tensordict = torch.cat([
-                tensordict.select(*self.value_network.in_keys),
-                input_tensordict.select(*self.value_network.in_keys).unsqueeze(0)
-            ], 0)
+            tensordict = torch.cat(
+                [
+                    tensordict.select(*self.value_network.in_keys),
+                    input_tensordict.select(*self.value_network.in_keys).unsqueeze(0),
+                ],
+                0,
+            )
             tensordict = self.value_network(
                 tensordict, params=value_params, buffers=value_buffers, vmap=(0, 0, 0)
             )
-            loss_actor, next_state_action_value, pred_val = tensordict.get("state_action_value").squeeze(-1)
+            loss_actor, next_state_action_value, pred_val = tensordict.get(
+                "state_action_value"
+            ).squeeze(-1)
             loss_actor = -loss_actor
 
         target_value = next_state_value(
