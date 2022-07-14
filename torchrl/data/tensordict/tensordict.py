@@ -517,7 +517,7 @@ dtype=torch.float32)},
     def _convert_to_tensor(
         self, array: np.ndarray
     ) -> Union[torch.Tensor, MemmapTensor]:
-        return torch.tensor(array, device=self.device)
+        return torch.as_tensor(array, device=self.device)
 
     def _process_tensor(
         self,
@@ -527,7 +527,6 @@ dtype=torch.float32)},
         check_shared: bool = False,
     ) -> Union[torch.Tensor, MemmapTensor]:
 
-        # TODO: move to _TensorDict?
         if not isinstance(input, _accepted_classes):
             tensor = self._convert_to_tensor(input)
         else:
@@ -1766,15 +1765,6 @@ class TensorDict(_TensorDict):
 
         if source is not None:
             for key, value in source.items():
-                if not isinstance(key, str):
-                    raise TypeError(
-                        f"Expected key to be a string but found {type(key)}"
-                    )
-                if not isinstance(value, _accepted_classes):
-                    raise TypeError(
-                        f"Expected value to be one of types"
-                        f" {_accepted_classes} but got {type(value)}"
-                    )
                 if map_item_to_device:
                     value = value.to(device)
                 _meta_val = (
@@ -1890,15 +1880,11 @@ class TensorDict(_TensorDict):
         return all(memmap_list) and len(memmap_list) > 0
 
     def _check_device(self) -> None:
-        devices = [value.device for value in self.values_meta()]
-        device0 = None
-        for _device in devices:
-            if device0 is None:
-                device0 is _device
-            elif device0 != _device:
-                raise RuntimeError(
-                    f"Found more than one device: {_device} and {device0}"
-                )
+        devices = set(value.device for value in self.values_meta())
+        if len(devices) > 1:
+            raise RuntimeError(
+                f"Found more than one device: {devices}"
+            )
 
     def pin_memory(self) -> _TensorDict:
         if self.device == torch.device("cpu"):
@@ -2211,6 +2197,7 @@ class TensorDict(_TensorDict):
             batch_size=self.batch_size,
             source=d,
             _meta_source=d_meta,
+            _run_checks=False,
         )
 
     def keys(self) -> KeysView:
@@ -3232,7 +3219,8 @@ class LazyStackedTensorDict(_TensorDict):
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             if isinstance(self, dest):
                 return self
-            return dest(source=self, batch_size=self.batch_size)
+            kwargs.update({"batch_size": self.batch_size})
+            return dest(source=self, **kwargs)
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
             try:
