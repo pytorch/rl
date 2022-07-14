@@ -1801,9 +1801,7 @@ class TensorDict(_TensorDict):
             else isinstance(proc_value, MemmapTensor)
         )
         is_shared = (
-            self._is_shared
-            if self._is_shared is not None
-            else proc_value.is_shared()
+            self._is_shared if self._is_shared is not None else proc_value.is_shared()
         )
         return MetaTensor(
             proc_value,
@@ -2197,7 +2195,11 @@ class TensorDict(_TensorDict):
 
     def select(self, *keys: str, inplace: bool = False) -> _TensorDict:
         d = {key: value for (key, value) in self.items() if key in keys}
-        d_meta = {key: value for (key, value) in self.items_meta(make_unset=False) if key in keys}
+        d_meta = {
+            key: value
+            for (key, value) in self.items_meta(make_unset=False)
+            if key in keys
+        }
         if inplace:
             self._tensordict = d
             for key in list(self._dict_meta.keys()):
