@@ -3692,9 +3692,9 @@ class SavedTensorDict(_TensorDict):
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             if isinstance(self, dest):
                 return self
+            kwargs.update({"batch_size": self.batch_size})
             td = dest(
                 source=self.to_dict(),
-                batch_size=self.batch_size,
                 **kwargs,
             )
             return td
