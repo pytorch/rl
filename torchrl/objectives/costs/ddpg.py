@@ -272,7 +272,7 @@ class vecDDPGLoss(LossModule):
                 tensordict, params=actor_params, buffers=actor_buffers, vmap=(0, 0, 0)
             )
             tensordict = torch.cat([
-                tensordict,
+                tensordict.select(*self.value_network.in_keys),
                 input_tensordict.select(*self.value_network.in_keys).unsqueeze(0)
             ], 0).to_tensordict()
             tensordict = self.value_network(
