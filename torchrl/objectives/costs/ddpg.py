@@ -238,30 +238,21 @@ class vecDDPGLoss(LossModule):
                 f"(self.device={self.device})"
             )
 
-        td_copy = input_tensordict.select(*self.value_network.in_keys).detach()
-        self.value_network(
-            td_copy,
-            params=self.value_network_params,
-            buffers=self.value_network_buffers,
-        )
-        pred_val = td_copy.get("state_action_value").squeeze(-1)
-
         with set_exploration_mode("mode"), hold_out_params(
             self.value_network_params
         ) as value_net_actor_loss_params:
-            actor_loss_params = list(self.actor_network_params) + list(
-                value_net_actor_loss_params
-            )
-            actor_loss_buffers = list(self.actor_network_buffers) + list(
-                self.value_network_buffers
-            )
+            actor_loss_params_an = self.actor_network_params
+            actor_loss_params_vn = value_net_actor_loss_params
+            actor_loss_buffers_an = self.actor_network_buffers
+            actor_loss_buffers_vn = self.value_network_buffers
 
-            value_loss_target_params = list(self.target_actor_network_params) + list(
-                self.target_value_network_params
-            )
-            value_loss_target_buffers = list(self.target_actor_network_buffers) + list(
-                self.target_value_network_buffers
-            )
+            value_loss_target_params_an = self.target_actor_network_params
+            value_loss_target_params_vn = self.target_value_network_params
+            value_loss_target_buffers_an = self.target_actor_network_buffers
+            value_loss_target_buffers_vn = self.target_value_network_buffers
+
+            value_loss_params_vn = self.value_network_params
+            value_loss_buffers_vn = self.value_network_buffers
 
             tensordict = torch.stack(
                 [
@@ -271,13 +262,23 @@ class vecDDPGLoss(LossModule):
                 0,
             ).to_tensordict()
 
-            params = transpose_stack((actor_loss_params, value_loss_target_params))
-            buffers = transpose_stack((actor_loss_buffers, value_loss_target_buffers))
+            actor_params = transpose_stack((actor_loss_params_an, value_loss_target_params_an))
+            actor_buffers = transpose_stack((actor_loss_buffers_an, value_loss_target_buffers_an))
 
-            self.actor_critic(
-                tensordict, params=params, buffers=buffers, vmap=(0, 0, 0)
+            value_params = transpose_stack((actor_loss_params_vn, value_loss_target_params_vn, value_loss_params_vn))
+            value_buffers = transpose_stack((actor_loss_buffers_vn, value_loss_target_buffers_vn, value_loss_buffers_vn))
+
+            tensordict = self.actor_network(
+                tensordict, params=actor_params, buffers=actor_buffers, vmap=(0, 0, 0)
             )
-            loss_actor, next_state_action_value = tensordict.get("state_action_value")
+            tensordict = torch.cat([
+                tensordict,
+                input_tensordict.select(*self.value_network.in_keys).unsqueeze(0)
+            ], 0).to_tensordict()
+            tensordict = self.value_network(
+                tensordict, params=value_params, buffers=value_buffers, vmap=(0, 0, 0)
+            )
+            loss_actor, next_state_action_value, pred_val = tensordict.get("state_action_value").squeeze(-1)
             loss_actor = -loss_actor
 
         target_value = next_state_value(
