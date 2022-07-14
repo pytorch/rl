@@ -115,7 +115,6 @@ class KeyDependentDefaultDict(collections.defaultdict):
     def __missing__(self, key):
         value = self.fun(key)
         self[key] = value
-        assert not isinstance(value, str)
         return value
 
 
