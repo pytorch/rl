@@ -6,8 +6,19 @@
 import abc
 import os
 
+from omegaconf import OmegaConf
 from torch import Tensor
 
+try:
+    import wandb
+except ImportError:
+    print("wandb could not be imported, you will not be able to use wandb logging")
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except ImportError:
+    print(
+        "tensorboard could not be imported, you will not be able to use tensorboard logging"
+    )
 
 __all__ = ["TensorboardLogger"]
 
@@ -134,7 +145,7 @@ class WandbLogger(Logger):
 
     def __init__(
         self,
-        exp_name: str = None,
+        exp_name: str,
         offline: bool = False,
         save_dir: str = None,
         id: str = None,
@@ -147,17 +158,22 @@ class WandbLogger(Logger):
         self.project = project
         self._wandb_kwargs = {
             "name": exp_name,
-            "offline": offline,
-            "save_dir": save_dir,
+            "dir": save_dir,
             "id": id,
             "project": project,
             "resume": "allow",
             **kwargs,
         }
         super().__init__(exp_name=exp_name)
-        self.log_dir = self.experiment.save_dir
+        import wandb
+
+        if self.offline:
+            os.environ["WANDB_MODE"] = "dryrun"
+        self.log_dir = save_dir
 
         self._has_imported_moviepy = False
+
+        self.video_log_counter = 0
 
     def _create_experiment(self) -> "WandbLogger":
         """
@@ -209,7 +225,13 @@ class WandbLogger(Logger):
                 raise Exception(
                     "moviepy not found, videos cannot be logged with TensorboardLogger"
                 )
-        self.experiment.log({"name": wandb.Video(video, fps=6, format="mp4")})
+        self.video_log_counter += 1
+        if step is not None:
+            self.experiment.log(
+                {name: wandb.Video(video, fps=6, format="mp4")}, step=step
+            )
+        else:
+            self.experiment.log({name: wandb.Video(video, fps=6, format="mp4")})
 
     def log_hparams(self, cfg: "DictConfig") -> None:
         """
@@ -218,4 +240,8 @@ class WandbLogger(Logger):
         Args:
             cfg (DictConfig): The configuration of the experiment.
         """
-        self.experiment.config.update(cfg, allow_val_change=True)
+        dict_config = OmegaConf.to_container(cfg, resolve=True)
+        self.experiment.config.update(dict_config, allow_val_change=True)
+
+    def __repr__(self) -> str:
+        return self.experiment.__repr__()
