@@ -76,6 +76,15 @@ class _TensorDict(Mapping, metaclass=abc.ABCMeta):
     _lazy = False
     is_meta = False
 
+    def __getstate__(self) -> dict:
+        state = self.__dict__.copy()
+        del state["_dict_meta"]
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        state["_dict_meta"] = KeyDependentDefaultDict(self._make_meta)
+        self.__dict__.update(state)
+
     def __init__(self):
         self._dict_meta = KeyDependentDefaultDict(self._make_meta)
 
@@ -1695,15 +1704,6 @@ class TensorDict(_TensorDict):
         True
 
     """
-
-    def __getstate__(self) -> dict:
-        state = self.__dict__.copy()
-        del state["_dict_meta"]
-        return state
-
-    def __setstate__(self, state: dict) -> None:
-        state["_dict_meta"] = KeyDependentDefaultDict(self._make_meta)
-        self.__dict__.update(state)
 
     @classmethod
     def __new__(cls, *args, **kwargs):
@@ -3455,8 +3455,6 @@ class SavedTensorDict(_TensorDict):
         device: Optional[torch.device] = None,
         batch_size: Optional[Sequence[int]] = None,
     ):
-        super().__init__()
-
         if not isinstance(source, _TensorDict):
             raise TypeError(
                 f"Expected source to be a _TensorDict instance, but got {type(source)} instead."
@@ -3493,7 +3491,11 @@ class SavedTensorDict(_TensorDict):
         torch.save(tensordict, self.filename)
 
     def _make_meta(self, key: str) -> MetaTensor:
-        return self._dict_meta[key]
+        if key not in self._dict_meta:
+            raise RuntimeError(
+                f'the key "{key}" was not found in SavedTensorDict._dict_meta (keys: {self._dict_meta.keys()}.'
+            )
+        return self._dict_meta["key"]
 
     def _load(self) -> _TensorDict:
         return torch.load(self.filename, map_location=self._device_safe())
@@ -3690,8 +3692,9 @@ class SavedTensorDict(_TensorDict):
         if isinstance(dest, type) and issubclass(dest, _TensorDict):
             if isinstance(self, dest):
                 return self
+            kwargs.update({"batch_size": self.batch_size})
             td = dest(
-                source=TensorDict(self.to_dict(), batch_size=self.batch_size),
+                source=self.to_dict(),
                 **kwargs,
             )
             return td
@@ -3705,8 +3708,9 @@ class SavedTensorDict(_TensorDict):
                 pass
             self_copy = copy(self)
             self_copy._device = dest
+            self_copy._dict_meta = deepcopy(self._dict_meta)
             for k, item in self.items_meta():
-                item.device = dest
+                self_copy._dict_meta[k].device = dest
             return self_copy
         if isinstance(dest, torch.Size):
             self.batch_size = dest
