@@ -327,6 +327,7 @@ class vecDDPGLoss(LossModule):
             _run_checks=False,
         )
 
+
 class vecDDPGLossGrad(LossModule):
     """
     The DDPG Loss class, with internal gradient computation
@@ -384,8 +385,8 @@ class vecDDPGLossGrad(LossModule):
         if not hasattr(self, "td"):
             self.td = input_tensordict
             self.grad = functorch.grad(
-                lambda *params: self._get_loss(self.td, params[:n],
-                                               params[n:]))
+                lambda *params: self._get_loss(self.td, params[:n], params[n:])
+            )
         else:
             self.td.update_(input_tensordict)
         g = self.grad(*self.actor_network_params, *self.value_network_params)
