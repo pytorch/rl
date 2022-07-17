@@ -285,7 +285,7 @@ class ProbabilisticTDModule(TensorDictModule):
         elif interaction_mode == "mean":
             try:
                 return dist.mean
-            except AttributeError:
+            except AttributeError or NotImplementedError:
                 if dist.has_rsample:
                     return dist.rsample((self._n_empirical_est,)).mean(0)
                 else:
