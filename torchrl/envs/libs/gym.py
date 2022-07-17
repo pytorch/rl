@@ -277,7 +277,7 @@ class GymEnv(GymWrapper):
         try:
             with warnings.catch_warnings(record=True) as w:
                 env = self.lib.make(env_name, frameskip=self.frame_skip, **kwargs)
-                if len(w) and "frameskip" in str(w[-1].message):
+                if any("frameskip" in str(_w.message) for _w in w):
                     raise TypeError("unexpected keyword argument 'frameskip'")
             self.wrapper_frame_skip = 1
         except TypeError as err:
