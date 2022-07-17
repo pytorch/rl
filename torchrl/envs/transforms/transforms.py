@@ -1529,7 +1529,6 @@ class NoopResetEnv(Transform):
 
         while i < noops:
             i += 1
-            print(tensordict)
             tensordict = parent.rand_step(step_tensordict(tensordict))
             if parent.is_done:
                 parent.reset()

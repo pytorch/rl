@@ -88,7 +88,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             Default is 1000
 
     Examples:
-        >>> from torchrl.modules.td_module import ProbabilisticTensorDictModule
+        >>> from torchrl.modules import ProbabilisticTensorDictModule
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
         >>> from torchrl.modules import  TanhNormal, NormalParamWrapper
         >>> import functorch, torch
@@ -306,7 +306,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         elif interaction_mode == "mean":
             try:
                 return dist.mean
-            except AttributeError:
+            except (AttributeError, NotImplementedError):
                 if dist.has_rsample:
                     return dist.rsample((self.n_empirical_estimate,)).mean(0)
                 else:
