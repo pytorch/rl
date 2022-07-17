@@ -135,6 +135,8 @@ class GymWrapper(GymLikeEnv):
     def __init__(self, env=None, **kwargs):
         if env is not None:
             kwargs["env"] = env
+        if kwargs.get("from_pixels", False):
+            kwargs["render_mode"] = "single_rgb_array"
         self._seed_calls_reset = None
         super().__init__(**kwargs)
 
