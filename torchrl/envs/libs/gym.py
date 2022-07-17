@@ -266,9 +266,10 @@ class GymEnv(GymWrapper):
                 f" {self.git_url}"
             )
         from_pixels = kwargs.get("from_pixels", False)
+        if from_pixels:
+            kwargs["render_mode"] = "single_rgb_array"
         if "from_pixels" in kwargs:
             del kwargs["from_pixels"]
-            kwargs["render_mode"] = "single_rgb_array"
 
         pixels_only = kwargs.get("pixels_only", True)
         if "pixels_only" in kwargs:
