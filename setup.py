@@ -170,7 +170,7 @@ def _main():
         },
         install_requires=[pytorch_package_dep, "numpy", "packaging"],
         extras_require={
-            "atari": ["gym", "atari-py", "ale-py", "gym[accept-rom-license]", "pygame"],
+            "atari": ["gym<=0.24", "atari-py", "ale-py", "gym[accept-rom-license]", "pygame"],
             "dm_control": ["dm_control"],
             "gym_continuous": ["mujoco-py", "mujoco"],
             "rendering": ["moviepy"],
