@@ -42,6 +42,9 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 
 and many more to come!
 
+We also provide [tutorials and demos](tutorials) that give a sense of what the 
+library can do.
+
 ## Installation
 Create a conda environment where the packages will be installed. 
 Before installing anything, make sure you have the latest version of the `ninja` library:

@@ -68,7 +68,7 @@ DEFAULT_REWARD_SCALING = {
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
-    from torch.utils.tensorboard import SummaryWriter
+    from torchrl.trainers.loggers import TensorboardLogger
 
     cfg = correct_for_frame_skip(cfg)
 
@@ -89,7 +89,7 @@ def main(cfg: "DictConfig"):
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
-    writer = SummaryWriter(f"ddpg_logging/{exp_name}")
+    logger = TensorboardLogger(f"ddpg_logging/{exp_name}")
     video_tag = exp_name if cfg.record_video else ""
 
     stats = None
@@ -161,7 +161,7 @@ def main(cfg: "DictConfig"):
         video_tag=video_tag,
         norm_obs_only=True,
         stats=stats,
-        writer=writer,
+        logger=logger,
         use_env_creator=False,
     )()
 
@@ -195,7 +195,7 @@ def main(cfg: "DictConfig"):
         target_net_updater,
         actor_model_explore,
         replay_buffer,
-        writer,
+        logger,
         cfg,
     )
 
@@ -216,7 +216,7 @@ def main(cfg: "DictConfig"):
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
 
     trainer.train()
-    return (writer.log_dir, trainer._log_dict, trainer.state_dict())
+    return (logger.log_dir, trainer._log_dict, trainer.state_dict())
 
 
 if __name__ == "__main__":

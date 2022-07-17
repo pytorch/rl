@@ -4,3 +4,4 @@
 # LICENSE file in the root directory of this source tree.
 
 from .trainers import *
+from .loggers import *

@@ -38,7 +38,7 @@ class TensorDictSequence(TensorDictModule):
 
     TDSequence supportse functional, modular and vmap coding:
     Examples:
-        >>> from torchrl.modules.td_module import ProbabilisticTensorDictModule
+        >>> from torchrl.modules.tensordict_module import ProbabilisticTensorDictModule
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
         >>> from torchrl.modules import  TanhNormal, TensorDictSequence, NormalParamWrapper
         >>> import torch, functorch

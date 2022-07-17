@@ -131,10 +131,9 @@ class ReplayBuffer:
         self._storage = storage
         self._capacity = size
         self._cursor = 0
-        if collate_fn is not None:
-            self._collate_fn = collate_fn
-        else:
-            self._collate_fn = stack_tensors
+        if collate_fn is None:
+            collate_fn = stack_tensors
+        self._collate_fn = collate_fn
         self._pin_memory = pin_memory
 
         self._prefetch = prefetch is not None and prefetch > 0
@@ -275,7 +274,7 @@ class ReplayBuffer:
 
     def __repr__(self) -> str:
         string = (
-            f"{self.__class__.__name__}(size={len(self)}, "
+            f"{type(self).__name__}(size={len(self)}, "
             f"pin_memory={self._pin_memory})"
         )
         return string
@@ -558,9 +557,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 return stack_td(x, 0, contiguous=True)
 
         super().__init__(size, collate_fn, pin_memory, prefetch, storage=storage)
-
-    def sample(self, size: int) -> Any:
-        return super(TensorDictReplayBuffer, self).sample(size)
 
 
 class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
