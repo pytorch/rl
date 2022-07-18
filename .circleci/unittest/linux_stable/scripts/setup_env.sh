@@ -53,6 +53,15 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
+
+if [[ $OSTYPE == 'darwin'* ]]; then
+  PRIVATE_MUJOCO_GL=glfw
+else
+  conda install -y -c conda-forge mesa
+  conda install -y -c menpo osmesa
+  PRIVATE_MUJOCO_GL=osmesa
+fi
+
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
 conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   DISPLAY=unix:0.0 \
@@ -62,4 +71,3 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL
 
 conda env update --file "${this_dir}/environment.yml" --prune
-pip install dm_control

@@ -51,10 +51,3 @@ python -c "import functorch"
 printf "* Installing torchrl\n"
 python setup.py develop
 
-if [[ $OSTYPE == 'darwin'* ]]; then
-  PRIVATE_MUJOCO_GL=glfw
-else
-  conda install -y -c conda-forge mesa
-  conda install -y -c menpo osmesa
-  PRIVATE_MUJOCO_GL=osmesa
-fi

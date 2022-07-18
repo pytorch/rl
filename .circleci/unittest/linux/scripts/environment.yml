@@ -24,3 +24,4 @@ dependencies:
     - mujoco_py
     - hydra-core
     - tensorboard
+    - dm_control
