@@ -12,19 +12,13 @@ You can use the syntax `close #15213` if this solves the issue #15213
 
 ## Types of changes
 
-What types of changes does your code introduce? Put an `x` in all the boxes that apply:
+What types of changes does your code introduce? Remove all that do not apply:
 
 - [ ] Bug fix (non-breaking change which fixes an issue)
 - [ ] New feature (non-breaking change which adds core functionality)
 - [ ] Breaking change (fix or feature that would cause existing functionality to change)
 - [ ] Documentation (update in the documentation)
 - [ ] Example (update in the folder of examples)
-
-## Implemented Tasks
-
-- [ ] Subtask 1
-- [ ] Subtask 2
-- [ ] Subtask 3
 
 ## Checklist
 
