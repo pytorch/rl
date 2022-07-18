@@ -62,3 +62,4 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL
 
 conda env update --file "${this_dir}/environment.yml" --prune
+pip install dm_control
