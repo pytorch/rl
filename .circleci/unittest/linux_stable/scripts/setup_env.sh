@@ -53,7 +53,7 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
-export MUJOCO_GL=$$PRIVATE_MUJOCO_GL
+export MUJOCO_GL=$PRIVATE_MUJOCO_GL
 conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   DISPLAY=unix:0.0 \
   MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
