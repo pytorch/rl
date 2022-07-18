@@ -8,7 +8,7 @@ import argparse
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from torch import nn
+from torch import nn, autograd
 from torchrl.data.tensordict.tensordict import _TensorDict
 from torchrl.modules import (
     TanhNormal,
@@ -209,6 +209,18 @@ def test_tanhtrsf(dtype):
     some_big_number = trsf.inv(ones)
     assert torch.isfinite(some_big_number).all()
     assert (some_big_number.sign() == ones.sign()).all()
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_tanhtrsf_grad(dtype):
+    torch.manual_seed(0)
+    trsf = SafeTanhTransform()
+    x = torch.randn(100, requires_grad=True)
+    y1 = trsf(x)
+    y2 = x.tanh()
+    g1 = autograd.grad(y1.sum(), x, retain_graph=True)[0]
+    g2 = autograd.grad(y2.sum(), x, retain_graph=True)[0]
+    torch.testing.assert_close(g1, g2)
 
 
 if __name__ == "__main__":
