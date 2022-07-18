@@ -6,7 +6,6 @@ dependencies:
   - ninja
   - protobuf
   - pip:
-    - glfw
     - hypothesis
     - future
     - cloudpickle

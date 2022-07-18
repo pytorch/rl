@@ -5,7 +5,6 @@ dependencies:
   - pip
   - protobuf
   - pip:
-    - glfw
     - hypothesis
     - future
     - cloudpickle
