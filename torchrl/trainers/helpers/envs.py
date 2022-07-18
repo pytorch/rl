@@ -348,8 +348,13 @@ def get_stats_random_rollout(
     while n < cfg.init_env_steps:
         _td_stats = proof_environment.rollout(max_steps=cfg.init_env_steps)
         n += _td_stats.numel()
-        td_stats.append(_td_stats.to_tensordict().select(key).cpu())
-        del _td_stats
+        _td_stats_select = _td_stats.to_tensordict().select(key).cpu()
+        if not len(list(_td_stats_select.keys())):
+            raise RuntimeError(
+                f"key {key} not found in tensordict with keys {list(_td_stats.keys())}"
+            )
+        td_stats.append(_td_stats_select)
+        del _td_stats, _td_stats_select
     td_stats = torch.cat(td_stats, 0)
 
     if key is None:

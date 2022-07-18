@@ -441,8 +441,8 @@ class Trainer:
             else:
                 _log = False
             method = LOGGER_METHODS.get(key, "log_scalar")
-            if _log and self.log_scalar is not None:
-                getattr(self.log_scalar, method)(key, item, step=collected_frames)
+            if _log and self.logger is not None:
+                getattr(self.logger, method)(key, item, step=collected_frames)
             if method == "log_scalar" and self.progress_bar and log_pbar:
                 if isinstance(item, torch.Tensor):
                     item = item.item()
