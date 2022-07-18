@@ -4,21 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+from ast import Import
 import os
 
-from omegaconf import OmegaConf
 from torch import Tensor
 
-try:
-    import wandb
-except ImportError:
-    print("wandb could not be imported, you will not be able to use wandb logging")
-try:
-    from torch.utils.tensorboard import SummaryWriter
-except ImportError:
-    print(
-        "tensorboard could not be imported, you will not be able to use tensorboard logging"
-    )
 
 __all__ = ["TensorboardLogger"]
 
@@ -75,6 +65,8 @@ class TensorboardLogger(Logger):
 
         Args:
             exp_name (str): The name of the experiment.
+        Returns:
+            SummaryWriter: The tensorboard experiment.
 
         """
         try:
@@ -164,14 +156,15 @@ class WandbLogger(Logger):
             "resume": "allow",
             **kwargs,
         }
+        self._has_imported_wandb = False
         super().__init__(exp_name=exp_name)
-        import wandb
-
         if self.offline:
             os.environ["WANDB_MODE"] = "dryrun"
         self.log_dir = save_dir
 
         self._has_imported_moviepy = False
+
+        self._has_imported_omgaconf = False
 
         self.video_log_counter = 0
 
@@ -181,10 +174,12 @@ class WandbLogger(Logger):
 
         Args:
             exp_name (str): The name of the experiment.
-
+        Returns:
+            WandbLogger: The wandb experiment logger.
         """
         try:
             import wandb
+            self._has_imported_wandb = True
         except ImportError:
             raise ImportError("wandb could not be imported")
 
@@ -216,6 +211,12 @@ class WandbLogger(Logger):
             video (Tensor): The video to be logged.
             step (int, optional): The step at which the video is logged. Defaults to None.
         """
+        if not self._has_imported_wandb:
+            try:
+                import wandb
+                self._has_imported_wandb = True
+            except ImportError:
+                raise ImportError("wandb could not be imported")
         if not self._has_imported_moviepy:
             try:
                 import moviepy  # noqa
@@ -240,8 +241,16 @@ class WandbLogger(Logger):
         Args:
             cfg (DictConfig): The configuration of the experiment.
         """
-        dict_config = OmegaConf.to_container(cfg, resolve=True)
-        self.experiment.config.update(dict_config, allow_val_change=True)
+        
+        if type(cfg) is not dict:
+            if not self._has_imported_omgaconf:
+                try:
+                    from omegaconf import OmegaConf
+                    self._has_imported_omgaconf = True
+                except ImportError:
+                    raise ImportError("Cannot log hydra configs without OmegaConf")
+            cfg = OmegaConf.to_container(cfg, resolve=True)
+        self.experiment.config.update(cfg, allow_val_change=True)
 
     def __repr__(self) -> str:
         return self.experiment.__repr__()
