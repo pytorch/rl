@@ -8,7 +8,7 @@ it is preferable to install the nightly built of pytorch.
 
 Make sure you install torchrl in develop mode by running
 ```
-pip install -e ".[atari,dm_control,gym_continuous,rendering,tests,utils]"
+python setup.py develop
 ```
 in your shell.
 
