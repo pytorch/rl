@@ -313,7 +313,7 @@ class DistributionalQValueHook(QValueHook):
 
     Examples:
         >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
-        >>> from torchrl.modules.td_module.actors import DistributionalQValueHook, Actor
+        >>> from torchrl.modules.tensordict_module.actors import DistributionalQValueHook, Actor
         >>> from torch import nn
         >>> import torch, functorch
         >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
@@ -414,7 +414,7 @@ class QValueActor(Actor):
 
     Examples:
         >>> from torchrl.data import TensorDict, OneHotDiscreteTensorSpec
-        >>> from torchrl.modules.td_module.actors import QValueActor
+        >>> from torchrl.modules.tensordict_module.actors import QValueActor
         >>> from torch import nn
         >>> import torch, functorch
         >>> td = TensorDict({'observation': torch.randn(5, 4)}, [5])
@@ -804,7 +804,7 @@ class ActorCriticWrapper(TensorDictSequence):
         value_operator (TensorDictModule): a value operator, that reads the hidden variable and returns a value
 
     Examples:
-        >>> from torchrl.modules.td_module.deprec import ProbabilisticActor_deprecated        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
+        >>> from torchrl.modules.tensordict_module.deprec import ProbabilisticActor_deprecated        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec, NdBoundedTensorSpec
         >>> from torchrl.modules import  ValueOperator, TanhNormal, ActorCriticWrapper
         >>> import torch
         >>> spec_action = NdBoundedTensorSpec(-1, 1, torch.Size([8]))

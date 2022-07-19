@@ -16,6 +16,7 @@ from torchrl.envs.common import _EnvClass
 from torchrl.modules import TensorDictModule, TensorDictModuleWrapper, reset_noise
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
+from torchrl.trainers.loggers import Logger
 from torchrl.trainers.trainers import (
     Trainer,
     SelectKeys,
@@ -81,7 +82,7 @@ def make_trainer(
         Union[TensorDictModuleWrapper, TensorDictModule]
     ] = None,
     replay_buffer: Optional[ReplayBuffer] = None,
-    writer: Optional["SummaryWriter"] = None,
+    logger: Optional[Logger] = None,
     cfg: "DictConfig" = None,
 ) -> Trainer:
     """Creates a Trainer instance given its constituents.
@@ -95,7 +96,7 @@ def make_trainer(
         policy_exploration (TDModule or TensorDictModuleWrapper, optional): a policy to be used for recording and exploration
             updates (should be synced with the learnt policy).
         replay_buffer (ReplayBuffer, optional): a replay buffer to be used to collect data.
-        writer (SummaryWriter, optional): a tensorboard SummaryWriter to be used for logging.
+        logger (Logger, optional): a Logger to be used for logging.
         cfg (DictConfig, optional): a DictConfig containing the arguments of the script. If None, the default
             arguments are used.
 
@@ -105,7 +106,7 @@ def make_trainer(
     Examples:
         >>> import torch
         >>> import tempfile
-        >>> from torch.utils.tensorboard import SummaryWriter
+        >>> from torchrl.trainers.loggers import TensorboardLogger
         >>> from torchrl.trainers import Trainer
         >>> from torchrl.envs import EnvCreator
         >>> from torchrl.collectors.collectors import SyncDataCollector
@@ -130,9 +131,9 @@ def make_trainer(
         >>> policy_exploration = EGreedyWrapper(policy)
         >>> replay_buffer = TensorDictReplayBuffer(1000)
         >>> dir = tempfile.gettempdir()
-        >>> writer = SummaryWriter(log_dir=dir)
+        >>> logger = TensorboardLogger(exp_name=dir)
         >>> trainer = make_trainer(collector, loss_module, recorder, target_net_updater, policy_exploration,
-        ...    replay_buffer, writer)
+        ...    replay_buffer, logger)
         >>> print(trainer)
 
     """
@@ -174,14 +175,13 @@ def make_trainer(
         f"target_net_updater = {target_net_updater}; \n"
         f"policy_exploration = {policy_exploration}; \n"
         f"replay_buffer = {replay_buffer}; \n"
-        f"writer = {writer}; \n"
+        f"logger = {logger}; \n"
         f"cfg = {cfg}; \n"
     )
 
-    if writer is not None:
+    if logger is not None:
         # log hyperparams
-        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(cfg).items())])
-        writer.add_text("hparams", txt)
+        logger.log_hparams(cfg)
 
     trainer = Trainer(
         collector=collector,
@@ -189,7 +189,7 @@ def make_trainer(
         total_frames=cfg.total_frames * cfg.frame_skip,
         loss_module=loss_module,
         optimizer=optimizer,
-        writer=writer,
+        logger=logger,
         optim_steps_per_batch=cfg.optim_steps_per_batch,
         clip_grad_norm=cfg.clip_grad_norm,
         clip_norm=cfg.clip_norm,

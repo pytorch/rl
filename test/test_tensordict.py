@@ -63,7 +63,7 @@ def test_tensordict_set(device):
         torch.randn(4, 5, 1, 2, dtype=torch.double, device=device),
         inplace=False,
     )
-    assert td._tensordict_meta["key1"].shape == td._tensordict["key1"].shape
+    assert td._dict_meta["key1"].shape == td._tensordict["key1"].shape
 
 
 def test_pad():

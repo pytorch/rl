@@ -114,6 +114,7 @@ class KeyDependentDefaultDict(collections.defaultdict):
 
     def __missing__(self, key):
         value = self.fun(key)
+        self[key] = value
         return value
 
 

@@ -106,6 +106,8 @@ class MemmapTensor(object):
 
     """
 
+    requires_grad = False
+
     def __init__(
         self,
         elem: Union[torch.Tensor, MemmapTensor],
