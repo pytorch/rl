@@ -183,6 +183,7 @@ def _main():
             "tests": ["pytest", "pyyaml", "pytest-instafail"],
             "utils": [
                 "tensorboard",
+                "wandb",
                 "tqdm",
                 "hydra-core>=1.1",
                 "hydra-submitit-launcher",
