@@ -85,6 +85,13 @@ and functorch
 pip install "git+https://github.com/pytorch/functorch.git"
 ```
 
+If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message 
+`(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
+
+```
+ARCHFLAGS="-arch arm64" pip install "git+https://github.com/pytorch/functorch.git"
+```
+
 **Torchrl**
 
 You can install the latest release by using
@@ -112,6 +119,13 @@ Go to the directory where you have cloned the torchrl repo and install it
 ```
 cd /path/to/torchrl/
 python setup.py develop
+```
+
+If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message 
+`(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
+
+```
+ARCHFLAGS="-arch arm64" python setup.py develop
 ```
 
 To run a quick sanity check, leave that directory (e.g. by executing `cd ~/`) 
