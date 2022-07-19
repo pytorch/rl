@@ -70,8 +70,8 @@ class MetaTensor:
         _is_shared: Optional[bool] = None,
         _is_memmap: Optional[bool] = None,
         _is_tensordict: Optional[bool] = None,
+        _repr_tensordict: Optional[str] = None,
     ):
-        _repr_tensordict = None
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
             shape = tensor.shape
@@ -177,6 +177,7 @@ class MetaTensor:
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
             _is_tensordict=self.is_tensordict(),
+            _repr_tensordict=self._repr_tensordict,
         )
 
     def _to_meta(self) -> torch.Tensor:
@@ -192,6 +193,7 @@ class MetaTensor:
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
             _is_tensordict=self.is_tensordict(),
+            _repr_tensordict=self._repr_tensordict,
         )
 
     @classmethod

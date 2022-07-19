@@ -656,15 +656,6 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                 else:
                     tensordicts = tensordicts.contiguous()
                 tensordicts.batch_size = tensordicts.batch_size[:1]
-            # # we split the tensordict such that the setting of the "index" key herebelow results in a change in
-            # # the tensordicts stored in the buffer
-            # tensordicts = list(tensordicts.unbind(0))
-            tensordicts.set(
-                "index",
-                torch.zeros(
-                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
-                ),
-            )
             tensordicts.set(
                 "index",
                 torch.zeros(
