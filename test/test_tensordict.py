@@ -198,9 +198,19 @@ def test_mask_td(device):
         "key2": torch.randn(4, 5, 10, device=device),
     }
     mask = torch.zeros(4, 5, dtype=torch.bool, device=device).bernoulli_()
+    mask_list = mask.numpy().tolist()
     td = TensorDict(batch_size=(4, 5), source=d)
+
     td_masked = torch.masked_select(td, mask)
+    td_masked1 = td[mask_list]
     assert len(td_masked.get("key1")) == td_masked.shape[0]
+    assert len(td_masked1.get("key1")) == td_masked1.shape[0]
+
+    mask_list = [False, True, False, True]
+
+    td_masked2 = td[mask_list, 0]
+    torch.testing.assert_allclose(td.get("key1")[mask_list, 0], td_masked2.get("key1"))
+    torch.testing.assert_allclose(td.get("key2")[mask_list, 0], td_masked2.get("key2"))
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -781,6 +791,12 @@ class TestTensorDicts:
         assert_allclose_td(td_masked, td_masked2)
         assert td_masked.batch_size[0] == mask.sum()
         assert td_masked.batch_dims == 1
+
+        mask_list = mask.numpy().tolist()
+        td_masked3 = td[mask_list]
+        assert_allclose_td(td_masked3, td_masked2)
+        assert td_masked3.batch_size[0] == mask.sum()
+        assert td_masked3.batch_dims == 1
 
     @pytest.mark.skipif(
         torch.cuda.device_count() == 0, reason="No cuda device detected"
