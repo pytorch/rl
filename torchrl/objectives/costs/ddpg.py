@@ -123,12 +123,6 @@ class DDPGLoss(LossModule):
             td_copy = self.value_network(
                 td_copy, params=params, buffers=self.value_network_buffers
             )
-        # TODO: validate this experimentally
-        # td_copy = self.value_network(
-        #     td_copy,
-        #     params=self.target_value_network_params,
-        #     buffers=self.value_network_buffers,
-        # )
         return -td_copy.get("state_action_value")
 
     def _loss_value(
