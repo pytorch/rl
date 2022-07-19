@@ -69,10 +69,16 @@ def step_tensordict(
     prohibited = set()
     if exclude_done:
         prohibited.add("done")
+    else:
+        other_keys.append("done")
     if exclude_reward:
         prohibited.add("reward")
+    else:
+        other_keys.append("reward")
     if exclude_action:
         prohibited.add("action")
+    else:
+        other_keys.append("action")
     keys = [key for key in tensordict.keys() if key.startswith("next_")]
     if len(keys) == 0:
         raise RuntimeError(

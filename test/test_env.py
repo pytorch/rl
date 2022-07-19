@@ -35,6 +35,7 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     RewardClipping,
 )
+from torchrl.envs.utils import step_tensordict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.modules import (
     ActorCriticOperator,
@@ -815,6 +816,61 @@ def test_seed():
         rollout2["observation"][1:], rollout2["next_observation"][:-1]
     )
     torch.testing.assert_allclose(rollout1["observation"], rollout2["observation"])
+
+
+@pytest.mark.parametrize("keep_other", [True, False])
+@pytest.mark.parametrize("exclude_reward", [True, False])
+@pytest.mark.parametrize("exclude_done", [True, False])
+@pytest.mark.parametrize("exclude_action", [True, False])
+@pytest.mark.parametrize("has_out", [True, False])
+def test_steptensordict(
+    keep_other, exclude_reward, exclude_done, exclude_action, has_out
+):
+    torch.manual_seed(0)
+    tensordict = TensorDict(
+        {
+            "ledzep": torch.randn(4, 2),
+            "next_ledzep": torch.randn(4, 2),
+            "reward": torch.randn(4, 1),
+            "done": torch.zeros(4, 1, dtype=torch.bool),
+            "beatles": torch.randn(4, 1),
+            "action": torch.randn(4, 2),
+        },
+        [4],
+    )
+    next_tensordict = TensorDict({}, [4]) if has_out else None
+    out = step_tensordict(
+        tensordict,
+        keep_other=keep_other,
+        exclude_reward=exclude_reward,
+        exclude_done=exclude_done,
+        exclude_action=exclude_action,
+        next_tensordict=next_tensordict,
+    )
+    assert "ledzep" in out.keys()
+    assert out["ledzep"] is tensordict["next_ledzep"]
+    if keep_other:
+        assert "beatles" in out.keys()
+        assert out["beatles"] is tensordict["beatles"]
+    else:
+        assert "beatles" not in out.keys()
+    if not exclude_reward:
+        assert "reward" in out.keys()
+        assert out["reward"] is tensordict["reward"]
+    else:
+        assert "reward" not in out.keys()
+    if not exclude_action:
+        assert "action" in out.keys()
+        assert out["action"] is tensordict["action"]
+    else:
+        assert "action" not in out.keys()
+    if not exclude_done:
+        assert "done" in out.keys()
+        assert out["done"] is tensordict["done"]
+    else:
+        assert "done" not in out.keys()
+    if has_out:
+        assert out is next_tensordict
 
 
 if __name__ == "__main__":
