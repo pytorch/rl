@@ -583,7 +583,7 @@ class LogReward:
 
     """
 
-    def __init__(self, logname="r_training", log_pbar: bool = False):
+    def __init__(self, logname="r_training", log_pbar: bool = True):
         self.logname = logname
         self.log_pbar = log_pbar
 
