@@ -3,12 +3,15 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .common import Logger
 from torch import Tensor
+
+from .common import Logger
+
 try:
     from torch.utils.tensorboard import SummaryWriter
 except ImportError:
     raise ImportError("torch.utils.tensorboard could not be imported")
+
 
 class TensorboardLogger(Logger):
     """
@@ -86,4 +89,3 @@ class TensorboardLogger(Logger):
 
     def __repr__(self) -> str:
         return self.experiment.__repr__()
-

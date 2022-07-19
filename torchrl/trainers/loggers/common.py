@@ -40,4 +40,3 @@ class Logger:
     @abc.abstractmethod
     def __repr__(self) -> str:
         raise NotImplementedError
-

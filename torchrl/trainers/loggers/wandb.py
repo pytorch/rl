@@ -3,15 +3,19 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .common import Logger
-from torch import Tensor
 import os
+
+from torch import Tensor
+
+from .common import Logger
+
 try:
     import wandb
 except ImportError:
     raise ImportError("wandb could not be imported")
 try:
     from omegaconf import OmegaConf
+
     _has_imported_omgaconf = True
 except ImportError:
     print("OmegaConf could not be imported. Cannot log hydra configs without OmegaConf")
@@ -121,7 +125,7 @@ class WandbLogger(Logger):
         Args:
             cfg (DictConfig): The configuration of the experiment.
         """
-        
+
         if type(cfg) is not dict and _has_imported_omgaconf:
             cfg = OmegaConf.to_container(cfg, resolve=True)
         self.experiment.config.update(cfg, allow_val_change=True)
