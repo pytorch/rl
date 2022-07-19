@@ -8,7 +8,7 @@ dependencies:
     - hypothesis
     - future
     - cloudpickle
-    - gym
+    - gym==0.24
     - pygame
     - gym[accept-rom-license]
     - gym[atari]
@@ -21,7 +21,7 @@ dependencies:
     - expecttest
     - pyyaml
     - scipy
-    - dm_control
     - mujoco_py
     - hydra-core
     - tensorboard
+    - dm_control

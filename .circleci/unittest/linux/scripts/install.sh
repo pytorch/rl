@@ -50,18 +50,3 @@ python -c "import functorch"
 
 printf "* Installing torchrl\n"
 python setup.py develop
-
-if [[ $OSTYPE == 'darwin'* ]]; then
-  PRIVATE_MUJOCO_GL=glfw
-else
-  conda install -y -c conda-forge mesa
-  conda install -y -c menpo osmesa
-  PRIVATE_MUJOCO_GL=osmesa
-fi
-
-conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
-  DISPLAY=unix:0.0 \
-  MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
-  SDL_VIDEODRIVER=dummy \
-  MUJOCO_GL=$PRIVATE_MUJOCO_GL

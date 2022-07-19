@@ -51,7 +51,7 @@ cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
 
 
-@hydra.main(version_base=None, config_path=None, config_name="config")
+@hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
     from torchrl.trainers.loggers.tensorboard import TensorboardLogger
 
@@ -81,7 +81,9 @@ def main(cfg: "DictConfig"):
     if not cfg.vecnorm and cfg.norm_stats:
         proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False)()
         stats = get_stats_random_rollout(
-            cfg, proof_env, key="next_pixels" if cfg.from_pixels else None
+            cfg,
+            proof_env,
+            key="next_pixels" if cfg.from_pixels else "next_observation_vector",
         )
         # make sure proof_env is closed
         proof_env.close()

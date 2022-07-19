@@ -11,6 +11,7 @@ import torch
 from torch import distributions as D, nn
 from torch.distributions import constraints
 
+from torchrl._torchrl import safetanh
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
@@ -85,9 +86,7 @@ class SafeTanhTransform(D.TanhTransform):
     """
 
     def _call(self, x: torch.Tensor) -> torch.Tensor:
-        eps = torch.finfo(x.dtype).eps
-        y = super()._call(x)
-        y.data.clamp_(-1 + eps, 1 - eps)
+        y = safetanh(x)
         return y
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:

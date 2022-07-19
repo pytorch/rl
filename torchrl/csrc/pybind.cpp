@@ -11,6 +11,7 @@
 #include <memory>
 
 #include "segment_tree.h"
+#include "utils.h"
 
 namespace py = pybind11;
 
@@ -20,4 +21,6 @@ PYBIND11_MODULE(_torchrl, m) {
 
   torchrl::DefineMinSegmentTree<float>("Fp32", m);
   torchrl::DefineMinSegmentTree<double>("Fp64", m);
+
+  m.def("safetanh", &safetanh, "Safe Tanh");
 }
