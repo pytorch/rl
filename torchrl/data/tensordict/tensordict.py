@@ -1299,13 +1299,14 @@ dtype=torch.float32)},
                 raise RuntimeError("repeated dim in permute")
             seen[idx] = True
 
-        return PermutedTensorDict(
+        result = PermutedTensorDict(
             source=self,
             custom_op="permute",
             inv_op="permute",
             custom_op_kwargs={"dims": dims_list},
             inv_op_kwargs={"dims": dims_list},
         )
+        return result
 
     def __repr__(self) -> str:
         fields = _td_fields(self)
