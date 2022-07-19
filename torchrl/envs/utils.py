@@ -66,16 +66,13 @@ def step_tensordict(
 
     """
     other_keys = []
-    to_exclude = []
+    prohibited = set()
     if exclude_done:
-        to_exclude.append("done")
+        prohibited.add("done")
     if exclude_reward:
-        to_exclude.append("reward")
+        prohibited.add("reward")
     if exclude_action:
-        to_exclude.append("action")
-    if to_exclude:
-        # we exclude those keys to make sure we aren't reporting time-specific values at the next step.
-        tensordict = tensordict.exclude(*to_exclude)
+        prohibited.add("action")
     keys = [key for key in tensordict.keys() if key.startswith("next_")]
     if len(keys) == 0:
         raise RuntimeError(
@@ -83,10 +80,10 @@ def step_tensordict(
             tensordict,
         )
     new_keys = [key[5:] for key in keys]
+    prohibited = prohibited.union(keys).union(new_keys)
     if keep_other:
-        prohibited = set(keys).union(new_keys)
         other_keys = [key for key in tensordict.keys() if key not in prohibited]
-    select_tensordict = tensordict.select(*other_keys, *keys).clone()
+    select_tensordict = tensordict.select(*other_keys, *keys)
     for new_key, key in zip(new_keys, keys):
         select_tensordict.rename_key(key, new_key, safe=True)
     if next_tensordict is not None:
