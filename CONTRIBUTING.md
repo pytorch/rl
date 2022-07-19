@@ -12,6 +12,13 @@ python setup.py develop
 ```
 in your shell.
 
+If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message 
+`(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
+
+```
+ARCHFLAGS="-arch arm64" python setup.py develop
+```
+
 ## Formatting your code
 **Type annotation** 
 
