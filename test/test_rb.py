@@ -33,15 +33,22 @@ collate_fn_dict = {
 
 
 @pytest.mark.parametrize(
-    "rbtype",
+    "rbtype,storage",
     [
-        ReplayBuffer,
-        PrioritizedReplayBuffer,
-        TensorDictReplayBuffer,
-        TensorDictPrioritizedReplayBuffer,
+        (ReplayBuffer, None),
+        (ReplayBuffer, ListStorage),
+        (PrioritizedReplayBuffer, None),
+        (PrioritizedReplayBuffer, ListStorage),
+        (TensorDictReplayBuffer, None),
+        (TensorDictReplayBuffer, ListStorage),
+        (TensorDictReplayBuffer, LazyTensorStorage),
+        (TensorDictReplayBuffer, LazyMemmapStorage),
+        (TensorDictPrioritizedReplayBuffer, None),
+        (TensorDictPrioritizedReplayBuffer, ListStorage),
+        (TensorDictPrioritizedReplayBuffer, LazyTensorStorage),
+        (TensorDictPrioritizedReplayBuffer, LazyMemmapStorage),
     ],
 )
-@pytest.mark.parametrize("storage", [None, ListStorage])
 @pytest.mark.parametrize("size", [3, 100])
 @pytest.mark.parametrize("prefetch", [0])
 class TestBuffers:
@@ -96,9 +103,21 @@ class TestBuffers:
         elif rbtype is PrioritizedReplayBuffer:
             data = [torch.randint(100, (1,)) for _ in range(size)]
         elif rbtype is TensorDictReplayBuffer:
-            data = TensorDict({"a": torch.randint(100, (size,))}, [size])
+            data = TensorDict(
+                {
+                    "a": torch.randint(100, (size,)),
+                    "b": TensorDict({"c": torch.randint(100, (size,))}, [size]),
+                },
+                [size],
+            )
         elif rbtype is TensorDictPrioritizedReplayBuffer:
-            data = TensorDict({"a": torch.randint(100, (size,))}, [size])
+            data = TensorDict(
+                {
+                    "a": torch.randint(100, (size,)),
+                    "b": TensorDict({"c": torch.randint(100, (size,))}, [size]),
+                },
+                [size],
+            )
         else:
             raise NotImplementedError(rbtype)
         return data
@@ -108,7 +127,11 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_datum(rbtype)
         rb.add(data)
-        assert (rb._storage[0] == data).all()
+        s = rb._storage[0]
+        if isinstance(s, _TensorDict):
+            assert (s == data.select(*s.keys())).all()
+        else:
+            assert (s == data).all()
 
     def test_extend(self, rbtype, storage, size, prefetch):
         torch.manual_seed(0)
@@ -120,7 +143,9 @@ class TestBuffers:
             found_similar = False
             for b in rb._storage:
                 if isinstance(b, _TensorDict):
-                    b = b.select(*d.keys())
+                    b = b.exclude("index").select(*set(d.keys()).intersection(b.keys()))
+                    d = d.select(*set(d.keys()).intersection(b.keys()))
+
                 value = b == d
                 if isinstance(value, (torch.Tensor, _TensorDict)):
                     value = value.all()
@@ -137,17 +162,22 @@ class TestBuffers:
         new_data = rb.sample(3)
         if not isinstance(new_data, (torch.Tensor, _TensorDict)):
             new_data = new_data[0]
+
         for d in new_data:
             found_similar = False
             for b in data:
                 if isinstance(b, _TensorDict):
-                    d = d.select(*b.keys())
+                    b = b.exclude("index").select(*set(d.keys()).intersection(b.keys()))
+                    d = d.select(*set(d.keys()).intersection(b.keys()))
+
                 value = b == d
                 if isinstance(value, (torch.Tensor, _TensorDict)):
                     value = value.all()
                 if value:
                     found_similar = True
                     break
+            if not found_similar:
+                d
             assert found_similar, (d, data)
 
     def test_index(self, rbtype, storage, size, prefetch):

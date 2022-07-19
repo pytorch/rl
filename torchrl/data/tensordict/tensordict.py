@@ -815,8 +815,12 @@ dtype=torch.float32)},
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
-    def memmap_(self) -> _TensorDict:
+    def memmap_(self, prefix=None) -> _TensorDict:
         """Writes all tensors onto a MemmapTensor.
+
+        Args:
+            prefix (str): directory prefix where the memmap tensors will have to
+                be stored.
 
         Returns:
             self.
@@ -1336,7 +1340,7 @@ dtype=torch.float32)},
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
                 device=self._device_safe(),
             )
-        return all([value.all() for key, value in self.items()])
+        return all(value.all() for value in self.values())
 
     def any(self, dim: int = None) -> Union[bool, _TensorDict]:
         """Checks if any value is True/non-null in the tensordict.
@@ -1496,6 +1500,8 @@ dtype=torch.float32)},
                 "indexing a tensordict with td.batch_dims==0 is not permitted"
             )
 
+        if isinstance(idx, np.ndarray):
+            idx = torch.tensor(idx, device=self.device)
         if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
 
@@ -1720,13 +1726,15 @@ class TensorDict(_TensorDict):
         device: Optional[DEVICE_TYPING] = None,
         _meta_source: Optional[dict] = None,
         _run_checks: bool = True,
+        _is_shared: Optional[bool] = None,
+        _is_memmap: Optional[bool] = None,
     ) -> object:
         super().__init__()
 
         self._tensordict: Dict = dict()
 
-        self._is_shared = None
-        self._is_memmap = None
+        self._is_shared = _is_shared
+        self._is_memmap = _is_memmap
 
         if not isinstance(source, (_TensorDict, dict)):
             raise ValueError(
@@ -1923,7 +1931,11 @@ class TensorDict(_TensorDict):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
         if self._is_shared is None:
-            self._is_shared = value.is_shared()
+            try:
+                self._is_shared = value.is_shared()
+            except NotImplementedError:
+                # when running functorch, a NotImplementedError may be raised
+                pass
         if self._is_memmap is None:
             self._is_memmap = isinstance(value, MemmapTensor)
 
@@ -2102,7 +2114,7 @@ class TensorDict(_TensorDict):
             value.detach_()
         return self
 
-    def memmap_(self) -> _TensorDict:
+    def memmap_(self, prefix=None) -> _TensorDict:
         if self.is_shared() and self.device == torch.device("cpu"):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
@@ -2117,7 +2129,7 @@ class TensorDict(_TensorDict):
                 "memmap is not compatible with gradients, one of Tensors has requires_grad equals True"
             )
         for key, value in self.items():
-            self._tensordict[key] = MemmapTensor(value)
+            self._tensordict[key] = MemmapTensor(value, prefix=prefix)
         for key, value in self.items_meta():
             value.memmap_()
         self._is_memmap = True
@@ -2196,6 +2208,8 @@ class TensorDict(_TensorDict):
             source=d,
             _meta_source=d_meta,
             _run_checks=False,
+            _is_memmap=self._is_memmap,
+            _is_shared=self._is_shared,
         )
 
     def keys(self) -> KeysView:
@@ -2607,7 +2621,8 @@ torch.Size([3, 2])
             raise RuntimeError("batch_size does not match self.batch_size.")
 
     def _make_meta(self, key: str) -> MetaTensor:
-        return self._source._get_meta(key)[self.idx]
+        out = self._source._get_meta(key)[self.idx]
+        return out
 
     @property
     def batch_size(self) -> torch.Size:
@@ -2900,7 +2915,7 @@ torch.Size([3, 2])
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self) -> _TensorDict:
+    def memmap_(self, prefix=None) -> _TensorDict:
         raise RuntimeError(
             "Converting a sub-tensordict values to memmap cannot be done."
         )
@@ -3372,9 +3387,9 @@ class LazyStackedTensorDict(_TensorDict):
             td.detach_()
         return self
 
-    def memmap_(self) -> _TensorDict:
+    def memmap_(self, prefix=None) -> _TensorDict:
         for td in self.tensordicts:
-            td.memmap_()
+            td.memmap_(prefix=prefix)
         self._is_memmap = True
         return self
 
@@ -3638,7 +3653,7 @@ class SavedTensorDict(_TensorDict):
     def share_memory_(self) -> _TensorDict:
         raise RuntimeError("SavedTensorDict cannot be put in shared memory.")
 
-    def memmap_(self) -> _TensorDict:
+    def memmap_(self, prefix=None) -> _TensorDict:
         raise RuntimeError(
             "SavedTensorDict and memmap are mutually exclusive features."
         )
@@ -4066,9 +4081,10 @@ class _CustomOpTensorDict(_TensorDict):
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self):
-        self._source.memmap_()
+    def memmap_(self, prefix=None):
+        self._source.memmap_(prefix=prefix)
         self._is_memmap = True
+        return self
 
     def share_memory_(self):
         self._source.share_memory_()
