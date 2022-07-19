@@ -1299,14 +1299,13 @@ dtype=torch.float32)},
                 raise RuntimeError("repeated dim in permute")
             seen[idx] = True
 
-        result = PermutedTensorDict(
+        return PermutedTensorDict(
             source=self,
             custom_op="permute",
             inv_op="permute",
             custom_op_kwargs={"dims": dims_list},
             inv_op_kwargs={"dims": dims_list},
         )
-        return result
 
     def __repr__(self) -> str:
         fields = _td_fields(self)
@@ -4200,7 +4199,44 @@ class ViewedTensorDict(_CustomOpTensorDict):
 class PermutedTensorDict(_CustomOpTensorDict):
     """
     A lazy view on a TensorDict with the batch dimensions permuted.
+
+    When calling `tensordict.permute(dims_list, dim)`, a lazy view of this operation is
+    returned such that the following code snippet works without raising an
+    exception:
+
+        >>> assert tensordict.permute(dims_list, dim).permute(dims_list, dim) is tensordict
+
+    Examples:
+        >>> from torchrl.data import TensorDict
+        >>> import torch
+        >>> td = TensorDict({'a': torch.randn(4, 5, 6, 9)}, batch_size=[3])
+        >>> td_permute = td.permute(dims=(2, 1, 0))
+        >>> print(td_permute.shape)
+        torch.Size([6, 5, 4])
+        >>> print(td_permute.permute(dims=(2, 1, 0)) is td)
+        True
     """
+
+    def permute(
+        self,
+        *dims_list: int,
+        dims=None,
+    ) -> _TensorDict:
+        if len(dims_list) == 0:
+            dims_list = dims
+        elif len(dims_list) == 1 and not isinstance(dims_list[0], int):
+            dims_list = dims_list[0]
+        if len(dims_list) != len(self.shape):
+            raise RuntimeError(
+                f"number of dims don't match in permute (got {len(dims_list)}, expected {len(self.shape)}"
+            )
+        if not len(dims_list) and not self.batch_dims:
+            return self
+        if np.array_equal(np.argsort(dims_list), self.custom_op_kwargs.get("dims")):
+            return self
+        if np.array_equal(np.argsort(dims_list), self.inv_op_kwargs.get("dims")):
+            return self._source
+        return super().permute(*dims_list)
 
     def add_missing_dims(self, num_dims: int, batch_dims: tuple) -> tuple:
         dim_diff = num_dims - len(batch_dims)

@@ -297,6 +297,24 @@ def test_permute(device):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
+def test_permute_applied_twice(device):
+    torch.manual_seed(1)
+    d = {
+        "a": torch.randn(4, 5, 6, 9, device=device),
+        "b": torch.randn(4, 5, 6, 7, device=device),
+        "c": torch.randn(4, 5, 6, device=device),
+    }
+    td1 = TensorDict(batch_size=(4, 5, 6), source=d)
+    td2 = torch.permute(td1, dims=(2, 1, 0))
+    td3 = torch.permute(td2, dims=(2, 1, 0))
+    assert td3 is td1
+    td1 = TensorDict(batch_size=(4, 5, 6), source=d)
+    td2 = torch.permute(td1, dims=(2, 1, 0))
+    td3 = torch.permute(td2, dims=(0, 1, 2))
+    assert td3 is not td1
+
+
+@pytest.mark.parametrize("device", get_available_devices())
 def test_permute_exceptions(device):
     torch.manual_seed(1)
     d = {
@@ -615,6 +633,18 @@ class TestTensorDicts:
         #     },
         #     batch_size=[3, 1, 2, 4],
         # ).permute(2, 0, 1, 3)
+
+    def test_permute_applied_twice(self, td_name, device):
+        torch.manual_seed(0)
+        tensordict = getattr(self, td_name)(device)
+        for _ in range(10):
+            p = torch.randperm(4)
+            inv_p = p.argsort()
+            other_p = inv_p
+            while (other_p == inv_p).all():
+                other_p = torch.randperm(4)
+            assert tensordict.permute(*p).permute(*inv_p) is tensordict
+            assert tensordict.permute(*p).permute(*other_p) is not tensordict
 
     def unsqueezed_td(self, device):
         td = TensorDict(
