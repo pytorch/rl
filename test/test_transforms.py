@@ -895,6 +895,7 @@ class TestTransforms:
         assert td["reward"] is reward
         assert (td["reward"] != reward_copy).all()
         assert (td["misc"] == misc_copy).all()
+        assert (torch.count_nonzero(td["reward"]) == torch.sum(reward_copy > 0)).all()
 
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("scale", [0.1, 10])
