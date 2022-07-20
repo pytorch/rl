@@ -222,6 +222,9 @@ def test_vecnorm_parallel_auto(nprc):
     for idx in range(nprc):
         queues[idx][1].put(msg)
 
+    sleep(0.01)  # Further fix for flacky test: vecnorm should have a locking
+    # mechanism
+
     obs_sum = td.get("next_observation_sum").clone()
     obs_ssq = td.get("next_observation_ssq").clone()
     obs_count = td.get("next_observation_count").clone()
@@ -229,8 +232,6 @@ def test_vecnorm_parallel_auto(nprc):
     reward_ssq = td.get("reward_ssq").clone()
     reward_count = td.get("reward_count").clone()
 
-    sleep(0.01)  # Further fix for flacky test: vecnorm should have a locking
-    # mechanism
     assert obs_count == nprc * 11 + 2  # 10 steps + reset + init
 
     for idx in range(nprc):
