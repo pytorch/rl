@@ -25,4 +25,4 @@ init_env_steps: 10000
 record_frames: 50000
 loss_function: smooth_l1
 batch_transform: 1
-entropy_coef: 0.0001
+entropy_coef: 0.01

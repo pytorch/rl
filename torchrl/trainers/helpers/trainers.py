@@ -23,7 +23,6 @@ from torchrl.trainers.trainers import (
     ReplayBufferTrainer,
     LogReward,
     RewardNormalizer,
-    mask_batch,
     BatchSubSampler,
     UpdateWeights,
     Recorder,
