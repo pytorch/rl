@@ -279,7 +279,7 @@ class SACLoss(LossModule):
         loss_value = distance_loss(
             pred_val, target_chunks, loss_function=self.loss_function
         ).view(*shape)
-        priority_value = torch.cat(abs(pred_val - target_chunks).unbind(0), 0)
+        priority_value = torch.cat((pred_val - target_chunks).pow(2).unbind(0), 0)
 
         return loss_value, priority_value
 
