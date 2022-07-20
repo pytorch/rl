@@ -212,54 +212,58 @@ def test_vecnorm_parallel_auto(nprc):
         prcs.append(p)
         queues.append((prc_queue_in, prc_queue_out))
 
-    td = list(make_env.state_dict().values())[0]
-    dones = [queue[0].get() for queue in queues]
-    assert all(dones)
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
+    with mp.Lock():
+        td = list(make_env.state_dict().values())[0]
+        dones = [queue[0].get() for queue in queues]
+        assert all(dones)
+        msg = "all_done"
+        for idx in range(nprc):
+            queues[idx][1].put(msg)
 
-    for p in prcs:
-        p.join()
-    obs_sum = td.get("next_observation_sum").clone()
-    obs_ssq = td.get("next_observation_ssq").clone()
-    obs_count = td.get("next_observation_count").clone()
-    reward_sum = td.get("reward_sum").clone()
-    reward_ssq = td.get("reward_ssq").clone()
-    reward_count = td.get("reward_count").clone()
+    with mp.Lock():
+        obs_sum = td.get("next_observation_sum").clone()
+        obs_ssq = td.get("next_observation_ssq").clone()
+        obs_count = td.get("next_observation_count").clone()
+        reward_sum = td.get("reward_sum").clone()
+        reward_ssq = td.get("reward_ssq").clone()
+        reward_count = td.get("reward_count").clone()
 
     assert obs_count == nprc * 11 + 2  # 10 steps + reset + init
 
-    for idx in range(nprc):
-        tup = queues[idx][0].get(timeout=TIMEOUT)
-        (
-            _obs_sum,
-            _obs_ssq,
-            _obs_count,
-            _reward_sum,
-            _reward_ssq,
-            _reward_count,
-        ) = tup
-        assert (obs_sum == _obs_sum).all(), "sum"
-        assert (obs_ssq == _obs_ssq).all(), "ssq"
-        assert (obs_count == _obs_count).all(), "count"
-        assert (reward_sum == _reward_sum).all(), "sum"
-        assert (reward_ssq == _reward_ssq).all(), "ssq"
-        assert (reward_count == _reward_count).all(), "count"
+    with mp.Lock():
+        for idx in range(nprc):
+            tup = queues[idx][0].get(timeout=TIMEOUT)
+            (
+                _obs_sum,
+                _obs_ssq,
+                _obs_count,
+                _reward_sum,
+                _reward_ssq,
+                _reward_count,
+            ) = tup
+            assert (obs_sum == _obs_sum).all(), "sum"
+            assert (obs_ssq == _obs_ssq).all(), "ssq"
+            assert (obs_count == _obs_count).all(), "count"
+            assert (reward_sum == _reward_sum).all(), "sum"
+            assert (reward_ssq == _reward_ssq).all(), "ssq"
+            assert (reward_count == _reward_count).all(), "count"
 
-        obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
-            _obs_sum,
-            _obs_ssq,
-            _obs_count,
-            _reward_sum,
-            _reward_ssq,
-            _reward_count,
-        )
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
+            obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
+                _obs_sum,
+                _obs_ssq,
+                _obs_count,
+                _reward_sum,
+                _reward_ssq,
+                _reward_count,
+            )
+    with mp.Lock():
+        msg = "all_done"
+        for idx in range(nprc):
+            queues[idx][1].put(msg)
+
     del queues
-
+    for p in prcs:
+        p.join()
 
 def _run_parallelenv(parallel_env, queue_in, queue_out):
     tensordict = parallel_env.reset()
