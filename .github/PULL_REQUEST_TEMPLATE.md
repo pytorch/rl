@@ -8,7 +8,7 @@ Why is this change required? What problem does it solve?
 If it fixes an open issue, please link to the issue here.
 You can use the syntax `close #15213` if this solves the issue #15213
 
-- [ ] I have raised an issue to propose this change ([required](https://github.com/facebookresearch/rl/blob/main/CONTRIBUTING.md) for new features and bug fixes)
+- [ ] I have raised an issue to propose this change ([required](https://github.com/facebookresearch/rl/issues) for new features and bug fixes)
 
 ## Types of changes
 
