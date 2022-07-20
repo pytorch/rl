@@ -159,4 +159,4 @@ class DDPGLoss(LossModule):
             pred_val, target_value, loss_function=self.loss_funtion
         )
 
-        return loss_value, abs(pred_val - target_value), pred_val, target_value
+        return loss_value, (pred_val - target_value).pow(2), pred_val, target_value

@@ -269,7 +269,7 @@ class REDQLoss(LossModule):
             pred_next_val=next_state_value,
         )
         pred_val = state_action_value_qvalue
-        td_error = abs(pred_val - target_value)
+        td_error = (pred_val - target_value).pow(2)
         loss_qval = distance_loss(
             pred_val,
             target_value.expand_as(pred_val),

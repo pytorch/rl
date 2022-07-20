@@ -112,7 +112,7 @@ class DQNLoss(LossModule):
                 buffers=self.target_value_network_buffers,
                 next_val_key="chosen_action_value",
             )
-        priority_tensor = abs(pred_val_index - target_value)
+        priority_tensor = (pred_val_index - target_value).pow(2)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)
         priority_tensor = priority_tensor.to(input_tensordict.device)
 
