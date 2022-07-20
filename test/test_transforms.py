@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+from copy import copy
 
 import pytest
 import torch
@@ -932,6 +933,111 @@ class TestTransforms:
         obs_spec = env.observation_spec
         obs_spec = obs_spec[key]
         assert obs_spec.shape[-1] == 4 * env.base_env.observation_spec[key].shape[-1]
+
+    def test_insert(self):
+
+        env = ContinuousActionVecMockEnv()
+        obs_spec = env.observation_spec
+        key = list(obs_spec.keys())[0]
+        env = TransformedEnv(env)
+
+        _ = env.action_spec
+        _ = env.observation_spec
+        _ = env.reward_spec
+
+        assert env._action_spec is not None
+        assert env._observation_spec is not None
+        assert env._reward_spec is not None
+
+        env.insert_transform(0, CatFrames(N=4, cat_dim=-1, keys_in=[key]))
+
+        assert env._action_spec is None
+        assert env._observation_spec is None
+        assert env._reward_spec is None
+
+        assert isinstance(env.transform, Compose)
+        assert len(env.transform) == 1
+        obs_spec = env.observation_spec
+        obs_spec = obs_spec[key]
+        assert obs_spec.shape[-1] == 4 * env.base_env.observation_spec[key].shape[-1]
+
+        env.insert_transform(1, FiniteTensorDictCheck())
+        assert isinstance(env.transform, Compose)
+        assert len(env.transform) == 2
+        assert isinstance(env.transform[-1], FiniteTensorDictCheck)
+        assert isinstance(env.transform[0], CatFrames)
+
+        env.insert_transform(0, NoopResetEnv())
+        assert isinstance(env.transform, Compose)
+        assert len(env.transform) == 3
+        assert isinstance(env.transform[0], NoopResetEnv)
+        assert isinstance(env.transform[1], CatFrames)
+        assert isinstance(env.transform[2], FiniteTensorDictCheck)
+
+        env.insert_transform(2, NoopResetEnv())
+        assert isinstance(env.transform, Compose)
+        assert len(env.transform) == 4
+        assert isinstance(env.transform[0], NoopResetEnv)
+        assert isinstance(env.transform[1], CatFrames)
+        assert isinstance(env.transform[2], NoopResetEnv)
+        assert isinstance(env.transform[3], FiniteTensorDictCheck)
+
+        env.insert_transform(-3, PinMemoryTransform())
+        assert isinstance(env.transform, Compose)
+        assert len(env.transform) == 5
+        assert isinstance(env.transform[0], NoopResetEnv)
+        assert isinstance(env.transform[1], PinMemoryTransform)
+        assert isinstance(env.transform[2], CatFrames)
+        assert isinstance(env.transform[3], NoopResetEnv)
+        assert isinstance(env.transform[4], FiniteTensorDictCheck)
+        assert env._action_spec is None
+        assert env._observation_spec is None
+        assert env._reward_spec is None
+
+        env.insert_transform(-5, CatFrames(N=4, cat_dim=-1, keys_in=[key]))
+        assert isinstance(env.transform, Compose)
+        assert len(env.transform) == 6
+
+        assert isinstance(env.transform[0], CatFrames)
+        assert isinstance(env.transform[1], NoopResetEnv)
+        assert isinstance(env.transform[2], PinMemoryTransform)
+        assert isinstance(env.transform[3], CatFrames)
+        assert isinstance(env.transform[4], NoopResetEnv)
+        assert isinstance(env.transform[5], FiniteTensorDictCheck)
+        assert env._action_spec is None
+        assert env._observation_spec is None
+        assert env._reward_spec is None
+
+        _ = copy(env.action_spec)
+        _ = copy(env.observation_spec)
+        _ = copy(env.reward_spec)
+
+        try:
+            env.insert_transform(-7, FiniteTensorDictCheck())
+            assert 1 == 6
+        except ValueError as ve:
+            assert len(env.transform) == 6
+            assert env._action_spec is not None
+            assert env._observation_spec is not None
+            assert env._reward_spec is not None
+
+        try:
+            env.insert_transform(7, FiniteTensorDictCheck())
+            assert 1 == 6
+        except ValueError as ve:
+            assert len(env.transform) == 6
+            assert env._action_spec is not None
+            assert env._observation_spec is not None
+            assert env._reward_spec is not None
+
+        try:
+            env.insert_transform(4, "ffff")
+            assert 1 == 6
+        except ValueError as ve:
+            assert len(env.transform) == 6
+            assert env._action_spec is not None
+            assert env._observation_spec is not None
+            assert env._reward_spec is not None
 
 
 if __name__ == "__main__":
