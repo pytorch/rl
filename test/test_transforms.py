@@ -31,7 +31,7 @@ from torchrl.envs import (
     CatTensors,
     FlattenObservation,
     RewardScaling,
-    BinarizeReward
+    BinarizeReward,
 )
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import VecNorm, TransformedEnv
