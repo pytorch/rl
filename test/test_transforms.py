@@ -261,6 +261,7 @@ def test_vecnorm_parallel_auto(nprc):
     msg = "all_done"
     for idx in range(nprc):
         queues[idx][1].put(msg)
+
     del queues
     for p in prcs:
         p.join()
