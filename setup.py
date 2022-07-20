@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from setuptools import setup, find_packages
 import distutils.command.clean
 import glob
 import os
@@ -12,6 +11,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from setuptools import setup, find_packages
 from torch.utils.cpp_extension import (
     CppExtension,
     BuildExtension,
