@@ -219,8 +219,6 @@ def test_vecnorm_parallel_auto(nprc):
     for idx in range(nprc):
         queues[idx][1].put(msg)
 
-    for p in prcs:
-        p.join()
     obs_sum = td.get("next_observation_sum").clone()
     obs_ssq = td.get("next_observation_ssq").clone()
     obs_count = td.get("next_observation_count").clone()
@@ -258,7 +256,10 @@ def test_vecnorm_parallel_auto(nprc):
     msg = "all_done"
     for idx in range(nprc):
         queues[idx][1].put(msg)
+
     del queues
+    for p in prcs:
+        p.join()
 
 
 def _run_parallelenv(parallel_env, queue_in, queue_out):
