@@ -198,7 +198,7 @@ def test_mask_td(device):
         "key2": torch.randn(4, 5, 10, device=device),
     }
     mask = torch.zeros(4, 5, dtype=torch.bool, device=device).bernoulli_()
-    mask_list = mask.cpu.numpy().tolist()
+    mask_list = mask.cpu().numpy().tolist()
     td = TensorDict(batch_size=(4, 5), source=d)
 
     td_masked = torch.masked_select(td, mask)
