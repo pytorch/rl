@@ -820,7 +820,7 @@ class TestTensorDicts:
         n = mask.sum()
         d = td.ndimension()
         pseudo_td = TensorDict(
-            {k: zeros_like(item, n, d) for k, item in td.items()}, [n]
+            {k: zeros_like(item, n, d) for k, item in td.items()}, [n], device=device
         )
         if from_list:
             td_mask = mask.cpu().numpy().tolist()
