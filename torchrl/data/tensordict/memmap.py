@@ -262,6 +262,15 @@ class MemmapTensor(object):
         if idx is not None:
             if isinstance(idx, torch.Tensor):
                 idx = idx.cpu()
+            elif isinstance(idx, tuple) and any(
+                    isinstance(sub_index, torch.Tensor) for sub_index in idx
+            ):
+                idx = tuple(
+                    sub_index.cpu()
+                    if isinstance(sub_index, torch.Tensor)
+                    else sub_index
+                    for sub_index in idx
+                )
             memmap_array = memmap_array[idx]
         out = self._np_to_tensor(memmap_array, from_numpy=from_numpy)
         if (
