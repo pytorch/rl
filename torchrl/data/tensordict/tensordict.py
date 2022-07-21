@@ -1288,6 +1288,10 @@ dtype=torch.float32)},
                 f"number of dims don't match in permute (got {len(dims_list)}, expected {len(self.shape)}"
             )
 
+        if not len(dims_list) and not self.batch_dims:
+            return self
+        if np.array_equal(dims_list, range(self.batch_dims)):
+            return self
         min_dim, max_dim = -self.batch_dims, self.batch_dims - 1
         seen = [False for dim in range(max_dim + 1)]
         for idx in dims_list:
@@ -4232,7 +4236,7 @@ class PermutedTensorDict(_CustomOpTensorDict):
             )
         if not len(dims_list) and not self.batch_dims:
             return self
-        if np.array_equal(np.argsort(dims_list), self.custom_op_kwargs.get("dims")):
+        if np.array_equal(dims_list, range(self.batch_dims)):
             return self
         if np.array_equal(np.argsort(dims_list), self.inv_op_kwargs.get("dims")):
             return self._source
