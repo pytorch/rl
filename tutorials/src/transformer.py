@@ -65,3 +65,100 @@ class FFN(nn.Module):
 
     def forward(self, X):
         return self.FFN(X)
+
+
+class AttentionBlock(nn.Module):
+    def __init__(self, to_dim, to_len, from_dim, latent_dim, num_heads):
+        super().__init__()
+        self.tokens_to_qkv = TokensToQKV(to_dim, from_dim, latent_dim)
+        self.split_heads = SplitHeads(num_heads)
+        self.attention = Attention(latent_dim, to_dim)
+        self.skip = SkipLayerNorm(to_len, to_dim)
+
+    def forward(self, X_to, X_from):
+        Q, K, V = self.tokens_to_qkv(X_to, X_from)
+        Q, K, V = self.split_heads(Q, K, V)
+        out, attention = self.attention(Q, K, V)
+        out = self.skip(X_to, out)
+        return out
+
+
+class EncoderTransformerBlock(nn.Module):
+    def __init__(self, to_dim, to_len, latent_dim, num_heads):
+        super().__init__()
+        self.attention_block = AttentionBlock(
+            to_dim, to_len, to_dim, latent_dim, num_heads
+        )
+        self.FFN = FFN(to_dim, 4 * to_dim)
+        self.skip = SkipLayerNorm(to_len, to_dim)
+
+    def forward(self, X_to):
+        X_to = self.attention_block(X_to, X_to)
+        X_out = self.FFN(X_to)
+        return self.skip(X_out, X_to)
+
+
+class DecoderTransformerBlock(nn.Module):
+    def __init__(self, to_dim, to_len, from_dim, latent_dim, num_heads):
+        super().__init__()
+        self.attention_block = AttentionBlock(
+            to_dim, to_len, from_dim, latent_dim, num_heads
+        )
+        self.encoder_block = EncoderTransformerBlock(
+            to_dim, to_len, latent_dim, num_heads
+        )
+
+    def forward(self, X_to, X_from):
+        X_to = self.attention_block(X_to, X_from)
+        X_to = self.encoder_block(X_to)
+        return X_to
+
+
+class TransformerEncoder(nn.Module):
+    def __init__(self, num_blocks, to_dim, to_len, latent_dim, num_heads):
+        super().__init__()
+        self.encoder = nn.ModuleList(
+            [
+                EncoderTransformerBlock(to_dim, to_len, latent_dim, num_heads)
+                for i in range(num_blocks)
+            ]
+        )
+
+    def forward(self, X_to):
+        for i in range(len(self.encoder)):
+            X_to = self.encoder[i](X_to)
+        return X_to
+
+
+class TransformerDecoder(nn.Module):
+    def __init__(self, num_blocks, to_dim, to_len, from_dim, latent_dim, num_heads):
+        super().__init__()
+        self.decoder = nn.ModuleList(
+            [
+                DecoderTransformerBlock(to_dim, to_len, from_dim, latent_dim, num_heads)
+                for i in range(num_blocks)
+            ]
+        )
+
+    def forward(self, X_to, X_from):
+        for i in range(len(self.decoder)):
+            X_to = self.decoder[i](X_to, X_from)
+        return X_to
+
+
+class Transformer(nn.Module):
+    def __init__(
+        self, num_blocks, to_dim, to_len, from_dim, from_len, latent_dim, num_heads
+    ):
+        super().__init__()
+        self.encoder = TransformerEncoder(
+            num_blocks, to_dim, to_len, latent_dim, num_heads
+        )
+        self.decoder = TransformerDecoder(
+            num_blocks, from_dim, from_len, to_dim, latent_dim, num_heads
+        )
+
+    def forward(self, X_to, X_from):
+        X_to = self.encoder(X_to)
+        X_out = self.decoder(X_from, X_to)
+        return X_out
