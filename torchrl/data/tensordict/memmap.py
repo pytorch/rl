@@ -263,7 +263,7 @@ class MemmapTensor(object):
             if isinstance(idx, torch.Tensor):
                 idx = idx.cpu()
             elif isinstance(idx, tuple) and any(
-                    isinstance(sub_index, torch.Tensor) for sub_index in idx
+                isinstance(sub_index, torch.Tensor) for sub_index in idx
             ):
                 idx = tuple(
                     sub_index.cpu()
