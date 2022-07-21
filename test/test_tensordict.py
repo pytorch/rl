@@ -802,7 +802,7 @@ class TestTensorDicts:
     def test_masking_set(self, td_name, device, from_list):
         def zeros_like(item, n, d):
             if isinstance(item, (MemmapTensor, torch.Tensor)):
-                return torch.zeros(n, *item.shape[d:], dtype=item.dtype)
+                return torch.zeros(n, *item.shape[d:], dtype=item.dtype, device=device)
             elif isinstance(item, _TensorDict):
                 batch_size = item.batch_size
                 batch_size = [n, *batch_size[d:]]
