@@ -432,6 +432,20 @@ class TransformedEnv(_EnvClass):
             self.transform.set_parent(self)
         self.transform.append(transform)
 
+    def insert_transform(self, index: int, transform: Transform) -> None:
+        if not isinstance(transform, Transform):
+            raise ValueError(
+                "TransformedEnv.append_transform expected a transform but received an object of "
+                f"type {type(transform)} instead."
+            )
+        transform = transform.to(self.device)
+        if not isinstance(self.transform, Compose):
+            self.transform = Compose(self.transform)
+            self.transform.set_parent(self)
+
+        self.transform.insert(index, transform)
+        self._erase_metadata()
+
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
             return self.__getattribute__(
@@ -581,6 +595,24 @@ class Compose(Transform):
                 f"type {type(transform)} instead."
             )
         self.transforms.append(transform)
+        transform.set_parent(self)
+
+    def insert(self, index: int, transform: Transform) -> None:
+        if not isinstance(transform, Transform):
+            raise ValueError(
+                "Compose.append expected a transform but received an object of "
+                f"type {type(transform)} instead."
+            )
+
+        if abs(index) > len(self.transforms):
+            raise ValueError(
+                f"Index expected to be between [-{len(self.transforms)}, {len(self.transforms)}] got index={index}"
+            )
+
+        self.empty_cache()
+        if index < 0:
+            index = index + len(self.transforms)
+        self.transforms.insert(index, transform)
         transform.set_parent(self)
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Compose:
