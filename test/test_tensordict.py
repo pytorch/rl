@@ -808,7 +808,8 @@ class TestTensorDicts:
                 batch_size = [n, *batch_size[d:]]
                 out = TensorDict(
                     {k: zeros_like(_item, n, d) for k, _item in item.items()},
-                    batch_size, device=device
+                    batch_size,
+                    device=device,
                 )
                 return out
 
