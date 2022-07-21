@@ -474,6 +474,15 @@ class MemmapTensor(object):
         if self.device == torch.device("cpu"):
             self._load_item()[idx] = value
         else:
+            if isinstance(idx, torch.Tensor):
+                idx = idx.cpu()
+            elif isinstance(idx, tuple) and any(
+                isinstance(_idx, torch.Tensor) for _idx in idx
+            ):
+                idx = tuple(
+                    _idx.cpu() if isinstance(_idx, torch.Tensor) else _idx
+                    for _idx in idx
+                )
             self.memmap_array[idx] = to_numpy(value)
 
     def __setstate__(self, state: dict) -> None:
