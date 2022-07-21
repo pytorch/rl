@@ -792,7 +792,7 @@ class TestTensorDicts:
         assert td_masked.batch_size[0] == mask.sum()
         assert td_masked.batch_dims == 1
 
-        mask_list = mask.numpy().tolist()
+        mask_list = mask.cpu().numpy().tolist()
         td_masked3 = td[mask_list]
         assert_allclose_td(td_masked3, td_masked2)
         assert td_masked3.batch_size[0] == mask.sum()
