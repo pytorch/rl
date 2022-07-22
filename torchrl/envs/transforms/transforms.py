@@ -31,7 +31,7 @@ from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     DEVICE_TYPING,
 )
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import _EnvClass, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import FiniteTensor
@@ -125,7 +125,7 @@ class Transform(nn.Module):
             keys_inv_out = copy(self.keys_inv_in)
         self.keys_inv_out = keys_inv_out
 
-    def reset(self, tensordict: _TensorDict) -> _TensorDict:
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets a tranform if it is stateful."""
         return tensordict
 
@@ -147,7 +147,7 @@ class Transform(nn.Module):
         """
         raise NotImplementedError
 
-    def _call(self, tensordict: _TensorDict) -> _TensorDict:
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the
         transform.
 
@@ -159,7 +159,7 @@ class Transform(nn.Module):
                 tensordict.set(key_out, observation, inplace=self.inplace)
         return tensordict
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._call(tensordict)
         return tensordict
 
@@ -169,7 +169,7 @@ class Transform(nn.Module):
         else:
             return obs
 
-    def _inv_call(self, tensordict: _TensorDict) -> _TensorDict:
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._check_inplace()
         for key_in, key_out in zip(self.keys_inv_in, self.keys_inv_out):
             for key_in in tensordict.keys():
@@ -177,7 +177,7 @@ class Transform(nn.Module):
                 tensordict.set(key_out, observation, inplace=self.inplace)
         return tensordict
 
-    def inv(self, tensordict: _TensorDict) -> _TensorDict:
+    def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._inv_call(tensordict)
         return tensordict
 
@@ -357,7 +357,7 @@ class TransformedEnv(_EnvClass):
             reward_spec = self._reward_spec
         return reward_spec
 
-    def _step(self, tensordict: _TensorDict) -> _TensorDict:
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # selected_keys = [key for key in tensordict.keys() if "action" in key]
         # tensordict_in = tensordict.select(*selected_keys).clone()
         tensordict_in = self.transform.inv(tensordict.clone(recursive=False))
@@ -371,7 +371,7 @@ class TransformedEnv(_EnvClass):
         """Set the seeds of the environment"""
         return self.base_env.set_seed(seed)
 
-    def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs):
+    def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         out_tensordict = self.base_env.reset(execute_step=False, **kwargs)
         out_tensordict = self.transform.reset(out_tensordict)
         out_tensordict = self.transform(out_tensordict)
@@ -547,7 +547,7 @@ class Compose(Transform):
         for t in self.transforms:
             t.set_parent(self)
 
-    def _call(self, tensordict: _TensorDict) -> _TensorDict:
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms:
             tensordict = t(tensordict)
         return tensordict
@@ -578,12 +578,12 @@ class Compose(Transform):
         for t in self:
             t.dump(**kwargs)
 
-    def reset(self, tensordict: _TensorDict) -> _TensorDict:
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms:
             tensordict = t.reset(tensordict)
         return tensordict
 
-    def init(self, tensordict: _TensorDict) -> None:
+    def init(self, tensordict: TensorDictBase) -> None:
         for t in self.transforms:
             t.init(tensordict)
 
@@ -1140,7 +1140,7 @@ class CatFrames(ObservationTransform):
         self.cat_dim = cat_dim
         self.buffer = []
 
-    def reset(self, tensordict: _TensorDict) -> _TensorDict:
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         self.buffer = []
         return tensordict
 
@@ -1240,7 +1240,7 @@ class FiniteTensorDictCheck(Transform):
     def __init__(self):
         super().__init__(keys_in=[])
 
-    def _call(self, tensordict: _TensorDict) -> _TensorDict:
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         source = {}
         for key, item in tensordict.items():
             try:
@@ -1384,7 +1384,7 @@ class CatTensors(Transform):
         self.dim = dim
         self.del_keys = del_keys
 
-    def _call(self, tensordict: _TensorDict) -> _TensorDict:
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if all([key in tensordict.keys() for key in self.keys_in]):
             out_tensor = torch.cat(
                 [tensordict.get(key) for key in self.keys_in], dim=self.dim
@@ -1548,7 +1548,7 @@ class NoopResetEnv(Transform):
     def base_env(self):
         return self.parent
 
-    def reset(self, tensordict: _TensorDict) -> _TensorDict:
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Do no-op action for a number of steps in [1, noop_max]."""
         parent = self.parent
         keys = tensordict.keys()
@@ -1602,7 +1602,7 @@ class PinMemoryTransform(Transform):
     def __init__(self):
         super().__init__([])
 
-    def _call(self, tensordict: _TensorDict) -> _TensorDict:
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         return tensordict.pin_memory()
 
 
@@ -1624,7 +1624,7 @@ class gSDENoise(Transform):
         self.state_dim = state_dim
         self.action_dim = action_dim
 
-    def reset(self, tensordict: _TensorDict) -> _TensorDict:
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = super().reset(tensordict=tensordict)
         if self.state_dim is None or self.action_dim is None:
             tensordict.set(
@@ -1657,14 +1657,14 @@ class VecNorm(Transform):
     statistics are not updated.
 
     If multiple processes are running a similar environment, one can pass a
-    _TensorDict instance that is placed in shared memory: if so, every time
+    TensorDictBase instance that is placed in shared memory: if so, every time
     the normalization layer is queried it will update the values for all
     processes that share the same reference.
 
     Args:
         keys_in (iterable of str, optional): keys to be updated.
             default: ["next_observation", "reward"]
-        shared_td (_TensorDict, optional): A shared tensordict containing the
+        shared_td (TensorDictBase, optional): A shared tensordict containing the
             keys of the transform.
         decay (number, optional): decay rate of the moving average.
             default: 0.99
@@ -1695,7 +1695,7 @@ class VecNorm(Transform):
     def __init__(
         self,
         keys_in: Optional[Sequence[str]] = None,
-        shared_td: Optional[_TensorDict] = None,
+        shared_td: Optional[TensorDictBase] = None,
         decay: float = 0.9999,
         eps: float = 1e-4,
     ) -> None:
@@ -1724,7 +1724,7 @@ class VecNorm(Transform):
         self.decay = decay
         self.eps = eps
 
-    def _call(self, tensordict: _TensorDict) -> _TensorDict:
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         for key in self.keys_in:
             if key not in tensordict.keys():
                 continue
@@ -1737,7 +1737,7 @@ class VecNorm(Transform):
             tensordict.set_(key, new_val)
         return tensordict
 
-    def _init(self, tensordict: _TensorDict, key: str) -> None:
+    def _init(self, tensordict: TensorDictBase, key: str) -> None:
         if self._td is None or key + "_sum" not in self._td.keys():
             td_view = tensordict.view(-1)
             td_select = td_view[0]
@@ -1794,7 +1794,7 @@ class VecNorm(Transform):
         env: _EnvClass,
         keys_prefix: Optional[Sequence[str]] = None,
         memmap: bool = False,
-    ) -> _TensorDict:
+    ) -> TensorDictBase:
         """Creates a shared tensordict that can be sent to different processes
         for normalization across processes.
 
@@ -1854,10 +1854,10 @@ class VecNorm(Transform):
             return td_select.memmap_()
         return td_select.share_memory_()
 
-    def get_extra_state(self) -> _TensorDict:
+    def get_extra_state(self) -> TensorDictBase:
         return self._td
 
-    def set_extra_state(self, td: _TensorDict) -> None:
+    def set_extra_state(self, td: TensorDictBase) -> None:
         if not td.is_shared():
             raise RuntimeError(
                 "Only shared tensordicts can be set in VecNorm transforms"
