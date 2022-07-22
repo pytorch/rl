@@ -242,7 +242,9 @@ class Trainer:
 
     def register_op(self, dest: str, op: Callable, **kwargs) -> None:
         if dest == "batch_process":
-            _check_input_output_typehint(op, input=TensorDictBase, output=TensorDictBase)
+            _check_input_output_typehint(
+                op, input=TensorDictBase, output=TensorDictBase
+            )
             self._batch_process_ops.append((op, kwargs))
 
         elif dest == "pre_optim_steps":
@@ -250,11 +252,15 @@ class Trainer:
             self._pre_optim_ops.append((op, kwargs))
 
         elif dest == "process_optim_batch":
-            _check_input_output_typehint(op, input=TensorDictBase, output=TensorDictBase)
+            _check_input_output_typehint(
+                op, input=TensorDictBase, output=TensorDictBase
+            )
             self._process_optim_batch_ops.append((op, kwargs))
 
         elif dest == "post_loss":
-            _check_input_output_typehint(op, input=TensorDictBase, output=TensorDictBase)
+            _check_input_output_typehint(
+                op, input=TensorDictBase, output=TensorDictBase
+            )
             self._post_loss_ops.append((op, kwargs))
 
         elif dest == "post_steps":

@@ -81,7 +81,10 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
     def _get_policy_and_device(
         self,
         policy: Optional[
-            Union[ProbabilisticTensorDictModule, Callable[[TensorDictBase], TensorDictBase]]
+            Union[
+                ProbabilisticTensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
         ] = None,
         device: Optional[DEVICE_TYPING] = None,
     ) -> Tuple[
@@ -230,7 +233,10 @@ class SyncDataCollector(_DataCollector):
             _EnvClass, "EnvCreator", Sequence[Callable[[], _EnvClass]]
         ],
         policy: Optional[
-            Union[ProbabilisticTensorDictModule, Callable[[TensorDictBase], TensorDictBase]]
+            Union[
+                ProbabilisticTensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[dict] = None,
@@ -623,7 +629,10 @@ class _MultiDataCollector(_DataCollector):
         self,
         create_env_fn: Sequence[Callable[[], _EnvClass]],
         policy: Optional[
-            Union[ProbabilisticTensorDictModule, Callable[[TensorDictBase], TensorDictBase]]
+            Union[
+                ProbabilisticTensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[Sequence[dict]] = None,
@@ -1169,7 +1178,10 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         self,
         create_env_fn: Callable[[], _EnvClass],
         policy: Optional[
-            Union[ProbabilisticTensorDictModule, Callable[[TensorDictBase], TensorDictBase]]
+            Union[
+                ProbabilisticTensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[dict] = None,

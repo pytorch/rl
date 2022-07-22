@@ -950,7 +950,9 @@ dtype=torch.float32)},
         return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
     @abc.abstractmethod
-    def to(self, dest: Union[DEVICE_TYPING, Type, torch.Size], **kwargs) -> TensorDictBase:
+    def to(
+        self, dest: Union[DEVICE_TYPING, Type, torch.Size], **kwargs
+    ) -> TensorDictBase:
         """Maps a TensorDictBase subclass either on a new device or to another
         TensorDictBase subclass (if permitted). Casting tensors to a new dtype
         is not allowed, as tensordicts are not bound to contain a single
@@ -1023,7 +1025,9 @@ dtype=torch.float32)},
         raise NotImplementedError
 
     @abc.abstractmethod
-    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> TensorDictBase:
+    def masked_fill(
+        self, mask: torch.Tensor, value: Union[float, bool]
+    ) -> TensorDictBase:
         """Out-of-place version of masked_fill
 
         Args:
@@ -1390,7 +1394,9 @@ dtype=torch.float32)},
         for i in range(length):
             yield self[i]
 
-    def flatten_keys(self, separator: str = ",", inplace: bool = True) -> TensorDictBase:
+    def flatten_keys(
+        self, separator: str = ",", inplace: bool = True
+    ) -> TensorDictBase:
         to_flatten = []
         for key, meta_value in self.items_meta():
             if meta_value.is_tensordict():
@@ -1421,7 +1427,9 @@ dtype=torch.float32)},
                     tensordict_out.set(key, value)
             return tensordict_out
 
-    def unflatten_keys(self, separator: str = ",", inplace: bool = True) -> TensorDictBase:
+    def unflatten_keys(
+        self, separator: str = ",", inplace: bool = True
+    ) -> TensorDictBase:
         to_unflatten = defaultdict(lambda: list())
         for key in self.keys():
             if separator in key[1:-1]:
@@ -1598,7 +1606,9 @@ dtype=torch.float32)},
         raise IndexError(f"Index has to a string but received {index}.")
 
     @abc.abstractmethod
-    def rename_key(self, old_key: str, new_key: str, safe: bool = False) -> TensorDictBase:
+    def rename_key(
+        self, old_key: str, new_key: str, safe: bool = False
+    ) -> TensorDictBase:
         """Renames a key with a new string.
 
         Args:
@@ -1993,7 +2003,9 @@ class TensorDict(TensorDictBase):
             del self._dict_meta[key]
         return self
 
-    def rename_key(self, old_key: str, new_key: str, safe: bool = False) -> TensorDictBase:
+    def rename_key(
+        self, old_key: str, new_key: str, safe: bool = False
+    ) -> TensorDictBase:
         if not isinstance(old_key, str):
             raise TypeError(
                 f"Expected old_name to be a string but found {type(old_key)}"
@@ -2164,7 +2176,9 @@ class TensorDict(TensorDictBase):
         self._is_memmap = True
         return self
 
-    def to(self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs) -> TensorDictBase:
+    def to(
+        self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs
+    ) -> TensorDictBase:
         if isinstance(dest, type) and issubclass(dest, TensorDictBase):
             if isinstance(self, dest):
                 return self
@@ -2206,7 +2220,9 @@ class TensorDict(TensorDictBase):
             item.masked_fill_(mask_expand, value)
         return self
 
-    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> TensorDictBase:
+    def masked_fill(
+        self, mask: torch.Tensor, value: Union[float, bool]
+    ) -> TensorDictBase:
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
@@ -2265,7 +2281,9 @@ def assert_allclose_td(
     equal_nan: bool = True,
     msg: str = "",
 ) -> bool:
-    if not isinstance(actual, TensorDictBase) or not isinstance(expected, TensorDictBase):
+    if not isinstance(actual, TensorDictBase) or not isinstance(
+        expected, TensorDictBase
+    ):
         raise TypeError("assert_allclose inputs must be of TensorDict type")
     set1 = set(actual.keys())
     set2 = set(expected.keys())
@@ -2756,7 +2774,9 @@ torch.Size([3, 2])
         self._source._stack_onto_at_(key, list_item, dim=dim, idx=self.idx)
         return self
 
-    def to(self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs) -> TensorDictBase:
+    def to(
+        self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs
+    ) -> TensorDictBase:
         if isinstance(dest, type) and issubclass(dest, TensorDictBase):
             if isinstance(self, dest):
                 return self
@@ -2940,7 +2960,9 @@ torch.Size([3, 2])
             self.set_(key, torch.full_like(item, value))
         return self
 
-    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> TensorDictBase:
+    def masked_fill(
+        self, mask: torch.Tensor, value: Union[float, bool]
+    ) -> TensorDictBase:
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
@@ -3504,7 +3526,9 @@ class LazyStackedTensorDict(TensorDictBase):
             self.set_(key, value, **kwargs)
         return self
 
-    def rename_key(self, old_key: str, new_key: str, safe: bool = False) -> TensorDictBase:
+    def rename_key(
+        self, old_key: str, new_key: str, safe: bool = False
+    ) -> TensorDictBase:
         for td in self.tensordicts:
             td.rename_key(old_key, new_key, safe=safe)
         self._valid_keys = sorted(
@@ -3520,7 +3544,9 @@ class LazyStackedTensorDict(TensorDictBase):
             td.masked_fill_(_mask, value)
         return self
 
-    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> TensorDictBase:
+    def masked_fill(
+        self, mask: torch.Tensor, value: Union[float, bool]
+    ) -> TensorDictBase:
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
@@ -3756,7 +3782,9 @@ class SavedTensorDict(TensorDictBase):
             return self
         return SavedTensorDict(source=_source)
 
-    def rename_key(self, old_key: str, new_key: str, safe: bool = False) -> TensorDictBase:
+    def rename_key(
+        self, old_key: str, new_key: str, safe: bool = False
+    ) -> TensorDictBase:
         td = self._load()
         td.rename_key(old_key, new_key, safe=safe)
         self._save(td)
@@ -3873,7 +3901,9 @@ class SavedTensorDict(TensorDictBase):
         self._save(td)
         return self
 
-    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> TensorDictBase:
+    def masked_fill(
+        self, mask: torch.Tensor, value: Union[float, bool]
+    ) -> TensorDictBase:
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
@@ -4153,7 +4183,9 @@ class _CustomOpTensorDict(TensorDictBase):
             self._source.set(key, val)
         return self
 
-    def masked_fill(self, mask: torch.Tensor, value: Union[float, bool]) -> TensorDictBase:
+    def masked_fill(
+        self, mask: torch.Tensor, value: Union[float, bool]
+    ) -> TensorDictBase:
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
