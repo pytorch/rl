@@ -18,7 +18,7 @@ from torchrl.data.tensordict.tensordict import (
     LazyStackedTensorDict,
     stack as stack_td,
     pad,
-    _TensorDict,
+    TensorDictBase,
 )
 from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 
@@ -833,7 +833,7 @@ class TestTensorDicts:
         def zeros_like(item, n, d):
             if isinstance(item, (MemmapTensor, torch.Tensor)):
                 return torch.zeros(n, *item.shape[d:], dtype=item.dtype, device=device)
-            elif isinstance(item, _TensorDict):
+            elif isinstance(item, TensorDictBase):
                 batch_size = item.batch_size
                 batch_size = [n, *batch_size[d:]]
                 out = TensorDict(
@@ -1344,7 +1344,7 @@ class TestTensorDicts:
 
         td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
         for key, value in td_flatten.items():
-            assert not isinstance(value, _TensorDict)
+            assert not isinstance(value, TensorDictBase)
         assert (
             separator.join(["nested_tensordict", "nested_nested_tensordict", "a"])
             in td_flatten.keys()

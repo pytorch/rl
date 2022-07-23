@@ -13,7 +13,7 @@ try:
 except ImportError:
     center_crop_fn = None
 
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.transforms import ObservationTransform, Transform
 from torchrl.trainers.loggers import Logger
 
@@ -163,7 +163,7 @@ class TensorDictRecorder(Transform):
         self.skip = skip
         self.count = 0
 
-    def _call(self, td: _TensorDict) -> _TensorDict:
+    def _call(self, td: TensorDictBase) -> TensorDictBase:
         self.count += 1
         if self.count % self.skip == 0:
             _td = td

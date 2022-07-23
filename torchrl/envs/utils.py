@@ -8,7 +8,7 @@ from typing import Any, Union
 import pkg_resources
 from torch.autograd.grad_mode import _DecoratorContextManager
 
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
@@ -19,21 +19,21 @@ class classproperty(property):
 
 
 def step_tensordict(
-    tensordict: _TensorDict,
-    next_tensordict: _TensorDict = None,
+    tensordict: TensorDictBase,
+    next_tensordict: TensorDictBase = None,
     keep_other: bool = True,
     exclude_reward: bool = True,
     exclude_done: bool = True,
     exclude_action: bool = True,
-) -> _TensorDict:
+) -> TensorDictBase:
     """
     Given a tensordict retrieved after a step, returns another tensordict with all the 'next_' prefixes are removed,
     i.e. all the `'next_some_other_string'` keys will be renamed onto `'some_other_string'` keys.
 
 
     Args:
-        tensordict (_TensorDict): tensordict with keys to be renamed
-        next_tensordict (_TensorDict, optional): destination tensordict
+        tensordict (TensorDictBase): tensordict with keys to be renamed
+        next_tensordict (TensorDictBase, optional): destination tensordict
         keep_other (bool, optional): if True, all keys that do not start with `'next_'` will be kept.
             Default is True.
         exclude_reward (bool, optional): if True, the `"reward"` key will be discarded
