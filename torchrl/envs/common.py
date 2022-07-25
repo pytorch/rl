@@ -131,6 +131,7 @@ class EnvBase(torch.nn.Module):
             steps if no policy is provided)
 
     """
+
     def __init__(
         self,
         device: DEVICE_TYPING = "cpu",
@@ -252,6 +253,7 @@ class EnvBase(torch.nn.Module):
 
         del tensordict_out
         return tensordict
+
     def forward(self, tensordict: _TensorDict) -> _TensorDict:
         return self.step(tensordict)
 
@@ -473,6 +475,7 @@ class EnvBase(torch.nn.Module):
         self.device = device
         return self
 
+
 class EnvStateful(EnvBase):
     """
     Abstract environment parent class for TorchRL.
@@ -496,6 +499,7 @@ class EnvStateful(EnvBase):
             steps if no policy is provided)
 
     """
+
     def __init__(
         self,
         device: DEVICE_TYPING = "cpu",
@@ -504,7 +508,7 @@ class EnvStateful(EnvBase):
     ):
         super().__init__(device, dtype, batch_size)
         self.eval()
-    
+
     def set_seed(self, seed: int) -> int:
         """Sets the seed of the environment and returns the next seed to be used (
         which is the input seed if a single environment is present)
@@ -524,6 +528,7 @@ class EnvStateful(EnvBase):
             new_seed = seed_generator(seed)
             seed = new_seed
         return seed
+
     def state_dict(self) -> OrderedDict:
         return OrderedDict()
 
@@ -535,7 +540,7 @@ class EnvStateful(EnvBase):
 
     def train(self, mode: bool = True) -> EnvStateful:
         return self
-    
+
     def reset(
         self,
         tensordict: Optional[_TensorDict] = None,
@@ -590,6 +595,7 @@ class EnvStateful(EnvBase):
         else:
             tensordict = tensordict_reset
         return tensordict
+
     def to(self, device: DEVICE_TYPING) -> EnvStateful:
         device = torch.device(device)
         if device == self.device:

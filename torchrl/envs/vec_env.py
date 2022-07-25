@@ -532,7 +532,9 @@ class SerialEnv(_BatchedEnv):
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
-            return super().__getattr__(attr)  # make sure that appropriate exceptions are raised
+            return super().__getattr__(
+                attr
+            )  # make sure that appropriate exceptions are raised
         elif attr.startswith("__"):
             raise AttributeError(
                 "dispatching built-in private methods is "
