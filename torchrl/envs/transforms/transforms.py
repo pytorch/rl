@@ -292,8 +292,8 @@ class TransformedEnv(_EnvClass):
         **kwargs,
     ):
         kwargs.setdefault("device", env.device)
-        super().__init__(**kwargs)
         device = kwargs["device"]
+        super().__init__(**kwargs)
         self._set_env(env, device)
         if transform is None:
             transform = Compose()
@@ -448,7 +448,8 @@ class TransformedEnv(_EnvClass):
         self._erase_metadata()
 
     def __getattr__(self, attr: str) -> Any:
-        if attr in self.__dir__():
+        print(attr)
+        if attr in self.__dir__():  
             return self.__getattribute__(
                 attr
             )  # make sure that appropriate exceptions are raised
@@ -461,7 +462,7 @@ class TransformedEnv(_EnvClass):
         elif "base_env" in self.__dir__():
             base_env = self.__getattribute__("base_env")
             return getattr(base_env, attr)
-
+        super().__getattr__(attr)
         raise AttributeError(
             f"env not set in {self.__class__.__name__}, cannot access {attr}"
         )

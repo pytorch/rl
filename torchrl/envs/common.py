@@ -676,6 +676,7 @@ class _EnvWrapper(_EnvClass, metaclass=abc.ABCMeta):
         elif "_env" in self.__dir__():
             env = self.__getattribute__("_env")
             return getattr(env, attr)
+        super().__getattr__(attr)
 
         raise AttributeError(
             f"env not set in {self.__class__.__name__}, cannot access {attr}"
