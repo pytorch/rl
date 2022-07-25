@@ -36,7 +36,7 @@ __all__ = [
     "CompositeSpec",
 ]
 
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 
 DEVICE_TYPING = Union[torch.device, str, int]
 
@@ -989,7 +989,7 @@ dtype=torch.float32)},
 
     def type_check(
         self,
-        value: Union[torch.Tensor, _TensorDict],
+        value: Union[torch.Tensor, TensorDictBase],
         selected_keys: Union[str, Optional[Sequence[str]]] = None,
     ):
         if isinstance(value, torch.Tensor) and isinstance(selected_keys, str):
@@ -1002,7 +1002,7 @@ dtype=torch.float32)},
             ):
                 self._specs[_key].type_check(value[_key], _key)
 
-    def is_in(self, val: Union[dict, _TensorDict]) -> bool:
+    def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
         return all(
             [
                 item.is_in(val.get(key))
@@ -1011,7 +1011,7 @@ dtype=torch.float32)},
             ]
         )
 
-    def project(self, val: _TensorDict) -> _TensorDict:
+    def project(self, val: TensorDictBase) -> TensorDictBase:
         for key, item in self.items():
             if item is None:
                 continue

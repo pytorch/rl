@@ -7,7 +7,7 @@ import torch
 from torch import Tensor
 
 from torchrl.data import TensorDict
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
 from torchrl.modules import TensorDictModule
 from torchrl.objectives import (
@@ -127,7 +127,7 @@ class REDQLoss_deprecated(LossModule):
             alpha = self.log_alpha.exp()
         return alpha
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         loss_actor, sample_log_prob = self._actor_loss(tensordict)
 
         loss_qval = self._qvalue_loss(tensordict)
@@ -149,7 +149,7 @@ class REDQLoss_deprecated(LossModule):
 
         return td_out
 
-    def _actor_loss(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
+    def _actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
         tensordict_clone = tensordict.select(*obs_keys)  # to avoid overwriting keys
         with set_exploration_mode("random"):
@@ -176,7 +176,7 @@ class REDQLoss_deprecated(LossModule):
         ).mean(0)
         return loss_actor, tensordict_clone.get("sample_log_prob")
 
-    def _qvalue_loss(self, tensordict: _TensorDict) -> Tensor:
+    def _qvalue_loss(self, tensordict: TensorDictBase) -> Tensor:
         tensordict_save = tensordict
 
         next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]

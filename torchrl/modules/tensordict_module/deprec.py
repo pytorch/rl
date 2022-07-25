@@ -8,7 +8,7 @@ import torch
 from torch import Tensor, nn, distributions as d
 
 from torchrl.data import TensorSpec, DEVICE_TYPING
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules import TensorDictModule, Delta, distributions_maps
 
@@ -161,14 +161,14 @@ class ProbabilisticTDModule(TensorDictModule):
 
     def get_dist(
         self,
-        tensordict: _TensorDict,
+        tensordict: TensorDictBase,
         **kwargs,
     ) -> Tuple[torch.distributions.Distribution, ...]:
         """Calls the module using the tensors retrieved from the 'in_keys' attribute and returns a distribution
         using its output.
 
         Args:
-            tensordict (_TensorDict): tensordict with the input values for the creation of the distribution.
+            tensordict (TensorDictBase): tensordict with the input values for the creation of the distribution.
 
         Returns:
             a distribution along with other tensors returned by the module.
@@ -216,10 +216,10 @@ class ProbabilisticTDModule(TensorDictModule):
 
     def forward(
         self,
-        tensordict: _TensorDict,
-        tensordict_out: Optional[_TensorDict] = None,
+        tensordict: TensorDictBase,
+        tensordict_out: Optional[TensorDictBase] = None,
         **kwargs,
-    ) -> _TensorDict:
+    ) -> TensorDictBase:
 
         dist, *tensors = self.get_dist(tensordict, **kwargs)
         out_tensor = self._dist_sample(
@@ -236,13 +236,13 @@ class ProbabilisticTDModule(TensorDictModule):
             tensordict_out.set("_".join([self.out_keys[0], "log_prob"]), log_prob)
         return tensordict_out
 
-    def log_prob(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
+    def log_prob(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         """
         Samples/computes an action using the module and writes this value onto the input tensordict along
         with its log-probability.
 
         Args:
-            tensordict (_TensorDict): tensordict containing the in_keys specified in the initializer.
+            tensordict (TensorDictBase): tensordict containing the in_keys specified in the initializer.
 
         Returns:
             the same tensordict with the out_keys values added/updated as well as a

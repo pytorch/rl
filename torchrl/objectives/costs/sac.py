@@ -11,7 +11,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules import TensorDictModule
 from torchrl.modules.tensordict_module.actors import (
@@ -167,7 +167,7 @@ class SACLoss(LossModule):
             "At least one of the networks of SACLoss must have trainable " "parameters."
         )
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         if tensordict.ndimension() > 1:
             tensordict = tensordict.view(-1)
 
@@ -197,7 +197,7 @@ class SACLoss(LossModule):
             [],
         )
 
-    def _loss_actor(self, tensordict: _TensorDict) -> Tensor:
+    def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
         # KL lossa
         with set_exploration_mode("random"):
             dist = self.actor_network.get_dist(
@@ -229,7 +229,7 @@ class SACLoss(LossModule):
         tensordict.set("_log_prob", log_prob.detach())
         return self._alpha * log_prob - min_q_logprob
 
-    def _loss_qvalue(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
+    def _loss_qvalue(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         actor_critic = ActorCriticWrapper(self.actor_network, self.value_network)
         params = list(self.target_actor_network_params) + list(
             self.target_value_network_params
@@ -283,7 +283,7 @@ class SACLoss(LossModule):
 
         return loss_value, priority_value
 
-    def _loss_value(self, tensordict: _TensorDict) -> Tensor:
+    def _loss_value(self, tensordict: TensorDictBase) -> Tensor:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys).detach()
         self.value_network(
@@ -328,7 +328,7 @@ class SACLoss(LossModule):
         )
         return loss_value
 
-    def _loss_alpha(self, tensordict: _TensorDict) -> Tensor:
+    def _loss_alpha(self, tensordict: TensorDictBase) -> Tensor:
         log_pi = tensordict.get("_log_prob")
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter

@@ -15,7 +15,7 @@ from functorch._src.make_functional import _swap_state
 from torch import nn
 from torch.nn import Parameter
 
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.modules import TensorDictModule
 
 
@@ -32,7 +32,7 @@ class LossModule(nn.Module):
         super().__init__()
         self._param_maps = dict()
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """It is designed to read an input TensorDict and return another tensordict
         with loss keys named "loss*".
         Splitting the loss in its component can then be used by the trainer to log the various loss values throughout

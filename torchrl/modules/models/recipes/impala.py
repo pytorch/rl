@@ -6,7 +6,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 
 
 # TODO: code small architecture ref in Impala paper
@@ -173,7 +173,7 @@ class ImpalaNet(nn.Module):
 class ImpalaNetTensorDict(ImpalaNet):
     observation_key = "pixels"
 
-    def forward(self, tensordict: _TensorDict):
+    def forward(self, tensordict: TensorDictBase):
         x = tensordict.get(self.observation_key)
         done = tensordict.get("done").squeeze(-1)
         reward = tensordict.get("reward").squeeze(-1)

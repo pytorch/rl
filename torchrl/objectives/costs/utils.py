@@ -11,7 +11,7 @@ import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
 
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import step_tensordict
 from torchrl.modules import TensorDictModule
 
@@ -291,7 +291,7 @@ class hold_out_params(_context_manager):
 
 @torch.no_grad()
 def next_state_value(
-    tensordict: _TensorDict,
+    tensordict: TensorDictBase,
     operator: Optional[TensorDictModule] = None,
     next_val_key: str = "state_action_value",
     gamma: float = 0.99,
@@ -307,7 +307,7 @@ def next_state_value(
     from the input tensordict.
 
     Args:
-        tensordict (_TensorDict): Tensordict containing a reward and done key (and a n_steps_to_next key for n-steps
+        tensordict (TensorDictBase): Tensordict containing a reward and done key (and a n_steps_to_next key for n-steps
             rewards).
         operator (ProbabilisticTDModule, optional): the value function operator. Should write a 'next_val_key'
             key-value in the input tensordict when called. It does not need to be provided if pred_next_val is given.

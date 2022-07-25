@@ -8,7 +8,7 @@ from typing import Callable
 import torch
 
 from torchrl.data import TensorDict
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 
 
 def _stack_output(fun) -> Callable:
@@ -27,7 +27,7 @@ def _stack_output_zip(fun) -> Callable:
     return stacked_output_fun
 
 
-def split_trajectories(rollout_tensordict: _TensorDict) -> _TensorDict:
+def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     """Takes a tensordict with a key traj_ids that indicates the id of each trajectory.
     From there, builds a B x T x ... zero-padded tensordict with B batches on max duration T
     """

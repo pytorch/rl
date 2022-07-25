@@ -13,7 +13,7 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
 )
 from torchrl.data import MultiStep
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import ParallelEnv
 
 __all__ = [
@@ -163,7 +163,7 @@ def _make_collector(
     collector_class: Type,
     env_fns: Union[Callable, List[Callable]],
     env_kwargs: Optional[Union[dict, List[dict]]],
-    policy: Callable[[_TensorDict], _TensorDict],
+    policy: Callable[[TensorDictBase], TensorDictBase],
     max_frames_per_traj: int = -1,
     frames_per_batch: int = 200,
     total_frames: Optional[int] = None,

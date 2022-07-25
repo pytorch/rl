@@ -9,7 +9,7 @@ from typing import Callable, Optional, Tuple
 import torch
 from torch import distributions as d
 
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.utils import step_tensordict
 from torchrl.modules import TensorDictModule
 from ...modules.tensordict_module import ProbabilisticTensorDictModule
@@ -66,7 +66,7 @@ class PPOLoss(LossModule):
         critic_coef: float = 1.0,
         gamma: float = 0.99,
         loss_critic_type: str = "smooth_l1",
-        advantage_module: Optional[Callable[[_TensorDict], _TensorDict]] = None,
+        advantage_module: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
     ):
         super().__init__()
         self.convert_to_functional(actor, "actor")
@@ -95,7 +95,7 @@ class PPOLoss(LossModule):
         return entropy.unsqueeze(-1)
 
     def _log_weight(
-        self, tensordict: _TensorDict
+        self, tensordict: TensorDictBase
     ) -> Tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
         action = tensordict.get("action")
@@ -116,7 +116,7 @@ class PPOLoss(LossModule):
         log_weight = log_prob - prev_log_prob
         return log_weight, dist
 
-    def loss_critic(self, tensordict: _TensorDict) -> torch.Tensor:
+    def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         if self.advantage_diff_key in tensordict.keys():
             advantage_diff = tensordict.get(self.advantage_diff_key)
             if not advantage_diff.requires_grad:
@@ -147,7 +147,7 @@ class PPOLoss(LossModule):
             )
         return self.critic_coef * loss_value
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.advantage_module is not None:
             tensordict = self.advantage_module(
                 tensordict,
@@ -227,7 +227,7 @@ class ClipPPOLoss(PPOLoss):
             math.log1p(self.clip_epsilon),
         )
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.advantage_module is not None:
             tensordict = self.advantage_module(tensordict)
         tensordict = tensordict.clone()
@@ -351,7 +351,7 @@ class KLPENPPOLoss(PPOLoss):
         self.decrement = decrement
         self.samples_mc_kl = samples_mc_kl
 
-    def forward(self, tensordict: _TensorDict) -> TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDict:
         if self.advantage_module is not None:
             tensordict = self.advantage_module(tensordict)
         tensordict = tensordict.clone()

@@ -17,7 +17,7 @@ import torch
 #     entropy_loss = entropy_loss + entropy
 from torch import Tensor
 
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import step_tensordict
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.returns.functional import (
@@ -62,17 +62,17 @@ class TDEstimate:
 
     def __call__(
         self,
-        tensordict: _TensorDict,
+        tensordict: TensorDictBase,
         *unused_args,
         params: Optional[List[Tensor]] = None,
         buffers: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
         target_buffers: Optional[List[Tensor]] = None,
-    ) -> _TensorDict:
+    ) -> TensorDictBase:
         """Computes the GAE given the data in tensordict.
 
         Args:
-            tensordict (_TensorDict): A TensorDict containing the data (observation, action, reward, done state)
+            tensordict (TensorDictBase): A TensorDict containing the data (observation, action, reward, done state)
                 necessary to compute the value estimates and the GAE.
 
         Returns:
@@ -163,17 +163,17 @@ class TDLambdaEstimate:
 
     def __call__(
         self,
-        tensordict: _TensorDict,
+        tensordict: TensorDictBase,
         *unused_args,
         params: Optional[List[Tensor]] = None,
         buffers: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
         target_buffers: Optional[List[Tensor]] = None,
-    ) -> _TensorDict:
+    ) -> TensorDictBase:
         """Computes the GAE given the data in tensordict.
 
         Args:
-            tensordict (_TensorDict): A TensorDict containing the data (observation, action, reward, done state)
+            tensordict (TensorDictBase): A TensorDict containing the data (observation, action, reward, done state)
                 necessary to compute the value estimates and the GAE.
 
         Returns:
@@ -268,17 +268,17 @@ class GAE:
 
     def __call__(
         self,
-        tensordict: _TensorDict,
+        tensordict: TensorDictBase,
         *unused_args,
         params: Optional[List[Tensor]] = None,
         buffers: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
         target_buffers: Optional[List[Tensor]] = None,
-    ) -> _TensorDict:
+    ) -> TensorDictBase:
         """Computes the GAE given the data in tensordict.
 
         Args:
-            tensordict (_TensorDict): A TensorDict containing the data (observation, action, reward, done state)
+            tensordict (TensorDictBase): A TensorDict containing the data (observation, action, reward, done state)
                 necessary to compute the value estimates and the GAE.
 
         Returns:
