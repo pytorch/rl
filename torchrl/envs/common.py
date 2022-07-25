@@ -142,7 +142,7 @@ class _EnvBase(torch.nn.Module):
             self.device = torch.device(device)
         self._is_done = None
         self.dtype = dtype_map.get(dtype, dtype)
-        if not hasattr(self, "is_closed"):
+        if "is_closed" not in self.__dir__():
             self.is_closed = True
         if "_action_spec" not in self.__dir__():
             self._action_spec = None
