@@ -51,7 +51,14 @@ class _R3MNet(Transform):
         return super()._call(tensordict_view)
 
     def _apply_transform(self, obs: torch.Tensor) -> None:
-        return self.convnet(obs)
+        shape = None
+        if obs.ndimension() > 4:
+            shape = obs.shape[:-3]
+            obs = obs.flatten(0, -4)
+        out = self.convnet(obs)
+        if shape is not None:
+            out = out.view(*shape, *out.shape[1:])
+        return out
 
     @staticmethod
     def _load_weights(convnet, model_name):
