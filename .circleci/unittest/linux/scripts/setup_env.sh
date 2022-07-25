@@ -71,4 +71,7 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL
 
+conda deactivate
+conda activate "${env_dir}"
+
 conda env update --file "${this_dir}/environment.yml" --prune
