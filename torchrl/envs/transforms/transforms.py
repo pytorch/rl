@@ -301,7 +301,6 @@ class TransformedEnv(EnvStateful):
         else:
             transform = transform.to(device)
         self.transform = transform
-        self.transform.eval()
 
         self._last_obs = None
         self.cache_specs = cache_specs
