@@ -10,7 +10,7 @@ from typing import Callable, Optional, Union, Any
 import torch
 
 from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
-from torchrl.envs.common import _EnvClass
+from torchrl.envs.common import EnvStateful
 from torchrl.envs.env_creator import env_creator, EnvCreator
 from torchrl.envs.transforms import (
     CatFrames,
@@ -213,7 +213,7 @@ def transformed_env_constructor(
     norm_obs_only: bool = False,
     use_env_creator: bool = True,
     custom_env_maker: Optional[Callable] = None,
-    custom_env: Optional[_EnvClass] = None,
+    custom_env: Optional[EnvStateful] = None,
     return_transformed_envs: bool = True,
     action_dim_gsde: Optional[int] = None,
     state_dim_gsde: Optional[int] = None,
@@ -236,7 +236,7 @@ def transformed_env_constructor(
             of torchrl env wrappers, a custom callable
             can be passed instead. In this case it will override the
             constructor retrieved from `args`.
-        custom_env (_EnvClass, optional): if an existing environment needs to be
+        custom_env (EnvStateful, optional): if an existing environment needs to be
             transformed_in, it can be passed directly to this helper. `custom_env_maker`
             and `custom_env` are exclusive features.
         return_transformed_envs (bool, optional): if True, a transformed_in environment
@@ -337,7 +337,7 @@ def parallel_env_constructor(
 
 
 def get_stats_random_rollout(
-    cfg: "DictConfig", proof_environment: _EnvClass, key: Optional[str] = None
+    cfg: "DictConfig", proof_environment: EnvStateful, key: Optional[str] = None
 ):
     print("computing state stats")
     if not hasattr(cfg, "init_env_steps"):

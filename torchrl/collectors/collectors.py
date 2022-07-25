@@ -34,7 +34,7 @@ from torchrl.envs.transforms import TransformedEnv
 from ..data import TensorSpec
 from ..data.tensordict.tensordict import _TensorDict, TensorDict
 from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
-from ..envs.common import _EnvClass
+from ..envs.common import EnvStateful
 from ..envs.vec_env import _BatchedEnv
 
 _TIMEOUT = 1.0
@@ -104,7 +104,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         #     if create_env_kwargs is None:
         #         create_env_kwargs = dict()
         #     self.create_env_fn = create_env_fn
-        #     if isinstance(create_env_fn, _EnvClass):
+        #     if isinstance(create_env_fn, EnvStateful):
         #         env = create_env_fn
         #     else:
         #         env = self.create_env_fn(**create_env_kwargs)
@@ -172,7 +172,7 @@ class SyncDataCollector(_DataCollector):
     Generic data collector for RL problems. Requires and environment constructor and a policy.
 
     Args:
-        create_env_fn (Callable), returns an instance of _EnvClass class.
+        create_env_fn (Callable), returns an instance of EnvStateful class.
         policy (Callable, optional): Policy to be executed in the environment.
             Must accept _TensorDict object as input.
         total_frames (int): lower bound of the total number of frames returned by the collector. The iterator will
@@ -227,7 +227,7 @@ class SyncDataCollector(_DataCollector):
     def __init__(
         self,
         create_env_fn: Union[
-            _EnvClass, "EnvCreator", Sequence[Callable[[], _EnvClass]]
+            EnvStateful, "EnvCreator", Sequence[Callable[[], EnvStateful]]
         ],
         policy: Optional[
             Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
@@ -256,7 +256,7 @@ class SyncDataCollector(_DataCollector):
 
         if create_env_kwargs is None:
             create_env_kwargs = {}
-        if not isinstance(create_env_fn, _EnvClass):
+        if not isinstance(create_env_fn, EnvStateful):
             env = create_env_fn(**create_env_kwargs)
         else:
             env = create_env_fn
@@ -269,7 +269,7 @@ class SyncDataCollector(_DataCollector):
                 env.update_kwargs(create_env_kwargs)
 
         self.passing_device = torch.device(passing_device)
-        self.env: _EnvClass = env.to(self.passing_device)
+        self.env: EnvStateful = env.to(self.passing_device)
         self.closed = False
         self.n_env = self.env.numel()
 
@@ -571,7 +571,7 @@ class _MultiDataCollector(_DataCollector):
     """Runs a given number of DataCollectors on separate processes.
 
     Args:
-        create_env_fn (list of Callabled): list of Callables, each returning an instance of _EnvClass
+        create_env_fn (list of Callabled): list of Callables, each returning an instance of EnvStateful
         policy (Callable, optional): Instance of ProbabilisticTensorDictModule class.
             Must accept _TensorDict object as input.
         total_frames (int): lower bound of the total number of frames returned by the collector. In parallel settings,
@@ -621,7 +621,7 @@ class _MultiDataCollector(_DataCollector):
 
     def __init__(
         self,
-        create_env_fn: Sequence[Callable[[], _EnvClass]],
+        create_env_fn: Sequence[Callable[[], EnvStateful]],
         policy: Optional[
             Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
         ] = None,
@@ -754,7 +754,7 @@ class _MultiDataCollector(_DataCollector):
             _passing_device = self.passing_devices[i]
             pipe_parent, pipe_child = mp.Pipe()  # send messages to procs
             if env_fun.__class__.__name__ != "EnvCreator" and not isinstance(
-                env_fun, _EnvClass
+                env_fun, EnvStateful
             ):  # to avoid circular imports
                 env_fun = CloudpickleWrapper(env_fun)
 
@@ -1114,7 +1114,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
     is being created.
 
     Args:
-        create_env_fn (Callabled): Callable returning an instance of _EnvClass
+        create_env_fn (Callabled): Callable returning an instance of EnvStateful
         policy (Callable, optional): Instance of ProbabilisticTensorDictModule class.
             Must accept _TensorDict object as input.
         total_frames (int): lower bound of the total number of frames returned
@@ -1167,7 +1167,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
 
     def __init__(
         self,
-        create_env_fn: Callable[[], _EnvClass],
+        create_env_fn: Callable[[], EnvStateful],
         policy: Optional[
             Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
         ] = None,
@@ -1206,7 +1206,7 @@ def _main_async_collector(
     pipe_parent: connection.Connection,
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
-    create_env_fn: Union[_EnvClass, "EnvCreator", Callable[[], _EnvClass]],
+    create_env_fn: Union[EnvStateful, "EnvCreator", Callable[[], EnvStateful]],
     create_env_kwargs: dict,
     policy: Callable[[_TensorDict], _TensorDict],
     frames_per_worker: int,

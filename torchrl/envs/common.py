@@ -43,7 +43,7 @@ class Specs:
     the environment from the workspace.
 
     Args:
-        env (_EnvClass): environment from which the specs have to be read.
+        env (EnvStateful): environment from which the specs have to be read.
 
     """
 
@@ -55,7 +55,7 @@ class Specs:
         "from_pixels",
     }
 
-    def __init__(self, env: _EnvClass):
+    def __init__(self, env: EnvStateful):
         self.env = env
 
     def __getitem__(self, item: str) -> Any:
@@ -108,7 +108,7 @@ class Specs:
         return td
 
 
-class _EnvBase(torch.nn.Module):
+class EnvBase(torch.nn.Module):
     """
     Abstract environment parent class for TorchRL.
 
@@ -204,7 +204,7 @@ class _EnvBase(torch.nn.Module):
         """Makes a step in the environment.
         Step accepts a single argument, tensordict, which usually carries an 'action' key which indicates the action
         to be taken.
-        Step will call an out-place private method, _step, which is the method to be re-written by _EnvClass subclasses.
+        Step will call an out-place private method, _step, which is the method to be re-written by EnvStateful subclasses.
 
         Args:
             tensordict (_TensorDict): Tensordict containing the action to be taken.
@@ -228,7 +228,7 @@ class _EnvBase(torch.nn.Module):
 
         if tensordict_out is tensordict:
             raise RuntimeError(
-                "_EnvClass._step should return outplace changes to the input "
+                "EnvStateful._step should return outplace changes to the input "
                 "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
@@ -460,7 +460,7 @@ class _EnvBase(torch.nn.Module):
         if not self.is_closed:
             self.close()
 
-    def to(self, device: DEVICE_TYPING) -> _EnvClass:
+    def to(self, device: DEVICE_TYPING) -> EnvStateful:
         device = torch.device(device)
         if device == self.device:
             return self
@@ -473,7 +473,7 @@ class _EnvBase(torch.nn.Module):
         self.device = device
         return self
 
-class _EnvClass(_EnvBase):
+class EnvStateful(EnvBase):
     """
     Abstract environment parent class for TorchRL.
 
@@ -530,10 +530,10 @@ class _EnvClass(_EnvBase):
     def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
         pass
 
-    def eval(self) -> _EnvClass:
+    def eval(self) -> EnvStateful:
         return self
 
-    def train(self, mode: bool = True) -> _EnvClass:
+    def train(self, mode: bool = True) -> EnvStateful:
         return self
     
     def reset(
@@ -543,7 +543,7 @@ class _EnvClass(_EnvBase):
         **kwargs,
     ) -> _TensorDict:
         """Resets the environment.
-        As for step and _step, only the private method `_reset` should be overwritten by _EnvClass subclasses.
+        As for step and _step, only the private method `_reset` should be overwritten by EnvStateful subclasses.
 
         Args:
             tensordict (_TensorDict, optional): tensordict to be used to contain the resulting new observation.
@@ -561,7 +561,7 @@ class _EnvClass(_EnvBase):
         tensordict_reset = self._reset(tensordict, **kwargs)
         if tensordict_reset is tensordict:
             raise RuntimeError(
-                "_EnvClass._reset should return outplace changes to the input "
+                "EnvStateful._reset should return outplace changes to the input "
                 "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
                 "tensordict.select()) inside _reset before writing new tensors onto this new instance."
             )
@@ -590,7 +590,7 @@ class _EnvClass(_EnvBase):
         else:
             tensordict = tensordict_reset
         return tensordict
-    def to(self, device: DEVICE_TYPING) -> _EnvClass:
+    def to(self, device: DEVICE_TYPING) -> EnvStateful:
         device = torch.device(device)
         if device == self.device:
             return self
@@ -604,10 +604,10 @@ class _EnvClass(_EnvBase):
         return self
 
 
-class _EnvWrapper(_EnvClass, metaclass=abc.ABCMeta):
+class _EnvWrapper(EnvStateful, metaclass=abc.ABCMeta):
     """Abstract environment wrapper class.
 
-    Unlike _EnvClass, _EnvWrapper comes with a `_build_env` private method that will be called upon instantiation.
+    Unlike EnvStateful, _EnvWrapper comes with a `_build_env` private method that will be called upon instantiation.
     Interfaces with other libraries should be coded using _EnvWrapper.
 
     It is possible to directly query attributed from the nested environment it its name does not conflict with
@@ -731,7 +731,7 @@ class _EnvWrapper(_EnvClass, metaclass=abc.ABCMeta):
 
 
 def make_tensordict(
-    env: _EnvClass,
+    env: EnvStateful,
     policy: Optional[Callable[[_TensorDict, ...], _TensorDict]] = None,
 ) -> _TensorDict:
     """
