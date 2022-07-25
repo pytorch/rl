@@ -461,7 +461,7 @@ class TransformedEnv(EnvStateful):
                 f"Got attribute {attr}."
             )
         elif "base_env" in self.__dir__():
-            base_env = self.__getattribute__("base_env")
+            base_env = self.__getattr__("base_env")
             return getattr(base_env, attr)
 
         raise AttributeError(
