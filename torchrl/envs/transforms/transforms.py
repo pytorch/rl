@@ -301,6 +301,7 @@ class TransformedEnv(_EnvClass):
         else:
             transform = transform.to(device)
         self.transform = transform
+        self.transform.eval()
 
         self._last_obs = None
         self.cache_specs = cache_specs
@@ -386,7 +387,10 @@ class TransformedEnv(_EnvClass):
         self.transform.load_state_dict(state_dict, **kwargs)
 
     def eval(self) -> TransformedEnv:
-        self.transform.eval()
+        if "transform" in self.__dir__():
+            # when calling __init__, eval() is called but transforms are not set
+            # yet.
+            self.transform.eval()
         return self
 
     def train(self, mode: bool = True) -> TransformedEnv:
@@ -448,11 +452,8 @@ class TransformedEnv(_EnvClass):
         self._erase_metadata()
 
     def __getattr__(self, attr: str) -> Any:
-        print(attr)
-        if attr in self.__dir__():  
-            return self.__getattribute__(
-                attr
-            )  # make sure that appropriate exceptions are raised
+        if attr in self.__dir__():
+            return super().__getattr__(attr)  # make sure that appropriate exceptions are raised
         elif attr.startswith("__"):
             raise AttributeError(
                 "passing built-in private methods is "
@@ -462,7 +463,7 @@ class TransformedEnv(_EnvClass):
         elif "base_env" in self.__dir__():
             base_env = self.__getattribute__("base_env")
             return getattr(base_env, attr)
-        super().__getattr__(attr)
+
         raise AttributeError(
             f"env not set in {self.__class__.__name__}, cannot access {attr}"
         )
