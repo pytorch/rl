@@ -9,7 +9,7 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from torch import nn, autograd
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.modules import (
     TanhNormal,
     NormalParamWrapper,
@@ -59,7 +59,7 @@ def test_delta(device, div_up, div_down):
 
 def _map_all(*tensors_or_other, device):
     for t in tensors_or_other:
-        if isinstance(t, (torch.Tensor, _TensorDict)):
+        if isinstance(t, (torch.Tensor, TensorDictBase)):
             yield t.to(device)
         else:
             yield t

@@ -18,7 +18,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import TensorDict, _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDict, TensorDictBase
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
@@ -376,7 +376,7 @@ class TestComposite:
         ts = self._composite_spec(is_complete, device, dtype)
         ts["nested_cp"] = self._composite_spec(is_complete, device, dtype)
         td = ts.rand()
-        assert isinstance(td["nested_cp"], _TensorDict)
+        assert isinstance(td["nested_cp"], TensorDictBase)
         keys = list(td.keys())
         for key in keys:
             if key != "nested_cp":

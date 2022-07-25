@@ -52,7 +52,7 @@ class MemmapTensor(object):
     and remote workers that have access to
     a common storage, and as such it supports serialization and
     deserialization. It is possible to choose if the ownership is
-    transferred upon serialization / deserialization: If owenership is not
+    transferred upon serialization / deserialization: If ownership is not
     transferred (transfer_ownership=False, default), then the process where
     the MemmapTensor was created will be responsible of clearing it once it
     gets out of scope (in that process). Otherwise, the process that
@@ -262,6 +262,15 @@ class MemmapTensor(object):
         if idx is not None:
             if isinstance(idx, torch.Tensor):
                 idx = idx.cpu()
+            elif isinstance(idx, tuple) and any(
+                isinstance(sub_index, torch.Tensor) for sub_index in idx
+            ):
+                idx = tuple(
+                    sub_index.cpu()
+                    if isinstance(sub_index, torch.Tensor)
+                    else sub_index
+                    for sub_index in idx
+                )
             memmap_array = memmap_array[idx]
         out = self._np_to_tensor(memmap_array, from_numpy=from_numpy)
         if (
@@ -465,6 +474,15 @@ class MemmapTensor(object):
         if self.device == torch.device("cpu"):
             self._load_item()[idx] = value
         else:
+            if isinstance(idx, torch.Tensor):
+                idx = idx.cpu()
+            elif isinstance(idx, tuple) and any(
+                isinstance(_idx, torch.Tensor) for _idx in idx
+            ):
+                idx = tuple(
+                    _idx.cpu() if isinstance(_idx, torch.Tensor) else _idx
+                    for _idx in idx
+                )
             self.memmap_array[idx] = to_numpy(value)
 
     def __setstate__(self, state: dict) -> None:

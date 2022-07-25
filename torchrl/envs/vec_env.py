@@ -18,7 +18,7 @@ from torch import multiprocessing as mp
 
 from torchrl import _check_for_faulty_process
 from torchrl.data import TensorDict, TensorSpec
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvClass, make_tensordict
 from torchrl.envs.env_creator import EnvCreator
@@ -513,7 +513,7 @@ class SerialEnv(_BatchedEnv):
         return seed
 
     @_check_start
-    def _reset(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         if tensordict is not None and "reset_workers" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             reset_workers = tensordict.get("reset_workers")
@@ -654,7 +654,7 @@ class ParallelEnv(_BatchedEnv):
                 raise RuntimeError(f"Expected 'loaded' but received {msg}")
 
     @_check_start
-    def _step(self, tensordict: _TensorDict) -> _TensorDict:
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._assert_tensordict_shape(tensordict)
 
         self.shared_tensordict_parent.update_(tensordict.select(*self.env_input_keys))
@@ -716,7 +716,7 @@ class ParallelEnv(_BatchedEnv):
         return seed
 
     @_check_start
-    def _reset(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         cmd_out = "reset"
         if tensordict is not None and "reset_workers" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)

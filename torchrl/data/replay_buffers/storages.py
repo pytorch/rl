@@ -6,7 +6,7 @@ import torch
 
 from torchrl.data.replay_buffers.utils import INT_CLASSES
 from torchrl.data.tensordict.memmap import MemmapTensor
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 
 __all__ = ["Storage", "ListStorage", "LazyMemmapStorage", "LazyTensorStorage"]
 
@@ -95,7 +95,7 @@ class LazyTensorStorage(Storage):
         self.device = device if device else torch.device("cpu")
         self._len = 0
 
-    def _init(self, data: Union[_TensorDict, torch.Tensor]) -> None:
+    def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         print("Creating a TensorStorage...")
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
@@ -109,7 +109,7 @@ class LazyTensorStorage(Storage):
             out = TensorDict({}, [self.size, *data.shape])
             print("The storage is being created: ")
             for key, tensor in data.items():
-                if isinstance(tensor, _TensorDict):
+                if isinstance(tensor, TensorDictBase):
                     out[key] = tensor.expand(self.size).clone().zero_()
                 else:
                     out[key] = torch.empty(
@@ -125,7 +125,7 @@ class LazyTensorStorage(Storage):
     def set(
         self,
         cursor: Union[int, Sequence[int], slice],
-        data: Union[_TensorDict, torch.Tensor],
+        data: Union[TensorDictBase, torch.Tensor],
     ):
         if isinstance(cursor, INT_CLASSES):
             self._len = max(self._len, cursor + 1)
@@ -173,7 +173,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         self.device = device if device else torch.device("cpu")
         self._len = 0
 
-    def _init(self, data: Union[_TensorDict, torch.Tensor]) -> None:
+    def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         print("Creating a MemmapStorage...")
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
@@ -188,7 +188,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             out = TensorDict({}, [self.size, *data.shape])
             print("The storage is being created: ")
             for key, tensor in data.items():
-                if isinstance(tensor, _TensorDict):
+                if isinstance(tensor, TensorDictBase):
                     out[key] = (
                         tensor.expand(self.size)
                         .clone()
