@@ -1036,7 +1036,7 @@ class TestTensorDicts:
         assert (td_view.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
-    def test_implied_size_view(self, td_name, device):
+    def test_inferred_view_size(self, td_name, device):
         if td_name in ("permute_td", "sub_td2"):
             pytest.skip("view incompatible with stride / permutation")
         torch.manual_seed(1)
@@ -1044,7 +1044,7 @@ class TestTensorDicts:
         for i in range(len(td.shape)):
             # replacing every index one at a time
             # with -1, to test that td.view(..., -1, ...)
-            # always returns the same tensordict
+            # always returns the original tensordict
             new_shape = [
                 dim_size if dim_idx != i else -1
                 for dim_idx, dim_size in enumerate(td.shape)
