@@ -13,11 +13,12 @@ import torch
 from torch import nn, Tensor
 
 try:
-    _has_tv = True
     from torchvision.transforms.functional import center_crop
     from torchvision.transforms.functional_tensor import (
         resize,
     )  # as of now resize is imported from torchvision
+
+    _has_tv = True
 except ImportError:
     _has_tv = False
 
@@ -797,6 +798,8 @@ class Resize(ObservationTransform):
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         # flatten if necessary
+        if observation.shape[-2:] == torch.Size([self.w, self.h]):
+            return observation
         ndim = observation.ndimension()
         if ndim > 4:
             sizes = observation.shape[:-3]

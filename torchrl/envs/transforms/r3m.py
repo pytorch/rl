@@ -1,92 +1,84 @@
-import copy
-import os
-from typing import Sequence
-from typing import Optional
-
-import hydra
-import omegaconf
 import torch
-import tempfile
-from torchvision.datasets.utils import download_url
+from torch.nn import Identity
 
-from .transforms import Transform
+from torchrl.envs.transforms import (
+    ToTensorImage,
+    Compose,
+    ObservationNorm,
+    Resize,
+    Transform,
+)
 
-from r3m import load_r3m
+try:
+    from torchvision import models
 
-# VALID_ARGS = ["_target_", "device", "lr", "hidden_dim", "size", "l2weight", "l1weight", "langweight", "tcnweight", "l2dist", "bs"]
-#
-# def remove_language_head(state_dict):
-#     keys = state_dict.keys()
-#     ## Hardcodes to remove the language head
-#     ## Assumes downstream use is as visual representation
-#     for key in list(keys):
-#         if ("lang_enc" in key) or ("lang_rew" in key):
-#             del state_dict[key]
-#     return state_dict
-#
-# def cleanup_config(cfg, device):
-#     config = copy.deepcopy(cfg)
-#     keys = config.agent.keys()
-#     for key in list(keys):
-#         if key not in VALID_ARGS:
-#             del config.agent[key]
-#     config.agent["_target_"] = "r3m.R3M"
-#     config["device"] = device
-#
-#     ## Hardcodes to remove the language head
-#     ## Assumes downstream use is as visual representation
-#     config.agent["langweight"] = 0
-#     return config.agent
-#
-# def load_r3m(modelid, device, store_dir=None):
-#     store_dir_obj = None
-#     if store_dir is None:
-#         store_dir_obj = tempfile.TemporaryDirectory()
-#         store_dir = str(store_dir_obj.name)
-#     if modelid == "resnet50":
-#         foldername = "r3m_50"
-#         modelurl = 'https://drive.google.com/uc?id=1Xu0ssuG0N1zjZS54wmWzJ7-nb0-7XzbA'
-#         configurl = 'https://drive.google.com/uc?id=10jY2VxrrhfOdNPmsFdES568hjjIoBJx8'
-#     elif modelid == "resnet34":
-#         foldername = "r3m_34"
-#         modelurl = 'https://drive.google.com/uc?id=15bXD3QRhspIRacOKyWPw5y2HpoWUCEnE'
-#         configurl = 'https://drive.google.com/uc?id=1RY0NS-Tl4G7M1Ik_lOym0b5VIBxX9dqW'
-#     elif modelid == "resnet18":
-#         foldername = "r3m_18"
-#         modelurl = 'https://drive.google.com/uc?id=1A1ic-p4KtYlKXdXHcV2QV0cUzI4kn0u-'
-#         configurl = 'https://drive.google.com/uc?id=1nitbHQ-GRorxc7vMUiEHjHWP5N11Jvc6'
-#     else:
-#         raise NameError('Invalid Model ID')
-#
-#     if not os.path.exists(os.path.join(store_dir, foldername)):
-#         os.makedirs(os.path.join(store_dir, foldername))
-#     foldername = os.path.join(store_dir, foldername)
-#     modelpath = os.path.join(foldername, "model.pt")
-#     configpath = os.path.join(foldername, "config.yaml")
-#     print("downloading model")
-#     download_url(modelurl, foldername, "model.pt")
-#     print("downloading config")
-#     download_url(configurl, foldername, "config.yaml")
-#     print("done")
-#
-#     modelcfg = omegaconf.OmegaConf.load(configpath)
-#     cleancfg = cleanup_config(modelcfg, device)
-#     rep = hydra.utils.instantiate(cleancfg)
-#     # rep = torch.nn.DataParallel(rep)
-#     r3m_state_dict = remove_language_head(
-#         torch.load(modelpath, map_location=torch.device(device))['r3m'])
-#     rep.load_state_dict(r3m_state_dict)
-#     del store_dir_obj
-#     return rep
+    _has_tv = True
+except ImportError:
+    _has_tv = False
+
+__all__ = ["R3MTransform"]
 
 
-class R3MTransform(Transform):
-    def __init__(
-        self,
-        keys_in: Sequence[str],
-        keys_out: Optional[Sequence[str]] = None,
-        modelid="resnet50",
-    ):
-        super().__init__(keys_in=keys_in, keys_out=keys_out)
-        self.model = load_r3m(modelid, device="cpu")
-        print(self.model)
+class _R3MNet(Transform):
+
+    inplace = False
+
+    def __init__(self, in_keys, out_keys, model_name):
+        if not _has_tv:
+            raise ImportError(
+                "Tried to instantiate R3M without torchvision. Make sure you have "
+                "torchvision installed in your environment."
+            )
+        if model_name == "resnet18":
+            self.outdim = 512
+            convnet = models.resnet18(pretrained=False)
+        elif model_name == "resnet18":
+            self.outdim = 512
+            convnet = models.resnet34(pretrained=False)
+        elif model_name == "resnet50":
+            self.outdim = 2048
+            convnet = models.resnet50(pretrained=False)
+        else:
+            raise NotImplementedError(
+                f"model {model_name} is currently not supported by R3M"
+            )
+        convnet.fc = Identity()
+        super().__init__(keys_in=in_keys)
+        self.convnet = convnet
+
+    def _call(self, tensordict):
+        tensordict_view = tensordict.view(-1)
+        return super()._call(tensordict_view)
+
+    def _apply_transform(self, obs: torch.Tensor) -> None:
+        return self.convnet(obs)
+
+    @staticmethod
+    def _load_weights(convnet, model_name):
+        raise NotImplementedError
+
+
+class R3MTransform(Compose):
+    """
+    TODO
+    """
+
+    def __init__(self, model_name, keys_in=None, keys_out=None, size=244):
+        # ToTensor
+        totensor = ToTensorImage(unsqueeze=False, keys_in=keys_in, keys_out=keys_out)
+        keys_out = totensor.keys_out
+        # Normalize
+        mean = [0.485, 0.456, 0.406]
+        std = [0.229, 0.224, 0.225]
+        normalize = ObservationNorm(
+            keys_in=totensor.keys_out,
+            loc=torch.tensor(mean).view(3, 1, 1),
+            scale=torch.tensor(std).view(3, 1, 1),
+            standard_normal=True,
+        )
+        # Resize: note that resize is a no-op if the tensor has the desired size already
+        resize = Resize(size, size)
+        # R3M
+        network = _R3MNet(in_keys=keys_out, out_keys=keys_out, model_name=model_name)
+        transforms = [totensor, resize, normalize, network]
+        super().__init__(*transforms)
