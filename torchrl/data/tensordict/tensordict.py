@@ -2766,6 +2766,9 @@ torch.Size([3, 2])
                     f"tensor.shape={tensor.shape[:self.batch_dims]} and "
                     f"self.batch_size={self.batch_size} mismatch"
                 )
+        tensor = self._process_tensor(
+            tensor, check_device=False, check_tensor_shape=False
+        )
         self._source.set_at_(key, tensor, self.idx)
         if key in self._dict_meta:
             self._dict_meta[key].requires_grad = tensor.requires_grad
