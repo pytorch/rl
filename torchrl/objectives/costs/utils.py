@@ -263,9 +263,7 @@ class hold_out_net(_context_manager):
         try:
             self.p_example = next(network.parameters())
         except StopIteration:
-            raise RuntimeError(
-                "hold_out_net requires the network parameter set to be " "non-empty."
-            )
+            self.p_example = torch.tensor([])
         self._prev_state = []
 
     def __enter__(self) -> None:
