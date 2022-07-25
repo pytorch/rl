@@ -488,6 +488,16 @@ def test_savedtensordict(device):
     assert ss.get("a").device == device
 
 
+def test_inferred_view_size():
+    td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
+    assert td.view(-1).view(-1, 4) is td
+
+    assert td.view(-1, 4) is td
+    assert td.view(3, -1) is td
+    assert td.view(3, 4) is td
+    assert td.view(-1, 12).shape == torch.Size([1, 12])
+
+
 @pytest.mark.parametrize(
     "ellipsis_index, expected_index",
     [
@@ -1025,6 +1035,23 @@ class TestTensorDicts:
         assert td_view.view(*td.shape) is td
         assert (td_view.get("a") == 1).all()
         assert (td.get("a") == 1).all()
+
+    def test_implied_size_view(self, td_name, device):
+        if td_name in ("permute_td", "sub_td2"):
+            pytest.skip("view incompatible with stride / permutation")
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        for i in range(len(td.shape)):
+            # replacing every index one at a time
+            # with -1, to test that td.view(..., -1, ...)
+            # always returns the same tensordict
+            new_shape = [
+                dim_size if dim_idx != i else -1
+                for dim_idx, dim_size in enumerate(td.shape)
+            ]
+            assert td.view(-1).view(*new_shape) is td
+            assert td.view(*new_shape) is td
+
 
     def test_clone_td(self, td_name, device):
         torch.manual_seed(1)
