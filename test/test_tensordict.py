@@ -1052,7 +1052,6 @@ class TestTensorDicts:
             assert td.view(-1).view(*new_shape) is td
             assert td.view(*new_shape) is td
 
-
     def test_clone_td(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
