@@ -52,7 +52,7 @@ class MemmapTensor(object):
     and remote workers that have access to
     a common storage, and as such it supports serialization and
     deserialization. It is possible to choose if the ownership is
-    transferred upon serialization / deserialization: If owenership is not
+    transferred upon serialization / deserialization: If ownership is not
     transferred (transfer_ownership=False, default), then the process where
     the MemmapTensor was created will be responsible of clearing it once it
     gets out of scope (in that process). Otherwise, the process that

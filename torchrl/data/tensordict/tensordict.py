@@ -33,6 +33,7 @@ from warnings import warn
 
 import numpy as np
 import torch
+from torch.jit._shape_functions import infer_size_impl
 
 from torchrl import KeyDependentDefaultDict, prod
 from torchrl.data.tensordict.memmap import MemmapTensor
@@ -1232,7 +1233,10 @@ dtype=torch.float32)},
         elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
             return self.view(*shape[0])
         elif not isinstance(shape, torch.Size):
+            shape = infer_size_impl(shape, self.numel())
             shape = torch.Size(shape)
+        if shape == self.shape:
+            return self
         return ViewedTensorDict(
             source=self,
             custom_op="view",
@@ -4298,6 +4302,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
             return self.view(*shape[0])
         elif not isinstance(shape, torch.Size):
+            shape = infer_size_impl(shape, self.numel())
             shape = torch.Size(shape)
         if shape == self._source.batch_size:
             return self._source
