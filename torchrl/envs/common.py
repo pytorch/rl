@@ -525,25 +525,25 @@ class EnvBase(torch.nn.Module):
 
 class EnvStateful(EnvBase):
     """
-    Abstract environment parent class for TorchRL.
+    Env class for stateful envs in TorchRL.
 
-    Properties:
-        - observation_spec (CompositeSpec): sampling spec of the observations;
-        - action_spec (TensorSpec): sampling spec of the actions;
-        - input_spec (CompositeSpec): sampling spec of the actions and/or other inputs;
-        - reward_spec (TensorSpec): sampling spec of the rewards;
-        - batch_size (torch.Size): number of environments contained in the instance;
-        - device (torch.device): device where the env input and output are expected to live
-        - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the
-            last reset
+     Properties:
+         - observation_spec (CompositeSpec): sampling spec of the observations;
+         - action_spec (TensorSpec): sampling spec of the actions;
+         - input_spec (CompositeSpec): sampling spec of the actions and/or other inputs;
+         - reward_spec (TensorSpec): sampling spec of the rewards;
+         - batch_size (torch.Size): number of environments contained in the instance;
+         - device (torch.device): device where the env input and output are expected to live
+         - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the
+             last reset
 
-    Methods:
-        step (TensorDictBase -> TensorDictBase): step in the environment
-        reset (TensorDictBase, optional -> TensorDictBase): reset the environment
-        set_seed (int -> int): sets the seed of the environment
-        rand_step (TensorDictBase, optional -> TensorDictBase): random step given the action spec
-        rollout (Callable, ... -> TensorDictBase): executes a rollout in the environment with the given policy (or random
-            steps if no policy is provided)
+     Methods:
+         step (TensorDictBase -> TensorDictBase): step in the environment
+         reset (TensorDictBase, optional -> TensorDictBase): reset the environment
+         set_seed (int -> int): sets the seed of the environment
+         rand_step (TensorDictBase, optional -> TensorDictBase): random step given the action spec
+         rollout (Callable, ... -> TensorDictBase): executes a rollout in the environment with the given policy (or random
+             steps if no policy is provided)
 
     """
 
