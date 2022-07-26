@@ -11,6 +11,7 @@ from numbers import Number
 from typing import Any, Callable, Iterator, Optional, Union, Dict
 
 import numpy as np
+import torch.nn as nn
 import torch
 
 from torchrl import seed_generator, prod
@@ -108,7 +109,7 @@ class Specs:
         return td
 
 
-class EnvBase(torch.nn.Module):
+class EnvBase(nn.Module):
     """
     Abstract environment parent class for TorchRL.
 
