@@ -50,6 +50,7 @@ class _R3MNet(Transform):
         tensordict_view = tensordict.view(-1)
         return super()._call(tensordict_view)
 
+    @torch.no_grad()
     def _apply_transform(self, obs: torch.Tensor) -> None:
         shape = None
         if obs.ndimension() > 4:
