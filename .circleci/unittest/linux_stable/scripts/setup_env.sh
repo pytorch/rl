@@ -57,11 +57,12 @@ cat "${this_dir}/environment.yml"
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
 else
-  conda install -y -c conda-forge mesa
+#  conda install -y -c conda-forge mesa
   conda install -y -c conda-forge libglvnd-glx-cos7-x86_64
-  conda install -y -c conda-forge mesalib
+#  conda install -y -c conda-forge mesalib
+  conda install -c menpo osmesa
   conda install -y -c conda-forge libglvnd-egl-cos7-x86_64
-  PRIVATE_MUJOCO_GL=egl
+  PRIVATE_MUJOCO_GL=osmesa
 fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
