@@ -551,12 +551,11 @@ class Compose(Transform):
         for t in self.transforms:
             tensordict = t(tensordict)
         return tensordict
-    
+
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms[::-1]:
             tensordict = t.inv(tensordict)
         return tensordict
-    
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms:
