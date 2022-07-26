@@ -16,7 +16,7 @@ from torchrl.data import (
     TensorSpec,
     CompositeSpec,
 )
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.modules.tensordict_module.common import TensorDictModule
 from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,
@@ -38,7 +38,7 @@ class TensorDictSequence(TensorDictModule):
 
     TDSequence supportse functional, modular and vmap coding:
     Examples:
-        >>> from torchrl.modules.td_module import ProbabilisticTensorDictModule
+        >>> from torchrl.modules.tensordict_module import ProbabilisticTensorDictModule
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
         >>> from torchrl.modules import  TanhNormal, TensorDictSequence, NormalParamWrapper
         >>> import torch, functorch
@@ -192,8 +192,8 @@ class TensorDictSequence(TensorDictModule):
         return out
 
     def forward(
-        self, tensordict: _TensorDict, tensordict_out=None, **kwargs
-    ) -> _TensorDict:
+        self, tensordict: TensorDictBase, tensordict_out=None, **kwargs
+    ) -> TensorDictBase:
         if "params" in kwargs and "buffers" in kwargs:
             param_splits = self._split_param(kwargs["params"], "params")
             buffer_splits = self._split_param(kwargs["buffers"], "buffers")
@@ -316,7 +316,7 @@ class TensorDictSequence(TensorDictModule):
 
     def get_dist(
         self,
-        tensordict: _TensorDict,
+        tensordict: TensorDictBase,
         **kwargs,
     ) -> Tuple[torch.distributions.Distribution, ...]:
         L = len(self.module)

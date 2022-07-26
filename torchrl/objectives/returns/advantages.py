@@ -17,7 +17,7 @@ import torch
 #     entropy_loss = entropy_loss + entropy
 from torch import Tensor
 
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import step_tensordict
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.returns.functional import (
@@ -28,6 +28,8 @@ from torchrl.objectives.returns.functional import (
 from .functional import td_advantage_estimate
 
 __all__ = ["GAE", "TDLambdaEstimate", "TDEstimate"]
+
+from ..costs.utils import hold_out_net
 
 
 class TDEstimate:
@@ -62,17 +64,17 @@ class TDEstimate:
 
     def __call__(
         self,
-        tensordict: _TensorDict,
+        tensordict: TensorDictBase,
         *unused_args,
         params: Optional[List[Tensor]] = None,
         buffers: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
         target_buffers: Optional[List[Tensor]] = None,
-    ) -> _TensorDict:
+    ) -> TensorDictBase:
         """Computes the GAE given the data in tensordict.
 
         Args:
-            tensordict (_TensorDict): A TensorDict containing the data (observation, action, reward, done state)
+            tensordict (TensorDictBase): A TensorDict containing the data (observation, action, reward, done state)
                 necessary to compute the value estimates and the GAE.
 
         Returns:
@@ -89,7 +91,7 @@ class TDEstimate:
             if self.average_rewards:
                 reward = reward - reward.mean()
                 reward = reward / reward.std().clamp_min(1e-4)
-                tensordict.set_(
+                tensordict.set(
                     "reward", reward
                 )  # we must update the rewards if they are used later in the code
 
@@ -106,12 +108,19 @@ class TDEstimate:
             self.value_network(tensordict, **kwargs)
             value = tensordict.get(self.value_key)
 
-        with torch.set_grad_enabled(False):
+        with hold_out_net(self.value_network):
+            # we may still need to pass gradient, but we don't want to assign grads to
+            # value net params
             step_td = step_tensordict(tensordict)
             if target_params is not None:
+                # we assume that target parameters are not differentiable
                 kwargs["params"] = target_params
+            elif "params" in kwargs:
+                kwargs["params"] = [param.detach() for param in kwargs["params"]]
             if target_buffers is not None:
                 kwargs["buffers"] = target_buffers
+            elif "buffers" in kwargs:
+                kwargs["buffers"] = [buffer.detach() for buffer in kwargs["buffers"]]
             self.value_network(step_td, **kwargs)
             next_value = step_td.get(self.value_key)
 
@@ -163,17 +172,17 @@ class TDLambdaEstimate:
 
     def __call__(
         self,
-        tensordict: _TensorDict,
+        tensordict: TensorDictBase,
         *unused_args,
         params: Optional[List[Tensor]] = None,
         buffers: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
         target_buffers: Optional[List[Tensor]] = None,
-    ) -> _TensorDict:
+    ) -> TensorDictBase:
         """Computes the GAE given the data in tensordict.
 
         Args:
-            tensordict (_TensorDict): A TensorDict containing the data (observation, action, reward, done state)
+            tensordict (TensorDictBase): A TensorDict containing the data (observation, action, reward, done state)
                 necessary to compute the value estimates and the GAE.
 
         Returns:
@@ -190,7 +199,7 @@ class TDLambdaEstimate:
             if self.average_rewards:
                 reward = reward - reward.mean()
                 reward = reward / reward.std().clamp_min(1e-4)
-                tensordict.set_(
+                tensordict.set(
                     "reward", reward
                 )  # we must update the rewards if they are used later in the code
 
@@ -209,12 +218,19 @@ class TDLambdaEstimate:
             self.value_network(tensordict, **kwargs)
             value = tensordict.get(self.value_key)
 
-        with torch.set_grad_enabled(False):
+        with hold_out_net(self.value_network):
+            # we may still need to pass gradient, but we don't want to assign grads to
+            # value net params
             step_td = step_tensordict(tensordict)
             if target_params is not None:
+                # we assume that target parameters are not differentiable
                 kwargs["params"] = target_params
+            elif "params" in kwargs:
+                kwargs["params"] = [param.detach() for param in kwargs["params"]]
             if target_buffers is not None:
                 kwargs["buffers"] = target_buffers
+            elif "buffers" in kwargs:
+                kwargs["buffers"] = [buffer.detach() for buffer in kwargs["buffers"]]
             self.value_network(step_td, **kwargs)
             next_value = step_td.get(self.value_key)
 
@@ -268,17 +284,17 @@ class GAE:
 
     def __call__(
         self,
-        tensordict: _TensorDict,
+        tensordict: TensorDictBase,
         *unused_args,
         params: Optional[List[Tensor]] = None,
         buffers: Optional[List[Tensor]] = None,
         target_params: Optional[List[Tensor]] = None,
         target_buffers: Optional[List[Tensor]] = None,
-    ) -> _TensorDict:
+    ) -> TensorDictBase:
         """Computes the GAE given the data in tensordict.
 
         Args:
-            tensordict (_TensorDict): A TensorDict containing the data (observation, action, reward, done state)
+            tensordict (TensorDictBase): A TensorDict containing the data (observation, action, reward, done state)
                 necessary to compute the value estimates and the GAE.
 
         Returns:
@@ -295,7 +311,7 @@ class GAE:
             if self.average_rewards:
                 reward = reward - reward.mean()
                 reward = reward / reward.std().clamp_min(1e-4)
-                tensordict.set_(
+                tensordict.set(
                     "reward", reward
                 )  # we must update the rewards if they are used later in the code
 
@@ -312,12 +328,19 @@ class GAE:
             self.value_network(tensordict, **kwargs)
             value = tensordict.get("state_value")
 
-        with torch.set_grad_enabled(False):
+        with hold_out_net(self.value_network):
+            # we may still need to pass gradient, but we don't want to assign grads to
+            # value net params
             step_td = step_tensordict(tensordict)
             if target_params is not None:
+                # we assume that target parameters are not differentiable
                 kwargs["params"] = target_params
+            elif "params" in kwargs:
+                kwargs["params"] = [param.detach() for param in kwargs["params"]]
             if target_buffers is not None:
                 kwargs["buffers"] = target_buffers
+            elif "buffers" in kwargs:
+                kwargs["buffers"] = [buffer.detach() for buffer in kwargs["buffers"]]
             self.value_network(step_td, **kwargs)
             next_value = step_td.get("state_value")
             done = tensordict.get("done")

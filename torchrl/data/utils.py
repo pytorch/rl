@@ -62,8 +62,8 @@ class CloudpickleWrapper(object):
 
 
 def expand_as_right(
-    tensor: Union[torch.Tensor, "MemmapTensor", "_TensorDict"],
-    dest: Union[torch.Tensor, "MemmapTensor", "_TensorDict"],
+    tensor: Union[torch.Tensor, "MemmapTensor", "TensorDictBase"],
+    dest: Union[torch.Tensor, "MemmapTensor", "TensorDictBase"],
 ):
     """Expand a tensor on the right to match another tensor shape.
     Args:

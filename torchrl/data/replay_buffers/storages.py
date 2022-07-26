@@ -6,7 +6,7 @@ import torch
 
 from torchrl.data.replay_buffers.utils import INT_CLASSES
 from torchrl.data.tensordict.memmap import MemmapTensor
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 
 __all__ = ["Storage", "ListStorage", "LazyMemmapStorage", "LazyTensorStorage"]
 
@@ -93,9 +93,10 @@ class LazyTensorStorage(Storage):
         self.size = int(size)
         self.initialized = False
         self.device = device if device else torch.device("cpu")
+        self._len = 0
 
-    def _init(self, data: Union[_TensorDict, torch.Tensor]) -> None:
-        print("Creating a MemmapStorage...")
+    def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
+        print("Creating a TensorStorage...")
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
             out = torch.empty(
@@ -108,12 +109,15 @@ class LazyTensorStorage(Storage):
             out = TensorDict({}, [self.size, *data.shape])
             print("The storage is being created: ")
             for key, tensor in data.items():
-                out[key] = torch.empty(
-                    self.size,
-                    *tensor.shape,
-                    device=self.device,
-                    dtype=tensor.dtype,
-                )
+                if isinstance(tensor, TensorDictBase):
+                    out[key] = tensor.expand(self.size).clone().zero_()
+                else:
+                    out[key] = torch.empty(
+                        self.size,
+                        *tensor.shape,
+                        device=self.device,
+                        dtype=tensor.dtype,
+                    )
 
         self._storage = out
         self.initialized = True
@@ -121,8 +125,13 @@ class LazyTensorStorage(Storage):
     def set(
         self,
         cursor: Union[int, Sequence[int], slice],
-        data: Union[_TensorDict, torch.Tensor],
+        data: Union[TensorDictBase, torch.Tensor],
     ):
+        if isinstance(cursor, INT_CLASSES):
+            self._len = max(self._len, cursor + 1)
+        else:
+            self._len = max(self._len, max(cursor) + 1)
+
         if not self.initialized:
             if not isinstance(cursor, INT_CLASSES):
                 self._init(data[0])
@@ -139,7 +148,7 @@ class LazyTensorStorage(Storage):
         return out
 
     def __len__(self):
-        return self.size
+        return self._len
 
 
 class LazyMemmapStorage(LazyTensorStorage):
@@ -162,8 +171,9 @@ class LazyMemmapStorage(LazyTensorStorage):
             if self.scratch_dir[-1] != "/":
                 self.scratch_dir += "/"
         self.device = device if device else torch.device("cpu")
+        self._len = 0
 
-    def _init(self, data: Union[_TensorDict, torch.Tensor]) -> None:
+    def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         print("Creating a MemmapStorage...")
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
@@ -178,17 +188,24 @@ class LazyMemmapStorage(LazyTensorStorage):
             out = TensorDict({}, [self.size, *data.shape])
             print("The storage is being created: ")
             for key, tensor in data.items():
-                out[key] = _value = MemmapTensor(
-                    self.size,
-                    *tensor.shape,
-                    device=self.device,
-                    dtype=tensor.dtype,
-                    prefix=self.scratch_dir,
-                )
+                if isinstance(tensor, TensorDictBase):
+                    out[key] = (
+                        tensor.expand(self.size)
+                        .clone()
+                        .zero_()
+                        .memmap_(prefix=self.scratch_dir)
+                    )
+                else:
+                    out[key] = _value = MemmapTensor(
+                        self.size,
+                        *tensor.shape,
+                        device=self.device,
+                        dtype=tensor.dtype,
+                        prefix=self.scratch_dir,
+                    )
                 filesize = os.path.getsize(_value.filename) / 1024 / 1024
                 print(
                     f"\t{key}: {_value.filename}, {filesize} Mb of storage (size: {[self.size, *tensor.shape]})."
                 )
-
         self._storage = out
         self.initialized = True

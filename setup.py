@@ -162,7 +162,7 @@ def _main():
         long_description_content_type="text/markdown",
         license="BSD",
         # Package info
-        packages=find_packages(exclude=("test",)),
+        packages=find_packages(exclude=("test", "tutorials")),
         ext_modules=get_extensions(),
         cmdclass={
             "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
@@ -170,13 +170,20 @@ def _main():
         },
         install_requires=[pytorch_package_dep, "numpy", "packaging"],
         extras_require={
-            "atari": ["gym", "atari-py", "ale-py", "gym[accept-rom-license]", "pygame"],
+            "atari": [
+                "gym<=0.24",
+                "atari-py",
+                "ale-py",
+                "gym[accept-rom-license]",
+                "pygame",
+            ],
             "dm_control": ["dm_control"],
             "gym_continuous": ["mujoco-py", "mujoco"],
             "rendering": ["moviepy"],
             "tests": ["pytest", "pyyaml", "pytest-instafail"],
             "utils": [
                 "tensorboard",
+                "wandb",
                 "tqdm",
                 "hydra-core>=1.1",
                 "hydra-submitit-launcher",

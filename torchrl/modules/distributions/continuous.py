@@ -11,6 +11,7 @@ import torch
 from torch import distributions as D, nn
 from torch.distributions import constraints
 
+from torchrl._torchrl import safetanh
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
@@ -85,9 +86,7 @@ class SafeTanhTransform(D.TanhTransform):
     """
 
     def _call(self, x: torch.Tensor) -> torch.Tensor:
-        eps = torch.finfo(x.dtype).eps
-        y = super()._call(x)
-        y.data.clamp_(-1 + eps, 1 - eps)
+        y = safetanh(x)
         return y
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
@@ -516,10 +515,6 @@ class TanhDelta(D.TransformedDistribution):
             if not all(max > min):
                 raise ValueError(minmax_msg)
 
-        self.min = _cast_device(min, param.device)
-        self.max = _cast_device(max, param.device)
-        loc = self.update(param)
-
         t = SafeTanhTransform()
         non_trivial_min = (isinstance(min, torch.Tensor) and (min != -1.0).any()) or (
             not isinstance(min, torch.Tensor) and min != -1.0
@@ -527,7 +522,13 @@ class TanhDelta(D.TransformedDistribution):
         non_trivial_max = (isinstance(max, torch.Tensor) and (max != 1.0).any()) or (
             not isinstance(max, torch.Tensor) and max != 1.0
         )
-        if non_trivial_max or non_trivial_min:
+        self.non_trivial = non_trivial_min or non_trivial_max
+
+        self.min = _cast_device(min, param.device)
+        self.max = _cast_device(max, param.device)
+        loc = self.update(param)
+
+        if self.non_trivial:
             t = D.ComposeTransform(
                 [
                     t,
@@ -551,9 +552,10 @@ class TanhDelta(D.TransformedDistribution):
 
     def update(self, net_output: torch.Tensor) -> Optional[torch.Tensor]:
         loc = net_output
-        device = loc.device
-        shift = _cast_device(self.max - self.min, device)
-        loc = loc + shift / 2 + _cast_device(self.min, device)
+        if self.non_trivial:
+            device = loc.device
+            shift = _cast_device(self.max - self.min, device)
+            loc = loc + shift / 2 + _cast_device(self.min, device)
         if hasattr(self, "base_dist"):
             self.base_dist.update(loc)
         else:

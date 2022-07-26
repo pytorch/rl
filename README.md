@@ -42,6 +42,9 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 
 and many more to come!
 
+We also provide [tutorials and demos](tutorials) that give a sense of what the 
+library can do.
+
 ## Installation
 Create a conda environment where the packages will be installed. 
 Before installing anything, make sure you have the latest version of the `ninja` library:
@@ -82,6 +85,13 @@ and functorch
 pip install "git+https://github.com/pytorch/functorch.git"
 ```
 
+If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message 
+`(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
+
+```
+ARCHFLAGS="-arch arm64" pip install "git+https://github.com/pytorch/functorch.git"
+```
+
 **Torchrl**
 
 You can install the latest release by using
@@ -109,6 +119,13 @@ Go to the directory where you have cloned the torchrl repo and install it
 ```
 cd /path/to/torchrl/
 python setup.py develop
+```
+
+If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message 
+`(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
+
+```
+ARCHFLAGS="-arch arm64" python setup.py develop
 ```
 
 To run a quick sanity check, leave that directory (e.g. by executing `cd ~/`) 

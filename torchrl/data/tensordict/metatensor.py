@@ -65,13 +65,13 @@ class MetaTensor:
         self,
         *shape: Union[int, torch.Tensor, "MemmapTensor"],
         device: Optional[DEVICE_TYPING] = "cpu",
-        dtype: torch.dtype = torch.get_default_dtype(),
+        dtype: torch.dtype = None,
         requires_grad: bool = False,
         _is_shared: Optional[bool] = None,
         _is_memmap: Optional[bool] = None,
         _is_tensordict: Optional[bool] = None,
+        _repr_tensordict: Optional[str] = None,
     ):
-        _repr_tensordict = None
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
             shape = tensor.shape
@@ -81,8 +81,8 @@ class MetaTensor:
                 _is_memmap = isinstance(tensor, MemmapTensor)
             device = tensor.device if not tensor.is_meta else device
             if _is_tensordict is None:
-                _is_tensordict = not isinstance(tensor, (MemmapTensor, torch.Tensor))
-            if isinstance(tensor, (MemmapTensor, torch.Tensor)):
+                _is_tensordict = not _is_memmap and not isinstance(tensor, torch.Tensor)
+            if not _is_tensordict:
                 dtype = tensor.dtype
             else:
                 dtype = None
@@ -97,11 +97,11 @@ class MetaTensor:
         if not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
         self.shape = shape
-        self.device = torch.device(device)
-        self.dtype = dtype
+        self.device = device
+        self.dtype = dtype if dtype is not None else torch.get_default_dtype()
         self.requires_grad = requires_grad
         self._ndim = len(shape)
-        self._numel = np.prod(shape)
+        self._numel = None
         self._is_shared = bool(_is_shared)
         self._is_memmap = bool(_is_memmap)
         self._is_tensordict = bool(_is_tensordict)
@@ -155,6 +155,8 @@ class MetaTensor:
         return self._is_tensordict
 
     def numel(self) -> int:
+        if self._numel is None:
+            self._numel = np.prod(self.shape)
         return self._numel
 
     def ndimension(self) -> int:
@@ -175,6 +177,7 @@ class MetaTensor:
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
             _is_tensordict=self.is_tensordict(),
+            _repr_tensordict=self._repr_tensordict,
         )
 
     def _to_meta(self) -> torch.Tensor:
@@ -190,6 +193,7 @@ class MetaTensor:
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
             _is_tensordict=self.is_tensordict(),
+            _repr_tensordict=self._repr_tensordict,
         )
 
     @classmethod

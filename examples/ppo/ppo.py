@@ -51,9 +51,9 @@ cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
 
 
-@hydra.main(version_base=None, config_path=None, config_name="config")
+@hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
-    from torch.utils.tensorboard import SummaryWriter
+    from torchrl.trainers.loggers.tensorboard import TensorboardLogger
 
     cfg = correct_for_frame_skip(cfg)
 
@@ -74,14 +74,16 @@ def main(cfg: "DictConfig"):
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
-    writer = SummaryWriter(f"ppo_logging/{exp_name}")
+    logger = TensorboardLogger(f"ppo_logging/{exp_name}")
     video_tag = exp_name if cfg.record_video else ""
 
     stats = None
     if not cfg.vecnorm and cfg.norm_stats:
         proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False)()
         stats = get_stats_random_rollout(
-            cfg, proof_env, key="next_pixels" if cfg.from_pixels else None
+            cfg,
+            proof_env,
+            key="next_pixels" if cfg.from_pixels else "next_observation_vector",
         )
         # make sure proof_env is closed
         proof_env.close()
@@ -131,7 +133,7 @@ def main(cfg: "DictConfig"):
         video_tag=video_tag,
         norm_obs_only=True,
         stats=stats,
-        writer=writer,
+        logger=logger,
         use_env_creator=False,
     )()
 
@@ -165,7 +167,7 @@ def main(cfg: "DictConfig"):
         None,
         actor_model,
         None,
-        writer,
+        logger,
         cfg,
     )
     if cfg.loss == "kl":
@@ -175,7 +177,7 @@ def main(cfg: "DictConfig"):
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
 
     trainer.train()
-    return (writer.log_dir, trainer._log_dict, trainer.state_dict())
+    return (logger.log_dir, trainer._log_dict)
 
 
 if __name__ == "__main__":

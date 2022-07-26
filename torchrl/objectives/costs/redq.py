@@ -11,7 +11,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
@@ -144,7 +144,7 @@ class REDQLoss(LossModule):
             alpha = self.log_alpha.exp()
         return alpha
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
         next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]
         tensordict_select = tensordict.select(
@@ -269,7 +269,7 @@ class REDQLoss(LossModule):
             pred_next_val=next_state_value,
         )
         pred_val = state_action_value_qvalue
-        td_error = abs(pred_val - target_value)
+        td_error = (pred_val - target_value).pow(2)
         loss_qval = distance_loss(
             pred_val,
             target_value.expand_as(pred_val),

@@ -2,7 +2,7 @@ from typing import Optional, Callable
 
 import torch
 
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.utils import step_tensordict
 from torchrl.modules import TensorDictModule, ProbabilisticTensorDictModule
 from torchrl.objectives import distance_loss
@@ -19,7 +19,7 @@ class ReinforceLoss(LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticTensorDictModule,
-        advantage_module: Callable[[_TensorDict], _TensorDict],
+        advantage_module: Callable[[TensorDictBase], TensorDictBase],
         critic: Optional[TensorDictModule] = None,
         delay_value: bool = False,
         gamma: float = 0.99,
@@ -61,7 +61,7 @@ class ReinforceLoss(LossModule):
 
         self.advantage_module = advantage_module
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         # get advantage
         tensordict = self.advantage_module(
             tensordict,
@@ -88,7 +88,7 @@ class ReinforceLoss(LossModule):
 
         return td_out
 
-    def loss_critic(self, tensordict: _TensorDict) -> torch.Tensor:
+    def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         if self.advantage_diff_key in tensordict.keys():
             advantage_diff = tensordict.get(self.advantage_diff_key)
             if not advantage_diff.requires_grad:

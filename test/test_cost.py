@@ -1573,13 +1573,9 @@ def test_hold_out():
     assert y.requires_grad
 
     # exception
-    with pytest.raises(
-        RuntimeError,
-        match="hold_out_net requires the network parameter set to be non-empty.",
-    ):
-        net = torch.nn.Sequential()
-        with hold_out_net(net):
-            pass
+    net = torch.nn.Sequential()
+    with hold_out_net(net):
+        pass
 
 
 @pytest.mark.parametrize("mode", ["hard", "soft"])

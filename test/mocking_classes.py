@@ -16,7 +16,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import _EnvClass
 
 spec_dict = {
@@ -110,7 +110,7 @@ class MockSerialEnv(_EnvClass):
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict({"reward": n, "done": done, "next_observation": n}, [])
 
-    def _reset(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         self.max_val = max(self.counter + 100, self.counter * 2)
 
         n = torch.tensor([self.counter]).to(self.device).to(torch.get_default_dtype())
@@ -118,7 +118,7 @@ class MockSerialEnv(_EnvClass):
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict({"done": done, "next_observation": n}, [])
 
-    def rand_step(self, tensordict: Optional[_TensorDict] = None) -> _TensorDict:
+    def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
         return self.step(tensordict)
 
 
@@ -144,7 +144,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
     def _get_out_obs(self, obs):
         return obs
 
-    def _reset(self, tensordict: _TensorDict) -> _TensorDict:
+    def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         self.counter += 1
         state = torch.zeros(self.size) + self.counter
         tensordict = tensordict.select().set(
@@ -156,8 +156,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
 
     def _step(
         self,
-        tensordict: _TensorDict,
-    ) -> _TensorDict:
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
         tensordict = tensordict.to(self.device)
         a = tensordict.get("action")
         assert (a.sum(-1) == 1).all()
@@ -199,7 +199,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
     def _get_out_obs(self, obs):
         return obs
 
-    def _reset(self, tensordict: _TensorDict) -> _TensorDict:
+    def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         self.counter += 1
         self.step_count = 0
         state = torch.zeros(self.size) + self.counter
@@ -211,8 +211,8 @@ class ContinuousActionVecMockEnv(_MockEnv):
 
     def _step(
         self,
-        tensordict: _TensorDict,
-    ) -> _TensorDict:
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
         self.step_count += 1
         tensordict = tensordict.to(self.device)
         a = tensordict.get("action")
