@@ -266,8 +266,8 @@ class TransformedEnv(_EnvClass):
     Args:
         env (_EnvClass): original environment to be transformed_in.
         transform (Transform, optional): transform to apply to the tensordict resulting
-            from `env.step(td)`. If none is provided, an empty Compose placeholder is
-            used.
+            from `env.step(td)`. If none is provided, an empty Compose
+            placeholder in an eval mode is used.
         cache_specs (bool, optional): if True, the specs will be cached once
             and for all after the first call (i.e. the specs will be
             transformed_in only once). If the transform changes during
@@ -299,6 +299,7 @@ class TransformedEnv(_EnvClass):
             transform.set_parent(self)
         else:
             transform = transform.to(device)
+        transform.eval()
         self.transform = transform
 
         self._last_obs = None
@@ -435,7 +436,7 @@ class TransformedEnv(_EnvClass):
     def insert_transform(self, index: int, transform: Transform) -> None:
         if not isinstance(transform, Transform):
             raise ValueError(
-                "TransformedEnv.append_transform expected a transform but received an object of "
+                "TransformedEnv.insert_transform expected a transform but received an object of "
                 f"type {type(transform)} instead."
             )
         transform = transform.to(self.device)
@@ -599,6 +600,7 @@ class Compose(Transform):
                 "Compose.append expected a transform but received an object of "
                 f"type {type(transform)} instead."
             )
+        transform.eval()
         self.transforms.append(transform)
         transform.set_parent(self)
 
@@ -617,6 +619,7 @@ class Compose(Transform):
         self.empty_cache()
         if index < 0:
             index = index + len(self.transforms)
+        transform.eval()
         self.transforms.insert(index, transform)
         transform.set_parent(self)
 
