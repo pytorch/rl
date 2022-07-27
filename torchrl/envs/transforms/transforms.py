@@ -172,7 +172,7 @@ class Transform(nn.Module):
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._check_inplace()
         for key_in, key_out in zip(self.keys_inv_in, self.keys_inv_out):
-            for key_in in tensordict.keys():
+            if key_in in tensordict.keys():
                 observation = self._inv_apply_transform(tensordict.get(key_in))
                 tensordict.set(key_out, observation, inplace=self.inplace)
         return tensordict
