@@ -22,6 +22,9 @@ class Storage:
 
     """
 
+    def __init__(self, size: int) -> None:
+        self.size = int(size)
+
     @abc.abstractmethod
     def set(self, cursor: int, data: Any):
         raise NotImplementedError
@@ -46,7 +49,8 @@ class Storage:
 
 
 class ListStorage(Storage):
-    def __init__(self):
+    def __init__(self, size: int):
+        super().__init__(size)
         self._storage = []
 
     def set(self, cursor: Union[int, Sequence[int], slice], data: Any):
@@ -90,7 +94,7 @@ class LazyTensorStorage(Storage):
     """
 
     def __init__(self, size, scratch_dir=None, device=None):
-        self.size = int(size)
+        super().__init__(size)
         self.initialized = False
         self.device = device if device else torch.device("cpu")
         self._len = 0
@@ -163,7 +167,7 @@ class LazyMemmapStorage(LazyTensorStorage):
     """
 
     def __init__(self, size, scratch_dir=None, device=None):
-        self.size = int(size)
+        super().__init__(size)
         self.initialized = False
         self.scratch_dir = None
         if scratch_dir is not None:
