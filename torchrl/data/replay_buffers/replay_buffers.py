@@ -670,7 +670,11 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         else:
             stacked_td = tensordicts
         idx = super().extend(tensordicts, priorities)
-        stacked_td.set("index", idx, inplace=True)
+        stacked_td.set(
+            "index",
+            torch.tensor(idx, dtype=torch.int, device=stacked_td.device),
+            inplace=True,
+        )
         return idx
 
     def update_priority(self, tensordict: TensorDictBase) -> None:

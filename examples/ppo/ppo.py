@@ -177,7 +177,7 @@ def main(cfg: "DictConfig"):
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
 
     trainer.train()
-    return (logger.log_dir, trainer._log_dict, trainer.state_dict())
+    return (logger.log_dir, trainer._log_dict)
 
 
 if __name__ == "__main__":

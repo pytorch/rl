@@ -4,7 +4,7 @@ on:
     types: [opened, synchronize, reopened]
   push:
     branches:
-      - release/0.0.1a0
+      - release/0.0.1c0
 
 jobs:
 
@@ -27,7 +27,7 @@ jobs:
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install wheel
-          BUILD_VERSION=0.0.1a0 python3 setup.py bdist_wheel
+          BUILD_VERSION=0.0.1c0 python3 setup.py bdist_wheel
           # NB: wheels have the linux_x86_64 tag so we rename to manylinux1
           # find . -name 'dist/*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
@@ -68,7 +68,7 @@ jobs:
         run: |
           export CC=clang CXX=clang++
           python3 -mpip install wheel
-          BUILD_VERSION=0.0.1a0 python3 setup.py bdist_wheel
+          BUILD_VERSION=0.0.1c0 python3 setup.py bdist_wheel
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
         with:

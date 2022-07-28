@@ -591,6 +591,42 @@ class TestTransforms:
                     [nchannels * N, 16, 16]
                 )
 
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "keys_inv_1",
+        [
+            ["action_1"],
+            [],
+        ],
+    )
+    @pytest.mark.parametrize(
+        "keys_inv_2",
+        [
+            ["action_2"],
+            [],
+        ],
+    )
+    def test_compose_inv(self, keys_inv_1, keys_inv_2, device):
+        torch.manual_seed(0)
+        keys_to_transform = set(keys_inv_1 + keys_inv_2)
+        keys_total = set(["action_1", "action_2", "dont_touch"])
+        double2float_1 = DoubleToFloat(keys_inv_in=keys_inv_1)
+        double2float_2 = DoubleToFloat(keys_inv_in=keys_inv_2)
+        compose = Compose(double2float_1, double2float_2)
+        td = TensorDict(
+            {
+                key: torch.zeros(1, 3, 3, dtype=torch.float32, device=device)
+                for key in keys_total
+            },
+            [1],
+        )
+
+        compose.inv(td)
+        for key in keys_to_transform:
+            assert td.get(key).dtype == torch.double
+        for key in keys_total - keys_to_transform:
+            assert td.get(key).dtype == torch.float32
+
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
         "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
