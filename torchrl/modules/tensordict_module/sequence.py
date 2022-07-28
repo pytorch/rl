@@ -211,7 +211,7 @@ class TensorDictSequence(TensorDictModule):
                 id_to_keep.remove(i)
         for i, module in reversed(list(enumerate(self.module))):
             if i in id_to_keep:
-                if all(key in out_keys for key in module.out_keys):
+                if any(key in out_keys for key in module.out_keys):
                     out_keys.extend(module.in_keys)
                 else:
                     id_to_keep.remove(i)
