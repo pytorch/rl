@@ -23,17 +23,17 @@ class Sampler(ABC):
         raise NotImplementedError
 
     def add(self, index: int) -> None:
-        self._capacity = max(self._capacity, index)
+        self._capacity = max(self._capacity, index + 1)
 
     def extend(self, index: torch.Tensor) -> None:
-        self._capacity = max(self._capacity, *index)
+        self._capacity = max(self._capacity, max(index) + 1)
 
     def update_priority(self, index: Union[int, torch.Tensor], priority: Union[int, torch.Tensor]) -> None:
         pass
 
 
 class RandomSampler(Sampler):
-    def sample(self, batch_size: int) -> Any:
+    def sample(self, batch_size: int) -> np.array:
         index = np.random.randint(0, self._capacity, size=batch_size)
         return index
 
