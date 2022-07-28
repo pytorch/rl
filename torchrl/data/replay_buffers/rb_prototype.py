@@ -95,8 +95,9 @@ class ReplayBuffer:
 
 
 class TensorDictReplayBuffer(ReplayBuffer):
-    def __init__(self, *a, **kw) -> None:
-        super().__init__(*a, **kw)
+    def __init__(self, priority_key: str = "td_error", **kw) -> None:
+        super().__init__(**kw)
+        self.priority_key = priority_key
 
         if not self._collate_fn:
 
@@ -104,6 +105,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 return stack_td(x, 0, contiguous=True)
 
             self._collate_fn = collate_fn
+
 
     def _get_priority(self, tensordict: TensorDictBase) -> Optional[torch.Tensor]:
         if self.priority_key not in tensordict.keys():
