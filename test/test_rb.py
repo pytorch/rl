@@ -60,11 +60,7 @@ class TestBuffers:
     def _get_rb(self, rbtype, size, storage, prefetch):
         collate_fn = collate_fn_dict[storage]
         if storage is not None:
-            storage = (
-                storage(size)
-                if storage in (LazyMemmapStorage, LazyTensorStorage)
-                else storage()
-            )
+            storage = storage(size)
         if rbtype is ReplayBuffer:
             params = self._default_params_rb
         elif rbtype is PrioritizedReplayBuffer:
