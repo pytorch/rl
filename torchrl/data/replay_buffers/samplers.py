@@ -30,6 +30,10 @@ class Sampler(ABC):
     ) -> dict:
         pass
 
+    @property
+    def default_priority(self) -> float:
+        return 1.0
+
 
 class RandomSampler(Sampler):
     def sample(self, storage: Storage, batch_size: int) -> Tuple[np.array, dict]:
@@ -84,7 +88,7 @@ class PrioritizedSampler(Sampler):
         self._max_priority = 1.0
 
     @property
-    def _default_priority(self) -> float:
+    def default_priority(self) -> float:
         return (self._max_priority + self._eps) ** self._alpha
 
     def sample(self, storage: Storage, batch_size: int) -> torch.Tensor:
@@ -114,7 +118,7 @@ class PrioritizedSampler(Sampler):
         return index, {"_weight": weight}
 
     def _add_or_extend(self, index: Union[int, torch.Tensor]) -> None:
-        priority = self._default_priority
+        priority = self.default_priority
 
         if not (
             isinstance(priority, float)

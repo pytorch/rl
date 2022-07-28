@@ -2,10 +2,11 @@ import collections
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Optional, Sequence, Union, Tuple
 
+import numpy as np
 import torch
 
 from ..tensordict.tensordict import TensorDictBase
-from .replay_buffers import pin_memory_output, stack_tensors
+from .replay_buffers import pin_memory_output, stack_tensors, stack_td
 from .samplers import Sampler, RandomSampler
 from .storages import Storage, ListStorage
 from .utils import INT_CLASSES, to_numpy
@@ -73,7 +74,6 @@ class ReplayBuffer:
     def _sample(self, batch_size: int) -> Tuple[Any, dict]:
         index, info = self._sampler.sample(self._storage, batch_size)
         data = self._storage[index]
-
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         return data, info
@@ -96,20 +96,19 @@ class ReplayBuffer:
 
 class TensorDictReplayBuffer(ReplayBuffer):
     def __init__(self, priority_key: str = "td_error", **kw) -> None:
-        super().__init__(**kw)
-        self.priority_key = priority_key
-
-        if not self._collate_fn:
+        if not kw.get("collate_fn"):
 
             def collate_fn(x):
                 return stack_td(x, 0, contiguous=True)
 
-            self._collate_fn = collate_fn
+            kw["collate_fn"] = collate_fn
 
+        super().__init__(**kw)
+        self.priority_key = priority_key
 
     def _get_priority(self, tensordict: TensorDictBase) -> Optional[torch.Tensor]:
         if self.priority_key not in tensordict.keys():
-            return None
+            return self._sampler.default_priority
         if tensordict.batch_dims:
             tensordict = tensordict.clone(recursive=False)
             tensordict.batch_size = []
@@ -125,24 +124,44 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
     def add(self, data: TensorDictBase) -> int:
         index = super().add(data)
-        data.set("index", index, inplace=True)
+        data.set("index", index)
 
         priority = self._get_priority(data)
         if priority:
             self.update_priority(index, priority)
+        return index
 
-    def extend(self, data: torch.Tensor) -> torch.Tensor:
-        index = super().extend(data)
-        data.set(
+    def extend(self, tensordicts: TensorDictBase) -> torch.Tensor:
+        if isinstance(tensordicts, TensorDictBase):
+            if tensordicts.batch_dims > 1:
+                # we want the tensordict to have one dimension only. The batch size
+                # of the sampled tensordicts can be changed thereafter
+                if not isinstance(tensordicts, LazyStackedTensorDict):
+                    tensordicts = tensordicts.clone(recursive=False)
+                else:
+                    tensordicts = tensordicts.contiguous()
+                tensordicts.batch_size = tensordicts.batch_size[:1]
+            tensordicts.set(
+                "index",
+                torch.zeros(
+                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
+                ),
+            )
+
+        if not isinstance(tensordicts, TensorDictBase):
+            stacked_td = torch.stack(data, 0)
+        else:
+            stacked_td = tensordicts
+
+        index = super().extend(tensordicts)
+        stacked_td.set(
             "index",
-            torch.tensor(index, dtype=torch.int, device=data.device),
+            torch.tensor(index, dtype=torch.int, device=stacked_td.device),
             inplace=True,
         )
-        priorities = [self._get_priority(td) or self._default_priority for td in data]
-        self.update_priority(index, priorities)
+        self.update_tensordict_priority(tensordicts)
+        return index
 
-    def sample(self, batch_size: int) -> Tuple[Any, dict]:
-        data, info = super().sample(batch_size)
-        for k, v in info:
-            data.set(k, torch.tensor(v), device=data.device, inplace=True)
-        return data, info
+    def update_tensordict_priority(self, data: TensorDictBase) -> None:
+        priority = torch.tensor([self._get_priority(td) for td in data], dtype=torch.float, device=data.device)
+        self.update_priority(data.get("index"), priority)
