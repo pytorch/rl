@@ -115,6 +115,15 @@ class TensorDictSequence(TensorDictModule):
         self,
         *modules: TensorDictModule,
     ):
+        in_keys, out_keys = self._compute_in_and_out_keys(modules)
+
+        super().__init__(
+            spec=None,
+            module=nn.ModuleList(list(modules)),
+            in_keys=in_keys,
+            out_keys=out_keys,
+        )
+    def _compute_in_and_out_keys(self, modules: List[TensorDictModule])->Tuple[List]:
         in_keys = []
         out_keys = []
         for module in modules:
@@ -130,13 +139,7 @@ class TensorDictSequence(TensorDictModule):
             for i, out_key in enumerate(out_keys)
             if out_key not in out_keys[i + 1 :]
         ]
-
-        super().__init__(
-            spec=None,
-            module=nn.ModuleList(list(modules)),
-            in_keys=in_keys,
-            out_keys=out_keys,
-        )
+        return in_keys, out_keys
 
     @staticmethod
     def _find_functional_module(module: TensorDictModule) -> nn.Module:
@@ -192,8 +195,36 @@ class TensorDictSequence(TensorDictModule):
         return out
 
     def forward(
-        self, tensordict: TensorDictBase, tensordict_out=None, **kwargs
+        self, tensordict: TensorDictBase, in_keys=None, out_keys=None, tensordict_out=None, **kwargs
     ) -> TensorDictBase:
+
+        # Filter modules to avoid calling modules that don't require the desired in_keys or out keys.
+        if in_keys is None:
+            in_keys = self.in_keys
+        if out_keys is None:
+            out_keys = self.out_keys
+        id_to_keep = set([i for i in range(len(self.module))])
+        for i, module in enumerate(self.module):
+            if all(key in in_keys for key in module.in_keys):
+                in_keys.extend(module.out_keys)
+            else:
+                id_to_keep.remove(i)
+        for i, module in reversed(list(enumerate(self.module))):
+            if i in id_to_keep:
+                if all(key in out_keys for key in module.out_keys):
+                    out_keys.extend(module.in_keys)
+                else:
+                    id_to_keep.remove(i)
+        id_to_keep = sorted(list(id_to_keep))
+
+        modules = [self.module[i] for i in id_to_keep]
+
+        in_keys, out_keys = self._compute_in_and_out_keys(modules)
+
+        if not all(key in tensordict.keys() for key in in_keys):
+
+            raise ValueError(f"Not all in_keys found in input TensorDict. In_keys required:{in_keys}")
+
         if "params" in kwargs and "buffers" in kwargs:
             param_splits = self._split_param(kwargs["params"], "params")
             buffer_splits = self._split_param(kwargs["buffers"], "buffers")
@@ -202,8 +233,11 @@ class TensorDictSequence(TensorDictModule):
                 for key, item in kwargs.items()
                 if key not in ("params", "buffers")
             }
+            param_splits = [param_splits[i] for i in id_to_keep]
+            buffer_splits = [buffer_splits[i] for i in id_to_keep]
+
             for i, (module, param, buffer) in enumerate(
-                zip(self.module, param_splits, buffer_splits)
+                zip(modules, param_splits, buffer_splits)
             ):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
@@ -217,18 +251,19 @@ class TensorDictSequence(TensorDictModule):
             kwargs_pruned = {
                 key: item for key, item in kwargs.items() if key not in ("params",)
             }
-            for i, (module, param) in enumerate(zip(self.module, param_splits)):
+            param_splits = [param_splits[i] for i in id_to_keep]
+            for i, (module, param) in enumerate(zip(modules, param_splits)):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
                 tensordict = module(tensordict, params=param, **kwargs_pruned)
 
         elif not len(kwargs):
-            for module in self.module:
+            for module in modules:
                 tensordict = module(tensordict)
         else:
             raise RuntimeError(
-                "TensorDictSequence does not support keyword arguments other than 'tensordict_out', 'params', 'buffers' and 'vmap'"
+                "TensorDictSequence does not support keyword arguments other than 'tensordict_out', 'in_keys', 'out_keys' 'params', 'buffers' and 'vmap'"
             )
         if tensordict_out is not None:
             tensordict_out.update(tensordict, inplace=True)
