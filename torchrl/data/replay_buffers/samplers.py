@@ -28,7 +28,9 @@ class Sampler(ABC):
     def extend(self, index: torch.Tensor) -> None:
         self._capacity = max(self._capacity, max(index) + 1)
 
-    def update_priority(self, index: Union[int, torch.Tensor], priority: Union[int, torch.Tensor]) -> None:
+    def update_priority(
+        self, index: Union[int, torch.Tensor], priority: Union[int, torch.Tensor]
+    ) -> None:
         pass
 
 
@@ -52,7 +54,15 @@ class PrioritizedSampler(Sampler):
         eps (float): delta added to the priorities to ensure that the buffer
             does not contain null priorities.
     """
-    def __init__(self, max_capacity: int, alpha: float, beta: float, eps: float = 1e-8, dtype: torch.dtype = torch.float) -> None:
+
+    def __init__(
+        self,
+        max_capacity: int,
+        alpha: float,
+        beta: float,
+        eps: float = 1e-8,
+        dtype: torch.dtype = torch.float,
+    ) -> None:
         super().__init__(max_capacity)
 
         if alpha <= 0:
@@ -121,9 +131,7 @@ class PrioritizedSampler(Sampler):
         self._add_or_extend(index)
 
     def update_priority(
-        self,
-        index: Union[int, torch.Tensor],
-        priority: Union[float, torch.Tensor]
+        self, index: Union[int, torch.Tensor], priority: Union[float, torch.Tensor]
     ) -> None:
         """
         Updates the priority of the data pointed by the index.

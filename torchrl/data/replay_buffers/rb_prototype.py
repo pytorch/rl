@@ -1,6 +1,6 @@
 import collections
-from typing import Any, Callable, Optional, Sequence, Union
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Callable, Optional, Sequence, Union
 
 import torch
 
@@ -99,6 +99,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         super().__init__(*a, **kw)
 
         if not self._collate_fn:
+
             def collate_fn(x):
                 return stack_td(x, 0, contiguous=True)
 
