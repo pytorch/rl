@@ -1,6 +1,6 @@
 import collections
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Optional, Sequence, Union
+from typing import Any, Callable, Optional, Sequence, Union, Tuple
 
 import torch
 
@@ -23,7 +23,7 @@ class ReplayBuffer:
         prefetch: int = None,
     ) -> None:
         self._storage = storage or ListStorage(size=1_000)
-        self._sampler = sampler or RandomSampler(max_capacity=self._storage.size)
+        self._sampler = sampler or RandomSampler()
         self._writer = writer or RoundRobinWriter()
         self._writer.register_storage(self._storage)
 
@@ -70,15 +70,15 @@ class ReplayBuffer:
         self._sampler.update_priority(index, priority)
 
     @pin_memory_output
-    def _sample(self, batch_size: int) -> Any:
-        index = self._sampler.sample(batch_size)
+    def _sample(self, batch_size: int) -> Tuple[Any, dict]:
+        index, info = self._sampler.sample(self._storage, batch_size)
         data = self._storage[index]
 
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
-        return data
+        return data, info
 
-    def sample(self, batch_size: int) -> Any:
+    def sample(self, batch_size: int) -> Tuple[Any, dict]:
         if not self._prefetch:
             return self._sample(batch_size)
 
@@ -138,3 +138,9 @@ class TensorDictReplayBuffer(ReplayBuffer):
         )
         priorities = [self._get_priority(td) or self._default_priority for td in data]
         self.update_priority(index, priorities)
+
+    def sample(self, batch_size: int) -> Tuple[Any, dict]:
+        data, info = super().sample(batch_size)
+        for k, v in info:
+            data.set(k, torch.tensor(v), device=data.device, inplace=True)
+        return data, info

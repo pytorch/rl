@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Union
+from typing import Any, Union, Tuple
 
 import numpy as np
 import torch
@@ -11,33 +11,30 @@ from torchrl._torchrl import (
     SumSegmentTreeFp64,
 )
 from .utils import INT_CLASSES, to_numpy
+from .storages import Storage
 
 
 class Sampler(ABC):
-    def __init__(self, max_capacity: int) -> None:
-        self._max_capacity = max_capacity
-        self._capacity = 0
-
     @abstractmethod
-    def sample(self, batch_size: int) -> Any:
+    def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
         raise NotImplementedError
 
     def add(self, index: int) -> None:
-        self._capacity = max(self._capacity, index + 1)
+        pass
 
     def extend(self, index: torch.Tensor) -> None:
-        self._capacity = max(self._capacity, max(index) + 1)
+        pass
 
     def update_priority(
         self, index: Union[int, torch.Tensor], priority: Union[int, torch.Tensor]
-    ) -> None:
+    ) -> dict:
         pass
 
 
 class RandomSampler(Sampler):
-    def sample(self, batch_size: int) -> np.array:
-        index = np.random.randint(0, self._capacity, size=batch_size)
-        return index
+    def sample(self, storage: Storage, batch_size: int) -> Tuple[np.array, dict]:
+        index = np.random.randint(0, len(storage), size=batch_size)
+        return index, {}
 
 
 class PrioritizedSampler(Sampler):
@@ -63,8 +60,6 @@ class PrioritizedSampler(Sampler):
         eps: float = 1e-8,
         dtype: torch.dtype = torch.float,
     ) -> None:
-        super().__init__(max_capacity)
-
         if alpha <= 0:
             raise ValueError(
                 f"alpha must be strictly greater than 0, got alpha={alpha}"
@@ -72,6 +67,7 @@ class PrioritizedSampler(Sampler):
         if beta < 0:
             raise ValueError(f"beta must be greater or equal to 0, got beta={beta}")
 
+        self._max_capacity = max_capacity
         self._alpha = alpha
         self._beta = beta
         self._eps = eps
@@ -91,9 +87,9 @@ class PrioritizedSampler(Sampler):
     def _default_priority(self) -> float:
         return (self._max_priority + self._eps) ** self._alpha
 
-    def sample(self, batch_size: int) -> torch.Tensor:
-        p_sum = self._sum_tree.query(0, self._max_capacity)
-        p_min = self._min_tree.query(0, self._max_capacity)
+    def sample(self, storage: Storage, batch_size: int) -> torch.Tensor:
+        p_sum = self._sum_tree.query(0, len(storage))
+        p_min = self._min_tree.query(0, len(storage))
         if p_sum <= 0:
             raise RuntimeError("negative p_sum")
         if p_min <= 0:
@@ -101,10 +97,21 @@ class PrioritizedSampler(Sampler):
         mass = np.random.uniform(0.0, p_sum, size=batch_size)
         index = self._sum_tree.scan_lower_bound(mass)
         if isinstance(index, torch.Tensor):
-            index.clamp_max_(self._capacity - 1)
+            index.clamp_max_(len(storage) - 1)
         else:
-            index = np.clip(index, None, self._capacity - 1)
-        return index
+            index = np.clip(index, None, len(storage) - 1)
+        weight = self._sum_tree[index]
+
+        # Importance sampling weight formula:
+        #   w_i = (p_i / sum(p) * N) ^ (-beta)
+        #   weight_i = w_i / max(w)
+        #   weight_i = (p_i / sum(p) * N) ^ (-beta) /
+        #       ((min(p) / sum(p) * N) ^ (-beta))
+        #   weight_i = ((p_i / sum(p) * N) / (min(p) / sum(p) * N)) ^ (-beta)
+        #   weight_i = (p_i / min(p)) ^ (-beta)
+        # weight = np.power(weight / (p_min + self._eps), -self._beta)
+        weight = np.power(weight / p_min, -self._beta)
+        return index, {"_weight": weight}
 
     def _add_or_extend(self, index: Union[int, torch.Tensor]) -> None:
         priority = self._default_priority
