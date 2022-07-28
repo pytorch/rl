@@ -32,8 +32,13 @@ collate_fn_dict = {
     None: lambda x: torch.stack(x, 0),
 }
 
-@pytest.mark.parametrize("rb_type", [prototype_rb.ReplayBuffer, prototype_rb.TensorDictReplayBuffer])
-@pytest.mark.parametrize("sampler", [samplers.RandomSampler, samplers.PrioritizedSampler])
+
+@pytest.mark.parametrize(
+    "rb_type", [prototype_rb.ReplayBuffer, prototype_rb.TensorDictReplayBuffer]
+)
+@pytest.mark.parametrize(
+    "sampler", [samplers.RandomSampler, samplers.PrioritizedSampler]
+)
 @pytest.mark.parametrize("writer", [writers.RoundRobinWriter])
 @pytest.mark.parametrize("storage", [ListStorage, LazyTensorStorage, LazyMemmapStorage])
 @pytest.mark.parametrize("size", [3, 100])
@@ -50,7 +55,9 @@ class TestPrototypeBuffers:
 
         sampler = sampler(**sampler_args)
         writer = writer()
-        rb = rb_type(collate_fn=collate_fn, storage=storage, sampler=sampler, writer=writer)
+        rb = rb_type(
+            collate_fn=collate_fn, storage=storage, sampler=sampler, writer=writer
+        )
         return rb
 
     def _get_datum(self, rb_type):
@@ -79,7 +86,9 @@ class TestPrototypeBuffers:
 
     def test_add(self, rb_type, sampler, writer, storage, size):
         torch.manual_seed(0)
-        rb = self._get_rb(rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size)
+        rb = self._get_rb(
+            rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
+        )
         data = self._get_datum(rb_type)
         rb.add(data)
         s = rb._storage[0]
@@ -90,7 +99,9 @@ class TestPrototypeBuffers:
 
     def test_extend(self, rb_type, sampler, writer, storage, size):
         torch.manual_seed(0)
-        rb = self._get_rb(rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size)
+        rb = self._get_rb(
+            rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
+        )
         data = self._get_data(rb_type, size=5)
         rb.extend(data)
         length = len(rb)
@@ -111,7 +122,9 @@ class TestPrototypeBuffers:
 
     def test_sample(self, rb_type, sampler, writer, storage, size):
         torch.manual_seed(0)
-        rb = self._get_rb(rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size)
+        rb = self._get_rb(
+            rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
+        )
         data = self._get_data(rb_type, size=5)
         rb.extend(data)
         new_data = rb.sample(3)
@@ -137,7 +150,9 @@ class TestPrototypeBuffers:
 
     def test_index(self, rb_type, sampler, writer, storage, size):
         torch.manual_seed(0)
-        rb = self._get_rb(rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size)
+        rb = self._get_rb(
+            rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
+        )
         data = self._get_data(rb_type, size=5)
         rb.extend(data)
         d1 = rb[2]
@@ -157,11 +172,7 @@ def test_prototype_prb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)
     rb = prototype_rb.TensorDictReplayBuffer(
-        sampler=samplers.PrioritizedSampler(
-            5,
-            alpha=0.7,
-            beta=0.9
-        ),
+        sampler=samplers.PrioritizedSampler(5, alpha=0.7, beta=0.9),
         collate_fn=None if contiguous else lambda x: torch.stack(x, 0),
         priority_key=priority_key,
     )
@@ -228,6 +239,7 @@ def test_prototype_prb(priority_key, contiguous, device):
     torch.testing.assert_allclose(
         td2[idx0].get("a").view(1), s.get("a").unique().view(1)
     )
+
 
 @pytest.mark.parametrize(
     "rbtype,storage",

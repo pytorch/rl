@@ -10,8 +10,8 @@ from torchrl._torchrl import (
     SumSegmentTreeFp32,
     SumSegmentTreeFp64,
 )
-from .utils import INT_CLASSES, to_numpy
 from .storages import Storage
+from .utils import INT_CLASSES, to_numpy
 
 
 class Sampler(ABC):

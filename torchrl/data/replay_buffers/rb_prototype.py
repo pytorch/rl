@@ -2,7 +2,6 @@ import collections
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Optional, Sequence, Union, Tuple
 
-import numpy as np
 import torch
 
 from ..tensordict.tensordict import TensorDictBase
@@ -163,5 +162,9 @@ class TensorDictReplayBuffer(ReplayBuffer):
         return index
 
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
-        priority = torch.tensor([self._get_priority(td) for td in data], dtype=torch.float, device=data.device)
+        priority = torch.tensor(
+            [self._get_priority(td) for td in data],
+            dtype=torch.float,
+            device=data.device,
+        )
         self.update_priority(data.get("index"), priority)
