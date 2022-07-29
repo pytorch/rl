@@ -195,35 +195,35 @@ class TensorDictSequence(TensorDictModule):
         return out
 
     def forward(
-        self, tensordict: TensorDictBase, in_keys=None, out_keys=None, tensordict_out=None, **kwargs
+        self, tensordict: TensorDictBase, in_keys_filter=None, out_keys_filter=None, tensordict_out=None, **kwargs
     ) -> TensorDictBase:
 
         # Filter modules to avoid calling modules that don't require the desired in_keys or out keys.
-        if in_keys is None:
-            in_keys = self.in_keys
-        if out_keys is None:
-            out_keys = self.out_keys
+        if in_keys_filter is None:
+            in_keys_filter = deepcopy(self.in_keys)
+        if out_keys_filter is None:
+            out_keys_filter = deepcopy(self.out_keys)
         id_to_keep = set([i for i in range(len(self.module))])
         for i, module in enumerate(self.module):
-            if all(key in in_keys for key in module.in_keys):
-                in_keys.extend(module.out_keys)
+            if all(key in in_keys_filter for key in module.in_keys):
+                in_keys_filter.extend(module.out_keys)
             else:
                 id_to_keep.remove(i)
         for i, module in reversed(list(enumerate(self.module))):
             if i in id_to_keep:
-                if any(key in out_keys for key in module.out_keys):
-                    out_keys.extend(module.in_keys)
+                if any(key in out_keys_filter for key in module.out_keys):
+                    out_keys_filter.extend(module.in_keys)
                 else:
                     id_to_keep.remove(i)
         id_to_keep = sorted(list(id_to_keep))
 
         modules = [self.module[i] for i in id_to_keep]
 
-        in_keys, out_keys = self._compute_in_and_out_keys(modules)
+        in_keys, _ = self._compute_in_and_out_keys(modules)
 
         if not all(key in tensordict.keys() for key in in_keys):
 
-            raise ValueError(f"Not all in_keys found in input TensorDict. In_keys required:{in_keys}")
+            raise ValueError(f"Not all in_keys found in input TensorDict. missing keys:{set(in_keys) - set(tensordict.keys())}")
 
         if "params" in kwargs and "buffers" in kwargs:
             param_splits = self._split_param(kwargs["params"], "params")
