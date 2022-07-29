@@ -4,7 +4,7 @@ from typing import Any, Callable, Optional, Sequence, Union, Tuple
 
 import torch
 
-from ..tensordict.tensordict import TensorDictBase
+from ..tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from .replay_buffers import pin_memory_output, stack_tensors, stack_td
 from .samplers import Sampler, RandomSampler
 from .storages import Storage, ListStorage
@@ -168,3 +168,10 @@ class TensorDictReplayBuffer(ReplayBuffer):
             device=data.device,
         )
         self.update_priority(data.get("index"), priority)
+
+    def sample(self, batch_size: int, include_info: bool = False) -> TensorDictBase:
+        data, info = super().sample(batch_size)
+        if include_info:
+            for k, v in info.items():
+                data.set(k, torch.tensor(v, device=data.device), inplace=True)
+        return data, info

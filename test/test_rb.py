@@ -235,10 +235,43 @@ def test_prototype_prb(priority_key, contiguous, device):
 
     # test updating values of original td
     td2.set_("a", torch.ones_like(td2.get("a")))
-    s = rb.sample(5)
+    s, _ = rb.sample(5)
     torch.testing.assert_allclose(
         td2[idx0].get("a").view(1), s.get("a").unique().view(1)
     )
+
+
+@pytest.mark.parametrize("stack", [False, True])
+def test_prototype_rb_trajectories(stack):
+    traj_td = TensorDict(
+        {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
+        batch_size=[3, 4],
+    )
+    if stack:
+        traj_td = torch.stack([td.to_tensordict() for td in traj_td], 0)
+
+    rb = prototype_rb.TensorDictReplayBuffer(
+        sampler=samplers.PrioritizedSampler(
+            5,
+            alpha=0.7,
+            beta=0.9,
+        ),
+        collate_fn=lambda x: torch.stack(x, 0),
+        priority_key="td_error",
+    )
+    rb.extend(traj_td)
+    sampled_td, _ = rb.sample(3)
+    sampled_td.set("td_error", torch.rand(3))
+    rb.update_tensordict_priority(sampled_td)
+    sampled_td, _ = rb.sample(3, include_info=True)
+    assert (sampled_td.get("_weight") > 0).all()
+    assert sampled_td.batch_size == torch.Size([3])
+
+    # set back the trajectory length
+    sampled_td_filtered = sampled_td.to_tensordict().exclude(
+        "_weight", "index", "td_error"
+    )
+    sampled_td_filtered.batch_size = [3, 4]
 
 
 @pytest.mark.parametrize(
