@@ -123,7 +123,8 @@ class TensorDictSequence(TensorDictModule):
             in_keys=in_keys,
             out_keys=out_keys,
         )
-    def _compute_in_and_out_keys(self, modules: List[TensorDictModule])->Tuple[List]:
+
+    def _compute_in_and_out_keys(self, modules: List[TensorDictModule]) -> Tuple[List]:
         in_keys = []
         out_keys = []
         for module in modules:
@@ -195,7 +196,12 @@ class TensorDictSequence(TensorDictModule):
         return out
 
     def forward(
-        self, tensordict: TensorDictBase, in_keys_filter=None, out_keys_filter=None, tensordict_out=None, **kwargs
+        self,
+        tensordict: TensorDictBase,
+        in_keys_filter=None,
+        out_keys_filter=None,
+        tensordict_out=None,
+        **kwargs,
     ) -> TensorDictBase:
 
         # Filter modules to avoid calling modules that don't require the desired in_keys or out keys.
@@ -223,7 +229,9 @@ class TensorDictSequence(TensorDictModule):
 
         if not all(key in tensordict.keys() for key in in_keys):
 
-            raise ValueError(f"Not all in_keys found in input TensorDict. missing keys:{set(in_keys) - set(tensordict.keys())}")
+            raise ValueError(
+                f"Not all in_keys found in input TensorDict. missing keys:{set(in_keys) - set(tensordict.keys())}"
+            )
 
         if "params" in kwargs and "buffers" in kwargs:
             param_splits = self._split_param(kwargs["params"], "params")

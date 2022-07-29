@@ -1546,12 +1546,24 @@ class TestTDSequence:
             td_0 = TensorDict({"in": torch.randn(5, 3)}, [5])
             td_module(td_0, params=params, buffers=buffers, vmap=True)
             assert td_0.get("out").shape == torch.Size([5, 4])
-            td_1= TensorDict({"in": torch.randn(5, 3)}, [5])
-            td_module(td_1, out_keys_filter=["hidden"], params=params, buffers=buffers, vmap=True)
+            td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
+            td_module(
+                td_1,
+                out_keys_filter=["hidden"],
+                params=params,
+                buffers=buffers,
+                vmap=True,
+            )
             assert "hidden" in td_1.keys()
             assert "out" not in td_1.keys()
             td_2 = TensorDict({"hidden": torch.randn(5, 2)}, [5])
-            td_module(td_2, in_keys_filter=["hidden"], params=params, buffers=buffers, vmap=True, )
+            td_module(
+                td_2,
+                in_keys_filter=["hidden"],
+                params=params,
+                buffers=buffers,
+                vmap=True,
+            )
             assert "out" in td_2.keys()
             assert td_2.get("out").shape == torch.Size([5, 4])
         else:
@@ -1566,9 +1578,6 @@ class TestTDSequence:
             td_module(td_2, in_keys_filter=["hidden"])
             assert "out" in td_2.keys()
             assert td_2.get("out").shape == torch.Size([5, 4])
-        
-
-        
 
 
 if __name__ == "__main__":
