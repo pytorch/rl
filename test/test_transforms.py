@@ -189,13 +189,11 @@ def test_vecnorm_parallel_auto(nprc):
     prcs = []
     if _has_gym:
         make_env = EnvCreator(
-            lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm(decay=1.0)).train()
+            lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm(decay=1.0))
         )
     else:
         make_env = EnvCreator(
-            lambda: TransformedEnv(
-                ContinuousActionVecMockEnv(), VecNorm(decay=1.0)
-            ).train()
+            lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm(decay=1.0))
         )
 
     for idx in range(nprc):
@@ -284,13 +282,11 @@ def _run_parallelenv(parallel_env, queue_in, queue_out):
 
 def test_parallelenv_vecnorm():
     if _has_gym:
-        make_env = EnvCreator(
-            lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()).train()
-        )
+        make_env = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
         env_input_keys = None
     else:
         make_env = EnvCreator(
-            lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm()).train()
+            lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
         )
         env_input_keys = ["action", ContinuousActionVecMockEnv._out_key]
     parallel_env = ParallelEnv(3, make_env, env_input_keys=env_input_keys)
