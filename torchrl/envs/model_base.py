@@ -5,17 +5,13 @@
 
 from __future__ import annotations
 
-import abc
-from collections import OrderedDict
-from numbers import Number
-from turtle import forward
 from typing import Any, Callable, Iterator, Optional, Union, Dict, List
 
 import numpy as np
 import torch.nn as nn
 import torch
 
-from common import EnvStateful
+from .common import EnvBase
 from ..data.tensordict.tensordict import TensorDictBase
 from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
 from ..data.utils import DEVICE_TYPING
@@ -26,7 +22,7 @@ dtype_map = {
     torch.bool: bool,
 }
 
-class ModelBasedEnv(TensorDictSequence, EnvStateful):
+class ModelBasedEnv(TensorDictSequence, EnvBase):
     """
     Basic environnement for Model Based RL algorithms.
 
@@ -78,9 +74,7 @@ class ModelBasedEnv(TensorDictSequence, EnvStateful):
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
     ):
-        in_keys = in_keys_train
-        out_keys = out_keys_train
-
+    
         if type(model) is TensorDictModule:
             modules = [model]
         elif type(model) is list:
@@ -92,7 +86,8 @@ class ModelBasedEnv(TensorDictSequence, EnvStateful):
             modules = [model.module[i] for i in range(len(model.module)) ]
         else:
             raise TypeError("model must be a TensorDictModule, a list of TensorDictModule or a TensorDictSequence")
-        super().__init__(*modules, device=device, dtype=dtype, batch_size=batch_size)
+        TensorDictSequence.__init__(self, *modules)
+        # EnvBase.__init__(self, device=device, dtype=dtype, batch_size=batch_size)
 
         if self.in_keys_train is None:
             self.in_keys_train = self.in_keys
