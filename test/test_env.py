@@ -126,7 +126,7 @@ def test_mb_env(device):
             ),
             "action": torch.stack([env.action_spec.rand() for i in range(2)], dim=0),
             "reward": torch.stack([env.reward_spec.rand() for i in range(2)], dim=0),
-            "done": torch.Tensor([0, 0]).bool()
+            "done": torch.Tensor([0, 0]).bool(),
         },
         batch_size=[2],
     )
@@ -156,7 +156,7 @@ def test_mb_env(device):
             ),
             "action": torch.stack([env.action_spec.rand() for i in range(2)], dim=0),
             "reward": torch.stack([env.reward_spec.rand() for i in range(2)], dim=0),
-            "done": torch.Tensor([0, 0]).bool()
+            "done": torch.Tensor([0, 0]).bool(),
         },
         batch_size=[2],
     )
@@ -180,7 +180,7 @@ def test_mb_env(device):
             ),
             "action": torch.stack([env.action_spec.rand() for i in range(2)], dim=0),
             "reward": torch.stack([env.reward_spec.rand() for i in range(2)], dim=0),
-            "done": torch.Tensor([0,0]).bool()
+            "done": torch.Tensor([0, 0]).bool(),
         },
         batch_size=[2],
     )

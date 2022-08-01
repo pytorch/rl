@@ -177,7 +177,7 @@ class ModelBasedEnv(EnvBase):
                 f"but got {tensordict.get('action').dtype}"
             )
 
-        tensordict= self._step(tensordict)
+        tensordict = self._step(tensordict)
 
         self.is_done = tensordict.get("done")
 
