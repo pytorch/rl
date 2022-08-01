@@ -75,7 +75,9 @@ class ModelBasedEnv(EnvBase):
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
     ):
-        super(ModelBasedEnv, self).__init__(device=device, dtype=dtype, batch_size=batch_size)
+        super(ModelBasedEnv, self).__init__(
+            device=device, dtype=dtype, batch_size=batch_size
+        )
         if type(model) is TensorDictModule:
             modules = [model]
         elif type(model) is list:
@@ -93,7 +95,6 @@ class ModelBasedEnv(EnvBase):
             )
 
         self.module = TensorDictSequence(*modules)
-       
 
         if in_keys_train is None:
             self.in_keys_train = self.module.in_keys
@@ -114,6 +115,11 @@ class ModelBasedEnv(EnvBase):
             self.out_keys_test = self.module.out_keys
         else:
             self.out_keys_test = out_keys_test
+
+    def _set_specs(self, action_spec, observation_spec, reward_spec):
+        self.action_spec = action_spec
+        self.observation_spec = observation_spec
+        self.reward_spec = reward_spec
 
     def forward(
         self,
@@ -147,6 +153,48 @@ class ModelBasedEnv(EnvBase):
             in_keys_filter=self.in_keys_test,
             out_keys_filter=self.out_keys_test,
         )
+        return tensordict
+
+    def step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Makes a step in the environment.
+        Step accepts a single argument, tensordict, which usually carries an 'action' key which indicates the action
+        to be taken.
+        Step will call an out-place private method, _step, which is the method to be re-written by ModelBasedEnv subclasses.
+
+        Args:
+            tensordict (TensorDictBase): Tensordict containing the action to be taken.
+
+        Returns:
+            the input tensordict, modified in place with the resulting observations, done state and reward
+            (+ others if needed).
+
+        """
+
+        # sanity check
+        if tensordict.get("action").dtype is not self.action_spec.dtype:
+            raise TypeError(
+                f"expected action.dtype to be {self.action_spec.dtype} "
+                f"but got {tensordict.get('action').dtype}"
+            )
+
+        tensordict= self._step(tensordict)
+
+        self.is_done = tensordict.get("done")
+
+        for key in self._select_observation_keys(tensordict):
+            obs = tensordict.get(key)
+            self.observation_spec.type_check(obs, key)
+
+        if tensordict._get_meta("reward").dtype is not self.reward_spec.dtype:
+            raise TypeError(
+                f"expected reward.dtype to be {self.reward_spec.dtype} "
+                f"but got {tensordict.get('reward').dtype}"
+            )
+
+        if tensordict._get_meta("done").dtype is not torch.bool:
+            raise TypeError(
+                f"expected done.dtype to be torch.bool but got {tensordict.get('done').dtype}"
+            )
         return tensordict
 
     def to(self, device: DEVICE_TYPING) -> ModelBasedEnv:
