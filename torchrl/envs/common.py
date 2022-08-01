@@ -11,8 +11,8 @@ from numbers import Number
 from typing import Any, Callable, Iterator, Optional, Union, Dict
 
 import numpy as np
-import torch.nn as nn
 import torch
+import torch.nn as nn
 
 from torchrl import seed_generator, prod
 from torchrl.data import CompositeSpec, TensorDict, TensorSpec

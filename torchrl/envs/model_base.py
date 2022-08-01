@@ -8,13 +8,13 @@ from __future__ import annotations
 from typing import Any, Callable, Iterator, Optional, Union, Dict, List
 
 import numpy as np
-import torch.nn as nn
 import torch
+import torch.nn as nn
 
-from .common import EnvBase
 from ..data.tensordict.tensordict import TensorDictBase
-from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
 from ..data.utils import DEVICE_TYPING
+from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
+from .common import EnvBase
 
 dtype_map = {
     torch.float: np.float32,
@@ -22,11 +22,12 @@ dtype_map = {
     torch.bool: bool,
 }
 
-class ModelBasedEnv(TensorDictSequence, EnvBase):
+
+class ModelBasedEnv(EnvBase):
     """
     Basic environnement for Model Based RL algorithms.
 
-    This class is a wrapper around the model of the MBRL algorithm. 
+    This class is a wrapper around the model of the MBRL algorithm.
     We can both train it and use it for inference.
     This wrapper is designed as a TensorDictSequence, so that we can use it as a TensorDictSequence.
     In particular, one can specify different input and output keys for the training and inference phases.
@@ -74,58 +75,81 @@ class ModelBasedEnv(TensorDictSequence, EnvBase):
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
     ):
-    
+        super(ModelBasedEnv, self).__init__(device=device, dtype=dtype, batch_size=batch_size)
         if type(model) is TensorDictModule:
             modules = [model]
         elif type(model) is list:
-            if not all([type(model[i]) is  TensorDictModule] for i in range(len(model))):
-                raise TypeError("model must be a list of TensorDictModule, a TensorDictSequence or an nn.Module")
+            if not all([type(model[i]) is TensorDictModule] for i in range(len(model))):
+                raise TypeError(
+                    "model must be a list of TensorDictModule, a TensorDictSequence or an nn.Module"
+                )
             else:
                 modules = model
         elif type(model) is TensorDictSequence:
-            modules = [model.module[i] for i in range(len(model.module)) ]
+            modules = [model.module[i] for i in range(len(model.module))]
         else:
-            raise TypeError("model must be a TensorDictModule, a list of TensorDictModule or a TensorDictSequence")
-        TensorDictSequence.__init__(self, *modules)
-        # EnvBase.__init__(self, device=device, dtype=dtype, batch_size=batch_size)
+            raise TypeError(
+                "model must be a TensorDictModule, a list of TensorDictModule or a TensorDictSequence"
+            )
 
-        if self.in_keys_train is None:
-            self.in_keys_train = self.in_keys
+        self.module = TensorDictSequence(*modules)
+       
+
+        if in_keys_train is None:
+            self.in_keys_train = self.module.in_keys
         else:
             self.in_keys_train = in_keys_train
 
-        if self.out_keys_train is None:
-            self.out_keys_train = self.out_keys
+        if out_keys_train is None:
+            self.out_keys_train = self.module.out_keys
         else:
             self.out_keys_train = out_keys_train
 
-        if self.in_keys_test is None:
-            self.in_keys_test = self.in_keys
+        if in_keys_test is None:
+            self.in_keys_test = self.module.in_keys
         else:
             self.in_keys_test = in_keys_test
 
-        if self.out_keys_test is None:
-            self.out_keys_test = self.out_keys
+        if out_keys_test is None:
+            self.out_keys_test = self.module.out_keys
         else:
             self.out_keys_test = out_keys_test
-            
-    def forward(self, tensordict: TensorDictBase, in_keys_filter: Optional[str] = None, out_keys_filter: Optional[str] = None) -> TensorDictBase:
-        tensordict = TensorDictSequence.forward(self, tensordict, in_keys_filter=in_keys_filter, out_keys_filter=out_keys_filter)
+
+    def forward(
+        self,
+        tensordict: TensorDictBase,
+        in_keys_filter: Optional[str] = None,
+        out_keys_filter: Optional[str] = None,
+    ) -> TensorDictBase:
+        tensordict = self.module(
+            tensordict,
+            in_keys_filter=in_keys_filter,
+            out_keys_filter=out_keys_filter,
+        )
         return tensordict
 
     def train_step(self, tensordict: TensorDictBase) -> TensorDictBase:
         self.train()
-        tensordict = self(tensordict, in_keys_filter=self.in_keys_train, out_keys_filter=self.out_keys_train)
+        tensordict = self.forward(
+            tensordict,
+            in_keys_filter=self.in_keys_train,
+            out_keys_filter=self.out_keys_train,
+        )
         return tensordict
-    
+
     def _step(
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         self.eval()
-        tensordict = self(tensordict, in_keys_filter=self.in_keys_test, out_keys_filter=self.out_keys_test)
+        tensordict = self.forward(
+            tensordict,
+            in_keys_filter=self.in_keys_test,
+            out_keys_filter=self.out_keys_test,
+        )
         return tensordict
+
     def to(self, device: DEVICE_TYPING) -> ModelBasedEnv:
-        EnvStateful.to(device)
-        TensorDictSequence.to(device)
+        EnvBase.to(device)
+        self.module.to(device)
         return self

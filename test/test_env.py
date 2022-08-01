@@ -30,13 +30,13 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import EnvCreator, ObservationNorm
 from torchrl.envs import GymEnv
 from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs.model_base import ModelBasedEnv
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
     ToTensorImage,
     RewardClipping,
 )
-from torchrl.envs.model_base import ModelBasedEnv
 from torchrl.envs.utils import step_tensordict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.modules import (
@@ -105,21 +105,24 @@ except FileNotFoundError:
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_mb_env(device):
-    layer = nn.Linear(4, 2)
-    model = TensorDictModule(layer, in_keys=["observation"], out_keys=["action"])
+    layer = nn.Linear(4, 4)
+    model = TensorDictModule(layer, in_keys=["observation"], out_keys=["next_observation"])
     env = ModelBasedEnv(model, device=device)
     tensordict = TensorDict({"observation": torch.randn(2, 4)}, batch_size=[2])
     tensordict = env.train_step(tensordict)
-    assert tensordict.get("action").shape == (2, 2)
-    assert tensordict.get("action").requires_grad
-    tensordict_step = TensorDict({"observation": torch.randn(2, 4)}, batch_size=[2])
+    assert tensordict.get("next_observation").shape == (2, 4)
+    assert tensordict.get("next_observation").requires_grad
+    tensordict_step = TensorDict({"observation": torch.randn(2, 4), "action": torch.randn(2,1)}, batch_size=[2])
     tensordict_step = env.step(tensordict_step)
-    assert tensordict_step.get("action").shape == (2, 2)
-    assert not tensordict_step.get("action").requires_grad
+    assert tensordict_step.get("next_observation").shape == (2, 4)
+    assert not tensordict_step.get("next_observation").requires_grad
 
     layer_1 = nn.Linear(4, 2)
     layer_2 = nn.Linear(2, 2)
-    model = [TensorDictModule(layer_1, in_keys=["observation"], out_keys=["hidden"]), TensorDictModule(layer_2, in_keys=["hidden"], out_keys=["action"])]
+    model = [
+        TensorDictModule(layer_1, in_keys=["observation"], out_keys=["hidden"]),
+        TensorDictModule(layer_2, in_keys=["hidden"], out_keys=["action"]),
+    ]
     env = ModelBasedEnv(model, device=device)
     tensordict = env.train_step(tensordict)
     assert tensordict.get("action").shape == (2, 2)
@@ -308,7 +311,6 @@ def _make_envs(
             )
 
     return env_parallel, env_serial, env0
-
 
 
 class TestParallel:
