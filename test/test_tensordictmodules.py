@@ -1527,6 +1527,56 @@ class TestTDSequence:
         elif safe and spec_type == "bounded":
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
+    @pytest.mark.parametrize("functional", [True, False])
+    def test_submodule_sequence(self, functional):
+        td_module_1 = TensorDictModule(
+            nn.Linear(3, 2),
+            in_keys=["in"],
+            out_keys=["hidden"],
+        )
+        td_module_2 = TensorDictModule(
+            nn.Linear(2, 4),
+            in_keys=["hidden"],
+            out_keys=["out"],
+        )
+        td_module = TensorDictSequence(td_module_1, td_module_2)
+
+        if functional:
+            td_module, (params, buffers) = td_module.make_functional_with_buffers()
+            td_0 = TensorDict({"in": torch.randn(5, 3)}, [5])
+            td_module(td_0, params=params, buffers=buffers)
+            assert td_0.get("out").shape == torch.Size([5, 4])
+            td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
+            td_module(
+                td_1,
+                out_keys_filter=["hidden"],
+                params=params,
+                buffers=buffers,
+            )
+            assert "hidden" in td_1.keys()
+            assert "out" not in td_1.keys()
+            td_2 = TensorDict({"hidden": torch.randn(5, 2)}, [5])
+            td_module(
+                td_2,
+                in_keys_filter=["hidden"],
+                params=params,
+                buffers=buffers,
+            )
+            assert "out" in td_2.keys()
+            assert td_2.get("out").shape == torch.Size([5, 4])
+        else:
+            td_0 = TensorDict({"in": torch.randn(5, 3)}, [5])
+            td_module(td_0)
+            assert td_0.get("out").shape == torch.Size([5, 4])
+            td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
+            td_module(td_1, out_keys_filter=["hidden"])
+            assert "hidden" in td_1.keys()
+            assert "out" not in td_1.keys()
+            td_2 = TensorDict({"hidden": torch.randn(5, 2)}, [5])
+            td_module(td_2, in_keys_filter=["hidden"])
+            assert "out" in td_2.keys()
+            assert td_2.get("out").shape == torch.Size([5, 4])
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
