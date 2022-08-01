@@ -3619,6 +3619,9 @@ class SavedTensorDict(TensorDictBase):
 
     @batch_size.setter
     def batch_size(self, new_size: torch.Size):
+        td = self._load()
+        td.batch_size = new_size
+        self._save(td)
         return self._batch_size_setter(new_size)
 
     @property
