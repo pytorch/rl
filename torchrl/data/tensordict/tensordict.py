@@ -861,7 +861,7 @@ dtype=torch.float32)},
             a new TensorDict object containing the same values.
 
         """
-        return self.to(
+        return self.clone().to(
             TensorDict,
             batch_size=self.batch_size,
             device=self.device,
@@ -2788,7 +2788,7 @@ torch.Size([3, 2])
             if isinstance(self, dest):
                 return self
             return dest(
-                source=self.clone(),
+                source=self,
             )
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
