@@ -256,7 +256,7 @@ class EnvBase(nn.Module):
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return self.step(tensordict)
+        raise NotImplementedError
 
     def _step(
         self,
@@ -521,6 +521,7 @@ class EnvBase(nn.Module):
 
         self.is_done = self.is_done.to(device)
         self.device = device
+        super().to(device)
         return self
 
 
