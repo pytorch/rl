@@ -2789,9 +2789,9 @@ torch.Size([3, 2])
     ) -> TensorDictBase:
         if isinstance(dest, type) and issubclass(dest, TensorDictBase):
             if isinstance(self, dest):
-                return self.clone()
+                return self
             return dest(
-                source=self,
+                source=self.clone(),
             )
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
@@ -3622,10 +3622,13 @@ class SavedTensorDict(TensorDictBase):
 
     @batch_size.setter
     def batch_size(self, new_size: torch.Size):
+        return self._batch_size_setter(new_size)
+
+    def _batch_size_setter(self, new_size: torch.Size):
         td = self._load()
         td.batch_size = new_size
         self._save(td)
-        return self._batch_size_setter(new_size)
+        return super()._batch_size_setter(new_size)
 
     @property
     def device(self) -> torch.device:
@@ -3843,7 +3846,8 @@ class SavedTensorDict(TensorDictBase):
 
     def to_tensordict(self):
         """Returns a regular TensorDict instance from the TensorDictBase.
-
+            Makes a copy of the tensor dict.
+            Memmap and shared memory tensors are converted to regular tensors.
         Returns:
             a new TensorDict object containing the same values.
 
