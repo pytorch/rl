@@ -274,7 +274,7 @@ class EnvBase(nn.Module):
         **kwargs,
     ) -> TensorDictBase:
         """Resets the environment.
-        As for step and _step, only the private method `_reset` should be overwritten by _EnvClass subclasses.
+        As for step and _step, only the private method `_reset` should be overwritten by EnvStateful subclasses.
 
         Args:
             tensordict (TensorDictBase, optional): tensordict to be used to contain the resulting new observation.
@@ -287,12 +287,62 @@ class EnvBase(nn.Module):
             a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
 
         """
+        if tensordict is None:
+            tensordict = TensorDict({}, device=self.device, batch_size=self.batch_size)
+        tensordict_reset = self._reset(tensordict, **kwargs)
+        if tensordict_reset is tensordict:
+            raise RuntimeError(
+                "EnvStateful._reset should return outplace changes to the input "
+                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
+                "tensordict.select()) inside _reset before writing new tensors onto this new instance."
+            )
+        if not isinstance(tensordict_reset, TensorDictBase):
+            raise RuntimeError(
+                f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
+            )
+
+        self.is_done = tensordict_reset.get(
+            "done",
+            torch.zeros(self.batch_size, dtype=torch.bool, device=self.device),
+        )
+        if self.is_done:
+            raise RuntimeError(
+                f"Env {self} was done after reset. This is (currently) not allowed."
+            )
+        if execute_step:
+            tensordict_reset = step_tensordict(
+                tensordict_reset,
+                exclude_done=False,
+                exclude_reward=True,
+                exclude_action=True,
+            )
+        if tensordict is not None:
+            tensordict.update(tensordict_reset)
+        else:
+            tensordict = tensordict_reset
         return tensordict
 
     def numel(self) -> int:
         return prod(self.batch_size)
 
     def set_seed(self, seed: int) -> int:
+        """Sets the seed of the environment and returns the next seed to be used (
+        which is the input seed if a single environment is present)
+
+        Args:
+            seed: integer
+
+        Returns:
+            integer representing the "next seed": i.e. the seed that should be
+            used for another environment if created concomittently to this environment.
+
+        """
+        if seed is not None:
+            torch.manual_seed(seed)
+        self._set_seed(seed)
+        if seed is not None:
+            new_seed = seed_generator(seed)
+            seed = new_seed
         return seed
 
     def _set_seed(self, seed: Optional[int]):
@@ -524,26 +574,6 @@ class EnvStateful(EnvBase):
         super().__init__(device, dtype, batch_size)
         self.eval()
 
-    def set_seed(self, seed: int) -> int:
-        """Sets the seed of the environment and returns the next seed to be used (
-        which is the input seed if a single environment is present)
-
-        Args:
-            seed: integer
-
-        Returns:
-            integer representing the "next seed": i.e. the seed that should be
-            used for another environment if created concomittently to this environment.
-
-        """
-        if seed is not None:
-            torch.manual_seed(seed)
-        self._set_seed(seed)
-        if seed is not None:
-            new_seed = seed_generator(seed)
-            seed = new_seed
-        return seed
-
     def state_dict(self) -> OrderedDict:
         return OrderedDict()
 
@@ -555,61 +585,6 @@ class EnvStateful(EnvBase):
 
     def train(self, mode: bool = True) -> EnvStateful:
         return self
-
-    def reset(
-        self,
-        tensordict: Optional[TensorDictBase] = None,
-        execute_step: bool = True,
-        **kwargs,
-    ) -> TensorDictBase:
-        """Resets the environment.
-        As for step and _step, only the private method `_reset` should be overwritten by EnvStateful subclasses.
-
-        Args:
-            tensordict (TensorDictBase, optional): tensordict to be used to contain the resulting new observation.
-                In some cases, this input can also be used to pass argument to the reset function.
-            execute_step (bool, optional): if True, a `step_tensordict` is executed on the output TensorDict,
-                hereby removing the `"next_"` prefixes from the keys.
-            kwargs (optional): other arguments to be passed to the native
-                reset function.
-        Returns:
-            a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
-
-        """
-        if tensordict is None:
-            tensordict = TensorDict({}, device=self.device, batch_size=self.batch_size)
-        tensordict_reset = self._reset(tensordict, **kwargs)
-        if tensordict_reset is tensordict:
-            raise RuntimeError(
-                "EnvStateful._reset should return outplace changes to the input "
-                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
-                "tensordict.select()) inside _reset before writing new tensors onto this new instance."
-            )
-        if not isinstance(tensordict_reset, TensorDictBase):
-            raise RuntimeError(
-                f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
-            )
-
-        self.is_done = tensordict_reset.get(
-            "done",
-            torch.zeros(self.batch_size, dtype=torch.bool, device=self.device),
-        )
-        if self.is_done:
-            raise RuntimeError(
-                f"Env {self} was done after reset. This is (currently) not allowed."
-            )
-        if execute_step:
-            tensordict_reset = step_tensordict(
-                tensordict_reset,
-                exclude_done=False,
-                exclude_reward=True,
-                exclude_action=True,
-            )
-        if tensordict is not None:
-            tensordict.update(tensordict_reset)
-        else:
-            tensordict = tensordict_reset
-        return tensordict
 
 
 class _EnvWrapper(EnvStateful, metaclass=abc.ABCMeta):
