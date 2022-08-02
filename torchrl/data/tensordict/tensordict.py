@@ -861,12 +861,15 @@ dtype=torch.float32)},
             a new TensorDict object containing the same values.
 
         """
-        return self.clone().to(
-            TensorDict,
-            batch_size=self.batch_size,
+        return TensorDict(
+            {
+                key: value.clone()
+                if not isinstance(value, TensorDictBase)
+                else value.to_tensordict()
+                for key, value in self.items()
+            },
             device=self.device,
-            _meta_source=dict(self._dict_meta),
-            _run_checks=False,
+            batch_size=self.batch_size,
         )
 
     def zero_(self) -> TensorDictBase:
@@ -2786,7 +2789,7 @@ torch.Size([3, 2])
     ) -> TensorDictBase:
         if isinstance(dest, type) and issubclass(dest, TensorDictBase):
             if isinstance(self, dest):
-                return self
+                return self.clone()
             return dest(
                 source=self,
             )
@@ -3837,6 +3840,25 @@ class SavedTensorDict(TensorDictBase):
                 f"dest must be a string, torch.device or a TensorDict "
                 f"instance, {dest} not allowed"
             )
+
+    def to_tensordict(self):
+        """Returns a regular TensorDict instance from the TensorDictBase.
+
+        Returns:
+            a new TensorDict object containing the same values.
+
+        """
+        td = self._load()
+        return TensorDict(
+            {
+                key: value.clone()
+                if not isinstance(value, TensorDictBase)
+                else value.to_tensordict()
+                for key, value in td.items()
+            },
+            device=self.device,
+            batch_size=self.batch_size,
+        )
 
     def _change_batch_size(self, new_size: torch.Size):
         if not hasattr(self, "_orig_batch_size"):
