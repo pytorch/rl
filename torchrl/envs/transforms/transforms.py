@@ -32,7 +32,7 @@ from torchrl.data.tensor_specs import (
     DEVICE_TYPING,
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
-from torchrl.envs.common import EnvStateful, make_tensordict
+from torchrl.envs.common import EnvBase, EnvStateful, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import FiniteTensor
 from torchrl.envs.utils import step_tensordict
@@ -259,7 +259,7 @@ class Transform(nn.Module):
             self.parent.empty_cache()
 
 
-class TransformedEnv(EnvStateful):
+class TransformedEnv(EnvBase):
     """
     A transformed_in environment.
 
@@ -286,7 +286,7 @@ class TransformedEnv(EnvStateful):
 
     def __init__(
         self,
-        env: EnvStateful,
+        env: EnvBase,
         transform: Optional[Transform] = None,
         cache_specs: bool = True,
         **kwargs,

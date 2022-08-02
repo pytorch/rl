@@ -11,8 +11,8 @@ from numbers import Number
 from typing import Any, Callable, Iterator, Optional, Union, Dict
 
 import numpy as np
-import torch.nn as nn
 import torch
+import torch.nn as nn
 
 from torchrl import seed_generator, prod
 from torchrl.data import CompositeSpec, TensorDict, TensorSpec
@@ -287,46 +287,13 @@ class EnvBase(nn.Module):
             a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
 
         """
-        if tensordict is None:
-            tensordict = TensorDict({}, device=self.device, batch_size=self.batch_size)
-        tensordict_reset = self._reset(tensordict, **kwargs)
-        if tensordict_reset is tensordict:
-            raise RuntimeError(
-                "_EnvClass._reset should return outplace changes to the input "
-                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
-                "tensordict.select()) inside _reset before writing new tensors onto this new instance."
-            )
-        if not isinstance(tensordict_reset, TensorDictBase):
-            raise RuntimeError(
-                f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
-            )
-
-        self.is_done = tensordict_reset.get(
-            "done",
-            torch.zeros(self.batch_size, dtype=torch.bool, device=self.device),
-        )
-        if self.is_done:
-            raise RuntimeError(
-                f"Env {self} was done after reset. This is (currently) not allowed."
-            )
-        if execute_step:
-            tensordict_reset = step_tensordict(
-                tensordict_reset,
-                exclude_done=False,
-                exclude_reward=True,
-                exclude_action=True,
-            )
-        if tensordict is not None:
-            tensordict.update(tensordict_reset)
-        else:
-            tensordict = tensordict_reset
         return tensordict
 
     def numel(self) -> int:
         return prod(self.batch_size)
 
     def set_seed(self, seed: int) -> int:
-        raise NotImplementedError
+        return seed
 
     def _set_seed(self, seed: Optional[int]):
         raise NotImplementedError
@@ -643,19 +610,6 @@ class EnvStateful(EnvBase):
         else:
             tensordict = tensordict_reset
         return tensordict
-
-    def to(self, device: DEVICE_TYPING) -> EnvStateful:
-        device = torch.device(device)
-        if device == self.device:
-            return self
-        self.action_spec = self.action_spec.to(device)
-        self.reward_spec = self.reward_spec.to(device)
-        self.observation_spec = self.observation_spec.to(device)
-        self.input_spec = self.input_spec.to(device)
-
-        self.is_done = self.is_done.to(device)
-        self.device = device
-        return self
 
 
 class _EnvWrapper(EnvStateful, metaclass=abc.ABCMeta):
