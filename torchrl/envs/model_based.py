@@ -11,10 +11,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from ..data.tensordict.tensordict import TensorDictBase
+from torchrl.data import TensorDict, TensorSpec
 from ..data.utils import DEVICE_TYPING
 from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
-from .common import EnvBase
+from .common import EnvBase, Specs
 
 dtype_map = {
     torch.float: np.float32,
@@ -53,14 +53,14 @@ class ModelBasedEnv(EnvBase):
         batch_size (torch.Size): number of environments contained in the instance
 
     Methods:
-        step (TensorDictBase -> TensorDictBase): step in the environment
-        reset (TensorDictBase, optional -> TensorDictBase): reset the environment
+        step (TensorDict -> TensorDict): step in the environment
+        reset (TensorDict, optional -> TensorDict): reset the environment
         set_seed (int -> int): sets the seed of the environment
-        rand_step (TensorDictBase, optional -> TensorDictBase): random step given the action spec
-        rollout (Callable, ... -> TensorDictBase): executes a rollout in the environment with the given policy (or random
+        rand_step (TensorDict, optional -> TensorDict): random step given the action spec
+        rollout (Callable, ... -> TensorDict): executes a rollout in the environment with the given policy (or random
             steps if no policy is provided)
-        train_step (TensorDictBase -> TensorDictBase): step in the environment for training
-        forward (TensorDictBase, optional -> TensorDictBase): forward pass of the model
+        train_step (TensorDict -> TensorDict): step in the environment for training
+        forward (TensorDict, optional -> TensorDict): forward pass of the model
 
     """
 
@@ -116,17 +116,24 @@ class ModelBasedEnv(EnvBase):
         else:
             self.out_keys_test = out_keys_test
 
-    def _set_specs(self, action_spec, observation_spec, reward_spec):
+    def set_specs(self, action_spec: TensorSpec, observation_spec: TensorSpec, reward_spec: TensorSpec)->None:
         self.action_spec = action_spec
         self.observation_spec = observation_spec
         self.reward_spec = reward_spec
+    
+    def set_specs_from_env(self, env: EnvBase)->None:
+        self.set_specs(
+            action_spec=env.action_spec,
+            observation_spec=env.observation_spec,
+            reward_spec=env.reward_spec,
+        )
 
     def forward(
         self,
-        tensordict: TensorDictBase,
+        tensordict: TensorDict,
         in_keys_filter: Optional[str] = None,
         out_keys_filter: Optional[str] = None,
-    ) -> TensorDictBase:
+    ) -> TensorDict:
         tensordict = self.module(
             tensordict,
             in_keys_filter=in_keys_filter,
@@ -134,7 +141,7 @@ class ModelBasedEnv(EnvBase):
         )
         return tensordict
 
-    def train_step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def train_step(self, tensordict: TensorDict) -> TensorDict:
         self.train()
         tensordict = self.forward(
             tensordict,
@@ -145,8 +152,8 @@ class ModelBasedEnv(EnvBase):
 
     def _step(
         self,
-        tensordict: TensorDictBase,
-    ) -> TensorDictBase:
+        tensordict: TensorDict,
+    ) -> TensorDict:
         self.eval()
         tensordict = self.forward(
             tensordict,
@@ -155,14 +162,13 @@ class ModelBasedEnv(EnvBase):
         )
         return tensordict
 
-    def step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def step(self, tensordict: TensorDict) -> TensorDict:
         """Makes a step in the environment.
         Step accepts a single argument, tensordict, which usually carries an 'action' key which indicates the action
         to be taken.
-        Step will call an out-place private method, _step, which is the method to be re-written by ModelBasedEnv subclasses.
 
         Args:
-            tensordict (TensorDictBase): Tensordict containing the action to be taken.
+            tensordict (TensorDict): Tensordict containing the action to be taken.
 
         Returns:
             the input tensordict, modified in place with the resulting observations, done state and reward
@@ -179,8 +185,6 @@ class ModelBasedEnv(EnvBase):
 
         tensordict = self._step(tensordict)
 
-        self.is_done = tensordict.get("done")
-
         for key in self._select_observation_keys(tensordict):
             obs = tensordict.get(key)
             self.observation_spec.type_check(obs, key)
@@ -189,11 +193,6 @@ class ModelBasedEnv(EnvBase):
             raise TypeError(
                 f"expected reward.dtype to be {self.reward_spec.dtype} "
                 f"but got {tensordict.get('reward').dtype}"
-            )
-
-        if tensordict._get_meta("done").dtype is not torch.bool:
-            raise TypeError(
-                f"expected done.dtype to be torch.bool but got {tensordict.get('done').dtype}"
             )
         return tensordict
 
