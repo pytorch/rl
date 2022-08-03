@@ -56,6 +56,9 @@ cat "${this_dir}/environment.yml"
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
 else
+  # Software rendering requires GLX and OSMesa.
+  apt-get update
+  apt-get install -y libgl1-mesa-glx libosmesa6
   conda install -y -c conda-forge mesa
   conda install -y -c conda-forge mesalib
   PRIVATE_MUJOCO_GL=osmesa
