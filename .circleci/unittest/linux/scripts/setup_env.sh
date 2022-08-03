@@ -58,8 +58,6 @@ if [[ $OSTYPE == 'darwin'* ]]; then
 else
   # Software rendering requires GLX and OSMesa.
   yum install -y mesa-libOSMesa-devel.x86_64 mesa-libGL-devel.x86_64 mesa-libGLU-devel.x86_64
-  conda install -y -c conda-forge mesa
-  conda install -y -c conda-forge mesalib
   PRIVATE_MUJOCO_GL=osmesa
 fi
 
