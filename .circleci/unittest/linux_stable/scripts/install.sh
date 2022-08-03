@@ -45,7 +45,7 @@ else
 fi
 
 printf "Installing functorch\n"
-pip3 install git+https://github.com/pytorch/functorch.git@release/0.2
+pip3 install functorch
 
 # smoke test
 python -c "import functorch"
