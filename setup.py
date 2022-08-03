@@ -172,7 +172,6 @@ def _main():
             pytorch_package_dep,
             "numpy",
             "packaging",
-            "functorch @ git+https://github.com/pytorch/functorch@v0.2.0",
         ],
         extras_require={
             "atari": [
