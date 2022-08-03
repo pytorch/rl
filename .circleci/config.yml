@@ -491,7 +491,7 @@ jobs:
   unittest_macos_cpu:
     <<: *binary_common
     macos:
-      xcode: "12.0"
+      xcode: "13.0"
 
     resource_class: large
     steps:
