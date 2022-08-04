@@ -62,7 +62,7 @@ else
   yum install -y glew
   yum install -y mesa-libGL
   yum install -y mesa-libOSMesa-devel
-  PRIVATE_MUJOCO_GL=osmesa
+  PRIVATE_MUJOCO_GL=egl
 fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
