@@ -356,6 +356,29 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
         env_t.close()
 
 
+def test_added_transforms_are_in_eval_mode_trivial():
+    base_env = ContinuousActionVecMockEnv()
+    t = TransformedEnv(base_env)
+    assert not t.transform.training
+
+    t.train()
+    assert t.transform.training
+
+
+def test_added_transforms_are_in_eval_mode():
+    base_env = ContinuousActionVecMockEnv()
+    r = RewardScaling(0, 1)
+    t = TransformedEnv(base_env, r)
+    assert not t.transform.training
+    t.append_transform(RewardScaling(0, 1))
+    assert not t.transform[1].training
+
+    t.train()
+    assert t.transform.training
+    assert t.transform[0].training
+    assert t.transform[1].training
+
+
 class TestTransforms:
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize("interpolation", ["bilinear", "bicubic"])
