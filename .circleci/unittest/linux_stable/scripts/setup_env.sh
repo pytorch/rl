@@ -77,7 +77,6 @@ if [[ $MUJOCO_GL == 'osmesa' ]]; then
   yum install -y glew
   yum install -y mesa-libGL
   yum install -y mesa-libOSMesa-devel
-  yum install -y libglvnd-opengl
 fi
 
 conda env update --file "${this_dir}/environment.yml" --prune

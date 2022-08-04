@@ -5,6 +5,12 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
+pip3 install pyrender
+pip3 install pyopengl --upgrade
+
+export MUJOCO_GL=egl
+export PYOPENGL_PLATFORM=egl
+
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
