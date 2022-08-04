@@ -59,6 +59,8 @@ if [[ $OSTYPE == 'darwin'* ]]; then
 else
   # Software rendering requires GLX and OSMesa.
   yum makecache
+  yum install -y glfw
+  yum install -y glew
   yum install -y mesa-libGL
   yum install -y mesa-libOSMesa-devel
   PRIVATE_MUJOCO_GL=osmesa
