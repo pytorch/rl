@@ -168,7 +168,7 @@ def _main():
             "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
             "clean": clean,
         },
-        install_requires=[pytorch_package_dep, "numpy", "packaging", "PyOpenGL==3.1.0"],
+        install_requires=[pytorch_package_dep, "numpy", "packaging"],
         extras_require={
             "atari": [
                 "gym<=0.24",
