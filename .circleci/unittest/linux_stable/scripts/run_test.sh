@@ -10,6 +10,9 @@ pip3 install pyopengl --upgrade
 
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
+export __GL_SHADER_DISK_CACHE=0
+xport __GL_SHADER_DISK_CACHE_PATH=/tmp
+printf "DISPLAY:$DISPLAY-->\n"
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
@@ -22,6 +25,7 @@ lib_dir="${env_dir}/lib"
 
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
+printf "LD_LIBRARY_PATH:$LD_LIBRARY_PATH-->\n"
 export MKL_THREADING_LAYER=GNU
 
 pytest test/smoke_test.py -v --durations 20
