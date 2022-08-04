@@ -54,8 +54,4 @@ printf "* Installing torchrl\n"
 printf "g++ version: "
 gcc --version
 
-printf "Check env variables-->"
-printf "${MUJOCO_GL}/env"
-printf "${PYOPENGL_PLATFORM}/env"
-
 python setup.py develop
