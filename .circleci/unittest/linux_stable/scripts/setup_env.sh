@@ -58,7 +58,9 @@ if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
 else
   # Software rendering requires GLX and OSMesa.
-  yum install -y mesa-libOSMesa-devel.x86_64 mesa-libGL-devel.x86_64 mesa-libGLU-devel.x86_64
+  yum makecache
+  yum install -y glx-utils
+  yum install -y mesa-libOSMesa-devel
   PRIVATE_MUJOCO_GL=osmesa
 fi
 
