@@ -69,10 +69,12 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   PYOPENGL_PLATFORM=osmesa
 
 # Software rendering requires GLX and OSMesa.
-yum update
-yum install -y glfw
-yum install -y glew
-yum install -y mesa-libGL
-yum install -y mesa-libOSMesa-devel
+if [[ $MUJOCO_GL == 'osmesa' ]]; then
+  yum makecache
+  yum install -y glfw
+  yum install -y glew
+  yum install -y mesa-libGL
+  yum install -y mesa-libOSMesa-devel
+fi
 
 conda env update --file "${this_dir}/environment.yml" --prune
