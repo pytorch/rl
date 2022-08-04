@@ -11,7 +11,7 @@ pip3 install pyopengl --upgrade
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
 export __GL_SHADER_DISK_CACHE=0
-xport __GL_SHADER_DISK_CACHE_PATH=/tmp
+export __GL_SHADER_DISK_CACHE_PATH=/tmp
 printf "DISPLAY:$DISPLAY-->\n"
 
 export PYTORCH_TEST_WITH_SLOW='1'
