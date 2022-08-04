@@ -25,3 +25,4 @@ dependencies:
     - hydra-core
     - tensorboard
     - dm_control
+    - pyrender
