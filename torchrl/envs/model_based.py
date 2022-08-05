@@ -98,23 +98,20 @@ class ModelBasedEnv(EnvBase):
 
         if in_keys_train is None:
             self.in_keys_train = self.module.in_keys
-        else:
-            self.in_keys_train = in_keys_train
 
         if out_keys_train is None:
             self.out_keys_train = self.module.out_keys
-        else:
-            self.out_keys_train = out_keys_train
 
         if in_keys_test is None:
             self.in_keys_test = self.module.in_keys
-        else:
-            self.in_keys_test = in_keys_test
 
         if out_keys_test is None:
             self.out_keys_test = self.module.out_keys
-        else:
-            self.out_keys_test = out_keys_test
+
+        self.train_submodel = self.module.select_subsequence(
+            in_keys_train, out_keys_train
+        )
+        self.test_submodel = self.module.select_subsequence(in_keys_test, out_keys_test)
 
     def set_specs(
         self,
@@ -136,22 +133,16 @@ class ModelBasedEnv(EnvBase):
     def forward(
         self,
         tensordict: TensorDict,
-        in_keys_filter: Optional[str] = None,
-        out_keys_filter: Optional[str] = None,
     ) -> TensorDict:
         tensordict = self.module(
             tensordict,
-            in_keys_filter=in_keys_filter,
-            out_keys_filter=out_keys_filter,
         )
         return tensordict
 
     def train_step(self, tensordict: TensorDict) -> TensorDict:
         self.train()
-        tensordict = self.forward(
+        tensordict = self.train_submodel(
             tensordict,
-            in_keys_filter=self.in_keys_train,
-            out_keys_filter=self.out_keys_train,
         )
         return tensordict
 
@@ -160,10 +151,8 @@ class ModelBasedEnv(EnvBase):
         tensordict: TensorDict,
     ) -> TensorDict:
         self.eval()
-        tensordict = self.forward(
+        tensordict = self.test_submodel(
             tensordict,
-            in_keys_filter=self.in_keys_test,
-            out_keys_filter=self.out_keys_test,
         )
         return tensordict
 
@@ -202,6 +191,6 @@ class ModelBasedEnv(EnvBase):
         return tensordict
 
     def to(self, device: DEVICE_TYPING) -> ModelBasedEnv:
-        EnvBase.to(device)
+        super().to(device)
         self.module.to(device)
         return self
