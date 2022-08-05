@@ -2200,10 +2200,10 @@ class TensorDict(TensorDictBase):
                 batch_size=self.batch_size,
                 device=dest,
             )
-            if self._safe:
-                # sanity check
-                self_copy._check_device()
-                self_copy._check_is_shared()
+            # if self._safe:
+            #     # sanity check
+            #     self_copy._check_device()
+            #     self_copy._check_is_shared()
             return self_copy
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
