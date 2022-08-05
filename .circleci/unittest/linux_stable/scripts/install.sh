@@ -19,11 +19,11 @@ if [ "${CU_VERSION:-}" == cpu ] ; then
     version="cpu"
     echo "Using cpu build"
 else
-#    if [[ ${#CU_VERSION} -eq 4 ]]; then
-#        CUDA_VERSION="${CU_VERSION:2:1}.${CU_VERSION:3:1}"
-#    elif [[ ${#CU_VERSION} -eq 5 ]]; then
-#        CUDA_VERSION="${CU_VERSION:2:2}.${CU_VERSION:4:1}"
-#    fi
+    if [[ ${#CU_VERSION} -eq 4 ]]; then
+        CUDA_VERSION="${CU_VERSION:2:1}.${CU_VERSION:3:1}"
+    elif [[ ${#CU_VERSION} -eq 5 ]]; then
+        CUDA_VERSION="${CU_VERSION:2:2}.${CU_VERSION:4:1}"
+    fi
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
     cudatoolkit="cudatoolkit=${version}"
@@ -45,11 +45,11 @@ if [ "${CU_VERSION:-}" == cpu ] ; then
     pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
 else
 #    conda install -y pytorch torchvision cudatoolkit=11.3 -c pytorch
-    pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu102
+    pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
 fi
 
 printf "Installing functorch\n"
-pip install --user git+https://github.com/pytorch/functorch@v0.2.0
+pip3 install functorch
 
 # smoke test
 python -c "import functorch"
