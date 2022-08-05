@@ -1538,18 +1538,13 @@ dtype=torch.float32)},
         if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
 
-        if return_simple_view and not self.is_memmap():
-            # We exclude memmap tensordicts such that indexing is achieved only when needed
-            #  as  SubTenssorDicts are lazy objects
-            return TensorDict(
-                source={key: item[idx] for key, item in self.items()},
-                _meta_source={key: item[idx] for key, item in self.items_meta()},
-                batch_size=_getitem_batch_size(self.batch_size, idx),
-                device=self._device_safe(),
-            )
-        # SubTensorDict keeps the same storage as TensorDict
-        # in all cases not accounted for above
-        return self.get_sub_tensordict(idx)
+        # if return_simple_view and not self.is_memmap():
+        return TensorDict(
+            source={key: item[idx] for key, item in self.items()},
+            _meta_source={key: item[idx] for key, item in self.items_meta()},
+            batch_size=_getitem_batch_size(self.batch_size, idx),
+            device=self._device_safe(),
+        )
 
     def __setitem__(self, index: INDEX_TYPING, value: TensorDictBase) -> None:
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
