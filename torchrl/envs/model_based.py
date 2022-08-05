@@ -78,13 +78,13 @@ class ModelBasedEnv(EnvBase):
         super(ModelBasedEnv, self).__init__(
             device=device, dtype=dtype, batch_size=batch_size
         )
-        if issubclass(model, TensorDictSequence):
+        if isinstance(model, TensorDictSequence):
             self.module = model
         else:
-            if issubclass(model, TensorDictModule):
+            if isinstance(model, TensorDictModule):
                 self.module = TensorDictSequence(model)
             elif type(model) is list and all(
-                issubclass(m, TensorDictModule) for m in model
+                isinstance(m, TensorDictModule) for m in model
             ):
                 self.module = TensorDictSequence(*model)
             else:
