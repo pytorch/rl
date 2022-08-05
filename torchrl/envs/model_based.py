@@ -93,7 +93,7 @@ class ModelBasedEnv(EnvBase):
         # Extract latent states
         tensordict = self(tensordict)
         # Compute loss
-        loss = self.loss()
+        loss = self.loss(tensordict)
         # Backpropagate
         self.opt.zero_grad()
         loss.backward()
