@@ -78,21 +78,19 @@ class ModelBasedEnv(EnvBase):
         super(ModelBasedEnv, self).__init__(
             device=device, dtype=dtype, batch_size=batch_size
         )
-        if type(model) is TensorDictModule:
-            modules = [model]
-        elif type(model) is list:
-            if not all([type(model[i]) is TensorDictModule] for i in range(len(model))):
-                raise TypeError(
-                    "model must be a list of TensorDictModule, a TensorDictSequence or an nn.Module"
-                )
-            else:
-                modules = model
+        if issubclass(model, TensorDictSequence)
+            self.module = model
         else:
-            raise TypeError(
-                "model must be a TensorDictModule, a list of TensorDictModule or a TensorDictSequence"
-            )
-
-        self.module = TensorDictSequence(*modules)
+            if issubclass(model, TensorDictModule):
+                self.module = TensorDictSequence(model)
+            elif type(model) is list and all(
+                issubclass(m, TensorDictModule) for m in model
+            ):
+                self.module = TensorDictSequence(*model)
+            else:
+                raise TypeError(
+                    "model must be a TensorDictModule, a list of TensorDictModule or a TensorDictSequence"
+                )
 
         if in_keys_train is None:
             self.in_keys_train = self.module.in_keys
