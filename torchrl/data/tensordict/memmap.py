@@ -321,13 +321,13 @@ class MemmapTensor(object):
         return self._numel
 
     def clone(self) -> MemmapTensor:
-        """Clones the MemmapTensor onto another MemmapTensor
+        """Clones the MemmapTensor onto another tensor
 
         Returns:
-            a new MemmapTensor with the same data but a new storage.
+            a new torch.Tensor with the same data but a new storage.
 
         """
-        return MemmapTensor(self)
+        return self._load_item().clone()
 
     def contiguous(self) -> torch.Tensor:
         """Copies the MemmapTensor onto a torch.Tensor object.
