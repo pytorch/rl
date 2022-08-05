@@ -5,6 +5,9 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
+pip3 install pyrender
+pip3 install pyopengl --upgrade
+
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
 export __GL_SHADER_DISK_CACHE=0
@@ -24,7 +27,7 @@ lib_dir="${env_dir}/lib"
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 printf "LD_LIBRARY_PATH:$LD_LIBRARY_PATH-->\n"
 export MKL_THREADING_LAYER=GNU
-
+export PATH=/home/circleci/project/env/bin:/home/circleci/project/conda/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 printenv
 
 pytest test/smoke_test.py -v --durations 20
