@@ -34,7 +34,7 @@ unset NV_LIBCUBLAS_DEV_PACKAGE
 
 pip3 install pyrender
 pip3 install pyopengl --upgrade
-pip3 uninstall dm_control
+pip3 uninstall -y dm_control
 pip3 install dm_control
 
 export MUJOCO_GL=egl
