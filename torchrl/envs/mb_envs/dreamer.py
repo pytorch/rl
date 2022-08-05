@@ -1,12 +1,14 @@
+from math import sqrt
+
 import torch
+import torch.distributions as d
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.distributions as d
 from torch.distributions.kl import kl_divergence
-from torchrl.modules.tensordict_module import TensorDictModule, TensorDictSequence
+
 from torchrl.data import TensorDict
+from torchrl.modules.tensordict_module import TensorDictModule, TensorDictSequence
 from ..model_based import ModelBasedEnv
-from math import sqrt
 
 
 class DreamerEnv(ModelBasedEnv):
@@ -53,7 +55,7 @@ class DreamerEnv(ModelBasedEnv):
         return torch.optim.Adam(
             list(self.word_model.parameters()) + list(self.reward_model.parameters()),
             lr=1e-3,
-            eps=1e-4
+            eps=1e-4,
         )
 
     def loss(self, tensordict: TensorDict) -> torch.Tensor:
@@ -70,7 +72,7 @@ class DreamerEnv(ModelBasedEnv):
             * F.mse_loss(
                 tensordict["observation"],
                 tensordict["reco_observation"],
-                reduction=None,
+                reduction="none",
             )
             .mean(dim=[0, 1])
             .sum()

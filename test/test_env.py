@@ -31,8 +31,8 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import EnvCreator, ObservationNorm
 from torchrl.envs import GymEnv
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.envs.model_based import ModelBasedEnv
 from torchrl.envs.mb_envs.dreamer import DreamerEnv
+from torchrl.envs.model_based import ModelBasedEnv
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
@@ -138,6 +138,7 @@ def test_dreamer():
         {
             "observation": torch.randn(2, 10, 3, 64, 64),
             "action": torch.randn(2, 10, 10),
+            "reward": torch.randn(2, 10, 1),
             "initial_state": torch.randn(2, 20),
             "initial_rnn_hidden": torch.randn(2, 200),
         },
@@ -147,12 +148,6 @@ def test_dreamer():
 
     assert td.get("reco_observation").shape == (2, 10, 3, 64, 64)
     assert td.get("predicted_reward").shape == (2, 10, 1)
-
-    env.set_specs(
-        NdUnboundedContinuousTensorSpec(20),
-        NdUnboundedContinuousTensorSpec(200),
-        NdUnboundedContinuousTensorSpec(1),
-    )
 
     td_test = TensorDict(
         {
@@ -165,7 +160,6 @@ def test_dreamer():
     td_test = env.step(td_test)
 
     td_test
-    
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
