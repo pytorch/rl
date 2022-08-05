@@ -116,12 +116,17 @@ class ModelBasedEnv(EnvBase):
         else:
             self.out_keys_test = out_keys_test
 
-    def set_specs(self, action_spec: TensorSpec, observation_spec: TensorSpec, reward_spec: TensorSpec)->None:
+    def set_specs(
+        self,
+        action_spec: TensorSpec,
+        observation_spec: TensorSpec,
+        reward_spec: TensorSpec,
+    ) -> None:
         self.action_spec = action_spec
         self.observation_spec = observation_spec
         self.reward_spec = reward_spec
-    
-    def set_specs_from_env(self, env: EnvBase)->None:
+
+    def set_specs_from_env(self, env: EnvBase) -> None:
         self.set_specs(
             action_spec=env.action_spec,
             observation_spec=env.observation_spec,

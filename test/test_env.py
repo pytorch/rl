@@ -31,7 +31,7 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import EnvCreator, ObservationNorm
 from torchrl.envs import GymEnv
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.envs.model_based import ModelBasedEnv
+from torchrl.envs.mb_envs import ModelBasedEnv
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
