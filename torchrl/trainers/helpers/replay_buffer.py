@@ -30,7 +30,7 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
         buffer = TensorDictReplayBuffer(
             cfg.buffer_size,
             collate_fn=collate_fn,
-            pin_memory=device != torch.device("cpu"),
+            pin_memory=False,  # device != torch.device("cpu"),
             prefetch=cfg.buffer_prefetch,
             storage=LazyMemmapStorage(
                 cfg.buffer_size,
@@ -43,7 +43,7 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
             alpha=0.7,
             beta=0.5,
             collate_fn=collate_fn,
-            pin_memory=device != torch.device("cpu"),
+            pin_memory=False,  # device != torch.device("cpu"),
             prefetch=cfg.buffer_prefetch,
             storage=LazyMemmapStorage(
                 cfg.buffer_size,
