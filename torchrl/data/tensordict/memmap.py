@@ -327,7 +327,7 @@ class MemmapTensor(object):
             a new torch.Tensor with the same data but a new storage.
 
         """
-        return self._load_item().clone()
+        return self._tensor.clone()
 
     def contiguous(self) -> torch.Tensor:
         """Copies the MemmapTensor onto a torch.Tensor object.
