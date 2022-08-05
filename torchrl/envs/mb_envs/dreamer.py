@@ -2,9 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as d
+from torch.distributions.kl import kl_divergence
 from torchrl.modules.tensordict_module import TensorDictModule, TensorDictSequence
+from torchrl.data import TensorDict
 from ..model_based import ModelBasedEnv
 from math import sqrt
+
 
 class DreamerEnv(ModelBasedEnv):
     def __init__(
@@ -18,42 +21,64 @@ class DreamerEnv(ModelBasedEnv):
         batch_size=None,
     ):
         super().__init__(
-            model=DreamerModel(
+            world_model=DreamerModel(
                 obs_depth=obs_depth,
                 rssm_hidden=rssm_hidden,
                 rnn_hidden_dim=rnn_hidden_dim,
                 state_dim=state_dim,
             ),
-            in_keys_train=[
-                "observation",
-                "action",
-                "initial_state",
-                "initial_rnn_hidden",
-            ],
-            out_keys_train=[
-                "reco_observation",
-                "predicted_reward",
-                "prior_means",
-                "prior_stds",
-                "prior_states",
-                "prior_rnn_hiddens",
-                "posterior_means",
-                "posterior_stds",
-            ],
-            in_keys_test=["initial_state", "initial_rnn_hidden", "action"],
-            out_keys_test=["predicted_reward", "prior_states", "prior_rnn_hiddens"],
+            reward_model=TensorDictModule(
+                RewardModel(),
+                in_keys=[
+                    "posterior_states",
+                    "beliefs",
+                ],
+                out_keys=["predicted_reward"],
+            ),
             device=device,
             dtype=dtype,
             batch_size=batch_size,
         )
-        self.test_submodel[-1] = TensorDictModule(
-            self.test_submodel[-1].module,
-            in_keys=[
-                    "prior_states",
-                    "beliefs",
-                ],
-            out_keys=["predicted_reward"],
+
+        self.inference_world_model = self.word_model.select_subsequence(
+            in_keys=["initial_state", "initial_rnn_hidden", "action"],
+            out_keys=["prior_states", "prior_rnn_hiddens"],
         )
+        self.inference_reward_model.in_keys = [
+            "prior_states",
+            "beliefs",
+        ]
+
+    def _set_optimizer(self) -> torch.optim.Optimizer:
+        return torch.optim.Adam(
+            list(self.word_model.parameters()) + list(self.reward_model.parameters()),
+            lr=1e-3,
+            eps=1e-4
+        )
+
+    def loss(self, tensordict: TensorDict) -> torch.Tensor:
+        B, T, D = tensordict["prior_means"].shape
+        flat_prior_means = tensordict["prior_means"].reshape(B * T, D)
+        flat_prior_stds = tensordict["prior_stds"].reshape(B * T, D)
+        flat_prior = d.Normal(flat_prior_means, flat_prior_stds)
+        flat_posterior_means = tensordict["posterior_means"].reshape(B * T, D)
+        flat_posterior_stds = tensordict["posterior_stds"].reshape(B * T, D)
+        flat_posterior = d.Normal(flat_posterior_means, flat_posterior_stds)
+        kl_loss = kl_divergence(flat_posterior, flat_prior).mean()
+        reco_loss = (
+            0.5
+            * F.mse_loss(
+                tensordict["observation"],
+                tensordict["reco_observation"],
+                reduction=None,
+            )
+            .mean(dim=[0, 1])
+            .sum()
+        )
+        reward_loss = 0.5 * F.mse_loss(
+            tensordict["reward"], tensordict["predicted_reward"]
+        )
+        return kl_loss + reco_loss + reward_loss
 
 
 class DreamerModel(TensorDictSequence):
@@ -85,14 +110,6 @@ class DreamerModel(TensorDictSequence):
                 ObsDecoder(depth=obs_depth),
                 in_keys=["posterior_states", "beliefs"],
                 out_keys=["reco_observation"],
-            ),
-            TensorDictModule(
-                RewardModel(),
-                in_keys=[
-                    "posterior_states",
-                    "beliefs",
-                ],
-                out_keys=["predicted_reward"],
             ),
         )
 
@@ -171,7 +188,7 @@ class RSSMPrior(nn.Module):
         num_steps = action.size(1)
         for i in range(num_steps):
             prior_mean, prior_std, prior_state, belief = self.rssm_step(
-                state, action[:,i], rnn_hidden
+                state, action[:, i], rnn_hidden
             )
             prior_means.append(prior_mean)
             prior_stds.append(prior_std)
@@ -220,7 +237,18 @@ class RSSMPosterior(nn.Module):
 class RewardModel(nn.Module):
     def __init__(self, hidden_dim=300, num_layers=3):
         super().__init__()
-        layers = [nn.LazyLinear(hidden_dim), nn.ELU(),] + [nn.Linear(hidden_dim, hidden_dim), nn.ELU(),] * (num_layers - 1) + [nn.Linear(hidden_dim, 1)]
+        layers = (
+            [
+                nn.LazyLinear(hidden_dim),
+                nn.ELU(),
+            ]
+            + [
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.ELU(),
+            ]
+            * (num_layers - 1)
+            + [nn.Linear(hidden_dim, 1)]
+        )
         self.reward_model = nn.Sequential(*layers)
 
     def forward(self, state, belief):
