@@ -5,16 +5,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterator, Optional, Union, Dict, List
+from typing import Optional, Union, List
 
 import numpy as np
 import torch
 import torch.nn as nn
 
-from torchrl.data import TensorDict, TensorSpec
+from torchrl.data import TensorDict
 from ..data.utils import DEVICE_TYPING
 from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
-from .common import EnvBase, Specs
+from .common import EnvBase
 
 dtype_map = {
     torch.float: np.float32,
@@ -113,13 +113,13 @@ class ModelBasedEnv(EnvBase):
         self.eval()
         return self._step(tensordict)
 
-    def _set_optimizer(self):
+    def _set_optimizer(self) -> torch.optim.Optimizer:
         raise NotImplementedError
 
-    def set_optimizer(self):
+    def set_optimizer(self) -> None:
         self.opt = self._set_optimizer()
 
-    def loss(self):
+    def loss(self, tensordict: TensorDict) -> torch.Tensor:
         raise NotImplementedError
 
     def to(self, device: DEVICE_TYPING) -> ModelBasedEnv:
