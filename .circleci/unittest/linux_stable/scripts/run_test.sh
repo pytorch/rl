@@ -8,8 +8,8 @@ conda activate ./env
 pip3 install pyrender
 pip3 install pyopengl --upgrade
 
-export MUJOCO_GL=egl
-export PYOPENGL_PLATFORM=egl
+export MUJOCO_GL=glfw
+export PYOPENGL_PLATFORM=glfw
 export __GL_SHADER_DISK_CACHE=0
 export __GL_SHADER_DISK_CACHE_PATH=/tmp
 printf "DISPLAY:$DISPLAY-->\n"
