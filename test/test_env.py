@@ -111,7 +111,7 @@ def test_mb_env(device):
         layer, in_keys=["observation"], out_keys=["next_observation"]
     )
     env = ModelBasedEnv(model, device=device)
-    env._set_specs(
+    env.set_specs(
         NdUnboundedContinuousTensorSpec(1),
         NdUnboundedContinuousTensorSpec(4),
         NdUnboundedContinuousTensorSpec(1),
@@ -140,7 +140,7 @@ def test_mb_env(device):
         TensorDictModule(layer_2, in_keys=["hidden"], out_keys=["action"]),
     ]
     env = ModelBasedEnv(model, device=device)
-    env._set_specs(
+    env.set_specs(
         NdUnboundedContinuousTensorSpec(1),
         NdUnboundedContinuousTensorSpec(4),
         NdUnboundedContinuousTensorSpec(1),
@@ -165,7 +165,7 @@ def test_mb_env(device):
 
     model = TensorDictSequence(*model)
     env = ModelBasedEnv(model, device=device)
-    env._set_specs(
+    env.set_specs(
         NdUnboundedContinuousTensorSpec(1),
         NdUnboundedContinuousTensorSpec(4),
         NdUnboundedContinuousTensorSpec(1),
