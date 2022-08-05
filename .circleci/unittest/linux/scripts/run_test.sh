@@ -8,6 +8,7 @@ conda activate ./env
 pip3 install pyopengl --upgrade
 unset CUDA_VERSION
 
+unset LIBRARY_PATH
 unset NCCL_VERSION
 unset NVARCH
 unset NVIDIA_DRIVER_CAPABILITIES
