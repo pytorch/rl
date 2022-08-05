@@ -1542,40 +1542,64 @@ class TestTDSequence:
         td_module = TensorDictSequence(td_module_1, td_module_2)
 
         if functional:
-            td_module, (params, buffers) = td_module.make_functional_with_buffers()
-            td_0 = TensorDict({"in": torch.randn(5, 3)}, [5])
-            td_module(td_0, params=params, buffers=buffers)
-            assert td_0.get("out").shape == torch.Size([5, 4])
             td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
-            td_module(
+            sub_seq_1 = td_module.select_subsequence(out_keys=["hidden"])
+            sub_seq_1, (params, buffers) = sub_seq_1.make_functional_with_buffers()
+            sub_seq_1(
                 td_1,
-                out_keys_filter=["hidden"],
                 params=params,
                 buffers=buffers,
             )
             assert "hidden" in td_1.keys()
             assert "out" not in td_1.keys()
             td_2 = TensorDict({"hidden": torch.randn(5, 2)}, [5])
-            td_module(
+            sub_seq_2 = td_module.select_subsequence(in_keys=["hidden"])
+            sub_seq_2, (params, buffers) = sub_seq_2.make_functional_with_buffers()
+            sub_seq_2(
                 td_2,
-                in_keys_filter=["hidden"],
                 params=params,
                 buffers=buffers,
             )
             assert "out" in td_2.keys()
             assert td_2.get("out").shape == torch.Size([5, 4])
         else:
-            td_0 = TensorDict({"in": torch.randn(5, 3)}, [5])
-            td_module(td_0)
-            assert td_0.get("out").shape == torch.Size([5, 4])
             td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
-            td_module(td_1, out_keys_filter=["hidden"])
+            sub_seq_1 = td_module.select_subsequence(out_keys=["hidden"])
+            sub_seq_1(td_1)
             assert "hidden" in td_1.keys()
             assert "out" not in td_1.keys()
             td_2 = TensorDict({"hidden": torch.randn(5, 2)}, [5])
-            td_module(td_2, in_keys_filter=["hidden"])
+            sub_seq_2 = td_module.select_subsequence(in_keys=["hidden"])
+            sub_seq_2(td_2)
             assert "out" in td_2.keys()
             assert td_2.get("out").shape == torch.Size([5, 4])
+
+
+def test_subsequence_weight_update():
+    td_module_1 = TensorDictModule(
+        nn.Linear(3, 2),
+        in_keys=["in"],
+        out_keys=["hidden"],
+    )
+    td_module_2 = TensorDictModule(
+        nn.Linear(2, 4),
+        in_keys=["hidden"],
+        out_keys=["out"],
+    )
+    td_module = TensorDictSequence(td_module_1, td_module_2)
+
+    td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
+    sub_seq_1 = td_module.select_subsequence(out_keys=["hidden"])
+    copy = sub_seq_1[0].module.weight.clone()
+
+    opt = torch.optim.SGD(td_module.parameters(), lr=0.1)
+    opt.zero_grad()
+    td_1 = td_module(td_1)
+    td_1["out"].mean().backward()
+    opt.step()
+
+    assert not torch.allclose(copy, sub_seq_1[0].module.weight)
+    assert torch.allclose(td_module[0].module.weight, sub_seq_1[0].module.weight)
 
 
 if __name__ == "__main__":

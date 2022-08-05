@@ -195,43 +195,56 @@ class TensorDictSequence(TensorDictModule):
             out.append(param_list[a:b])
         return out
 
-    def forward(
-        self,
-        tensordict: TensorDictBase,
-        in_keys_filter=None,
-        out_keys_filter=None,
-        tensordict_out=None,
-        **kwargs,
-    ) -> TensorDictBase:
+    def select_subsequence(
+        self, in_keys: Iterable[str] = None, out_keys: Iterable[str] = None
+    ) -> "TensorDictSequence":
+        """
+        Returns a new TensorDictSequence with only the modules that are necessary to compute
+        the given output keys with the given input keys.
 
-        # Filter modules to avoid calling modules that don't require the desired in_keys or out keys.
-        if in_keys_filter is None:
-            in_keys_filter = deepcopy(self.in_keys)
-        if out_keys_filter is None:
-            out_keys_filter = deepcopy(self.out_keys)
+        Args:
+            in_keys: input keys of the subsequence we want to select
+            out_keys: output keys of the subsequence we want to select
+
+        Returns:
+            A new TensorDictSequence with only the modules that are necessary acording to the given input and output keys.
+        """
+        if in_keys is None:
+            in_keys = deepcopy(self.in_keys)
+        if out_keys is None:
+            out_keys = deepcopy(self.out_keys)
         id_to_keep = set([i for i in range(len(self.module))])
         for i, module in enumerate(self.module):
-            if all(key in in_keys_filter for key in module.in_keys):
-                in_keys_filter.extend(module.out_keys)
+            if all(key in in_keys for key in module.in_keys):
+                in_keys.extend(module.out_keys)
             else:
                 id_to_keep.remove(i)
         for i, module in reversed(list(enumerate(self.module))):
             if i in id_to_keep:
-                if any(key in out_keys_filter for key in module.out_keys):
-                    out_keys_filter.extend(module.in_keys)
+                if any(key in out_keys for key in module.out_keys):
+                    out_keys.extend(module.in_keys)
                 else:
                     id_to_keep.remove(i)
         id_to_keep = sorted(list(id_to_keep))
 
         modules = [self.module[i] for i in id_to_keep]
 
-        in_keys, _ = self._compute_in_and_out_keys(modules)
+        return TensorDictSequence(*modules)
 
-        if not all(key in tensordict.keys() for key in in_keys):
+    def forward(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_out=None,
+        **kwargs,
+    ) -> TensorDictBase:
+
+        if not all(key in tensordict.keys() for key in self.in_keys):
 
             raise ValueError(
-                f"Not all in_keys found in input TensorDict. missing keys:{set(in_keys) - set(tensordict.keys())}"
+                f"Not all in_keys found in input TensorDict. missing keys:{set(self.in_keys) - set(tensordict.keys())}"
             )
+
+        # Filter modules to avoid calling modules that don't require the desired in_keys or out keys
 
         if "params" in kwargs and "buffers" in kwargs:
             param_splits = self._split_param(kwargs["params"], "params")
@@ -241,11 +254,8 @@ class TensorDictSequence(TensorDictModule):
                 for key, item in kwargs.items()
                 if key not in ("params", "buffers")
             }
-            param_splits = [param_splits[i] for i in id_to_keep]
-            buffer_splits = [buffer_splits[i] for i in id_to_keep]
-
             for i, (module, param, buffer) in enumerate(
-                zip(modules, param_splits, buffer_splits)
+                zip(self.module, param_splits, buffer_splits)
             ):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
@@ -259,15 +269,14 @@ class TensorDictSequence(TensorDictModule):
             kwargs_pruned = {
                 key: item for key, item in kwargs.items() if key not in ("params",)
             }
-            param_splits = [param_splits[i] for i in id_to_keep]
-            for i, (module, param) in enumerate(zip(modules, param_splits)):
+            for i, (module, param) in enumerate(zip(self.module, param_splits)):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
                 tensordict = module(tensordict, params=param, **kwargs_pruned)
 
         elif not len(kwargs):
-            for module in modules:
+            for module in self.module:
                 tensordict = module(tensordict)
         else:
             raise RuntimeError(
