@@ -45,7 +45,7 @@ if [ "${CU_VERSION:-}" == cpu ] ; then
     pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
 else
 #    conda install -y pytorch torchvision cudatoolkit=11.3 -c pytorch
-    pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
+    pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu102
 fi
 
 printf "Installing functorch\n"
