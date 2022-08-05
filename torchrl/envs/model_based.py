@@ -43,11 +43,8 @@ class ModelBasedEnv(EnvBase):
             last reset
 
     Args:
-        model (TensorDictModule, list of TensorDictModule or TensorDictSequence): model for out MBRL algorithm
-        in_keys_train (str): keys of the input tensors to the model used for training
-        out_keys_train (str): keys of the output tensors to the model used for training
-        in_keys_test (str): keys of the input tensors to the model used for inference
-        out_keys_test (str): keys of the output tensors to the model used for inference
+        world_model (nn.Module): model which will be used to generate the world state;
+        reward_model (nn.Module): model which will be used to predict the reward;
         device (torch.device): device where the env input and output are expected to live
         dtype (torch.dtype): dtype of the env input and output
         batch_size (torch.Size): number of environments contained in the instance
@@ -66,11 +63,8 @@ class ModelBasedEnv(EnvBase):
 
     def __init__(
         self,
-        model: Union[nn.Module, List[TensorDictModule]],
-        in_keys_train: Optional[str] = None,
-        out_keys_train: Optional[str] = None,
-        in_keys_test: Optional[str] = None,
-        out_keys_test: Optional[str] = None,
+        world_model: Union[nn.Module, List[TensorDictModule], TensorDictSequence],
+        reward_model: Union[nn.Module, List[TensorDictModule], TensorDictSequence],
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
@@ -78,113 +72,55 @@ class ModelBasedEnv(EnvBase):
         super(ModelBasedEnv, self).__init__(
             device=device, dtype=dtype, batch_size=batch_size
         )
-        if isinstance(model, TensorDictSequence):
-            self.module = model
-        else:
-            if isinstance(model, TensorDictModule):
-                self.module = TensorDictSequence(model)
-            elif type(model) is list and all(
-                isinstance(m, TensorDictModule) for m in model
-            ):
-                self.module = TensorDictSequence(*model)
-            else:
-                raise TypeError(
-                    "model must be a TensorDictModule, a list of TensorDictModule or a TensorDictSequence"
-                )
+        self.word_model = world_model
+        self.reward_model = reward_model
 
-        if in_keys_train is None:
-            self.in_keys_train = self.module.in_keys
-
-        if out_keys_train is None:
-            self.out_keys_train = self.module.out_keys
-
-        if in_keys_test is None:
-            self.in_keys_test = self.module.in_keys
-
-        if out_keys_test is None:
-            self.out_keys_test = self.module.out_keys
-
-        self.train_submodel = self.module.select_subsequence(
-            in_keys_train, out_keys_train
-        )
-        self.test_submodel = self.module.select_subsequence(in_keys_test, out_keys_test)
-
-    def set_specs(
-        self,
-        action_spec: TensorSpec,
-        observation_spec: TensorSpec,
-        reward_spec: TensorSpec,
-    ) -> None:
-        self.action_spec = action_spec
-        self.observation_spec = observation_spec
-        self.reward_spec = reward_spec
-
-    def set_specs_from_env(self, env: EnvBase) -> None:
-        self.set_specs(
-            action_spec=env.action_spec,
-            observation_spec=env.observation_spec,
-            reward_spec=env.reward_spec,
-        )
+        self.inference_world_model = world_model
+        self.inference_reward_model = reward_model
+        self.set_optimizer()
 
     def forward(
         self,
         tensordict: TensorDict,
     ) -> TensorDict:
-        tensordict = self.module(
-            tensordict,
-        )
+        tensordict = self.word_model(tensordict)
+        # Compute rewards
+        tensordict = self.reward_model(tensordict)
         return tensordict
 
     def train_step(self, tensordict: TensorDict) -> TensorDict:
         self.train()
-        tensordict = self.train_submodel(
-            tensordict,
-        )
+        # Extract latent states
+        tensordict = self(tensordict)
+        # Compute loss
+        loss = self.loss()
+        # Backpropagate
+        self.opt.zero_grad()
+        loss.backward()
+        self.opt.step()
         return tensordict
 
     def _step(
         self,
         tensordict: TensorDict,
     ) -> TensorDict:
-        self.eval()
-        tensordict = self.test_submodel(
-            tensordict,
-        )
+        tensordict = self.inference_world_model(tensordict)
+        # Compute rewards
+        tensordict = self.inference_reward_model(tensordict)
         return tensordict
 
     def step(self, tensordict: TensorDict) -> TensorDict:
-        """Makes a step in the environment.
-        Step accepts a single argument, tensordict, which usually carries an 'action' key which indicates the action
-        to be taken.
+        self.eval()
+        return self._step(tensordict)
 
-        Args:
-            tensordict (TensorDict): Tensordict containing the action to be taken.
+    def _set_optimizer(self):
+        raise NotImplementedError
 
-        Returns:
-            the input tensordict, modified in place with the resulting observations, done state and reward
-            (+ others if needed).
+    def set_optimizer(self):
+        self.opt = self._set_optimizer()
 
-        """
-
-        # sanity check
-        if tensordict.get("action").dtype is not self.action_spec.dtype:
-            raise TypeError(
-                f"expected action.dtype to be {self.action_spec.dtype} "
-                f"but got {tensordict.get('action').dtype}"
-            )
-
-        tensordict = self._step(tensordict)
-
-        for key in self._select_observation_keys(tensordict):
-            obs = tensordict.get(key)
-            self.observation_spec.type_check(obs, key)
-
-        if tensordict._get_meta("reward").dtype is not self.reward_spec.dtype:
-            raise TypeError(
-                f"expected reward.dtype to be {self.reward_spec.dtype} "
-                f"but got {tensordict.get('reward').dtype}"
-            )
-        return tensordict
+    def loss(self):
+        raise NotImplementedError
 
     def to(self, device: DEVICE_TYPING) -> ModelBasedEnv:
         super().to(device)

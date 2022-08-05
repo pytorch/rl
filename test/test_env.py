@@ -104,88 +104,31 @@ except FileNotFoundError:
 #     assert_allclose_td(rollout1, rollout0)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
-def test_mb_env(device):
-    layer = nn.Linear(4, 4)
-    model = TensorDictModule(
-        layer, in_keys=["observation"], out_keys=["next_observation"]
-    )
-    env = ModelBasedEnv(model, device=device)
-    env.set_specs(
-        NdUnboundedContinuousTensorSpec(1),
-        NdUnboundedContinuousTensorSpec(4),
-        NdUnboundedContinuousTensorSpec(1),
-    )
-    tensordict = TensorDict({"observation": torch.randn(2, 4)}, batch_size=[2])
-    tensordict = env.train_step(tensordict)
-    assert tensordict.get("next_observation").shape == (2, 4)
-    tensordict_step = TensorDict(
-        {
-            "observation": torch.stack(
-                [env.observation_spec.rand() for i in range(2)], dim=0
-            ),
-            "action": torch.stack([env.action_spec.rand() for i in range(2)], dim=0),
-            "reward": torch.stack([env.reward_spec.rand() for i in range(2)], dim=0),
-            "done": torch.Tensor([0, 0]).bool(),
-        },
-        batch_size=[2],
-    )
-    tensordict_step = env.step(tensordict_step)
-    assert tensordict_step.get("next_observation").shape == (2, 4)
-
-    layer_1 = nn.Linear(4, 2)
-    layer_2 = nn.Linear(2, 2)
-    model = [
-        TensorDictModule(layer_1, in_keys=["observation"], out_keys=["hidden"]),
-        TensorDictModule(layer_2, in_keys=["hidden"], out_keys=["action"]),
-    ]
-    env = ModelBasedEnv(model, device=device)
-    env.set_specs(
-        NdUnboundedContinuousTensorSpec(1),
-        NdUnboundedContinuousTensorSpec(4),
-        NdUnboundedContinuousTensorSpec(1),
-    )
-    tensordict = TensorDict({"observation": torch.randn(2, 4)}, batch_size=[2])
-    tensordict = env.train_step(tensordict)
-    assert tensordict.get("action").shape == (2, 2)
-    assert tensordict.get("action").requires_grad
-    tensordict_step = TensorDict(
-        {
-            "observation": torch.stack(
-                [env.observation_spec.rand() for i in range(2)], dim=0
-            ),
-            "action": torch.stack([env.action_spec.rand() for i in range(2)], dim=0),
-            "reward": torch.stack([env.reward_spec.rand() for i in range(2)], dim=0),
-            "done": torch.Tensor([0, 0]).bool(),
-        },
-        batch_size=[2],
-    )
-    tensordict_step = env.step(tensordict_step)
-    assert tensordict_step.get("action").shape == (2, 2)
-
-    model = TensorDictSequence(*model)
-    env = ModelBasedEnv(model, device=device)
-    env.set_specs(
-        NdUnboundedContinuousTensorSpec(1),
-        NdUnboundedContinuousTensorSpec(4),
-        NdUnboundedContinuousTensorSpec(1),
-    )
-    tensordict = TensorDict({"observation": torch.randn(2, 4)}, batch_size=[2])
-    tensordict = env.train_step(tensordict)
-    assert tensordict.get("action").shape == (2, 2)
-    tensordict_step = TensorDict(
-        {
-            "observation": torch.stack(
-                [env.observation_spec.rand() for i in range(2)], dim=0
-            ),
-            "action": torch.stack([env.action_spec.rand() for i in range(2)], dim=0),
-            "reward": torch.stack([env.reward_spec.rand() for i in range(2)], dim=0),
-            "done": torch.Tensor([0, 0]).bool(),
-        },
-        batch_size=[2],
-    )
-    tensordict_step = env.step(tensordict_step)
-    assert tensordict_step.get("action").shape == (2, 2)
+# @pytest.mark.parametrize("device", get_available_devices())
+# def test_mb_env(device):
+#     layer = nn.Linear(4, 4)
+#     world_model = TensorDictModule(
+#         layer, in_keys=["observation"], out_keys=["hidden"],
+#     )
+#     reward_model = TensorDictModule(
+#         nn.Linear(4,1), in_keys=["observation"], out_keys=["reward"],
+#     )
+#     env = ModelBasedEnv(world_model, reward_model, device=device)
+#     tensordict = TensorDict({"observation": torch.randn(2, 4)}, batch_size=[2]).to(device)
+#     tensordict = env(tensordict)
+#     assert tensordict.get("hidden").shape == (2, 4)
+#     assert tensordict.get("reward").shape == (2,1)
+#     tensordict_step = TensorDict(
+#         {
+#             "observation": torch.stack(
+#                 [env.observation_spec.rand() for i in range(2)], dim=0
+#             )
+#         },
+#         batch_size=[2],
+#     ).to(device)
+#     tensordict_step = env.step(tensordict_step)
+#     assert tensordict_step.get("hidden").shape == (2, 4)
+#     assert tensordict_step.get("reward").shape == (2,1)
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
