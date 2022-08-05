@@ -57,7 +57,7 @@ cat "${this_dir}/environment.yml"
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
 else
-  PRIVATE_MUJOCO_GL=osmesa
+  PRIVATE_MUJOCO_GL=egl
 fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
@@ -67,10 +67,10 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   LD_LIBRARY_PATH=$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL \
-  PYOPENGL_PLATFORM=osmesa
+  PYOPENGL_PLATFORM=egl
 
 # Software rendering requires GLX and OSMesa.
-if [[ $MUJOCO_GL == 'osmesa' ]]; then
+if [[ $MUJOCO_GL == 'egl' ]]; then
   yum makecache
   yum update -y
   yum install -y glfw

@@ -4,6 +4,7 @@ set -e
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
+export CUDA_VERSION=11.3
 
 pip3 install pyrender
 pip3 install pyopengl --upgrade
