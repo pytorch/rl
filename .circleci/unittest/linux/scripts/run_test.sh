@@ -6,7 +6,10 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 pip3 install pyopengl --upgrade
-
+unset CUDA_VERSION
+export PYENV_ROOT=/opt/circleci/.pyenv
+export PYENV_SHELL=bash
+export TERM=xterm-256color
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
