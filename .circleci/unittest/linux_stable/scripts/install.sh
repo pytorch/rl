@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+
 unset PYTORCH_VERSION
 # For unittest, nightly PyTorch is used as the following section,
 # so no need to set PYTORCH_VERSION.
@@ -9,6 +10,9 @@ set -e
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
+
+echo "--> Check env"
+printenv
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
     cudatoolkit="cpuonly"
