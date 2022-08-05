@@ -82,4 +82,4 @@ fi
 conda env update --file "${this_dir}/environment.yml" --prune
 
 pip3 install pyrender
-pip3 install pyopengl --upgrade
+#pip3 install pyopengl --upgrade
