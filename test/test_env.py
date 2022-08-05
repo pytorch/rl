@@ -105,6 +105,7 @@ except FileNotFoundError:
 #     assert_allclose_td(rollout1, rollout0)
 
 
+<<<<<<< HEAD
 @pytest.mark.parametrize("device", get_available_devices())
 def test_mb_env(device):
     layer = nn.Linear(4, 4)
@@ -199,6 +200,33 @@ def test_mb_env(device):
     )
     tensordict_step = env.step(tensordict_step)
     assert tensordict_step.get("action").shape == (2, 2)
+=======
+# @pytest.mark.parametrize("device", get_available_devices())
+# def test_mb_env(device):
+#     layer = nn.Linear(4, 4)
+#     world_model = TensorDictModule(
+#         layer, in_keys=["observation"], out_keys=["hidden"],
+#     )
+#     reward_model = TensorDictModule(
+#         nn.Linear(4,1), in_keys=["observation"], out_keys=["reward"],
+#     )
+#     env = ModelBasedEnv(world_model, reward_model, device=device)
+#     tensordict = TensorDict({"observation": torch.randn(2, 4)}, batch_size=[2]).to(device)
+#     tensordict = env(tensordict)
+#     assert tensordict.get("hidden").shape == (2, 4)
+#     assert tensordict.get("reward").shape == (2,1)
+#     tensordict_step = TensorDict(
+#         {
+#             "observation": torch.stack(
+#                 [env.observation_spec.rand() for i in range(2)], dim=0
+#             )
+#         },
+#         batch_size=[2],
+#     ).to(device)
+#     tensordict_step = env.step(tensordict_step)
+#     assert tensordict_step.get("hidden").shape == (2, 4)
+#     assert tensordict_step.get("reward").shape == (2,1)
+>>>>>>> MB_env
 
 
 def test_dreamer():
