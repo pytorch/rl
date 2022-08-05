@@ -106,7 +106,7 @@ except FileNotFoundError:
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-def test_mb_env(self, device):
+def test_mb_env(device):
     layer = nn.Linear(4, 4)
     model = TensorDictModule(
         layer, in_keys=["observation"], out_keys=["next_observation"]
@@ -205,15 +205,36 @@ def test_dreamer():
     env = DreamerEnv()
     td = TensorDict(
         {
-            "observations": torch.randn(2, 10, 3, 256, 256),
+            "observation": torch.randn(2, 10, 3, 64, 64),
             "action": torch.randn(2, 10, 10),
-            "initial_state": torch.randn(2, 10, 20),
-            "initial_rnn_hidden": torch.randn(2, 10, 200),
+            "initial_state": torch.randn(2, 20),
+            "initial_rnn_hidden": torch.randn(2, 200),
         },
         batch_size=[2],
     )
-    env = env.train_step(td)
+    td = env.train_step(td)
 
+    assert td.get("reco_observation").shape == (2, 10, 3, 64, 64)
+    assert td.get("predicted_reward").shape == (2, 10, 1)
+
+    env.set_specs(
+        NdUnboundedContinuousTensorSpec(20),
+        NdUnboundedContinuousTensorSpec(200),
+        NdUnboundedContinuousTensorSpec(1),
+    )
+
+    td_test = TensorDict(
+        {
+            "action": torch.randn(2, 1, 10),
+            "initial_state": torch.randn(2, 20),
+            "initial_rnn_hidden": torch.randn(2, 200),
+        },
+        batch_size=[2],
+    )
+    td_test = env.step(td_test)
+
+    td_test
+    
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")

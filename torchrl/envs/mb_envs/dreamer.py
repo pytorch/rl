@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch.distributions as d
 from torchrl.modules.tensordict_module import TensorDictModule, TensorDictSequence
 from ..model_based import ModelBasedEnv
-
+from math import sqrt
 
 class DreamerEnv(ModelBasedEnv):
     def __init__(
@@ -78,7 +78,7 @@ class DreamerModel(TensorDictSequence):
                     hidden_dim=rssm_hidden,
                     state_dim=state_dim,
                 ),
-                in_keys=["actions", "observation_encoded"],
+                in_keys=["action", "observation_encoded"],
                 out_keys=["posterior_means", "posterior_stds", "posterior_states"],
             ),
             TensorDictModule(
@@ -112,13 +112,10 @@ class ObsEncoder(nn.Module):
         )
 
     def forward(self, observation):
-        if observation.dim() > 4:
-            *batch_sizes, C, H, W = observation.shape
-            observation = observation.view(-1, C, H, W)
+        *batch_sizes, C, H, W = observation.shape
+        observation = observation.view(-1, C, H, W)
         obs_encoded = self.encoder(observation)
-        latent = obs_encoded.view(obs_encoded.size(0), -1)
-        if observation.dim() > 4:
-            latent = latent.view(*batch_sizes, -1)
+        latent = obs_encoded.view(*batch_sizes, -1)
         return latent
 
 
@@ -126,7 +123,7 @@ class ObsDecoder(nn.Module):
     def __init__(self, depth=32):
         super().__init__()
         self.state_to_latent = nn.Sequential(
-            nn.LazyLinear(depth * 8 * 4),
+            nn.LazyLinear(depth * 8 * 4 * 4),
             nn.ReLU(),
         )
         self.decoder = nn.Sequential(
@@ -142,15 +139,13 @@ class ObsDecoder(nn.Module):
 
     def forward(self, state, rnn_hidden):
         latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
-        if latent.dim() > 2:
-            *batch_sizes, D = latent.shape
-            latent = latent.view(-1, D)
-        h = w = latent.size(1) // (8 * self._depth)
-        latent_reshaped = latent.view(latent.size(0), 8 * self._depth, h, w)
+        *batch_sizes, D = latent.shape
+        latent = latent.view(-1, D)
+        h = w = int(sqrt(D // (8 * self._depth)))
+        latent_reshaped = latent.view(latent.shape[0], 8 * self._depth, h, w)
         obs_decoded = self.decoder(latent_reshaped)
-        if latent.dim() > 2:
-            _, C, H, W = obs_decoded.shape
-            obs_decoded = obs_decoded.view(*batch_sizes, C, H, W)
+        _, C, H, W = obs_decoded.shape
+        obs_decoded = obs_decoded.view(*batch_sizes, C, H, W)
         return obs_decoded
 
 
@@ -176,7 +171,7 @@ class RSSMPrior(nn.Module):
         num_steps = action.size(1)
         for i in range(num_steps):
             prior_mean, prior_std, prior_state, belief = self.rssm_step(
-                state, action[i], rnn_hidden
+                state, action[:,i], rnn_hidden
             )
             prior_means.append(prior_mean)
             prior_stds.append(prior_std)
@@ -191,7 +186,7 @@ class RSSMPrior(nn.Module):
         return prior_means, prior_stds, prior_states, beliefs
 
     def rssm_step(self, state, action, rnn_hidden):
-        action_state = self.action_state_projector(torch.cat([state, action], dim=1))
+        action_state = self.action_state_projector(torch.cat([state, action], dim=-1))
         rnn_hidden = self.rnn(action_state, rnn_hidden)
         belief = rnn_hidden
         prior = self.rnn_to_prior_projector(belief)
@@ -225,15 +220,9 @@ class RSSMPosterior(nn.Module):
 class RewardModel(nn.Module):
     def __init__(self, hidden_dim=300, num_layers=3):
         super().__init__()
-        self.reward_model = nn.Sequential(
-            nn.Sequential(nn.LazyLinear(hidden_dim), nn.ELU()),
-            *[
-                nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.ELU())
-                for _ in range(num_layers - 1)
-            ],
-            nn.LazyLinear(hidden_dim, 1),
-        )
+        layers = [nn.LazyLinear(hidden_dim), nn.ELU(),] + [nn.Linear(hidden_dim, hidden_dim), nn.ELU(),] * (num_layers - 1) + [nn.Linear(hidden_dim, 1)]
+        self.reward_model = nn.Sequential(*layers)
 
     def forward(self, state, belief):
-        reward = self.reward_model(torch.cat([state, belief], dim=1))
+        reward = self.reward_model(torch.cat([state, belief], dim=-1))
         return reward
