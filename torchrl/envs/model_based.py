@@ -87,8 +87,6 @@ class ModelBasedEnv(EnvBase):
                 )
             else:
                 modules = model
-        elif type(model) is TensorDictSequence:
-            modules = [model.module[i] for i in range(len(model.module))]
         else:
             raise TypeError(
                 "model must be a TensorDictModule, a list of TensorDictModule or a TensorDictSequence"

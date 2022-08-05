@@ -46,12 +46,19 @@ class DreamerEnv(ModelBasedEnv):
             dtype=dtype,
             batch_size=batch_size,
         )
+        self.test_submodel[-1] = TensorDictModule(
+            self.test_submodel[-1].module,
+            in_keys=[
+                    "prior_states",
+                    "beliefs",
+                ],
+            out_keys=["predicted_reward"],
+        )
 
 
 class DreamerModel(TensorDictSequence):
     def __init__(self, obs_depth=32, rssm_hidden=200, rnn_hidden_dim=200, state_dim=20):
-        super.__init__(
-            self,
+        super().__init__(
             TensorDictModule(
                 ObsEncoder(depth=obs_depth),
                 in_keys=["observation"],
@@ -69,7 +76,6 @@ class DreamerModel(TensorDictSequence):
             TensorDictModule(
                 RSSMPosterior(
                     hidden_dim=rssm_hidden,
-                    rnn_hidden_dim=rnn_hidden_dim,
                     state_dim=state_dim,
                 ),
                 in_keys=["actions", "observation_encoded"],
@@ -83,8 +89,8 @@ class DreamerModel(TensorDictSequence):
             TensorDictModule(
                 RewardModel(),
                 in_keys=[
-                    "prior_states",
-                    "action",
+                    "posterior_states",
+                    "beliefs",
                 ],
                 out_keys=["predicted_reward"],
             ),
@@ -228,6 +234,6 @@ class RewardModel(nn.Module):
             nn.LazyLinear(hidden_dim, 1),
         )
 
-    def forward(self, state, action):
-        reward = self.reward_model(torch.cat([state, action], dim=1))
+    def forward(self, state, belief):
+        reward = self.reward_model(torch.cat([state, belief], dim=1))
         return reward

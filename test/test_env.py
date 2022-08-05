@@ -31,7 +31,8 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import EnvCreator, ObservationNorm
 from torchrl.envs import GymEnv
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.envs.mb_envs import ModelBasedEnv
+from torchrl.envs.model_based import ModelBasedEnv
+from torchrl.envs.mb_envs.dreamer import DreamerEnv
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
@@ -105,7 +106,7 @@ except FileNotFoundError:
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-def test_mb_env(device):
+def test_mb_env(self, device):
     layer = nn.Linear(4, 4)
     model = TensorDictModule(
         layer, in_keys=["observation"], out_keys=["next_observation"]
@@ -124,8 +125,12 @@ def test_mb_env(device):
             "observation": torch.stack(
                 [env.observation_spec.rand() for i in range(2)], dim=0
             ),
-            "action": torch.stack([env.action_spec.rand() for i in range(2)], dim=0),
-            "reward": torch.stack([env.reward_spec.rand() for i in range(2)], dim=0),
+            "action": torch.stack(
+                [env.action_spec.rand() for i in range(2)], dim=0
+            ),
+            "reward": torch.stack(
+                [env.reward_spec.rand() for i in range(2)], dim=0
+            ),
             "done": torch.Tensor([0, 0]).bool(),
         },
         batch_size=[2],
@@ -154,8 +159,12 @@ def test_mb_env(device):
             "observation": torch.stack(
                 [env.observation_spec.rand() for i in range(2)], dim=0
             ),
-            "action": torch.stack([env.action_spec.rand() for i in range(2)], dim=0),
-            "reward": torch.stack([env.reward_spec.rand() for i in range(2)], dim=0),
+            "action": torch.stack(
+                [env.action_spec.rand() for i in range(2)], dim=0
+            ),
+            "reward": torch.stack(
+                [env.reward_spec.rand() for i in range(2)], dim=0
+            ),
             "done": torch.Tensor([0, 0]).bool(),
         },
         batch_size=[2],
@@ -178,14 +187,33 @@ def test_mb_env(device):
             "observation": torch.stack(
                 [env.observation_spec.rand() for i in range(2)], dim=0
             ),
-            "action": torch.stack([env.action_spec.rand() for i in range(2)], dim=0),
-            "reward": torch.stack([env.reward_spec.rand() for i in range(2)], dim=0),
+            "action": torch.stack(
+                [env.action_spec.rand() for i in range(2)], dim=0
+            ),
+            "reward": torch.stack(
+                [env.reward_spec.rand() for i in range(2)], dim=0
+            ),
             "done": torch.Tensor([0, 0]).bool(),
         },
         batch_size=[2],
     )
     tensordict_step = env.step(tensordict_step)
     assert tensordict_step.get("action").shape == (2, 2)
+
+
+def test_dreamer():
+    env = DreamerEnv()
+    td = TensorDict(
+        {
+            "observations": torch.randn(2, 10, 3, 256, 256),
+            "action": torch.randn(2, 10, 10),
+            "initial_state": torch.randn(2, 10, 20),
+            "initial_rnn_hidden": torch.randn(2, 10, 200),
+        },
+        batch_size=[2],
+    )
+    env = env.train_step(td)
+
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
