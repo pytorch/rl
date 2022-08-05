@@ -75,8 +75,8 @@ if [[ $MUJOCO_GL == 'egl' ]]; then
   yum install -y glew
   yum install -y mesa-libGL
   yum install -y mesa-libOSMesa-devel
-#  yum -y install egl-utils
-#  yum -y install freeglut
+  yum -y install egl-utils
+  yum -y install freeglut
 fi
 
 conda env update --file "${this_dir}/environment.yml" --prune
