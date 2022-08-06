@@ -83,9 +83,3 @@ if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
 fi
 
 conda env update --file "${this_dir}/environment.yml" --prune
-
-#pip3 install pyrender
-#
-#if [ "${CU_VERSION:-}" != cpu ]; then
-#  pip3 install pyopengl --upgrade
-#fi

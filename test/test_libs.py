@@ -105,7 +105,7 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
 
 
 @pytest.mark.skipif(not _has_dmc, reason="no dm_control library found")
-@pytest.mark.parametrize("env_name,task", [["cheetah", "run"], ["humanoid", "walk"]])
+@pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
 @pytest.mark.parametrize("frame_skip", [1, 3])
 @pytest.mark.parametrize(
     "from_pixels,pixels_only",
@@ -118,35 +118,32 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
 def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
     if from_pixels and (not torch.has_cuda or not torch.cuda.device_count()):
         raise pytest.skip("no cuda device")
-    env0 = DMControlEnv(
-        env_name,
-        task,
-        frame_skip=frame_skip,
-        from_pixels=from_pixels,
-        pixels_only=pixels_only,
-    )
-    torch.manual_seed(0)
-    np.random.seed(0)
-    final_seed0 = env0.set_seed(0)
-    tdreset0 = env0.reset()
-    rollout0 = env0.rollout(max_steps=50)
-    env0.close()
-    del env0
 
-    env1 = DMControlEnv(
-        env_name,
-        task,
-        frame_skip=frame_skip,
-        from_pixels=from_pixels,
-        pixels_only=pixels_only,
-    )
-    torch.manual_seed(0)
-    np.random.seed(0)
-    final_seed1 = env1.set_seed(0)
-    tdreset1 = env1.reset()
-    rollout1 = env1.rollout(max_steps=50)
-    env1.close()
-    del env1
+    tds = []
+    tds_reset = []
+    final_seed = []
+    for i in range(2):
+        env0 = DMControlEnv(
+            env_name,
+            task,
+            frame_skip=frame_skip,
+            from_pixels=from_pixels,
+            pixels_only=pixels_only,
+        )
+        torch.manual_seed(0)
+        np.random.seed(0)
+        final_seed0 = env0.set_seed(0)
+        tdreset0 = env0.reset()
+        rollout0 = env0.rollout(max_steps=50)
+        env0.close()
+        del env0
+        tds_reset.append(tdreset0)
+        tds.append(rollout0)
+        final_seed.append(final_seed0)
+
+    tdreset1, tdreset0 = tds_reset
+    rollout0, rollout1 = tds
+    final_seed0, final_seed1 = final_seed
 
     assert_allclose_td(tdreset1, tdreset0)
     assert final_seed0 == final_seed1
