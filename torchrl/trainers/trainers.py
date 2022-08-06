@@ -59,6 +59,7 @@ __all__ = [
     "RewardNormalizer",
     "SelectKeys",
     "UpdateWeights",
+    "ClearCudaCache",
 ]
 
 TYPE_DESCR = {float: "4.4f", int: ""}
@@ -573,6 +574,23 @@ class ReplayBufferTrainer:
     def update_priority(self, batch: TensorDictBase) -> None:
         if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
             self.replay_buffer.update_priority(batch)
+
+
+class ClearCudaCache:
+    """Clears cuda cache at a given interval.
+
+    Examples:
+        >>> clear_cuda = ClearCudaCache(100)
+        >>> trainer.register_op("pre_optim_steps", clear_cuda)
+
+    """
+
+    def __init__(self, interval: int):
+        self.inteval = interval
+
+    def __call__(self, batch: TensorDictBase) -> TensorDictBase:
+        torch.cuda.empty_cache()
+        return batch
 
 
 class LogReward:

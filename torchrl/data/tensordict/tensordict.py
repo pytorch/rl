@@ -1523,11 +1523,6 @@ dtype=torch.float32)},
         # elif isinstance(idx, torch.Tensor) and idx.dtype == torch.bool:
         #     return self.masked_select(idx)
 
-        contiguous_input = (int, slice)
-        return_simple_view = isinstance(idx, contiguous_input) or (
-            isinstance(idx, tuple)
-            and all(isinstance(_idx, contiguous_input) for _idx in idx)
-        )
         if not self.batch_size:
             raise RuntimeError(
                 "indexing a tensordict with td.batch_dims==0 is not permitted"

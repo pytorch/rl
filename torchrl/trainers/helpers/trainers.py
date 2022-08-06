@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Optional, Union, List
 from warnings import warn
 
+import torch.cuda
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
@@ -28,6 +29,7 @@ from torchrl.trainers.trainers import (
     UpdateWeights,
     Recorder,
     CountFramesLog,
+    ClearCudaCache,
 )
 
 OPTIMIZERS = {
@@ -194,6 +196,9 @@ def make_trainer(
         clip_grad_norm=cfg.clip_grad_norm,
         clip_norm=cfg.clip_norm,
     )
+
+    if torch.cuda.device_count() > 0:
+        trainer.register_op("pre_optim_steps", ClearCudaCache(100))
 
     if hasattr(cfg, "noisy") and cfg.noisy:
         trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
