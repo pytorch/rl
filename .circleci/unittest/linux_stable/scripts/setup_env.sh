@@ -66,10 +66,10 @@ export MUJOCO_GL=$PRIVATE_MUJOCO_GL
 conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   DISPLAY=unix:0.0 \
   MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
-  LD_LIBRARY_PATH=$root_dir/.mujoco/mujoco210/bin \
+  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL \
-  PYOPENGL_PLATFORM=egl
+  PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
 
 # Software rendering requires GLX and OSMesa.
 if [[ $OSTYPE -ne 'darwin'* ]]; then
