@@ -72,7 +72,7 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
 
 # Software rendering requires GLX and OSMesa.
-if [[ $OSTYPE -ne 'darwin'* ]]; then
+if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
   yum makecache
   yum install -y glfw
   yum install -y glew
