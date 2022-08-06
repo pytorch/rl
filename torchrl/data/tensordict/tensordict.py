@@ -2636,8 +2636,13 @@ torch.Size([3, 2])
 
     """
 
-    _safe = False
-    _lazy = True
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._safe = False
+        cls._lazy = True
+        cls._is_shared = None
+        cls._is_memmap = None
+        return TensorDictBase.__new__(cls)
 
     def __init__(
         self,
@@ -3365,6 +3370,18 @@ class LazyStackedTensorDict(TensorDictBase):
                 "setting values to a LazyStackTensorDict using boolean values is not supported yet."
                 "If this feature is needed, feel free to raise an issue on github."
             )
+        if isinstance(item, torch.Tensor):
+            # e.g. item.shape = [1, 2, 3] and stack_dim == 2
+            if item.ndimension() >= self.stack_dim + 1:
+                items = item.unbind(self.stack_dim)
+                values = value.unbind(self.stack_dim)
+                for td, _item, sub_td in zip(self.tensordicts, items, values):
+                    td[_item] = sub_td
+            else:
+                values = value.unbind(self.stack_dim)
+                for td, sub_td in zip(self.tensordicts, values):
+                    td[item] = sub_td
+            return self
         return super().__setitem__(item, value)
 
     def __getitem__(self, item: INDEX_TYPING) -> TensorDictBase:

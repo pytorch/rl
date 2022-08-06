@@ -1555,7 +1555,6 @@ def test_batchsize_reset():
 
     # test that lazy tds return an exception
     td_stack = stack_td([TensorDict({"a": torch.randn(3)}, [3]) for _ in range(2)])
-    td_stack.to_tensordict().batch_size = [2]
     with pytest.raises(
         RuntimeError,
         match=re.escape(
@@ -1564,9 +1563,10 @@ def test_batchsize_reset():
         ),
     ):
         td_stack.batch_size = [2]
+    td_stack.to_tensordict().batch_size = [2]
 
     td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
-    subtd = td[:, torch.tensor([1, 2])]
+    subtd = td.get_sub_tensordict((slice(None), torch.tensor([1, 2])))
     with pytest.raises(
         RuntimeError,
         match=re.escape(
@@ -1812,6 +1812,7 @@ def _driver_func(tensordict, tensordict_unbind):
     "td_type", ["contiguous", "stack", "saved", "memmap", "memmap_stack"]
 )
 def test_mp(td_type):
+    print(td_type)
     tensordict = TensorDict(
         source={
             "a": torch.randn(2, 2),
@@ -1840,7 +1841,9 @@ def test_mp(td_type):
         )
     else:
         raise NotImplementedError
-    _driver_func(tensordict, tensordict.unbind(0))
+    _driver_func(
+        tensordict, (tensordict.get_sub_tensordict(0), tensordict.get_sub_tensordict(1))
+    )
 
 
 def test_saved_delete():
