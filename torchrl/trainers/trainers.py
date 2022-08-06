@@ -586,10 +586,14 @@ class ClearCudaCache:
     """
 
     def __init__(self, interval: int):
-        self.inteval = interval
+        self.interval = interval
+        self.count = 0
 
     def __call__(self, batch: TensorDictBase) -> TensorDictBase:
-        torch.cuda.empty_cache()
+        self.count += 1
+        if self.count % self.interval == 0:
+            print("clearing cuda cache")
+            torch.cuda.empty_cache()
         return batch
 
 
