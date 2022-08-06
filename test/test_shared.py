@@ -200,22 +200,25 @@ def test_memmap(idx, dtype, large_scale=False):
     print("\nTesting writing to TD")
     for i in range(2):
         t0 = time.time()
-        td_sm[idx].update_(td_to_copy)
+        sub_td_sm = td_sm.get_sub_tensordict(idx)
+        sub_td_sm.update_(td_to_copy)
         if i == 1:
             print(f"sm td: {time.time() - t0:4.4f} sec")
-        torch.testing.assert_close(td_sm[idx].get("a"), td_to_copy.get("a"))
+        torch.testing.assert_close(sub_td_sm.get("a"), td_to_copy.get("a"))
 
         t0 = time.time()
-        td_memmap[idx].update_(td_to_copy)
+        sub_td_sm = td_memmap.get_sub_tensordict(idx)
+        sub_td_sm.update_(td_to_copy)
         if i == 1:
             print(f"memmap td: {time.time() - t0:4.4f} sec")
-        torch.testing.assert_close(td_memmap[idx].get("a"), td_to_copy.get("a"))
+        torch.testing.assert_close(sub_td_sm.get("a"), td_to_copy.get("a"))
 
         t0 = time.time()
-        td_saved[idx].update_(td_to_copy)
+        sub_td_sm = td_saved.get_sub_tensordict(idx)
+        sub_td_sm.update_(td_to_copy)
         if i == 1:
             print(f"saved td: {time.time() - t0:4.4f} sec")
-        torch.testing.assert_close(td_saved[idx].get("a"), td_to_copy.get("a"))
+        torch.testing.assert_close(sub_td_sm.get("a"), td_to_copy.get("a"))
 
 
 if __name__ == "__main__":

@@ -1841,8 +1841,10 @@ def test_mp(td_type):
     else:
         raise NotImplementedError
     _driver_func(
-        # tensordict, (tensordict.get_sub_tensordict(0), tensordict.get_sub_tensordict(1))
-        tensordict, tensordict.unbind(0)
+        tensordict,
+        (tensordict.get_sub_tensordict(0), tensordict.get_sub_tensordict(1))
+        # tensordict,
+        # tensordict.unbind(0),
     )
 
 

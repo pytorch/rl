@@ -29,6 +29,7 @@ __all__ = ["MemmapTensor", "set_transfer_ownership", "SubMemmapTensor"]
 NoneType = type(None)
 EllipsisType = type(Ellipsis)
 
+
 def implements_for_memmap(torch_function) -> Callable:
     """Register a torch function override for ScalarTensor"""
 
@@ -578,8 +579,13 @@ class MemmapTensor(object):
         ]
         return tuple(self[_idx] for _idx in idx)
 
-class SubMemmapTensor():
-    def __init__(self, source: Union[MemmapTensor, SubMemmapTensor], idx: Union[NoneType, INDEX_TYPING]):
+
+class SubMemmapTensor:
+    def __init__(
+        self,
+        source: Union[MemmapTensor, SubMemmapTensor],
+        idx: Union[NoneType, INDEX_TYPING],
+    ):
         self.source = source
         self.idx = idx
 
@@ -612,9 +618,15 @@ class SubMemmapTensor():
         return getattr(tensor, item)
 
     def to(self, device_or_dtype: Union[DEVICE_TYPING, torch.dtype]):
-        if isinstance(device_or_dtype, torch.dtype) and device_or_dtype != self.source.dtype:
+        if (
+            isinstance(device_or_dtype, torch.dtype)
+            and device_or_dtype != self.source.dtype
+        ):
             return self.source._load_item(idx=self.idx).to(device_or_dtype)
-        elif isinstance(device_or_dtype, (int, str, torch.device)) and torch.device(device_or_dtype) != self.source.device:
+        elif (
+            isinstance(device_or_dtype, (int, str, torch.device))
+            and torch.device(device_or_dtype) != self.source.device
+        ):
             return self.source._load_item(idx=self.idx).to(device_or_dtype)
         else:
             return self
@@ -693,11 +705,16 @@ class SubMemmapTensor():
     def _inplace_constructor(self, method: str):
         def new_method(*args):
             if len(args):
-                out = to_numpy(getattr(self.source._load_item(idx=self.idx), method[:-1])(*args))
+                out = to_numpy(
+                    getattr(self.source._load_item(idx=self.idx), method[:-1])(*args)
+                )
                 self.source.memmap_array[self.idx] = to_numpy(out)
             else:
-                self.source.memmap_array[self.idx] = to_numpy(getattr(self.source._load_item(idx=self.idx), method[:-1])())
+                self.source.memmap_array[self.idx] = to_numpy(
+                    getattr(self.source._load_item(idx=self.idx), method[:-1])()
+                )
             return self
+
         return new_method
 
     def __getitem__(self, item: INDEX_TYPING) -> torch.Tensor:
@@ -705,7 +722,10 @@ class SubMemmapTensor():
         # return self._load_item()[item]
         if isinstance(item, (NoneType, int, np.int, slice, EllipsisType)):
             item = (item,)
-        if isinstance(item, tuple) and all(isinstance(_item, (NoneType, int, np.int, slice, EllipsisType)) for _item in item):
+        if isinstance(item, tuple) and all(
+            isinstance(_item, (NoneType, int, np.int, slice, EllipsisType))
+            for _item in item
+        ):
             return SubMemmapTensor(self, item)
         return self._tensor[item]
 
@@ -741,13 +761,15 @@ class SubMemmapTensor():
 
         return SUBMEMMAP_HANDLED_FN[func](*args, **kwargs)
 
+
 def _stack(
     list_of_memmap: List[MemmapTensor],
     dim: int,
     out: Optional[Union[torch.Tensor]] = None,
 ) -> torch.Tensor:
     list_of_tensors = [
-        a._tensor if isinstance(a, (MemmapTensor, SubMemmapTensor)) else a for a in list_of_memmap
+        a._tensor if isinstance(a, (MemmapTensor, SubMemmapTensor)) else a
+        for a in list_of_memmap
     ]
     if isinstance(out, (MemmapTensor, SubMemmapTensor)):
         list_of_tensors = [tensor.cpu() for tensor in list_of_tensors]
@@ -755,20 +777,26 @@ def _stack(
     else:
         return torch.stack(list_of_tensors, dim, out=out)
 
+
 implements_for_memmap(torch.stack)(_stack)
 implements_for_submemmap(torch.stack)(_stack)
+
 
 def _unbind(memmap: MemmapTensor, dim: int) -> Tuple[torch.Tensor, ...]:
     return memmap.unbind(dim)
 
+
 implements_for_memmap(torch.unbind)(_unbind)
 implements_for_submemmap(torch.unbind)(_unbind)
+
 
 def _tensor(memmap: MemmapTensor) -> torch.Tensor:
     return memmap._tensor
 
+
 implements_for_memmap(torch.tensor)(_tensor)
 implements_for_submemmap(torch.tensor)(_tensor)
+
 
 def _cat(
     list_of_memmap: List[MemmapTensor],
@@ -776,12 +804,14 @@ def _cat(
     out: Optional[Union[torch.Tensor, MemmapTensor]] = None,
 ) -> torch.Tensor:
     list_of_tensors = [
-        a._tensor if isinstance(a, (MemmapTensor, SubMemmapTensor)) else a for a in list_of_memmap
+        a._tensor if isinstance(a, (MemmapTensor, SubMemmapTensor)) else a
+        for a in list_of_memmap
     ]
     print("mm: ", [t.shape for t in list_of_memmap])
     print("tensors: ", [t.shape for t in list_of_tensors])
     print("dim: ", dim, "shape: ", torch.cat(list_of_tensors, dim, out=out).shape)
     return torch.cat(list_of_tensors, dim, out=out)
+
 
 implements_for_memmap(torch.cat)(_cat)
 implements_for_submemmap(torch.cat)(_cat)

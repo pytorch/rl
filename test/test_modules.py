@@ -156,9 +156,7 @@ def test_actorcritic(device):
     torch.testing.assert_close(
         td_total.get("sample_log_prob"), td_policy.get("sample_log_prob")
     )
-    torch.testing.assert_close(
-        td_total.get("state_value"), td_value.get("state_value")
-    )
+    torch.testing.assert_close(td_total.get("state_value"), td_value.get("state_value"))
 
     value_params = set(
         list(op.get_value_operator().parameters()) + list(op.module[0].parameters())
