@@ -568,7 +568,6 @@ class ReplayBufferTrainer:
 
     def sample(self, batch: TensorDictBase) -> TensorDictBase:
         sample = self.replay_buffer.sample(self.batch_size)
-        assert sample.device == self.device, (self.device, sample.device)
         return sample.to(self.device)
 
     def update_priority(self, batch: TensorDictBase) -> None:
