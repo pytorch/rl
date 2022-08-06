@@ -315,17 +315,18 @@ jobs:
           paths:
             - conda
             - env
-      - run:
-          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
-          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
-          # They're available in all the other workflows (OSX and Windows).
-          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
-          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
-          name: export CIRCLECI env var
-          command: echo "CIRCLECI=true" >> ./env.list
+#      - run:
+#          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
+#          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
+#          # They're available in all the other workflows (OSX and Windows).
+#          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
+#          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
+#          name: export CIRCLECI env var
+#          command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux/scripts/install.sh
+          command: bash .circleci/unittest/linux/scripts/install.sh
+#          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux/scripts/install.sh
       - run:
           name: Run tests
           command: bash .circleci/unittest/linux/scripts/run_test.sh
@@ -369,20 +370,22 @@ jobs:
           paths:
             - conda
             - env
-      - run:
-          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
-          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
-          # They're available in all the other workflows (OSX and Windows).
-          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
-          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
-          name: export CIRCLECI env var
-          command: echo "CIRCLECI=true" >> ./env.list
+#      - run:
+#          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
+#          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
+#          # They're available in all the other workflows (OSX and Windows).
+#          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
+#          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
+#          name: export CIRCLECI env var
+#          command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_optdeps/scripts/install.sh
+          command: bash .circleci/unittest/linux/scripts/install.sh
+#          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux/scripts/install.sh
       - run:
           name: Run tests
-          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_optdeps/scripts/run_test.sh
+          command: bash .circleci/unittest/linux/scripts/run_test.sh
+#          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_optdeps/scripts/post_process.sh
@@ -469,20 +472,22 @@ jobs:
           paths:
             - conda
             - env
-      - run:
-          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
-          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
-          # They're availble in all the other workflows (OSX and Windows).
-          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
-          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
-          name: export CIRCLECI env var
-          command: echo "CIRCLECI=true" >> ./env.list
+#      - run:
+#          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
+#          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
+#          # They're available in all the other workflows (OSX and Windows).
+#          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
+#          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
+#          name: export CIRCLECI env var
+#          command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_stable/scripts/install.sh
+          command: bash .circleci/unittest/linux/scripts/install.sh
+#          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux/scripts/install.sh
       - run:
           name: Run tests
-          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_stable/scripts/run_test.sh
+          command: bash .circleci/unittest/linux/scripts/run_test.sh
+#          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_stable/scripts/post_process.sh
