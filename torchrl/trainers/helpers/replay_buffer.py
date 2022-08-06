@@ -24,7 +24,7 @@ class collate_fn:
         self.device = device
 
     def __call__(self, x):
-        return x.to_tensordict()
+        return x
 
 
 def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer:
@@ -39,6 +39,7 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
             storage=LazyMemmapStorage(
                 cfg.buffer_size,
                 scratch_dir=cfg.buffer_scratch_dir,
+                device=device,
             ),
         )
     else:
@@ -52,6 +53,7 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
             storage=LazyMemmapStorage(
                 cfg.buffer_size,
                 scratch_dir=cfg.buffer_scratch_dir,
+                device=device,
             ),
         )
     return buffer

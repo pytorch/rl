@@ -194,6 +194,7 @@ class LazyMemmapStorage(LazyTensorStorage):
                         .clone()
                         .zero_()
                         .memmap_(prefix=self.scratch_dir)
+                        .to(self.device)
                     )
                 else:
                     out[key] = _value = MemmapTensor(
