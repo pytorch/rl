@@ -415,6 +415,7 @@ class _EnvClass:
         auto_reset: bool = True,
         auto_cast_to_device: bool = False,
         break_when_any_done: bool = True,
+        return_contiguous: bool = True,
         tensordict: Optional[TensorDictBase] = None,
     ) -> TensorDictBase:
         """Executes a rollout in the environment.
@@ -435,6 +436,7 @@ class _EnvClass:
             auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
                 policy device before the policy is used. Default is `False`.
             break_when_any_done (bool): breaks if any of the done state is True. Default is True.
+            return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
             tensordict (TensorDict, optional): if auto_reset is False, an initial
                 tensordict must be provided.
 
@@ -485,6 +487,8 @@ class _EnvClass:
             raise Exception("reset env before calling rollout!")
 
         out_td = torch.stack(tensordicts, len(self.batch_size))
+        if return_contiguous:
+            return out_td.contiguous()
         return out_td
 
     def _select_observation_keys(self, tensordict: TensorDictBase) -> Iterator[str]:
