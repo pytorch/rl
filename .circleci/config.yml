@@ -380,11 +380,11 @@ jobs:
 #          command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
-          command: bash .circleci/unittest/linux/scripts/install.sh
+          command: bash .circleci/unittest/linux_optdeps/scripts/install.sh
 #          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux/scripts/install.sh
       - run:
           name: Run tests
-          command: bash .circleci/unittest/linux/scripts/run_test.sh
+          command: bash .circleci/unittest/linux_optdeps/scripts/run_test.sh
 #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Post Process
@@ -482,11 +482,11 @@ jobs:
 #          command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install torchrl
-          command: bash .circleci/unittest/linux/scripts/install.sh
+          command: bash .circleci/unittest/linux_stable/scripts/install.sh
 #          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux/scripts/install.sh
       - run:
           name: Run tests
-          command: bash .circleci/unittest/linux/scripts/run_test.sh
+          command: bash .circleci/unittest/linux_stable/scripts/run_test.sh
 #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Post Process

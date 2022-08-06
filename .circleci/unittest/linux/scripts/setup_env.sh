@@ -53,8 +53,11 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
+
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
+elif [ "${CU_VERSION:-}" == cpu ]; then
+  PRIVATE_MUJOCO_GL=osmesa
 else
   PRIVATE_MUJOCO_GL=egl
 fi
@@ -65,11 +68,11 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
   LD_LIBRARY_PATH=$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
-  MUJOCO_GL=$PRIVATE_MUJOCO_GL\
+  MUJOCO_GL=$PRIVATE_MUJOCO_GL \
   PYOPENGL_PLATFORM=egl
 
 # Software rendering requires GLX and OSMesa.
-if [[ $MUJOCO_GL == 'egl' ]]; then
+if [[ $OSTYPE -ne 'darwin'* ]]; then
   yum makecache
   yum install -y glfw
   yum install -y glew
