@@ -275,7 +275,7 @@ class MemmapTensor(object):
         out = self._np_to_tensor(memmap_array, from_numpy=from_numpy)
         if (
             idx is not None
-            and not isinstance(idx, (int, np.integer))
+            and not isinstance(idx, (int, np.integer, slice))
             and len(idx) == 1
             and not (isinstance(idx, torch.Tensor) and idx.dtype is torch.bool)
         ):  # and isinstance(idx, torch.Tensor) and len(idx) == 1:

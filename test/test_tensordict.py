@@ -1152,7 +1152,7 @@ class TestTensorDicts:
             pytest.mark.skip("cannot index tensor with desired index")
             return
 
-        td_clone = td[idx].clone().zero_()
+        td_clone = td[idx].to_tensordict().zero_()
         td[idx] = td_clone
         assert (td[idx].get("a") == 0).all()
 
