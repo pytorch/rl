@@ -10,7 +10,7 @@ from typing import Callable, Dict, Optional
 
 import torch
 
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import _EnvClass
 
@@ -94,7 +94,7 @@ class EnvCreator:
 
     def share_memory(self, state_dict: OrderedDict) -> None:
         for key, item in list(state_dict.items()):
-            if isinstance(item, (_TensorDict,)):
+            if isinstance(item, (TensorDictBase,)):
                 if not item.is_shared():
                     item.share_memory_()
                 else:

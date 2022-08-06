@@ -19,7 +19,7 @@ from torchrl.modules.tensordict_module.common import (
 
 __all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
 
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 
 
 class EGreedyWrapper(TensorDictModuleWrapper):
@@ -95,7 +95,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
                 ).item(),
             )
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = self.td_module.forward(tensordict)
         if exploration_mode() == "random" or exploration_mode() is None:
             out = tensordict.get(self.td_module.out_keys[0])
@@ -241,7 +241,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
                     f"number of frames."
                 )
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = super().forward(tensordict)
         if exploration_mode() == "random" or exploration_mode() is None:
             tensordict = self.ou.add_sample(tensordict, self.eps.item())
@@ -290,7 +290,7 @@ class _OrnsteinUhlenbeckProcess:
     def steps_key(self):
         return self._steps_key  # + str(id(self))
 
-    def _make_noise_pair(self, tensordict: _TensorDict) -> None:
+    def _make_noise_pair(self, tensordict: TensorDictBase) -> None:
         tensordict.set(
             self.noise_key,
             torch.zeros(tensordict.get(self.key).shape, device=tensordict.device),
@@ -304,7 +304,9 @@ class _OrnsteinUhlenbeckProcess:
             ),
         )
 
-    def add_sample(self, tensordict: _TensorDict, eps: float = 1.0) -> _TensorDict:
+    def add_sample(
+        self, tensordict: TensorDictBase, eps: float = 1.0
+    ) -> TensorDictBase:
 
         if self.noise_key not in tensordict.keys():
             self._make_noise_pair(tensordict)

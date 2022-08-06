@@ -11,7 +11,7 @@ from torchrl.modules import (
     DistributionalQValueActor,
     QValueActor,
 )
-from ...data.tensordict.tensordict import _TensorDict
+from ...data.tensordict.tensordict import TensorDictBase
 from .common import LossModule
 from .utils import distance_loss, next_state_value
 
@@ -58,14 +58,14 @@ class DQNLoss(LossModule):
         self.loss_function = loss_function
         self.priority_key = priority_key
 
-    def forward(self, input_tensordict: _TensorDict) -> TensorDict:
+    def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """
         Computes the DQN loss given a tensordict sampled from the replay buffer.
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
 
         Args:
-            input_tensordict (_TensorDict): a tensordict with keys ["done", "reward", "action"] and the in_keys of
+            input_tensordict (TensorDictBase): a tensordict with keys ["done", "reward", "action"] and the in_keys of
                 the value network.
 
         Returns:
@@ -167,7 +167,7 @@ class DistributionalDQNLoss(LossModule):
             create_target_params=self.delay_value,
         )
 
-    def forward(self, input_tensordict: _TensorDict) -> TensorDict:
+    def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         # from https://github.com/Kaixhin/Rainbow/blob/9ff5567ad1234ae0ed30d8471e8f13ae07119395/agent.py
         device = self.device
         tensordict = TensorDict(

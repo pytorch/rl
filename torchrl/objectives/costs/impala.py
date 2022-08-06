@@ -5,7 +5,7 @@
 
 import torch
 
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.modules import ProbabilisticTensorDictModule
 from torchrl.objectives.returns.vtrace import vtrace
 
@@ -18,7 +18,7 @@ class QValEstimator:
     def device(self) -> torch.device:
         return next(self.value_model.parameters()).device
 
-    def forward(self, tensordict: _TensorDict) -> None:
+    def forward(self, tensordict: TensorDictBase) -> None:
         tensordict_device = tensordict.to(self.device)
         self.value_model_device(tensordict_device)  # udpates the value key
         gamma = tensordict_device.get("gamma")
@@ -35,7 +35,7 @@ class QValEstimator:
 
 
 class VTraceEstimator:
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict_device = tensordict.to(device)
         rewards = tensordict_device.get("reward")
         vals = tensordict_device.get("value")

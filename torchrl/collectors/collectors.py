@@ -32,7 +32,7 @@ __all__ = [
 
 from torchrl.envs.transforms import TransformedEnv
 from ..data import TensorSpec
-from ..data.tensordict.tensordict import _TensorDict, TensorDict
+from ..data.tensordict.tensordict import TensorDictBase, TensorDict
 from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
 from ..envs.common import _EnvClass
 from ..envs.vec_env import _BatchedEnv
@@ -62,7 +62,7 @@ class RandomPolicy:
         """
         self.action_spec = action_spec
 
-    def __call__(self, td: _TensorDict) -> _TensorDict:
+    def __call__(self, td: TensorDictBase) -> TensorDictBase:
         return td.set("action", self.action_spec.rand(td.batch_size))
 
 
@@ -81,7 +81,10 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
     def _get_policy_and_device(
         self,
         policy: Optional[
-            Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
+            Union[
+                ProbabilisticTensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
         ] = None,
         device: Optional[DEVICE_TYPING] = None,
     ) -> Tuple[
@@ -143,11 +146,11 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         if self.get_weights_fn is not None:
             self.policy.load_state_dict(self.get_weights_fn())
 
-    def __iter__(self) -> Iterator[_TensorDict]:
+    def __iter__(self) -> Iterator[TensorDictBase]:
         return self.iterator()
 
     @abc.abstractmethod
-    def iterator(self) -> Iterator[_TensorDict]:
+    def iterator(self) -> Iterator[TensorDictBase]:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -174,7 +177,7 @@ class SyncDataCollector(_DataCollector):
     Args:
         create_env_fn (Callable), returns an instance of _EnvClass class.
         policy (Callable, optional): Policy to be executed in the environment.
-            Must accept _TensorDict object as input.
+            Must accept TensorDictBase object as input.
         total_frames (int): lower bound of the total number of frames returned by the collector. The iterator will
             stop once the total number of frames equates or exceeds the total number of frames passed to the
             collector.
@@ -230,7 +233,10 @@ class SyncDataCollector(_DataCollector):
             _EnvClass, "EnvCreator", Sequence[Callable[[], _EnvClass]]
         ],
         policy: Optional[
-            Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
+            Union[
+                ProbabilisticTensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[dict] = None,
@@ -238,7 +244,7 @@ class SyncDataCollector(_DataCollector):
         frames_per_batch: int = 200,
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
-        postproc: Optional[Callable[[_TensorDict], _TensorDict]] = None,
+        postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: bool = True,
         device: DEVICE_TYPING = None,
         passing_device: DEVICE_TYPING = "cpu",
@@ -336,10 +342,10 @@ class SyncDataCollector(_DataCollector):
         """
         return self.env.set_seed(seed)
 
-    def iterator(self) -> Iterator[_TensorDict]:
+    def iterator(self) -> Iterator[TensorDictBase]:
         """Iterates through the DataCollector.
 
-        Yields: _TensorDict objects containing (chunks of) trajectories
+        Yields: TensorDictBase objects containing (chunks of) trajectories
 
         """
         total_frames = self.total_frames
@@ -371,7 +377,7 @@ class SyncDataCollector(_DataCollector):
             if self._frames >= self.total_frames:
                 break
 
-    def _cast_to_policy(self, td: _TensorDict) -> _TensorDict:
+    def _cast_to_policy(self, td: TensorDictBase) -> TensorDictBase:
         policy_device = self.device
         if hasattr(self.policy, "in_keys"):
             td = td.select(*self.policy.in_keys)
@@ -384,8 +390,8 @@ class SyncDataCollector(_DataCollector):
         return self._td_policy
 
     def _cast_to_env(
-        self, td: _TensorDict, dest: Optional[_TensorDict] = None
-    ) -> _TensorDict:
+        self, td: TensorDictBase, dest: Optional[TensorDictBase] = None
+    ) -> TensorDictBase:
         env_device = self.env_device
         if dest is None:
             if self._td_env is None:
@@ -434,11 +440,11 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.set("step_count", steps)
 
     @torch.no_grad()
-    def rollout(self) -> _TensorDict:
+    def rollout(self) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
 
         Returns:
-            _TensorDict containing the computed rollout.
+            TensorDictBase containing the computed rollout.
 
         """
         if self.reset_at_each_iter:
@@ -573,7 +579,7 @@ class _MultiDataCollector(_DataCollector):
     Args:
         create_env_fn (list of Callabled): list of Callables, each returning an instance of _EnvClass
         policy (Callable, optional): Instance of ProbabilisticTensorDictModule class.
-            Must accept _TensorDict object as input.
+            Must accept TensorDictBase object as input.
         total_frames (int): lower bound of the total number of frames returned by the collector. In parallel settings,
             the actual number of frames may well be greater than this as the closing signals are sent to the
             workers only once the total number of frames has been collected on the server.
@@ -623,7 +629,10 @@ class _MultiDataCollector(_DataCollector):
         self,
         create_env_fn: Sequence[Callable[[], _EnvClass]],
         policy: Optional[
-            Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
+            Union[
+                ProbabilisticTensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[Sequence[dict]] = None,
@@ -631,7 +640,7 @@ class _MultiDataCollector(_DataCollector):
         frames_per_batch: int = 200,
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
-        postproc: Optional[Callable[[_TensorDict], _TensorDict]] = None,
+        postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: bool = True,
         devices: DEVICE_TYPING = None,
         seed: Optional[int] = None,
@@ -918,7 +927,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
     def _queue_len(self) -> int:
         return self.num_workers
 
-    def iterator(self) -> Iterator[_TensorDict]:
+    def iterator(self) -> Iterator[TensorDictBase]:
         i = -1
         frames = 0
         out_tensordicts_shared = OrderedDict()
@@ -1021,7 +1030,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     def frames_per_batch_worker(self):
         return self.frames_per_batch
 
-    def _get_from_queue(self, timeout=None) -> Tuple[int, int, _TensorDict]:
+    def _get_from_queue(self, timeout=None) -> Tuple[int, int, TensorDictBase]:
         new_data, j = self.queue_out.get(timeout=timeout)
         if j == 0:
             data, idx = new_data
@@ -1036,7 +1045,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     def _queue_len(self) -> int:
         return 1
 
-    def iterator(self) -> Iterator[_TensorDict]:
+    def iterator(self) -> Iterator[TensorDictBase]:
         if self.update_at_each_batch:
             self.update_policy_weights_()
 
@@ -1116,7 +1125,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
     Args:
         create_env_fn (Callabled): Callable returning an instance of _EnvClass
         policy (Callable, optional): Instance of ProbabilisticTensorDictModule class.
-            Must accept _TensorDict object as input.
+            Must accept TensorDictBase object as input.
         total_frames (int): lower bound of the total number of frames returned
             by the collector. In parallel settings, the actual number of
             frames may well be greater than this as the closing signals are
@@ -1169,7 +1178,10 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         self,
         create_env_fn: Callable[[], _EnvClass],
         policy: Optional[
-            Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
+            Union[
+                ProbabilisticTensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[dict] = None,
@@ -1177,7 +1189,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         frames_per_batch: int = 200,
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
-        postproc: Optional[Callable[[_TensorDict], _TensorDict]] = None,
+        postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: bool = True,
         device: Optional[Union[int, str, torch.device]] = None,
         passing_device: Union[int, str, torch.device] = "cpu",
@@ -1208,7 +1220,7 @@ def _main_async_collector(
     queue_out: queues.Queue,
     create_env_fn: Union[_EnvClass, "EnvCreator", Callable[[], _EnvClass]],
     create_env_kwargs: dict,
-    policy: Callable[[_TensorDict], _TensorDict],
+    policy: Callable[[TensorDictBase], TensorDictBase],
     frames_per_worker: int,
     max_frames_per_traj: int,
     frames_per_batch: int,

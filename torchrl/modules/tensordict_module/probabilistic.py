@@ -12,7 +12,7 @@ from torch import Tensor
 from torch import distributions as d
 
 from torchrl.data import TensorSpec
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import exploration_mode, set_exploration_mode
 from torchrl.modules.distributions import distributions_maps, Delta
 from torchrl.modules.tensordict_module.common import TensorDictModule, _check_all_str
@@ -189,7 +189,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
 
-    def _call_module(self, tensordict: _TensorDict, **kwargs) -> _TensorDict:
+    def _call_module(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         return self.module(tensordict, **kwargs)
 
     def make_functional_with_buffers(self, clone: bool = True):
@@ -211,10 +211,10 @@ class ProbabilisticTensorDictModule(TensorDictModule):
 
     def get_dist(
         self,
-        tensordict: _TensorDict,
-        tensordict_out: Optional[_TensorDict] = None,
+        tensordict: TensorDictBase,
+        tensordict_out: Optional[TensorDictBase] = None,
         **kwargs,
-    ) -> Tuple[d.Distribution, _TensorDict]:
+    ) -> Tuple[d.Distribution, TensorDictBase]:
         interaction_mode = exploration_mode()
         if interaction_mode is None:
             interaction_mode = self.default_interaction_mode
@@ -225,7 +225,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         dist = self.build_dist_from_params(tensordict_out)
         return dist, tensordict_out
 
-    def build_dist_from_params(self, tensordict_out: _TensorDict) -> d.Distribution:
+    def build_dist_from_params(self, tensordict_out: TensorDictBase) -> d.Distribution:
         try:
             dist = self.distribution_class(
                 **tensordict_out.select(*self.dist_param_keys)
@@ -246,10 +246,10 @@ class ProbabilisticTensorDictModule(TensorDictModule):
 
     def forward(
         self,
-        tensordict: _TensorDict,
-        tensordict_out: Optional[_TensorDict] = None,
+        tensordict: TensorDictBase,
+        tensordict_out: Optional[TensorDictBase] = None,
         **kwargs,
-    ) -> _TensorDict:
+    ) -> TensorDictBase:
 
         dist, tensordict_out = self.get_dist(
             tensordict, tensordict_out=tensordict_out, **kwargs
