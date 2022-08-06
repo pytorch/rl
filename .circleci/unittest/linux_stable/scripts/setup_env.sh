@@ -86,6 +86,6 @@ conda env update --file "${this_dir}/environment.yml" --prune
 
 pip3 install pyrender
 
-if [ "${CU_VERSION:-}" -ne cpu ]; then
+if [ "${CU_VERSION:-}" != cpu ]; then
   pip3 install pyopengl --upgrade
 fi
