@@ -861,12 +861,15 @@ dtype=torch.float32)},
             a new TensorDict object containing the same values.
 
         """
-        return self.to(
-            TensorDict,
-            batch_size=self.batch_size,
+        return TensorDict(
+            {
+                key: value.clone()
+                if not isinstance(value, TensorDictBase)
+                else value.to_tensordict()
+                for key, value in self.items()
+            },
             device=self.device,
-            _meta_source=dict(self._dict_meta),
-            _run_checks=False,
+            batch_size=self.batch_size,
         )
 
     def zero_(self) -> TensorDictBase:
@@ -3621,6 +3624,12 @@ class SavedTensorDict(TensorDictBase):
     def batch_size(self, new_size: torch.Size):
         return self._batch_size_setter(new_size)
 
+    def _batch_size_setter(self, new_size: torch.Size):
+        td = self._load()
+        td.batch_size = new_size
+        self._save(td)
+        return super()._batch_size_setter(new_size)
+
     @property
     def device(self) -> torch.device:
         device = self._device
@@ -3834,6 +3843,26 @@ class SavedTensorDict(TensorDictBase):
                 f"dest must be a string, torch.device or a TensorDict "
                 f"instance, {dest} not allowed"
             )
+
+    def to_tensordict(self):
+        """Returns a regular TensorDict instance from the TensorDictBase.
+            Makes a copy of the tensor dict.
+            Memmap and shared memory tensors are converted to regular tensors.
+        Returns:
+            a new TensorDict object containing the same values.
+
+        """
+        td = self._load()
+        return TensorDict(
+            {
+                key: value.clone()
+                if not isinstance(value, TensorDictBase)
+                else value.to_tensordict()
+                for key, value in td.items()
+            },
+            device=self.device,
+            batch_size=self.batch_size,
+        )
 
     def _change_batch_size(self, new_size: torch.Size):
         if not hasattr(self, "_orig_batch_size"):
