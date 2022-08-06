@@ -36,7 +36,7 @@ import torch
 from torch.jit._shape_functions import infer_size_impl
 
 from torchrl import KeyDependentDefaultDict, prod
-from torchrl.data.tensordict.memmap import MemmapTensor
+from torchrl.data.tensordict.memmap import MemmapTensor, SubMemmapTensor
 from torchrl.data.tensordict.metatensor import MetaTensor
 from torchrl.data.tensordict.utils import (
     _getitem_batch_size,
@@ -62,6 +62,7 @@ TD_HANDLED_FUNCTIONS: Dict = dict()
 COMPATIBLE_TYPES = Union[
     torch.Tensor,
     MemmapTensor,
+    SubMemmapTensor,
 ]  # None? # leaves space for TensorDictBase
 
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
@@ -2310,7 +2311,7 @@ def assert_allclose_td(
             input1 = input1._tensor
         if isinstance(input2, MemmapTensor):
             input2 = input2._tensor
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=msg
         )
     return True
@@ -4470,7 +4471,7 @@ def _check_keys(
     return keys
 
 
-_accepted_classes = (torch.Tensor, MemmapTensor, TensorDictBase)
+_accepted_classes = (torch.Tensor, MemmapTensor, SubMemmapTensor, TensorDictBase)
 
 
 def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_device):

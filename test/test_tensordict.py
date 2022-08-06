@@ -54,7 +54,7 @@ def test_tensordict_set(device):
     # test set_at_ with dtype casting
     x = torch.randn(6, dtype=torch.double, device=device)
     td.set_at_("key2", x, (2, 2))  # robust to dtype casting
-    torch.testing.assert_allclose(td.get("key2")[2, 2], x.to(torch.float))
+    torch.testing.assert_close(td.get("key2")[2, 2], x.to(torch.float))
 
     td.set("key1", torch.zeros(4, 5, dtype=torch.double, device=device), inplace=True)
     assert (td.get("key1") == 0).all()
@@ -136,13 +136,13 @@ def test_tensordict_indexing(device):
         batch_size=[3, 4],
     )
     td[0].set_("key1", x)
-    torch.testing.assert_allclose(td.get("key1")[0], x)
-    torch.testing.assert_allclose(td.get("key1")[0], td[0].get("key1"))
+    torch.testing.assert_close(td.get("key1")[0], x)
+    torch.testing.assert_close(td.get("key1")[0], td[0].get("key1"))
 
     y = torch.randn(3, 5, device=device)
     td[:, 0].set_("key1", y)
-    torch.testing.assert_allclose(td.get("key1")[:, 0], y)
-    torch.testing.assert_allclose(td.get("key1")[:, 0], td[:, 0].get("key1"))
+    torch.testing.assert_close(td.get("key1")[:, 0], y)
+    torch.testing.assert_close(td.get("key1")[:, 0], td[:, 0].get("key1"))
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -209,8 +209,8 @@ def test_mask_td(device):
     mask_list = [False, True, False, True]
 
     td_masked2 = td[mask_list, 0]
-    torch.testing.assert_allclose(td.get("key1")[mask_list, 0], td_masked2.get("key1"))
-    torch.testing.assert_allclose(td.get("key2")[mask_list, 0], td_masked2.get("key2"))
+    torch.testing.assert_close(td.get("key1")[mask_list, 0], td_masked2.get("key1"))
+    torch.testing.assert_close(td.get("key2")[mask_list, 0], td_masked2.get("key2"))
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -482,9 +482,9 @@ def test_savedtensordict(device):
     ]
     ss = stack_td(ss_list, 0)
     assert ss_list[1] is ss[1]
-    torch.testing.assert_allclose(ss_list[1].get("a"), vals[1])
-    torch.testing.assert_allclose(ss_list[1].get("a"), ss[1].get("a"))
-    torch.testing.assert_allclose(ss[1].get("a"), ss.get("a")[1])
+    torch.testing.assert_close(ss_list[1].get("a"), vals[1])
+    torch.testing.assert_close(ss_list[1].get("a"), ss[1].get("a"))
+    torch.testing.assert_close(ss[1].get("a"), ss.get("a")[1])
     assert ss.get("a").device == device
 
 
@@ -1087,7 +1087,7 @@ class TestTensorDicts:
             a = a._tensor
         if isinstance(z, MemmapTensor):
             z = z._tensor
-        torch.testing.assert_allclose(a, z)
+        torch.testing.assert_close(a, z)
 
         new_z = torch.randn_like(z)
         if td_name in ("sub_td", "sub_td2"):
@@ -1095,18 +1095,18 @@ class TestTensorDicts:
         else:
             td.set("z", new_z)
 
-        torch.testing.assert_allclose(new_z, td.get("z"))
+        torch.testing.assert_close(new_z, td.get("z"))
 
         new_z = torch.randn_like(z)
         td.set_("z", new_z)
-        torch.testing.assert_allclose(new_z, td.get("z"))
+        torch.testing.assert_close(new_z, td.get("z"))
 
     def test_set_nontensor(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         r = torch.randn_like(td.get("a"))
         td.set("numpy", r.cpu().numpy())
-        torch.testing.assert_allclose(td.get("numpy"), r)
+        torch.testing.assert_close(td.get("numpy"), r)
 
     @pytest.mark.parametrize(
         "actual_index,expected_index",
@@ -1793,7 +1793,7 @@ def _driver_func(tensordict, tensordict_unbind):
         is_done = parents[i].recv()
         assert is_done == "done"
     new_a = tensordict.get("a").clone().contiguous()
-    torch.testing.assert_allclose(a_prev - 1, new_a)
+    torch.testing.assert_close(a_prev - 1, new_a)
 
     a_prev = tensordict.get("a").clone().contiguous()
     for i in range(2):
@@ -1801,7 +1801,7 @@ def _driver_func(tensordict, tensordict_unbind):
         is_done = parents[i].recv()
         assert is_done == "done"
     new_a = tensordict.get("a").clone().contiguous()
-    torch.testing.assert_allclose(a_prev + 1, new_a)
+    torch.testing.assert_close(a_prev + 1, new_a)
 
     for i in range(2):
         parents[i].send(("close", None))
@@ -1809,10 +1809,9 @@ def _driver_func(tensordict, tensordict_unbind):
 
 
 @pytest.mark.parametrize(
-    "td_type", ["contiguous", "stack", "saved", "memmap", "memmap_stack"]
+    "td_type", ["memmap", "memmap_stack", "contiguous", "stack", "saved"]
 )
 def test_mp(td_type):
-    print(td_type)
     tensordict = TensorDict(
         source={
             "a": torch.randn(2, 2),
@@ -1842,7 +1841,8 @@ def test_mp(td_type):
     else:
         raise NotImplementedError
     _driver_func(
-        tensordict, (tensordict.get_sub_tensordict(0), tensordict.get_sub_tensordict(1))
+        # tensordict, (tensordict.get_sub_tensordict(0), tensordict.get_sub_tensordict(1))
+        tensordict, tensordict.unbind(0)
     )
 
 
