@@ -631,7 +631,9 @@ dtype=torch.float32)},
         """
         if make_unset:
             for k in self.keys():
-                yield self._get_meta(k)
+                value = self._get_meta(k)
+                print(k, value)
+                yield value
         else:
             return self._dict_meta.values()
 
