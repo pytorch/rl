@@ -403,8 +403,9 @@ class Trainer:
 
         self._pre_optim_hook()
 
+        torch.cuda.empty_cache()
+
         for j in range(self.optim_steps_per_batch):
-            # torch.cuda.empty_cache()
             self._optim_count += 1
 
             sub_batch = self._process_optim_batch_hook(batch)
@@ -421,7 +422,7 @@ class Trainer:
                 for key, item in losses_detached.items():
                     val = average_losses.get(key)
                     average_losses.set(key, val * j / (j + 1) + item / (j + 1))
-            del sub_batch, losses_td
+            del sub_batch, losses_td, losses_detached
 
         if self.optim_steps_per_batch > 0:
             self._log(
