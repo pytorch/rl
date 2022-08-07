@@ -144,7 +144,6 @@ class REDQLoss(LossModule):
             alpha = self.log_alpha.exp()
         return alpha
 
-    @torch.no_grad()
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
         next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]

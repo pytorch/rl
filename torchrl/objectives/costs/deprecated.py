@@ -48,7 +48,6 @@ class REDQLoss_deprecated(LossModule):
     """
 
     delay_actor: bool = False
-    delay_qvalue: bool = False
 
     def __init__(
         self,
@@ -64,6 +63,8 @@ class REDQLoss_deprecated(LossModule):
         max_alpha: float = 10.0,
         fixed_alpha: bool = False,
         target_entropy: Union[str, Number] = "auto",
+        delay_qvalue: bool = True,
+        gSDE: bool = False,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -71,6 +72,11 @@ class REDQLoss_deprecated(LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
+
+        # let's make sure that actor_network has `return_log_prob` set to True
+        self.actor_network.return_log_prob = True
+
+        self.delay_qvalue = delay_qvalue
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
@@ -108,7 +114,7 @@ class REDQLoss_deprecated(LossModule):
             )
 
         if target_entropy == "auto":
-            if actor_network.spec is None:
+            if actor_network.spec["action"] is None:
                 raise RuntimeError(
                     "Cannot infer the dimensionality of the action. Consider providing "
                     "the target entropy explicitely or provide the spec of the "
@@ -118,6 +124,7 @@ class REDQLoss_deprecated(LossModule):
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
+        self.gSDE = gSDE
 
     @property
     def alpha(self):
