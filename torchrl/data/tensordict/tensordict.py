@@ -2198,6 +2198,7 @@ class TensorDict(TensorDictBase):
             self_copy._is_shared = None
             self_copy._is_memmap = None
             for item in self_copy._dict_meta.values():
+                print(item)
                 item._device = dest
             if self._safe:
                 # sanity check
