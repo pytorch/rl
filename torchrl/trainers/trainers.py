@@ -420,7 +420,7 @@ class Trainer:
             #     for key, item in losses_detached.items():
             #         val = average_losses.get(key)
             #         average_losses.set(key, val * j / (j + 1) + item / (j + 1))
-            # del sub_batch, losses_td, losses_detached
+            del sub_batch, losses_td
 
         # if self.optim_steps_per_batch > 0:
         #     self._log(
