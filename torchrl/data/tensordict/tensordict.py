@@ -631,10 +631,7 @@ dtype=torch.float32)},
         """
         if make_unset:
             for k in self.keys():
-                print(k in self._dict_meta.keys())
-                value = self._get_meta(k)
-                print(k, value)
-                yield value
+                yield self._get_meta(k)
         else:
             return self._dict_meta.values()
 
@@ -2200,10 +2197,10 @@ class TensorDict(TensorDictBase):
             self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
             self_copy._is_shared = None
             self_copy._is_memmap = None
-            if self._safe:
-                # sanity check
-                self_copy._check_device()
-                self_copy._check_is_shared()
+            # if self._safe:
+            #     # sanity check
+            #     self_copy._check_device()
+            #     self_copy._check_is_shared()
             return self_copy
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
