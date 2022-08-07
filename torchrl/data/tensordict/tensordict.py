@@ -2194,7 +2194,7 @@ class TensorDict(TensorDictBase):
             self_copy = copy(self)
             self_copy._device = dest
             self_copy._tensordict = {
-                key: value.to(dest) for key, value in self_copy.items()
+                key: value.to(dest, **kwargs) for key, value in self_copy.items()
             }
             self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
             self_copy._is_shared = None
@@ -2797,7 +2797,7 @@ torch.Size([3, 2])
             # try:
             if self._device_safe() is not None and dest == self.device:
                 return self
-            td = self.to_tensordict().to(dest)
+            td = self.to_tensordict().to(dest, **kwargs)
             # must be device
             return td
 
@@ -3296,7 +3296,7 @@ class LazyStackedTensorDict(TensorDictBase):
             dest = torch.device(dest)
             if self._device_safe() is not None and dest == self.device:
                 return self
-            td = self.to_tensordict().to(dest)
+            td = self.to_tensordict().to(dest, **kwargs)
             return td
 
         elif isinstance(dest, torch.Size):
@@ -4190,7 +4190,7 @@ class _CustomOpTensorDict(TensorDictBase):
         elif isinstance(dest, (torch.device, str, int)):
             if self._device_safe() is not None and torch.device(dest) == self.device:
                 return self
-            td = self._source.to(dest)
+            td = self._source.to(dest, **kwargs)
             self_copy = copy(self)
             self_copy._source = td
             return self_copy
