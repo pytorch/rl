@@ -2191,11 +2191,14 @@ class TensorDict(TensorDictBase):
             if self._device_safe() is not None and dest == self.device:
                 return self
 
-            self_copy = TensorDict(
-                source={key: value.to(dest) for key, value in self.items()},
-                batch_size=self.batch_size,
-                # device=dest,
-            )
+            self_copy = copy(self)
+            self_copy._device = dest
+            self_copy._tensordict = {key: value.to(dest) for key, value in self_copy.items()}
+            self_copy._dict_meta = deepcopy(self._dict_meta)
+            self_copy._is_shared = None
+            self_copy._is_memmap = None
+            for item in self_copy._dict_meta.values():
+                item._device = dest
             if self._safe:
                 # sanity check
                 self_copy._check_device()
@@ -2792,7 +2795,7 @@ torch.Size([3, 2])
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
             # try:
-            if dest == self._device_safe():
+            if self._device_safe() is not None and dest == self.device:
                 return self
             td = self.to_tensordict().to(dest)
             # must be device
@@ -3291,7 +3294,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return dest(source=self, **kwargs)
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
-            if dest == self._device_safe():
+            if self._device_safe() is not None and dest == self.device:
                 return self
             td = self.to_tensordict().to(dest)
             return td
@@ -3829,7 +3832,7 @@ class SavedTensorDict(TensorDictBase):
         elif isinstance(dest, (torch.device, str, int)):
             # must be device
             dest = torch.device(dest)
-            if dest == self._device_safe():
+            if self._device_safe() is not None and dest == self.device:
                 return self
             self_copy = copy(self)
             self_copy._device = dest
