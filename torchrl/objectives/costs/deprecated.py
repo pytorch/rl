@@ -188,8 +188,6 @@ class REDQLoss_deprecated(LossModule):
 
         next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]
         obs_keys = [key for key in tensordict.keys() if key.startswith("obs")]
-        if "pixels" in tensordict.keys():
-            raise RuntimeError("not suited for pixel-based experiments")
         tensordict = tensordict.select(
             "reward", "done", *next_obs_keys, *obs_keys, "action"
         )
