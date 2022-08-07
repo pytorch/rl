@@ -467,10 +467,6 @@ class Trainer:
                         for key in sorted(self._pbar_str.keys())
                     ]
                 )
-                + f"mem_allocated: {torch.cuda.memory_allocated(0)}, "
-                  f"max_mem_allocated: {torch.cuda.max_memory_allocated(0)}, "
-                  f"reserved: {torch.cuda.memory_reserved(0)}, "
-                  f"max_reserved: {torch.cuda.max_memory_reserved(0)}"
             )
 
     def __repr__(self) -> str:
