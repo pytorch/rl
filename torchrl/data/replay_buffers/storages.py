@@ -110,7 +110,7 @@ class LazyTensorStorage(Storage):
             print("The storage is being created: ")
             for key, tensor in data.items():
                 if isinstance(tensor, TensorDictBase):
-                    out[key] = tensor.expand(self.size).clone().zero_()
+                    out[key] = tensor.expand(self.size).clone().to(self.device).zero_()
                 else:
                     out[key] = torch.empty(
                         self.size,

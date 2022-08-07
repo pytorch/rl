@@ -13,10 +13,10 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
+from torchrl.data.replay_buffers.storages import LazyTensorStorage
 
 __all__ = ["make_replay_buffer"]
 
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 
 
 class collate_fn:
@@ -24,7 +24,7 @@ class collate_fn:
         self.device = device
 
     def __call__(self, x):
-        return x
+        return x.to(self.device)
 
 
 def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer:
@@ -36,10 +36,9 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
             collate_fn=collate_fn(device),
             pin_memory=device != torch.device("cpu"),
             prefetch=cfg.buffer_prefetch,
-            storage=LazyMemmapStorage(
+            storage=LazyTensorStorage(
                 cfg.buffer_size,
                 scratch_dir=cfg.buffer_scratch_dir,
-                device=device,
             ),
         )
     else:
@@ -50,10 +49,9 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
             collate_fn=collate_fn(device),
             pin_memory=device != torch.device("cpu"),
             prefetch=cfg.buffer_prefetch,
-            storage=LazyMemmapStorage(
+            storage=LazyTensorStorage(
                 cfg.buffer_size,
                 scratch_dir=cfg.buffer_scratch_dir,
-                device=device,
             ),
         )
     return buffer
