@@ -399,7 +399,6 @@ class Trainer:
         return losses_td.detach().set("grad_norm", grad_norm)
 
     def optim_steps(self, batch: TensorDictBase) -> None:
-        # average_grad_norm = 0.0
         average_losses = None
 
         self._pre_optim_hook()
@@ -408,26 +407,26 @@ class Trainer:
             self._optim_count += 1
 
             sub_batch = self._process_optim_batch_hook(batch)
-            # losses_td = self.loss_module(sub_batch)
-            # self._post_loss_hook(sub_batch)
-            #
-            # losses_detached = self._optimizer_step(losses_td)
-            # self._post_optim_hook()
-            # self._post_optim_log(sub_batch)
-            #
-            # if average_losses is None:
-            #     average_losses: TensorDictBase = losses_detached
-            # else:
-            #     for key, item in losses_detached.items():
-            #         val = average_losses.get(key)
-            #         average_losses.set(key, val * j / (j + 1) + item / (j + 1))
-            # del sub_batch, losses_td, losses_detached
+            losses_td = self.loss_module(sub_batch)
+            self._post_loss_hook(sub_batch)
 
-        # if self.optim_steps_per_batch > 0:
-        #     self._log(
-        #         optim_steps=self._optim_count,
-        #         **average_losses,
-        #     )
+            losses_detached = self._optimizer_step(losses_td)
+            self._post_optim_hook()
+            self._post_optim_log(sub_batch)
+
+            if average_losses is None:
+                average_losses: TensorDictBase = losses_detached
+            else:
+                for key, item in losses_detached.items():
+                    val = average_losses.get(key)
+                    average_losses.set(key, val * j / (j + 1) + item / (j + 1))
+            del sub_batch, losses_td, losses_detached
+
+        if self.optim_steps_per_batch > 0:
+            self._log(
+                optim_steps=self._optim_count,
+                **average_losses,
+            )
 
     def _grad_clip(self) -> float:
         if self.clip_grad_norm:
