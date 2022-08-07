@@ -114,6 +114,7 @@ class TensorDictSequence(TensorDictModule):
     def __init__(
         self,
         *modules: TensorDictModule,
+        partial_tolerant: bool = False,
     ):
         in_keys = []
         out_keys = []
@@ -137,6 +138,7 @@ class TensorDictSequence(TensorDictModule):
             in_keys=in_keys,
             out_keys=out_keys,
         )
+        self.partial_tolerant = partial_tolerant
 
     @staticmethod
     def _find_functional_module(module: TensorDictModule) -> nn.Module:
@@ -208,9 +210,11 @@ class TensorDictSequence(TensorDictModule):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, 0, *(0,) * len(module.in_keys))
-                tensordict = module(
-                    tensordict, params=param, buffers=buffer, **kwargs_pruned
-                )
+                tensordict_keys = set(tensordict.keys())
+                if not self.partial_tolerant or all(key in tensordict_keys for key in module.in_keys):
+                    tensordict = module(
+                        tensordict, params=param, buffers=buffer, **kwargs_pruned
+                    )
 
         elif "params" in kwargs:
             param_splits = self._split_param(kwargs["params"], "params")
@@ -221,11 +225,15 @@ class TensorDictSequence(TensorDictModule):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
-                tensordict = module(tensordict, params=param, **kwargs_pruned)
+                tensordict_keys = set(tensordict.keys())
+                if not self.partial_tolerant or all(key in tensordict_keys for key in module.in_keys):
+                    tensordict = module(tensordict, params=param, **kwargs_pruned)
 
         elif not len(kwargs):
             for module in self.module:
-                tensordict = module(tensordict)
+                tensordict_keys = set(tensordict.keys())
+                if not self.partial_tolerant or all(key in tensordict_keys for key in module.in_keys):
+                    tensordict = module(tensordict)
         else:
             raise RuntimeError(
                 "TensorDictSequence does not support keyword arguments other than 'tensordict_out', 'params', 'buffers' and 'vmap'"
