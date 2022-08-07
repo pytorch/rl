@@ -404,6 +404,7 @@ class Trainer:
         self._pre_optim_hook()
 
         for j in range(self.optim_steps_per_batch):
+            torch.cuda.empty_cache()
             self._optim_count += 1
 
             sub_batch = self._process_optim_batch_hook(batch)
