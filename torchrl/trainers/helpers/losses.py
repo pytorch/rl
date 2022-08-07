@@ -30,6 +30,7 @@ from torchrl.objectives import (
 )
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.deprecated import REDQLoss_deprecated
+
 # from torchrl.objectives.costs.redq import REDQLoss
 
 from torchrl.objectives.costs.utils import _TargetNetUpdate
