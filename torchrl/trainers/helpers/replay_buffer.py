@@ -24,7 +24,7 @@ class collate_fn:
         self.device = device
 
     def __call__(self, x):
-        return x.to(self.device)
+        return x
 
 
 def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer:
