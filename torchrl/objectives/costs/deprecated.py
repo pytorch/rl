@@ -186,8 +186,8 @@ class REDQLoss_deprecated(LossModule):
     def _qvalue_loss(self, tensordict: TensorDictBase) -> Tensor:
         tensordict_save = tensordict
 
+        obs_keys = self.actor_network.in_keys
         next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]
-        obs_keys = [key for key in tensordict.keys() if key.startswith("obs")]
         tensordict = tensordict.select(
             "reward", "done", *next_obs_keys, *obs_keys, "action"
         )
