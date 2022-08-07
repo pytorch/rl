@@ -2197,12 +2197,9 @@ class TensorDict(TensorDictBase):
             self_copy = copy(self)
             self_copy._device = dest
             self_copy._tensordict = {key: value.to(dest) for key, value in self_copy.items()}
-            self_copy._dict_meta = deepcopy(self._dict_meta)
+            self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
             self_copy._is_shared = None
             self_copy._is_memmap = None
-            for item in self_copy._dict_meta.values():
-                print(item)
-                item._device = dest
             if self._safe:
                 # sanity check
                 self_copy._check_device()
