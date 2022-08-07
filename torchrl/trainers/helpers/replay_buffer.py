@@ -38,7 +38,7 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
             storage=LazyMemmapStorage(
                 cfg.buffer_size,
                 scratch_dir=cfg.buffer_scratch_dir,
-                # device=device,
+                device=device,
             ),
         )
     else:
@@ -52,7 +52,7 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
             storage=LazyMemmapStorage(
                 cfg.buffer_size,
                 scratch_dir=cfg.buffer_scratch_dir,
-                # device=device,
+                device=device,
             ),
         )
     return buffer
