@@ -30,9 +30,8 @@ from torchrl.objectives import (
 )
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.deprecated import REDQLoss_deprecated
-from torchrl.objectives.costs.redq import REDQLoss
-
 # from torchrl.objectives.costs.redq import REDQLoss
+
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 from torchrl.objectives.returns.advantages import GAE
 
@@ -112,7 +111,9 @@ def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
     return loss_module, target_net_updater
 
 
-def make_redq_loss(model, cfg) -> Tuple[REDQLoss_deprecated, Optional[_TargetNetUpdate]]:
+def make_redq_loss(
+    model, cfg
+) -> Tuple[REDQLoss_deprecated, Optional[_TargetNetUpdate]]:
     """Builds the REDQ loss module."""
     loss_kwargs = {}
     if hasattr(cfg, "distributional") and cfg.distributional:

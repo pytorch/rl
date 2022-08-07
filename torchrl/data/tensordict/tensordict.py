@@ -2193,7 +2193,9 @@ class TensorDict(TensorDictBase):
 
             self_copy = copy(self)
             self_copy._device = dest
-            self_copy._tensordict = {key: value.to(dest) for key, value in self_copy.items()}
+            self_copy._tensordict = {
+                key: value.to(dest) for key, value in self_copy.items()
+            }
             self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
             self_copy._is_shared = None
             self_copy._is_memmap = None
@@ -2258,9 +2260,6 @@ class TensorDict(TensorDictBase):
 
     def keys(self) -> KeysView:
         return self._tensordict.keys()
-
-    def __del__(self):
-        del self._tensordict
 
 
 def implements_for_td(torch_function: Callable) -> Callable:

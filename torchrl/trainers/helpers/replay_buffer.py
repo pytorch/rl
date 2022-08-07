@@ -18,7 +18,6 @@ from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 __all__ = ["make_replay_buffer"]
 
 
-
 class collate_fn:
     def __init__(self, device):
         self.device = device
