@@ -2261,6 +2261,11 @@ class TensorDict(TensorDictBase):
     def keys(self) -> KeysView:
         return self._tensordict.keys()
 
+    def __del__(self):
+        for key in list(self.keys()):
+            del self._tensordict[key]
+        del self._tensordict
+
 
 def implements_for_td(torch_function: Callable) -> Callable:
     """Register a torch function override for ScalarTensor"""
