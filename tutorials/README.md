@@ -9,5 +9,8 @@ is about and what it can do.
 
 To understand how to use `TensorDict` with pytorch modules, make sure to check out the [TensorDictModule tutorial](tensordictmodule.ipynb).
 
-Checkout the [environment tutorial](envs.ipynb) for a deep dive in the envs
+Check out the [environment tutorial](envs.ipynb) for a deep dive in the envs
 functionalities.
+
+Finally, the [DDPG tutorial](coding_ddpg.ipynb) will guide you through the steps to code 
+your first RL algorithm in TorchRL.
