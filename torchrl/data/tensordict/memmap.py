@@ -22,9 +22,8 @@ from torchrl.data.utils import (
 )
 
 MEMMAP_HANDLED_FN = {}
-SUBMEMMAP_HANDLED_FN = {}
 
-__all__ = ["MemmapTensor", "set_transfer_ownership", "SubMemmapTensor"]
+__all__ = ["MemmapTensor", "set_transfer_ownership"]
 
 NoneType = type(None)
 EllipsisType = type(Ellipsis)
@@ -36,17 +35,6 @@ def implements_for_memmap(torch_function) -> Callable:
     @functools.wraps(torch_function)
     def decorator(func):
         MEMMAP_HANDLED_FN[torch_function] = func
-        return func
-
-    return decorator
-
-
-def implements_for_submemmap(torch_function) -> Callable:
-    """Register a torch function override for ScalarTensor"""
-
-    @functools.wraps(torch_function)
-    def decorator(func):
-        SUBMEMMAP_HANDLED_FN[torch_function] = func
         return func
 
     return decorator
@@ -578,198 +566,15 @@ class MemmapTensor(object):
         return tuple(self[_idx] for _idx in idx)
 
 
-class SubMemmapTensor:
-    def __init__(
-        self,
-        source: Union[MemmapTensor, SubMemmapTensor],
-        idx: Union[NoneType, INDEX_TYPING],
-    ):
-        self.source = source
-        self.idx = idx
-
-    @property
-    def memmap_array(self):
-        return self.source.memmap_array[self.idx]
-
-    def _load_item(self, idx):
-        print(self, self.source, self.idx, idx)
-        t = self.source._load_item(self.idx)
-        print(t.shape)
-        return t[idx]
-
-    def __len__(self):
-        t = self._tensor
-        if t.ndimension():
-            return len(t)
-        else:
-            return 1
-
-    def __getattr__(self, item):
-        if item not in self.__dir__():
-            if item[-1] == "_" and item[-2] != "_":
-                return self._inplace_constructor(item)
-            elif item[-2:] == "__":
-                print(item)
-                return getattr(self._tensor, item)
-
-        tensor = self._tensor
-        return getattr(tensor, item)
-
-    def to(self, device_or_dtype: Union[DEVICE_TYPING, torch.dtype]):
-        if (
-            isinstance(device_or_dtype, torch.dtype)
-            and device_or_dtype != self.source.dtype
-        ):
-            return self.source._load_item(idx=self.idx).to(device_or_dtype)
-        elif (
-            isinstance(device_or_dtype, (int, str, torch.device))
-            and torch.device(device_or_dtype) != self.source.device
-        ):
-            return self.source._load_item(idx=self.idx).to(device_or_dtype)
-        else:
-            return self
-
-    def __sub__(self, other):
-        return self._tensor - other
-
-    def __add__(self, other):
-        return self._tensor + other
-
-    def __mul__(self, other):
-        return self._tensor * other
-
-    def __div__(self, other):
-        return self._tensor / other
-
-    def __rdiv__(self, other):
-        return other / self._tensor
-
-    def __matmul__(self, other):
-        return self._tensor @ other
-
-    def __eq__(self, other):
-        return self.source._load_item(self.idx) == other
-
-    def __ne__(self, other):
-        return self.source._load_item(self.idx) != other
-
-    def __neg__(self):
-        return self.neg_()
-
-    def neg_(self):
-        self.source.memmap_array[self.idx] = -self.source.memmap_array[self.idx]
-        return self
-
-    def zero_(self):
-        self.source.memmap_array[self.idx] = 0
-        return self
-
-    def __iadd__(self, other):
-        return self.add_(other)
-
-    def add_(self, other):
-        self.source.memmap_array[self.idx] += to_numpy(other)
-        return self
-
-    def __idiv__(self, other):
-        return self.div_(other)
-
-    def div_(self, other):
-        self.source.memmap_array[self.idx] /= to_numpy(other)
-        return self
-
-    def __isub__(self, other):
-        return self.sub_(other)
-
-    def sub_(self, other):
-        self.source.memmap_array[self.idx] -= to_numpy(other)
-        return self
-
-    def __imul__(self, other):
-        return self.mul_(other)
-
-    def mul_(self, other):
-        self.source.memmap_array[self.idx] *= to_numpy(other)
-        return self
-
-    def copy_(self, other):
-        self.source.memmap_array[self.idx] = to_numpy(other)
-        return self
-
-    def fill_(self, other):
-        self.source.memmap_array[self.idx] = other
-        return self
-
-    def _inplace_constructor(self, method: str):
-        def new_method(*args):
-            if len(args):
-                out = to_numpy(
-                    getattr(self.source._load_item(idx=self.idx), method[:-1])(*args)
-                )
-                self.source.memmap_array[self.idx] = to_numpy(out)
-            else:
-                self.source.memmap_array[self.idx] = to_numpy(
-                    getattr(self.source._load_item(idx=self.idx), method[:-1])()
-                )
-            return self
-
-        return new_method
-
-    def __getitem__(self, item: INDEX_TYPING) -> torch.Tensor:
-        # return self._load_item(memmap_array=self.memmap_array[item])#[item]
-        # return self._load_item()[item]
-        if isinstance(item, (NoneType, int, np.integer, slice, EllipsisType)):
-            item = (item,)
-        if isinstance(item, tuple) and all(
-            isinstance(_item, (NoneType, int, np.integer, slice, EllipsisType))
-            for _item in item
-        ):
-            return SubMemmapTensor(self, item)
-        return self._tensor[item]
-
-    def __getstate__(self):
-        return {"source": self.source, "idx": self.idx}
-
-    def __setstate__(self, state):
-        self.source = state["source"]
-        self.idx = state["idx"]
-
-    @property
-    def _tensor_from_numpy(self):
-        return self.source._tensor_from_numpy[self.idx]
-
-    @property
-    def _tensor(self):
-        return self.source._load_item(idx=self.idx)
-
-    @classmethod
-    def __torch_function__(
-        cls,
-        func: Callable,
-        types,
-        args: Tuple = (),
-        kwargs: Optional[dict] = None,
-    ):
-        if kwargs is None:
-            kwargs = {}
-        if func not in SUBMEMMAP_HANDLED_FN:
-            args = tuple(a._tensor if hasattr(a, "_tensor") else a for a in args)
-            ret = func(*args, **kwargs)
-            return ret
-
-        return SUBMEMMAP_HANDLED_FN[func](*args, **kwargs)
-
-
 def _stack(
     list_of_memmap: List[MemmapTensor],
     dim: int,
     out: Optional[Union[torch.Tensor]] = None,
 ) -> torch.Tensor:
     list_of_tensors = [
-        a._tensor if isinstance(a, (MemmapTensor, SubMemmapTensor)) else a
-        for a in list_of_memmap
+        a._tensor if isinstance(a, (MemmapTensor,)) else a for a in list_of_memmap
     ]
-    if isinstance(out, (MemmapTensor, SubMemmapTensor)):
+    if isinstance(out, (MemmapTensor,)):
         list_of_tensors = [tensor.cpu() for tensor in list_of_tensors]
         return torch.stack(list_of_tensors, dim, out=out._tensor_from_numpy)
     else:
@@ -777,7 +582,6 @@ def _stack(
 
 
 implements_for_memmap(torch.stack)(_stack)
-implements_for_submemmap(torch.stack)(_stack)
 
 
 def _unbind(memmap: MemmapTensor, dim: int) -> Tuple[torch.Tensor, ...]:
@@ -785,7 +589,6 @@ def _unbind(memmap: MemmapTensor, dim: int) -> Tuple[torch.Tensor, ...]:
 
 
 implements_for_memmap(torch.unbind)(_unbind)
-implements_for_submemmap(torch.unbind)(_unbind)
 
 
 def _tensor(memmap: MemmapTensor) -> torch.Tensor:
@@ -793,7 +596,6 @@ def _tensor(memmap: MemmapTensor) -> torch.Tensor:
 
 
 implements_for_memmap(torch.tensor)(_tensor)
-implements_for_submemmap(torch.tensor)(_tensor)
 
 
 def _cat(
@@ -802,8 +604,7 @@ def _cat(
     out: Optional[Union[torch.Tensor, MemmapTensor]] = None,
 ) -> torch.Tensor:
     list_of_tensors = [
-        a._tensor if isinstance(a, (MemmapTensor, SubMemmapTensor)) else a
-        for a in list_of_memmap
+        a._tensor if isinstance(a, (MemmapTensor,)) else a for a in list_of_memmap
     ]
     print("mm: ", [t.shape for t in list_of_memmap])
     print("tensors: ", [t.shape for t in list_of_tensors])
@@ -812,7 +613,6 @@ def _cat(
 
 
 implements_for_memmap(torch.cat)(_cat)
-implements_for_submemmap(torch.cat)(_cat)
 
 
 def set_transfer_ownership(memmap: MemmapTensor, value: bool = True) -> None:
