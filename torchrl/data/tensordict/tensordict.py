@@ -2194,7 +2194,7 @@ class TensorDict(TensorDictBase):
             self_copy = TensorDict(
                 source={key: value.to(dest) for key, value in self.items()},
                 batch_size=self.batch_size,
-                device=dest,
+                # device=dest,
             )
             if self._safe:
                 # sanity check
@@ -2791,15 +2791,13 @@ torch.Size([3, 2])
             )
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
-            try:
-                if dest == self.device:
-                    return self
-            except RuntimeError:
-                # if device has not been set, pass
-                pass
-            td = self.to(TensorDict)
+            # try:
+            if dest == self._device_safe():
+                return self
+            td = self.to_tensordict().to(dest)
             # must be device
-            return td.to(dest, **kwargs)
+            return td
+
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
             return self
@@ -3293,13 +3291,11 @@ class LazyStackedTensorDict(TensorDictBase):
             return dest(source=self, **kwargs)
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
-            try:
-                if dest == self.device:
-                    return self
-            except RuntimeError:
-                pass
-            tds = [td.to(dest) for td in self.tensordicts]
-            return LazyStackedTensorDict(*tds, stack_dim=self.stack_dim)
+            if dest == self._device_safe():
+                return self
+            td = self.to_tensordict().to(dest)
+            return td
+
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
         else:
@@ -3833,11 +3829,8 @@ class SavedTensorDict(TensorDictBase):
         elif isinstance(dest, (torch.device, str, int)):
             # must be device
             dest = torch.device(dest)
-            try:
-                if dest == self.device:
-                    return self
-            except RuntimeError:
-                pass
+            if dest == self._device_safe():
+                return self
             self_copy = copy(self)
             self_copy._device = dest
             self_copy._dict_meta = deepcopy(self._dict_meta)
