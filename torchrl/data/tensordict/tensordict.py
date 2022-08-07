@@ -2198,10 +2198,6 @@ class TensorDict(TensorDictBase):
             self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
             self_copy._is_shared = None
             self_copy._is_memmap = None
-            # if self._safe:
-            #     # sanity check
-            #     self_copy._check_device()
-            #     self_copy._check_is_shared()
             return self_copy
         elif isinstance(dest, torch.Size):
             self.batch_size = dest

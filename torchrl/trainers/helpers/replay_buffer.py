@@ -18,21 +18,13 @@ from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 __all__ = ["make_replay_buffer"]
 
 
-class collate_fn:
-    def __init__(self, device):
-        self.device = device
-
-    def __call__(self, x):
-        return x
-
-
 def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer:
     """Builds a replay buffer using the config built from ReplayArgsConfig."""
     device = torch.device(device)
     if not cfg.prb:
         buffer = TensorDictReplayBuffer(
             cfg.buffer_size,
-            collate_fn=collate_fn(device),
+            collate_fn=lambda x: x,
             pin_memory=device != torch.device("cpu"),
             prefetch=cfg.buffer_prefetch,
             storage=LazyMemmapStorage(
@@ -46,7 +38,7 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
             cfg.buffer_size,
             alpha=0.7,
             beta=0.5,
-            collate_fn=collate_fn(device),
+            collate_fn=lambda x: x,
             pin_memory=device != torch.device("cpu"),
             prefetch=cfg.buffer_prefetch,
             storage=LazyMemmapStorage(
