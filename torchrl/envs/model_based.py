@@ -77,7 +77,6 @@ class ModelBasedEnv(EnvBase):
 
         self.inference_world_model = world_model
         self.inference_reward_model = reward_model
-        self.set_optimizer()
 
     def forward(
         self,
