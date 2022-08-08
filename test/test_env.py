@@ -136,6 +136,11 @@ except FileNotFoundError:
 def test_dreamer():
     env = DreamerEnv()
     model_loss = DreamerModelLoss()
+    opt = torch.optim.Adam(
+            env.parameters(),
+            lr=1e-3,
+            eps=1e-4,
+    )
     td = TensorDict(
         {
             "observation": torch.randn(2, 10, 3, 64, 64),
@@ -147,9 +152,16 @@ def test_dreamer():
         batch_size=[2],
     )
     td = env.train_step(td)
+    loss = model_loss(td)
+
+    opt.zero_grad()
+    loss.backward()
+    opt.step()
 
     assert td.get("reco_observation").shape == (2, 10, 3, 64, 64)
     assert td.get("predicted_reward").shape == (2, 10, 1)
+
+    env.eval()
 
     td_test = TensorDict(
         {
@@ -161,7 +173,8 @@ def test_dreamer():
     )
     td_test = env.step(td_test)
 
-    td_test
+    assert "reco_observation" not in td_test.keys()
+    assert td_test.get("predicted_reward").shape == (2, 1, 1)
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")

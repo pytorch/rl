@@ -4,9 +4,7 @@ import torch
 import torch.distributions as d
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions.kl import kl_divergence
 
-from torchrl.data import TensorDict
 from torchrl.modules.tensordict_module import TensorDictModule, TensorDictSequence
 from ..model_based import ModelBasedEnv
 
@@ -50,37 +48,6 @@ class DreamerEnv(ModelBasedEnv):
             "prior_states",
             "beliefs",
         ]
-
-    def _set_optimizer(self) -> torch.optim.Optimizer:
-        return torch.optim.Adam(
-            list(self.word_model.parameters()) + list(self.reward_model.parameters()),
-            lr=1e-3,
-            eps=1e-4,
-        )
-
-    def loss(self, tensordict: TensorDict) -> torch.Tensor:
-        B, T, D = tensordict["prior_means"].shape
-        flat_prior_means = tensordict["prior_means"].reshape(B * T, D)
-        flat_prior_stds = tensordict["prior_stds"].reshape(B * T, D)
-        flat_prior = d.Normal(flat_prior_means, flat_prior_stds)
-        flat_posterior_means = tensordict["posterior_means"].reshape(B * T, D)
-        flat_posterior_stds = tensordict["posterior_stds"].reshape(B * T, D)
-        flat_posterior = d.Normal(flat_posterior_means, flat_posterior_stds)
-        kl_loss = kl_divergence(flat_posterior, flat_prior).mean()
-        reco_loss = (
-            0.5
-            * F.mse_loss(
-                tensordict["observation"],
-                tensordict["reco_observation"],
-                reduction="none",
-            )
-            .mean(dim=[0, 1])
-            .sum()
-        )
-        reward_loss = 0.5 * F.mse_loss(
-            tensordict["reward"], tensordict["predicted_reward"]
-        )
-        return kl_loss + reco_loss + reward_loss
 
 
 class DreamerModel(TensorDictSequence):
