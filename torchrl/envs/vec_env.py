@@ -187,7 +187,7 @@ class _BatchedEnv(_EnvClass):
         super().__init__(device=None)
         self.is_closed = True
 
-        self._single_task = callable(create_env_fn) or len(set(create_env_fn)) == 1
+        self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
         if callable(create_env_fn):
             create_env_fn = [create_env_fn for _ in range(num_workers)]
         else:
@@ -197,7 +197,7 @@ class _BatchedEnv(_EnvClass):
                     f"got {len(create_env_fn)} and {num_workers}"
                 )
             if (
-                share_individual_td is False
+                share_individual_td is False and not self._single_task
             ):  # then it has been explicitly set by the user
                 raise ValueError(
                     "share_individual_td must be set to None or True when using multi-task batched environments"
