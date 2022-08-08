@@ -15,7 +15,7 @@ import torch
 #     R = R * opt.gamma + reward
 #     critic_loss = critic_loss + (R - value) ** 2 / 2
 #     entropy_loss = entropy_loss + entropy
-from torch import Tensor
+from torch import Tensor, nn
 
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import step_tensordict
@@ -32,7 +32,7 @@ __all__ = ["GAE", "TDLambdaEstimate", "TDEstimate"]
 from ..costs.utils import hold_out_net
 
 
-class TDEstimate:
+class TDEstimate(nn.Module):
     """Temporal Difference estimate of advantage function.
 
     Args:
@@ -54,7 +54,7 @@ class TDEstimate:
         gradient_mode: bool = False,
         value_key: str = "state_value",
     ):
-        self.gamma = gamma
+        self.register_buffer("gamma",  torch.tensor(gamma))
         self.value_network = value_network
         self.is_functional = value_network.is_functional
 
@@ -62,7 +62,7 @@ class TDEstimate:
         self.gradient_mode = gradient_mode
         self.value_key = value_key
 
-    def __call__(
+    def forward(
         self,
         tensordict: TensorDictBase,
         *unused_args,
@@ -133,7 +133,7 @@ class TDEstimate:
         return tensordict
 
 
-class TDLambdaEstimate:
+class TDLambdaEstimate(nn.Module):
     """TD-Lambda estimate of advantage function.
 
     Args:
@@ -160,8 +160,8 @@ class TDLambdaEstimate:
         value_key: str = "state_value",
         vectorized: bool = True,
     ):
-        self.gamma = gamma
-        self.lmbda = lmbda
+        self.register_buffer("gamma",  torch.tensor(gamma))
+        self.register_buffer("lmbda",  torch.tensor(lmbda))
         self.value_network = value_network
         self.is_functional = value_network.is_functional
         self.vectorized = vectorized
@@ -170,7 +170,7 @@ class TDLambdaEstimate:
         self.gradient_mode = gradient_mode
         self.value_key = value_key
 
-    def __call__(
+    def forward(
         self,
         tensordict: TensorDictBase,
         *unused_args,
@@ -251,7 +251,7 @@ class TDLambdaEstimate:
         return tensordict
 
 
-class GAE:
+class GAE(nn.Module):
     """
     A class wrapper around the generalized advantage estimate functional.
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
@@ -274,15 +274,15 @@ class GAE:
         average_rewards: bool = False,
         gradient_mode: bool = False,
     ):
-        self.gamma = gamma
-        self.lmbda = lmbda
+        self.register_buffer("gamma",  torch.tensor(gamma))
+        self.register_buffer("lmbda",  torch.tensor(lmbda))
         self.value_network = value_network
         self.is_functional = value_network.is_functional
 
         self.average_rewards = average_rewards
         self.gradient_mode = gradient_mode
 
-    def __call__(
+    def forward(
         self,
         tensordict: TensorDictBase,
         *unused_args,

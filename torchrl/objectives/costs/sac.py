@@ -118,7 +118,7 @@ class SACLoss(LossModule):
             + list(value_network.parameters()),
         )
 
-        self.gamma = gamma
+        self.register_buffer("gamma",  torch.tensor(gamma))
         self.priority_key = priotity_key
         self.loss_function = loss_function
         try:
