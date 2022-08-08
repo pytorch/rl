@@ -115,7 +115,9 @@ class _BatchedEnv(_EnvClass):
     Args:
         num_workers: number of workers (i.e. env instances) to be deployed simultaneously;
         create_env_fn (callable or list of callables): function (or list of functions) to be used for the environment
-            creation;
+            creation. If a single task is used, a callable should be used and not a list of identical callables:
+            if a list of callable is provided, the environment will be executed as if multiple, diverse tasks were
+            needed, which comes with a slight compute overhead;
         create_env_kwargs (dict or list of dicts, optional): kwargs to be used with the environments being created;
         env_input_keys (list of str, optional): list of keys that are to be considered policy-output. If the policy has it,
             the attribute policy.out_keys can be used.
@@ -134,9 +136,9 @@ class _BatchedEnv(_EnvClass):
             replay buffer) and/or limit the amount of data passed from one process to the other;
         excluded_keys (list of str, optional): list of keys to be excluded from the returned tensordicts.
             See selected_keys for more details;
-        share_individual_td (bool): if True, a different tensordict is created for every process/worker and a lazy
+        share_individual_td (bool, optional): if True, a different tensordict is created for every process/worker and a lazy
             stack is returned.
-            default = False;
+            default = None (False if single task);
         shared_memory (bool): whether or not the returned tensordict will be placed in shared memory;
         memmap (bool): whether or not the returned tensordict will be placed in memory map.
         policy_proof (callable, optional): if provided, it'll be used to get the list of

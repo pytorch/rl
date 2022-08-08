@@ -3338,7 +3338,7 @@ class LazyStackedTensorDict(TensorDictBase):
             valid_keys = valid_keys.intersection(td.keys())
         self._valid_keys = sorted(list(valid_keys))
 
-    def select(self, *keys: str, inplace: bool = False) -> TensorDictBase:
+    def select(self, *keys: str, inplace: bool = False) -> LazyStackedTensorDict:
         # the following implementation keeps the hidden keys in the tensordicts
         excluded_keys = set(self.valid_keys) - set(keys)
         tensordicts = [
