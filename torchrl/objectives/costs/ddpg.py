@@ -63,7 +63,7 @@ class DDPGLoss(LossModule):
 
         self.actor_in_keys = actor_network.in_keys
 
-        self.register_buffer("gamma",  torch.tensor(gamma))
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_funtion = loss_function
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:

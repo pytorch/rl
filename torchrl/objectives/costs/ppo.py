@@ -77,9 +77,9 @@ class PPOLoss(LossModule):
         self.advantage_diff_key = advantage_diff_key
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_coef
-        self.register_buffer("entropy_coef",  torch.tensor(entropy_coef))
-        self.register_buffer("critic_coef",  torch.tensor(critic_coef))
-        self.register_buffer("gamma",  torch.tensor(gamma))
+        self.register_buffer("entropy_coef", torch.tensor(entropy_coef))
+        self.register_buffer("critic_coef", torch.tensor(critic_coef))
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_critic_type = loss_critic_type
         self.advantage_module = advantage_module
 
@@ -221,7 +221,7 @@ class ClipPPOLoss(PPOLoss):
             loss_critic_type=loss_critic_type,
             **kwargs,
         )
-        self.register_buffer("clip_epsilon",  torch.tensor(clip_epsilon))
+        self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
 
     @property
     def _clip_bounds(self):
@@ -340,7 +340,7 @@ class KLPENPPOLoss(PPOLoss):
 
         self.dtarg = dtarg
         self._beta_init = beta
-        self.register_buffer("beta",  torch.tensor(beta))
+        self.register_buffer("beta", torch.tensor(beta))
 
         if increment < 1.0:
             raise ValueError(
