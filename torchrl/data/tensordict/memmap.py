@@ -480,11 +480,16 @@ class MemmapTensor(object):
             f"dtype={self.dtype})"
         )
 
-    def __getitem__(self, item: INDEX_TYPING) -> torch.Tensor:
+    def __getitem__(self, item: INDEX_TYPING) -> Union[torch.Tensor, SubMemmapTensor]:
         # return self._load_item(memmap_array=self.memmap_array[item])#[item]
         # return self._load_item()[item]
         if isinstance(item, (NoneType, EllipsisType, int, np.integer, slice)):
             item = (item,)
+        if isinstance(item, tuple) and all(
+            isinstance(_item, (NoneType, EllipsisType, int, np.integer, slice))
+            for _item in item
+        ):
+            return SubMemmapTensor(self, item)
         return self._load_item(idx=item)
 
     def __setitem__(self, idx: INDEX_TYPING, value: torch.Tensor):
