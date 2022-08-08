@@ -115,7 +115,8 @@ class _BatchedEnv(_EnvClass):
     Args:
         num_workers: number of workers (i.e. env instances) to be deployed simultaneously;
         create_env_fn (callable or list of callables): function (or list of functions) to be used for the environment
-            creation. If a single task is used, a callable should be used and not a list of identical callables:
+            creation.
+            If a single task is used, a callable should be used and not a list of identical callables:
             if a list of callable is provided, the environment will be executed as if multiple, diverse tasks were
             needed, which comes with a slight compute overhead;
         create_env_kwargs (dict or list of dicts, optional): kwargs to be used with the environments being created;
@@ -186,16 +187,15 @@ class _BatchedEnv(_EnvClass):
         super().__init__(device=None)
         self.is_closed = True
 
+        self._single_task = callable(create_env_fn) or len(set(create_env_fn)) == 1
         if callable(create_env_fn):
             create_env_fn = [create_env_fn for _ in range(num_workers)]
-            self._single_task = True
         else:
             if len(create_env_fn) != num_workers:
                 raise RuntimeError(
                     f"num_workers and len(create_env_fn) mismatch, "
                     f"got {len(create_env_fn)} and {num_workers}"
                 )
-            self._single_task = False
             if (
                 share_individual_td is False
             ):  # then it has been explicitly set by the user
