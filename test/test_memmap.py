@@ -137,10 +137,10 @@ def test_memmap_ownership_2pass(value):
             assert m1._has_ownership + m2._has_ownership + m3._has_ownership == 1
 
 
-def test_memmap_clone():
+def test_memmap_new():
     t = torch.tensor([1])
     m1 = MemmapTensor(t)
-    m2 = m1.clone()
+    m2 = MemmapTensor(m1)
     assert isinstance(m2, MemmapTensor)
     assert m2.filename != m1.filename
     assert m2.filename == m2.file.name
