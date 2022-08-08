@@ -92,12 +92,6 @@ class ModelBasedEnv(EnvBase):
         self.train()
         # Extract latent states
         tensordict = self(tensordict)
-        # Compute loss
-        loss = self.loss(tensordict)
-        # Backpropagate
-        self.opt.zero_grad()
-        loss.backward()
-        self.opt.step()
         return tensordict
 
     def _step(
@@ -110,17 +104,7 @@ class ModelBasedEnv(EnvBase):
         return tensordict
 
     def step(self, tensordict: TensorDict) -> TensorDict:
-        self.eval()
         return self._step(tensordict)
-
-    def _set_optimizer(self) -> torch.optim.Optimizer:
-        raise NotImplementedError
-
-    def set_optimizer(self) -> None:
-        self.opt = self._set_optimizer()
-
-    def loss(self, tensordict: TensorDict) -> torch.Tensor:
-        raise NotImplementedError
 
     def to(self, device: DEVICE_TYPING) -> ModelBasedEnv:
         super().to(device)
