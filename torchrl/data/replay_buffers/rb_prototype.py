@@ -1,5 +1,6 @@
 import collections
 from concurrent.futures import ThreadPoolExecutor
+import threading
 from typing import Any, Callable, Optional, Sequence, Union, Tuple
 
 import torch
@@ -36,16 +37,26 @@ class ReplayBuffer:
         if self._prefetch_cap:
             self._prefetch_executor = ThreadPoolExecutor(max_workers=self._prefetch_cap)
 
+        self._replay_lock = threading.RLock()
+        self._futures_lock = threading.RLock()
+
     def __len__(self) -> int:
         return len(self._storage)
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(storage={self._storage}, sampler={self._sampler}, writer={self._writer})"
+        return (
+            f"{type(self).__name__}("
+            f"storage={self._storage}, "
+            f"sampler={self._sampler}, "
+            f"writer={self._writer}"
+            ")"
+        )
 
     @pin_memory_output
     def __getitem__(self, index: Union[int, torch.Tensor]) -> Any:
         index = to_numpy(index)
-        data = self._storage[index]
+        with self._replay_lock:
+            data = self._storage[index]
 
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
@@ -53,13 +64,15 @@ class ReplayBuffer:
         return data
 
     def add(self, data: Any) -> int:
-        index = self._writer.add(data)
-        self._sampler.add(index)
+        with self._replay_lock:
+            index = self._writer.add(data)
+            self._sampler.add(index)
         return index
 
     def extend(self, data: Sequence) -> torch.Tensor:
-        index = self._writer.extend(data)
-        self._sampler.extend(index)
+        with self._replay_lock:
+            index = self._writer.extend(data)
+            self._sampler.extend(index)
         return index
 
     def update_priority(
@@ -67,12 +80,14 @@ class ReplayBuffer:
         index: Union[int, torch.Tensor],
         priority: Union[int, torch.Tensor],
     ) -> None:
-        self._sampler.update_priority(index, priority)
+        with self._replay_lock:
+            self._sampler.update_priority(index, priority)
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> Tuple[Any, dict]:
-        index, info = self._sampler.sample(self._storage, batch_size)
-        data = self._storage[index]
+        with self._replay_lock:
+            index, info = self._sampler.sample(self._storage, batch_size)
+            data = self._storage[index]
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         return data, info
@@ -84,11 +99,13 @@ class ReplayBuffer:
         if len(self._prefetch_fut) == 0:
             ret = self._sample(batch_size)
         else:
-            ret = self._prefetch_queue.popleft().result()
+            with self._futures_lock:
+                ret = self._prefetch_queue.popleft().result()
 
-        while len(self._prefetch_queue) < self._prefetch_cap:
-            fut = self._prefetch_executor.submit(self._sample, batch_size)
-            self._prefetch_queue.append(fut)
+        with self._futures_lock:
+            while len(self._prefetch_queue) < self._prefetch_cap:
+                fut = self._prefetch_executor.submit(self._sample, batch_size)
+                self._prefetch_queue.append(fut)
 
         return ret
 
