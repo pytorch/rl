@@ -266,8 +266,8 @@ class TransformedEnv(EnvBase):
     Args:
         env (EnvBase): original environment to be transformed_in.
         transform (Transform, optional): transform to apply to the tensordict resulting
-            from `env.step(td)`. If none is provided, an empty Compose placeholder is
-            used.
+            from `env.step(td)`. If none is provided, an empty Compose
+            placeholder in an eval mode is used.
         cache_specs (bool, optional): if True, the specs will be cached once
             and for all after the first call (i.e. the specs will be
             transformed_in only once). If the transform changes during
@@ -300,6 +300,7 @@ class TransformedEnv(EnvBase):
             transform.set_parent(self)
         else:
             transform = transform.to(device)
+        transform.eval()
         self.transform = transform
 
         self._last_obs = None
@@ -437,7 +438,7 @@ class TransformedEnv(EnvBase):
     def insert_transform(self, index: int, transform: Transform) -> None:
         if not isinstance(transform, Transform):
             raise ValueError(
-                "TransformedEnv.append_transform expected a transform but received an object of "
+                "TransformedEnv.insert_transform expected a transform but received an object of "
                 f"type {type(transform)} instead."
             )
         transform = transform.to(self.device)
@@ -601,6 +602,7 @@ class Compose(Transform):
                 "Compose.append expected a transform but received an object of "
                 f"type {type(transform)} instead."
             )
+        transform.eval()
         self.transforms.append(transform)
         transform.set_parent(self)
 
@@ -619,6 +621,7 @@ class Compose(Transform):
         self.empty_cache()
         if index < 0:
             index = index + len(self.transforms)
+        transform.eval()
         self.transforms.insert(index, transform)
         transform.set_parent(self)
 
@@ -1668,6 +1671,9 @@ class VecNorm(Transform):
     the normalization layer is queried it will update the values for all
     processes that share the same reference.
 
+    To use VecNorm at inference time and avoid updating the values with the new
+    observations, one should substitute this layer by `vecnorm.to_observation_norm()`.
+
     Args:
         keys_in (iterable of str, optional): keys to be updated.
             default: ["next_observation", "reward"]
@@ -1770,31 +1776,51 @@ class VecNorm(Transform):
         _ssq = self._td.get(key + "_ssq")
         _count = self._td.get(key + "_count")
 
-        if self.training:
-            _sum = self._td.get(key + "_sum")
-            value_sum = _sum_left(value, _sum)
-            _sum *= self.decay
-            _sum += value_sum
-            self._td.set_(key + "_sum", _sum, no_check=True)
+        _sum = self._td.get(key + "_sum")
+        value_sum = _sum_left(value, _sum)
+        _sum *= self.decay
+        _sum += value_sum
+        self._td.set_(key + "_sum", _sum, no_check=True)
 
-            _ssq = self._td.get(key + "_ssq")
-            value_ssq = _sum_left(value.pow(2), _ssq)
-            _ssq *= self.decay
-            _ssq += value_ssq
-            self._td.set_(key + "_ssq", _ssq, no_check=True)
+        _ssq = self._td.get(key + "_ssq")
+        value_ssq = _sum_left(value.pow(2), _ssq)
+        _ssq *= self.decay
+        _ssq += value_ssq
+        self._td.set_(key + "_ssq", _ssq, no_check=True)
 
-            _count = self._td.get(key + "_count")
-            _count *= self.decay
-            _count += N
-            self._td.set_(key + "_count", _count, no_check=True)
-        else:
-            _sum = self._td.get(key + "_sum")
-            _ssq = self._td.get(key + "_ssq")
-            _count = self._td.get(key + "_count")
+        _count = self._td.get(key + "_count")
+        _count *= self.decay
+        _count += N
+        self._td.set_(key + "_count", _count, no_check=True)
 
         mean = _sum / _count
         std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
         return (value - mean) / std.clamp_min(self.eps)
+
+    def to_observation_norm(self) -> Union[Compose, ObservationNorm]:
+        """Converts VecNorm into an ObservationNorm class that can be used
+        at inference time.
+
+        """
+        out = []
+        for key in self.keys_in:
+            _sum = self._td.get(key + "_sum")
+            _ssq = self._td.get(key + "_ssq")
+            _count = self._td.get(key + "_count")
+            mean = _sum / _count
+            std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
+
+            _out = ObservationNorm(
+                loc=mean,
+                scale=std,
+                standard_normal=True,
+                keys_in=self.keys_in,
+            )
+            if len(self.keys_in) == 1:
+                return _out
+            else:
+                out += ObservationNorm
+        return Compose(*out)
 
     @staticmethod
     def build_td_for_shared_vecnorm(

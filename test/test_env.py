@@ -431,7 +431,7 @@ class TestParallel:
             max_steps=10, auto_reset=False, tensordict=td0_serial
         ).contiguous()
         key = "pixels" if "pixels" in td_serial else "observation"
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
         )
 
@@ -443,7 +443,7 @@ class TestParallel:
         td_parallel = env_parallel.rollout(
             max_steps=10, auto_reset=False, tensordict=td0_parallel
         ).contiguous()
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             td_parallel[:, :-1].get("next_" + key), td_parallel[:, 1:].get(key)
         )
 
@@ -809,13 +809,13 @@ def test_seed():
     torch.manual_seed(0)
     rollout2 = env2.rollout(max_steps=30)
 
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(
         rollout1["observation"][1:], rollout1["next_observation"][:-1]
     )
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(
         rollout2["observation"][1:], rollout2["next_observation"][:-1]
     )
-    torch.testing.assert_allclose(rollout1["observation"], rollout2["observation"])
+    torch.testing.assert_close(rollout1["observation"], rollout2["observation"])
 
 
 @pytest.mark.parametrize("keep_other", [True, False])
