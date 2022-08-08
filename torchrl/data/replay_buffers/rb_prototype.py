@@ -16,12 +16,12 @@ from .writers import Writer, RoundRobinWriter
 class ReplayBuffer:
     def __init__(
         self,
-        storage: Storage = None,
-        sampler: Sampler = None,
-        writer: Writer = None,
-        collate_fn: Callable = None,
+        storage: Optional[Storage] = None,
+        sampler: Optional[Sampler] = None,
+        writer: Optional[Writer] = None,
+        collate_fn: Optional[Callable] = None,
         pin_memory: bool = False,
-        prefetch: int = None,
+        prefetch: Optional[int] = None,
     ) -> None:
         self._storage = storage or ListStorage(size=1_000)
         self._sampler = sampler or RandomSampler()
@@ -41,7 +41,8 @@ class ReplayBuffer:
         self._futures_lock = threading.RLock()
 
     def __len__(self) -> int:
-        return len(self._storage)
+        with self._replay_lock:
+            return len(self._storage)
 
     def __repr__(self) -> str:
         return (
@@ -111,6 +112,10 @@ class ReplayBuffer:
 
 
 class TensorDictReplayBuffer(ReplayBuffer):
+    """
+    TensorDict-specific wrapper around the ReplayBuffer class.
+    """
+
     def __init__(self, priority_key: str = "td_error", **kw) -> None:
         if not kw.get("collate_fn"):
 
