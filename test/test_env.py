@@ -48,6 +48,7 @@ from torchrl.modules import (
     Actor,
     MLP,
 )
+from torchrl.objectives.model_based.dreamer import DreamerModelLoss
 from torchrl.modules.tensordict_module.sequence import TensorDictSequence
 
 try:
@@ -134,6 +135,7 @@ except FileNotFoundError:
 
 def test_dreamer():
     env = DreamerEnv()
+    model_loss = DreamerModelLoss()
     td = TensorDict(
         {
             "observation": torch.randn(2, 10, 3, 64, 64),
