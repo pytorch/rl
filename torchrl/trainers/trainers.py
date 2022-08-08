@@ -32,7 +32,7 @@ from torchrl.data import (
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import expand_right, DEVICE_TYPING
-from torchrl.envs.common import EnvStateful
+from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule
@@ -59,6 +59,7 @@ __all__ = [
     "RewardNormalizer",
     "SelectKeys",
     "UpdateWeights",
+    "ClearCudaCache",
 ]
 
 TYPE_DESCR = {float: "4.4f", int: ""}
@@ -398,7 +399,6 @@ class Trainer:
         return losses_td.detach().set("grad_norm", grad_norm)
 
     def optim_steps(self, batch: TensorDictBase) -> None:
-        # average_grad_norm = 0.0
         average_losses = None
 
         self._pre_optim_hook()
@@ -407,13 +407,12 @@ class Trainer:
             self._optim_count += 1
 
             sub_batch = self._process_optim_batch_hook(batch)
-            sub_batch_device = sub_batch.to(self.loss_module.device)
-            losses_td = self.loss_module(sub_batch_device)
-            self._post_loss_hook(sub_batch_device)
+            losses_td = self.loss_module(sub_batch)
+            self._post_loss_hook(sub_batch)
 
             losses_detached = self._optimizer_step(losses_td)
             self._post_optim_hook()
-            self._post_optim_log(sub_batch_device)
+            self._post_optim_log(sub_batch)
 
             if average_losses is None:
                 average_losses: TensorDictBase = losses_detached
@@ -421,6 +420,7 @@ class Trainer:
                 for key, item in losses_detached.items():
                     val = average_losses.get(key)
                     average_losses.set(key, val * j / (j + 1) + item / (j + 1))
+            del sub_batch, losses_td, losses_detached
 
         if self.optim_steps_per_batch > 0:
             self._log(
@@ -567,12 +567,31 @@ class ReplayBufferTrainer:
 
     def sample(self, batch: TensorDictBase) -> TensorDictBase:
         sample = self.replay_buffer.sample(self.batch_size)
-        sample = sample.contiguous()
-        return sample.to(self.device)
+        return sample.to(self.device, non_blocking=True)
 
     def update_priority(self, batch: TensorDictBase) -> None:
         if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
             self.replay_buffer.update_priority(batch)
+
+
+class ClearCudaCache:
+    """Clears cuda cache at a given interval.
+
+    Examples:
+        >>> clear_cuda = ClearCudaCache(100)
+        >>> trainer.register_op("pre_optim_steps", clear_cuda)
+
+    """
+
+    def __init__(self, interval: int):
+        self.interval = interval
+        self.count = 0
+
+    def __call__(self, *args, **kwargs):
+        self.count += 1
+        if self.count % self.interval == 0:
+            print("clearing cuda cache")
+            torch.cuda.empty_cache()
 
 
 class LogReward:
@@ -833,7 +852,7 @@ class Recorder:
             the performance of the policy, it should be possible to turn off
             the explorative behaviour by calling the
             `set_exploration_mode('mode')` context manager.
-        recorder (EnvStateful): An environment instance to be used
+        recorder (EnvBase): An environment instance to be used
             for testing.
         exploration_mode (str, optional): exploration mode to use for the
             policy. By default, no exploration is used and the value used is
@@ -852,7 +871,7 @@ class Recorder:
         record_frames: int,
         frame_skip: int,
         policy_exploration: TensorDictModule,
-        recorder: EnvStateful,
+        recorder: EnvBase,
         exploration_mode: str = "mode",
         log_keys: Optional[List[str]] = None,
         out_keys: Optional[Dict[str, str]] = None,
@@ -870,7 +889,7 @@ class Recorder:
         if log_keys is None:
             log_keys = ["reward"]
         if out_keys is None:
-            out_keys = KeyDependentDefaultDict()
+            out_keys = KeyDependentDefaultDict(lambda x: x)
             out_keys["reward"] = "r_evaluation"
         self.log_keys = log_keys
         self.out_keys = out_keys

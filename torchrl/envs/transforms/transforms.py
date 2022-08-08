@@ -32,7 +32,7 @@ from torchrl.data.tensor_specs import (
     DEVICE_TYPING,
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
-from torchrl.envs.common import EnvBase, EnvStateful, make_tensordict
+from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import FiniteTensor
 from torchrl.envs.utils import step_tensordict
@@ -89,7 +89,7 @@ class Transform(nn.Module):
     constructor via the `keys` argument.
 
     Transforms are to be combined with their target environments with the
-    TransformedEnv class, which takes as arguments an `EnvStateful` instance
+    TransformedEnv class, which takes as arguments an `EnvBase` instance
     and a transform. If multiple transforms are to be used, they can be
     concatenated using the `Compose` class.
     A transform can be stateless or stateful (e.g. CatTransform). Because of
@@ -227,15 +227,15 @@ class Transform(nn.Module):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(keys={self.keys_in})"
 
-    def set_parent(self, parent: Union[Transform, EnvStateful]) -> None:
+    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
         self.__dict__["_parent"] = parent
 
     @property
-    def parent(self) -> EnvStateful:
+    def parent(self) -> EnvBase:
         if not hasattr(self, "_parent"):
             raise AttributeError("transform parent uninitialized")
         parent = self._parent
-        if not isinstance(parent, EnvStateful):
+        if not isinstance(parent, EnvBase):
             # if it's not an env, it should be a Compose transform
             if not isinstance(parent, Compose):
                 raise ValueError(
@@ -264,10 +264,10 @@ class TransformedEnv(EnvBase):
     A transformed_in environment.
 
     Args:
-        env (EnvStateful): original environment to be transformed_in.
+        env (EnvBase): original environment to be transformed_in.
         transform (Transform, optional): transform to apply to the tensordict resulting
-            from `env.step(td)`. If none is provided, an empty Compose placeholder is
-            used.
+            from `env.step(td)`. If none is provided, an empty Compose
+            placeholder in an eval mode is used.
         cache_specs (bool, optional): if True, the specs will be cached once
             and for all after the first call (i.e. the specs will be
             transformed_in only once). If the transform changes during
@@ -300,6 +300,7 @@ class TransformedEnv(EnvBase):
             transform.set_parent(self)
         else:
             transform = transform.to(device)
+        transform.eval()
         self.transform = transform
 
         self._last_obs = None
@@ -310,7 +311,7 @@ class TransformedEnv(EnvBase):
         self._observation_spec = None
         self.batch_size = self.base_env.batch_size
 
-    def _set_env(self, env: EnvStateful, device) -> None:
+    def _set_env(self, env: EnvBase, device) -> None:
         self.base_env = env.to(device)
         # updates need not be inplace, as transforms may modify values out-place
         self.base_env._inplace_update = False
@@ -437,7 +438,7 @@ class TransformedEnv(EnvBase):
     def insert_transform(self, index: int, transform: Transform) -> None:
         if not isinstance(transform, Transform):
             raise ValueError(
-                "TransformedEnv.append_transform expected a transform but received an object of "
+                "TransformedEnv.insert_transform expected a transform but received an object of "
                 f"type {type(transform)} instead."
             )
         transform = transform.to(self.device)
@@ -601,6 +602,7 @@ class Compose(Transform):
                 "Compose.append expected a transform but received an object of "
                 f"type {type(transform)} instead."
             )
+        transform.eval()
         self.transforms.append(transform)
         transform.set_parent(self)
 
@@ -619,6 +621,7 @@ class Compose(Transform):
         self.empty_cache()
         if index < 0:
             index = index + len(self.transforms)
+        transform.eval()
         self.transforms.insert(index, transform)
         transform.set_parent(self)
 
@@ -1529,7 +1532,7 @@ class NoopResetEnv(Transform):
     Runs a series of random actions when an environment is reset.
 
     Args:
-        env (EnvStateful): env on which the random actions have to be
+        env (EnvBase): env on which the random actions have to be
             performed. Can be the same env as the one provided to the
             TransformedEnv class
         noops (int, optional): number of actions performed after reset.
@@ -1668,6 +1671,9 @@ class VecNorm(Transform):
     the normalization layer is queried it will update the values for all
     processes that share the same reference.
 
+    To use VecNorm at inference time and avoid updating the values with the new
+    observations, one should substitute this layer by `vecnorm.to_observation_norm()`.
+
     Args:
         keys_in (iterable of str, optional): keys to be updated.
             default: ["next_observation", "reward"]
@@ -1770,35 +1776,55 @@ class VecNorm(Transform):
         _ssq = self._td.get(key + "_ssq")
         _count = self._td.get(key + "_count")
 
-        if self.training:
-            _sum = self._td.get(key + "_sum")
-            value_sum = _sum_left(value, _sum)
-            _sum *= self.decay
-            _sum += value_sum
-            self._td.set_(key + "_sum", _sum, no_check=True)
+        _sum = self._td.get(key + "_sum")
+        value_sum = _sum_left(value, _sum)
+        _sum *= self.decay
+        _sum += value_sum
+        self._td.set_(key + "_sum", _sum, no_check=True)
 
-            _ssq = self._td.get(key + "_ssq")
-            value_ssq = _sum_left(value.pow(2), _ssq)
-            _ssq *= self.decay
-            _ssq += value_ssq
-            self._td.set_(key + "_ssq", _ssq, no_check=True)
+        _ssq = self._td.get(key + "_ssq")
+        value_ssq = _sum_left(value.pow(2), _ssq)
+        _ssq *= self.decay
+        _ssq += value_ssq
+        self._td.set_(key + "_ssq", _ssq, no_check=True)
 
-            _count = self._td.get(key + "_count")
-            _count *= self.decay
-            _count += N
-            self._td.set_(key + "_count", _count, no_check=True)
-        else:
-            _sum = self._td.get(key + "_sum")
-            _ssq = self._td.get(key + "_ssq")
-            _count = self._td.get(key + "_count")
+        _count = self._td.get(key + "_count")
+        _count *= self.decay
+        _count += N
+        self._td.set_(key + "_count", _count, no_check=True)
 
         mean = _sum / _count
         std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
         return (value - mean) / std.clamp_min(self.eps)
 
+    def to_observation_norm(self) -> Union[Compose, ObservationNorm]:
+        """Converts VecNorm into an ObservationNorm class that can be used
+        at inference time.
+
+        """
+        out = []
+        for key in self.keys_in:
+            _sum = self._td.get(key + "_sum")
+            _ssq = self._td.get(key + "_ssq")
+            _count = self._td.get(key + "_count")
+            mean = _sum / _count
+            std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
+
+            _out = ObservationNorm(
+                loc=mean,
+                scale=std,
+                standard_normal=True,
+                keys_in=self.keys_in,
+            )
+            if len(self.keys_in) == 1:
+                return _out
+            else:
+                out += ObservationNorm
+        return Compose(*out)
+
     @staticmethod
     def build_td_for_shared_vecnorm(
-        env: EnvStateful,
+        env: EnvBase,
         keys_prefix: Optional[Sequence[str]] = None,
         memmap: bool = False,
     ) -> TensorDictBase:
@@ -1806,7 +1832,7 @@ class VecNorm(Transform):
         for normalization across processes.
 
         Args:
-            env (EnvStateful): example environment to be used to create the
+            env (EnvBase): example environment to be used to create the
                 tensordict
             keys_prefix (iterable of str, optional): prefix of the keys that
                 have to be normalized. Default is `["next_", "reward"]`
