@@ -872,7 +872,7 @@ class ParallelEnv(_BatchedEnv):
                 # there might be some delay between writing the shared tensordict
                 # and reading the updated value on the main process
                 sleep(0.01)
-        return self.shared_tensordict_parent.select(*keys)
+        return self.shared_tensordict_parent.select(*keys).clone()
 
     def __reduce__(self):
         if not self.is_closed:

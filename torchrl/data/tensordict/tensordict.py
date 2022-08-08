@@ -3276,6 +3276,8 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def clone(self, recursive: bool = True) -> TensorDictBase:
         if recursive:
+            # This could be optimized using copy but we must be careful with
+            # metadata (_is_shared etc)
             return LazyStackedTensorDict(
                 *[td.clone() for td in self.tensordicts],
                 stack_dim=self.stack_dim,
