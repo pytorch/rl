@@ -16,7 +16,7 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.data.replay_buffers import TensorDictPrioritizedReplayBuffer
-from torchrl.data.replay_buffers import rb_prototype as prototype_rb, samplers, writers
+from torchrl.data.replay_buffers import rb_prototype, samplers, writers
 from torchrl.data.replay_buffers.storages import (
     ListStorage,
     LazyMemmapStorage,
@@ -34,7 +34,7 @@ collate_fn_dict = {
 
 
 @pytest.mark.parametrize(
-    "rb_type", [prototype_rb.ReplayBuffer, prototype_rb.TensorDictReplayBuffer]
+    "rb_type", [rb_prototype.ReplayBuffer, rb_prototype.TensorDictReplayBuffer]
 )
 @pytest.mark.parametrize(
     "sampler", [samplers.RandomSampler, samplers.PrioritizedSampler]
@@ -61,18 +61,18 @@ class TestPrototypeBuffers:
         return rb
 
     def _get_datum(self, rb_type):
-        if rb_type is prototype_rb.ReplayBuffer:
+        if rb_type is rb_prototype.ReplayBuffer:
             data = torch.randint(100, (1,))
-        elif rb_type is prototype_rb.TensorDictReplayBuffer:
+        elif rb_type is rb_prototype.TensorDictReplayBuffer:
             data = TensorDict({"a": torch.randint(100, (1,))}, [])
         else:
             raise NotImplementedError(rb_type)
         return data
 
     def _get_data(self, rbtype, size):
-        if rbtype is prototype_rb.ReplayBuffer:
+        if rbtype is rb_prototype.ReplayBuffer:
             data = [torch.randint(100, (1,)) for _ in range(size)]
-        elif rbtype is prototype_rb.TensorDictReplayBuffer:
+        elif rbtype is rb_prototype.TensorDictReplayBuffer:
             data = TensorDict(
                 {
                     "a": torch.randint(100, (size,)),
@@ -171,7 +171,7 @@ class TestPrototypeBuffers:
 def test_prototype_prb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)
-    rb = prototype_rb.TensorDictReplayBuffer(
+    rb = rb_prototype.TensorDictReplayBuffer(
         sampler=samplers.PrioritizedSampler(5, alpha=0.7, beta=0.9),
         collate_fn=None if contiguous else lambda x: torch.stack(x, 0),
         priority_key=priority_key,
@@ -242,7 +242,7 @@ def test_prototype_prb(priority_key, contiguous, device):
 
 
 @pytest.mark.parametrize("stack", [False, True])
-def test_prototype_rb_trajectories(stack):
+def test_rb_prototype_trajectories(stack):
     traj_td = TensorDict(
         {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
         batch_size=[3, 4],
@@ -250,7 +250,7 @@ def test_prototype_rb_trajectories(stack):
     if stack:
         traj_td = torch.stack([td.to_tensordict() for td in traj_td], 0)
 
-    rb = prototype_rb.TensorDictReplayBuffer(
+    rb = rb_prototype.TensorDictReplayBuffer(
         sampler=samplers.PrioritizedSampler(
             5,
             alpha=0.7,
@@ -475,11 +475,7 @@ def test_prb(priority_key, contiguous, device):
     ).to(device)
     rb.extend(td2)
     s = rb.sample(5)
-    assert s.batch_size == torch.Size(
-        [
-            5,
-        ]
-    )
+    assert s.batch_size == torch.Size([5])
     assert (td2[s.get("_idx").squeeze()].get("a") == s.get("a")).all()
     assert_allclose_td(td2[s.get("_idx").squeeze()].select("a"), s.select("a"))
 
