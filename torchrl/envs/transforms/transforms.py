@@ -32,7 +32,7 @@ from torchrl.data.tensor_specs import (
     DEVICE_TYPING,
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
-from torchrl.envs.common import EnvStateful, EnvBase, make_tensordict
+from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import FiniteTensor
 from torchrl.envs.utils import step_tensordict
@@ -1529,7 +1529,7 @@ class NoopResetEnv(Transform):
     Runs a series of random actions when an environment is reset.
 
     Args:
-        env (EnvStateful): env on which the random actions have to be
+        env (EnvBase): env on which the random actions have to be
             performed. Can be the same env as the one provided to the
             TransformedEnv class
         noops (int, optional): number of actions performed after reset.
