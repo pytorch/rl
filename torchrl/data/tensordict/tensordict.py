@@ -3339,12 +3339,11 @@ class LazyStackedTensorDict(TensorDictBase):
         self._valid_keys = sorted(list(valid_keys))
 
     def select(self, *keys: str, inplace: bool = False) -> TensorDictBase:
-        # if len(set(self.valid_keys).intersection(keys)) != len(keys):
-        #     raise KeyError(
-        #         f"Selected and existing keys mismatch, got self.valid_keys"
-        #         f"={self.valid_keys} and keys={keys}"
-        #     )
-        tensordicts = [td.select(*keys, inplace=inplace) for td in self.tensordicts]
+        # the following implementation keeps the hidden keys in the tensordicts
+        excluded_keys = set(self.valid_keys) - set(keys)
+        tensordicts = [
+            td.exclude(*excluded_keys, inplace=inplace) for td in self.tensordicts
+        ]
         if inplace:
             return self
         return LazyStackedTensorDict(
