@@ -14,6 +14,23 @@ from .writers import Writer, RoundRobinWriter
 
 
 class ReplayBuffer:
+    """
+    #TODO: Description of the ReplayBuffer class needed.
+    Args:
+        storage (Storage, optional): the storage to be used. If none is provided
+            a default ListStorage with size 1_000 will be created.
+        sampler (Sampler, optional): the sampler to be used. If none is provided
+            a default RandomSampler() will be used.
+        writer (Writer, optional): the writer to be used. If none is provided
+            a default RoundRobinWriter() will be used.
+        collate_fn (callable, optional): merges a list of samples to form a
+            mini-batch of Tensor(s)/outputs.  Used when using batched
+            loading from a map-style dataset.
+        pin_memory (bool): whether pin_memory() should be called on the rb
+            samples.
+        prefetch (int, optional): number of next batches to be prefetched
+            using multithreading.
+    """
     def __init__(
         self,
         storage: Optional[Storage] = None,
@@ -65,12 +82,30 @@ class ReplayBuffer:
         return data
 
     def add(self, data: Any) -> int:
+        """Add a single element to the replay buffer.
+
+        Args:
+            data (Any): data to be added to the replay buffer
+
+        Returns:
+            index where the data lives in the replay buffer.
+        """
         with self._replay_lock:
             index = self._writer.add(data)
             self._sampler.add(index)
         return index
 
     def extend(self, data: Sequence) -> torch.Tensor:
+        """Extends the replay buffer with one or more elements contained in
+        an iterable.
+
+        Args:
+            data (iterable): collection of data to be added to the replay
+                buffer.
+
+        Returns:
+            Indices of the data aded to the replay buffer.
+        """
         with self._replay_lock:
             index = self._writer.extend(data)
             self._sampler.extend(index)
@@ -94,6 +129,16 @@ class ReplayBuffer:
         return data, info
 
     def sample(self, batch_size: int) -> Tuple[Any, dict]:
+        """
+        Samples a batch of data from the replay buffer.
+        Uses Sampler to sample indices, and retrieves them from Storage.
+
+        Args:
+            batch_size (int): size of data to be collected.
+
+        Returns:
+            A batch of data selected in the replay buffer.
+        """
         if not self._prefetch:
             return self._sample(batch_size)
 
@@ -114,6 +159,9 @@ class ReplayBuffer:
 class TensorDictReplayBuffer(ReplayBuffer):
     """
     TensorDict-specific wrapper around the ReplayBuffer class.
+    Args:
+        priority_key (str): the key at which priority is assumed to be stored
+            within TensorDicts added to this ReplayBuffer.
     """
 
     def __init__(self, priority_key: str = "td_error", **kw) -> None:
