@@ -12,7 +12,7 @@ import torch
 
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import CloudpickleWrapper
-from torchrl.envs.common import EnvStateful
+from torchrl.envs.common import EnvBase
 
 __all__ = ["EnvCreator"]
 
@@ -28,7 +28,7 @@ class EnvCreator:
     all of them are synchronised.
 
     Args:
-        create_env_fn (callable): a callable that returns an EnvStateful
+        create_env_fn (callable): a callable that returns an EnvBase
             instance.
         create_env_kwargs (dict, optional): the kwargs of the env creator.
         share_memory (bool, optional): if False, the resulting tensordict
@@ -76,7 +76,7 @@ class EnvCreator:
 
     def __init__(
         self,
-        create_env_fn: Callable[..., EnvStateful],
+        create_env_fn: Callable[..., EnvBase],
         create_env_kwargs: Optional[Dict] = None,
         share_memory: bool = True,
     ) -> None:
@@ -120,7 +120,7 @@ class EnvCreator:
         del shadow_env
         return self
 
-    def __call__(self, **kwargs) -> EnvStateful:
+    def __call__(self, **kwargs) -> EnvBase:
         if not self.initialized:
             raise RuntimeError("EnvCreator must be initialized before being called.")
         kwargs.update(self.create_env_kwargs)  # create_env_kwargs precedes

@@ -12,7 +12,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
-from torchrl.envs.common import EnvStateful
+from torchrl.envs.common import EnvBase
 from torchrl.modules import TensorDictModule, TensorDictModuleWrapper, reset_noise
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
@@ -76,7 +76,7 @@ class TrainerConfig:
 def make_trainer(
     collector: _DataCollector,
     loss_module: LossModule,
-    recorder: Optional[EnvStateful] = None,
+    recorder: Optional[EnvBase] = None,
     target_net_updater: Optional[_TargetNetUpdate] = None,
     policy_exploration: Optional[
         Union[TensorDictModuleWrapper, TensorDictModule]
@@ -90,7 +90,7 @@ def make_trainer(
     Args:
         collector (_DataCollector): A data collector to be used to collect data.
         loss_module (LossModule): A TorchRL loss module
-        recorder (EnvStateful, optional): a recorder environment. If None, the trainer will train the policy without
+        recorder (EnvBase, optional): a recorder environment. If None, the trainer will train the policy without
             testing it.
         target_net_updater (_TargetNetUpdate, optional): A target network update object.
         policy_exploration (TDModule or TensorDictModuleWrapper, optional): a policy to be used for recording and exploration

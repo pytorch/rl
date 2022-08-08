@@ -20,7 +20,7 @@ from torchrl import _check_for_faulty_process
 from torchrl.data import TensorDict, TensorSpec
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
-from torchrl.envs.common import EnvStateful, make_tensordict
+from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.env_creator import EnvCreator
 
 __all__ = ["SerialEnv", "ParallelEnv"]
@@ -87,7 +87,7 @@ class _dummy_env_context:
         del self.dummy_env
 
 
-class _BatchedEnv(EnvStateful):
+class _BatchedEnv(EnvBase):
     """
 
     Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.
@@ -108,7 +108,7 @@ class _BatchedEnv(EnvStateful):
             drastically decrease the IO burden when the tensordict is placed in shared memory / memory map.
             env_input_keys will typically contain "action" and if this list is not provided this object
             will look for corresponding keys. When working with stateless models, it is important to include the
-            state to be read by the environment. If none is provided, _BatchedEnv will use the `EnvStateful.input_spec`
+            state to be read by the environment. If none is provided, _BatchedEnv will use the `EnvBase.input_spec`
             keys as indicators of the keys to be sent to the env.
         pin_memory (bool): if True and device is "cpu", calls `pin_memory` on the tensordicts when created.
         selected_keys (list of str, optional): keys that have to be returned by the environment.
@@ -146,7 +146,7 @@ class _BatchedEnv(EnvStateful):
         self,
         num_workers: int,
         create_env_fn: Union[
-            Callable[[], EnvStateful], Sequence[Callable[[], EnvStateful]]
+            Callable[[], EnvBase], Sequence[Callable[[], EnvBase]]
         ],
         create_env_kwargs: Union[dict, Sequence[dict]] = None,
         env_input_keys: Optional[Sequence[str]] = None,
@@ -249,7 +249,7 @@ class _BatchedEnv(EnvStateful):
         )
 
     @property
-    def _dummy_env(self) -> EnvStateful:
+    def _dummy_env(self) -> EnvBase:
         """Returns a closed dummy environment. This is used to check the type of attributes that will
         be gathered on remote processed.
         """
@@ -259,7 +259,7 @@ class _BatchedEnv(EnvStateful):
         return self._dummy_env_instance
 
     @_dummy_env.setter
-    def _dummy_env(self, value: EnvStateful) -> None:
+    def _dummy_env(self, value: EnvBase) -> None:
         self._dummy_env_instance = value
 
     def state_dict(self) -> OrderedDict:
@@ -802,7 +802,7 @@ def _run_worker_pipe_shared_mem(
     idx: int,
     parent_pipe: connection.Connection,
     child_pipe: connection.Connection,
-    env_fun: Union[EnvStateful, Callable],
+    env_fun: Union[EnvBase, Callable],
     env_fun_kwargs: dict,
     pin_memory: bool,
     env_input_keys: dict,
@@ -811,7 +811,7 @@ def _run_worker_pipe_shared_mem(
 ) -> None:
     parent_pipe.close()
     pid = os.getpid()
-    if not isinstance(env_fun, EnvStateful):
+    if not isinstance(env_fun, EnvBase):
         env = env_fun(**env_fun_kwargs)
     else:
         if env_fun_kwargs:

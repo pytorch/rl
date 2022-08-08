@@ -44,7 +44,7 @@ class Specs:
     the environment from the workspace.
 
     Args:
-        env (EnvStateful): environment from which the specs have to be read.
+        env (EnvBase): environment from which the specs have to be read.
 
     """
 
@@ -56,7 +56,7 @@ class Specs:
         "from_pixels",
     }
 
-    def __init__(self, env: EnvStateful):
+    def __init__(self, env: EnvBase):
         self.env = env
 
     def __getitem__(self, item: str) -> Any:
@@ -111,7 +111,7 @@ class Specs:
 
 class EnvBase(nn.Module):
     """
-    Abstract environment parent class for TorchRL.
+    Abstract environment parent class.
 
     Properties:
         - observation_spec (CompositeSpec): sampling spec of the observations;
@@ -206,7 +206,7 @@ class EnvBase(nn.Module):
         """Makes a step in the environment.
         Step accepts a single argument, tensordict, which usually carries an 'action' key which indicates the action
         to be taken.
-        Step will call an out-place private method, _step, which is the method to be re-written by EnvStateful subclasses.
+        Step will call an out-place private method, _step, which is the method to be re-written by EnvBase subclasses.
 
         Args:
             tensordict (TensorDictBase): Tensordict containing the action to be taken.
@@ -230,7 +230,7 @@ class EnvBase(nn.Module):
 
         if tensordict_out is tensordict:
             raise RuntimeError(
-                "EnvStateful._step should return outplace changes to the input "
+                "EnvBase._step should return outplace changes to the input "
                 "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
@@ -256,7 +256,7 @@ class EnvBase(nn.Module):
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return self.step(tensordict)
+        raise NotImplementedError
 
     def _step(
         self,
@@ -274,7 +274,7 @@ class EnvBase(nn.Module):
         **kwargs,
     ) -> TensorDictBase:
         """Resets the environment.
-        As for step and _step, only the private method `_reset` should be overwritten by EnvStateful subclasses.
+        As for step and _step, only the private method `_reset` should be overwritten by EnvBase subclasses.
 
         Args:
             tensordict (TensorDictBase, optional): tensordict to be used to contain the resulting new observation.
@@ -292,7 +292,7 @@ class EnvBase(nn.Module):
         tensordict_reset = self._reset(tensordict, **kwargs)
         if tensordict_reset is tensordict:
             raise RuntimeError(
-                "EnvStateful._reset should return outplace changes to the input "
+                "EnvBase._reset should return outplace changes to the input "
                 "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
                 "tensordict.select()) inside _reset before writing new tensors onto this new instance."
             )
@@ -527,7 +527,7 @@ class EnvBase(nn.Module):
         if not self.is_closed:
             self.close()
 
-    def to(self, device: DEVICE_TYPING) -> EnvStateful:
+    def to(self, device: DEVICE_TYPING) -> EnvBase:
         device = torch.device(device)
         if device == self.device:
             return self
@@ -574,17 +574,11 @@ class EnvStateful(EnvBase):
         super().__init__(device, dtype, batch_size)
         self.eval()
 
-    def state_dict(self) -> OrderedDict:
-        return OrderedDict()
-
-    def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
-        pass
-
     def eval(self) -> EnvStateful:
-        return self
+        return super().eval()
 
     def train(self, mode: bool = True) -> EnvStateful:
-        return self
+        return super().eval()
 
 
 class _EnvWrapper(EnvStateful, metaclass=abc.ABCMeta):
@@ -714,7 +708,7 @@ class _EnvWrapper(EnvStateful, metaclass=abc.ABCMeta):
 
 
 def make_tensordict(
-    env: EnvStateful,
+    env: _EnvWrapper,
     policy: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
 ) -> TensorDictBase:
     """

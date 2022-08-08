@@ -32,7 +32,7 @@ from torchrl.data.tensor_specs import (
     DEVICE_TYPING,
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
-from torchrl.envs.common import EnvBase, EnvStateful, make_tensordict
+from torchrl.envs.common import EnvStateful, EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import FiniteTensor
 from torchrl.envs.utils import step_tensordict
@@ -89,7 +89,7 @@ class Transform(nn.Module):
     constructor via the `keys` argument.
 
     Transforms are to be combined with their target environments with the
-    TransformedEnv class, which takes as arguments an `EnvStateful` instance
+    TransformedEnv class, which takes as arguments an `EnvBase` instance
     and a transform. If multiple transforms are to be used, they can be
     concatenated using the `Compose` class.
     A transform can be stateless or stateful (e.g. CatTransform). Because of
@@ -227,15 +227,15 @@ class Transform(nn.Module):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(keys={self.keys_in})"
 
-    def set_parent(self, parent: Union[Transform, EnvStateful]) -> None:
+    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
         self.__dict__["_parent"] = parent
 
     @property
-    def parent(self) -> EnvStateful:
+    def parent(self) -> EnvBase:
         if not hasattr(self, "_parent"):
             raise AttributeError("transform parent uninitialized")
         parent = self._parent
-        if not isinstance(parent, EnvStateful):
+        if not isinstance(parent, EnvBase):
             # if it's not an env, it should be a Compose transform
             if not isinstance(parent, Compose):
                 raise ValueError(
@@ -264,7 +264,7 @@ class TransformedEnv(EnvBase):
     A transformed_in environment.
 
     Args:
-        env (EnvStateful): original environment to be transformed_in.
+        env (EnvBase): original environment to be transformed_in.
         transform (Transform, optional): transform to apply to the tensordict resulting
             from `env.step(td)`. If none is provided, an empty Compose placeholder is
             used.
@@ -310,7 +310,7 @@ class TransformedEnv(EnvBase):
         self._observation_spec = None
         self.batch_size = self.base_env.batch_size
 
-    def _set_env(self, env: EnvStateful, device) -> None:
+    def _set_env(self, env: EnvBase, device) -> None:
         self.base_env = env.to(device)
         # updates need not be inplace, as transforms may modify values out-place
         self.base_env._inplace_update = False
@@ -1798,7 +1798,7 @@ class VecNorm(Transform):
 
     @staticmethod
     def build_td_for_shared_vecnorm(
-        env: EnvStateful,
+        env: EnvBase,
         keys_prefix: Optional[Sequence[str]] = None,
         memmap: bool = False,
     ) -> TensorDictBase:
@@ -1806,7 +1806,7 @@ class VecNorm(Transform):
         for normalization across processes.
 
         Args:
-            env (EnvStateful): example environment to be used to create the
+            env (EnvBase): example environment to be used to create the
                 tensordict
             keys_prefix (iterable of str, optional): prefix of the keys that
                 have to be normalized. Default is `["next_", "reward"]`
