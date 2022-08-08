@@ -19,20 +19,17 @@ from mocking_classes import (
 )
 from scipy.stats import chisquare
 from torch import nn
-from torchrl.data import tensordict
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     BoundedTensorSpec,
     NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import EnvCreator, ObservationNorm
 from torchrl.envs import GymEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.mb_envs.dreamer import DreamerEnv
-from torchrl.envs.model_based import ModelBasedEnv
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
@@ -49,7 +46,6 @@ from torchrl.modules import (
     MLP,
 )
 from torchrl.objectives.model_based.dreamer import DreamerModelLoss
-from torchrl.modules.tensordict_module.sequence import TensorDictSequence
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -137,9 +133,9 @@ def test_dreamer():
     env = DreamerEnv()
     model_loss = DreamerModelLoss()
     opt = torch.optim.Adam(
-            env.parameters(),
-            lr=1e-3,
-            eps=1e-4,
+        env.parameters(),
+        lr=1e-3,
+        eps=1e-4,
     )
     td = TensorDict(
         {

@@ -1,6 +1,7 @@
 import torch
-import torch.nn as nn
 import torch.distributions as d
+import torch.nn as nn
+
 
 class LogLikelihood(nn.Module):
     """
@@ -13,7 +14,7 @@ class LogLikelihood(nn.Module):
         self.reduction = reduction
 
     def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        log_likelihood =  -d.Normal(input, 1).log_prob(target)
+        log_likelihood = -d.Normal(input, 1).log_prob(target)
 
         if self.reduction == "mean":
             return log_likelihood.mean()

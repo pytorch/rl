@@ -5,11 +5,13 @@
 
 
 import torch
-import torch.nn as nn
 import torch.distributions as d
+import torch.nn as nn
 from torch.distributions import kl_divergence
+
 from torchrl.data import TensorDict
 from torchrl.objectives.utils import LogLikelihood
+
 
 class DreamerModelLoss(nn.Module):
     """
@@ -30,7 +32,7 @@ class DreamerModelLoss(nn.Module):
         lambda_reward: float = 1.0,
         reco_loss: nn.Module = LogLikelihood(reduction="none"),
         reward_loss: nn.Module = LogLikelihood(),
-        free_nats: int = 3
+        free_nats: int = 3,
     ):
         super().__init__()
         self.reco_loss = reco_loss
@@ -42,10 +44,10 @@ class DreamerModelLoss(nn.Module):
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         kl_loss = self.kl_loss(
-            tensordict["prior_mean"],
-            tensordict["prior_std"],
-            tensordict["posterior_mean"],
-            tensordict["posterior_std"],
+            tensordict["prior_means"],
+            tensordict["prior_stds"],
+            tensordict["posterior_means"],
+            tensordict["posterior_stds"],
         )
         reco_loss = (
             0.5
