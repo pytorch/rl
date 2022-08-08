@@ -145,9 +145,7 @@ class _BatchedEnv(EnvBase):
     def __init__(
         self,
         num_workers: int,
-        create_env_fn: Union[
-            Callable[[], EnvBase], Sequence[Callable[[], EnvBase]]
-        ],
+        create_env_fn: Union[Callable[[], EnvBase], Sequence[Callable[[], EnvBase]]],
         create_env_kwargs: Union[dict, Sequence[dict]] = None,
         env_input_keys: Optional[Sequence[str]] = None,
         pin_memory: bool = False,

@@ -229,9 +229,7 @@ class SyncDataCollector(_DataCollector):
 
     def __init__(
         self,
-        create_env_fn: Union[
-            EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]
-        ],
+        create_env_fn: Union[EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]],
         policy: Optional[
             Union[
                 ProbabilisticTensorDictModule,
