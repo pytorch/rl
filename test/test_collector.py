@@ -518,7 +518,7 @@ def test_update_weights(use_async):
     policy_state_dict = policy.state_dict()
     for worker in range(3):
         for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-            torch.testing.assert_allclose(
+            torch.testing.assert_close(
                 state_dict[f"worker{worker}"]["policy_state_dict"][k],
                 policy_state_dict[k].cpu(),
             )
@@ -534,7 +534,7 @@ def test_update_weights(use_async):
     for worker in range(3):
         for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
             with pytest.raises(AssertionError):
-                torch.testing.assert_allclose(
+                torch.testing.assert_close(
                     state_dict[f"worker{worker}"]["policy_state_dict"][k],
                     policy_state_dict[k].cpu(),
                 )
@@ -547,7 +547,7 @@ def test_update_weights(use_async):
     policy_state_dict = policy.state_dict()
     for worker in range(3):
         for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-            torch.testing.assert_allclose(
+            torch.testing.assert_close(
                 state_dict[f"worker{worker}"]["policy_state_dict"][k],
                 policy_state_dict[k].cpu(),
             )

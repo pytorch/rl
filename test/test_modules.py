@@ -87,9 +87,9 @@ def test_noisy(layer_class, device, seed=0):
     layer.reset_noise()
     y2 = layer(x)
     y3 = layer(x)
-    torch.testing.assert_allclose(y2, y3)
+    torch.testing.assert_close(y2, y3)
     with pytest.raises(AssertionError):
-        torch.testing.assert_allclose(y1, y2)
+        torch.testing.assert_close(y1, y2)
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -152,13 +152,11 @@ def test_actorcritic(device):
     td_policy = policy_op(td.clone())
     value_op = op.get_value_operator()
     td_value = value_op(td)
-    torch.testing.assert_allclose(td_total.get("action"), td_policy.get("action"))
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(td_total.get("action"), td_policy.get("action"))
+    torch.testing.assert_close(
         td_total.get("sample_log_prob"), td_policy.get("sample_log_prob")
     )
-    torch.testing.assert_allclose(
-        td_total.get("state_value"), td_value.get("state_value")
-    )
+    torch.testing.assert_close(td_total.get("state_value"), td_value.get("state_value"))
 
     value_params = set(
         list(op.get_value_operator().parameters()) + list(op.module[0].parameters())

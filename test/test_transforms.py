@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 from copy import copy
+from time import sleep
 
 import pytest
 import torch
@@ -154,6 +155,8 @@ def test_vecnorm_parallel(nprc):
     for idx in range(nprc):
         queues[idx][1].put(msg)
     del queues
+    for p in prcs:
+        p.join()
 
 
 def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.Queue):
@@ -218,6 +221,9 @@ def test_vecnorm_parallel_auto(nprc):
     msg = "all_done"
     for idx in range(nprc):
         queues[idx][1].put(msg)
+
+    sleep(0.01)  # Further fix for flacky test: vecnorm should have a locking
+    # mechanism
 
     obs_sum = td.get("next_observation_sum").clone()
     obs_ssq = td.get("next_observation_ssq").clone()
@@ -354,6 +360,29 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     assert (abs(std - 1) < thr).all()
     if not env_t.is_closed:
         env_t.close()
+
+
+def test_added_transforms_are_in_eval_mode_trivial():
+    base_env = ContinuousActionVecMockEnv()
+    t = TransformedEnv(base_env)
+    assert not t.transform.training
+
+    t.train()
+    assert t.transform.training
+
+
+def test_added_transforms_are_in_eval_mode():
+    base_env = ContinuousActionVecMockEnv()
+    r = RewardScaling(0, 1)
+    t = TransformedEnv(base_env, r)
+    assert not t.transform.training
+    t.append_transform(RewardScaling(0, 1))
+    assert not t.transform[1].training
+
+    t.train()
+    assert t.transform.training
+    assert t.transform[0].training
+    assert t.transform[1].training
 
 
 class TestTransforms:
@@ -590,6 +619,42 @@ class TestTransforms:
                 assert observation_spec[key].shape == torch.Size(
                     [nchannels * N, 16, 16]
                 )
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "keys_inv_1",
+        [
+            ["action_1"],
+            [],
+        ],
+    )
+    @pytest.mark.parametrize(
+        "keys_inv_2",
+        [
+            ["action_2"],
+            [],
+        ],
+    )
+    def test_compose_inv(self, keys_inv_1, keys_inv_2, device):
+        torch.manual_seed(0)
+        keys_to_transform = set(keys_inv_1 + keys_inv_2)
+        keys_total = set(["action_1", "action_2", "dont_touch"])
+        double2float_1 = DoubleToFloat(keys_inv_in=keys_inv_1)
+        double2float_2 = DoubleToFloat(keys_inv_in=keys_inv_2)
+        compose = Compose(double2float_1, double2float_2)
+        td = TensorDict(
+            {
+                key: torch.zeros(1, 3, 3, dtype=torch.float32, device=device)
+                for key in keys_total
+            },
+            [1],
+        )
+
+        compose.inv(td)
+        for key in keys_to_transform:
+            assert td.get(key).dtype == torch.double
+        for key in keys_total - keys_to_transform:
+            assert td.get(key).dtype == torch.float32
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
