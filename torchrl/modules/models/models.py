@@ -10,6 +10,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from torchrl.modules.distributions import NormalParamWrapper, TanhNormal
+import torch.distributions as d
 from torchrl import prod
 from torchrl.data import DEVICE_TYPING
 from torchrl.modules.models.utils import (
@@ -29,6 +31,7 @@ __all__ = [
     "DdpgMlpActor",
     "DdpgMlpQNet",
     "LSTMNet",
+    "TanhActor"
 ]
 
 
@@ -1032,3 +1035,16 @@ class LSTMNet(nn.Module):
 
         input = self.mlp(input)
         return self._lstm(input, hidden0_in, hidden1_in)
+
+
+class TanhActor(nn.Module):
+    def __init__(self, out_features=None, depth=None, num_cells=None, activation_class=None):
+        super().__init__()
+        self.backbone = NormalParamWrapper(MLP(out_features=2*out_features, depth=depth, num_cells=num_cells, activation_class=activation_class))
+    def forward(self, *input):
+        loc, scale = self.backbone(*input)
+        if self.training:
+            action = TanhNormal(loc=loc, scale=scale).rsample()
+        else:
+            action = torch.tanh(loc)
+        return action

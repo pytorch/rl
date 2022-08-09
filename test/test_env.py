@@ -46,7 +46,7 @@ from torchrl.modules import (
     Actor,
     MLP,
 )
-from torchrl.objectives.model_based.dreamer import DreamerModelLoss
+from torchrl.objectives.costs.dreamer import DreamerModelLoss
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))

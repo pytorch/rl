@@ -10,6 +10,7 @@ from typing import Iterable, Optional, Union
 import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
+import torch.distributions as d
 
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import step_tensordict
@@ -338,3 +339,26 @@ def next_state_value(
     rewards = rewards.to(torch.float)
     target_value = rewards + (gamma ** steps_to_next_obs) * target_value
     return target_value
+
+
+class LogLikelihood(nn.Module):
+    """
+    Log Likelihood
+    Computes the log likelihood of the observation given the target
+    """
+
+    def __init__(self, reduction: str = "mean"):
+        super().__init__()
+        self.reduction = reduction
+
+    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        log_likelihood = -d.Normal(input, 1).log_prob(target)
+
+        if self.reduction == "mean":
+            return log_likelihood.mean()
+        elif self.reduction == "sum":
+            return log_likelihood.sum()
+        elif self.reduction == "none":
+            return log_likelihood
+        else:
+            raise ValueError(f"Unknown reduction {self.reduction}")

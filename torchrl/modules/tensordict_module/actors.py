@@ -27,6 +27,7 @@ __all__ = [
     "ActorCriticOperator",
     "ActorCriticWrapper",
     "DistributionalQValueActor",
+    "WorldModelWrapper"
 ]
 
 from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, TensorSpec
@@ -872,6 +873,45 @@ class ActorCriticWrapper(TensorDictSequence):
         return self.module[0]
 
     def get_value_operator(self) -> TensorDictSequence:
+        """
+
+        Returns a stand-alone value network operator that maps an observation to a value estimate.
+
+        """
+        return self.module[1]
+
+class WorldModelWrapper(TensorDictSequence):
+    """
+    World model wrapper.
+    This module wraps together a world model and a reward model.
+    The world model is used to predict an imaginary world state.
+    The reward model is used to predict the reward of the imaginary world state.
+
+    Args:
+        world_model (TensorDictModule): a world model that generates a world state.
+        reward_model (TensorDictModule): a reward model, that reads the world state and returns a reward
+
+    """
+
+    def __init__(
+        self,
+        world_modeler_operator: TensorDictModule,
+        reward_operator: TensorDictModule,
+    ):
+        super().__init__(
+            world_modeler_operator,
+            reward_operator,
+        )
+
+    def get_world_modeler_operator(self) -> TensorDictSequence:
+        """
+
+        Returns a stand-alone policy operator that maps an observation to an action.
+
+        """
+        return self.module[0]
+
+    def get_reward_operator(self) -> TensorDictSequence:
         """
 
         Returns a stand-alone value network operator that maps an observation to a value estimate.
