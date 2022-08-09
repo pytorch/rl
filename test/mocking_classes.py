@@ -22,6 +22,8 @@ from torchrl.envs.model_based import ModelBasedEnv
 from torchrl.modules import TensorDictModule
 import torch.nn as nn
 
+from torchrl.modules.tensordict_module.actors import WorldModelWrapper
+
 spec_dict = {
     "bounded": BoundedTensorSpec,
     "one_hot": OneHotDiscreteTensorSpec,
@@ -358,6 +360,7 @@ class DummyModelBasedEnv(ModelBasedEnv):
         batch_size=None,
     ):
         super(DummyModelBasedEnv, self).__init__(
+            WorldModelWrapper(
             TensorDictModule(
                 ActionObsMergeLinear(5, 4),
                 in_keys=["hidden_observation", "action"],
@@ -367,7 +370,7 @@ class DummyModelBasedEnv(ModelBasedEnv):
                 nn.Linear(4, 1),
                 in_keys=["hidden_observation"],
                 out_keys=["reward"],
-            ),
+            )),
             device,
             dtype,
             batch_size,
