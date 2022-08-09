@@ -134,6 +134,15 @@ class ContinuousBox(Box):
         max_str = f"maximum={self.maximum}"
         return f"{self.__class__.__name__}({min_str}, {max_str})"
 
+    def __eq__(self, other):
+        return (
+            type(self) == type(other)
+            and self.minimum.dtype == other.minimum.dtype
+            and self.maximum.dtype == other.maximum.dtype
+            and torch.equal(self.minimum, other.minimum)
+            and torch.equal(self.maximum, other.maximum)
+        )
+
 
 @dataclass(repr=False)
 class DiscreteBox(Box):

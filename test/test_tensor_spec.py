@@ -383,6 +383,234 @@ class TestComposite:
                 assert key in td["nested_cp"].keys()
 
 
+class TestEquality:
+    @staticmethod
+    def _ts_make_all_fields_equal(ts_to, ts_from):
+        ts_to.shape = ts_from.shape
+        ts_to.space = ts_from.space
+        ts_to.device = ts_from.device
+        ts_to.dtype = ts_from.dtype
+        ts_to.domain = ts_from.domain
+        return ts_to
+
+    def test_equality_bounded(self):
+        MIN = 10
+        MAX = 100
+        DEVICE = "cpu"
+        DTYPE = torch.float16
+
+        ts = BoundedTensorSpec(MIN, MAX, DEVICE, DTYPE)
+
+        ts_same = BoundedTensorSpec(MIN, MAX, DEVICE, DTYPE)
+        assert ts == ts_same
+
+        ts_other = BoundedTensorSpec(MIN + 1, MAX, DEVICE, DTYPE)
+        assert ts != ts_other
+
+        ts_other = BoundedTensorSpec(MIN, MAX + 1, DEVICE, DTYPE)
+        assert ts != ts_other
+
+        ts_other = BoundedTensorSpec(MIN, MAX, "cpu:2", DTYPE)
+        assert ts != ts_other
+
+        ts_other = BoundedTensorSpec(MIN, MAX, DEVICE, torch.float64)
+        assert ts != ts_other
+
+        ts_other = TestEquality._ts_make_all_fields_equal(
+            UnboundedContinuousTensorSpec(DEVICE, DTYPE), ts
+        )
+        assert ts != ts_other
+
+    def test_equality_onehot(self):
+        N = 5
+        DEVICE = "cpu"
+        DTYPE = torch.float16
+        USER_REGISTER = False
+
+        ts = OneHotDiscreteTensorSpec(N, DEVICE, DTYPE, USER_REGISTER)
+
+        ts_same = OneHotDiscreteTensorSpec(N, DEVICE, DTYPE, USER_REGISTER)
+        assert ts == ts_same
+
+        ts_other = OneHotDiscreteTensorSpec(N + 1, DEVICE, DTYPE, USER_REGISTER)
+        assert ts != ts_other
+
+        ts_other = OneHotDiscreteTensorSpec(N, "cpu:2", DTYPE, USER_REGISTER)
+        assert ts != ts_other
+
+        ts_other = OneHotDiscreteTensorSpec(N, DEVICE, torch.float64, USER_REGISTER)
+        assert ts != ts_other
+
+        ts_other = TestEquality._ts_make_all_fields_equal(
+            UnboundedContinuousTensorSpec(DEVICE, DTYPE), ts
+        )
+        assert ts != ts_other
+
+    def test_equality_unbounded(self):
+        DEVICE = "cpu"
+        DTYPE = torch.float16
+
+        ts = UnboundedContinuousTensorSpec(DEVICE, DTYPE)
+
+        ts_same = UnboundedContinuousTensorSpec(DEVICE, DTYPE)
+        assert ts == ts_same
+
+        ts_other = UnboundedContinuousTensorSpec("cpu:2", DTYPE)
+        assert ts != ts_other
+
+        ts_other = UnboundedContinuousTensorSpec(DEVICE, torch.float64)
+        assert ts != ts_other
+
+        ts_other = TestEquality._ts_make_all_fields_equal(
+            BoundedTensorSpec(0, 1, DEVICE, DTYPE), ts
+        )
+        assert ts != ts_other
+
+    def test_equality_ndbounded(self):
+        MIN = np.arange(12).reshape((3, 4))
+        MAX = MIN + 100
+        DEVICE = "cpu"
+        DTYPE = torch.float16
+
+        ts = NdBoundedTensorSpec(minimum=MIN, maximum=MAX, device=DEVICE, dtype=DTYPE)
+
+        ts_same = NdBoundedTensorSpec(
+            minimum=MIN, maximum=MAX, device=DEVICE, dtype=DTYPE
+        )
+        assert ts == ts_same
+
+        ts_other = NdBoundedTensorSpec(
+            minimum=MIN + 1, maximum=MAX, device=DEVICE, dtype=DTYPE
+        )
+        assert ts != ts_other
+
+        ts_other = NdBoundedTensorSpec(
+            minimum=MIN, maximum=MAX + 1, device=DEVICE, dtype=DTYPE
+        )
+        assert ts != ts_other
+
+        ts_other = NdBoundedTensorSpec(
+            minimum=MIN, maximum=MAX, device="cpu:2", dtype=DTYPE
+        )
+        assert ts != ts_other
+
+        ts_other = NdBoundedTensorSpec(
+            minimum=MIN, maximum=MAX, device=DEVICE, dtype=torch.float64
+        )
+        assert ts != ts_other
+
+        ts_other = TestEquality._ts_make_all_fields_equal(
+            BoundedTensorSpec(0, 1, DEVICE, DTYPE), ts
+        )
+        assert ts != ts_other
+
+    @pytest.mark.parametrize(
+        "shape",
+        [
+            3,
+            torch.Size([4]),
+            torch.Size([5, 6]),
+        ],
+    )
+    def test_equality_ndunbounded(self, shape):
+        DEVICE = "cpu"
+        DTYPE = torch.float16
+
+        ts = NdUnboundedContinuousTensorSpec(shape=shape, device=DEVICE, dtype=DTYPE)
+
+        ts_same = NdUnboundedContinuousTensorSpec(
+            shape=shape, device=DEVICE, dtype=DTYPE
+        )
+        assert ts == ts_same
+
+        other_shape = 13 if type(shape) == int else torch.Size(np.array(shape) + 10)
+        ts_other = NdUnboundedContinuousTensorSpec(
+            shape=other_shape, device=DEVICE, dtype=DTYPE
+        )
+        assert ts != ts_other
+
+        ts_other = NdUnboundedContinuousTensorSpec(
+            shape=shape, device="cpu:2", dtype=DTYPE
+        )
+        assert ts != ts_other
+
+        ts_other = NdUnboundedContinuousTensorSpec(
+            shape=shape, device=DEVICE, dtype=torch.float64
+        )
+        assert ts != ts_other
+
+        ts_other = TestEquality._ts_make_all_fields_equal(
+            BoundedTensorSpec(0, 1, DEVICE, DTYPE), ts
+        )
+        assert ts != ts_other
+
+    def test_equality_binary(self):
+        N = 5
+        DEVICE = "cpu"
+        DTYPE = torch.float16
+
+        ts = BinaryDiscreteTensorSpec(n=N, device=DEVICE, dtype=DTYPE)
+
+        ts_same = BinaryDiscreteTensorSpec(n=N, device=DEVICE, dtype=DTYPE)
+        assert ts == ts_same
+
+        ts_other = BinaryDiscreteTensorSpec(n=N + 5, device=DEVICE, dtype=DTYPE)
+        assert ts != ts_other
+
+        ts_other = BinaryDiscreteTensorSpec(n=N, device="cpu:2", dtype=DTYPE)
+        assert ts != ts_other
+
+        ts_other = BinaryDiscreteTensorSpec(n=N, device=DEVICE, dtype=torch.float64)
+        assert ts != ts_other
+
+        ts_other = TestEquality._ts_make_all_fields_equal(
+            BoundedTensorSpec(0, 1, DEVICE, DTYPE), ts
+        )
+        assert ts != ts_other
+
+    @pytest.mark.parametrize("nvec", [[3], [3, 4], [3, 4, 5]])
+    def test_equality_multi_onehot(self, nvec):
+        N = 5
+        DEVICE = "cpu"
+        DTYPE = torch.float16
+
+        ts = MultOneHotDiscreteTensorSpec(nvec=nvec, device=DEVICE, dtype=DTYPE)
+
+        ts_same = MultOneHotDiscreteTensorSpec(nvec=nvec, device=DEVICE, dtype=DTYPE)
+        assert ts == ts_same
+
+        other_nvec = np.array(nvec) + 3
+        ts_other = MultOneHotDiscreteTensorSpec(
+            nvec=other_nvec, device=DEVICE, dtype=DTYPE
+        )
+        assert ts != ts_other
+
+        other_nvec = [12]
+        ts_other = MultOneHotDiscreteTensorSpec(
+            nvec=other_nvec, device=DEVICE, dtype=DTYPE
+        )
+        assert ts != ts_other
+
+        other_nvec = [12, 13]
+        ts_other = MultOneHotDiscreteTensorSpec(
+            nvec=other_nvec, device=DEVICE, dtype=DTYPE
+        )
+        assert ts != ts_other
+
+        ts_other = MultOneHotDiscreteTensorSpec(nvec=nvec, device="cpu:2", dtype=DTYPE)
+        assert ts != ts_other
+
+        ts_other = MultOneHotDiscreteTensorSpec(
+            nvec=nvec, device=DEVICE, dtype=torch.float64
+        )
+        assert ts != ts_other
+
+        ts_other = TestEquality._ts_make_all_fields_equal(
+            BoundedTensorSpec(0, 1, DEVICE, DTYPE), ts
+        )
+        assert ts != ts_other
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
