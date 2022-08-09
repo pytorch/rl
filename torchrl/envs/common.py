@@ -44,7 +44,7 @@ class Specs:
     the environment from the workspace.
 
     Args:
-        env (EnvStateful): environment from which the specs have to be read.
+        env (EnvBase): environment from which the specs have to be read.
 
     """
 
@@ -56,7 +56,7 @@ class Specs:
         "from_pixels",
     }
 
-    def __init__(self, env: EnvStateful):
+    def __init__(self, env: EnvBase):
         self.env = env
 
     def __getitem__(self, item: str) -> Any:
@@ -109,9 +109,9 @@ class Specs:
         return td
 
 
-class EnvBase(nn.Module):
+class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     """
-    Abstract environment parent class for TorchRL.
+    Abstract environment parent class.
 
     Properties:
         - observation_spec (CompositeSpec): sampling spec of the observations;
@@ -206,7 +206,7 @@ class EnvBase(nn.Module):
         """Makes a step in the environment.
         Step accepts a single argument, tensordict, which usually carries an 'action' key which indicates the action
         to be taken.
-        Step will call an out-place private method, _step, which is the method to be re-written by EnvStateful subclasses.
+        Step will call an out-place private method, _step, which is the method to be re-written by EnvBase subclasses.
 
         Args:
             tensordict (TensorDictBase): Tensordict containing the action to be taken.
@@ -230,7 +230,7 @@ class EnvBase(nn.Module):
 
         if tensordict_out is tensordict:
             raise RuntimeError(
-                "EnvStateful._step should return outplace changes to the input "
+                "EnvBase._step should return outplace changes to the input "
                 "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
@@ -258,12 +258,14 @@ class EnvBase(nn.Module):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         raise NotImplementedError
 
+    @abc.abstractmethod
     def _step(
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         raise NotImplementedError
 
+    @abc.abstractmethod
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         raise NotImplementedError
 
@@ -274,7 +276,7 @@ class EnvBase(nn.Module):
         **kwargs,
     ) -> TensorDictBase:
         """Resets the environment.
-        As for step and _step, only the private method `_reset` should be overwritten by EnvStateful subclasses.
+        As for step and _step, only the private method `_reset` should be overwritten by EnvBase subclasses.
 
         Args:
             tensordict (TensorDictBase, optional): tensordict to be used to contain the resulting new observation.
@@ -292,7 +294,7 @@ class EnvBase(nn.Module):
         tensordict_reset = self._reset(tensordict, **kwargs)
         if tensordict_reset is tensordict:
             raise RuntimeError(
-                "EnvStateful._reset should return outplace changes to the input "
+                "EnvBase._reset should return outplace changes to the input "
                 "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
                 "tensordict.select()) inside _reset before writing new tensors onto this new instance."
             )
@@ -404,6 +406,7 @@ class EnvBase(nn.Module):
         auto_reset: bool = True,
         auto_cast_to_device: bool = False,
         break_when_any_done: bool = True,
+        return_contiguous: bool = True,
         tensordict: Optional[TensorDictBase] = None,
     ) -> TensorDictBase:
         """Executes a rollout in the environment.
@@ -424,6 +427,7 @@ class EnvBase(nn.Module):
             auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
                 policy device before the policy is used. Default is `False`.
             break_when_any_done (bool): breaks if any of the done state is True. Default is True.
+            return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
             tensordict (TensorDict, optional): if auto_reset is False, an initial
                 tensordict must be provided.
 
@@ -474,6 +478,8 @@ class EnvBase(nn.Module):
             raise Exception("reset env before calling rollout!")
 
         out_td = torch.stack(tensordicts, len(self.batch_size))
+        if return_contiguous:
+            return out_td.contiguous()
         return out_td
 
     def _select_observation_keys(self, tensordict: TensorDictBase) -> Iterator[str]:
@@ -527,7 +533,7 @@ class EnvBase(nn.Module):
         if not self.is_closed:
             self.close()
 
-    def to(self, device: DEVICE_TYPING) -> EnvStateful:
+    def to(self, device: DEVICE_TYPING) -> EnvBase:
         device = torch.device(device)
         if device == self.device:
             return self
@@ -542,56 +548,10 @@ class EnvBase(nn.Module):
         return self
 
 
-class EnvStateful(EnvBase):
-    """
-    Env class for stateful envs in TorchRL.
-
-     Properties:
-         - observation_spec (CompositeSpec): sampling spec of the observations;
-         - action_spec (TensorSpec): sampling spec of the actions;
-         - input_spec (CompositeSpec): sampling spec of the actions and/or other inputs;
-         - reward_spec (TensorSpec): sampling spec of the rewards;
-         - batch_size (torch.Size): number of environments contained in the instance;
-         - device (torch.device): device where the env input and output are expected to live
-         - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the
-             last reset
-
-     Methods:
-         step (TensorDictBase -> TensorDictBase): step in the environment
-         reset (TensorDictBase, optional -> TensorDictBase): reset the environment
-         set_seed (int -> int): sets the seed of the environment
-         rand_step (TensorDictBase, optional -> TensorDictBase): random step given the action spec
-         rollout (Callable, ... -> TensorDictBase): executes a rollout in the environment with the given policy (or random
-             steps if no policy is provided)
-
-    """
-
-    def __init__(
-        self,
-        device: DEVICE_TYPING = "cpu",
-        dtype: Optional[Union[torch.dtype, np.dtype]] = None,
-        batch_size: Optional[torch.Size] = None,
-    ):
-        super().__init__(device, dtype, batch_size)
-        self.eval()
-
-    def state_dict(self) -> OrderedDict:
-        return OrderedDict()
-
-    def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
-        pass
-
-    def eval(self) -> EnvStateful:
-        return self
-
-    def train(self, mode: bool = True) -> EnvStateful:
-        return self
-
-
-class _EnvWrapper(EnvStateful, metaclass=abc.ABCMeta):
+class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
     """Abstract environment wrapper class.
 
-    Unlike EnvStateful, _EnvWrapper comes with a `_build_env` private method that will be called upon instantiation.
+    Unlike EnvBase, _EnvWrapper comes with a `_build_env` private method that will be called upon instantiation.
     Interfaces with other libraries should be coded using _EnvWrapper.
 
     It is possible to directly query attributed from the nested environment it its name does not conflict with
@@ -715,7 +675,7 @@ class _EnvWrapper(EnvStateful, metaclass=abc.ABCMeta):
 
 
 def make_tensordict(
-    env: EnvStateful,
+    env: _EnvWrapper,
     policy: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
 ) -> TensorDictBase:
     """

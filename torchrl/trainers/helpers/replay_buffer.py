@@ -13,14 +13,9 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-
-__all__ = ["make_replay_buffer"]
-
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 
-
-def collate_fn(x):
-    return x.to_tensordict()
+__all__ = ["make_replay_buffer"]
 
 
 def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer:
@@ -29,12 +24,13 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
     if not cfg.prb:
         buffer = TensorDictReplayBuffer(
             cfg.buffer_size,
-            collate_fn=collate_fn,
+            collate_fn=lambda x: x,
             pin_memory=device != torch.device("cpu"),
             prefetch=cfg.buffer_prefetch,
             storage=LazyMemmapStorage(
                 cfg.buffer_size,
                 scratch_dir=cfg.buffer_scratch_dir,
+                # device=device,  # when using prefetch, this can overload the GPU memory
             ),
         )
     else:
@@ -42,12 +38,13 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
             cfg.buffer_size,
             alpha=0.7,
             beta=0.5,
-            collate_fn=collate_fn,
+            collate_fn=lambda x: x,
             pin_memory=device != torch.device("cpu"),
             prefetch=cfg.buffer_prefetch,
             storage=LazyMemmapStorage(
                 cfg.buffer_size,
                 scratch_dir=cfg.buffer_scratch_dir,
+                # device=device,  # when using prefetch, this can overload the GPU memory
             ),
         )
     return buffer

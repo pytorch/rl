@@ -7,9 +7,11 @@ from __future__ import annotations
 
 from typing import Optional, Union, List
 
+import abc
 import numpy as np
 import torch
 import torch.nn as nn
+
 
 from torchrl.data import TensorDict
 from ..data.utils import DEVICE_TYPING
@@ -23,14 +25,13 @@ dtype_map = {
 }
 
 
-class ModelBasedEnv(EnvBase):
+class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     """
     Basic environnement for Model Based RL algorithms.
 
     This class is a wrapper around the model of the MBRL algorithm.
-    We can both train it and use it for inference.
-    This wrapper is designed as a TensorDictSequence, so that we can use it as a TensorDictSequence.
-    In particular, one can specify different input and output keys for the training and inference phases.
+    This class is meant to give an env framework to a world model and a reward model.
+    It is meant to behave as a classical environment.
 
     Properties:
         - observation_spec (CompositeSpec): sampling spec of the observations;
@@ -56,8 +57,6 @@ class ModelBasedEnv(EnvBase):
         rand_step (TensorDict, optional -> TensorDict): random step given the action spec
         rollout (Callable, ... -> TensorDict): executes a rollout in the environment with the given policy (or random
             steps if no policy is provided)
-        train_step (TensorDict -> TensorDict): step in the environment for training
-        forward (TensorDict, optional -> TensorDict): forward pass of the model
 
     """
 
@@ -72,40 +71,42 @@ class ModelBasedEnv(EnvBase):
         super(ModelBasedEnv, self).__init__(
             device=device, dtype=dtype, batch_size=batch_size
         )
-        self.word_model = world_model
+        self.world_model = world_model
         self.reward_model = reward_model
-
-        self.inference_world_model = world_model
-        self.inference_reward_model = reward_model
-
-    def forward(
-        self,
-        tensordict: TensorDict,
-    ) -> TensorDict:
-        tensordict = self.word_model(tensordict)
-        # Compute rewards
-        tensordict = self.reward_model(tensordict)
-        return tensordict
-
-    def train_step(self, tensordict: TensorDict) -> TensorDict:
-        self.train()
-        # Extract latent states
-        tensordict = self(tensordict)
-        return tensordict
+    
+    def set_specs_from_env(self, env: EnvBase):
+        """
+        Sets the specs of the environment from the specs of the given environment.
+        """
+        self.observation_spec = env.observation_spec
+        self.action_spec = env.action_spec
+        self.reward_spec = env.reward_spec
 
     def _step(
         self,
         tensordict: TensorDict,
     ) -> TensorDict:
-        tensordict = self.inference_world_model(tensordict)
+        # step method requires to be immutable
+        tensordict_out = tensordict.clone()
+        # Compute world state
+        tensordict_out = self.world_model(tensordict_out)
         # Compute rewards
-        tensordict = self.inference_reward_model(tensordict)
-        return tensordict
-
-    def step(self, tensordict: TensorDict) -> TensorDict:
-        return self._step(tensordict)
+        tensordict_out = self.reward_model(tensordict_out)
+        # Step requires a done flag. No sense for MBRL so we set it to False
+        tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool)
+        return tensordict_out
+    
+    @abc.abstractmethod
+    def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
+        raise NotImplementedError
+    
+    @abc.abstractmethod
+    def _set_seed(self, seed: Optional[int]) -> int:
+        raise NotImplementedError
 
     def to(self, device: DEVICE_TYPING) -> ModelBasedEnv:
         super().to(device)
-        self.module.to(device)
+        self.world_model.to(device)
+        self.reward_model.to(device)
         return self
+

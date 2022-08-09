@@ -17,7 +17,10 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
-from torchrl.envs.common import EnvStateful
+from torchrl.envs.common import EnvBase
+from torchrl.envs.model_based import ModelBasedEnv
+from torchrl.modules import TensorDictModule
+import torch.nn as nn
 
 spec_dict = {
     "bounded": BoundedTensorSpec,
@@ -51,7 +54,7 @@ def make_spec(spec_str):
     return target_class(**default_spec_kwargs[target_class])
 
 
-class _MockEnv(EnvStateful):
+class _MockEnv(EnvBase):
     def __init__(self, seed: int = 100):
         super().__init__(
             device="cpu",
@@ -88,7 +91,7 @@ class _MockEnv(EnvStateful):
         return TensorDict({"a": torch.zeros(3)}, [])
 
 
-class MockSerialEnv(EnvStateful):
+class MockSerialEnv(EnvBase):
     def __init__(self, device):
         super(MockSerialEnv, self).__init__(device=device)
         self.action_spec = NdUnboundedContinuousTensorSpec((1,))
@@ -340,3 +343,58 @@ class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
     def _get_in_obs(self, tensordict):
         obs = tensordict.get(*self.in_keys).diagonal(0, -1, -2).squeeze()
         return obs
+
+
+class DummyModelBasedEnv(ModelBasedEnv):
+    """
+    Dummy environnement for Model Based RL algorithms.
+    This class is meant to be used to test the model based environnement.
+    """
+
+    def __init__(
+        self,
+        device="cpu",
+        dtype=None,
+        batch_size=None,
+    ):
+        super(DummyModelBasedEnv, self).__init__(
+            TensorDictModule(
+                ActionObsMergeLinear(5, 4),
+                in_keys=["hidden_observation", "action"],
+                out_keys=["next_hidden_observation"],
+            ),
+            TensorDictModule(
+                nn.Linear(4, 1),
+                in_keys=["hidden_observation"],
+                out_keys=["reward"],
+            ),
+            device,
+            dtype,
+            batch_size,
+        )
+        self.action_spec = NdUnboundedContinuousTensorSpec((1,))
+        self.observation_spec = NdUnboundedContinuousTensorSpec((4,))
+        self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+
+    def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
+        td = TensorDict(
+            {
+                "hidden_observation": torch.randn(*self.batch_size, 4),
+                "next_hidden_observation": torch.randn(*self.batch_size, 4),
+                "action": torch.randn(*self.batch_size, 1),
+            },
+            batch_size=self.batch_size,
+        )
+        return td
+
+    def _set_seed(self, seed: int) -> int:
+        return seed
+
+
+class ActionObsMergeLinear(nn.Module):
+    def __init__(self, in_size, out_size):
+        super().__init__()
+        self.linear = nn.Linear(in_size, out_size)
+
+    def forward(self, observation, action):
+        return self.linear(torch.cat([observation, action], dim=-1))
