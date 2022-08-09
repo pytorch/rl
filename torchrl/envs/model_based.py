@@ -44,8 +44,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
             last reset
 
     Args:
-        world_model (nn.Module): model which will be used to generate the world state;
-        reward_model (nn.Module): model which will be used to predict the reward;
+        world_model (nn.Module): model that generates world states and its corresponding rewards;
         device (torch.device): device where the env input and output are expected to live
         dtype (torch.dtype): dtype of the env input and output
         batch_size (torch.Size): number of environments contained in the instance
@@ -63,7 +62,6 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     def __init__(
         self,
         world_model: Union[nn.Module, List[TensorDictModule], TensorDictSequence],
-        reward_model: Union[nn.Module, List[TensorDictModule], TensorDictSequence],
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
@@ -72,7 +70,6 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
             device=device, dtype=dtype, batch_size=batch_size
         )
         self.world_model = world_model
-        self.reward_model = reward_model
     
     def set_specs_from_env(self, env: EnvBase):
         """
@@ -90,8 +87,6 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         tensordict_out = tensordict.clone()
         # Compute world state
         tensordict_out = self.world_model(tensordict_out)
-        # Compute rewards
-        tensordict_out = self.reward_model(tensordict_out)
         # Step requires a done flag. No sense for MBRL so we set it to False
         tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool)
         return tensordict_out
