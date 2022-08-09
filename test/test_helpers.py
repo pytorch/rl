@@ -157,9 +157,9 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
             tsf_loc = actor.module[-1].module.transform(td.get("loc"))
             if exploration == "random":
                 with pytest.raises(AssertionError):
-                    torch.testing.assert_allclose(td.get("action"), tsf_loc)
+                    torch.testing.assert_close(td.get("action"), tsf_loc)
             else:
-                torch.testing.assert_allclose(td.get("action"), tsf_loc)
+                torch.testing.assert_close(td.get("action"), tsf_loc)
 
         value(td)
         expected_keys += ["state_action_value"]
@@ -260,9 +260,9 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
 
             if exploration == "random":
                 with pytest.raises(AssertionError):
-                    torch.testing.assert_allclose(td_clone.get("action"), tsf_loc)
+                    torch.testing.assert_close(td_clone.get("action"), tsf_loc)
             else:
-                torch.testing.assert_allclose(td_clone.get("action"), tsf_loc)
+                torch.testing.assert_close(td_clone.get("action"), tsf_loc)
 
         value = actor_value.get_value_operator()
         expected_keys = [
@@ -354,9 +354,9 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             tsf_loc = actor.module[-1].module.transform(td_clone.get("loc"))
             if exploration == "random":
                 with pytest.raises(AssertionError):
-                    torch.testing.assert_allclose(td_clone.get("action"), tsf_loc)
+                    torch.testing.assert_close(td_clone.get("action"), tsf_loc)
             else:
-                torch.testing.assert_allclose(td_clone.get("action"), tsf_loc)
+                torch.testing.assert_close(td_clone.get("action"), tsf_loc)
 
         try:
             _assert_keys_match(td_clone, expected_keys)
@@ -472,9 +472,9 @@ def test_redq_make(device, from_pixels, gsde, exploration):
             tsf_loc = actor.module[-1].module.transform(td.get("loc"))
             if exploration == "random":
                 with pytest.raises(AssertionError):
-                    torch.testing.assert_allclose(td.get("action"), tsf_loc)
+                    torch.testing.assert_close(td.get("action"), tsf_loc)
             else:
-                torch.testing.assert_allclose(td.get("action"), tsf_loc)
+                torch.testing.assert_close(td.get("action"), tsf_loc)
 
         qvalue(td)
         expected_keys = [
