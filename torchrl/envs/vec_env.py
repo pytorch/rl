@@ -10,6 +10,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from logging import warn
 from multiprocessing import connection
+from multiprocessing.synchronize import Lock as MpLock
 from time import sleep
 from typing import Callable, Optional, Sequence, Union, Any, List
 
@@ -798,6 +799,19 @@ class ParallelEnv(_BatchedEnv):
         return self
 
 
+def recursively_strip_locks_from_state_dict(state_dict: OrderedDict) -> OrderedDict:
+    return OrderedDict(
+        **{
+            k: recursively_strip_locks_from_state_dict(item)
+            if isinstance(item, OrderedDict)
+            else None
+            if isinstance(item, MpLock)
+            else item
+            for k, item in state_dict.items()
+        }
+    )
+
+
 def _run_worker_pipe_shared_mem(
     idx: int,
     parent_pipe: connection.Connection,
@@ -921,7 +935,7 @@ def _run_worker_pipe_shared_mem(
             child_pipe.send((msg, None))
 
         elif cmd == "state_dict":
-            state_dict = env.state_dict()
+            state_dict = recursively_strip_locks_from_state_dict(env.state_dict())
             msg = "state_dict"
             child_pipe.send((msg, state_dict))
 

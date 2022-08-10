@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import multiprocessing as mp
 from copy import deepcopy, copy
 from typing import Any, List, Optional, OrderedDict, Sequence, Union
 from warnings import warn
@@ -1707,7 +1708,7 @@ class VecNorm(Transform):
         self,
         keys_in: Optional[Sequence[str]] = None,
         shared_td: Optional[TensorDictBase] = None,
-        lock: mp.Lock = None,
+        lock: mp.Lock = (mp.Lock()),
         decay: float = 0.9999,
         eps: float = 1e-4,
     ) -> None:
@@ -1898,7 +1899,14 @@ class VecNorm(Transform):
         return OrderedDict([("lock", self.lock), ("td", self._td)])
 
     def set_extra_state(self, state: OrderedDict) -> None:
-        self.lock = state["lock"]
+        lock = state["lock"]
+        if lock is not None:
+            """
+            since locks can't be serialized, we have use cases for stripping them
+            for example in ParallelEnv, in which case keep the lock we already have
+            to avoid an updated tensor dict being sent between processes to erase locks
+            """
+            self.lock = lock
         td = state["td"]
         if td is not None and not td.is_shared():
             raise RuntimeError(
