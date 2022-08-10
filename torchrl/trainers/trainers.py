@@ -32,7 +32,7 @@ from torchrl.data import (
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import expand_right, DEVICE_TYPING
-from torchrl.envs.common import _EnvClass
+from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule
@@ -851,7 +851,7 @@ class Recorder:
             the performance of the policy, it should be possible to turn off
             the explorative behaviour by calling the
             `set_exploration_mode('mode')` context manager.
-        recorder (_EnvClass): An environment instance to be used
+        recorder (EnvBase): An environment instance to be used
             for testing.
         exploration_mode (str, optional): exploration mode to use for the
             policy. By default, no exploration is used and the value used is
@@ -870,7 +870,7 @@ class Recorder:
         record_frames: int,
         frame_skip: int,
         policy_exploration: TensorDictModule,
-        recorder: _EnvClass,
+        recorder: EnvBase,
         exploration_mode: str = "mode",
         log_keys: Optional[List[str]] = None,
         out_keys: Optional[Dict[str, str]] = None,

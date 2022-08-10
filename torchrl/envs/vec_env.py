@@ -20,7 +20,7 @@ from torchrl import _check_for_faulty_process
 from torchrl.data import TensorDict, TensorSpec, CompositeSpec
 from torchrl.data.tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
-from torchrl.envs.common import _EnvClass, make_tensordict
+from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.env_creator import EnvCreator
 
 __all__ = ["SerialEnv", "ParallelEnv"]
@@ -102,7 +102,7 @@ class _dummy_env_context:
         del self.dummy_env
 
 
-class _BatchedEnv(_EnvClass):
+class _BatchedEnv(EnvBase):
     """
 
     Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.
@@ -126,7 +126,7 @@ class _BatchedEnv(_EnvClass):
             drastically decrease the IO burden when the tensordict is placed in shared memory / memory map.
             env_input_keys will typically contain "action" and if this list is not provided this object
             will look for corresponding keys. When working with stateless models, it is important to include the
-            state to be read by the environment. If none is provided, _BatchedEnv will use the `_EnvClass.input_spec`
+            state to be read by the environment. If none is provided, _BatchedEnv will use the `EnvBase.input_spec`
             keys as indicators of the keys to be sent to the env.
         pin_memory (bool): if True and device is "cpu", calls `pin_memory` on the tensordicts when created.
         selected_keys (list of str, optional): keys that have to be returned by the environment.
@@ -163,9 +163,7 @@ class _BatchedEnv(_EnvClass):
     def __init__(
         self,
         num_workers: int,
-        create_env_fn: Union[
-            Callable[[], _EnvClass], Sequence[Callable[[], _EnvClass]]
-        ],
+        create_env_fn: Union[Callable[[], EnvBase], Sequence[Callable[[], EnvBase]]],
         create_env_kwargs: Union[dict, Sequence[dict]] = None,
         env_input_keys: Optional[Sequence[str]] = None,
         pin_memory: bool = False,
@@ -311,7 +309,7 @@ class _BatchedEnv(_EnvClass):
         )
 
     @property
-    def _dummy_env(self) -> _EnvClass:
+    def _dummy_env(self) -> EnvBase:
         """Returns a closed dummy environment. This is used to check the type of attributes that will
         be gathered on remote processed.
         """
@@ -333,7 +331,7 @@ class _BatchedEnv(_EnvClass):
         return self._dummy_env_instance
 
     @_dummy_env.setter
-    def _dummy_env(self, value: _EnvClass) -> None:
+    def _dummy_env(self, value: EnvBase) -> None:
         self._dummy_env_instance = value
 
     def state_dict(self) -> OrderedDict:
@@ -658,7 +656,7 @@ class SerialEnv(_BatchedEnv):
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
-            return self.__getattribute__(
+            return super().__getattr__(
                 attr
             )  # make sure that appropriate exceptions are raised
         elif attr.startswith("__"):
@@ -884,7 +882,7 @@ class ParallelEnv(_BatchedEnv):
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
-            return self.__getattribute__(
+            return super().__getattr__(
                 attr
             )  # make sure that appropriate exceptions are raised
         elif attr.startswith("__"):
@@ -928,7 +926,7 @@ def _run_worker_pipe_shared_mem(
     idx: int,
     parent_pipe: connection.Connection,
     child_pipe: connection.Connection,
-    env_fun: Union[_EnvClass, Callable],
+    env_fun: Union[EnvBase, Callable],
     env_fun_kwargs: dict,
     pin_memory: bool,
     env_input_keys: dict,
@@ -937,7 +935,7 @@ def _run_worker_pipe_shared_mem(
 ) -> None:
     parent_pipe.close()
     pid = os.getpid()
-    if not isinstance(env_fun, _EnvClass):
+    if not isinstance(env_fun, EnvBase):
         env = env_fun(**env_fun_kwargs)
     else:
         if env_fun_kwargs:
