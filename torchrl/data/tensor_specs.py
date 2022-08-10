@@ -561,6 +561,17 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     def is_in(self, val: torch.Tensor) -> bool:
         return (val.sum(-1) == 1).all()
 
+    def __eq__(self, other):
+        return (
+            type(self) == type(other)
+            and self.shape == other.shape
+            and self.space == other.space
+            and self.device == other.device
+            and self.dtype == other.dtype
+            and self.domain == other.domain
+            and self.use_register == other.use_register
+        )
+
 
 @dataclass(repr=False)
 class UnboundedContinuousTensorSpec(TensorSpec):
@@ -1063,3 +1074,10 @@ dtype=torch.float32)},
             value.to(dest)
         self.device = torch.device(dest)
         return self
+
+    def __eq__(self, other):
+        return (
+            type(self) == type(other)
+            and self._device == other._device
+            and self._specs == other._specs
+        )
