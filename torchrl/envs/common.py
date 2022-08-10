@@ -288,8 +288,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
 
         """
-        if tensordict is None:
-            tensordict = TensorDict({}, device=self.device, batch_size=self.batch_size)
         tensordict_reset = self._reset(tensordict, **kwargs)
         if tensordict_reset is tensordict:
             raise RuntimeError(

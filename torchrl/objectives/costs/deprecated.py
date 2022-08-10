@@ -86,7 +86,7 @@ class REDQLoss_deprecated(LossModule):
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
-        self.gamma = gamma
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.priority_key = priotity_key
         self.loss_function = loss_function
 
