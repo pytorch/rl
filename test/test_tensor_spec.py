@@ -394,116 +394,118 @@ class TestEquality:
         return ts_to
 
     def test_equality_bounded(self):
-        MIN = 10
-        MAX = 100
-        DEVICE = "cpu"
-        DTYPE = torch.float16
+        minimum = 10
+        maximum = 100
+        device = "cpu"
+        dtype = torch.float16
 
-        ts = BoundedTensorSpec(MIN, MAX, DEVICE, DTYPE)
+        ts = BoundedTensorSpec(minimum, maximum, device, dtype)
 
-        ts_same = BoundedTensorSpec(MIN, MAX, DEVICE, DTYPE)
+        ts_same = BoundedTensorSpec(minimum, maximum, device, dtype)
         assert ts == ts_same
 
-        ts_other = BoundedTensorSpec(MIN + 1, MAX, DEVICE, DTYPE)
+        ts_other = BoundedTensorSpec(minimum + 1, maximum, device, dtype)
         assert ts != ts_other
 
-        ts_other = BoundedTensorSpec(MIN, MAX + 1, DEVICE, DTYPE)
+        ts_other = BoundedTensorSpec(minimum, maximum + 1, device, dtype)
         assert ts != ts_other
 
-        ts_other = BoundedTensorSpec(MIN, MAX, "cpu:2", DTYPE)
+        ts_other = BoundedTensorSpec(minimum, maximum, "cpu:2", dtype)
         assert ts != ts_other
 
-        ts_other = BoundedTensorSpec(MIN, MAX, DEVICE, torch.float64)
+        ts_other = BoundedTensorSpec(minimum, maximum, device, torch.float64)
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            UnboundedContinuousTensorSpec(DEVICE, DTYPE), ts
+            UnboundedContinuousTensorSpec(device, dtype), ts
         )
         assert ts != ts_other
 
     def test_equality_onehot(self):
-        N = 5
-        DEVICE = "cpu"
-        DTYPE = torch.float16
-        USE_REGISTER = False
+        n = 5
+        device = "cpu"
+        dtype = torch.float16
+        use_register = False
 
-        ts = OneHotDiscreteTensorSpec(N, DEVICE, DTYPE, USE_REGISTER)
+        ts = OneHotDiscreteTensorSpec(n, device, dtype, use_register)
 
-        ts_same = OneHotDiscreteTensorSpec(N, DEVICE, DTYPE, USE_REGISTER)
+        ts_same = OneHotDiscreteTensorSpec(n, device, dtype, use_register)
         assert ts == ts_same
 
-        ts_other = OneHotDiscreteTensorSpec(N + 1, DEVICE, DTYPE, USE_REGISTER)
+        ts_other = OneHotDiscreteTensorSpec(n + 1, device, dtype, use_register)
         assert ts != ts_other
 
-        ts_other = OneHotDiscreteTensorSpec(N, "cpu:2", DTYPE, USE_REGISTER)
+        ts_other = OneHotDiscreteTensorSpec(n, "cpu:2", dtype, use_register)
         assert ts != ts_other
 
-        ts_other = OneHotDiscreteTensorSpec(N, DEVICE, torch.float64, USE_REGISTER)
+        ts_other = OneHotDiscreteTensorSpec(n, device, torch.float64, use_register)
         assert ts != ts_other
 
-        ts_other = OneHotDiscreteTensorSpec(N, DEVICE, DTYPE, not USE_REGISTER)
+        ts_other = OneHotDiscreteTensorSpec(n, device, dtype, not use_register)
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            UnboundedContinuousTensorSpec(DEVICE, DTYPE), ts
+            UnboundedContinuousTensorSpec(device, dtype), ts
         )
         assert ts != ts_other
 
     def test_equality_unbounded(self):
-        DEVICE = "cpu"
-        DTYPE = torch.float16
+        device = "cpu"
+        dtype = torch.float16
 
-        ts = UnboundedContinuousTensorSpec(DEVICE, DTYPE)
+        ts = UnboundedContinuousTensorSpec(device, dtype)
 
-        ts_same = UnboundedContinuousTensorSpec(DEVICE, DTYPE)
+        ts_same = UnboundedContinuousTensorSpec(device, dtype)
         assert ts == ts_same
 
-        ts_other = UnboundedContinuousTensorSpec("cpu:2", DTYPE)
+        ts_other = UnboundedContinuousTensorSpec("cpu:2", dtype)
         assert ts != ts_other
 
-        ts_other = UnboundedContinuousTensorSpec(DEVICE, torch.float64)
+        ts_other = UnboundedContinuousTensorSpec(device, torch.float64)
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, DEVICE, DTYPE), ts
+            BoundedTensorSpec(0, 1, device, dtype), ts
         )
         assert ts != ts_other
 
     def test_equality_ndbounded(self):
-        MIN = np.arange(12).reshape((3, 4))
-        MAX = MIN + 100
-        DEVICE = "cpu"
-        DTYPE = torch.float16
+        minimum = np.arange(12).reshape((3, 4))
+        maximum = minimum + 100
+        device = "cpu"
+        dtype = torch.float16
 
-        ts = NdBoundedTensorSpec(minimum=MIN, maximum=MAX, device=DEVICE, dtype=DTYPE)
+        ts = NdBoundedTensorSpec(
+            minimum=minimum, maximum=maximum, device=device, dtype=dtype
+        )
 
         ts_same = NdBoundedTensorSpec(
-            minimum=MIN, maximum=MAX, device=DEVICE, dtype=DTYPE
+            minimum=minimum, maximum=maximum, device=device, dtype=dtype
         )
         assert ts == ts_same
 
         ts_other = NdBoundedTensorSpec(
-            minimum=MIN + 1, maximum=MAX, device=DEVICE, dtype=DTYPE
+            minimum=minimum + 1, maximum=maximum, device=device, dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = NdBoundedTensorSpec(
-            minimum=MIN, maximum=MAX + 1, device=DEVICE, dtype=DTYPE
+            minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = NdBoundedTensorSpec(
-            minimum=MIN, maximum=MAX, device="cpu:2", dtype=DTYPE
+            minimum=minimum, maximum=maximum, device="cpu:2", dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = NdBoundedTensorSpec(
-            minimum=MIN, maximum=MAX, device=DEVICE, dtype=torch.float64
+            minimum=minimum, maximum=maximum, device=device, dtype=torch.float64
         )
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, DEVICE, DTYPE), ts
+            BoundedTensorSpec(0, 1, device, dtype), ts
         )
         assert ts != ts_other
 
@@ -516,166 +518,166 @@ class TestEquality:
         ],
     )
     def test_equality_ndunbounded(self, shape):
-        DEVICE = "cpu"
-        DTYPE = torch.float16
+        device = "cpu"
+        dtype = torch.float16
 
-        ts = NdUnboundedContinuousTensorSpec(shape=shape, device=DEVICE, dtype=DTYPE)
+        ts = NdUnboundedContinuousTensorSpec(shape=shape, device=device, dtype=dtype)
 
         ts_same = NdUnboundedContinuousTensorSpec(
-            shape=shape, device=DEVICE, dtype=DTYPE
+            shape=shape, device=device, dtype=dtype
         )
         assert ts == ts_same
 
         other_shape = 13 if type(shape) == int else torch.Size(np.array(shape) + 10)
         ts_other = NdUnboundedContinuousTensorSpec(
-            shape=other_shape, device=DEVICE, dtype=DTYPE
+            shape=other_shape, device=device, dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = NdUnboundedContinuousTensorSpec(
-            shape=shape, device="cpu:2", dtype=DTYPE
+            shape=shape, device="cpu:2", dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = NdUnboundedContinuousTensorSpec(
-            shape=shape, device=DEVICE, dtype=torch.float64
+            shape=shape, device=device, dtype=torch.float64
         )
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, DEVICE, DTYPE), ts
+            BoundedTensorSpec(0, 1, device, dtype), ts
         )
         assert ts != ts_other
 
     def test_equality_binary(self):
-        N = 5
-        DEVICE = "cpu"
-        DTYPE = torch.float16
+        n = 5
+        device = "cpu"
+        dtype = torch.float16
 
-        ts = BinaryDiscreteTensorSpec(n=N, device=DEVICE, dtype=DTYPE)
+        ts = BinaryDiscreteTensorSpec(n=n, device=device, dtype=dtype)
 
-        ts_same = BinaryDiscreteTensorSpec(n=N, device=DEVICE, dtype=DTYPE)
+        ts_same = BinaryDiscreteTensorSpec(n=n, device=device, dtype=dtype)
         assert ts == ts_same
 
-        ts_other = BinaryDiscreteTensorSpec(n=N + 5, device=DEVICE, dtype=DTYPE)
+        ts_other = BinaryDiscreteTensorSpec(n=n + 5, device=device, dtype=dtype)
         assert ts != ts_other
 
-        ts_other = BinaryDiscreteTensorSpec(n=N, device="cpu:2", dtype=DTYPE)
+        ts_other = BinaryDiscreteTensorSpec(n=n, device="cpu:2", dtype=dtype)
         assert ts != ts_other
 
-        ts_other = BinaryDiscreteTensorSpec(n=N, device=DEVICE, dtype=torch.float64)
+        ts_other = BinaryDiscreteTensorSpec(n=n, device=device, dtype=torch.float64)
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, DEVICE, DTYPE), ts
+            BoundedTensorSpec(0, 1, device, dtype), ts
         )
         assert ts != ts_other
 
     @pytest.mark.parametrize("nvec", [[3], [3, 4], [3, 4, 5]])
     def test_equality_multi_onehot(self, nvec):
-        DEVICE = "cpu"
-        DTYPE = torch.float16
+        device = "cpu"
+        dtype = torch.float16
 
-        ts = MultOneHotDiscreteTensorSpec(nvec=nvec, device=DEVICE, dtype=DTYPE)
+        ts = MultOneHotDiscreteTensorSpec(nvec=nvec, device=device, dtype=dtype)
 
-        ts_same = MultOneHotDiscreteTensorSpec(nvec=nvec, device=DEVICE, dtype=DTYPE)
+        ts_same = MultOneHotDiscreteTensorSpec(nvec=nvec, device=device, dtype=dtype)
         assert ts == ts_same
 
         other_nvec = np.array(nvec) + 3
         ts_other = MultOneHotDiscreteTensorSpec(
-            nvec=other_nvec, device=DEVICE, dtype=DTYPE
+            nvec=other_nvec, device=device, dtype=dtype
         )
         assert ts != ts_other
 
         other_nvec = [12]
         ts_other = MultOneHotDiscreteTensorSpec(
-            nvec=other_nvec, device=DEVICE, dtype=DTYPE
+            nvec=other_nvec, device=device, dtype=dtype
         )
         assert ts != ts_other
 
         other_nvec = [12, 13]
         ts_other = MultOneHotDiscreteTensorSpec(
-            nvec=other_nvec, device=DEVICE, dtype=DTYPE
+            nvec=other_nvec, device=device, dtype=dtype
         )
         assert ts != ts_other
 
-        ts_other = MultOneHotDiscreteTensorSpec(nvec=nvec, device="cpu:2", dtype=DTYPE)
+        ts_other = MultOneHotDiscreteTensorSpec(nvec=nvec, device="cpu:2", dtype=dtype)
         assert ts != ts_other
 
         ts_other = MultOneHotDiscreteTensorSpec(
-            nvec=nvec, device=DEVICE, dtype=torch.float64
+            nvec=nvec, device=device, dtype=torch.float64
         )
         assert ts != ts_other
 
         ts_other = TestEquality._ts_make_all_fields_equal(
-            BoundedTensorSpec(0, 1, DEVICE, DTYPE), ts
+            BoundedTensorSpec(0, 1, device, dtype), ts
         )
         assert ts != ts_other
 
     def test_equality_composite(self):
-        MIN = np.arange(12).reshape((3, 4))
-        MAX = MIN + 100
-        DEVICE = "cpu"
-        DTYPE = torch.float16
+        minimum = np.arange(12).reshape((3, 4))
+        maximum = minimum + 100
+        device = "cpu"
+        dtype = torch.float16
 
-        BOUNDED = BoundedTensorSpec(0, 1, DEVICE, DTYPE)
-        BOUNDED_SAME = BoundedTensorSpec(0, 1, DEVICE, DTYPE)
-        BOUNDED_OTHER = BoundedTensorSpec(0, 2, DEVICE, DTYPE)
+        bounded = BoundedTensorSpec(0, 1, device, dtype)
+        bounded_same = BoundedTensorSpec(0, 1, device, dtype)
+        bounded_other = BoundedTensorSpec(0, 2, device, dtype)
 
-        ND = NdBoundedTensorSpec(
-            minimum=MIN, maximum=MAX + 1, device=DEVICE, dtype=DTYPE
+        nd = NdBoundedTensorSpec(
+            minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
         )
-        ND_SAME = NdBoundedTensorSpec(
-            minimum=MIN, maximum=MAX + 1, device=DEVICE, dtype=DTYPE
+        nd_same = NdBoundedTensorSpec(
+            minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
         )
-        ND_OTHER = NdBoundedTensorSpec(
-            minimum=MIN, maximum=MAX + 3, device=DEVICE, dtype=DTYPE
+        nd_other = NdBoundedTensorSpec(
+            minimum=minimum, maximum=maximum + 3, device=device, dtype=dtype
         )
 
         # Equality tests
-        ts = CompositeSpec(ts1=BOUNDED)
-        ts_same = CompositeSpec(ts1=BOUNDED)
+        ts = CompositeSpec(ts1=bounded)
+        ts_same = CompositeSpec(ts1=bounded)
         assert ts == ts_same
 
-        ts = CompositeSpec(ts1=BOUNDED)
-        ts_same = CompositeSpec(ts1=BOUNDED_SAME)
+        ts = CompositeSpec(ts1=bounded)
+        ts_same = CompositeSpec(ts1=bounded_same)
         assert ts == ts_same
 
-        ts = CompositeSpec(ts1=BOUNDED, ts2=ND)
-        ts_same = CompositeSpec(ts1=BOUNDED, ts2=ND)
+        ts = CompositeSpec(ts1=bounded, ts2=nd)
+        ts_same = CompositeSpec(ts1=bounded, ts2=nd)
         assert ts == ts_same
 
-        ts = CompositeSpec(ts1=BOUNDED, ts2=ND)
-        ts_same = CompositeSpec(ts1=BOUNDED_SAME, ts2=ND_SAME)
+        ts = CompositeSpec(ts1=bounded, ts2=nd)
+        ts_same = CompositeSpec(ts1=bounded_same, ts2=nd_same)
         assert ts == ts_same
 
-        ts = CompositeSpec(ts1=BOUNDED, ts2=ND)
-        ts_same = CompositeSpec(ts2=ND_SAME, ts1=BOUNDED_SAME)
+        ts = CompositeSpec(ts1=bounded, ts2=nd)
+        ts_same = CompositeSpec(ts2=nd_same, ts1=bounded_same)
         assert ts == ts_same
 
         # Inequality tests
-        ts = CompositeSpec(ts1=BOUNDED)
-        ts_other = CompositeSpec(ts5=BOUNDED)
+        ts = CompositeSpec(ts1=bounded)
+        ts_other = CompositeSpec(ts5=bounded)
         assert ts != ts_other
 
-        ts = CompositeSpec(ts1=BOUNDED)
-        ts_other = CompositeSpec(ts1=BOUNDED_OTHER)
+        ts = CompositeSpec(ts1=bounded)
+        ts_other = CompositeSpec(ts1=bounded_other)
         assert ts != ts_other
 
-        ts = CompositeSpec(ts1=BOUNDED)
-        ts_other = CompositeSpec(ts1=ND)
+        ts = CompositeSpec(ts1=bounded)
+        ts_other = CompositeSpec(ts1=nd)
         assert ts != ts_other
 
-        ts = CompositeSpec(ts1=BOUNDED)
-        ts_other = CompositeSpec(ts1=BOUNDED, ts2=ND)
+        ts = CompositeSpec(ts1=bounded)
+        ts_other = CompositeSpec(ts1=bounded, ts2=nd)
         assert ts != ts_other
 
-        ts = CompositeSpec(ts1=BOUNDED, ts2=ND)
-        ts_other = CompositeSpec(ts2=ND)
+        ts = CompositeSpec(ts1=bounded, ts2=nd)
+        ts_other = CompositeSpec(ts2=nd)
         assert ts != ts_other
 
-        ts = CompositeSpec(ts1=BOUNDED, ts2=ND)
-        ts_other = CompositeSpec(ts1=BOUNDED, ts2=ND, ts3=BOUNDED_OTHER)
+        ts = CompositeSpec(ts1=bounded, ts2=nd)
+        ts_other = CompositeSpec(ts1=bounded, ts2=nd, ts3=bounded_other)
         assert ts != ts_other
 
 
