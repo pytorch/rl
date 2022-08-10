@@ -54,6 +54,7 @@ class TDEstimate(nn.Module):
         gradient_mode: bool = False,
         value_key: str = "state_value",
     ):
+        super().__init__()
         self.register_buffer("gamma", torch.tensor(gamma))
         self.value_network = value_network
         self.is_functional = value_network.is_functional
@@ -160,6 +161,7 @@ class TDLambdaEstimate(nn.Module):
         value_key: str = "state_value",
         vectorized: bool = True,
     ):
+        super().__init__()
         self.register_buffer("gamma", torch.tensor(gamma))
         self.register_buffer("lmbda", torch.tensor(lmbda))
         self.value_network = value_network
@@ -274,6 +276,7 @@ class GAE(nn.Module):
         average_rewards: bool = False,
         gradient_mode: bool = False,
     ):
+        super().__init__()
         self.register_buffer("gamma", torch.tensor(gamma))
         self.register_buffer("lmbda", torch.tensor(lmbda))
         self.value_network = value_network
