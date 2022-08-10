@@ -102,6 +102,5 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     def to(self, device: DEVICE_TYPING) -> ModelBasedEnv:
         super().to(device)
         self.world_model.to(device)
-        self.reward_model.to(device)
         return self
 
