@@ -1,0 +1,18 @@
+diff --git a/examples/dreamer/dreamer.py b/examples/dreamer/dreamer.py
+index 84eff0f..5101660 100644
+--- a/examples/dreamer/dreamer.py
++++ b/examples/dreamer/dreamer.py
+@@ -143,11 +143,11 @@ def main(cfg: "DictConfig"):
+         world_model=WorldModelWrapper(
+             world_modeler.select_subsequence(
+                 in_keys=["prior_state", "belief", "action"],
+-                out_keys=["next_prior_states", "next_belief"],
++                out_keys=["next_prior_state", "next_belief"],
+             ),
+             TensorDictModule(
+                 reward_model.module,
+-                in_keys=["next_prior_states", "next_belief"],
++                in_keys=["next_prior_state", "next_belief"],
+                 out_keys=["predicted_reward"],
+             ),
+         ),

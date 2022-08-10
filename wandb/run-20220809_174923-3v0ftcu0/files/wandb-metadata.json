@@ -1,0 +1,22 @@
+{
+    "os": "macOS-12.5-arm64-arm-64bit",
+    "python": "3.9.12",
+    "heartbeatAt": "2022-08-09T16:49:25.773939",
+    "startedAt": "2022-08-09T16:49:23.669287",
+    "docker": null,
+    "cpu_count": 10,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "/Users/ndufour/Documents/pytorch/rl/examples/dreamer/dreamer.py",
+    "codePath": "examples/dreamer/dreamer.py",
+    "git": {
+        "remote": "git@github.com:nicolas-dufour/torchrl.git",
+        "commit": "052011154acc92f2a3972d31b367981f73245bf6"
+    },
+    "email": "ndufour@fb.com",
+    "root": "/Users/ndufour/Documents/pytorch/rl",
+    "host": "ndufour-mbp",
+    "username": "ndufour",
+    "executable": "/Users/ndufour/anaconda3/envs/torch_rl/bin/python"
+}
