@@ -29,7 +29,7 @@ class DreamerWorldModeler(TensorDictSequence):
                     rnn_hidden_dim=rnn_hidden_dim,
                     state_dim=state_dim,
                 ),
-                in_keys=["prior_state", "initial_belief", "action"],
+                in_keys=["prior_state", "belief", "action"],
                 out_keys=["next_prior_mean", "next_prior_std", "next_prior_state", "next_belief"],
             ),
             TensorDictModule(
@@ -37,7 +37,7 @@ class DreamerWorldModeler(TensorDictSequence):
                     hidden_dim=rssm_hidden,
                     state_dim=state_dim,
                 ),
-                in_keys=["action", "observation_encoded"],
+                in_keys=["belief", "observation_encoded"],
                 out_keys=["posterior_mean", "posterior_std", "posterior_state"],
             ),
             TensorDictModule(

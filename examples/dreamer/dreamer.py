@@ -47,6 +47,7 @@ class DreamerConfig:
     grad_clip: int = 100
     world_model_lr: float = 6e-4
     actor_value_lr: float = 8e-5
+    imagination_horizon: int = 15
 
 @dataclass
 class TrainingConfig:
@@ -143,11 +144,11 @@ def main(cfg: "DictConfig"):
         world_model=WorldModelWrapper(
             world_modeler.select_subsequence(
                 in_keys=["prior_state", "belief", "action"],
-                out_keys=["next_prior_states", "next_belief"],
+                out_keys=["next_prior_state", "next_belief"],
             ),
             TensorDictModule(
                 reward_model.module,
-                in_keys=["next_prior_states", "next_belief"],
+                in_keys=["next_prior_state", "next_belief"],
                 out_keys=["predicted_reward"],
             ),
         ),
@@ -179,7 +180,7 @@ def main(cfg: "DictConfig"):
         ),
         TensorDictModule(
             actor_model.module,
-            in_keys=["prior_states", "belief"],
+            in_keys=["posterior_state", "belief"],
             out_keys=["action"],
         ),
     )
@@ -301,8 +302,8 @@ def main(cfg: "DictConfig"):
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample(cfg.batch_size)
                 sampled_tensordict.batch_size = [sampled_tensordict.shape[0]]
-                sampled_tensordict["initial_state"] = torch.zeros((sampled_tensordict.batch_size[0],1,cfg.state_dim))
-                sampled_tensordict["initial_belief"] = torch.zeros((sampled_tensordict.batch_size[0],1,cfg.rssm_hidden_dim))
+                sampled_tensordict["prior_state"] = torch.zeros((sampled_tensordict.batch_size[0],1,cfg.state_dim))
+                sampled_tensordict["belief"] = torch.zeros((sampled_tensordict.batch_size[0],1,cfg.rssm_hidden_dim))
                 world_model.train()
                 sampled_tensordict = world_model(sampled_tensordict)
                 # compute model loss
@@ -313,8 +314,9 @@ def main(cfg: "DictConfig"):
                 world_model_opt.step()
 
                 flattened_td = sampled_tensordict.select("prior_state", "belief").view(-1, sampled_tensordict.shape[-1]).detach()
+                flattened_td = actor_model(flattened_td)
                 with torch.no_grad:
-                    flattened_td = model_based_env.rollout(flattened_td)
+                    flattened_td = model_based_env.rollout(max_steps=cfg.imagination_horizon, policy=actor_model, auto_reset=False, tensordict=flattened_td)
                 flattened_td = actor_value_model(flattened_td)
                 # compute actor loss
                 actor_value_loss_td = behaviour_loss(flattened_td)

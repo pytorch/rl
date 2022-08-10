@@ -91,13 +91,11 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool)
         return tensordict_out
     
-    @abc.abstractmethod
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
-        raise NotImplementedError
+        return tensordict.clone()
     
-    @abc.abstractmethod
     def _set_seed(self, seed: Optional[int]) -> int:
-        raise NotImplementedError
+        return seed
 
     def to(self, device: DEVICE_TYPING) -> ModelBasedEnv:
         super().to(device)
