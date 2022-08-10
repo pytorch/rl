@@ -229,6 +229,9 @@ class TensorDictSequence(TensorDictModule):
 
         modules = [self.module[i] for i in id_to_keep]
 
+        if modules == []:
+            raise ValueError("No modules left after selection. Make sure that in_keys and out_keys are coherent.")
+
         return TensorDictSequence(*modules)
 
     def forward(
