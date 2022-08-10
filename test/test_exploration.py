@@ -159,10 +159,10 @@ def test_gsde(
             action1 = module(td).get("action")
         action2 = actor(td).get("action")
         if gSDE or exploration_mode == "mode":
-            torch.testing.assert_allclose(action1, action2)
+            torch.testing.assert_close(action1, action2)
         else:
             with pytest.raises(AssertionError):
-                torch.testing.assert_allclose(action1, action2)
+                torch.testing.assert_close(action1, action2)
 
 
 @pytest.mark.parametrize(

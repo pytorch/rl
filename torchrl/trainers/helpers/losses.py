@@ -29,9 +29,10 @@ from torchrl.objectives import (
     SoftUpdate,
 )
 from torchrl.objectives.costs.common import LossModule
-from torchrl.objectives.costs.redq import REDQLoss
+from torchrl.objectives.costs.deprecated import REDQLoss_deprecated
 
 # from torchrl.objectives.costs.redq import REDQLoss
+
 from torchrl.objectives.costs.utils import _TargetNetUpdate
 from torchrl.objectives.returns.advantages import GAE
 
@@ -111,7 +112,9 @@ def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
     return loss_module, target_net_updater
 
 
-def make_redq_loss(model, cfg) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
+def make_redq_loss(
+    model, cfg
+) -> Tuple[REDQLoss_deprecated, Optional[_TargetNetUpdate]]:
     """Builds the REDQ loss module."""
     loss_kwargs = {}
     if hasattr(cfg, "distributional") and cfg.distributional:
@@ -119,7 +122,7 @@ def make_redq_loss(model, cfg) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
     else:
         loss_kwargs.update({"loss_function": cfg.loss_function})
         loss_kwargs.update({"delay_qvalue": cfg.loss == "double"})
-        loss_class = REDQLoss
+        loss_class = REDQLoss_deprecated
     if isinstance(model, ActorValueOperator):
         actor_model = model.get_policy_operator()
         qvalue_model = model.get_value_operator()

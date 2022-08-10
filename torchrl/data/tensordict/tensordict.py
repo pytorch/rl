@@ -1523,11 +1523,6 @@ dtype=torch.float32)},
         # elif isinstance(idx, torch.Tensor) and idx.dtype == torch.bool:
         #     return self.masked_select(idx)
 
-        contiguous_input = (int, slice)
-        return_simple_view = isinstance(idx, contiguous_input) or (
-            isinstance(idx, tuple)
-            and all(isinstance(_idx, contiguous_input) for _idx in idx)
-        )
         if not self.batch_size:
             raise RuntimeError(
                 "indexing a tensordict with td.batch_dims==0 is not permitted"
@@ -1538,18 +1533,13 @@ dtype=torch.float32)},
         if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
 
-        if return_simple_view and not self.is_memmap():
-            # We exclude memmap tensordicts such that indexing is achieved only when needed
-            #  as  SubTenssorDicts are lazy objects
-            return TensorDict(
-                source={key: item[idx] for key, item in self.items()},
-                _meta_source={key: item[idx] for key, item in self.items_meta()},
-                batch_size=_getitem_batch_size(self.batch_size, idx),
-                device=self._device_safe(),
-            )
-        # SubTensorDict keeps the same storage as TensorDict
-        # in all cases not accounted for above
-        return self.get_sub_tensordict(idx)
+        # if return_simple_view and not self.is_memmap():
+        return TensorDict(
+            source={key: item[idx] for key, item in self.items()},
+            _meta_source={key: item[idx] for key, item in self.items_meta()},
+            batch_size=_getitem_batch_size(self.batch_size, idx),
+            device=self._device_safe(),
+        )
 
     def __setitem__(self, index: INDEX_TYPING, value: TensorDictBase) -> None:
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
@@ -2200,15 +2190,14 @@ class TensorDict(TensorDictBase):
             if self._device_safe() is not None and dest == self.device:
                 return self
 
-            self_copy = TensorDict(
-                source={key: value.to(dest) for key, value in self.items()},
-                batch_size=self.batch_size,
-                device=dest,
-            )
-            if self._safe:
-                # sanity check
-                self_copy._check_device()
-                self_copy._check_is_shared()
+            self_copy = copy(self)
+            self_copy._device = dest
+            self_copy._tensordict = {
+                key: value.to(dest, **kwargs) for key, value in self_copy.items()
+            }
+            self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
+            self_copy._is_shared = None
+            self_copy._is_memmap = None
             return self_copy
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
@@ -2320,7 +2309,7 @@ def assert_allclose_td(
             input1 = input1._tensor
         if isinstance(input2, MemmapTensor):
             input2 = input2._tensor
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=msg
         )
     return True
@@ -2646,8 +2635,13 @@ torch.Size([3, 2])
 
     """
 
-    _safe = False
-    _lazy = True
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._safe = False
+        cls._lazy = True
+        cls._is_shared = None
+        cls._is_memmap = None
+        return TensorDictBase.__new__(cls)
 
     def __init__(
         self,
@@ -2795,15 +2789,13 @@ torch.Size([3, 2])
             )
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
-            try:
-                if dest == self.device:
-                    return self
-            except RuntimeError:
-                # if device has not been set, pass
-                pass
-            td = self.to(TensorDict)
+            # try:
+            if self._device_safe() is not None and dest == self.device:
+                return self
+            td = self.to_tensordict().to(dest, **kwargs)
             # must be device
-            return td.to(dest, **kwargs)
+            return td
+
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
             return self
@@ -3299,13 +3291,11 @@ class LazyStackedTensorDict(TensorDictBase):
             return dest(source=self, **kwargs)
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
-            try:
-                if dest == self.device:
-                    return self
-            except RuntimeError:
-                pass
-            tds = [td.to(dest) for td in self.tensordicts]
-            return LazyStackedTensorDict(*tds, stack_dim=self.stack_dim)
+            if self._device_safe() is not None and dest == self.device:
+                return self
+            td = self.to_tensordict().to(dest, **kwargs)
+            return td
+
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
         else:
@@ -3376,6 +3366,18 @@ class LazyStackedTensorDict(TensorDictBase):
                 "setting values to a LazyStackTensorDict using boolean values is not supported yet."
                 "If this feature is needed, feel free to raise an issue on github."
             )
+        if isinstance(item, torch.Tensor):
+            # e.g. item.shape = [1, 2, 3] and stack_dim == 2
+            if item.ndimension() >= self.stack_dim + 1:
+                items = item.unbind(self.stack_dim)
+                values = value.unbind(self.stack_dim)
+                for td, _item, sub_td in zip(self.tensordicts, items, values):
+                    td[_item] = sub_td
+            else:
+                values = value.unbind(self.stack_dim)
+                for td, sub_td in zip(self.tensordicts, values):
+                    td[item] = sub_td
+            return self
         return super().__setitem__(item, value)
 
     def __getitem__(self, item: INDEX_TYPING) -> TensorDictBase:
@@ -3826,11 +3828,8 @@ class SavedTensorDict(TensorDictBase):
         elif isinstance(dest, (torch.device, str, int)):
             # must be device
             dest = torch.device(dest)
-            try:
-                if dest == self.device:
-                    return self
-            except RuntimeError:
-                pass
+            if self._device_safe() is not None and dest == self.device:
+                return self
             self_copy = copy(self)
             self_copy._device = dest
             self_copy._dict_meta = deepcopy(self._dict_meta)
@@ -4187,7 +4186,7 @@ class _CustomOpTensorDict(TensorDictBase):
         elif isinstance(dest, (torch.device, str, int)):
             if self._device_safe() is not None and torch.device(dest) == self.device:
                 return self
-            td = self._source.to(dest)
+            td = self._source.to(dest, **kwargs)
             self_copy = copy(self)
             self_copy._source = td
             return self_copy

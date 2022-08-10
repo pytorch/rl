@@ -59,6 +59,7 @@ __all__ = [
     "RewardNormalizer",
     "SelectKeys",
     "UpdateWeights",
+    "ClearCudaCache",
 ]
 
 TYPE_DESCR = {float: "4.4f", int: ""}
@@ -398,7 +399,6 @@ class Trainer:
         return losses_td.detach().set("grad_norm", grad_norm)
 
     def optim_steps(self, batch: TensorDictBase) -> None:
-        # average_grad_norm = 0.0
         average_losses = None
 
         self._pre_optim_hook()
@@ -407,13 +407,12 @@ class Trainer:
             self._optim_count += 1
 
             sub_batch = self._process_optim_batch_hook(batch)
-            sub_batch_device = sub_batch.to(self.loss_module.device)
-            losses_td = self.loss_module(sub_batch_device)
-            self._post_loss_hook(sub_batch_device)
+            losses_td = self.loss_module(sub_batch)
+            self._post_loss_hook(sub_batch)
 
             losses_detached = self._optimizer_step(losses_td)
             self._post_optim_hook()
-            self._post_optim_log(sub_batch_device)
+            self._post_optim_log(sub_batch)
 
             if average_losses is None:
                 average_losses: TensorDictBase = losses_detached
@@ -421,6 +420,7 @@ class Trainer:
                 for key, item in losses_detached.items():
                     val = average_losses.get(key)
                     average_losses.set(key, val * j / (j + 1) + item / (j + 1))
+            del sub_batch, losses_td, losses_detached
 
         if self.optim_steps_per_batch > 0:
             self._log(
@@ -567,12 +567,30 @@ class ReplayBufferTrainer:
 
     def sample(self, batch: TensorDictBase) -> TensorDictBase:
         sample = self.replay_buffer.sample(self.batch_size)
-        sample = sample.contiguous()
-        return sample.to(self.device)
+        return sample.to(self.device, non_blocking=True)
 
     def update_priority(self, batch: TensorDictBase) -> None:
         if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
             self.replay_buffer.update_priority(batch)
+
+
+class ClearCudaCache:
+    """Clears cuda cache at a given interval.
+
+    Examples:
+        >>> clear_cuda = ClearCudaCache(100)
+        >>> trainer.register_op("pre_optim_steps", clear_cuda)
+
+    """
+
+    def __init__(self, interval: int):
+        self.interval = interval
+        self.count = 0
+
+    def __call__(self, *args, **kwargs):
+        self.count += 1
+        if self.count % self.interval == 0:
+            torch.cuda.empty_cache()
 
 
 class LogReward:
@@ -870,7 +888,7 @@ class Recorder:
         if log_keys is None:
             log_keys = ["reward"]
         if out_keys is None:
-            out_keys = KeyDependentDefaultDict()
+            out_keys = KeyDependentDefaultDict(lambda x: x)
             out_keys["reward"] = "r_evaluation"
         self.log_keys = log_keys
         self.out_keys = out_keys

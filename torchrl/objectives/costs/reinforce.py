@@ -33,7 +33,7 @@ class ReinforceLoss(LossModule):
         self.advantage_key = advantage_key
         self.advantage_diff_key = advantage_diff_key
         self.loss_critic_type = loss_critic_type
-        self.gamma = gamma
+        self.register_buffer("gamma", torch.tensor(gamma))
 
         if (
             hasattr(advantage_module, "is_functional")
