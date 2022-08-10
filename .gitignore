@@ -166,5 +166,6 @@ cython_debug/
 # Vscode
 .vscode
 version.py
+torchrl/version.py
 wandb
 outputs
