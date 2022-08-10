@@ -27,7 +27,7 @@ from torchrl.data import (
     TensorSpec,
     CompositeSpec,
 )
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 
 __all__ = [
     "TensorDictModule",
@@ -234,12 +234,12 @@ class TensorDictModule(nn.Module):
 
     def _write_to_tensordict(
         self,
-        tensordict: _TensorDict,
+        tensordict: TensorDictBase,
         tensors: List,
-        tensordict_out: Optional[_TensorDict] = None,
+        tensordict_out: Optional[TensorDictBase] = None,
         out_keys: Optional[Iterable[str]] = None,
         vmap: Optional[int] = None,
-    ) -> _TensorDict:
+    ) -> TensorDictBase:
 
         if out_keys is None:
             out_keys = self.out_keys
@@ -338,10 +338,10 @@ class TensorDictModule(nn.Module):
 
     def forward(
         self,
-        tensordict: _TensorDict,
-        tensordict_out: Optional[_TensorDict] = None,
+        tensordict: TensorDictBase,
+        tensordict_out: Optional[TensorDictBase] = None,
         **kwargs,
-    ) -> _TensorDict:
+    ) -> TensorDictBase:
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
         tensors = self._call_module(tensors, **kwargs)
         if not isinstance(tensors, tuple):
@@ -354,12 +354,12 @@ class TensorDictModule(nn.Module):
         )
         return tensordict_out
 
-    def random(self, tensordict: _TensorDict) -> _TensorDict:
+    def random(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Samples a random element in the target space, irrespective of any input. If multiple output keys are present,
         only the first will be written in the input `tensordict`.
 
         Args:
-            tensordict (_TensorDict): tensordict where the output value should be written.
+            tensordict (TensorDictBase): tensordict where the output value should be written.
 
         Returns:
             the original tensordict with a new/updated value for the output key.
@@ -369,7 +369,7 @@ class TensorDictModule(nn.Module):
         tensordict.set(key0, self.spec.rand(tensordict.batch_size))
         return tensordict
 
-    def random_sample(self, tensordict: _TensorDict) -> _TensorDict:
+    def random_sample(self, tensordict: TensorDictBase) -> TensorDictBase:
         """see TensorDictModule.random(...)"""
         return self.random(tensordict)
 

@@ -21,7 +21,7 @@ from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
     LazyTensorStorage,
 )
-from torchrl.data.tensordict.tensordict import assert_allclose_td, _TensorDict
+from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDictBase
 
 
 collate_fn_dict = {
@@ -128,7 +128,7 @@ class TestBuffers:
         data = self._get_datum(rbtype)
         rb.add(data)
         s = rb._storage[0]
-        if isinstance(s, _TensorDict):
+        if isinstance(s, TensorDictBase):
             assert (s == data.select(*s.keys())).all()
         else:
             assert (s == data).all()
@@ -142,12 +142,12 @@ class TestBuffers:
         for d in data[-length:]:
             found_similar = False
             for b in rb._storage:
-                if isinstance(b, _TensorDict):
+                if isinstance(b, TensorDictBase):
                     b = b.exclude("index").select(*set(d.keys()).intersection(b.keys()))
                     d = d.select(*set(d.keys()).intersection(b.keys()))
 
                 value = b == d
-                if isinstance(value, (torch.Tensor, _TensorDict)):
+                if isinstance(value, (torch.Tensor, TensorDictBase)):
                     value = value.all()
                 if value:
                     found_similar = True
@@ -160,18 +160,18 @@ class TestBuffers:
         data = self._get_data(rbtype, size=5)
         rb.extend(data)
         new_data = rb.sample(3)
-        if not isinstance(new_data, (torch.Tensor, _TensorDict)):
+        if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
             new_data = new_data[0]
 
         for d in new_data:
             found_similar = False
             for b in data:
-                if isinstance(b, _TensorDict):
+                if isinstance(b, TensorDictBase):
                     b = b.exclude("index").select(*set(d.keys()).intersection(b.keys()))
                     d = d.select(*set(d.keys()).intersection(b.keys()))
 
                 value = b == d
-                if isinstance(value, (torch.Tensor, _TensorDict)):
+                if isinstance(value, (torch.Tensor, TensorDictBase)):
                     value = value.all()
                 if value:
                     found_similar = True
@@ -265,16 +265,12 @@ def test_prb(priority_key, contiguous, device):
     rb.update_priority(s)
     s = rb.sample(5)
     assert (val == s.get("a")).sum() >= 1
-    torch.testing.assert_allclose(
-        td2[idx0].get("a").view(1), s.get("a").unique().view(1)
-    )
+    torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
     # test updating values of original td
     td2.set_("a", torch.ones_like(td2.get("a")))
     s = rb.sample(5)
-    torch.testing.assert_allclose(
-        td2[idx0].get("a").view(1), s.get("a").unique().view(1)
-    )
+    torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
 
 @pytest.mark.parametrize("stack", [False, True])

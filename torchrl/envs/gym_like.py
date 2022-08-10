@@ -7,7 +7,7 @@ import numpy as np
 import torch
 
 from torchrl.data import TensorDict
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.common import _EnvWrapper
 
 __all__ = ["GymLikeEnv", "default_info_dict_reader"]
@@ -38,7 +38,7 @@ class default_info_dict_reader:
             keys = []
         self.keys = keys
 
-    def __call__(self, info_dict: dict, tensordict: _TensorDict) -> _TensorDict:
+    def __call__(self, info_dict: dict, tensordict: TensorDictBase) -> TensorDictBase:
         if not isinstance(info_dict, dict) and len(self.keys):
             warnings.warn(
                 f"Found an info_dict of type {type(info_dict)} "
@@ -78,7 +78,7 @@ class GymLikeEnv(_EnvWrapper):
         cls._info_dict_reader = None
         return super().__new__(cls, *args, **kwargs)
 
-    def _step(self, tensordict: _TensorDict) -> _TensorDict:
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get("action")
         action_np = self.action_spec.to_numpy(action, safe=False)
 
@@ -114,7 +114,9 @@ class GymLikeEnv(_EnvWrapper):
 
         return tensordict_out
 
-    def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs) -> _TensorDict:
+    def _reset(
+        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+    ) -> TensorDictBase:
         obs, *_ = self._output_transform((self._env.reset(**kwargs),))
         tensordict_out = TensorDict(
             source=self._read_obs(obs),

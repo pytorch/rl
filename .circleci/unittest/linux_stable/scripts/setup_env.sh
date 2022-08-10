@@ -40,7 +40,7 @@ conda activate "${env_dir}"
 
 # 3. Install mujoco
 printf "* Installing mujoco and related\n"
-mkdir $root_dir/.mujoco
+mkdir -p $root_dir/.mujoco
 cd $root_dir/.mujoco/
 wget https://github.com/deepmind/mujoco/releases/download/2.1.1/mujoco-2.1.1-linux-x86_64.tar.gz
 tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
@@ -56,10 +56,10 @@ cat "${this_dir}/environment.yml"
 
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
-else
-  conda install -y -c conda-forge mesa
-  conda install -y -c menpo osmesa
+elif [ "${CU_VERSION:-}" == cpu ]; then
   PRIVATE_MUJOCO_GL=osmesa
+else
+  PRIVATE_MUJOCO_GL=egl
 fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
@@ -68,6 +68,18 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
-  MUJOCO_GL=$PRIVATE_MUJOCO_GL
+  MUJOCO_GL=$PRIVATE_MUJOCO_GL \
+  PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
+
+# Software rendering requires GLX and OSMesa.
+if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
+  yum makecache
+  yum install -y glfw
+  yum install -y glew
+  yum install -y mesa-libGL
+  yum install -y mesa-libOSMesa-devel
+  yum -y install egl-utils
+  yum -y install freeglut
+fi
 
 conda env update --file "${this_dir}/environment.yml" --prune

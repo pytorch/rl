@@ -59,7 +59,7 @@ cs.store(name="config", node=Config)
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
 
-    from torchrl.trainers.loggers import TensorboardLogger
+    from torchrl.trainers.loggers.tensorboard import TensorboardLogger
 
     cfg = correct_for_frame_skip(cfg)
 
@@ -175,7 +175,7 @@ def main(cfg: "DictConfig"):
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
 
     trainer.train()
-    return (logger.log_dir, trainer._log_dict, trainer.state_dict())
+    return (logger.log_dir, trainer._log_dict)
 
 
 if __name__ == "__main__":

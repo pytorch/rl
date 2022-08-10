@@ -162,7 +162,7 @@ def _main():
         long_description_content_type="text/markdown",
         license="BSD",
         # Package info
-        packages=find_packages(exclude=("test",)),
+        packages=find_packages(exclude=("test", "tutorials")),
         ext_modules=get_extensions(),
         cmdclass={
             "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
@@ -183,6 +183,7 @@ def _main():
             "tests": ["pytest", "pyyaml", "pytest-instafail"],
             "utils": [
                 "tensorboard",
+                "wandb",
                 "tqdm",
                 "hydra-core>=1.1",
                 "hydra-submitit-launcher",

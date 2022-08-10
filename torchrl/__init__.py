@@ -108,7 +108,7 @@ def seed_generator(seed):
 
 
 class KeyDependentDefaultDict(collections.defaultdict):
-    def __init__(self, fun=lambda x: x):
+    def __init__(self, fun):
         self.fun = fun
         super().__init__()
 

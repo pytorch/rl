@@ -74,7 +74,7 @@ def test_multistep(n, key, device, T=11):
     assert ((next_obs == true_next_obs) | terminated[:, (1 + ms.n_steps_max) :]).all()
 
     # test gamma computation
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(
         ms_tensordict.get("gamma"), ms.gamma ** ms_tensordict.get("steps_to_next_obs")
     )
 

@@ -371,7 +371,9 @@ def get_stats_random_rollout(
         s = td_stats.get(key).std().clamp_min(1e-5)
     else:
         m = td_stats.get(key).mean(dim=0)
-        s = td_stats.get(key).std(dim=0).clamp_min(1e-5)
+        s = td_stats.get(key).std(dim=0)
+    m[s == 0] = 0.0
+    s[s == 0] = 1.0
 
     print(
         f"stats computed for {td_stats.numel()} steps. Got: \n"
