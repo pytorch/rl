@@ -15,8 +15,7 @@ from torchrl.data import (
     PrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.data.replay_buffers import TensorDictPrioritizedReplayBuffer
-from torchrl.data.replay_buffers import rb_prototype, samplers, writers
+from torchrl.data.replay_buffers import rb_prototype, samplers, writers, TensorDictPrioritizedReplayBuffer
 from torchrl.data.replay_buffers.storages import (
     ListStorage,
     LazyMemmapStorage,

@@ -22,8 +22,8 @@ class Storage:
 
     """
 
-    def __init__(self, size: int) -> None:
-        self.size = int(size)
+    def __init__(self, max_size: int) -> None:
+        self.max_size = int(max_size)
 
     @abc.abstractmethod
     def set(self, cursor: int, data: Any):
@@ -49,8 +49,8 @@ class Storage:
 
 
 class ListStorage(Storage):
-    def __init__(self, size: int):
-        super().__init__(size)
+    def __init__(self, max_size: int):
+        super().__init__(max_size)
         self._storage = []
 
     def set(self, cursor: Union[int, Sequence[int], slice], data: Any):
@@ -62,13 +62,19 @@ class ListStorage(Storage):
                 self.set(_cursor, _data)
             return
         else:
-            if cursor >= len(self._storage):
-                if cursor != len(self._storage):
-                    raise RuntimeError(
-                        "Cannot append data located more than one item away from"
-                        f"the storage size: the storage size is {len(self)} and the"
-                        f"index of the item to be set is {cursor}."
-                    )
+            if cursor > len(self._storage):
+                raise RuntimeError(
+                    "Cannot append data located more than one item away from "
+                    f"the storage size: the storage size is {len(self)} "
+                    f"and the index of the item to be set is {cursor}."
+                )
+            if cursor >= self.max_size:
+                raise RuntimeError(
+                    f"Cannot append data to the list storage: "
+                    f"maximum capacity is {self.max_size} "
+                    f"and the index of the item to be set is {cursor}."
+                )
+            if cursor == len(self._storage):
                 self._storage.append(data)
             else:
                 self._storage[cursor] = data
@@ -93,8 +99,8 @@ class LazyTensorStorage(Storage):
             stored and sent. Default is `torch.device("cpu")`.
     """
 
-    def __init__(self, size, scratch_dir=None, device=None):
-        super().__init__(size)
+    def __init__(self, max_size, scratch_dir=None, device=None):
+        super().__init__(max_size)
         self.initialized = False
         self.device = device if device else torch.device("cpu")
         self._len = 0
@@ -104,20 +110,20 @@ class LazyTensorStorage(Storage):
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
             out = torch.empty(
-                self.size,
+                self.max_size,
                 *data.shape,
                 device=self.device,
                 dtype=data.dtype,
             )
         else:
-            out = TensorDict({}, [self.size, *data.shape])
+            out = TensorDict({}, [self.max_size, *data.shape])
             print("The storage is being created: ")
             for key, tensor in data.items():
                 if isinstance(tensor, TensorDictBase):
-                    out[key] = tensor.expand(self.size).clone().zero_()
+                    out[key] = tensor.expand(self.max_size).clone().zero_()
                 else:
                     out[key] = torch.empty(
-                        self.size,
+                        self.max_size,
                         *tensor.shape,
                         device=self.device,
                         dtype=tensor.dtype,
@@ -159,15 +165,15 @@ class LazyMemmapStorage(LazyTensorStorage):
     """A memory-mapped storage for tensors and tensordicts.
 
     Args:
-        size (int): size of the storage, i.e. maximum number of elements stored
+        max_size (int): size of the storage, i.e. maximum number of elements stored
             in the buffer.
         scratch_dir (str or path): directory where memmap-tensors will be written.
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is `torch.device("cpu")`.
     """
 
-    def __init__(self, size, scratch_dir=None, device=None):
-        super().__init__(size)
+    def __init__(self, max_size, scratch_dir=None, device=None):
+        super().__init__(max_size)
         self.initialized = False
         self.scratch_dir = None
         if scratch_dir is not None:
@@ -182,26 +188,26 @@ class LazyMemmapStorage(LazyTensorStorage):
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
             out = MemmapTensor(
-                self.size, *data.shape, device=self.device, dtype=data.dtype
+                self.max_size, *data.shape, device=self.device, dtype=data.dtype
             )
             filesize = os.path.getsize(out.filename) / 1024 / 1024
             print(
                 f"The storage was created in {out.filename} and occupies {filesize} Mb of storage."
             )
         else:
-            out = TensorDict({}, [self.size, *data.shape])
+            out = TensorDict({}, [self.max_size, *data.shape])
             print("The storage is being created: ")
             for key, tensor in data.items():
                 if isinstance(tensor, TensorDictBase):
                     out[key] = (
-                        tensor.expand(self.size)
+                        tensor.expand(self.max_size)
                         .clone()
                         .zero_()
                         .memmap_(prefix=self.scratch_dir)
                     )
                 else:
                     out[key] = _value = MemmapTensor(
-                        self.size,
+                        self.max_size,
                         *tensor.shape,
                         device=self.device,
                         dtype=tensor.dtype,
@@ -209,7 +215,7 @@ class LazyMemmapStorage(LazyTensorStorage):
                     )
                 filesize = os.path.getsize(_value.filename) / 1024 / 1024
                 print(
-                    f"\t{key}: {_value.filename}, {filesize} Mb of storage (size: {[self.size, *tensor.shape]})."
+                    f"\t{key}: {_value.filename}, {filesize} Mb of storage (size: {[self.max_size, *tensor.shape]})."
                 )
         self._storage = out
         self.initialized = True

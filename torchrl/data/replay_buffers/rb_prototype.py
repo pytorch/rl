@@ -18,7 +18,7 @@ class ReplayBuffer:
     #TODO: Description of the ReplayBuffer class needed.
     Args:
         storage (Storage, optional): the storage to be used. If none is provided
-            a default ListStorage with size 1_000 will be created.
+            a default ListStorage with max_size of 1_000 will be created.
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
@@ -40,7 +40,7 @@ class ReplayBuffer:
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
     ) -> None:
-        self._storage = storage or ListStorage(size=1_000)
+        self._storage = storage or ListStorage(max_size=1_000)
         self._sampler = sampler or RandomSampler()
         self._writer = writer or RoundRobinWriter()
         self._writer.register_storage(self._storage)
