@@ -1527,6 +1527,100 @@ class TestTDSequence:
         elif safe and spec_type == "bounded":
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
+    @pytest.mark.parametrize("functional", [True, False])
+    @pytest.mark.parametrize("stack", [True, False])
+    def test_sequential_partial(self, stack, functional):
+        torch.manual_seed(0)
+        param_multiplier = 2
+
+        net1 = nn.Linear(3, 4)
+        if functional:
+            fnet1, params1 = make_functional(net1)
+        else:
+            params1 = None
+            fnet1 = net1
+
+        net2 = nn.Linear(4, 4 * param_multiplier)
+        net2 = NormalParamWrapper(net2)
+        if functional:
+            fnet2, params2 = make_functional(net2)
+        else:
+            fnet2 = net2
+            params2 = None
+        fnet2 = TensorDictModule(fnet2, in_keys=["b"], out_keys=["loc", "scale"])
+
+        net3 = nn.Linear(4, 4 * param_multiplier)
+        net3 = NormalParamWrapper(net3)
+        if functional:
+            fnet3, params3 = make_functional(net3)
+        else:
+            fnet3 = net3
+            params3 = None
+        fnet3 = TensorDictModule(fnet3, in_keys=["c"], out_keys=["loc", "scale"])
+
+        spec = NdBoundedTensorSpec(-0.1, 0.1, 4)
+        spec = CompositeSpec(out=spec, loc=None, scale=None)
+
+        kwargs = {"distribution_class": TanhNormal}
+
+        tdmodule1 = TensorDictModule(
+            fnet1,
+            spec=None,
+            in_keys=["a"],
+            out_keys=["hidden"],
+            safe=False,
+        )
+        tdmodule2 = ProbabilisticTensorDictModule(
+            fnet2,
+            spec=spec,
+            out_key_sample=["out"],
+            dist_param_keys=["loc", "scale"],
+            safe=True,
+            **kwargs
+        )
+        tdmodule3 = ProbabilisticTensorDictModule(
+            fnet3,
+            spec=spec,
+            out_key_sample=["out"],
+            dist_param_keys=["loc", "scale"],
+            safe=True,
+            **kwargs
+        )
+        tdmodule = TensorDictSequence(
+            tdmodule1, tdmodule2, tdmodule3, partial_tolerant=True
+        )
+
+        if stack:
+            td = torch.stack(
+                [
+                    TensorDict({"a": torch.randn(3), "b": torch.randn(4)}, []),
+                    TensorDict({"a": torch.randn(3), "c": torch.randn(4)}, []),
+                ],
+                0,
+            )
+            if functional:
+                tdmodule(td, params=params1 + params2 + params3)
+            else:
+                tdmodule(td)
+            assert "loc" in td.keys()
+            assert "scale" in td.keys()
+            assert "out" in td.keys()
+            assert td["out"].shape[0] == 2
+            assert td["loc"].shape[0] == 2
+            assert td["scale"].shape[0] == 2
+            assert "b" not in td.keys()
+            assert "b" in td[0].keys()
+        else:
+            td = TensorDict({"a": torch.randn(3), "b": torch.randn(4)}, [])
+            if functional:
+                tdmodule(td, params=params1 + params2 + params3)
+            else:
+                tdmodule(td)
+            assert "loc" in td.keys()
+            assert "scale" in td.keys()
+            assert "out" in td.keys()
+            assert "b" in td.keys()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
