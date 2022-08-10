@@ -46,116 +46,6 @@ from torchrl.envs.transforms.transforms import (
 TIMEOUT = 10.0
 
 
-def _test_vecnorm_subproc(idx, queue_out: mp.Queue, queue_in: mp.Queue):
-    td = queue_in.get(timeout=TIMEOUT)
-    if _has_gym:
-        env = GymEnv("Pendulum-v1")
-    else:
-        env = ContinuousActionVecMockEnv()
-    t = VecNorm(shared_td=td)
-    env = TransformedEnv(env, t)
-    env.set_seed(1000 + idx)
-    tensordict = env.reset()
-    for _ in range(10):
-        env.rand_step(tensordict)
-    queue_out.put(True)
-    msg = queue_in.get(timeout=TIMEOUT)
-    assert msg == "all_done"
-    obs_sum = t._td.get("next_observation_sum").clone()
-    obs_ssq = t._td.get("next_observation_ssq").clone()
-    obs_count = t._td.get("next_observation_ssq").clone()
-    reward_sum = t._td.get("reward_sum").clone()
-    reward_ssq = t._td.get("reward_ssq").clone()
-    reward_count = t._td.get("reward_ssq").clone()
-
-    td_out = TensorDict(
-        {
-            "obs_sum": obs_sum,
-            "obs_ssq": obs_ssq,
-            "obs_count": obs_count,
-            "reward_sum": reward_sum,
-            "reward_ssq": reward_ssq,
-            "reward_count": reward_count,
-        },
-        [],
-    ).share_memory_()
-    queue_out.put(td_out)
-    msg = queue_in.get(timeout=TIMEOUT)
-    assert msg == "all_done"
-    queue_in.close()
-    queue_out.close()
-    del queue_in, queue_out
-
-
-@pytest.mark.parametrize("nprc", [2, 5])
-def test_vecnorm_parallel(nprc):
-    queues = []
-    prcs = []
-    if _has_gym:
-        td = VecNorm.build_td_for_shared_vecnorm(GymEnv("Pendulum-v1"))
-    else:
-        td = VecNorm.build_td_for_shared_vecnorm(
-            ContinuousActionVecMockEnv(),
-        )
-    for idx in range(nprc):
-        prc_queue_in = mp.Queue(1)
-        prc_queue_out = mp.Queue(1)
-        p = mp.Process(
-            target=_test_vecnorm_subproc,
-            args=(
-                idx,
-                prc_queue_in,
-                prc_queue_out,
-            ),
-        )
-        p.start()
-        prc_queue_out.put(td)
-        prcs.append(p)
-        queues.append((prc_queue_in, prc_queue_out))
-
-    dones = [queue[0].get(timeout=TIMEOUT) for queue in queues]
-    assert all(dones)
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
-
-    obs_sum = td.get("next_observation_sum").clone()
-    obs_ssq = td.get("next_observation_ssq").clone()
-    obs_count = td.get("next_observation_ssq").clone()
-    reward_sum = td.get("reward_sum").clone()
-    reward_ssq = td.get("reward_ssq").clone()
-    reward_count = td.get("reward_ssq").clone()
-
-    for idx in range(nprc):
-        td_out = queues[idx][0].get(timeout=TIMEOUT)
-        _obs_sum = td_out.get("obs_sum")
-        _obs_ssq = td_out.get("obs_ssq")
-        _obs_count = td_out.get("obs_count")
-        _reward_sum = td_out.get("reward_sum")
-        _reward_ssq = td_out.get("reward_ssq")
-        _reward_count = td_out.get("reward_count")
-        assert (obs_sum == _obs_sum).all()
-        assert (obs_ssq == _obs_ssq).all()
-        assert (obs_count == _obs_count).all()
-        assert (reward_sum == _reward_sum).all()
-        assert (reward_ssq == _reward_ssq).all()
-        assert (reward_count == _reward_count).all()
-
-        obs_sum, obs_ssq, obs_count, reward_sum, reward_ssq, reward_count = (
-            _obs_sum,
-            _obs_ssq,
-            _obs_count,
-            _reward_sum,
-            _reward_ssq,
-            _reward_count,
-        )
-
-    msg = "all_done"
-    for idx in range(nprc):
-        queues[idx][1].put(msg)
-    del queues
-
-
 def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.Queue):
     env = make_env()
     env.set_seed(1000 + idx)
@@ -212,12 +102,13 @@ def test_vecnorm_parallel_auto(nprc):
         prcs.append(p)
         queues.append((prc_queue_in, prc_queue_out))
 
-    td = list(make_env.state_dict().values())[0]
     dones = [queue[0].get() for queue in queues]
     assert all(dones)
     msg = "all_done"
     for idx in range(nprc):
         queues[idx][1].put(msg)
+
+    td = make_env.state_dict()["_extra_state"]["td"]
 
     obs_sum = td.get("next_observation_sum").clone()
     obs_ssq = td.get("next_observation_ssq").clone()
@@ -297,7 +188,7 @@ def test_parallelenv_vecnorm():
     parallel_sd = parallel_env.state_dict()
     assert "worker0" in parallel_sd
     worker_sd = parallel_sd["worker0"]
-    td = list(worker_sd.values())[0]
+    td = worker_sd["_extra_state"]["td"]
     queue_out.put("start")
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "first round"
@@ -354,6 +245,29 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     assert (abs(std - 1) < thr).all()
     if not env_t.is_closed:
         env_t.close()
+
+
+def test_added_transforms_are_in_eval_mode_trivial():
+    base_env = ContinuousActionVecMockEnv()
+    t = TransformedEnv(base_env)
+    assert not t.transform.training
+
+    t.train()
+    assert t.transform.training
+
+
+def test_added_transforms_are_in_eval_mode():
+    base_env = ContinuousActionVecMockEnv()
+    r = RewardScaling(0, 1)
+    t = TransformedEnv(base_env, r)
+    assert not t.transform.training
+    t.append_transform(RewardScaling(0, 1))
+    assert not t.transform[1].training
+
+    t.train()
+    assert t.transform.training
+    assert t.transform[0].training
+    assert t.transform[1].training
 
 
 class TestTransforms:
@@ -590,6 +504,42 @@ class TestTransforms:
                 assert observation_spec[key].shape == torch.Size(
                     [nchannels * N, 16, 16]
                 )
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "keys_inv_1",
+        [
+            ["action_1"],
+            [],
+        ],
+    )
+    @pytest.mark.parametrize(
+        "keys_inv_2",
+        [
+            ["action_2"],
+            [],
+        ],
+    )
+    def test_compose_inv(self, keys_inv_1, keys_inv_2, device):
+        torch.manual_seed(0)
+        keys_to_transform = set(keys_inv_1 + keys_inv_2)
+        keys_total = set(["action_1", "action_2", "dont_touch"])
+        double2float_1 = DoubleToFloat(keys_inv_in=keys_inv_1)
+        double2float_2 = DoubleToFloat(keys_inv_in=keys_inv_2)
+        compose = Compose(double2float_1, double2float_2)
+        td = TensorDict(
+            {
+                key: torch.zeros(1, 3, 3, dtype=torch.float32, device=device)
+                for key in keys_total
+            },
+            [1],
+        )
+
+        compose.inv(td)
+        for key in keys_to_transform:
+            assert td.get(key).dtype == torch.double
+        for key in keys_total - keys_to_transform:
+            assert td.get(key).dtype == torch.float32
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(

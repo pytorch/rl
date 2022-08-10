@@ -239,7 +239,7 @@ class ReplayBuffer:
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> Any:
-        index = np.random.randint(0, len(self._storage), size=batch_size)
+        index = torch.randint(0, len(self._storage), (batch_size,))
 
         with self._replay_lock:
             data = self._storage[index]
@@ -447,10 +447,11 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                 raise RuntimeError("negative p_min")
             mass = np.random.uniform(0.0, p_sum, size=batch_size)
             index = self._sum_tree.scan_lower_bound(mass)
-            if isinstance(index, torch.Tensor):
-                index.clamp_max_(len(self._storage) - 1)
-            else:
-                index = np.clip(index, None, len(self._storage) - 1)
+            if not isinstance(index, torch.Tensor):
+                index = torch.tensor(index)
+            if not index.ndimension():
+                index = index.reshape((1,))
+            index.clamp_max_(len(self._storage) - 1)
             data = self._storage[index]
             weight = self._sum_tree[index]
 

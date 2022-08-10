@@ -54,7 +54,7 @@ class DQNLoss(LossModule):
             raise TypeError(
                 f"DQNLoss requires value_network to be of QValueActor dtype, got {type(value_network)}"
             )
-        self.gamma = gamma
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_function = loss_function
         self.priority_key = priority_key
 
@@ -152,7 +152,7 @@ class DistributionalDQNLoss(LossModule):
         delay_value: bool = False,
     ):
         super().__init__()
-        self.gamma = gamma
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.priority_key = priority_key
         self.delay_value = delay_value
         if not isinstance(value_network, DistributionalQValueActor):

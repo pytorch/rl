@@ -97,7 +97,7 @@ class REDQLoss(LossModule):
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
-        self.gamma = gamma
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.priority_key = priotity_key
         self.loss_function = loss_function
 
@@ -288,12 +288,12 @@ class REDQLoss(LossModule):
                 "loss_actor": loss_actor.mean(),
                 "loss_qvalue": loss_qval.mean(),
                 "loss_alpha": loss_alpha.mean(),
-                "alpha": self.alpha,
-                "entropy": -sample_log_prob.mean(),
-                "state_action_value_actor": state_action_value_actor.mean(),
-                "action_log_prob_actor": action_log_prob_actor.mean(),
-                "next_state_value": next_state_value.mean(),
-                "target_value": target_value.mean(),
+                "alpha": self.alpha.detach(),
+                "entropy": -sample_log_prob.mean().detach(),
+                "state_action_value_actor": state_action_value_actor.mean().detach(),
+                "action_log_prob_actor": action_log_prob_actor.mean().detach(),
+                "next_state_value": next_state_value.mean().detach(),
+                "target_value": target_value.mean().detach(),
             },
             [],
         )

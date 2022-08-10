@@ -120,7 +120,7 @@ class LazyTensorStorage(Storage):
             print("The storage is being created: ")
             for key, tensor in data.items():
                 if isinstance(tensor, TensorDictBase):
-                    out[key] = tensor.expand(self.max_size).clone().zero_()
+                    out[key] = tensor.expand(self.max_size).clone().to(self.device).zero_()
                 else:
                     out[key] = torch.empty(
                         self.max_size,
@@ -204,6 +204,7 @@ class LazyMemmapStorage(LazyTensorStorage):
                         .clone()
                         .zero_()
                         .memmap_(prefix=self.scratch_dir)
+                        .to(self.device)
                     )
                 else:
                     out[key] = _value = MemmapTensor(

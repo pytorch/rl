@@ -23,7 +23,7 @@ __all__ = [
     "make_collector_onpolicy",
 ]
 
-from torchrl.envs.common import _EnvClass
+from torchrl.envs.common import EnvBase
 from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule
 
 
@@ -70,7 +70,7 @@ def sync_async_collector(
     and the policy should handle those envs in batch.
 
     Args:
-        env_fns: Callable (or list of Callables) returning an instance of _EnvClass class.
+        env_fns: Callable (or list of Callables) returning an instance of EnvBase class.
         env_kwargs: Optional. Dictionary (or list of dictionaries) containing the kwargs for the environment being created.
         num_env_per_collector: Number of environments per data collector. The product
             num_env_per_collector * num_collectors should be less or equal to the number of workers available.
@@ -141,7 +141,7 @@ def sync_sync_collector(
     and the policy should handle those envs in batch.
 
     Args:
-        env_fns: Callable (or list of Callables) returning an instance of _EnvClass class.
+        env_fns: Callable (or list of Callables) returning an instance of EnvBase class.
         env_kwargs: Optional. Dictionary (or list of dictionaries) containing the kwargs for the environment being created.
         num_env_per_collector: Number of environments per data collector. The product
             num_env_per_collector * num_collectors should be less or equal to the number of workers available.
@@ -237,7 +237,7 @@ def _make_collector(
 
 
 def make_collector_offpolicy(
-    make_env: Callable[[], _EnvClass],
+    make_env: Callable[[], EnvBase],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
     cfg: "DictConfig",
     make_env_kwargs: Optional[Dict] = None,
@@ -302,7 +302,7 @@ def make_collector_offpolicy(
 
 
 def make_collector_onpolicy(
-    make_env: Callable[[], _EnvClass],
+    make_env: Callable[[], EnvBase],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
     cfg: "DictConfig",
     make_env_kwargs: Optional[Dict] = None,

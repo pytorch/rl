@@ -498,16 +498,12 @@ def test_prb(priority_key, contiguous, device):
     rb.update_priority(s)
     s = rb.sample(5)
     assert (val == s.get("a")).sum() >= 1
-    torch.testing.assert_allclose(
-        td2[idx0].get("a").view(1), s.get("a").unique().view(1)
-    )
+    torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
     # test updating values of original td
     td2.set_("a", torch.ones_like(td2.get("a")))
     s = rb.sample(5)
-    torch.testing.assert_allclose(
-        td2[idx0].get("a").view(1), s.get("a").unique().view(1)
-    )
+    torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
 
 
 @pytest.mark.parametrize("stack", [False, True])

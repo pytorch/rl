@@ -44,8 +44,8 @@ else
 fi
 
 printf "Installing functorch\n"
-python -m pip install ninja  # Makes the build go faster
-python -m pip install "git+https://github.com/pytorch/functorch.git"
+pip3 install ninja  # Makes the build go faster
+pip3 install "git+https://github.com/pytorch/functorch.git"
 
 # smoke test
 python -c "import functorch"
