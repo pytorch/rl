@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 from copy import copy
-from time import sleep
 
 import pytest
 import torch
@@ -188,15 +187,22 @@ def _test_vecnorm_subproc_auto(idx, make_env, queue_out: mp.Queue, queue_in: mp.
 @pytest.mark.parametrize("nprc", [2, 5])
 def test_vecnorm_parallel_auto(nprc):
 
+    # note:  it's critical to create the lock outside of the lambda
+    #       otherwise there will be a seperate lock per process
+    shared_lock = mp.Lock()
     queues = []
     prcs = []
     if _has_gym:
         make_env = EnvCreator(
-            lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm(decay=1.0))
+            lambda: TransformedEnv(
+                GymEnv("Pendulum-v1"), VecNorm(decay=1.0, lock=shared_lock)
+            )
         )
     else:
         make_env = EnvCreator(
-            lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm(decay=1.0))
+            lambda: TransformedEnv(
+                ContinuousActionVecMockEnv(), VecNorm(decay=1.0, lock=shared_lock)
+            )
         )
 
     for idx in range(nprc):
@@ -215,15 +221,13 @@ def test_vecnorm_parallel_auto(nprc):
         prcs.append(p)
         queues.append((prc_queue_in, prc_queue_out))
 
-    td = list(make_env.state_dict().values())[0]
     dones = [queue[0].get() for queue in queues]
     assert all(dones)
     msg = "all_done"
     for idx in range(nprc):
         queues[idx][1].put(msg)
 
-    sleep(0.01)  # Further fix for flacky test: vecnorm should have a locking
-    # mechanism
+    td = make_env.state_dict()["_extra_state"]["td"]
 
     obs_sum = td.get("next_observation_sum").clone()
     obs_ssq = td.get("next_observation_ssq").clone()
@@ -303,7 +307,7 @@ def test_parallelenv_vecnorm():
     parallel_sd = parallel_env.state_dict()
     assert "worker0" in parallel_sd
     worker_sd = parallel_sd["worker0"]
-    td = list(worker_sd.values())[0]
+    td = worker_sd["_extra_state"]["td"]
     queue_out.put("start")
     msg = queue_in.get(timeout=TIMEOUT)
     assert msg == "first round"

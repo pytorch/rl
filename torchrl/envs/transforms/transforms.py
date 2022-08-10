@@ -1707,6 +1707,7 @@ class VecNorm(Transform):
         self,
         keys_in: Optional[Sequence[str]] = None,
         shared_td: Optional[TensorDictBase] = None,
+        lock: mp.Lock = None,
         decay: float = 0.9999,
         eps: float = 1e-4,
     ) -> None:
@@ -1732,10 +1733,14 @@ class VecNorm(Transform):
                         f"with keys {shared_td.keys()}"
                     )
 
+        self.lock = lock
         self.decay = decay
         self.eps = eps
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.lock is not None:
+            self.lock.acquire()
+
         for key in self.keys_in:
             if key not in tensordict.keys():
                 continue
@@ -1746,6 +1751,10 @@ class VecNorm(Transform):
             )
 
             tensordict.set_(key, new_val)
+
+        if self.lock is not None:
+            self.lock.release()
+
         return tensordict
 
     def _init(self, tensordict: TensorDictBase, key: str) -> None:
@@ -1885,11 +1894,13 @@ class VecNorm(Transform):
             return td_select.memmap_()
         return td_select.share_memory_()
 
-    def get_extra_state(self) -> TensorDictBase:
-        return self._td
+    def get_extra_state(self) -> OrderedDict:
+        return OrderedDict([("lock", self.lock), ("td", self._td)])
 
-    def set_extra_state(self, td: TensorDictBase) -> None:
-        if not td.is_shared():
+    def set_extra_state(self, state: OrderedDict) -> None:
+        self.lock = state["lock"]
+        td = state["td"]
+        if td is not None and not td.is_shared():
             raise RuntimeError(
                 "Only shared tensordicts can be set in VecNorm transforms"
             )

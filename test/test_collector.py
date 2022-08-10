@@ -483,8 +483,8 @@ def test_collector_vecnorm_envcreator():
 
     s = c.state_dict()
 
-    td1 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"].clone()
-    td2 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"].clone()
+    td1 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"]["td"].clone()
+    td2 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"]["td"].clone()
     assert (td1 == td2).all()
 
     next(c_iter)
@@ -492,8 +492,8 @@ def test_collector_vecnorm_envcreator():
 
     s = c.state_dict()
 
-    td3 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"].clone()
-    td4 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"].clone()
+    td3 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"]["td"].clone()
+    td4 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"]["td"].clone()
     assert (td3 == td4).all()
     assert (td1 != td4).any()
 
