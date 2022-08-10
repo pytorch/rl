@@ -55,8 +55,8 @@ class DreamerModelLoss(LossModule):
         reco_loss = (
             0.5
             * self.reco_loss(
-                tensordict.get("observation"),
-                tensordict.get("reco_observation"),
+                tensordict.get("pixels"),
+                tensordict.get("reco_pixels"),
             )
             .mean(dim=[0, 1])
             .sum()

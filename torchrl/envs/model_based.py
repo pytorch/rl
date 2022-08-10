@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Tuple
 
 import abc
 import numpy as np
@@ -13,10 +13,16 @@ import torch
 import torch.nn as nn
 
 
-from torchrl.data import TensorDict
+from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 from ..data.utils import DEVICE_TYPING
 from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
 from .common import EnvBase
+from torchrl.data import (
+    TensorDict,
+    TensorSpec,
+    CompositeSpec,
+    NdUnboundedContinuousTensorSpec,
+)
 
 dtype_map = {
     torch.float: np.float32,
@@ -70,7 +76,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
             device=device, dtype=dtype, batch_size=batch_size
         )
         self.world_model = world_model
-    
+
     def set_specs_from_env(self, env: EnvBase):
         """
         Sets the specs of the environment from the specs of the given environment.
@@ -90,15 +96,65 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         # Step requires a done flag. No sense for MBRL so we set it to False
         tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool)
         return tensordict_out
-    
+
+    @abc.abstractmethod
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
-        return tensordict.clone()
-    
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def _set_seed(self, seed: Optional[int]) -> int:
-        return seed
+        raise NotImplementedError
 
     def to(self, device: DEVICE_TYPING) -> ModelBasedEnv:
         super().to(device)
         self.world_model.to(device)
         return self
 
+
+class DreamerEnv(ModelBasedEnv):
+    def __init__(
+        self,
+        world_model: WorldModelWrapper,
+        obs_decoder: TensorDictModule = None,
+        device: DEVICE_TYPING = "cpu",
+        dtype: Optional[Union[torch.dtype, np.dtype]] = None,
+        batch_size: Optional[torch.Size] = None,
+    ):
+        super(DreamerEnv, self).__init__(world_model, device, dtype, batch_size)
+        self.obs_decoder = obs_decoder
+        self._latent_spec = None
+
+    @property
+    def latent_spec(self) -> TensorSpec:
+        if self._latent_spec is None:
+            raise ValueError("No latent spec set")
+        return self._latent_spec
+
+    @latent_spec.setter
+    def latent_spec(
+        self, shapes: Tuple[torch.Size]
+    ) -> None:
+        self._input_spec = CompositeSpec(
+            prior_state=NdUnboundedContinuousTensorSpec(shape=shapes[0]),
+            belief=NdUnboundedContinuousTensorSpec(shape=shapes[1]),
+        )
+
+    def _reset(self, **kwargs) -> TensorDict:
+        td = self.latent_spec.rand(batch_size=self.batch_size, device=self.device)
+        return td
+
+    def _set_seed(self, seed: Optional[int]) -> int:
+        return seed
+
+    def decode_obs(self, tensordict: TensorDict, compute_latents=False) -> TensorDict:
+        if self.obs_decoder is None:
+            raise ValueError("No observation decoder provided")
+        if compute_latents:
+            tensordict = self(tensordict)
+        return self.obs_decoder(tensordict)
+
+    def to(self, device: DEVICE_TYPING) -> DreamerEnv:
+        super().to(device)
+        self.obs_decoder.to(device)
+        self.latent_spec.to(device)
+        return self

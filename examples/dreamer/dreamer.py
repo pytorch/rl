@@ -11,7 +11,6 @@ from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.model_based import ModelBasedEnv
 from torchrl.modules.tensordict_module.actors import (
     ActorCriticWrapper,
-    WorldModelWrapper,
 )
 from torchrl.modules.tensordict_module.sequence import TensorDictSequence
 from torchrl.record import VideoRecorder
@@ -27,8 +26,11 @@ from torchrl.trainers.helpers.envs import (
     EnvConfig,
 )
 from torchrl.modules import TensorDictModule
-from torchrl.modules.models import MLP, TanhActor
-from torchrl.modules.tensordict_module.world_models import DreamerWorldModeler
+from torchrl.trainers.helpers.models import (
+    make_dreamer_world_model,
+    make_dreamer_actor_critic,
+    DreamerConfig
+)
 from torchrl.objectives.costs.dreamer import DreamerBehaviourLoss, DreamerModelLoss
 from torchrl.trainers.helpers.recorder import RecorderConfig
 from torchrl.trainers.helpers.replay_buffer import (
@@ -137,63 +139,27 @@ def main(cfg: "DictConfig"):
         cfg=cfg, use_env_creator=False, stats=stats
     )()
 
-    #### World Model and reward model
-    from copy import deepcopy
-    world_modeler = DreamerWorldModeler(
-        rssm_hidden=cfg.rssm_hidden_dim,
-        rnn_hidden_dim=cfg.rssm_hidden_dim,
-        state_dim=cfg.state_dim,
-    ).to(device)
-    # test = deepcopy(world_modeler) fails
-    reward_model = TensorDictModule(
-        MLP(out_features=1, depth=3, num_cells=300, activation_class=nn.ELU).to(device),
-        in_keys=["posterior_state", "belief"],
-        out_keys=["predicted_reward"],
-    ).to(device)
-    test = deepcopy(reward_model)
-    world_model = WorldModelWrapper(world_modeler, reward_model).to(device)
-    model_based_env = ModelBasedEnv(
-        world_model=WorldModelWrapper(
-            world_modeler.select_subsequence(
-                in_keys=["prior_state", "belief", "action"],
-                out_keys=["next_prior_state", "next_belief"],
-            ).to(device),
-            TensorDictModule(
-                reward_model.module,
-                in_keys=["next_prior_state", "next_belief"],
-                out_keys=["predicted_reward"],
-            ).to(device),
-        ).to(device),
-        device=device,
-    ).to(device)
-
+    world_model, model_based_env = make_dreamer_world_model(
+        proof_environment=proof_env, cfg=cfg, device=device)
     ### Actor and Value models
-    actor_model = TensorDictModule(
-        TanhActor(
-            out_features=proof_env.action_spec.shape[0],
-            depth=3,
-            num_cells=300,
-            activation_class=nn.ELU,
-        ).to(device),
-        in_keys=["prior_state", "belief"],
-        out_keys=["action"],
-    ).to(device)
-    value_model = TensorDictModule(
-        MLP(out_features=1, depth=3, num_cells=400, activation_class=nn.ELU).to(device),
-        in_keys=["prior_state", "belief"],
-        out_keys=["predicted_value"],
-    ).to(device)
+    actor_model, value_model = make_dreamer_actor_critic(
+        mb_proof_environment=model_based_env,
+        cfg=cfg,
+        device="device",
+        action_key= "action",
+        value_key = "predicted_value",
+    )
 
     ### Policy to compute inference from observations
     policy = TensorDictSequence(
-        world_modeler.select_subsequence(
+        world_model.get_world_modeler_operator().select_subsequence(
             out_keys=["posterior_state", "belief"],
-        ).to(device),
+        ),
         TensorDictModule(
             actor_model.module,
             in_keys=["posterior_state", "belief"],
             out_keys=["action"],
-        ).to(device),
+        ),
     ).to(device)
 
     #### Losses

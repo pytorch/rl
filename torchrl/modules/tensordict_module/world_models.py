@@ -14,13 +14,58 @@ import torch.nn.functional as F
 
 from torchrl.modules.tensordict_module import TensorDictModule, TensorDictSequence
 
+__all__ = [
+    "DreamerWorldModeler",
+    "WorldModelWrapper"
+]
+
+class WorldModelWrapper(TensorDictSequence):
+    """
+    World model wrapper.
+    This module wraps together a world model and a reward model.
+    The world model is used to predict an imaginary world state.
+    The reward model is used to predict the reward of the imaginary world state.
+
+    Args:
+        world_model (TensorDictModule): a world model that generates a world state.
+        reward_model (TensorDictModule): a reward model, that reads the world state and returns a reward
+
+    """
+
+    def __init__(
+        self,
+        world_modeler_operator: TensorDictModule,
+        reward_operator: TensorDictModule,
+    ):
+        super().__init__(
+            world_modeler_operator,
+            reward_operator,
+        )
+
+    def get_world_modeler_operator(self) -> TensorDictSequence:
+        """
+
+        Returns a stand-alone policy operator that maps an observation to an action.
+
+        """
+        return self.module[0]
+
+    def get_reward_operator(self) -> TensorDictSequence:
+        """
+
+        Returns a stand-alone value network operator that maps an observation to a value estimate.
+
+        """
+        return self.module[1]
+
+
 
 class DreamerWorldModeler(TensorDictSequence):
     def __init__(self, obs_depth=32, rssm_hidden=200, rnn_hidden_dim=200, state_dim=20):
         super().__init__(
             TensorDictModule(
                 ObsEncoder(depth=obs_depth),
-                in_keys=["observation"],
+                in_keys=["pixels"],
                 out_keys=["observation_encoded"],
             ),
             TensorDictModule(
@@ -43,7 +88,7 @@ class DreamerWorldModeler(TensorDictSequence):
             TensorDictModule(
                 ObsDecoder(depth=obs_depth),
                 in_keys=["posterior_state", "belief"],
-                out_keys=["reco_observation"],
+                out_keys=["reco_pixels"],
             ),
         )
 
@@ -52,13 +97,13 @@ class ObsEncoder(nn.Module):
     def __init__(self, depth=32):
         super().__init__()
         self.encoder = nn.Sequential(
-            nn.LazyConv2d(depth, 4, stride=2, padding=1),
+            nn.LazyConv2d(depth, 4, stride=2),
             nn.ReLU(),
-            nn.Conv2d(depth, depth * 2, 4, stride=2, padding=1),
+            nn.Conv2d(depth, depth * 2, 4, stride=2),
             nn.ReLU(),
-            nn.Conv2d(depth * 2, depth * 4, 4, stride=2, padding=1),
+            nn.Conv2d(depth * 2, depth * 4, 4, stride=2),
             nn.ReLU(),
-            nn.Conv2d(depth * 4, depth * 8, 4, stride=2, padding=1),
+            nn.Conv2d(depth * 4, depth * 8, 4, stride=2),
             nn.ReLU(),
         )
 
@@ -78,7 +123,7 @@ class ObsDecoder(nn.Module):
             nn.ReLU(),
         )
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(depth * 8, depth * 4, 4, stride=2, padding=1),
+            nn.LazyConvTranspose2d(depth * 4, 5, stride=2),
             nn.ReLU(),
             nn.ConvTranspose2d(depth * 4, depth * 2, 4, stride=2, padding=1),
             nn.ReLU(),
@@ -91,10 +136,8 @@ class ObsDecoder(nn.Module):
     def forward(self, state, rnn_hidden):
         latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
         *batch_sizes, D = latent.shape
-        latent = latent.view(-1, D)
-        h = w = int(sqrt(D // (8 * self._depth)))
-        latent_reshaped = latent.view(latent.shape[0], 8 * self._depth, h, w)
-        obs_decoded = self.decoder(latent_reshaped)
+        latent = latent.view(-1, D, 1, 1)
+        obs_decoded = self.decoder(latent)
         _, C, H, W = obs_decoded.shape
         obs_decoded = obs_decoded.view(*batch_sizes, C, H, W)
         return obs_decoded

@@ -5,6 +5,7 @@
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
+from email.mime import image
 from typing import Callable, Optional, Union, Any
 
 import torch
@@ -125,7 +126,7 @@ def make_env_transforms(
         env.append_transform(ToTensorImage())
         if cfg.center_crop:
             env.append_transform(CenterCrop(*cfg.center_crop))
-        env.append_transform(Resize(84, 84))
+        env.append_transform(Resize(cfg.image_size, cfg.image_size))
         if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(first_dim=batch_dims))
@@ -427,3 +428,4 @@ class EnvConfig:
     # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
     batch_transform: bool = False
     # if True, the transforms will be applied to the parallel env, and not to each individual env.
+    image_size: int = 84
