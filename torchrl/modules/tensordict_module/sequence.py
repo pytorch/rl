@@ -213,7 +213,7 @@ class TensorDictSequence(TensorDictModule):
             in_keys = deepcopy(self.in_keys)
         if out_keys is None:
             out_keys = deepcopy(self.out_keys)
-        id_to_keep = set([i for i in range(len(self.module))])
+        id_to_keep = {i for i in range(len(self.module))}
         for i, module in enumerate(self.module):
             if all(key in in_keys for key in module.in_keys):
                 in_keys.extend(module.out_keys)
@@ -229,6 +229,9 @@ class TensorDictSequence(TensorDictModule):
 
         modules = [self.module[i] for i in id_to_keep]
 
+        if modules == []:
+            raise ValueError("No modules left after selection. Make sure that in_keys and out_keys are coherent.")
+
         return TensorDictSequence(*modules)
 
     def forward(
@@ -237,14 +240,6 @@ class TensorDictSequence(TensorDictModule):
         tensordict_out=None,
         **kwargs,
     ) -> TensorDictBase:
-
-        if not all(key in tensordict.keys() for key in self.in_keys):
-
-            raise ValueError(
-                f"Not all in_keys found in input TensorDict. missing keys:{set(self.in_keys) - set(tensordict.keys())}"
-            )
-
-        # Filter modules to avoid calling modules that don't require the desired in_keys or out keys
 
         if "params" in kwargs and "buffers" in kwargs:
             param_splits = self._split_param(kwargs["params"], "params")
