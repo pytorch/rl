@@ -46,13 +46,13 @@ from torchrl.envs.transforms.transforms import (
 TIMEOUT = 10.0
 
 
-def _test_vecnorm_subproc(idx, queue_out: mp.Queue, queue_in: mp.Queue):
+def _test_vecnorm_subproc(idx, shared_lock, queue_out: mp.Queue, queue_in: mp.Queue):
     td = queue_in.get(timeout=TIMEOUT)
     if _has_gym:
         env = GymEnv("Pendulum-v1")
     else:
         env = ContinuousActionVecMockEnv()
-    t = VecNorm(shared_td=td)
+    t = VecNorm(shared_td=td, lock=shared_lock)
     env = TransformedEnv(env, t)
     env.set_seed(1000 + idx)
     tensordict = env.reset()
@@ -91,6 +91,7 @@ def _test_vecnorm_subproc(idx, queue_out: mp.Queue, queue_in: mp.Queue):
 def test_vecnorm_parallel(nprc):
     queues = []
     prcs = []
+    shared_lock = mp.Lock()
     if _has_gym:
         td = VecNorm.build_td_for_shared_vecnorm(GymEnv("Pendulum-v1"))
     else:
@@ -104,6 +105,7 @@ def test_vecnorm_parallel(nprc):
             target=_test_vecnorm_subproc,
             args=(
                 idx,
+                shared_lock,
                 prc_queue_in,
                 prc_queue_out,
             ),
@@ -291,12 +293,19 @@ def _run_parallelenv(parallel_env, queue_in, queue_out):
 
 
 def test_parallelenv_vecnorm():
+    # using mp.Manager.Lock here as the test necessitates it being passed between processes
+    m = mp.Manager()
+    shared_lock = m.Lock()
     if _has_gym:
-        make_env = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
+        make_env = EnvCreator(
+            lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm(lock=shared_lock))
+        )
         env_input_keys = None
     else:
         make_env = EnvCreator(
-            lambda: TransformedEnv(ContinuousActionVecMockEnv(), VecNorm())
+            lambda: TransformedEnv(
+                ContinuousActionVecMockEnv(), VecNorm(lock=shared_lock)
+            )
         )
         env_input_keys = ["action", ContinuousActionVecMockEnv._out_key]
     parallel_env = ParallelEnv(3, make_env, env_input_keys=env_input_keys)
