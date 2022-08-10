@@ -105,6 +105,7 @@ def main(cfg: "DictConfig"):
         device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
+    device = torch.device("cpu")
 
     exp_name = "_".join(
         [
@@ -137,29 +138,32 @@ def main(cfg: "DictConfig"):
     )()
 
     #### World Model and reward model
+    from copy import deepcopy
     world_modeler = DreamerWorldModeler(
         rssm_hidden=cfg.rssm_hidden_dim,
         rnn_hidden_dim=cfg.rssm_hidden_dim,
         state_dim=cfg.state_dim,
     ).to(device)
+    # test = deepcopy(world_modeler) fails
     reward_model = TensorDictModule(
-        MLP(out_features=1, depth=3, num_cells=300, activation_class=nn.ELU),
+        MLP(out_features=1, depth=3, num_cells=300, activation_class=nn.ELU).to(device),
         in_keys=["posterior_state", "belief"],
         out_keys=["predicted_reward"],
     ).to(device)
+    test = deepcopy(reward_model)
     world_model = WorldModelWrapper(world_modeler, reward_model).to(device)
     model_based_env = ModelBasedEnv(
         world_model=WorldModelWrapper(
             world_modeler.select_subsequence(
                 in_keys=["prior_state", "belief", "action"],
                 out_keys=["next_prior_state", "next_belief"],
-            ),
+            ).to(device),
             TensorDictModule(
                 reward_model.module,
                 in_keys=["next_prior_state", "next_belief"],
                 out_keys=["predicted_reward"],
-            ),
-        ),
+            ).to(device),
+        ).to(device),
         device=device,
     ).to(device)
 
@@ -170,12 +174,12 @@ def main(cfg: "DictConfig"):
             depth=3,
             num_cells=300,
             activation_class=nn.ELU,
-        ),
+        ).to(device),
         in_keys=["prior_state", "belief"],
         out_keys=["action"],
     ).to(device)
     value_model = TensorDictModule(
-        MLP(out_features=1, depth=3, num_cells=400, activation_class=nn.ELU),
+        MLP(out_features=1, depth=3, num_cells=400, activation_class=nn.ELU).to(device),
         in_keys=["prior_state", "belief"],
         out_keys=["predicted_value"],
     ).to(device)
@@ -184,13 +188,14 @@ def main(cfg: "DictConfig"):
     policy = TensorDictSequence(
         world_modeler.select_subsequence(
             out_keys=["posterior_state", "belief"],
-        ),
+        ).to(device),
         TensorDictModule(
             actor_model.module,
             in_keys=["posterior_state", "belief"],
             out_keys=["action"],
-        ),
+        ).to(device),
     ).to(device)
+
     #### Losses
     behaviour_loss = DreamerBehaviourLoss().to(device)
     world_model_loss = DreamerModelLoss().to(device)
@@ -337,7 +342,7 @@ def main(cfg: "DictConfig"):
                         auto_reset=False,
                         tensordict=flattened_td,
                     )
-                flattened_td = actor_value_model(flattened_td)
+                flattened_td = value_model(flattened_td)
                 # compute actor loss
                 actor_value_loss_td = behaviour_loss(flattened_td)
                 actor_opt.zero_grad()
