@@ -1528,7 +1528,54 @@ class TestTDSequence:
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
     @pytest.mark.parametrize("functional", [True, False])
+    def test_submodule_sequence(self, functional):
+        td_module_1 = TensorDictModule(
+            nn.Linear(3, 2),
+            in_keys=["in"],
+            out_keys=["hidden"],
+        )
+        td_module_2 = TensorDictModule(
+            nn.Linear(2, 4),
+            in_keys=["hidden"],
+            out_keys=["out"],
+        )
+        td_module = TensorDictSequence(td_module_1, td_module_2)
+
+        if functional:
+            td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
+            sub_seq_1 = td_module.select_subsequence(out_keys=["hidden"])
+            sub_seq_1, (params, buffers) = sub_seq_1.make_functional_with_buffers()
+            sub_seq_1(
+                td_1,
+                params=params,
+                buffers=buffers,
+            )
+            assert "hidden" in td_1.keys()
+            assert "out" not in td_1.keys()
+            td_2 = TensorDict({"hidden": torch.randn(5, 2)}, [5])
+            sub_seq_2 = td_module.select_subsequence(in_keys=["hidden"])
+            sub_seq_2, (params, buffers) = sub_seq_2.make_functional_with_buffers()
+            sub_seq_2(
+                td_2,
+                params=params,
+                buffers=buffers,
+            )
+            assert "out" in td_2.keys()
+            assert td_2.get("out").shape == torch.Size([5, 4])
+        else:
+            td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
+            sub_seq_1 = td_module.select_subsequence(out_keys=["hidden"])
+            sub_seq_1(td_1)
+            assert "hidden" in td_1.keys()
+            assert "out" not in td_1.keys()
+            td_2 = TensorDict({"hidden": torch.randn(5, 2)}, [5])
+            sub_seq_2 = td_module.select_subsequence(in_keys=["hidden"])
+            sub_seq_2(td_2)
+            assert "out" in td_2.keys()
+            assert td_2.get("out").shape == torch.Size([5, 4])
+
     @pytest.mark.parametrize("stack", [True, False])
+    @pytest.mark.parametrize("functional", [True, False])
     def test_sequential_partial(self, stack, functional):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -1621,7 +1668,32 @@ class TestTDSequence:
             assert "out" in td.keys()
             assert "b" in td.keys()
 
+    def test_subsequence_weight_update(self):
+        td_module_1 = TensorDictModule(
+            nn.Linear(3, 2),
+            in_keys=["in"],
+            out_keys=["hidden"],
+        )
+        td_module_2 = TensorDictModule(
+            nn.Linear(2, 4),
+            in_keys=["hidden"],
+            out_keys=["out"],
+        )
+        td_module = TensorDictSequence(td_module_1, td_module_2)
 
-if __name__ == "__main__":
-    args, unknown = argparse.ArgumentParser().parse_known_args()
-    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
+        td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
+        sub_seq_1 = td_module.select_subsequence(out_keys=["hidden"])
+        copy = sub_seq_1[0].module.weight.clone()
+
+        opt = torch.optim.SGD(td_module.parameters(), lr=0.1)
+        opt.zero_grad()
+        td_1 = td_module(td_1)
+        td_1["out"].mean().backward()
+        opt.step()
+
+        assert not torch.allclose(copy, sub_seq_1[0].module.weight)
+        assert torch.allclose(td_module[0].module.weight, sub_seq_1[0].module.weight)
+
+    if __name__ == "__main__":
+        args, unknown = argparse.ArgumentParser().parse_known_args()
+        pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
