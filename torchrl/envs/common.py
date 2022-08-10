@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import abc
-from collections import OrderedDict
 from numbers import Number
 from typing import Any, Callable, Iterator, Optional, Union, Dict
 
@@ -256,7 +255,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        raise NotImplementedError
+        raise NotImplementedError("EnvBase.forward is not implemented")
 
     @abc.abstractmethod
     def _step(
