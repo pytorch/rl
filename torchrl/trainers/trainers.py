@@ -590,7 +590,6 @@ class ClearCudaCache:
     def __call__(self, *args, **kwargs):
         self.count += 1
         if self.count % self.interval == 0:
-            print("clearing cuda cache")
             torch.cuda.empty_cache()
 
 
