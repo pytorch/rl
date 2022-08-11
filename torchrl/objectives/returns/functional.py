@@ -5,6 +5,7 @@
 
 from typing import Tuple
 
+import functorch
 import torch
 
 __all__ = [
@@ -195,9 +196,31 @@ def _custom_conv1d(tensor, filter):
         -1,
     )
 
-    # shape = val.shape
-    filter = filter.squeeze(-1).unsqueeze(0).unsqueeze(0)  # 1 x 1 x T
-    out = torch.conv1d(val_pad, filter)
+    if filter.ndimension() > 2:
+        # filter will have shape batch_dims x timesteps x timesteps x 1
+        # reshape to batch_dims x timesteps x 1 x 1 x timesteps ready for convolving
+        filter = filter.reshape(*filter.shape[:-2], 1, 1, filter.shape[-2])
+
+        # add dimension to val-pad as we are going to vectorise over the first
+        # axis (batch) since we have different filter per batch
+        val_pad = val_pad.unsqueeze(1)
+
+        # vectorise application of filters to each batch. we have multiple
+        # filters and just one trajectory to apply it to.
+        # TODO: there's a lot of redundancy here since we only care about the
+        # diagonal entries. how to simplify?
+        conv1d_batch = functorch.vmap(torch.conv1d, (None, 0))
+
+        # vectorise over batch dimension
+        out = functorch.vmap(conv1d_batch)(val_pad, filter)
+
+        # out has dimensions batch x timesteps x 1 x 1 x timesteps
+        # we only care about the diagonal timestep entries
+        out = torch.diagonal(out, dim1=-4, dim2=-1).squeeze(-3)
+    else:
+        # shape = val.shape
+        filter = filter.squeeze(-1).unsqueeze(0).unsqueeze(0)  # 1 x 1 x T
+        out = torch.conv1d(val_pad, filter)
     # out = out.view(shape)
     if not out.shape == tensor.shape:
         raise RuntimeError("wrong output shape")
@@ -210,7 +233,8 @@ def vec_td_lambda_advantage_estimate(
     """Vectorized TD(lambda) advantage estimate.
 
     Args:
-        gamma (scalar): exponential mean discount.
+        gamma (scalar, Tensor): exponential mean discount. If tensor-valued,
+            must be a [Batch x TimeSteps x 1] tensor.
         lmbda (scalar): trajectory discount.
         state_value (Tensor): value function result with old_state input.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
@@ -230,10 +254,11 @@ def vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done):
     """Vectorized TD(lambda) return estimate.
 
     Args:
-        gamma (scalar): exponential mean discount.
+        gamma (scalar, Tensor): exponential mean discount. If tensor-valued,
+            must be a [Batch x TimeSteps x 1] tensor.
         lmbda (scalar): trajectory discount.
         next_state_value (Tensor): value function result with new_state input.
-            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+            must be a [Batch x TimeSteps x 1] tensor
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
@@ -243,21 +268,27 @@ def vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done):
     if not shape[-1] == 1:
         raise RuntimeError("last dimension of inputs shape must be singleton")
 
-    next_state_value = next_state_value.view(-1, 1, shape[-2])
-    reward = reward.view(-1, 1, shape[-2])
-    done = done.view(-1, 1, shape[-2])
+    T = shape[-2]
+
+    next_state_value = next_state_value.view(-1, 1, T)
+    reward = reward.view(-1, 1, T)
+    done = done.view(-1, 1, T)
 
     """Vectorized version of td_lambda_advantage_estimate"""
     device = reward.device
     not_done = 1 - done.to(next_state_value.dtype)
     next_state_value = not_done * next_state_value
 
-    T = shape[-2]
-
     first_below_thr_gamma = None
 
-    gammas = torch.ones(T + 1, 1, device=device)
-    gammas[1:] = gamma
+    if isinstance(gamma, torch.Tensor) and gamma.ndimension() > 0:
+        gamma = gamma.view(-1, T)
+        gammas = torch.ones(*gamma.shape, T + 1, 1, device=device)
+        gammas[..., 1:, :] = gamma[..., None, None]
+    else:
+        gammas = torch.ones(T + 1, 1, device=device)
+        gammas[1:] = gamma
+
     gammas = torch.cumprod(gammas, -2)
 
     lambdas = torch.ones(T + 1, 1, device=device)
@@ -265,15 +296,19 @@ def vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done):
     lambdas = torch.cumprod(lambdas, -2)
 
     first_below_thr = gammas < 1e-7
+    if gammas.ndimension() > 2:
+        # if we have multiple gammas, we only want to truncate if _all_ of
+        # the geometric sequences fall below the threshold
+        first_below_thr = first_below_thr.all(axis=0)
     if first_below_thr.any():
         first_below_thr_gamma = first_below_thr.nonzero()[0, 0]
     first_below_thr = lambdas < 1e-7
     if first_below_thr.any() and first_below_thr_gamma is not None:
         first_below_thr = max(first_below_thr_gamma, first_below_thr.nonzero()[0, 0])
-        gammas = gammas[:first_below_thr]
+        gammas = gammas[..., :first_below_thr, :]
         lambdas = lambdas[:first_below_thr]
 
-    gammas, gammas_prime = gammas[:-1], gammas[1:]
+    gammas, gammas_prime = gammas[..., :-1, :], gammas[..., 1:, :]
     lambdas, lambdas_prime = lambdas[:-1], lambdas[1:]
 
     rs = _custom_conv1d(reward, gammas * lambdas)
@@ -285,14 +320,23 @@ def vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done):
             # [torch.zeros_like(next_state_value[..., : -mask.shape[-2], :]), mask], -2
             [
                 torch.zeros(
-                    next_state_value.shape[-1] - mask.shape[-2], 1, device=device
+                    *mask.shape[:-2],
+                    next_state_value.shape[-1] - mask.shape[-2],
+                    1,
+                    device=device
                 ),
                 mask,
             ],
             -2,
         )
-    vs2 = (
-        _custom_conv1d(next_state_value, gam_lam)
-        - mask.squeeze(-1) * next_state_value[..., -1:]
-    )
+    if gammas.ndimension() > 2:
+        vs2 = (
+            _custom_conv1d(next_state_value, gam_lam)
+            - mask.squeeze(-1)[..., -1:, :] * next_state_value[..., -1:]
+        )
+    else:
+        vs2 = (
+            _custom_conv1d(next_state_value, gam_lam)
+            - mask.squeeze(-1) * next_state_value[..., -1:]
+        )
     return (rs + vs - vs2).view(shape)
