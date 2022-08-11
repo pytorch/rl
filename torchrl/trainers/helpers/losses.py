@@ -193,13 +193,16 @@ def make_ppo_loss(model, cfg) -> PPOLoss:
     actor_model = model.get_policy_operator()
     critic_model = model.get_value_operator()
 
-    advantage = GAE(
-        cfg.gamma,
-        cfg.lmbda,
-        value_network=critic_model,
-        average_rewards=True,
-        gradient_mode=False,
-    )
+    if cfg.advantage_in_loss:
+        advantage = GAE(
+            cfg.gamma,
+            cfg.lmbda,
+            value_network=critic_model,
+            average_rewards=True,
+            gradient_mode=False,
+        )
+    else:
+        advantage = None
     loss_module = loss_dict[cfg.loss](
         actor=actor_model,
         critic=critic_model,
@@ -245,3 +248,5 @@ class PPOLossConfig:
     # Entropy factor for the PPO loss
     loss_function: str = "smooth_l1"
     # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
+    advantage_in_loss: bool = False
+    # if True, the advantage is computed on the sub-batch.

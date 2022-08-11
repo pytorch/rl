@@ -234,7 +234,10 @@ def make_trainer(
     if cfg.normalize_rewards_online:
         # if used the running statistics of the rewards are computed and the
         # rewards used for training will be normalized based on these.
-        reward_normalizer = RewardNormalizer(scale=cfg.normalize_rewards_online_scale, decay=cfg.normalize_rewards_online_decay)
+        reward_normalizer = RewardNormalizer(
+            scale=cfg.normalize_rewards_online_scale,
+            decay=cfg.normalize_rewards_online_decay,
+        )
         trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
         trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 
