@@ -1713,6 +1713,44 @@ def test_tdlambda(device, gamma, lmbda, N, T):
     torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
 
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
+@pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
+@pytest.mark.parametrize("N", [(3,), (7, 3)])
+@pytest.mark.parametrize("T", [3, 5, 200])
+def test_tdlambda_tensor_gamma(device, gamma, lmbda, N, T):
+    torch.manual_seed(0)
+
+    done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+    reward = torch.randn(*N, T, 1, device=device)
+    state_value = torch.randn(*N, T, 1, device=device)
+    next_state_value = torch.randn(*N, T, 1, device=device)
+
+    gamma_tensor = torch.full((*N, T, 1), gamma, device=device)
+
+    v1 = vec_td_lambda_advantage_estimate(
+        gamma, lmbda, state_value, next_state_value, reward, done
+    )
+    v2 = vec_td_lambda_advantage_estimate(
+        gamma_tensor, lmbda, state_value, next_state_value, reward, done
+    )
+
+    torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+
+    # # same with last done being true
+    done[..., -1, :] = True  # terminating trajectory
+    gamma_tensor[..., -1, :] = 0.0
+
+    v1 = vec_td_lambda_advantage_estimate(
+        gamma, lmbda, state_value, next_state_value, reward, done
+    )
+    v2 = vec_td_lambda_advantage_estimate(
+        gamma_tensor, lmbda, state_value, next_state_value, reward, done
+    )
+
+    torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+
+
 @pytest.mark.parametrize(
     "dest,expected_dtype,expected_device",
     list(
