@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union, List, Tuple, Callable
 import abc
+from typing import Optional, Union, List, Tuple, Callable
 from typing import Optional, Union, List
 
 import numpy as np
@@ -14,16 +14,16 @@ import torch
 import torch.nn as nn
 
 from torchrl.data import TensorDict
-from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
-from ..data.utils import DEVICE_TYPING
-from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
-from .common import EnvBase
 from torchrl.data import (
     TensorDict,
     TensorSpec,
     CompositeSpec,
     NdUnboundedContinuousTensorSpec,
 )
+from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
+from ..data.utils import DEVICE_TYPING
+from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
+from .common import EnvBase
 
 dtype_map = {
     torch.float: np.float32,
@@ -85,7 +85,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         self.observation_spec = env.observation_spec
         self.action_spec = env.action_spec
         self.reward_spec = env.reward_spec
-    
+
     def _step(
         self,
         tensordict: TensorDict,
@@ -132,9 +132,7 @@ class DreamerEnv(ModelBasedEnv):
         return self._latent_spec
 
     @latent_spec.setter
-    def latent_spec(
-        self, shapes: Tuple[torch.Size]
-    ) -> None:
+    def latent_spec(self, shapes: Tuple[torch.Size]) -> None:
         self._latent_spec = CompositeSpec(
             prior_state=NdUnboundedContinuousTensorSpec(shape=shapes[0]),
             belief=NdUnboundedContinuousTensorSpec(shape=shapes[1]),

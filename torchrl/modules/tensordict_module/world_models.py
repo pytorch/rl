@@ -13,10 +13,8 @@ import torch.nn.functional as F
 
 from torchrl.modules.tensordict_module import TensorDictModule, TensorDictSequence
 
-__all__ = [
-    "DreamerWorldModeler",
-    "WorldModelWrapper"
-]
+__all__ = ["DreamerWorldModeler", "WorldModelWrapper"]
+
 
 class WorldModelWrapper(TensorDictSequence):
     """
@@ -57,6 +55,7 @@ class WorldModelWrapper(TensorDictSequence):
         """
         return self.module[1]
 
+
 class DreamerWorldModeler(TensorDictSequence):
     def __init__(self, obs_depth=32, rssm_hidden=200, rnn_hidden_dim=200, state_dim=20):
         super().__init__(
@@ -72,7 +71,12 @@ class DreamerWorldModeler(TensorDictSequence):
                     state_dim=state_dim,
                 ),
                 in_keys=["prior_state", "belief", "action"],
-                out_keys=["prior_means", "prior_stds", "next_prior_state", "next_belief"],
+                out_keys=[
+                    "prior_means",
+                    "prior_stds",
+                    "next_prior_state",
+                    "next_belief",
+                ],
             ),
             TensorDictModule(
                 RSSMPosterior(
@@ -139,6 +143,7 @@ class ObsDecoder(nn.Module):
         obs_decoded = obs_decoded.view(*batch_sizes, C, H, W)
         return obs_decoded
 
+
 class RSSMPrior(nn.Module):
     def __init__(self, hidden_dim=200, rnn_hidden_dim=200, state_dim=20):
         super().__init__()
@@ -173,7 +178,9 @@ class RSSMPrior(nn.Module):
         elif len(action.shape) == 3:
             pass
         else:
-            raise ValueError("Action must be a 3D tensor of shape BxTxD or 2D with shape BxD")
+            raise ValueError(
+                "Action must be a 3D tensor of shape BxTxD or 2D with shape BxD"
+            )
         num_steps = action.shape[1]
 
         for i in range(num_steps):

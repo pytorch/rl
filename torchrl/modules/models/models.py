@@ -7,13 +7,13 @@ from numbers import Number
 from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import torch
+import torch.distributions as d
 from torch import nn
 from torch.nn import functional as F
 
-from torchrl.modules.distributions import NormalParamWrapper, TanhNormal
-import torch.distributions as d
 from torchrl import prod
 from torchrl.data import DEVICE_TYPING
+from torchrl.modules.distributions import NormalParamWrapper, TanhNormal
 from torchrl.modules.models.utils import (
     _find_depth,
     LazyMapping,
@@ -31,7 +31,7 @@ __all__ = [
     "DdpgMlpActor",
     "DdpgMlpQNet",
     "LSTMNet",
-    "TanhActor"
+    "TanhActor",
 ]
 
 
@@ -1038,11 +1038,19 @@ class LSTMNet(nn.Module):
 
 
 class TanhActor(nn.Module):
-    def __init__(self, out_features=None, depth=None, num_cells=None, activation_class=None):
+    def __init__(
+        self, out_features=None, depth=None, num_cells=None, activation_class=None
+    ):
         super().__init__()
-        self.backbone = MLP(out_features=out_features, depth=depth, num_cells=num_cells, activation_class=activation_class)
+        self.backbone = MLP(
+            out_features=out_features,
+            depth=depth,
+            num_cells=num_cells,
+            activation_class=activation_class,
+        )
         self.loc_linear = nn.Linear(out_features, out_features)
         self.scale_linear = nn.Linear(out_features, out_features)
+
     def forward(self, *input):
         hidden = self.backbone(*input)
         loc = self.loc_linear(hidden)

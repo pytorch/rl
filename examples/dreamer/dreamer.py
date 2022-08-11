@@ -1,18 +1,24 @@
 import dataclasses
-from dataclasses import dataclass
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 
 import hydra
+import torch
 import torch.cuda
+import tqdm
 from hydra.core.config_store import ConfigStore
+from torch.nn.utils import clip_grad_norm_
 from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.model_based import ModelBasedEnv
+from torchrl.envs.transforms import RewardScaling, TransformedEnv
+from torchrl.modules import TensorDictModule
 from torchrl.modules.tensordict_module.actors import (
     ActorCriticWrapper,
 )
 from torchrl.modules.tensordict_module.sequence import TensorDictSequence
+from torchrl.objectives.costs.dreamer import DreamerBehaviourLoss, DreamerModelLoss
+from torchrl.objectives.costs.utils import hold_out_net
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
@@ -25,22 +31,16 @@ from torchrl.trainers.helpers.envs import (
     transformed_env_constructor,
     EnvConfig,
 )
-from torchrl.modules import TensorDictModule
 from torchrl.trainers.helpers.models import (
     make_dreamer_world_model,
     make_dreamer_actor_critic,
     DreamerConfig,
 )
-from torchrl.objectives.costs.dreamer import DreamerBehaviourLoss, DreamerModelLoss
 from torchrl.trainers.helpers.recorder import RecorderConfig
 from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
     ReplayArgsConfig,
 )
-from torchrl.objectives.costs.utils import hold_out_net
-import tqdm
-import torch
-from torch.nn.utils import clip_grad_norm_
 
 
 @dataclass
@@ -91,6 +91,7 @@ DEFAULT_REWARD_SCALING = {
 }
 torch.autograd.set_detect_anomaly(True)
 
+
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
 
@@ -107,7 +108,6 @@ def main(cfg: "DictConfig"):
         device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
-
     exp_name = "_".join(
         [
             "Dreamer",
@@ -162,7 +162,9 @@ def main(cfg: "DictConfig"):
 
     #### Losses
     world_model_loss = DreamerModelLoss(world_model, cfg)
-    behaviour_loss = DreamerBehaviourLoss(actor_model, value_model, model_based_env, cfg)
+    behaviour_loss = DreamerBehaviourLoss(
+        actor_model, value_model, model_based_env, cfg
+    )
 
     ### optimizers
     world_model_opt = torch.optim.Adam(world_model.parameters(), lr=cfg.world_model_lr)
@@ -279,24 +281,28 @@ def main(cfg: "DictConfig"):
                 world_model_opt.step()
 
                 # compute actor loss
-                actor_value_loss, sampled_tensordict = behaviour_loss(sampled_tensordict)
+                actor_value_loss, sampled_tensordict = behaviour_loss(
+                    sampled_tensordict
+                )
 
                 actor_opt.zero_grad()
                 actor_value_loss["loss_actor"].backward()
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
                 actor_opt.step()
-                
+
                 # Optimize value function
                 value_opt.zero_grad()
                 actor_value_loss["loss_value"].backward()
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
                 value_opt.step()
 
-                
             # Compute observation reco
             if i % cfg.record_interval == 0:
-                tensordict = model_based_env.observation_reco(tensordict.detach())
-                logger.log_video("reco_observation", tensordict["reco_pixels"])
+                with torch.no_grad():
+                    sampled_tensordict = model_based_env.observation_reco(
+                        sampled_tensordict.detach()
+                    )
+                logger.log_video("reco_observation", sampled_tensordict["reco_pixels"])
 
             td_record = recorder(None)
 

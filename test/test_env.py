@@ -104,50 +104,6 @@ except FileNotFoundError:
 #     assert_allclose_td(rollout1, rollout0)
 
 
-def test_dreamer():
-    env = DreamerEnv()
-    model_loss = DreamerModelLoss()
-    opt = torch.optim.Adam(
-        env.parameters(),
-        lr=1e-3,
-        eps=1e-4,
-    )
-    td = TensorDict(
-        {
-            "observation": torch.randn(2, 10, 3, 64, 64),
-            "action": torch.randn(2, 10, 10),
-            "reward": torch.randn(2, 10, 1),
-            "initial_state": torch.randn(2, 20),
-            "initial_rnn_hidden": torch.randn(2, 200),
-        },
-        batch_size=[2],
-    )
-    td = env.train_step(td)
-    loss = model_loss(td)
-
-    opt.zero_grad()
-    loss.backward()
-    opt.step()
-
-    assert td.get("reco_observation").shape == (2, 10, 3, 64, 64)
-    assert td.get("predicted_reward").shape == (2, 10, 1)
-
-    env.eval()
-
-    td_test = TensorDict(
-        {
-            "action": torch.randn(2, 1, 10),
-            "initial_state": torch.randn(2, 20),
-            "initial_rnn_hidden": torch.randn(2, 200),
-        },
-        batch_size=[2],
-    )
-    td_test = env.step(td_test)
-
-    assert "reco_observation" not in td_test.keys()
-    assert td_test.get("predicted_reward").shape == (2, 1, 1)
-
-
 @pytest.mark.skipif(not _has_gym, reason="no gym")
 @pytest.mark.parametrize("env_name", ["Pendulum-v1", "CartPole-v1"])
 @pytest.mark.parametrize("frame_skip", [1, 4])

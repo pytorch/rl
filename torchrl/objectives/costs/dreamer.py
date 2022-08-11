@@ -5,6 +5,7 @@
 
 
 from turtle import forward
+
 import torch
 import torch.distributions as d
 import torch.nn as nn
@@ -13,8 +14,8 @@ from torch.distributions import kl_divergence
 from torchrl.data import TensorDict
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import LogLikelihood
-from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
 from torchrl.objectives.costs.utils import hold_out_net
+from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
 
 
 class DreamerModelLoss(LossModule):
@@ -32,7 +33,7 @@ class DreamerModelLoss(LossModule):
     def __init__(
         self,
         world_model: nn.Module,
-        cfg: 'DictConfig',
+        cfg: "DictConfig",
         lambda_kl: float = 1.0,
         lambda_reco: float = 1.0,
         lambda_reward: float = 1.0,
@@ -83,15 +84,18 @@ class DreamerModelLoss(LossModule):
             + self.lambda_reco * reco_loss
             + self.lambda_reward * reward_loss
         )
-        return TensorDict(
-            {
-                "loss_world_model": loss,
-                "loss_kl": kl_loss,
-                "loss_reco": reco_loss,
-                "loss_reward": reward_loss,
-            },
-            [],
-        ), tensordict
+        return (
+            TensorDict(
+                {
+                    "loss_world_model": loss,
+                    "loss_kl": kl_loss,
+                    "loss_reco": reco_loss,
+                    "loss_reward": reward_loss,
+                },
+                [],
+            ),
+            tensordict,
+        )
 
     def kl_loss(self, prior_mean, prior_std, posterior_mean, posterior_std):
         flat_prior = d.Normal(prior_mean, prior_std)
@@ -101,9 +105,17 @@ class DreamerModelLoss(LossModule):
         return kl
 
 
-
 class DreamerBehaviourLoss(LossModule):
-    def __init__(self, actor_model, value_model, model_based_env, cfg, value_loss: nn.Module = nn.MSELoss(), gamma=0.99, lmbda=0.95):
+    def __init__(
+        self,
+        actor_model,
+        value_model,
+        model_based_env,
+        cfg,
+        value_loss: nn.Module = nn.MSELoss(),
+        gamma=0.99,
+        lmbda=0.95,
+    ):
         super().__init__()
         self.actor_model = actor_model
         self.value_model = value_model
@@ -112,11 +124,10 @@ class DreamerBehaviourLoss(LossModule):
         self.value_loss = value_loss
         self.gamma = gamma
         self.lmbda = lmbda
+
     def forward(self, tensordict) -> torch.Tensor:
         with torch.no_grad():
-            tensordict = tensordict.select(
-                "next_prior_state", "next_belief"
-            )
+            tensordict = tensordict.select("next_prior_state", "next_belief")
 
             tensordict.batch_size = [
                 tensordict.shape[0],
@@ -134,22 +145,31 @@ class DreamerBehaviourLoss(LossModule):
             )
             with hold_out_net(self.value_model):
                 tensordict = self.value_model(tensordict)
-        lambda_target = self.lambda_target(tensordict.get("reward"), tensordict.get("predicted_value"))
+        lambda_target = self.lambda_target(
+            tensordict.get("reward"), tensordict.get("predicted_value")
+        )
         actor_loss = -lambda_target.mean()
         with torch.no_grad():
             value_td = tensordict.clone().detach()
         value_td = self.value_model(value_td)
-        
-        value_loss = 0.5*self.value_loss(value_td.get("predicted_value"), lambda_target.detach())
-       
-        return TensorDict(
-            {
-                "loss_value": value_loss,
-                "loss_actor": actor_loss,
-                
-            },
-            batch_size = []
-        ), tensordict
+
+        value_loss = 0.5 * self.value_loss(
+            value_td.get("predicted_value"), lambda_target.detach()
+        )
+
+        return (
+            TensorDict(
+                {
+                    "loss_value": value_loss,
+                    "loss_actor": actor_loss,
+                },
+                batch_size=[],
+            ),
+            tensordict,
+        )
+
     def lambda_target(self, reward, value):
         done = torch.zeros(reward.shape).bool().to(reward.device)
-        return vec_td_lambda_return_estimate(self.gamma, self.lmbda, value, reward, done)
+        return vec_td_lambda_return_estimate(
+            self.gamma, self.lmbda, value, reward, done
+        )
