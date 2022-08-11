@@ -10,7 +10,7 @@ from torchrl.data import TensorDict
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
 from torchrl.modules import TensorDictModule
-from torchrl.objectives import (
+from torchrl.objectives.costs.utils import (
     hold_out_params,
     next_state_value as get_next_state_value,
     distance_loss,
