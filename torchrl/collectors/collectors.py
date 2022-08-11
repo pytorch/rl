@@ -72,6 +72,8 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
             k: recursive_map_to_cpu(item)
             if isinstance(item, OrderedDict)
             else item.cpu()
+            if isinstance(item, torch.Tensor)
+            else item
             for k, item in dictionary.items()
         }
     )

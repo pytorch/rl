@@ -124,7 +124,7 @@ class TensorDictSequence(TensorDictModule):
     ):
         in_keys, out_keys = self._compute_in_and_out_keys(modules)
 
-        super(TensorDictSequence, self).__init__(
+        super().__init__(
             spec=None,
             module=nn.ModuleList(list(modules)),
             in_keys=in_keys,
