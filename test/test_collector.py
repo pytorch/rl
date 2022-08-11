@@ -483,8 +483,8 @@ def test_collector_vecnorm_envcreator():
 
     s = c.state_dict()
 
-    td1 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"].clone()
-    td2 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"].clone()
+    td1 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"]["td"].clone()
+    td2 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"]["td"].clone()
     assert (td1 == td2).all()
 
     next(c_iter)
@@ -492,8 +492,8 @@ def test_collector_vecnorm_envcreator():
 
     s = c.state_dict()
 
-    td3 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"].clone()
-    td4 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"].clone()
+    td3 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"]["td"].clone()
+    td4 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"]["td"].clone()
     assert (td3 == td4).all()
     assert (td1 != td4).any()
 
@@ -518,7 +518,7 @@ def test_update_weights(use_async):
     policy_state_dict = policy.state_dict()
     for worker in range(3):
         for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-            torch.testing.assert_allclose(
+            torch.testing.assert_close(
                 state_dict[f"worker{worker}"]["policy_state_dict"][k],
                 policy_state_dict[k].cpu(),
             )
@@ -534,7 +534,7 @@ def test_update_weights(use_async):
     for worker in range(3):
         for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
             with pytest.raises(AssertionError):
-                torch.testing.assert_allclose(
+                torch.testing.assert_close(
                     state_dict[f"worker{worker}"]["policy_state_dict"][k],
                     policy_state_dict[k].cpu(),
                 )
@@ -547,7 +547,7 @@ def test_update_weights(use_async):
     policy_state_dict = policy.state_dict()
     for worker in range(3):
         for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-            torch.testing.assert_allclose(
+            torch.testing.assert_close(
                 state_dict[f"worker{worker}"]["policy_state_dict"][k],
                 policy_state_dict[k].cpu(),
             )

@@ -25,6 +25,9 @@ MEMMAP_HANDLED_FN = {}
 
 __all__ = ["MemmapTensor", "set_transfer_ownership"]
 
+NoneType = type(None)
+EllipsisType = type(Ellipsis)
+
 
 def implements_for_memmap(torch_function) -> Callable:
     """Register a torch function override for ScalarTensor"""
@@ -275,7 +278,7 @@ class MemmapTensor(object):
         out = self._np_to_tensor(memmap_array, from_numpy=from_numpy)
         if (
             idx is not None
-            and not isinstance(idx, (int, np.integer))
+            and not isinstance(idx, (int, np.integer, slice))
             and len(idx) == 1
             and not (isinstance(idx, torch.Tensor) and idx.dtype is torch.bool)
         ):  # and isinstance(idx, torch.Tensor) and len(idx) == 1:
@@ -321,13 +324,13 @@ class MemmapTensor(object):
         return self._numel
 
     def clone(self) -> MemmapTensor:
-        """Clones the MemmapTensor onto another MemmapTensor
+        """Clones the MemmapTensor onto another tensor
 
         Returns:
-            a new MemmapTensor with the same data but a new storage.
+            a new torch.Tensor with the same data but a new storage.
 
         """
-        return MemmapTensor(self)
+        return self._tensor.clone()
 
     def contiguous(self) -> torch.Tensor:
         """Copies the MemmapTensor onto a torch.Tensor object.
@@ -468,6 +471,8 @@ class MemmapTensor(object):
     def __getitem__(self, item: INDEX_TYPING) -> torch.Tensor:
         # return self._load_item(memmap_array=self.memmap_array[item])#[item]
         # return self._load_item()[item]
+        if isinstance(item, (NoneType, EllipsisType, int, np.integer, slice)):
+            item = (item,)
         return self._load_item(idx=item)
 
     def __setitem__(self, idx: INDEX_TYPING, value: torch.Tensor):
@@ -561,40 +566,53 @@ class MemmapTensor(object):
         return tuple(self[_idx] for _idx in idx)
 
 
-@implements_for_memmap(torch.stack)
-def stack(
+def _stack(
     list_of_memmap: List[MemmapTensor],
     dim: int,
     out: Optional[Union[torch.Tensor]] = None,
 ) -> torch.Tensor:
     list_of_tensors = [
-        a._tensor if isinstance(a, MemmapTensor) else a for a in list_of_memmap
+        a._tensor if isinstance(a, (MemmapTensor,)) else a for a in list_of_memmap
     ]
-    if isinstance(out, MemmapTensor):
+    if isinstance(out, (MemmapTensor,)):
         list_of_tensors = [tensor.cpu() for tensor in list_of_tensors]
         return torch.stack(list_of_tensors, dim, out=out._tensor_from_numpy)
     else:
         return torch.stack(list_of_tensors, dim, out=out)
 
 
-@implements_for_memmap(torch.unbind)
-def unbind(memmap: MemmapTensor, dim: int) -> Tuple[torch.Tensor, ...]:
+implements_for_memmap(torch.stack)(_stack)
+
+
+def _unbind(memmap: MemmapTensor, dim: int) -> Tuple[torch.Tensor, ...]:
     return memmap.unbind(dim)
 
 
-@implements_for_memmap(torch.cat)
-def cat(
+implements_for_memmap(torch.unbind)(_unbind)
+
+
+def _tensor(memmap: MemmapTensor) -> torch.Tensor:
+    return memmap._tensor
+
+
+implements_for_memmap(torch.tensor)(_tensor)
+
+
+def _cat(
     list_of_memmap: List[MemmapTensor],
     dim: int,
     out: Optional[Union[torch.Tensor, MemmapTensor]] = None,
 ) -> torch.Tensor:
     list_of_tensors = [
-        a._tensor if isinstance(a, MemmapTensor) else a for a in list_of_memmap
+        a._tensor if isinstance(a, (MemmapTensor,)) else a for a in list_of_memmap
     ]
     print("mm: ", [t.shape for t in list_of_memmap])
     print("tensors: ", [t.shape for t in list_of_tensors])
     print("dim: ", dim, "shape: ", torch.cat(list_of_tensors, dim, out=out).shape)
     return torch.cat(list_of_tensors, dim, out=out)
+
+
+implements_for_memmap(torch.cat)(_cat)
 
 
 def set_transfer_ownership(memmap: MemmapTensor, value: bool = True) -> None:

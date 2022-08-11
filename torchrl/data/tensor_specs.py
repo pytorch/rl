@@ -134,6 +134,15 @@ class ContinuousBox(Box):
         max_str = f"maximum={self.maximum}"
         return f"{self.__class__.__name__}({min_str}, {max_str})"
 
+    def __eq__(self, other):
+        return (
+            type(self) == type(other)
+            and self.minimum.dtype == other.minimum.dtype
+            and self.maximum.dtype == other.maximum.dtype
+            and torch.equal(self.minimum, other.minimum)
+            and torch.equal(self.maximum, other.maximum)
+        )
+
 
 @dataclass(repr=False)
 class DiscreteBox(Box):
@@ -225,7 +234,7 @@ class TensorSpec:
                 stride > 0 for stride in val.strides
             ):
                 val = val.copy()
-            val = torch.as_tensor(val, dtype=self.dtype, device=self.device)
+            val = torch.tensor(val, dtype=self.dtype, device=self.device)
         if not _NO_CHECK_SPEC_ENCODE:
             self.assert_is_in(val)
         return val
@@ -383,14 +392,14 @@ class BoundedTensorSpec(TensorSpec):
     ):
         dtype, device = _default_dtype_and_device(dtype, device)
         if not isinstance(minimum, torch.Tensor):
-            minimum = torch.as_tensor(minimum, dtype=dtype, device=device)
+            minimum = torch.tensor(minimum, dtype=dtype, device=device)
         if minimum.dtype is not dtype:
             minimum = minimum.to(dtype)
         if minimum.device != device:
             minimum = minimum.to(device)
 
         if not isinstance(maximum, torch.Tensor):
-            maximum = torch.as_tensor(maximum, dtype=dtype, device=device)
+            maximum = torch.tensor(maximum, dtype=dtype, device=device)
         if maximum.dtype is not dtype:
             maximum = maximum.to(dtype)
         if maximum.device != device:
@@ -506,7 +515,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         space: Optional[DiscreteBox] = None,
     ) -> torch.Tensor:
         if not isinstance(val, torch.Tensor):
-            val = torch.as_tensor(val, dtype=self.dtype, device=self.device)
+            val = torch.tensor(val, dtype=self.dtype, device=self.device)
 
         if space is None:
             space = self.space
@@ -552,6 +561,17 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     def is_in(self, val: torch.Tensor) -> bool:
         return (val.sum(-1) == 1).all()
 
+    def __eq__(self, other):
+        return (
+            type(self) == type(other)
+            and self.shape == other.shape
+            and self.space == other.space
+            and self.device == other.device
+            and self.dtype == other.dtype
+            and self.domain == other.domain
+            and self.use_register == other.use_register
+        )
+
 
 @dataclass(repr=False)
 class UnboundedContinuousTensorSpec(TensorSpec):
@@ -572,7 +592,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
 
     def __init__(self, device=None, dtype=None):
         dtype, device = _default_dtype_and_device(dtype, device)
-        box = ContinuousBox(torch.as_tensor(-np.inf), torch.as_tensor(np.inf))
+        box = ContinuousBox(torch.tensor(-np.inf), torch.tensor(np.inf))
         super().__init__(torch.Size((1,)), box, device, dtype, "composite")
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
@@ -610,9 +630,9 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
             device = torch._get_default_device()
 
         if not isinstance(minimum, torch.Tensor):
-            minimum = torch.as_tensor(minimum, dtype=dtype, device=device)
+            minimum = torch.tensor(minimum, dtype=dtype, device=device)
         if not isinstance(maximum, torch.Tensor):
-            maximum = torch.as_tensor(maximum, dtype=dtype, device=device)
+            maximum = torch.tensor(maximum, dtype=dtype, device=device)
         if maximum.device != device:
             maximum = maximum.to(device)
         if minimum.device != device:
@@ -766,11 +786,11 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
 
     Examples:
         >>> ts = MultOneHotDiscreteTensorSpec((3,2,3))
-        >>> ts.is_in(torch.as_tensor([0,0,1,
+        >>> ts.is_in(torch.tensor([0,0,1,
         ...                        0,1,
         ...                        1,0,0]))
         True
-        >>> ts.is_in(torch.as_tensor([1,0,1,
+        >>> ts.is_in(torch.tensor([1,0,1,
         ...                        0,1,
         ...                        1,0,0])) # False
         False
@@ -814,7 +834,7 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
 
     def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
         if not isinstance(val, torch.Tensor):
-            val = torch.as_tensor(val, device=self.device)
+            val = torch.tensor(val, device=self.device)
 
         x = []
         for v, space in zip(val.unbind(-1), self.space):
@@ -1054,3 +1074,10 @@ dtype=torch.float32)},
             value.to(dest)
         self.device = torch.device(dest)
         return self
+
+    def __eq__(self, other):
+        return (
+            type(self) == type(other)
+            and self._device == other._device
+            and self._specs == other._specs
+        )

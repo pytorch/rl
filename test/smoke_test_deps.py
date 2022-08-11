@@ -32,6 +32,14 @@ def test_gym():
 
 
 def test_tb():
-    with tempfile.TemporaryDirectory() as directory:
-        writer = SummaryWriter(log_dir=directory)
-        writer.add_scalar("a", 1, 1)
+    test_rounds = 100
+    while test_rounds > 0:
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                writer = SummaryWriter(log_dir=directory)
+                writer.add_scalar("a", 1, 1)
+            break
+        except OSError:
+            # OS error could be raised randomly
+            # depending on the test machine
+            test_rounds -= 1
