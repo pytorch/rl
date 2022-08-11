@@ -198,7 +198,7 @@ def make_trainer(
     )
 
     if torch.cuda.device_count() > 0:
-        trainer.register_op("pre_optim_steps", ClearCudaCache(1))
+        trainer.register_op("pre_optim_steps", ClearCudaCache(2))
 
     if hasattr(cfg, "noisy") and cfg.noisy:
         trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
