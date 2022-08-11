@@ -1,6 +1,6 @@
 import collections
-from concurrent.futures import ThreadPoolExecutor
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Optional, Sequence, Union, Tuple
 
 import torch
@@ -31,6 +31,7 @@ class ReplayBuffer:
         prefetch (int, optional): number of next batches to be prefetched
             using multithreading.
     """
+
     def __init__(
         self,
         storage: Optional[Storage] = None,
