@@ -20,13 +20,11 @@ from mocking_classes import (
 )
 from scipy.stats import chisquare
 from torch import nn
-from torchrl.data import tensordict
 from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     BoundedTensorSpec,
     NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import EnvCreator, ObservationNorm, CatTensors, DoubleToFloat
@@ -48,7 +46,6 @@ from torchrl.modules import (
     Actor,
     MLP,
 )
-from torchrl.modules.tensordict_module.sequence import TensorDictSequence
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))

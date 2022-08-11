@@ -22,7 +22,7 @@ from torchrl.envs.model_based import ModelBasedEnv
 from torchrl.modules import TensorDictModule
 import torch.nn as nn
 
-from torchrl.modules.tensordict_module.actors import WorldModelWrapper
+from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 
 spec_dict = {
     "bounded": BoundedTensorSpec,

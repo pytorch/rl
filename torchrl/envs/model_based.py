@@ -12,7 +12,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-
+from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 from torchrl.data import TensorDict
 from ..data.utils import DEVICE_TYPING
 from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
