@@ -108,6 +108,8 @@ def main(cfg: "DictConfig"):
         device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
+
+    print(f"Using device {device}")
     exp_name = "_".join(
         [
             "Dreamer",
@@ -271,7 +273,7 @@ def main(cfg: "DictConfig"):
         if collected_frames >= cfg.init_env_steps:
             for j in range(cfg.optim_steps_per_batch):
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample(cfg.batch_size)
+                sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
 
                 model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
 
