@@ -247,12 +247,12 @@ class REDQLoss_deprecated(LossModule):
                 buffers=selected_q_buffers,
                 vmap=True,
             )
-            state_value = (
+            next_state_value = (
                 next_td.get("state_action_value") - self.alpha * sample_log_prob
             )
-            next_state_value = state_value.min(0)[0]
+            next_state_value = next_state_value.min(0)[0]
 
-        tensordict.set("next_state_value", state_value)
+        tensordict.set("next_state_value", next_state_value)
         # target_value = get_next_state_value(
         #     tensordict,
         #     gamma=self.gamma,
