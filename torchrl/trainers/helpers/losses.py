@@ -27,9 +27,11 @@ from torchrl.objectives import (
     PPOLoss,
     SACLoss,
     SoftUpdate,
+    REDQLoss,
 )
 from torchrl.objectives.costs.common import LossModule
-from torchrl.objectives.costs.deprecated import REDQLoss_deprecated
+
+# from torchrl.objectives.costs.deprecated import REDQLoss_deprecated
 
 # from torchrl.objectives.costs.redq import REDQLoss
 
@@ -112,9 +114,7 @@ def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
     return loss_module, target_net_updater
 
 
-def make_redq_loss(
-    model, cfg
-) -> Tuple[REDQLoss_deprecated, Optional[_TargetNetUpdate]]:
+def make_redq_loss(model, cfg) -> Tuple[REDQLoss, Optional[_TargetNetUpdate]]:
     """Builds the REDQ loss module."""
     loss_kwargs = {}
     if hasattr(cfg, "distributional") and cfg.distributional:
@@ -122,7 +122,7 @@ def make_redq_loss(
     else:
         loss_kwargs.update({"loss_function": cfg.loss_function})
         loss_kwargs.update({"delay_qvalue": cfg.loss == "double"})
-        loss_class = REDQLoss_deprecated
+        loss_class = REDQLoss
     if isinstance(model, ActorValueOperator):
         actor_model = model.get_policy_operator()
         qvalue_model = model.get_value_operator()
@@ -142,6 +142,8 @@ def make_redq_loss(
         num_qvalue_nets=cfg.num_q_values,
         gamma=cfg.gamma,
         gSDE=cfg.gSDE,
+        return_estimation=cfg.return_estimation,
+        lmbda=cfg.lmbda,
         **loss_kwargs,
     )
     target_net_updater = make_target_updater(cfg, loss_module)
@@ -231,6 +233,9 @@ class LossConfig:
     # REDQ uses an arbitrary number of Q-value functions to speed up learning in MF contexts.
     target_entropy: Any = None
     # Target entropy for the policy distribution. Default is None (auto calculated as the `target_entropy = -action_dim`)
+    lmbda: float = 0.95
+    # lambda factor in GAE (using 'lambda' as attribute is prohibited in python, hence the misspelling)
+    return_estimation: str = "td"
 
 
 @dataclass

@@ -531,6 +531,11 @@ class ReplayBufferTrainer:
             Default is False.
         device (device, optional): device where the samples must be placed.
             Default is cpu.
+        store_trajectories (bool, optional): if True, trajectories will be stored
+            in the replay buffer. Default is `False`.
+        sub_traj_len (int, optional): if trajectories are being sampled from the
+            replay buffer,
+
 
     Examples:
         >>> rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
@@ -546,17 +551,35 @@ class ReplayBufferTrainer:
         batch_size: int,
         memmap: bool = False,
         device: DEVICE_TYPING = "cpu",
+        store_trajectories: bool = False,
+        sub_traj_len: Optional[int] = None,
     ) -> None:
         self.replay_buffer = replay_buffer
         self.batch_size = batch_size
         self.memmap = memmap
         self.device = device
+        self.store_trajectories = store_trajectories
+        self.sub_traj_len = sub_traj_len
+        if self.store_trajectories and self.sub_traj_len:
+            self.sub_batcher = BatchSubSampler(
+                batch_size=self.batch_size, sub_traj_len=self.sub_traj_len
+            )
+            self.batch_size = -(-self.batch_size // self.sub_traj_len)
 
     def extend(self, batch: TensorDictBase) -> TensorDictBase:
-        if "mask" in batch.keys():
-            batch = batch[batch.get("mask").squeeze(-1)]
+        if not self.store_trajectories:
+            if "mask" in batch.keys():
+                batch = batch[batch.get("mask").squeeze(-1)]
+            else:
+                batch = batch.reshape(-1)
         else:
-            batch = batch.reshape(-1)
+            if batch.ndimension() <= 1:
+                raise RuntimeError(
+                    "The replay buffer is supposed to store trajectories, but the "
+                    f"tensordict collected has less than two dimensions: {batch.shape}"
+                )
+            batch.batch_size = batch.batch_size[:1]
+
         # reward_training = batch.get("reward").mean().item()
         batch = batch.cpu()
         if self.memmap:
@@ -567,10 +590,23 @@ class ReplayBufferTrainer:
 
     def sample(self, batch: TensorDictBase) -> TensorDictBase:
         sample = self.replay_buffer.sample(self.batch_size)
+        if self.store_trajectories and self.sub_traj_len:
+            # we expand the keys that
+            sample.batch_size = next(sample.values()).shape[:2]
+            sample = self.sub_batcher(sample)
         return sample.to(self.device, non_blocking=True)
 
     def update_priority(self, batch: TensorDictBase) -> None:
         if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
+            if self.store_trajectories and self.sub_traj_len:
+                raise RuntimeError(
+                    "Prioritized replay buffers are not compatible with trajectory"
+                    "subsampling, as the priority signal will only be present for"
+                    "part of the trajectory and is hard to trace back to the orignal"
+                    "trajectory. If this is a desired feature, please submit an issue"
+                    "on the TorchRL repo explaining the usage you would like to do of "
+                    "this feature and what operations you would expect to occur."
+                )
             self.replay_buffer.update_priority(batch)
 
 
@@ -762,8 +798,13 @@ class BatchSubSampler:
         contain consecutive samples across time.
         """
 
-        if batch.ndimension() == 1:
-            return batch[torch.randperm(batch.shape[0])[: self.batch_size]]
+        if batch.ndimension() <= 1:
+            raise RuntimeError(
+                "BatchSubSampler expects tensordicts with size[:2] "
+                "[Batch x Time], but got an input of size"
+                f"{batch.shape}"
+            )
+            # return batch[torch.randperm(batch.shape[0])[: self.batch_size]]
 
         sub_traj_len = self.sub_traj_len if self.sub_traj_len > 0 else batch.shape[1]
         if "mask" in batch.keys():

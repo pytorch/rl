@@ -23,6 +23,8 @@ from torchrl.objectives.costs.utils import (
 
 __all__ = ["REDQLoss"]
 
+from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
+
 
 class REDQLoss(LossModule):
     """
@@ -39,6 +41,8 @@ class REDQLoss(LossModule):
         sub_sample_len (int, optional): number of Q-value networks to be subsampled to evaluate the next state value
             Default is 2.
         gamma (Number, optional): gamma decay factor. Default is 0.99.
+        lmbda (Number, optional): lambda decay factor. Default is 0.95.
+            Only used for return_estimation="td_lambda" or "gae".
         priotity_key (str, optional): Key where to write the priority value for prioritized replay buffers. Default is
             `"td_error"`.
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
@@ -55,6 +59,7 @@ class REDQLoss(LossModule):
             for data collection. Default is `False`.
         gSDE (bool, optional): Knowing if gSDE is used is necessary to create random noise variables.
             Default is False
+        return_estimation (str, optional): return algorithm to use.
 
     """
 
@@ -67,6 +72,7 @@ class REDQLoss(LossModule):
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
         gamma: Number = 0.99,
+        lmbda: Number = 0.95,
         priotity_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
@@ -76,6 +82,7 @@ class REDQLoss(LossModule):
         target_entropy: Union[str, Number] = "auto",
         delay_qvalue: bool = True,
         gSDE: bool = False,
+        return_estimation: str = "td",
     ):
         super().__init__()
         self.convert_to_functional(
@@ -98,6 +105,14 @@ class REDQLoss(LossModule):
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
         self.register_buffer("gamma", torch.tensor(gamma))
+        self.return_estimation = return_estimation
+        if self.return_estimation not in ("gae", "td_lambda", "td"):
+            raise ValueError(
+                "return_estimation must be one of 'gae', 'td_lambda' or 'td'. "
+                f"Got {return_estimation} instead."
+            )
+        if self.return_estimation in ("gae", "td_lambda"):
+            self.register_buffer("lmbda", torch.tensor(lmbda))
         self.priority_key = priotity_key
         self.loss_function = loss_function
 
@@ -145,6 +160,16 @@ class REDQLoss(LossModule):
         return alpha
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        shape = tensordict.batch_size
+        if len(shape) >= 2:
+            tensordict = tensordict.view(-1)
+        else:
+            if self.return_estimation != "td":
+                raise ValueError(
+                    f"return_estimation={self.return_estimation} is not compatible with "
+                    f"input samples that are not at least two dimensional."
+                )
+
         obs_keys = self.actor_network.in_keys
         next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]
         tensordict_select = tensordict.select(
@@ -258,17 +283,29 @@ class REDQLoss(LossModule):
             state_action_value_actor - self.alpha * action_log_prob_actor
         ).mean(0)
 
-        next_state_value = (
-            next_state_action_value_qvalue - self.alpha * next_action_log_prob_qvalue
-        )
+        with torch.no_grad():
+            next_state_value = (
+                next_state_action_value_qvalue
+                - self.alpha * next_action_log_prob_qvalue
+            )
         next_state_value = next_state_value.min(0)[0]
 
-        target_value = get_next_state_value(
-            tensordict,
-            gamma=self.gamma,
-            pred_next_val=next_state_value,
-        )
         pred_val = state_action_value_qvalue
+        if self.return_estimation == "td":
+            target_value = get_next_state_value(
+                tensordict,
+                gamma=self.gamma,
+                pred_next_val=next_state_value,
+            )
+        elif self.return_estimation == "gae":
+            raise NotImplementedError("feature to come")
+        elif self.return_estimation == "td_lambda":
+            reward = tensordict.view(shape).get("reward")
+            done = tensordict.view(shape).get("done")
+            target_value = vec_td_lambda_return_estimate(
+                self.gamma, self.lmbda, next_state_value.view_as(reward), reward, done
+            )
+            target_value = target_value.view(-1)
         td_error = (pred_val - target_value).pow(2)
         loss_qval = distance_loss(
             pred_val,

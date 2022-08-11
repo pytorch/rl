@@ -60,3 +60,8 @@ class ReplayArgsConfig:
     # directory where the buffer data should be stored. If none is passed, they will be placed in /tmp/
     buffer_prefetch: int = 10
     # prefetching queue length for the replay buffer
+    store_trajectories: bool = False
+    # if True, collected tensordict won't be flattened and will be stored as-is in the replay buffer. The
+    # buffer size should be adapted to match the total number of frames (i.e. if 1000000 frames are needed
+    # and each trajectory is 1000 steps long, the replay buffer size should be 1000). The batch size must also
+    # be adapted by dividing the total number of frames that need to be collected by the trajectory length.
