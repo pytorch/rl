@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import multiprocessing as mp
 from copy import deepcopy, copy
 from typing import Any, List, Optional, OrderedDict, Sequence, Union
 from warnings import warn
@@ -32,7 +33,7 @@ from torchrl.data.tensor_specs import (
     DEVICE_TYPING,
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
-from torchrl.envs.common import _EnvClass, make_tensordict
+from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import FiniteTensor
 from torchrl.envs.utils import step_tensordict
@@ -89,7 +90,7 @@ class Transform(nn.Module):
     constructor via the `keys` argument.
 
     Transforms are to be combined with their target environments with the
-    TransformedEnv class, which takes as arguments an `_EnvClass` instance
+    TransformedEnv class, which takes as arguments an `EnvBase` instance
     and a transform. If multiple transforms are to be used, they can be
     concatenated using the `Compose` class.
     A transform can be stateless or stateful (e.g. CatTransform). Because of
@@ -227,15 +228,15 @@ class Transform(nn.Module):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(keys={self.keys_in})"
 
-    def set_parent(self, parent: Union[Transform, _EnvClass]) -> None:
+    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
         self.__dict__["_parent"] = parent
 
     @property
-    def parent(self) -> _EnvClass:
+    def parent(self) -> EnvBase:
         if not hasattr(self, "_parent"):
             raise AttributeError("transform parent uninitialized")
         parent = self._parent
-        if not isinstance(parent, _EnvClass):
+        if not isinstance(parent, EnvBase):
             # if it's not an env, it should be a Compose transform
             if not isinstance(parent, Compose):
                 raise ValueError(
@@ -259,12 +260,12 @@ class Transform(nn.Module):
             self.parent.empty_cache()
 
 
-class TransformedEnv(_EnvClass):
+class TransformedEnv(EnvBase):
     """
     A transformed_in environment.
 
     Args:
-        env (_EnvClass): original environment to be transformed_in.
+        env (EnvBase): original environment to be transformed_in.
         transform (Transform, optional): transform to apply to the tensordict resulting
             from `env.step(td)`. If none is provided, an empty Compose
             placeholder in an eval mode is used.
@@ -286,13 +287,14 @@ class TransformedEnv(_EnvClass):
 
     def __init__(
         self,
-        env: _EnvClass,
+        env: EnvBase,
         transform: Optional[Transform] = None,
         cache_specs: bool = True,
         **kwargs,
     ):
         kwargs.setdefault("device", env.device)
         device = kwargs["device"]
+        super().__init__(**kwargs)
         self._set_env(env, device)
         if transform is None:
             transform = Compose()
@@ -310,9 +312,7 @@ class TransformedEnv(_EnvClass):
         self._observation_spec = None
         self.batch_size = self.base_env.batch_size
 
-        super().__init__(**kwargs)
-
-    def _set_env(self, env: _EnvClass, device) -> None:
+    def _set_env(self, env: EnvBase, device) -> None:
         self.base_env = env.to(device)
         # updates need not be inplace, as transforms may modify values out-place
         self.base_env._inplace_update = False
@@ -386,7 +386,10 @@ class TransformedEnv(_EnvClass):
         self.transform.load_state_dict(state_dict, **kwargs)
 
     def eval(self) -> TransformedEnv:
-        self.transform.eval()
+        if "transform" in self.__dir__():
+            # when calling __init__, eval() is called but transforms are not set
+            # yet.
+            self.transform.eval()
         return self
 
     def train(self, mode: bool = True) -> TransformedEnv:
@@ -449,7 +452,7 @@ class TransformedEnv(_EnvClass):
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
-            return self.__getattribute__(
+            return super().__getattr__(
                 attr
             )  # make sure that appropriate exceptions are raised
         elif attr.startswith("__"):
@@ -459,7 +462,7 @@ class TransformedEnv(_EnvClass):
                 f"Got attribute {attr}."
             )
         elif "base_env" in self.__dir__():
-            base_env = self.__getattribute__("base_env")
+            base_env = self.__getattr__("base_env")
             return getattr(base_env, attr)
 
         raise AttributeError(
@@ -1530,7 +1533,7 @@ class NoopResetEnv(Transform):
     Runs a series of random actions when an environment is reset.
 
     Args:
-        env (_EnvClass): env on which the random actions have to be
+        env (EnvBase): env on which the random actions have to be
             performed. Can be the same env as the one provided to the
             TransformedEnv class
         noops (int, optional): number of actions performed after reset.
@@ -1707,6 +1710,7 @@ class VecNorm(Transform):
         self,
         keys_in: Optional[Sequence[str]] = None,
         shared_td: Optional[TensorDictBase] = None,
+        lock: mp.Lock = (mp.Lock()),
         decay: float = 0.9999,
         eps: float = 1e-4,
     ) -> None:
@@ -1732,10 +1736,14 @@ class VecNorm(Transform):
                         f"with keys {shared_td.keys()}"
                     )
 
+        self.lock = lock
         self.decay = decay
         self.eps = eps
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.lock is not None:
+            self.lock.acquire()
+
         for key in self.keys_in:
             if key not in tensordict.keys():
                 continue
@@ -1746,6 +1754,10 @@ class VecNorm(Transform):
             )
 
             tensordict.set_(key, new_val)
+
+        if self.lock is not None:
+            self.lock.release()
+
         return tensordict
 
     def _init(self, tensordict: TensorDictBase, key: str) -> None:
@@ -1822,7 +1834,7 @@ class VecNorm(Transform):
 
     @staticmethod
     def build_td_for_shared_vecnorm(
-        env: _EnvClass,
+        env: EnvBase,
         keys_prefix: Optional[Sequence[str]] = None,
         memmap: bool = False,
     ) -> TensorDictBase:
@@ -1830,7 +1842,7 @@ class VecNorm(Transform):
         for normalization across processes.
 
         Args:
-            env (_EnvClass): example environment to be used to create the
+            env (EnvBase): example environment to be used to create the
                 tensordict
             keys_prefix (iterable of str, optional): prefix of the keys that
                 have to be normalized. Default is `["next_", "reward"]`
@@ -1885,11 +1897,20 @@ class VecNorm(Transform):
             return td_select.memmap_()
         return td_select.share_memory_()
 
-    def get_extra_state(self) -> TensorDictBase:
-        return self._td
+    def get_extra_state(self) -> OrderedDict:
+        return OrderedDict([("lock", self.lock), ("td", self._td)])
 
-    def set_extra_state(self, td: TensorDictBase) -> None:
-        if not td.is_shared():
+    def set_extra_state(self, state: OrderedDict) -> None:
+        lock = state["lock"]
+        if lock is not None:
+            """
+            since locks can't be serialized, we have use cases for stripping them
+            for example in ParallelEnv, in which case keep the lock we already have
+            to avoid an updated tensor dict being sent between processes to erase locks
+            """
+            self.lock = lock
+        td = state["td"]
+        if td is not None and not td.is_shared():
             raise RuntimeError(
                 "Only shared tensordicts can be set in VecNorm transforms"
             )

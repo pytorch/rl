@@ -17,7 +17,7 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
-from torchrl.envs.common import _EnvClass
+from torchrl.envs.common import EnvBase
 
 spec_dict = {
     "bounded": BoundedTensorSpec,
@@ -51,7 +51,7 @@ def make_spec(spec_str):
     return target_class(**default_spec_kwargs[target_class])
 
 
-class _MockEnv(_EnvClass):
+class _MockEnv(EnvBase):
     def __init__(self, seed: int = 100):
         super().__init__(
             device="cpu",
@@ -88,7 +88,7 @@ class _MockEnv(_EnvClass):
         return TensorDict({"a": torch.zeros(3)}, [])
 
 
-class MockSerialEnv(_EnvClass):
+class MockSerialEnv(EnvBase):
     def __init__(self, device):
         super(MockSerialEnv, self).__init__(device=device)
         self.action_spec = NdUnboundedContinuousTensorSpec((1,))
@@ -147,6 +147,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
     def _reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         self.counter += 1
         state = torch.zeros(self.size) + self.counter
+        if tensordict is None:
+            tensordict = TensorDict({}, self.batch_size, device=self.device)
         tensordict = tensordict.select().set(
             "next_" + self.out_key, self._get_out_obs(state)
         )
@@ -203,6 +205,8 @@ class ContinuousActionVecMockEnv(_MockEnv):
         self.counter += 1
         self.step_count = 0
         state = torch.zeros(self.size) + self.counter
+        if tensordict is None:
+            tensordict = TensorDict({}, self.batch_size, device=self.device)
         tensordict = tensordict.select()
         tensordict.set("next_" + self.out_key, self._get_out_obs(state))
         tensordict.set("next_" + self._out_key, self._get_out_obs(state))
