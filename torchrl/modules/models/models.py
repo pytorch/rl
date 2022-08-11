@@ -1040,9 +1040,13 @@ class LSTMNet(nn.Module):
 class TanhActor(nn.Module):
     def __init__(self, out_features=None, depth=None, num_cells=None, activation_class=None):
         super().__init__()
-        self.backbone = NormalParamWrapper(MLP(out_features=2*out_features, depth=depth, num_cells=num_cells, activation_class=activation_class))
+        self.backbone = MLP(out_features=out_features, depth=depth, num_cells=num_cells, activation_class=activation_class)
+        self.loc_linear = nn.Linear(out_features, out_features)
+        self.scale_linear = nn.Linear(out_features, out_features)
     def forward(self, *input):
-        loc, scale = self.backbone(*input)
+        hidden = self.backbone(*input)
+        loc = self.loc_linear(hidden)
+        scale = self.scale_linear(hidden)
         if self.training:
             action = TanhNormal(loc=loc, scale=scale).rsample()
         else:

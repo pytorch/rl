@@ -29,7 +29,7 @@ from torchrl.modules import TensorDictModule
 from torchrl.trainers.helpers.models import (
     make_dreamer_world_model,
     make_dreamer_actor_critic,
-    DreamerConfig
+    DreamerConfig,
 )
 from torchrl.objectives.costs.dreamer import DreamerBehaviourLoss, DreamerModelLoss
 from torchrl.trainers.helpers.recorder import RecorderConfig
@@ -37,8 +37,8 @@ from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
     ReplayArgsConfig,
 )
+from torchrl.objectives.costs.utils import hold_out_net
 import tqdm
-import torch.nn as nn
 import torch
 from torch.nn.utils import clip_grad_norm_
 
@@ -89,7 +89,7 @@ DEFAULT_REWARD_SCALING = {
     "Humanoid-v2": 20,
     "humanoid": 100,
 }
-
+torch.autograd.set_detect_anomaly(True)
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
@@ -107,7 +107,6 @@ def main(cfg: "DictConfig"):
         device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
-    device = torch.device("cpu")
 
     exp_name = "_".join(
         [
@@ -123,48 +122,47 @@ def main(cfg: "DictConfig"):
     video_tag = exp_name if cfg.record_video else ""
 
     stats = None
-    # if not cfg.vecnorm and cfg.norm_stats:
-    #     proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False)()
-    #     stats = get_stats_random_rollout(
-    #         cfg,
-    #         proof_env,
-    #         key="next_pixels" if cfg.from_pixels else "next_observation_vector",
-    #     )
-    #     # make sure proof_env is closed
-    #     proof_env.close()
-    # elif cfg.from_pixels:
-    #     stats = {"loc": 0.5, "scale": 0.5}
-    stats = {"loc": 0.5, "scale": 0.5}
+    if not cfg.vecnorm and cfg.norm_stats:
+        proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False)()
+        stats = get_stats_random_rollout(
+            cfg,
+            proof_env,
+            key="next_pixels" if cfg.from_pixels else "next_observation_vector",
+        )
+        # make sure proof_env is closed
+        proof_env.close()
+    elif cfg.from_pixels:
+        stats = {"loc": 0.5, "scale": 0.5}
     proof_env = transformed_env_constructor(
         cfg=cfg, use_env_creator=False, stats=stats
     )()
-
     world_model, model_based_env = make_dreamer_world_model(
-        proof_environment=proof_env, cfg=cfg, device=device)
+        proof_environment=proof_env, cfg=cfg, device=device, use_decoder_in_env=True
+    )
     ### Actor and Value models
     actor_model, value_model = make_dreamer_actor_critic(
         mb_proof_environment=model_based_env,
         cfg=cfg,
-        device="device",
-        action_key= "action",
-        value_key = "predicted_value",
+        device=device,
+        action_key="action",
+        value_key="predicted_value",
     )
 
     ### Policy to compute inference from observations
     policy = TensorDictSequence(
         world_model.get_world_modeler_operator().select_subsequence(
-            out_keys=["posterior_state", "belief"],
+            out_keys=["posterior_states", "next_belief"],
         ),
         TensorDictModule(
             actor_model.module,
-            in_keys=["posterior_state", "belief"],
+            in_keys=["posterior_states", "next_beliefs"],
             out_keys=["action"],
         ),
     ).to(device)
 
     #### Losses
-    behaviour_loss = DreamerBehaviourLoss().to(device)
-    world_model_loss = DreamerModelLoss().to(device)
+    world_model_loss = DreamerModelLoss(world_model, cfg)
+    behaviour_loss = DreamerBehaviourLoss(actor_model, value_model, model_based_env, cfg)
 
     ### optimizers
     world_model_opt = torch.optim.Adam(world_model.parameters(), lr=cfg.world_model_lr)
@@ -252,7 +250,7 @@ def main(cfg: "DictConfig"):
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
     ## Training loop
     collected_frames = 0
-    pbar = tqdm.tqdm(total=cfg.total_frames // cfg.frame_skip)
+    pbar = tqdm.tqdm(total=cfg.total_frames * cfg.frame_skip)
     r0 = None
     for i, tensordict in enumerate(collector):
 
@@ -263,14 +261,7 @@ def main(cfg: "DictConfig"):
             r0 = tensordict["reward"].mean().item()
         pbar.update(tensordict.numel())
 
-        # extend the replay buffer with the new data
-        if "mask" in tensordict.keys():
-            # if multi-step, a mask is present to help filter padded values
-            current_frames = tensordict["mask"].sum()
-            tensordict = tensordict[tensordict.get("mask").squeeze(-1)]
-        else:
-            tensordict = tensordict.view(-1)
-            current_frames = tensordict.numel()
+        current_frames = tensordict.numel()
         collected_frames += current_frames
         replay_buffer.extend(tensordict.cpu())
 
@@ -279,48 +270,34 @@ def main(cfg: "DictConfig"):
             for j in range(cfg.optim_steps_per_batch):
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample(cfg.batch_size)
-                sampled_tensordict.batch_size = [sampled_tensordict.shape[0]]
-                sampled_tensordict["prior_state"] = torch.zeros(
-                    (sampled_tensordict.batch_size[0], 1, cfg.state_dim)
-                )
-                sampled_tensordict["belief"] = torch.zeros(
-                    (sampled_tensordict.batch_size[0], 1, cfg.rssm_hidden_dim)
-                )
-                world_model.train()
-                sampled_tensordict = world_model(sampled_tensordict)
-                # compute model loss
-                model_loss_td = world_model_loss(sampled_tensordict)
+
+                model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
+
                 world_model_opt.zero_grad()
-                model_loss_td["loss"].backward()
+                model_loss_td["loss_world_model"].backward()
                 clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
                 world_model_opt.step()
 
-                flattened_td = (
-                    sampled_tensordict.select("prior_state", "belief")
-                    .view(-1, sampled_tensordict.shape[-1])
-                    .detach()
-                )
-                flattened_td = actor_model(flattened_td)
-                with torch.no_grad:
-                    flattened_td = model_based_env.rollout(
-                        max_steps=cfg.imagination_horizon,
-                        policy=actor_model,
-                        auto_reset=False,
-                        tensordict=flattened_td,
-                    )
-                flattened_td = value_model(flattened_td)
                 # compute actor loss
-                actor_value_loss_td = behaviour_loss(flattened_td)
+                actor_value_loss, sampled_tensordict = behaviour_loss(sampled_tensordict)
+
                 actor_opt.zero_grad()
-                actor_value_loss_td["loss_actor"].backward()
+                actor_value_loss["loss_actor"].backward()
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
                 actor_opt.step()
-
+                
                 # Optimize value function
                 value_opt.zero_grad()
-                actor_value_loss_td["loss_value"].backward()
+                actor_value_loss["loss_value"].backward()
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
                 value_opt.step()
+
+                
+            # Compute observation reco
+            if i % cfg.record_interval == 0:
+                tensordict = model_based_env.observation_reco(tensordict.detach())
+                logger.log_video("reco_observation", tensordict["reco_pixels"])
+
             td_record = recorder(None)
 
 

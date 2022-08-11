@@ -66,7 +66,7 @@ class DreamerWorldModeler(TensorDictSequence):
             TensorDictModule(
                 ObsEncoder(depth=obs_depth),
                 in_keys=["pixels"],
-                out_keys=["observation_encoded"],
+                out_keys=["observations_encoded"],
             ),
             TensorDictModule(
                 RSSMPrior(
@@ -75,19 +75,19 @@ class DreamerWorldModeler(TensorDictSequence):
                     state_dim=state_dim,
                 ),
                 in_keys=["prior_state", "belief", "action"],
-                out_keys=["next_prior_mean", "next_prior_std", "next_prior_state", "next_belief"],
+                out_keys=["prior_means", "prior_stds", "next_prior_state", "next_belief"],
             ),
             TensorDictModule(
                 RSSMPosterior(
                     hidden_dim=rssm_hidden,
                     state_dim=state_dim,
                 ),
-                in_keys=["belief", "observation_encoded"],
-                out_keys=["posterior_mean", "posterior_std", "posterior_state"],
+                in_keys=["next_belief", "observations_encoded"],
+                out_keys=["posterior_means", "posterior_stds", "posterior_states"],
             ),
             TensorDictModule(
                 ObsDecoder(depth=obs_depth),
-                in_keys=["posterior_state", "belief"],
+                in_keys=["posterior_states", "next_belief"],
                 out_keys=["reco_pixels"],
             ),
         )
@@ -119,17 +119,17 @@ class ObsDecoder(nn.Module):
     def __init__(self, depth=32):
         super().__init__()
         self.state_to_latent = nn.Sequential(
-            nn.LazyLinear(depth * 8 * 4 * 4),
+            nn.LazyLinear(depth * 8 * 2 * 2),
             nn.ReLU(),
         )
         self.decoder = nn.Sequential(
             nn.LazyConvTranspose2d(depth * 4, 5, stride=2),
             nn.ReLU(),
-            nn.ConvTranspose2d(depth * 4, depth * 2, 4, stride=2, padding=1),
+            nn.ConvTranspose2d(depth * 4, depth * 2, 5, stride=2),
             nn.ReLU(),
-            nn.ConvTranspose2d(depth * 2, depth, 4, stride=2, padding=1),
+            nn.ConvTranspose2d(depth * 2, depth, 6, stride=2),
             nn.ReLU(),
-            nn.ConvTranspose2d(depth, 3, 4, stride=2, padding=1),
+            nn.ConvTranspose2d(depth, 3, 6, stride=2),
         )
         self._depth = depth
 
@@ -156,26 +156,47 @@ class RSSMPrior(nn.Module):
         self.prior_mean = nn.Linear(hidden_dim, state_dim)
         self.prior_std = nn.Linear(hidden_dim, state_dim)
 
-    def forward(self, state, rnn_hidden, action):
+    def forward(self, prior_state, belief, action):
         prior_means = []
         prior_stds = []
         prior_states = []
         beliefs = []
-        num_steps = action.size(1)
+        if prior_state.dim() == 3:
+            if prior_state.shape[1] == 1:
+                prior_state = prior_state.squeeze(1)
+            else:
+                raise ValueError("prior_state should be a single step")
+        if belief.dim() == 3:
+            if belief.shape[1] == 1:
+                belief = belief.squeeze(1)
+            else:
+                raise ValueError("belief should be a single step")
+        if len(action.shape) == 2:
+            action = action.unsqueeze(1)
+        elif len(action.shape) == 3:
+            pass
+        else:
+            raise ValueError("Action must be a 3D tensor of shape BxTxD or 2D with shape BxD")
+        num_steps = action.shape[1]
+
         for i in range(num_steps):
             prior_mean, prior_std, prior_state, belief = self.rssm_step(
-                state, action[:, i], rnn_hidden
+                prior_state, action[:, i], belief
             )
             prior_means.append(prior_mean)
             prior_stds.append(prior_std)
             prior_states.append(prior_state)
             beliefs.append(belief)
-            state = prior_state
-            rnn_hidden = belief
-        prior_means = torch.stack(prior_means, dim=1)
-        prior_stds = torch.stack(prior_stds, dim=1)
-        prior_states = torch.stack(prior_states, dim=1)
-        beliefs = torch.stack(beliefs, dim=1)
+        if len(prior_states) == 1:
+            prior_states = prior_states[0]
+            beliefs = beliefs[0]
+            prior_means = prior_means[0]
+            prior_stds = prior_stds[0]
+        else:
+            prior_means = torch.stack(prior_means, dim=1)
+            prior_stds = torch.stack(prior_stds, dim=1)
+            prior_states = torch.stack(prior_states, dim=1)
+            beliefs = torch.stack(beliefs, dim=1)
         return prior_means, prior_stds, prior_states, beliefs
 
     def rssm_step(self, state, action, rnn_hidden):

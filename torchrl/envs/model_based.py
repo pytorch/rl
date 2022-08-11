@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union, List, Tuple
+from typing import Optional, Union, List, Tuple, Callable
 
 import abc
 import numpy as np
@@ -84,19 +84,19 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         self.observation_spec = env.observation_spec
         self.action_spec = env.action_spec
         self.reward_spec = env.reward_spec
-
+    
     def _step(
         self,
         tensordict: TensorDict,
     ) -> TensorDict:
         # step method requires to be immutable
-        tensordict_out = tensordict.clone()
+        tensordict_in = tensordict.clone()
         # Compute world state
-        tensordict_out = self.world_model(tensordict_out)
+        tensordict_out = self.world_model(tensordict_in)
         # Step requires a done flag. No sense for MBRL so we set it to False
         tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool)
         return tensordict_out
-
+    
     @abc.abstractmethod
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         raise NotImplementedError
@@ -118,7 +118,7 @@ class DreamerEnv(ModelBasedEnv):
         obs_decoder: TensorDictModule = None,
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
-        batch_size: Optional[torch.Size] = None,
+        batch_size: Optional[torch.Size] = torch.Size([1]),
     ):
         super(DreamerEnv, self).__init__(world_model, device, dtype, batch_size)
         self.obs_decoder = obs_decoder
@@ -134,13 +134,16 @@ class DreamerEnv(ModelBasedEnv):
     def latent_spec(
         self, shapes: Tuple[torch.Size]
     ) -> None:
-        self._input_spec = CompositeSpec(
+        self._latent_spec = CompositeSpec(
             prior_state=NdUnboundedContinuousTensorSpec(shape=shapes[0]),
             belief=NdUnboundedContinuousTensorSpec(shape=shapes[1]),
         )
 
-    def _reset(self, **kwargs) -> TensorDict:
-        td = self.latent_spec.rand(batch_size=self.batch_size, device=self.device)
+    def _reset(self, tensordict=None, **kwargs) -> TensorDict:
+        td = self.latent_spec.rand(shape=self.batch_size)
+        td["action"] = self.action_spec.rand(shape=self.batch_size)
+        # td = td.unsqueeze(0).to_tensordict()
+        td = self.step(td)
         return td
 
     def _set_seed(self, seed: Optional[int]) -> int:
@@ -155,6 +158,7 @@ class DreamerEnv(ModelBasedEnv):
 
     def to(self, device: DEVICE_TYPING) -> DreamerEnv:
         super().to(device)
-        self.obs_decoder.to(device)
+        if self.obs_decoder is not None:
+            self.obs_decoder.to(device)
         self.latent_spec.to(device)
         return self
