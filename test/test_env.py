@@ -16,7 +16,7 @@ from mocking_classes import (
     DiscreteActionVecMockEnv,
     MockSerialEnv,
     DiscreteActionConvMockEnv,
-    DummyModelBasedEnv
+    DummyModelBasedEnv,
 )
 from scipy.stats import chisquare
 from torch import nn
@@ -246,16 +246,21 @@ def _make_model_based_envs(
 ):
     torch.manual_seed(0)
     if transformed_in:
+
         def create_env_fn():
             env = DummyModelBasedEnv(device=device)
             return env
+
     else:
+
         def create_env_fn():
             env = DummyModelBasedEnv(device=device)
             env = TransformedEnv(
                 env,
                 Compose(
-                    ObservationNorm(keys_in=["next_hidden_observation"], loc=0.5, scale=1.1),
+                    ObservationNorm(
+                        keys_in=["next_hidden_observation"], loc=0.5, scale=1.1
+                    ),
                     RewardClipping(0, 0.1),
                 ),
             )
@@ -271,7 +276,9 @@ def _make_model_based_envs(
     if transformed_out:
         t_out = lambda: (
             Compose(
-                ObservationNorm(keys_in=["next_hidden_observation"], loc=0.5, scale=1.1),
+                ObservationNorm(
+                    keys_in=["next_hidden_observation"], loc=0.5, scale=1.1
+                ),
                 RewardClipping(0, 0.1),
             )
             if not transformed_in
@@ -375,13 +382,14 @@ def _make_envs(
 
     return env_parallel, env_serial, env0
 
+
 class TestModelBasedEnv:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_mb_rollout(self, device, seed=0):
 
         torch.manual_seed(seed)
         np.random.seed(seed)
-        mb_env = DummyModelBasedEnv(device=device, batch_size = torch.Size([10]))
+        mb_env = DummyModelBasedEnv(device=device, batch_size=torch.Size([10]))
         mb_env.set_seed(seed)
         mb_env.reset()
         rollout1 = mb_env.rollout(max_steps=100)
@@ -393,6 +401,7 @@ class TestModelBasedEnv:
         rollout2 = mb_env.rollout(max_steps=100)
 
         assert_allclose_td(rollout1, rollout2)
+
 
 class TestParallel:
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")

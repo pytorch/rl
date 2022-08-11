@@ -6,13 +6,14 @@
 from __future__ import annotations
 
 from typing import Optional, Union, List, Tuple, Callable
-
 import abc
+from typing import Optional, Union, List
+
 import numpy as np
 import torch
 import torch.nn as nn
 
-
+from torchrl.data import TensorDict
 from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 from ..data.utils import DEVICE_TYPING
 from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
@@ -96,7 +97,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         # Step requires a done flag. No sense for MBRL so we set it to False
         tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool)
         return tensordict_out
-    
+
     @abc.abstractmethod
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         raise NotImplementedError

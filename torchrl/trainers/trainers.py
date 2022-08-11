@@ -871,7 +871,7 @@ class Recorder:
         frame_skip: int,
         policy_exploration: TensorDictModule,
         recorder: EnvBase,
-        exploration_mode: str = "mode",
+        exploration_mode: str = "mean",
         log_keys: Optional[List[str]] = None,
         out_keys: Optional[Dict[str, str]] = None,
         suffix: Optional[str] = None,

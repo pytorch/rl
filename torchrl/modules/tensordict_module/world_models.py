@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-
 from math import sqrt
 
 import torch
@@ -57,8 +56,6 @@ class WorldModelWrapper(TensorDictSequence):
 
         """
         return self.module[1]
-
-
 
 class DreamerWorldModeler(TensorDictSequence):
     def __init__(self, obs_depth=32, rssm_hidden=200, rnn_hidden_dim=200, state_dim=20):
