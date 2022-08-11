@@ -10,3 +10,4 @@ from .ppo import *
 from .sac import *
 from .redq import *
 from .utils import *
+from .deprecated import REDQLoss_deprecated as REDQLoss

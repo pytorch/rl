@@ -284,6 +284,7 @@ class REDQLoss(LossModule):
         ).mean(0)
 
         with torch.no_grad():
+            next_action_log_prob_qvalue = next_action_log_prob_qvalue.detach()
             next_state_value = (
                 next_state_action_value_qvalue
                 - self.alpha * next_action_log_prob_qvalue
