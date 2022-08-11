@@ -24,7 +24,6 @@ from torchrl.trainers.trainers import (
     ReplayBufferTrainer,
     LogReward,
     RewardNormalizer,
-    mask_batch,
     BatchSubSampler,
     UpdateWeights,
     Recorder,
@@ -70,7 +69,9 @@ class TrainerConfig:
     normalize_rewards_online: bool = False
     # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
     normalize_rewards_online_scale: float = 1.0
-    # Final value of the normalized rewards.
+    # Final scale of the normalized rewards.
+    normalize_rewards_online_decay: float = 0.9999
+    # Decay of the reward moving averaging
     sub_traj_len: int = -1
     # length of the trajectories that sub-samples must have in online settings.
 
@@ -218,7 +219,7 @@ def make_trainer(
         trainer.register_op("process_optim_batch", rb_trainer.sample)
         trainer.register_op("post_loss", rb_trainer.update_priority)
     else:
-        trainer.register_op("batch_process", mask_batch)
+        # trainer.register_op("batch_process", mask_batch)
         trainer.register_op(
             "process_optim_batch",
             BatchSubSampler(batch_size=cfg.batch_size, sub_traj_len=cfg.sub_traj_len),
@@ -233,7 +234,10 @@ def make_trainer(
     if cfg.normalize_rewards_online:
         # if used the running statistics of the rewards are computed and the
         # rewards used for training will be normalized based on these.
-        reward_normalizer = RewardNormalizer(scale=cfg.normalize_rewards_online_scale)
+        reward_normalizer = RewardNormalizer(
+            scale=cfg.normalize_rewards_online_scale,
+            decay=cfg.normalize_rewards_online_decay,
+        )
         trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
         trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 

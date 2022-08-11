@@ -13,6 +13,7 @@ from hydra.core.config_store import ConfigStore
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
+from torchrl.objectives import GAE
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,
@@ -172,6 +173,24 @@ def main(cfg: "DictConfig"):
     )
     if cfg.loss == "kl":
         trainer.register_op("pre_optim_steps", loss_module.reset)
+
+    if not cfg.advantage_in_loss:
+        critic_model = model.get_value_operator()
+        advantage = GAE(
+            cfg.gamma,
+            cfg.lmbda,
+            value_network=critic_model,
+            average_rewards=True,
+            gradient_mode=False,
+        )
+        trainer.register_op(
+            "process_optim_batch",
+            advantage,
+        )
+        trainer._process_optim_batch_ops = [
+            trainer._process_optim_batch_ops[-1],
+            *trainer._process_optim_batch_ops[:-1],
+        ]
 
     final_seed = collector.set_seed(cfg.seed)
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")

@@ -10,7 +10,6 @@ import torch
 from torch import distributions as d
 
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
-from torchrl.envs.utils import step_tensordict
 from torchrl.modules import TensorDictModule
 from ...modules.tensordict_module import ProbabilisticTensorDictModule
 
@@ -129,19 +128,14 @@ class PPOLoss(LossModule):
                 loss_function=self.loss_critic_type,
             )
         else:
-            with torch.no_grad():
-                reward = tensordict.get("reward")
-                next_td = step_tensordict(tensordict)
-                next_value = self.critic(
-                    next_td, params=self.critic_params, buffers=self.critic_buffers
-                ).get("state_value")
-                value_target = reward + next_value * self.gamma
-            tensordict_select = tensordict.select(*self.critic.in_keys).clone()
+            advantage = tensordict.get(self.advantage_key)
+            tensordict_select = tensordict.select(*self.critic.in_keys)
             value = self.critic(
                 tensordict_select,
                 params=self.critic_params,
                 buffers=self.critic_buffers,
             ).get("state_value")
+            value_target = advantage + value.detach()
             loss_value = distance_loss(
                 value, value_target, loss_function=self.loss_critic_type
             )
