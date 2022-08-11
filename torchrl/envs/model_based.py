@@ -5,15 +5,15 @@
 
 from __future__ import annotations
 
+import abc
 from typing import Optional, Union, List
 
-import abc
 import numpy as np
 import torch
 import torch.nn as nn
 
-from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 from torchrl.data import TensorDict
+from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 from ..data.utils import DEVICE_TYPING
 from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
 from .common import EnvBase
@@ -70,7 +70,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
             device=device, dtype=dtype, batch_size=batch_size
         )
         self.world_model = world_model
-    
+
     def set_specs_from_env(self, env: EnvBase):
         """
         Sets the specs of the environment from the specs of the given environment.
@@ -90,11 +90,11 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         # Step requires a done flag. No sense for MBRL so we set it to False
         tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool)
         return tensordict_out
-    
+
     @abc.abstractmethod
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         raise NotImplementedError
-    
+
     @abc.abstractmethod
     def _set_seed(self, seed: Optional[int]) -> int:
         raise NotImplementedError
@@ -103,4 +103,3 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         super().to(device)
         self.world_model.to(device)
         return self
-

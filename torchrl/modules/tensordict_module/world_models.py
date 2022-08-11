@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-
 from math import sqrt
 
 import torch
@@ -14,9 +13,8 @@ import torch.nn.functional as F
 
 from torchrl.modules.tensordict_module import TensorDictModule, TensorDictSequence
 
-__all__ = [
-    "WorldModelWrapper"
-]
+__all__ = ["WorldModelWrapper"]
+
 
 class WorldModelWrapper(TensorDictSequence):
     """

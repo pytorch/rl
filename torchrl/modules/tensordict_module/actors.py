@@ -27,7 +27,6 @@ __all__ = [
     "ActorCriticOperator",
     "ActorCriticWrapper",
     "DistributionalQValueActor",
-    "WorldModelWrapper"
 ]
 
 from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, TensorSpec

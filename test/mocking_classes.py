@@ -5,6 +5,7 @@
 from typing import Optional
 
 import torch
+import torch.nn as nn
 from torchrl import seed_generator
 from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
@@ -20,8 +21,6 @@ from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based import ModelBasedEnv
 from torchrl.modules import TensorDictModule
-import torch.nn as nn
-
 from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 
 spec_dict = {
@@ -365,16 +364,17 @@ class DummyModelBasedEnv(ModelBasedEnv):
     ):
         super(DummyModelBasedEnv, self).__init__(
             WorldModelWrapper(
-            TensorDictModule(
-                ActionObsMergeLinear(5, 4),
-                in_keys=["hidden_observation", "action"],
-                out_keys=["next_hidden_observation"],
+                TensorDictModule(
+                    ActionObsMergeLinear(5, 4),
+                    in_keys=["hidden_observation", "action"],
+                    out_keys=["next_hidden_observation"],
+                ),
+                TensorDictModule(
+                    nn.Linear(4, 1),
+                    in_keys=["hidden_observation"],
+                    out_keys=["reward"],
+                ),
             ),
-            TensorDictModule(
-                nn.Linear(4, 1),
-                in_keys=["hidden_observation"],
-                out_keys=["reward"],
-            )),
             device,
             dtype,
             batch_size,
