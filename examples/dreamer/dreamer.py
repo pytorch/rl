@@ -28,8 +28,7 @@ from torchrl.trainers.helpers.envs import (
     EnvConfig,
 )
 from torchrl.trainers.helpers.models import (
-    make_dreamer_world_model,
-    make_dreamer_actor_critic,
+    make_dreamer,
     DreamerConfig,
 )
 from torchrl.trainers.helpers.recorder import RecorderConfig
@@ -104,6 +103,7 @@ def main(cfg: "DictConfig"):
         device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
+    device = torch.device("cpu")
 
     print(f"Using device {device}")
     exp_name = "_".join(
@@ -134,29 +134,10 @@ def main(cfg: "DictConfig"):
     proof_env = transformed_env_constructor(
         cfg=cfg, use_env_creator=False, stats=stats
     )()
-    world_model, model_based_env = make_dreamer_world_model(
-        proof_environment=proof_env, cfg=cfg, device=device, use_decoder_in_env=True
-    )
-    ### Actor and Value models
-    actor_model, value_model = make_dreamer_actor_critic(
-        mb_proof_environment=model_based_env,
-        cfg=cfg,
-        device=device,
-        action_key="action",
+    world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
+        proof_environment=proof_env, cfg=cfg, device=device, use_decoder_in_env=True,action_key="action",
         value_key="predicted_value",
     )
-
-    ### Policy to compute inference from observations
-    policy = TensorDictSequence(
-        world_model.get_world_modeler_operator().select_subsequence(
-            out_keys=["posterior_states", "next_belief"],
-        ),
-        TensorDictModule(
-            actor_model.module,
-            in_keys=["posterior_states", "next_beliefs"],
-            out_keys=["action"],
-        ),
-    ).to(device)
 
     #### Losses
     world_model_loss = DreamerModelLoss(world_model, cfg)
@@ -235,20 +216,20 @@ def main(cfg: "DictConfig"):
             t.scale.fill_(1.0)
             t.loc.fill_(0.0)
 
-    recorder = Recorder(
-            record_frames=cfg.record_frames,
-            frame_skip=cfg.frame_skip,
-            policy_exploration=policy,
-            recorder=recorder,
-            record_interval=cfg.record_interval,
-            log_keys=cfg.recorder_log_keys,
-        )
+    record = Recorder(
+        record_frames=cfg.record_frames,
+        frame_skip=cfg.frame_skip,
+        policy_exploration=policy,
+        recorder=recorder,
+        record_interval=cfg.record_interval,
+        log_keys=cfg.recorder_log_keys,
+    )
 
     final_seed = collector.set_seed(cfg.seed)
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
     ## Training loop
     collected_frames = 0
-    pbar = tqdm.tqdm(total=cfg.total_frames * cfg.frame_skip)
+    pbar = tqdm.tqdm(total=cfg.total_frames)
     r0 = None
     for i, tensordict in enumerate(collector):
 
@@ -293,14 +274,17 @@ def main(cfg: "DictConfig"):
                 value_opt.step()
 
             # Compute observation reco
-            if i % cfg.record_interval == 0:
+            if i % cfg.record_interval == 0 and cfg.record_video:
                 with torch.no_grad():
-                    sampled_tensordict = model_based_env.observation_reco(
+                    sampled_tensordict = model_based_env.decode_obs(
                         sampled_tensordict.detach()
                     )
-                logger.log_video("reco_observation", sampled_tensordict["reco_pixels"])
+                logger.log_video("reco_observation", sampled_tensordict["reco_pixels"].detach().cpu().numpy())
 
-            td_record = recorder(None)
+            td_record = record(None)
+            if td_record is not None:
+                for key, value in td_record.items():
+                    logger.log_scalar(key, value, step=collected_frames)
 
 
 if __name__ == "__main__":

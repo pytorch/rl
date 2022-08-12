@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
+import re
 from typing import Optional, Sequence
 
 import torch
@@ -42,6 +43,11 @@ from torchrl.modules.models.models import (
     MLP,
     DuelingMlpDQNet,
     TanhActor,
+    ObsEncoder,
+    ObsDecoder,
+    RSSMPrior,
+    RSSMPosterior,
+    RSSMPriorRollout
 )
 from torchrl.modules.tensordict_module import (
     Actor,
@@ -54,7 +60,6 @@ from torchrl.modules.tensordict_module.actors import (
     ProbabilisticActor,
 )
 from torchrl.modules.tensordict_module.world_models import (
-    DreamerWorldModeler,
     WorldModelWrapper,
 )
 
@@ -77,8 +82,7 @@ __all__ = [
     "make_ppo_model",
     "make_sac_model",
     "make_redq_model",
-    "make_dreamer_world_model",
-    "make_dreamer_actor_critic",
+    "make_dreamer",
 ]
 
 
@@ -1186,73 +1190,152 @@ def make_redq_model(
     return model
 
 
-def make_dreamer_world_model(
+def make_dreamer(
     proof_environment: EnvBase,
     cfg: "DictConfig",
     device: DEVICE_TYPING = "cpu",
+    action_key: str = "action",
+    value_key: str = "predicted_value",
     use_decoder_in_env: bool = False,
+
 ) -> nn.ModuleList:
 
-    if cfg.from_pixels:
-        #### World Model and reward model
-        world_modeler = DreamerWorldModeler(
-            rssm_hidden=cfg.rssm_hidden_dim,
-            rnn_hidden_dim=cfg.rssm_hidden_dim,
-            state_dim=cfg.state_dim,
+    ### Modules
+    obs_encoder = ObsEncoder()
+    obs_decoder = ObsDecoder()
+    rssm_prior = RSSMPrior(
+        hidden_dim=cfg.rssm_hidden_dim,
+        rnn_hidden_dim=cfg.rssm_hidden_dim,
+        state_dim=cfg.state_dim,
+    )
+    rssm_prior_rollout = RSSMPriorRollout(
+        rssm_prior
         )
-        # test = deepcopy(world_modeler) fails
-        reward_model = TensorDictModule(
-            MLP(out_features=1, depth=3, num_cells=300, activation_class=nn.ELU).to(
-                device
-            ),
+    rssm_posterior = RSSMPosterior(
+        hidden_dim=cfg.rssm_hidden_dim, state_dim=cfg.state_dim
+    )
+    reward_module = MLP(out_features=1, depth=3, num_cells=300, activation_class=nn.ELU)
+
+    actor_module = TanhActor(
+            out_features=proof_environment.action_spec.shape[0],
+            depth=3,
+            num_cells=300,
+            activation_class=nn.ELU,
+            rnn_hidden_dim=cfg.rssm_hidden_dim,
+    )
+
+    ### World Model and reward model
+    world_modeler = TensorDictSequence(
+        TensorDictModule(
+            obs_encoder,
+            in_keys=["pixels"],
+            out_keys=["observations_encoded"],
+        ),
+        TensorDictModule(
+            rssm_prior_rollout,
+            in_keys=["action"],
+            out_keys=[
+                "prior_means",
+                "prior_stds",
+                "next_prior_state",
+                "next_belief",
+            ],
+        ),
+        TensorDictModule(
+            rssm_posterior,
+            in_keys=["next_belief", "observations_encoded"],
+            out_keys=["posterior_means", "posterior_stds", "posterior_states"],
+        ),
+        TensorDictModule(
+            obs_decoder,
+            in_keys=["posterior_states", "next_belief"],
+            out_keys=["reco_pixels"],
+        ),
+    )
+    world_model = WorldModelWrapper(
+        world_modeler,
+        TensorDictModule(
+            reward_module,
             in_keys=["posterior_states", "next_belief"],
             out_keys=["predicted_reward"],
-        )
-        world_model = WorldModelWrapper(world_modeler, reward_model)
-        if use_decoder_in_env:
-            obs_decoder = world_modeler.select_subsequence(
-                in_keys=["posterior_states", "next_belief"],
-                out_keys=["reco_pixels"],
-            )
-            obs_decoder = TensorDictModule(
-                obs_decoder,
-                in_keys=["prior_state", "belief"],
-                out_keys=["reco_pixels"],
-            )
+        ),
+    )
+    ## Actor value and policy
+    actor_model = TensorDictModule(
+        actor_module,
+        in_keys=["prior_state", "belief"],
+        out_keys=[action_key],
+    )
+    value_model = TensorDictModule(
+        MLP(out_features=1, depth=3, num_cells=400, activation_class=nn.ELU),
+        in_keys=["prior_state", "belief"],
+        out_keys=[value_key],
+    )
+    policy = TensorDictSequence(
+        TensorDictModule(
+            obs_encoder,
+            in_keys=["pixels"],
+            out_keys=["observations_encoded"],
+        ),
+        TensorDictModule(
+            rssm_posterior,
+            in_keys=["belief", "observations_encoded"],
+            out_keys=["posterior_means", "posterior_stds", "posterior_state"],
+        ),
+        TensorDictModule(
+            actor_module,
+            in_keys=["posterior_state", "belief"],
+            out_keys=[action_key],
+        ),
+        TensorDictModule(
+            rssm_prior,
+            in_keys=["posterior_state", "belief", action_key],
+            out_keys=[
+                "prior_means",
+                "prior_stds",
+                "prior_state",
+                "next_belief",
+            ],
+        ),
+    )
 
-            model_based_env = DreamerEnv(
-                world_model=WorldModelWrapper(
-                    world_modeler.select_subsequence(
-                        in_keys=["prior_state", "belief", "action"],
-                        out_keys=["next_prior_state", "next_belief"],
-                    ),
-                    TensorDictModule(
-                        reward_model.module,
-                        in_keys=["prior_state", "belief"],
-                        out_keys=["reward"],
-                    ),
-                ),
-                obs_decoder=obs_decoder,
-            )
-        else:
-            model_based_env = DreamerEnv(
-                world_model=WorldModelWrapper(
-                    world_modeler.select_subsequence(
-                        in_keys=["prior_state", "belief", "action"],
-                        out_keys=["next_prior_state", "next_belief"],
-                    ),
-                    TensorDictModule(
-                        reward_model.module,
-                        in_keys=["prior_state", "belief"],
-                        out_keys=["reward"],
-                    ),
-                ),
-            )
-        model_based_env.set_specs_from_env(proof_environment)
+    # MB environment
+    if use_decoder_in_env:
+        mb_env_obs_decoder = TensorDictModule(
+            obs_decoder,
+            in_keys=["prior_state", "belief"],
+            out_keys=["reco_pixels"],
+        )
     else:
-        raise ValueError("not implemented yet")
+        mb_env_obs_decoder=None
+
+    model_based_env = DreamerEnv(
+        world_model=WorldModelWrapper(
+            TensorDictModule(
+            rssm_prior,
+            in_keys=["prior_state", "belief", "action"],
+            out_keys=[
+                "prior_means",
+                "prior_stds",
+                "next_prior_state",
+                "next_belief",
+            ],
+        ),
+            TensorDictModule(
+                reward_module,
+                in_keys=["next_prior_state", "next_belief"],
+                out_keys=["reward"],
+            ),
+        ),
+        obs_decoder=mb_env_obs_decoder,
+        )
+    
+
+    model_based_env.set_specs_from_env(proof_environment)
 
     world_model = world_model.to(device)
+
+
     # init nets
     with torch.no_grad(), set_exploration_mode("random"):
         td = proof_environment.rollout(1000)
@@ -1264,41 +1347,18 @@ def make_dreamer_world_model(
         world_model(td)
     model_based_env.latent_spec = (td["prior_state"].shape[-1], td["belief"].shape[-1])
     model_based_env = model_based_env.to(device)
-    del td
-    return world_model, model_based_env
-
-
-def make_dreamer_actor_critic(
-    mb_proof_environment: DreamerEnv,
-    cfg: "DictConfig",
-    device: DEVICE_TYPING = "cpu",
-    action_key: str = "action",
-    value_key: str = "predicted_value",
-) -> nn.ModuleList:
-    actor_model = TensorDictModule(
-        TanhActor(
-            out_features=mb_proof_environment.action_spec.shape[0],
-            depth=3,
-            num_cells=300,
-            activation_class=nn.ELU,
-        ),
-        in_keys=["prior_state", "belief"],
-        out_keys=[action_key],
-    ).to(device)
-    value_model = TensorDictModule(
-        MLP(out_features=1, depth=3, num_cells=400, activation_class=nn.ELU),
-        in_keys=["prior_state", "belief"],
-        out_keys=[value_key],
-    ).to(device)
 
     with torch.no_grad(), set_exploration_mode("random"):
-        td = mb_proof_environment.rollout(1000)
+        td = model_based_env.rollout(1000)
         td = td.to(device)
         td = actor_model(td)
         td = value_model(td)
-    del td
-    return actor_model, value_model
 
+    actor_model = actor_model.to(device)
+    value_model = value_model.to(device)
+    policy = policy.to(device)
+    del td
+    return world_model, model_based_env, actor_model, value_model, policy
 
 @dataclass
 class DreamerConfig:
