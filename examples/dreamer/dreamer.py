@@ -284,7 +284,7 @@ def main(cfg: "DictConfig"):
             td_record = record(None)
             if td_record is not None:
                 for key, value in td_record.items():
-                    logger.log_scalar(key, value, step=collected_frames)
+                    logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
 
 
 if __name__ == "__main__":
