@@ -273,7 +273,7 @@ def main(cfg: "DictConfig"):
                 value_opt.step()
 
             # Compute observation reco
-            if i % cfg.record_interval == 0 and cfg.record_video:
+            if collected_frames % cfg.record_interval == 0 and cfg.record_video:
                 with torch.no_grad():
                     sampled_tensordict = model_based_env.decode_obs(
                         sampled_tensordict.detach()
@@ -284,7 +284,8 @@ def main(cfg: "DictConfig"):
             if td_record is not None:
                 print(td_record.keys())
                 for key, value in td_record.items():
-                    logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
+                    if key in ['r_evaluation', 'total_r_evaluation']:
+                        logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
 
 
 if __name__ == "__main__":
