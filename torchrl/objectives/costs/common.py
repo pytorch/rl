@@ -110,9 +110,12 @@ class LossModule(nn.Module):
                 compare_against = set()
             for i, p in enumerate(params):
                 if p in compare_against:
-                    # expanded parameters are 'detached': the parameter will not
-                    # be trained to minimize loss involving this network.
-                    p_out = p.data.expand(expand_dim, *p.shape)
+                    # NO VALID ANYMORE
+                    # # expanded parameters are 'detached': the parameter will not
+                    # # be trained to minimize loss involving this network.
+                    # p_out = p.data.expand(expand_dim, *p.shape)
+
+                    p_out = p.expand(expand_dim, *p.shape)
                     # the expanded parameter must be sent to device when to()
                     # is called:
                     self._param_maps[p_out] = p
