@@ -10,15 +10,11 @@ import tqdm
 from hydra.core.config_store import ConfigStore
 from torch.nn.utils import clip_grad_norm_
 from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.model_based import ModelBasedEnv
+from torchrl.trainers.trainers import Recorder
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules import TensorDictModule
-from torchrl.modules.tensordict_module.actors import (
-    ActorCriticWrapper,
-)
 from torchrl.modules.tensordict_module.sequence import TensorDictSequence
 from torchrl.objectives.costs.dreamer import DreamerBehaviourLoss, DreamerModelLoss
-from torchrl.objectives.costs.utils import hold_out_net
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
@@ -180,7 +176,7 @@ def main(cfg: "DictConfig"):
             env=proof_env,
             device=device,
             logger=logger,
-            video_tag=video_tag,
+            tag=video_tag,
         )
     else:
         recorder = None
@@ -239,16 +235,14 @@ def main(cfg: "DictConfig"):
             t.scale.fill_(1.0)
             t.loc.fill_(0.0)
 
-    # trainer = make_trainer(
-    #     collector,
-    #     loss_module,
-    #     recorder,
-    #     target_net_updater,
-    #     model,
-    #     replay_buffer,
-    #     logger,
-    #     cfg,
-    # )
+    recorder = Recorder(
+            record_frames=cfg.record_frames,
+            frame_skip=cfg.frame_skip,
+            policy_exploration=policy,
+            recorder=recorder,
+            record_interval=cfg.record_interval,
+            log_keys=cfg.recorder_log_keys,
+        )
 
     final_seed = collector.set_seed(cfg.seed)
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
