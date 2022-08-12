@@ -277,7 +277,7 @@ class LossModule(nn.Module):
             for i, param in enumerate(list_of_params):
                 # we replace the param by the expanded form if needs be
                 if param in self._param_maps:
-                    list_of_params[i] = self._param_maps[param].data.expand_as(param)
+                    list_of_params[i] = self._param_maps[param].expand_as(param)
         return out
 
     def cuda(self, device: Optional[Union[int, device]] = None) -> LossModule:
