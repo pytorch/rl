@@ -1229,7 +1229,7 @@ def make_dreamer(
         TensorDictModule(
             obs_encoder,
             in_keys=["pixels"],
-            out_keys=["observations_encoded"],
+            out_keys=["encoded_latents"],
         ),
         TensorDictModule(
             rssm_prior_rollout,
@@ -1243,7 +1243,7 @@ def make_dreamer(
         ),
         TensorDictModule(
             rssm_posterior,
-            in_keys=["next_belief", "observations_encoded"],
+            in_keys=["next_belief", "encoded_latents"],
             out_keys=["posterior_means", "posterior_stds", "posterior_states"],
         ),
         TensorDictModule(
@@ -1275,11 +1275,11 @@ def make_dreamer(
         TensorDictModule(
             obs_encoder,
             in_keys=["pixels"],
-            out_keys=["observations_encoded"],
+            out_keys=["encoded_latents"],
         ),
         TensorDictModule(
             rssm_posterior,
-            in_keys=["belief", "observations_encoded"],
+            in_keys=["belief", "encoded_latents"],
             out_keys=["posterior_means", "posterior_stds", "posterior_state"],
         ),
         TensorDictModule(

@@ -103,6 +103,7 @@ def main(cfg: "DictConfig"):
         device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
+    # device = torch.device("cpu")
     print(f"Using device {device}")
     exp_name = "_".join(
         [
