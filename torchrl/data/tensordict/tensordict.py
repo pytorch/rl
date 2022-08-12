@@ -346,23 +346,29 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 f" {sorted(list(self.keys()))}"
             )
 
-    def apply_(self, fn: Callable) -> TensorDictBase:
+    def apply_(self, fn: Callable, inplace: bool = False) -> TensorDictBase:
         """Applies a callable to all values stored in the tensordict and
         re-writes them in-place.
 
         Args:
             fn (Callable): function to be applied to the tensors in the
                 tensordict.
+            inplace (bool, optional): if True, changes are made in-place.
+                Default is False.
 
         Returns:
-            self
+            self or a copy of self with the function applied
 
         """
-        for key, item in self.items():
-            item_trsf = fn(item)
+        out = self if inplace else copy(self)
+        for key, item in out.items():
+            if isinstance(item, TensorDictBase):
+                item_trsf = item.apply_(fn, inplace=inplace)
+            else:
+                item_trsf = fn(item)
             if item_trsf is not None:
-                self.set(key, item_trsf, inplace=True)
-        return self
+                out.set(key, item_trsf, inplace=True)
+        return out
 
     def apply(
         self, fn: Callable, batch_size: Optional[Sequence[int]] = None
@@ -1402,7 +1408,7 @@ dtype=torch.float32)},
             yield self[i]
 
     def flatten_keys(
-        self, separator: str = ",", inplace: bool = True
+        self, separator: str = ",", inplace: bool = False
     ) -> TensorDictBase:
         to_flatten = []
         for key, meta_value in self.items_meta():
@@ -1435,7 +1441,7 @@ dtype=torch.float32)},
             return tensordict_out
 
     def unflatten_keys(
-        self, separator: str = ",", inplace: bool = True
+        self, separator: str = ",", inplace: bool = False
     ) -> TensorDictBase:
         to_unflatten = defaultdict(lambda: list())
         for key in self.keys():
