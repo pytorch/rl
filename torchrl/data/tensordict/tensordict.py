@@ -346,7 +346,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 f" {sorted(list(self.keys()))}"
             )
 
-    def apply_(self, fn: Callable, inplace: bool=False) -> TensorDictBase:
+    def apply_(self, fn: Callable, inplace: bool = False) -> TensorDictBase:
         """Applies a callable to all values stored in the tensordict and
         re-writes them in-place.
 
