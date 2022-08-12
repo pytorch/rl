@@ -110,9 +110,9 @@ class ObsEncoder(nn.Module):
 
     def forward(self, observation):
         *batch_sizes, C, H, W = observation.shape
-        observation = observation.view(-1, C, H, W)
+        observation = observation.reshape(-1, C, H, W)
         obs_encoded = self.encoder(observation)
-        latent = obs_encoded.view(*batch_sizes, -1)
+        latent = obs_encoded.reshape(*batch_sizes, -1)
         return latent
 
 
@@ -137,10 +137,10 @@ class ObsDecoder(nn.Module):
     def forward(self, state, rnn_hidden):
         latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
         *batch_sizes, D = latent.shape
-        latent = latent.view(-1, D, 1, 1)
+        latent = latent.reshape(-1, D, 1, 1)
         obs_decoded = self.decoder(latent)
         _, C, H, W = obs_decoded.shape
-        obs_decoded = obs_decoded.view(*batch_sizes, C, H, W)
+        obs_decoded = obs_decoded.reshape(*batch_sizes, C, H, W)
         return obs_decoded
 
 
