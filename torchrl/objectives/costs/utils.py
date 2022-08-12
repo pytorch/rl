@@ -181,7 +181,7 @@ class _TargetNetUpdate:
                 if p_source.is_leaf:
                     self._step(p_source, p_target)
                 else:
-                    p_target.copy_(p_source)
+                    p_target.copy_(p_source.detach())
 
     def _step(self, p_source: Tensor, p_target: Tensor) -> None:
         raise NotImplementedError

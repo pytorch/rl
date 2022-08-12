@@ -10,12 +10,12 @@ from torchrl.data import TensorDict
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
 from torchrl.modules import TensorDictModule
+from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import (
     hold_out_params,
     next_state_value as get_next_state_value,
     distance_loss,
 )
-from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
 
 

@@ -126,7 +126,7 @@ class LossModule(nn.Module):
                             p_out.min().item(), p_out.max().item()
                         ).requires_grad_()
                     )
-                    params[i] = p_out
+                params[i] = p_out
 
             for i, b in enumerate(module_buffers):
                 b = b.expand(expand_dim, *b.shape).clone()
@@ -135,6 +135,8 @@ class LossModule(nn.Module):
             # # delete weights of original model as they do not correspond to the optimized weights
             # network_orig.to("meta")
 
+        # register the parameters that need gradient (i.e. that are not
+        # duplicated / expanded) and ALL params (included expanded ones) separately
         setattr(
             self,
             "_" + param_name,
@@ -179,6 +181,8 @@ class LossModule(nn.Module):
                     lambda _self: [getattr(_self, _name) for _name in target_params]
                 ),
             )
+            for i in getattr(self, name_params_target):
+                print(name_params_target, i.requires_grad, i.shape)
 
             target_buffers = [p.detach().clone() for p in getattr(self, buffer_name)]
             for i, p in enumerate(target_buffers):
