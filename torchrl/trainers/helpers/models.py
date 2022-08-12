@@ -1348,14 +1348,15 @@ def make_dreamer(
     model_based_env.latent_spec = (td["prior_state"].shape[-1], td["belief"].shape[-1])
     model_based_env = model_based_env.to(device)
 
+    actor_model = actor_model.to(device)
+    value_model = value_model.to(device)
+
     with torch.no_grad(), set_exploration_mode("random"):
         td = model_based_env.rollout(1000)
         td = td.to(device)
         td = actor_model(td)
         td = value_model(td)
 
-    actor_model = actor_model.to(device)
-    value_model = value_model.to(device)
     policy = policy.to(device)
     del td
     return world_model, model_based_env, actor_model, value_model, policy
