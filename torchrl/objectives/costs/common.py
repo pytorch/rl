@@ -126,7 +126,7 @@ class LossModule(nn.Module):
                             p_out.min().item(), p_out.max().item()
                         ).requires_grad_()
                     )
-                params[i] = p_out
+                    params[i] = p_out
 
             for i, b in enumerate(module_buffers):
                 b = b.expand(expand_dim, *b.shape).clone()
