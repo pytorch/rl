@@ -114,6 +114,16 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError
 
+    def size(self, dim: Optional[int] = None) -> Union[int, torch.Size]:
+        """
+        Return the shape of a tensordict at a specific dimension, if asked for.
+
+        Args:
+            dim (int, optional): if indicated, this dimension size will be returned
+
+        """
+        return self.shape[dim] if dim is not None else self.shape
+
     @property
     def requires_grad(self):
         return any(v.requires_grad for v in self._dict_meta.values())
@@ -346,32 +356,25 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 f" {sorted(list(self.keys()))}"
             )
 
-    def apply_(self, fn: Callable, inplace: bool = False) -> TensorDictBase:
+    def apply_(self, fn: Callable) -> TensorDictBase:
         """Applies a callable to all values stored in the tensordict and
         re-writes them in-place.
 
         Args:
             fn (Callable): function to be applied to the tensors in the
                 tensordict.
-            inplace (bool, optional): if True, changes are made in-place.
-                Default is False.
 
         Returns:
             self or a copy of self with the function applied
 
         """
-        out = self if inplace else copy(self)
-        for key, item in out.items():
-            if isinstance(item, TensorDictBase):
-                item_trsf = item.apply_(fn, inplace=inplace)
-            else:
-                item_trsf = fn(item)
-            if item_trsf is not None:
-                out.set(key, item_trsf, inplace=True)
-        return out
+        return self.apply(fn, inplace=True)
 
     def apply(
-        self, fn: Callable, batch_size: Optional[Sequence[int]] = None
+        self,
+        fn: Callable,
+        batch_size: Optional[Sequence[int]] = None,
+        inplace: bool = False,
     ) -> TensorDictBase:
         """Applies a callable to all values stored in the tensordict and sets
         them in a new tensordict.
@@ -383,21 +386,28 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 the resulting TensorDict will have the desired batch_size.
                 The `batch_size` argument should match the batch_size after
                 the transformation.
+            inplace (bool, optional): if True, changes are made in-place.
+                Default is False.
 
         Returns:
             a new tensordict with transformed_in tensors.
 
         """
-        if batch_size is None:
-            td = TensorDict({}, batch_size=self.batch_size, device=self._device_safe())
-        else:
-            td = TensorDict(
-                {}, batch_size=torch.Size(batch_size), device=self._device_safe()
-            )
+        out = (
+            self
+            if inplace
+            else TensorDict({}, batch_size=batch_size, device=self._device_safe())
+            if batch_size is not None
+            else copy(self)
+        )
         for key, item in self.items():
-            item_trsf = fn(item)
-            td.set(key, item_trsf)
-        return td
+            if isinstance(item, TensorDictBase):
+                item_trsf = item.apply(fn, inplace=inplace, batch_size=batch_size)
+            else:
+                item_trsf = fn(item)
+            if item_trsf is not None:
+                out.set(key, item_trsf, inplace=inplace)
+        return out
 
     def update(
         self,
@@ -547,6 +557,8 @@ dtype=torch.float32)},
             tensor = self._convert_to_tensor(input)
         else:
             tensor = input
+        if "BatchedTensor" in str(tensor):  # TODO: find a proper way of doing that
+            return tensor
 
         if check_device and self._device_safe() is not None:
             device = self.device
@@ -581,7 +593,7 @@ dtype=torch.float32)},
                 raise RuntimeError(
                     f"batch dimension mismatch, got self.batch_size"
                     f"={self.batch_size} and tensor.shape[:self.batch_dims]"
-                    f"={tensor.shape[: self.batch_dims]}"
+                    f"={tensor.shape[: self.batch_dims]} with tensor {tensor}"
                 )
 
         # minimum ndimension is 1
@@ -934,11 +946,10 @@ dtype=torch.float32)},
             recursive (bool, optional): if True, each tensor contained in the
                 TensorDict will be copied too. Default is `True`.
         """
+        if not recursive:
+            return copy(self)
         return TensorDict(
-            source={
-                key: value.clone() if recursive else value
-                for key, value in self.items()
-            },
+            source={key: value.clone() for key, value in self.items()},
             batch_size=self.batch_size,
             device=self._device_safe(),
         )
@@ -985,16 +996,21 @@ dtype=torch.float32)},
         n = len(new_size)
         for key, meta_tensor in self.items_meta():
             if (meta_tensor.ndimension() <= n) or (meta_tensor.shape[:n] != new_size):
-                if meta_tensor.ndimension() == n and meta_tensor.shape == new_size:
+                if (
+                    n > 0
+                    and meta_tensor.ndimension() == n
+                    and meta_tensor.shape == new_size
+                ):
                     raise RuntimeError(
                         "TensorDict requires tensors that have at least one more "
                         f'dimension than the batch_size. The tensor "{key}" has shape '
                         f"{meta_tensor.shape} which is the same as the new size."
                     )
-                raise RuntimeError(
-                    f"the tensor {key} has shape {meta_tensor.shape} which "
-                    f"is incompatible with the new shape {new_size}."
-                )
+                elif n > 0:
+                    raise RuntimeError(
+                        f"the tensor {key} has shape {meta_tensor.shape} which "
+                        f"is incompatible with the new shape {new_size}."
+                    )
 
     @abc.abstractmethod
     def _change_batch_size(self, new_size: torch.Size):
