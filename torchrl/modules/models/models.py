@@ -1171,7 +1171,7 @@ class RSSMPrior(nn.Module):
         prior = self.rnn_to_prior_projector(belief)
         prior_mean = self.prior_mean(prior)
         prior_std = F.softplus(self.prior_std(prior)) + self.min_std
-        prior_state = d.Normal(prior_mean, prior_std).rsample()
+        prior_state = prior_mean + torch.randn_like(prior_std)*prior_std
         return prior_mean, prior_std, prior_state, belief
 
 

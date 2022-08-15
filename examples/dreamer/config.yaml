@@ -6,7 +6,7 @@ async_collection: True
 record_video: 0
 frame_skip: 2
 frames_per_batch: 400
-optim_steps_per_batch: 100
+optim_steps_per_batch: 1 #100
 batch_size: 50
 total_frames: 10000000
 world_model_lr: 6e-4

@@ -235,6 +235,8 @@ def main(cfg: "DictConfig"):
     path = Path('./log')
     path.mkdir(exist_ok=True)
     with torch.profiler.profile(
+        activities=[
+        torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA], 
         schedule=torch.profiler.schedule(wait=125, warmup=1, active=2, repeat=1),
         on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/dreamer'),
         record_shapes=True,
