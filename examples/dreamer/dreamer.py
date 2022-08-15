@@ -231,74 +231,61 @@ def main(cfg: "DictConfig"):
     r0 = None
     path = Path('./log')
     path.mkdir(exist_ok=True)
+    for i, tensordict in enumerate(collector):
 
-    with torch.profiler.profile(
-        activities=[
-        torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA], 
-        schedule=torch.profiler.schedule(skip_first=125, wait=0, warmup=1, active=1, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/dreamer'),
-        record_shapes=True,
-        profile_memory=True,
-        with_stack=True,
-        with_modules=True
-) as prof:
-        for i, tensordict in enumerate(collector):
+        # update weights of the inference policy
+        collector.update_policy_weights_()
 
-            # update weights of the inference policy
-            collector.update_policy_weights_()
+        if r0 is None:
+            r0 = tensordict["reward"].mean().item()
+        pbar.update(tensordict.numel())
 
-            if r0 is None:
-                r0 = tensordict["reward"].mean().item()
-            pbar.update(tensordict.numel())
+        current_frames = tensordict.numel()
+        collected_frames += current_frames
+        replay_buffer.extend(tensordict.cpu())
 
-            current_frames = tensordict.numel()
-            collected_frames += current_frames
-            replay_buffer.extend(tensordict.cpu())
+        # optimization steps
+        if collected_frames >= cfg.init_env_steps:
+            for j in range(cfg.optim_steps_per_batch):
+                # sample from replay buffer
+                sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
 
-            # optimization steps
-            if collected_frames >= cfg.init_env_steps:
-                for j in range(cfg.optim_steps_per_batch):
-                    # sample from replay buffer
-                    sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
+                model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
 
-                    model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
+                world_model_opt.zero_grad()
+                model_loss_td["loss_world_model"].backward()
+                clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
+                world_model_opt.step()
 
-                    world_model_opt.zero_grad()
-                    model_loss_td["loss_world_model"].backward()
-                    clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
-                    world_model_opt.step()
+                # compute actor loss
+                actor_value_loss, sampled_tensordict = behaviour_loss(
+                    sampled_tensordict
+                )
 
-                    # compute actor loss
-                    actor_value_loss, sampled_tensordict = behaviour_loss(
-                        sampled_tensordict
-                    )
+                actor_opt.zero_grad()
+                actor_value_loss["loss_actor"].backward()
+                clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
+                actor_opt.step()
 
-                    actor_opt.zero_grad()
-                    actor_value_loss["loss_actor"].backward()
-                    clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
-                    actor_opt.step()
+                # Optimize value function
+                value_opt.zero_grad()
+                actor_value_loss["loss_value"].backward()
+                clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
+                value_opt.step()
 
-                    # Optimize value function
-                    value_opt.zero_grad()
-                    actor_value_loss["loss_value"].backward()
-                    clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
-                    value_opt.step()
+            # # Compute observation reco
+            # if collected_frames % cfg.record_interval == 0 and cfg.record_video:
+            #     with torch.no_grad():
+            #         sampled_tensordict = model_based_env.decode_obs(
+            #             sampled_tensordict.detach()
+            #         ).detach()
+            #     logger.log_video("reco_observation", sampled_tensordict["reco_pixels"].cpu().numpy())
 
-                # # Compute observation reco
-                # if collected_frames % cfg.record_interval == 0 and cfg.record_video:
-                #     with torch.no_grad():
-                #         sampled_tensordict = model_based_env.decode_obs(
-                #             sampled_tensordict.detach()
-                #         ).detach()
-                #     logger.log_video("reco_observation", sampled_tensordict["reco_pixels"].cpu().numpy())
-
-                # td_record = record(None)
-                # if td_record is not None:
-                #     for key, value in td_record.items():
-                #         if key in ['r_evaluation', 'total_r_evaluation']:
-                #             logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
-            prof.step()
-
+            # td_record = record(None)
+            # if td_record is not None:
+            #     for key, value in td_record.items():
+            #         if key in ['r_evaluation', 'total_r_evaluation']:
+            #             logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
 
 if __name__ == "__main__":
     main()
