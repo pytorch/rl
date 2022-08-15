@@ -86,8 +86,6 @@ DEFAULT_REWARD_SCALING = {
     "Humanoid-v2": 20,
     "humanoid": 100,
 }
-torch.autograd.set_detect_anomaly(True)
-
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
@@ -105,6 +103,7 @@ def main(cfg: "DictConfig"):
         device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
+    device = torch.device("cpu")
     print(f"Using device {device}")
     exp_name = "_".join(
         [
@@ -237,7 +236,7 @@ def main(cfg: "DictConfig"):
     with torch.profiler.profile(
         activities=[
         torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA], 
-        schedule=torch.profiler.schedule(skip_first=125, wait=1, warmup=1, active=3, repeat=2),
+        schedule=torch.profiler.schedule(skip_first=125, wait=1, warmup=1, active=1, repeat=3),
         on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/dreamer'),
         record_shapes=True,
         profile_memory=True,

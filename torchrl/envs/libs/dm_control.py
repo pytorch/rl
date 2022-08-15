@@ -32,6 +32,7 @@ try:
     from dm_control import suite
     from dm_control.suite.wrappers import pixels
 
+    print(f"using backend {dm_control._render.BACKEND}")
     _has_dmc = True
 
 except ImportError:
