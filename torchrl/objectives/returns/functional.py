@@ -199,7 +199,7 @@ def _custom_conv1d(tensor, filter):
     if filter.ndimension() > 2:
         # filter will have shape batch_dims x timesteps x timesteps x 1
         # reshape to batch_dims x timesteps x 1 x 1 x timesteps ready for convolving
-        filter = filter.reshape(*filter.shape[:-2], 1, 1, filter.shape[-2])
+        filter = filter.view(*filter.shape[:-2], 1, 1, filter.shape[-2])
 
         # add dimension to val-pad as we are going to vectorise over the first
         # axis (batch) since we have different filter per batch
