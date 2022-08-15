@@ -235,7 +235,7 @@ def main(cfg: "DictConfig"):
     with torch.profiler.profile(
         activities=[
         torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA], 
-        schedule=torch.profiler.schedule(skip_first=125, wait=1, warmup=1, active=1, repeat=3),
+        schedule=torch.profiler.schedule(skip_first=125, wait=0, warmup=1, active=1, repeat=1),
         on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/dreamer'),
         record_shapes=True,
         profile_memory=True,
