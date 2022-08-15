@@ -105,7 +105,6 @@ def main(cfg: "DictConfig"):
         device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
-    # device = torch.device("cpu")
     print(f"Using device {device}")
     exp_name = "_".join(
         [
@@ -235,8 +234,6 @@ def main(cfg: "DictConfig"):
     path = Path('./log')
     path.mkdir(exist_ok=True)
 
-    import os
-    print(os.environ["BACKEND"])
     with torch.profiler.profile(
         activities=[
         torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA], 
