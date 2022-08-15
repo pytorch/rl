@@ -1192,13 +1192,11 @@ class RSSMPosterior(nn.Module):
             obs_embedding = obs_embedding.unsqueeze(0)
         if belief is None:
             *batch_sizes, _ = obs_embedding.shape
-            belief = torch.zeros(*batch_sizes, self.hidden_dim).to(
-                obs_embedding.device
-            )
+            belief = torch.zeros(*batch_sizes, self.hidden_dim, device = obs_embedding.device)
         posterior = self.obs_rnn_to_post_projector(
             torch.cat([belief, obs_embedding], dim=-1)
         )
         post_mean = self.post_mean(posterior)
         post_std = F.softplus(self.post_std(posterior)) + self.min_std
-        post_state = d.Normal(post_mean, post_std).rsample()
+        post_state = post_mean + torch.randn_like(post_std)*post_std
         return post_mean, post_std, post_state
