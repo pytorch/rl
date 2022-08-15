@@ -141,10 +141,10 @@ def main(cfg: "DictConfig"):
     )
 
     #### Losses
-    world_model_loss = DreamerModelLoss(world_model, cfg)
+    world_model_loss = DreamerModelLoss(world_model, cfg).to(device)
     behaviour_loss = DreamerBehaviourLoss(
         actor_model, value_model, model_based_env, cfg
-    )
+    ).to(device)
 
     ### optimizers
     world_model_opt = torch.optim.Adam(world_model.parameters(), lr=cfg.world_model_lr)
