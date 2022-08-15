@@ -291,11 +291,11 @@ def main(cfg: "DictConfig"):
                         ).detach()
                     logger.log_video("reco_observation", sampled_tensordict["reco_pixels"].cpu().numpy())
 
-                td_record = record(None).detach()
+                td_record = record(None)
                 if td_record is not None:
                     for key, value in td_record.items():
                         if key in ['r_evaluation', 'total_r_evaluation']:
-                            logger.log_scalar(key, value.cpu().numpy(), step=collected_frames)
+                            logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
             prof.step()
 
 
