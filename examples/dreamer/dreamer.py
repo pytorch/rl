@@ -105,7 +105,7 @@ def main(cfg: "DictConfig"):
         device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
-    # device = torch.device("cpu")
+    device = torch.device("cpu")
     print(f"Using device {device}")
     exp_name = "_".join(
         [
@@ -283,19 +283,19 @@ def main(cfg: "DictConfig"):
                     clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
                     value_opt.step()
 
-                # Compute observation reco
-                if collected_frames % cfg.record_interval == 0 and cfg.record_video:
-                    with torch.no_grad():
-                        sampled_tensordict = model_based_env.decode_obs(
-                            sampled_tensordict.detach()
-                        ).detach()
-                    logger.log_video("reco_observation", sampled_tensordict["reco_pixels"].cpu().numpy())
+                # # Compute observation reco
+                # if collected_frames % cfg.record_interval == 0 and cfg.record_video:
+                #     with torch.no_grad():
+                #         sampled_tensordict = model_based_env.decode_obs(
+                #             sampled_tensordict.detach()
+                #         ).detach()
+                #     logger.log_video("reco_observation", sampled_tensordict["reco_pixels"].cpu().numpy())
 
-                td_record = record(None)
-                if td_record is not None:
-                    for key, value in td_record.items():
-                        if key in ['r_evaluation', 'total_r_evaluation']:
-                            logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
+                # td_record = record(None)
+                # if td_record is not None:
+                #     for key, value in td_record.items():
+                #         if key in ['r_evaluation', 'total_r_evaluation']:
+                #             logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
             prof.step()
 
 
