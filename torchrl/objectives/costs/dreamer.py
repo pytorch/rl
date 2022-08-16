@@ -37,8 +37,8 @@ class DreamerModelLoss(LossModule):
         lambda_kl: float = 1.0,
         lambda_reco: float = 1.0,
         lambda_reward: float = 1.0,
-        reco_loss: nn.Module = LogLikelihood(reduction="none"),
-        reward_loss: nn.Module = LogLikelihood(),
+        reco_loss: nn.Module = nn.MSELoss(reduction="none"),
+        reward_loss: nn.Module = nn.MSELoss(),
         free_nats: int = 3,
     ):
         super().__init__()
@@ -98,9 +98,7 @@ class DreamerModelLoss(LossModule):
         )
 
     def kl_loss(self, prior_mean, prior_std, posterior_mean, posterior_std):
-        flat_prior = d.Normal(prior_mean, prior_std)
-        flat_posterior = d.Normal(posterior_mean, posterior_std)
-        kl = kl_divergence(flat_posterior, flat_prior)
+        kl = torch.log(prior_std/posterior_std) + (posterior_std**2 + (prior_mean - posterior_mean)**2)/(2*prior_std**2) - 0.5
         kl = kl.clamp(min=self.free_nats).mean()
         return kl
 
@@ -135,7 +133,7 @@ class DreamerBehaviourLoss(LossModule):
             ]
             tensordict.rename_key("next_prior_state", "prior_state")
             tensordict.rename_key("next_belief", "belief")
-            tensordict = tensordict.view(-1).detach()
+            tensordict = tensordict.view(-1)
         with hold_out_net(self.model_based_env):
             tensordict = self.model_based_env.rollout(
                 max_steps=self.cfg.imagination_horizon,
@@ -150,7 +148,7 @@ class DreamerBehaviourLoss(LossModule):
         )
         actor_loss = -lambda_target.mean()
         with torch.no_grad():
-            value_td = tensordict.clone().detach()
+            value_td = tensordict.clone()
         value_td = self.value_model(value_td)
 
         value_loss = 0.5 * self.value_loss(

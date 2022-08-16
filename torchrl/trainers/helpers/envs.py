@@ -5,7 +5,6 @@
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from email.mime import image
 from typing import Callable, Optional, Union, Any
 
 import torch
