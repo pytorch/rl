@@ -100,6 +100,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     def _set_seed(self, seed: Optional[int]) -> int:
         raise NotImplementedError
 
+
 class DreamerEnv(ModelBasedEnv):
     def __init__(
         self,
@@ -129,7 +130,6 @@ class DreamerEnv(ModelBasedEnv):
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
         td = self.latent_spec.rand(shape=self.batch_size)
         td["action"] = self.action_spec.rand(shape=self.batch_size)
-        # td = td.unsqueeze(0).to_tensordict()
         td = self.step(td)
         return td
 
@@ -145,7 +145,5 @@ class DreamerEnv(ModelBasedEnv):
 
     def to(self, device: DEVICE_TYPING) -> DreamerEnv:
         super().to(device)
-        if self.obs_decoder is not None:
-            self.obs_decoder.to(device)
         self.latent_spec.to(device)
         return self
