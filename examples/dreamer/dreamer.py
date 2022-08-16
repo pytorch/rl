@@ -290,9 +290,9 @@ def main(cfg: "DictConfig"):
             # Compute observation reco
             if collected_frames % 100*cfg.record_interval == 0 and cfg.record_video:
                 with torch.no_grad():
-                    sampled_tensordict = model_based_env.decode_obs(
+                    sampled_tensordict = (model_based_env.decode_obs(
                         sampled_tensordict[:5].detach()
-                    ).detach() * stats["scale"] + stats["loc"]
+                    ).detach() - stats["loc"])/stats["scale"]
                 logger.log_video("reco_observation", sampled_tensordict["reco_pixels"].cpu().numpy())
         
             
