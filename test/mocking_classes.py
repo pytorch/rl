@@ -395,7 +395,7 @@ class DummyModelBasedEnv(ModelBasedEnv):
         return td
 
     def _set_seed(self, seed: int) -> int:
-        return seed
+        return seed + 1
 
 
 class ActionObsMergeLinear(nn.Module):

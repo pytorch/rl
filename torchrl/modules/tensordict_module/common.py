@@ -166,7 +166,7 @@ class TensorDictModule(nn.Module):
         safe: bool = False,
     ):
 
-        super(TensorDictModule, self).__init__()
+        super().__init__()
 
         if not out_keys:
             raise RuntimeError(f"out_keys were not passed to {self.__class__.__name__}")

@@ -31,12 +31,12 @@ class WorldModelWrapper(TensorDictSequence):
 
     def __init__(
         self,
-        world_modeler_operator: TensorDictModule,
-        reward_operator: TensorDictModule,
+        world_model: TensorDictModule,
+        reward_model: TensorDictModule,
     ):
         super().__init__(
-            world_modeler_operator,
-            reward_operator,
+            world_model,
+            reward_model,
         )
 
     def get_world_modeler_operator(self) -> TensorDictSequence:
