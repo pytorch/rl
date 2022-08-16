@@ -71,7 +71,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
             device=device, dtype=dtype, batch_size=batch_size
         )
         self.world_model = world_model
-
+        self._inplace_update = False
     def set_specs_from_env(self, env: EnvBase):
         """
         Sets the specs of the environment from the specs of the given environment.

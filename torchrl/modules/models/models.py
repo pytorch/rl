@@ -31,7 +31,7 @@ __all__ = [
     "DdpgMlpActor",
     "DdpgMlpQNet",
     "LSTMNet",
-    "TanhActor",
+    "DreamerActor",
     "ObsEncoder",
     "ObsDecoder",
     "RSSMPrior",
@@ -1041,33 +1041,37 @@ class LSTMNet(nn.Module):
         return self._lstm(input, hidden0_in, hidden1_in)
 
 
-class TanhActor(nn.Module):
+class DreamerActor(nn.Module):
     def __init__(
-        self, out_features=None, depth=None, num_cells=None, activation_class=None, rnn_hidden_dim=200
+        self,
+        out_features=None,
+        depth=None,
+        num_cells=None,
+        activation_class=None,
+        rnn_hidden_dim=200,
     ):
         super().__init__()
-        self.backbone = MLP(
-            out_features=out_features,
-            depth=depth,
-            num_cells=num_cells,
-            activation_class=activation_class,
+        self.backbone = NormalParamWrapper(
+            MLP(
+                out_features=2 * out_features,
+                depth=depth,
+                num_cells=num_cells,
+                activation_class=activation_class,
+            )
         )
-        self.loc_linear = nn.Linear(out_features, out_features)
-        self.scale_linear = nn.Linear(out_features, out_features)
         self.rnn_hidden_dim = rnn_hidden_dim
 
     def forward(self, state, belief):
         if belief is None:
-            *batch_size,_ = state.shape
+            *batch_size, _ = state.shape
             belief = torch.zeros(*batch_size, self.rnn_hidden_dim, device=state.device)
-        hidden = self.backbone(state, belief)
-        loc = self.loc_linear(hidden)
-        scale = self.scale_linear(hidden)
-        if self.training:
-            action = TanhNormal(loc=loc, scale=scale).rsample()
-        else:
-            action = torch.tanh(loc)
-        return action
+        loc, scale = self.backbone(state, belief)
+        # if self.training:
+        #     action = TanhNormal(loc=loc, scale=scale).rsample()
+        # else:
+        #     action = torch.tanh(loc)
+        return loc, scale
+
 
 class ObsEncoder(nn.Module):
     def __init__(self, depth=32):
@@ -1085,9 +1089,15 @@ class ObsEncoder(nn.Module):
 
     def forward(self, observation):
         *batch_sizes, C, H, W = observation.shape
-        observation = observation.reshape(-1, C, H, W)
+        if len(batch_sizes) == 0:
+            end_dim=0
+        else:
+            end_dim = len(batch_sizes)-1
+        observation = torch.flatten(
+            observation, start_dim=0, end_dim=end_dim
+        )
         obs_encoded = self.encoder(observation)
-        latent = obs_encoded.reshape(*batch_sizes, -1)
+        latent = obs_encoded.view(*batch_sizes, -1)
         return latent
 
 
@@ -1112,25 +1122,29 @@ class ObsDecoder(nn.Module):
     def forward(self, state, rnn_hidden):
         latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
         *batch_sizes, D = latent.shape
-        latent = latent.reshape(-1, D, 1, 1)
+        latent = latent.view(-1, D, 1, 1)
         obs_decoded = self.decoder(latent)
         _, C, H, W = obs_decoded.shape
-        obs_decoded = obs_decoded.reshape(*batch_sizes, C, H, W)
+        obs_decoded = obs_decoded.view(*batch_sizes, C, H, W)
         return obs_decoded
 
+
 class RSSMPriorRollout(nn.Module):
-    def __init__(self, RSSMPrior):
+    def __init__(self, rssm_prior):
         super().__init__()
-        self.RSSMPrior = RSSMPrior
-        self.rnn_hidden_dim = RSSMPrior.rnn_hidden_dim
+        self.rssm_prior = rssm_prior
+        self.rnn_hidden_dim = rssm_prior.rnn_hidden_dim
+
     def forward(self, action):
         prior_means = []
         prior_stds = []
         prior_states = []
         beliefs = []
-        prior_state, belief= None, None 
+        prior_state, belief = None, None
         for i in range(action.shape[1]):
-            prior_mean, prior_std, prior_state, belief = self.RSSMPrior(prior_state, belief, action[:, i])
+            prior_mean, prior_std, prior_state, belief = self.rssm_prior(
+                prior_state, belief, action[:, i]
+            )
             prior_means.append(prior_mean)
             prior_stds.append(prior_std)
             prior_states.append(prior_state)
@@ -1141,19 +1155,21 @@ class RSSMPriorRollout(nn.Module):
         beliefs = torch.stack(beliefs, dim=1)
         return prior_means, prior_stds, prior_states, beliefs
 
+
 class RSSMPrior(nn.Module):
     def __init__(self, hidden_dim=200, rnn_hidden_dim=200, state_dim=20):
         super().__init__()
-        self.min_std = 0.1
-
         ### Prior
         self.rnn = nn.GRUCell(hidden_dim, rnn_hidden_dim)
         self.action_state_projector = nn.Sequential(nn.LazyLinear(hidden_dim), nn.ELU())
-        self.rnn_to_prior_projector = nn.Sequential(
-            nn.Linear(rnn_hidden_dim, hidden_dim), nn.ELU()
+        self.rnn_to_prior_projector = NormalParamWrapper(
+            nn.Sequential(
+                nn.Linear(rnn_hidden_dim, hidden_dim),
+                nn.ELU(),
+                nn.Linear(hidden_dim, 2 * state_dim),
+            ),
+            scale_lb=0.1,
         )
-        self.prior_mean = nn.Linear(hidden_dim, state_dim)
-        self.prior_std = nn.Linear(hidden_dim, state_dim)
 
         self.state_dim = state_dim
         self.rnn_hidden_dim = rnn_hidden_dim
@@ -1163,28 +1179,29 @@ class RSSMPrior(nn.Module):
         if state is None:
             state = torch.zeros(*batch_size, self.state_dim, device=action.device)
         if rnn_hidden is None:
-            rnn_hidden = torch.zeros(*batch_size, self.rnn_hidden_dim, device=action.device)
+            rnn_hidden = torch.zeros(
+                *batch_size, self.rnn_hidden_dim, device=action.device
+            )
 
         action_state = self.action_state_projector(torch.cat([state, action], dim=-1))
         rnn_hidden = self.rnn(action_state, rnn_hidden)
         belief = rnn_hidden
-        prior = self.rnn_to_prior_projector(belief)
-        prior_mean = self.prior_mean(prior)
-        prior_std = F.softplus(self.prior_std(prior)) + self.min_std
-        prior_state = prior_mean + torch.randn_like(prior_std)*prior_std
+        prior_mean, prior_std = self.rnn_to_prior_projector(belief)
+        prior_state = prior_mean + torch.randn_like(prior_std) * prior_std
         return prior_mean, prior_std, prior_state, belief
 
 
 class RSSMPosterior(nn.Module):
     def __init__(self, hidden_dim=200, state_dim=20):
         super().__init__()
-        self.min_std = 0.1
-
-        self.obs_rnn_to_post_projector = nn.Sequential(
-            nn.LazyLinear(hidden_dim), nn.ELU()
+        self.obs_rnn_to_post_projector = NormalParamWrapper(
+            nn.Sequential(
+                nn.LazyLinear(hidden_dim),
+                nn.ELU(),
+                nn.Linear(hidden_dim, 2 * state_dim),
+            ),
+            scale_lb=0.1,
         )
-        self.post_mean = nn.Linear(hidden_dim, state_dim)
-        self.post_std = nn.Linear(hidden_dim, state_dim)
         self.hidden_dim = hidden_dim
 
     def forward(self, belief, obs_embedding):
@@ -1192,11 +1209,11 @@ class RSSMPosterior(nn.Module):
             obs_embedding = obs_embedding.unsqueeze(0)
         if belief is None:
             *batch_sizes, _ = obs_embedding.shape
-            belief = torch.zeros(*batch_sizes, self.hidden_dim, device = obs_embedding.device)
-        posterior = self.obs_rnn_to_post_projector(
+            belief = torch.zeros(
+                *batch_sizes, self.hidden_dim, device=obs_embedding.device
+            )
+        post_mean, post_std = self.obs_rnn_to_post_projector(
             torch.cat([belief, obs_embedding], dim=-1)
         )
-        post_mean = self.post_mean(posterior)
-        post_std = F.softplus(self.post_std(posterior)) + self.min_std
-        post_state = post_mean + torch.randn_like(post_std)*post_std
+        post_state = post_mean + torch.randn_like(post_std) * post_std
         return post_mean, post_std, post_state

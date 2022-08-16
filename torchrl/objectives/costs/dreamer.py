@@ -135,7 +135,7 @@ class DreamerBehaviourLoss(LossModule):
             ]
             tensordict.rename_key("next_prior_state", "prior_state")
             tensordict.rename_key("next_belief", "belief")
-            tensordict = tensordict.reshape(-1).detach()
+            tensordict = tensordict.view(-1).detach()
         with hold_out_net(self.model_based_env):
             tensordict = self.model_based_env.rollout(
                 max_steps=self.cfg.imagination_horizon,

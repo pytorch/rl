@@ -31,7 +31,6 @@ from torchrl.envs import EnvCreator, ObservationNorm, CatTensors, DoubleToFloat
 from torchrl.envs import GymEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.envs.mb_envs.dreamer import DreamerEnv
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
