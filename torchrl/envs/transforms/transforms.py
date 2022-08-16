@@ -479,10 +479,7 @@ class TransformedEnv(EnvBase):
             self._reward_spec = None
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
-        self.base_env.to(device)
-        self.device = torch.device(device)
-        self.transform.to(device)
-
+        super().to(device)
         self.is_done = self.is_done.to(device)
 
         if self.cache_specs:
