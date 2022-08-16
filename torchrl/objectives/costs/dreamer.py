@@ -103,14 +103,13 @@ class DreamerModelLoss(LossModule):
         return kl
 
 
-class DreamerBehaviourLoss(LossModule):
+class DreamerActorLoss(LossModule):
     def __init__(
         self,
         actor_model,
         value_model,
         model_based_env,
         cfg,
-        value_loss: nn.Module = nn.MSELoss(),
         gamma=0.99,
         lmbda=0.95,
     ):
@@ -119,7 +118,6 @@ class DreamerBehaviourLoss(LossModule):
         self.value_model = value_model
         self.model_based_env = model_based_env
         self.cfg = cfg
-        self.value_loss = value_loss
         self.gamma = gamma
         self.lmbda = lmbda
 
@@ -143,22 +141,14 @@ class DreamerBehaviourLoss(LossModule):
             )
             with hold_out_net(self.value_model):
                 tensordict = self.value_model(tensordict)
-        lambda_target = self.lambda_target(
+        tensordict["lambda_target"] = self.lambda_target(
             tensordict.get("reward"), tensordict.get("predicted_value")
         )
-        actor_loss = -lambda_target.mean()
-        with torch.no_grad():
-            value_td = tensordict.clone().detach()
-        value_td = self.value_model(value_td)
 
-        value_loss = 0.5 * self.value_loss(
-            value_td.get("predicted_value"), lambda_target.detach()
-        )
-
+        actor_loss = -tensordict["lambda_target"].mean()
         return (
             TensorDict(
                 {
-                    "loss_value": value_loss,
                     "loss_actor": actor_loss,
                 },
                 batch_size=[],
@@ -170,4 +160,32 @@ class DreamerBehaviourLoss(LossModule):
         done = torch.zeros(reward.shape).bool().to(reward.device)
         return vec_td_lambda_return_estimate(
             self.gamma, self.lmbda, value, reward, done
+        )
+class DreamerValueLoss(LossModule):
+    def __init__(
+        self,
+        value_model,
+        value_loss: nn.Module = nn.MSELoss(),
+    ):
+        super().__init__()
+        self.value_model = value_model
+        self.value_loss = value_loss
+
+    def forward(self, tensordict) -> torch.Tensor:
+        with torch.no_grad():
+            value_td = tensordict.clone().detach()
+        value_td = self.value_model(value_td)
+
+        value_loss = 0.5 * self.value_loss(
+            value_td.get("predicted_value"), tensordict["lambda_target"].detach()
+        )
+
+        return (
+            TensorDict(
+                {
+                    "loss_value": value_loss,
+                },
+                batch_size=[],
+            ),
+            tensordict,
         )

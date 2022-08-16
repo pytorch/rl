@@ -13,7 +13,7 @@ from torchrl.trainers.trainers import Recorder
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules import TensorDictModule
 from torchrl.modules.tensordict_module.sequence import TensorDictSequence
-from torchrl.objectives.costs.dreamer import DreamerBehaviourLoss, DreamerModelLoss
+from torchrl.objectives.costs.dreamer import DreamerActorLoss, DreamerModelLoss, DreamerValueLoss
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
@@ -136,9 +136,10 @@ def main(cfg: "DictConfig"):
 
     #### Losses
     world_model_loss = DreamerModelLoss(world_model, cfg).to(device)
-    behaviour_loss = DreamerBehaviourLoss(
+    actor_loss = DreamerActorLoss(
         actor_model, value_model, model_based_env, cfg
     ).to(device)
+    value_loss = DreamerValueLoss(value_model).to(device)
 
     ### optimizers
     world_model_opt = torch.optim.Adam(world_model.parameters(), lr=cfg.world_model_lr)
@@ -265,18 +266,21 @@ def main(cfg: "DictConfig"):
                 world_model_opt.step()
 
                 # compute actor losspython
-                actor_value_loss, sampled_tensordict = behaviour_loss(
+                actor_loss_td, sampled_tensordict = actor_loss(
+                    sampled_tensordict
+                )
+                value_loss_td, sampled_tensordict = value_loss(
                     sampled_tensordict
                 )
 
                 actor_opt.zero_grad()
-                actor_value_loss["loss_actor"].backward()
+                actor_loss_td["loss_actor"].backward()
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
                 actor_opt.step()
 
                 # Optimize value function
                 value_opt.zero_grad()
-                actor_value_loss["loss_value"].backward()
+                value_loss_td["loss_value"].backward()
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
                 value_opt.step()
 
