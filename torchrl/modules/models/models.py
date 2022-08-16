@@ -1097,7 +1097,7 @@ class ObsEncoder(nn.Module):
             observation, start_dim=0, end_dim=end_dim
         )
         obs_encoded = self.encoder(observation)
-        latent = obs_encoded.view(*batch_sizes, -1)
+        latent = obs_encoded.view(*batch_sizes, -1).contiguous()
         return latent
 
 
