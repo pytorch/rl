@@ -13,7 +13,6 @@ from torch.distributions import kl_divergence
 
 from torchrl.data import TensorDict
 from torchrl.objectives.costs.common import LossModule
-from torchrl.objectives.costs.utils import LogLikelihood
 from torchrl.objectives.costs.utils import hold_out_net
 from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
 
