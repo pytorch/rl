@@ -18,12 +18,6 @@ from ..data.utils import DEVICE_TYPING
 from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
 from .common import EnvBase
 
-dtype_map = {
-    torch.float: np.float32,
-    torch.double: np.float64,
-    torch.bool: bool,
-}
-
 
 class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     """
@@ -98,8 +92,3 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def _set_seed(self, seed: Optional[int]) -> int:
         raise NotImplementedError
-
-    def to(self, device: DEVICE_TYPING) -> ModelBasedEnv:
-        super().to(device)
-        self.world_model.to(device)
-        return self
