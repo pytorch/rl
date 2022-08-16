@@ -133,7 +133,7 @@ class DreamerBehaviourLoss(LossModule):
             ]
             tensordict.rename_key("next_prior_state", "prior_state")
             tensordict.rename_key("next_belief", "belief")
-            tensordict = tensordict.view(-1)
+            tensordict = tensordict.view(-1).detach()
         with hold_out_net(self.model_based_env):
             tensordict = self.model_based_env.rollout(
                 max_steps=self.cfg.imagination_horizon,
@@ -148,7 +148,7 @@ class DreamerBehaviourLoss(LossModule):
         )
         actor_loss = -lambda_target.mean()
         with torch.no_grad():
-            value_td = tensordict.clone()
+            value_td = tensordict.clone().detach()
         value_td = self.value_model(value_td)
 
         value_loss = 0.5 * self.value_loss(
