@@ -479,7 +479,10 @@ class TransformedEnv(EnvBase):
             self._reward_spec = None
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
-        super().to(device)
+        self.base_env.to(device)
+        self.device = torch.device(device)
+        self.transform.to(device)
+
         self.is_done = self.is_done.to(device)
 
         if self.cache_specs:
@@ -1085,6 +1088,7 @@ class ObservationNorm(ObservationTransform):
         self.register_buffer("scale", scale.clamp_min(eps))
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+        print(self.loc.device, obs.device)
         if self.standard_normal:
             loc = self.loc
             scale = self.scale

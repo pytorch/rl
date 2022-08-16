@@ -7,9 +7,7 @@
 from turtle import forward
 
 import torch
-import torch.distributions as d
 import torch.nn as nn
-from torch.distributions import kl_divergence
 
 from torchrl.data import TensorDict
 from torchrl.objectives.costs.common import LossModule
