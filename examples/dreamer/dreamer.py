@@ -303,7 +303,7 @@ def main(cfg: "DictConfig"):
                                 logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
 
                 # Compute observation reco
-                if record._count % 100*cfg.record_interval == 0 and cfg.record_video:
+                if record._count % cfg.record_interval == 0 and cfg.record_video:
                     with torch.no_grad():
                         reco_pxls = (model_based_env.decode_obs(
                             sampled_tensordict[:5]

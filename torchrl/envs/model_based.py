@@ -78,7 +78,9 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         """
         self.observation_spec = env.observation_spec
         self.action_spec = env.action_spec
+        self.action_spec.dtype = self.dtype
         self.reward_spec = env.reward_spec
+        self.reward_spec.dtype = self.dtype
 
     def _step(
         self,
@@ -123,8 +125,8 @@ class DreamerEnv(ModelBasedEnv):
     @latent_spec.setter
     def latent_spec(self, shapes: Tuple[torch.Size]) -> None:
         self._latent_spec = CompositeSpec(
-            prior_state=NdUnboundedContinuousTensorSpec(shape=shapes[0]),
-            belief=NdUnboundedContinuousTensorSpec(shape=shapes[1]),
+            prior_state=NdUnboundedContinuousTensorSpec(shape=shapes[0], dtype=self.dtype),
+            belief=NdUnboundedContinuousTensorSpec(shape=shapes[1], dtype=self.dtype),
         )
 
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
