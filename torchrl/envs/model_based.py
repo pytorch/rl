@@ -79,9 +79,38 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         self.observation_spec = deepcopy(env.observation_spec)
         self.action_spec = deepcopy(env.action_spec)
         self.reward_spec = deepcopy(env.reward_spec)
-        if self.dtype is not None:
-            self.action_spec.dtype = self.dtype
-            self.reward_spec.dtype = self.dtype
+
+    def step(self, tensordict: TensorDict) -> TensorDict:
+        """Makes a step in the environment.
+        Step accepts a single argument, tensordict, which usually carries an 'action' key which indicates the action
+        to be taken.
+        Step will call an out-place private method, _step, which is the method to be re-written by ModelBasedEnv subclasses.
+        ModelBasedEnv do not type check like EnvBase since the dtypes can change according to the models dtypes (ex : float16 for a model trained on float32)
+
+        Args:
+            tensordict (TensorDictBase): Tensordict containing the action to be taken.
+
+        Returns:
+            the input tensordict, modified in place with the resulting observations, done state and reward
+            (+ others if needed).
+
+        """
+
+        tensordict.is_locked = True  # make sure _step does not modify the tensordict
+        tensordict_out = self._step(tensordict)
+        tensordict.is_locked = False
+
+        if tensordict_out is tensordict:
+            raise RuntimeError(
+                "EnvBase._step should return outplace changes to the input "
+                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
+                "tensordict.select()) inside _step before writing new tensors onto this new instance."
+            )
+        self.is_done = tensordict_out.get("done")
+        tensordict.update(tensordict_out, inplace=self._inplace_update)
+
+        del tensordict_out
+        return tensordict
 
     def _step(
         self,
@@ -126,21 +155,14 @@ class DreamerEnv(ModelBasedEnv):
     @latent_spec.setter
     def latent_spec(self, shapes: Tuple[torch.Size]) -> None:
         self._latent_spec = CompositeSpec(
-            prior_state=NdUnboundedContinuousTensorSpec(shape=shapes[0], dtype=self.dtype),
-            belief=NdUnboundedContinuousTensorSpec(shape=shapes[1], dtype=self.dtype),
+            prior_state=NdUnboundedContinuousTensorSpec(shape=shapes[0]),
+            belief=NdUnboundedContinuousTensorSpec(shape=shapes[1]),
         )
 
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
         td = self.latent_spec.rand(shape=self.batch_size)
         td["action"] = self.action_spec.rand(shape=self.batch_size)
-
-        if self.dtype is not None:
-            td["action"] = td["action"].type(self.dtype)
-            td["prior_state"]= td["prior_state"].type(self.dtype)
-            td["belief"] = td["belief"].type(self.dtype)
-
         td = self.step(td)
-        
         return td
 
     def _set_seed(self, seed: Optional[int]) -> int:
