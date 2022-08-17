@@ -137,7 +137,7 @@ def main(cfg: "DictConfig"):
     )()
     world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
         proof_environment=proof_env, cfg=cfg, device=device, use_decoder_in_env=True,action_key="action",
-        value_key="predicted_value",
+        value_key="predicted_value", dtype=dtype,
     )
 
     #### Losses

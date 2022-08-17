@@ -24,7 +24,7 @@ from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 from ..data.utils import DEVICE_TYPING
 from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
 from .common import EnvBase
-
+from copy import deepcopy
 
 class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     """
@@ -76,11 +76,12 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         """
         Sets the specs of the environment from the specs of the given environment.
         """
-        self.observation_spec = env.observation_spec
-        self.action_spec = env.action_spec
-        self.action_spec.dtype = self.dtype
-        self.reward_spec = env.reward_spec
-        self.reward_spec.dtype = self.dtype
+        self.observation_spec = deepcopy(env.observation_spec)
+        self.action_spec = deepcopy(env.action_spec)
+        self.reward_spec = deepcopy(env.reward_spec)
+        if self.dtype is not None:
+            self.action_spec.dtype = self.dtype
+            self.reward_spec.dtype = self.dtype
 
     def _step(
         self,
