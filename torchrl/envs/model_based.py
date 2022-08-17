@@ -133,9 +133,12 @@ class DreamerEnv(ModelBasedEnv):
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
         td = self.latent_spec.rand(shape=self.batch_size)
         td["action"] = self.action_spec.rand(shape=self.batch_size)
-        td = self.step(td)
+
         if self.dtype is not None:
             td = td.to(self.dtype)
+            
+        td = self.step(td)
+        
         return td
 
     def _set_seed(self, seed: Optional[int]) -> int:
