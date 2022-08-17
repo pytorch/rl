@@ -269,14 +269,14 @@ def main(cfg: "DictConfig"):
                 actor_loss_td, sampled_tensordict = actor_loss(
                     sampled_tensordict
                 )
-                value_loss_td, sampled_tensordict = value_loss(
-                    sampled_tensordict
-                )
-
                 actor_opt.zero_grad()
                 actor_loss_td["loss_actor"].backward()
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
                 actor_opt.step()
+
+                value_loss_td, sampled_tensordict = value_loss(
+                    sampled_tensordict
+                )
 
                 # Optimize value function
                 value_opt.zero_grad()
