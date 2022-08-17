@@ -292,12 +292,12 @@ def main(cfg: "DictConfig"):
                             logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
 
             # Compute observation reco
-            if collected_frames % 100*cfg.record_interval == 0 and cfg.record_video:
+            if collected_frames % 10*cfg.record_interval == 0 and cfg.record_video:
                 with torch.no_grad():
-                    sampled_tensordict = (model_based_env.decode_obs(
-                        sampled_tensordict[:5].detach()
-                    ).detach() - stats["loc"])/stats["scale"]
-                logger.log_video("reco_observation", sampled_tensordict["reco_pixels"].cpu().numpy())
+                    reco_pxls = (model_based_env.decode_obs(
+                        sampled_tensordict[:5]
+                    ).detach()["reco_pixels"] - stats["loc"])/stats["scale"]
+                logger.log_video("reco_observation", reco_pxls.cpu().numpy())
         
             
 
