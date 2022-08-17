@@ -262,29 +262,29 @@ def main(cfg: "DictConfig"):
 
                 with autocast():
                     model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
-                    # actor_loss_td, sampled_tensordict = actor_loss(
-                    #     sampled_tensordict
-                    # )
+                    actor_loss_td, sampled_tensordict = actor_loss(
+                        sampled_tensordict
+                    )
                     # value_loss_td, sampled_tensordict = value_loss(
                     #     sampled_tensordict
                     # )                
                 
                 scaler.scale(model_loss_td["loss_world_model"]).backward()
-                # scaler.scale(actor_loss_td["loss_actor"]).backward()
+                scaler.scale(actor_loss_td["loss_actor"]).backward()
                 # scaler.scale(value_loss_td["loss_value"]).backward()
 
                 scaler.unscale_(world_model_opt)
                 clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
-                # scaler.unscale_(actor_opt)
-                # clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
+                scaler.unscale_(actor_opt)
+                clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
                 # scaler.unscale_(value_opt)
                 # clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
 
                 scaler.step(world_model_opt)
                 world_model_opt.zero_grad()   
 
-                # scaler.step(actor_opt)
-                # actor_opt.zero_grad()
+                scaler.step(actor_opt)
+                actor_opt.zero_grad()
                 
                 # scaler.step(value_opt)
                 # value_opt.zero_grad()
