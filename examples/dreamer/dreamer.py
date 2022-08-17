@@ -291,18 +291,18 @@ def main(cfg: "DictConfig"):
 
                 scaler.update()
 
-                with torch.no_grad():
-                    td_record = record(None)
-                    if td_record is not None:
-                        for key, value in td_record.items():
-                            if key in ['r_evaluation', 'total_r_evaluation']:
-                                logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
-                    # Compute observation reco
-                    if record._count % cfg.record_interval == 0 and cfg.record_video:
-                        reco_pxls = (model_based_env.decode_obs(
-                            sampled_tensordict[:5]
-                        ).detach()["reco_pixels"] - stats["loc"])/stats["scale"]
-                        logger.log_video("reco_observation", reco_pxls.cpu().numpy())
+                # with torch.no_grad():
+                #     td_record = record(None)
+                #     if td_record is not None:
+                #         for key, value in td_record.items():
+                #             if key in ['r_evaluation', 'total_r_evaluation']:
+                #                 logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
+                #     # Compute observation reco
+                #     if record._count % cfg.record_interval == 0 and cfg.record_video:
+                #         reco_pxls = (model_based_env.decode_obs(
+                #             sampled_tensordict[:5]
+                #         ).detach()["reco_pixels"] - stats["loc"])/stats["scale"]
+                #         logger.log_video("reco_observation", reco_pxls.cpu().numpy())
     
         
 
