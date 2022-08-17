@@ -1088,7 +1088,6 @@ class ObservationNorm(ObservationTransform):
         self.register_buffer("scale", scale.clamp_min(eps))
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
-        print(self.loc.device, obs.device)
         if self.standard_normal:
             loc = self.loc
             scale = self.scale
