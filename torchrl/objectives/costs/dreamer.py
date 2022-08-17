@@ -91,7 +91,7 @@ class DreamerModelLoss(LossModule):
                 },
                 [],
             ),
-            tensordict,
+            tensordict.detach(),
         )
 
     def kl_loss(self, prior_mean, prior_std, posterior_mean, posterior_std):
@@ -150,7 +150,7 @@ class DreamerActorLoss(LossModule):
                 },
                 batch_size=[],
             ),
-            tensordict,
+            tensordict.detach(),
         )
 
     def lambda_target(self, reward, value):
@@ -169,12 +169,9 @@ class DreamerValueLoss(LossModule):
         self.value_loss = value_loss
 
     def forward(self, tensordict) -> torch.Tensor:
-        with torch.no_grad():
-            value_td = tensordict.clone().detach()
-        value_td = self.value_model(value_td)
-
+        tensordict = self.value_model(tensordict)
         value_loss = 0.5 * self.value_loss(
-            value_td.get("predicted_value"), tensordict.get("lambda_target").detach()
+            tensordict.get("predicted_value"), tensordict.get("lambda_target")
         )
 
         return (
@@ -184,5 +181,5 @@ class DreamerValueLoss(LossModule):
                 },
                 batch_size=[],
             ),
-            value_td.detach(),
+            tensordict.detach(),
         )
