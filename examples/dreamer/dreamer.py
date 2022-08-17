@@ -137,7 +137,7 @@ def main(cfg: "DictConfig"):
     )()
     world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
         proof_environment=proof_env, cfg=cfg, device=device, use_decoder_in_env=True,action_key="action",
-        value_key="predicted_value", dtype=dtype,
+        value_key="predicted_value"
     )
 
     #### Losses
@@ -165,7 +165,14 @@ def main(cfg: "DictConfig"):
         recorder = None
 
     #### Actor and value network
-    model_explore = policy
+    model_explore =policy
+    
+    # model_explore = OrnsteinUhlenbeckProcessWrapper(
+    #     policy,
+    #     annealing_num_steps=cfg.annealing_frames,
+    #     sigma=cfg.ou_sigma,
+    #     theta=cfg.ou_theta,
+    # ).to(device)
 
     action_dim_gsde, state_dim_gsde = None, None
     proof_env.close()

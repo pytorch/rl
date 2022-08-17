@@ -1198,7 +1198,6 @@ def make_dreamer(
     action_key: str = "action",
     value_key: str = "predicted_value",
     use_decoder_in_env: bool = False,
-    dtype: torch.dtype = None
 ) -> nn.ModuleList:
 
     ### Modules
@@ -1339,7 +1338,6 @@ def make_dreamer(
             ),
         ),
         obs_decoder=mb_env_obs_decoder,
-        dtype=dtype
     )
 
     model_based_env.set_specs_from_env(proof_environment)
