@@ -278,11 +278,12 @@ def main(cfg: "DictConfig"):
                 with autocast():
                     model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
                 
-                world_model_opt.zero_grad()   
+                
                 scaler_world_model.scale(model_loss_td["loss_world_model"]).backward()
                 scaler_world_model.unscale_(world_model_opt)
                 clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
                 scaler_world_model.step(world_model_opt)
+                world_model_opt.zero_grad()   
                 scaler_world_model.update()
 
                 # compute actor
@@ -291,11 +292,12 @@ def main(cfg: "DictConfig"):
                         sampled_tensordict
                     )
                 
-                actor_opt.zero_grad()
+                
                 scaler_actor.scale(actor_loss_td["loss_actor"]).backward()
                 scaler_actor.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
                 scaler_actor.step(actor_opt)
+                actor_opt.zero_grad()
                 scaler_actor.update()
                 # compute value
                 with autocast():
@@ -303,11 +305,12 @@ def main(cfg: "DictConfig"):
                         sampled_tensordict
                     )
 
-                value_opt.zero_grad()
+                
                 scaler_value.scale(value_loss_td["loss_value"]).backward()
                 scaler_value.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
                 scaler_value.step(value_opt)
+                value_opt.zero_grad()
                 scaler_value.update()
                 with torch.no_grad():
                     td_record = record(None)
@@ -315,16 +318,14 @@ def main(cfg: "DictConfig"):
                         for key, value in td_record.items():
                             if key in ['r_evaluation', 'total_r_evaluation']:
                                 logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
-
-                # Compute observation reco
-                if record._count % cfg.record_interval == 0 and cfg.record_video:
-                    with torch.no_grad():
+                    # Compute observation reco
+                    if record._count % cfg.record_interval == 0 and cfg.record_video:
                         reco_pxls = (model_based_env.decode_obs(
                             sampled_tensordict[:5]
                         ).detach()["reco_pixels"] - stats["loc"])/stats["scale"]
-                    logger.log_video("reco_observation", reco_pxls.cpu().numpy())
+                        logger.log_video("reco_observation", reco_pxls.cpu().numpy())
+    
         
-            
 
 if __name__ == "__main__":
     main()
