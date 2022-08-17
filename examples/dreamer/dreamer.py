@@ -15,6 +15,7 @@ from torchrl.modules import TensorDictModule
 from torchrl.modules.tensordict_module.sequence import TensorDictSequence
 from torchrl.objectives.costs.dreamer import DreamerActorLoss, DreamerModelLoss, DreamerValueLoss
 from torchrl.record import VideoRecorder
+
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     OffPolicyCollectorConfig,
@@ -37,6 +38,9 @@ from torchrl.trainers.helpers.replay_buffer import (
 )
 
 from pathlib import Path
+
+### bf16
+from  torch.cuda.amp import autocast, GradScaler
 @dataclass
 class DreamerConfig:
     state_dim: int = 20
@@ -229,6 +233,9 @@ def main(cfg: "DictConfig"):
     r0 = None
     path = Path('./log')
     path.mkdir(exist_ok=True)
+
+    scaler = GradScaler()
+
     for i, tensordict in enumerate(collector):
 
         # update weights of the inference policy
@@ -257,47 +264,59 @@ def main(cfg: "DictConfig"):
             for j in range(cfg.optim_steps_per_batch):
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
+                with autocast():
+                    model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
+                    world_model_opt.zero_grad()
+                    model_loss_td["loss_world_model"].backward()
 
-                model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
-
-                world_model_opt.zero_grad()
-                model_loss_td["loss_world_model"].backward()
+                scaler.unscale_(world_model_opt)
                 clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
+                scaler.scale_(world_model_opt)
+
                 world_model_opt.step()
 
-                # compute actor losspython
-                actor_loss_td, sampled_tensordict = actor_loss(
-                    sampled_tensordict
-                )
-                actor_opt.zero_grad()
-                actor_loss_td["loss_actor"].backward()
+                # compute actor
+                with autocast():
+                    actor_loss_td, sampled_tensordict = actor_loss(
+                        sampled_tensordict
+                    )
+                    actor_opt.zero_grad()
+                    actor_loss_td["loss_actor"].backward()
+                
+                scaler.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
+                scaler.scale_(actor_opt)
+
                 actor_opt.step()
 
-                value_loss_td, sampled_tensordict = value_loss(
-                    sampled_tensordict
-                )
-
-                # Optimize value function
-                value_opt.zero_grad()
-                value_loss_td["loss_value"].backward()
+                # compute value
+                with autocast():
+                    value_loss_td, sampled_tensordict = value_loss(
+                        sampled_tensordict
+                    )
+                    value_opt.zero_grad()
+                    value_loss_td["loss_value"].backward()
+                
+                scaler.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
+                scaler.scale_(value_opt)
+                
                 value_opt.step()
 
-            with torch.no_grad():
-                td_record = record(None)
-                if td_record is not None:
-                    for key, value in td_record.items():
-                        if key in ['r_evaluation', 'total_r_evaluation']:
-                            logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
-
-            # Compute observation reco
-            if collected_frames % 10*cfg.record_interval == 0 and cfg.record_video:
                 with torch.no_grad():
-                    reco_pxls = (model_based_env.decode_obs(
-                        sampled_tensordict[:5]
-                    ).detach()["reco_pixels"] - stats["loc"])/stats["scale"]
-                logger.log_video("reco_observation", reco_pxls.cpu().numpy())
+                    td_record = record(None)
+                    if td_record is not None:
+                        for key, value in td_record.items():
+                            if key in ['r_evaluation', 'total_r_evaluation']:
+                                logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
+
+                # Compute observation reco
+                if record._count % 100*cfg.record_interval == 0 and cfg.record_video:
+                    with torch.no_grad():
+                        reco_pxls = (model_based_env.decode_obs(
+                            sampled_tensordict[:5]
+                        ).detach()["reco_pixels"] - stats["loc"])/stats["scale"]
+                    logger.log_video("reco_observation", reco_pxls.cpu().numpy())
         
             
 

@@ -16,12 +16,12 @@ collector_devices: [cuda:1,cuda:1,cuda:1,cuda:1]
 # collector_devices: [cpu]
 env_per_collector: 2
 num_workers: 8
-record_interval: 100
+record_interval: 1000
 max_frames_per_traj: -1
 init_env_steps: 50000
-record_frames: 10000
+record_frames: 1000
 batch_transform: 1
-state_dim: 20
+state_dim: 30
 rssm_hidden_dim: 200
 grad_clip: 100
 grayscale: False
