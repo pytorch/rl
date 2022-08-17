@@ -255,17 +255,6 @@ def main(cfg: "DictConfig"):
         collected_frames += current_frames
         replay_buffer.extend(tensordict.cpu())
 
-        # optimization steps
-        # with torch.profiler.profile(
-        #     activities=[
-        #     torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA], 
-        #     schedule=torch.profiler.schedule(skip_first=125, wait=1, warmup=1, active=1, repeat=2),
-        #     on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/dreamer'),
-        #     record_shapes=True,
-        #     profile_memory=True,
-        #     with_stack=True,
-        #     with_modules=True
-        #     ) as prof:
         if collected_frames >= cfg.init_env_steps:
             for j in range(cfg.optim_steps_per_batch):
                 # sample from replay buffer
@@ -273,47 +262,47 @@ def main(cfg: "DictConfig"):
 
                 with autocast():
                     model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
-                    actor_loss_td, sampled_tensordict = actor_loss(
-                        sampled_tensordict
-                    )
-                    value_loss_td, sampled_tensordict = value_loss(
-                        sampled_tensordict
-                    )                
+                    # actor_loss_td, sampled_tensordict = actor_loss(
+                    #     sampled_tensordict
+                    # )
+                    # value_loss_td, sampled_tensordict = value_loss(
+                    #     sampled_tensordict
+                    # )                
                 
                 scaler.scale(model_loss_td["loss_world_model"]).backward()
-                scaler.scale(actor_loss_td["loss_actor"]).backward()
-                scaler.scale(value_loss_td["loss_value"]).backward()
+                # scaler.scale(actor_loss_td["loss_actor"]).backward()
+                # scaler.scale(value_loss_td["loss_value"]).backward()
 
                 scaler.unscale_(world_model_opt)
                 clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
-                scaler.unscale_(actor_opt)
-                clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
-                scaler.unscale_(value_opt)
-                clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
+                # scaler.unscale_(actor_opt)
+                # clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
+                # scaler.unscale_(value_opt)
+                # clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
 
                 scaler.step(world_model_opt)
                 world_model_opt.zero_grad()   
 
-                scaler.step(actor_opt)
-                actor_opt.zero_grad()
+                # scaler.step(actor_opt)
+                # actor_opt.zero_grad()
                 
-                scaler.step(value_opt)
-                value_opt.zero_grad()
+                # scaler.step(value_opt)
+                # value_opt.zero_grad()
 
                 scaler.update()
 
-                with torch.no_grad():
-                    td_record = record(None)
-                    if td_record is not None:
-                        for key, value in td_record.items():
-                            if key in ['r_evaluation', 'total_r_evaluation']:
-                                logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
-                    # Compute observation reco
-                    if record._count % cfg.record_interval == 0 and cfg.record_video:
-                        reco_pxls = (model_based_env.decode_obs(
-                            sampled_tensordict[:5]
-                        ).detach()["reco_pixels"] - stats["loc"])/stats["scale"]
-                        logger.log_video("reco_observation", reco_pxls.cpu().numpy())
+                # with torch.no_grad():
+                #     td_record = record(None)
+                #     if td_record is not None:
+                #         for key, value in td_record.items():
+                #             if key in ['r_evaluation', 'total_r_evaluation']:
+                #                 logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
+                #     # Compute observation reco
+                #     if record._count % cfg.record_interval == 0 and cfg.record_video:
+                #         reco_pxls = (model_based_env.decode_obs(
+                #             sampled_tensordict[:5]
+                #         ).detach()["reco_pixels"] - stats["loc"])/stats["scale"]
+                #         logger.log_video("reco_observation", reco_pxls.cpu().numpy())
     
         
 
