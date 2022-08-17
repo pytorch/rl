@@ -110,7 +110,7 @@ def main(cfg: "DictConfig"):
         ]
     )
     logger = WandbLogger(
-        f"dreamer/{exp_name}", project="torchrl", group=f"Dreamer_{cfg.env_name}"
+        f"dreamer/{exp_name}", project="torchrl", group=f"Dreamer_{cfg.env_name}", offline=True
     )
     video_tag = exp_name if cfg.record_video else ""
 
