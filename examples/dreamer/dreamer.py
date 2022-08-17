@@ -300,8 +300,10 @@ def main(cfg: "DictConfig"):
                 scaler.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
                 scaler.scale_(value_opt)
-                
+
                 value_opt.step()
+
+                scaler.update()
 
                 with torch.no_grad():
                     td_record = record(None)
