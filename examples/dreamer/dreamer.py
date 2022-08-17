@@ -95,6 +95,8 @@ def main(cfg: "DictConfig"):
 
     cfg = correct_for_frame_skip(cfg)
 
+    dtype = torch.float16
+
     if not isinstance(cfg.reward_scaling, float):
         cfg.reward_scaling = 1.0
 
