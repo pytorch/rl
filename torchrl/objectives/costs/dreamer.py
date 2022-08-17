@@ -120,13 +120,13 @@ class DreamerActorLoss(LossModule):
 
     def forward(self, tensordict) -> torch.Tensor:
         with torch.no_grad():
-            tensordict = tensordict.select("next_prior_state", "next_belief")
+            tensordict = tensordict.select("posterior_states", "next_belief")
 
             tensordict.batch_size = [
                 tensordict.shape[0],
                 tensordict.get("next_belief").shape[1],
             ]
-            tensordict.rename_key("next_prior_state", "prior_state")
+            tensordict.rename_key("posterior_states", "prior_state")
             tensordict.rename_key("next_belief", "belief")
             tensordict = tensordict.view(-1).detach()
         with hold_out_net(self.model_based_env):

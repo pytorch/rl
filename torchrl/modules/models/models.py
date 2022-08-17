@@ -1164,7 +1164,7 @@ class RSSMPrior(nn.Module):
         self.action_state_projector = nn.Sequential(nn.LazyLinear(hidden_dim), nn.ELU())
         self.rnn_to_prior_projector = NormalParamWrapper(
             nn.Sequential(
-                nn.Linear(rnn_hidden_dim, hidden_dim),
+                nn.Linear(hidden_dim, hidden_dim),
                 nn.ELU(),
                 nn.Linear(hidden_dim, 2 * state_dim),
             ),

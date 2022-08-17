@@ -266,45 +266,35 @@ def main(cfg: "DictConfig"):
                 sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
                 with autocast():
                     model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
-                    world_model_opt.zero_grad()
-                    model_loss_td["loss_world_model"].backward()
-
+                
+                world_model_opt.zero_grad()   
+                scaler.scale(model_loss_td["loss_world_model"]).backward()
                 scaler.unscale_(world_model_opt)
                 clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
-                scaler.scale_(world_model_opt)
-
-                world_model_opt.step()
+                scaler.step(world_model_opt)
 
                 # compute actor
                 with autocast():
                     actor_loss_td, sampled_tensordict = actor_loss(
                         sampled_tensordict
                     )
-                    actor_opt.zero_grad()
-                    actor_loss_td["loss_actor"].backward()
                 
+                actor_opt.zero_grad()
+                scaler.scale(actor_loss_td["loss_actor"]).backward()
                 scaler.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
-                scaler.scale_(actor_opt)
-
-                actor_opt.step()
-
+                scaler.step(actor_opt)
                 # compute value
                 with autocast():
                     value_loss_td, sampled_tensordict = value_loss(
                         sampled_tensordict
                     )
-                    value_opt.zero_grad()
-                    value_loss_td["loss_value"].backward()
-                
+
+                value_opt.zero_grad()
+                scaler.scale(value_loss_td["loss_value"]).backward()
                 scaler.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
-                scaler.scale_(value_opt)
-
-                value_opt.step()
-
-                scaler.update()
-
+                scaler.step(value_opt)
                 with torch.no_grad():
                     td_record = record(None)
                     if td_record is not None:
