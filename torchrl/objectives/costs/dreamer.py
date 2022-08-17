@@ -96,7 +96,7 @@ class DreamerModelLoss(LossModule):
 
     def kl_loss(self, prior_mean, prior_std, posterior_mean, posterior_std):
         kl = torch.log(prior_std/posterior_std) + (posterior_std**2 + (prior_mean - posterior_mean)**2)/(2*prior_std**2) - 0.5
-        kl = kl.clamp(min=self.free_nats).mean()
+        kl = kl.mean().clamp(min=self.free_nats)
         return kl
 
 

@@ -1338,6 +1338,7 @@ def make_dreamer(
             ),
         ),
         obs_decoder=mb_env_obs_decoder,
+        dtype=torch.float16
     )
 
     model_based_env.set_specs_from_env(proof_environment)
