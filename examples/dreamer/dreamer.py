@@ -115,7 +115,7 @@ def main(cfg: "DictConfig"):
     logger = WandbLogger(
         f"dreamer/{exp_name}", project="torchrl", group=f"Dreamer_{cfg.env_name}"
     )
-    video_tag = exp_name if cfg.record_video else ""
+    video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
     stats = None
     if not cfg.vecnorm and cfg.norm_stats:
@@ -239,7 +239,7 @@ def main(cfg: "DictConfig"):
     r0 = None
     path = Path('./log')
     path.mkdir(exist_ok=True)
-    torch.cuda.empty_cache()
+    
     scaler= GradScaler()
     
     for i, tensordict in enumerate(collector):
@@ -300,11 +300,11 @@ def main(cfg: "DictConfig"):
                     # Compute observation reco
                     if record._count % cfg.record_interval == 0 and cfg.record_video:
                         reco_pxls = (model_based_env.decode_obs(
-                            sampled_tensordict[:5]
-                        ).detach()["reco_pixels"] - stats["loc"])/stats["scale"]
-                        logger.log_video("reco_observation", reco_pxls.cpu().numpy())
+                            sampled_tensordict[:4]
+                        )["reco_pixels"] - stats["loc"])/stats["scale"]
+                        logger.log_video("reco_observation", reco_pxls.detach().cpu().numpy())
     
-        
+            torch.cuda.empty_cache()
 
 if __name__ == "__main__":
     main()
