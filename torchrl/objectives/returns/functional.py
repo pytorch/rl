@@ -9,6 +9,7 @@ import torch
 
 __all__ = [
     "generalized_advantage_estimate",
+    "vec_generalized_advantage_estimate",
     "vec_td_lambda_return_estimate",
     "vec_td_lambda_advantage_estimate",
     "td_lambda_return_estimate",
@@ -63,6 +64,56 @@ def generalized_advantage_estimate(
 
     value_target = advantage + state_value
 
+    return advantage, value_target
+
+
+def vec_generalized_advantage_estimate(
+    gamma: float,
+    lmbda: float,
+    state_value: torch.Tensor,
+    next_state_value: torch.Tensor,
+    reward: torch.Tensor,
+    done: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Get generalized advantage estimate of a trajectory
+    Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
+    https://arxiv.org/pdf/1506.02438.pdf for more context.
+
+    Args:
+        gamma (scalar): exponential mean discount.
+        lmbda (scalar): trajectory discount.
+        state_value (Tensor): value function result with old_state input.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        next_state_value (Tensor): value function result with new_state input.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        reward (Tensor): reward of taking actions in the environment.
+            must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
+        done (Tensor): boolean flag for end of episode.
+    """
+    for tensor in (next_state_value, state_value, reward, done):
+        if tensor.shape[-1] != 1:
+            raise RuntimeError(
+                "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
+            )
+    not_done = 1 - done.to(next_state_value.dtype)
+    *batch_size, time_steps = not_done.shape[:-1]
+
+    filter = torch.ones(time_steps * 2 - 1, 1)
+    filter[1:] = gamma * lmbda
+    filter = filter.cumprod(0)
+    first_below_thr = filter < 1e-7
+    if first_below_thr.any():
+        first_below_thr = first_below_thr.nonzero()[0, 0]
+        filter = filter[:first_below_thr]
+    td0 = reward + not_done * gamma * next_state_value - state_value
+    if len(batch_size) > 1:
+        td0 = td0.unflatten(0, len(batch_size))
+    advantage = _custom_conv1d(td0.transpose(-2, -1), filter)
+    if len(batch_size) > 1:
+        advantage = advantage.unflatten(0, batch_size)
+    advantage = advantage.transpose(-2, -1)
+    value_target = advantage + state_value
     return advantage, value_target
 
 

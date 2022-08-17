@@ -57,6 +57,8 @@ from torchrl.objectives.returns.advantages import TDEstimate, GAE, TDLambdaEstim
 from torchrl.objectives.returns.functional import (
     vec_td_lambda_advantage_estimate,
     td_lambda_advantage_estimate,
+    vec_generalized_advantage_estimate,
+    generalized_advantage_estimate,
 )
 
 
@@ -1708,6 +1710,28 @@ def test_tdlambda(device, gamma, lmbda, N, T):
         gamma, lmbda, state_value, next_state_value, reward, done
     )
     r2 = td_lambda_advantage_estimate(
+        gamma, lmbda, state_value, next_state_value, reward, done
+    )
+    torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
+@pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
+@pytest.mark.parametrize("N", [(3,), (7, 3)])
+@pytest.mark.parametrize("T", [3, 5, 200])
+def test_gae(device, gamma, lmbda, N, T):
+    torch.manual_seed(0)
+
+    done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool).bernoulli_(0.1)
+    reward = torch.randn(*N, T, 1, device=device)
+    state_value = torch.randn(*N, T, 1, device=device)
+    next_state_value = torch.randn(*N, T, 1, device=device)
+
+    r1 = vec_generalized_advantage_estimate(
+        gamma, lmbda, state_value, next_state_value, reward, done
+    )
+    r2 = generalized_advantage_estimate(
         gamma, lmbda, state_value, next_state_value, reward, done
     )
     torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
