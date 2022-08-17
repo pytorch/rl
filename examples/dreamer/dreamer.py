@@ -243,7 +243,9 @@ def main(cfg: "DictConfig"):
     path = Path('./log')
     path.mkdir(exist_ok=True)
 
-    scaler = GradScaler()
+    scaler_world_model = GradScaler()
+    scaler_actor = GradScaler()
+    scaler_value = GradScaler()
 
     for i, tensordict in enumerate(collector):
 
@@ -277,10 +279,11 @@ def main(cfg: "DictConfig"):
                     model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
                 
                 world_model_opt.zero_grad()   
-                scaler.scale(model_loss_td["loss_world_model"]).backward()
-                scaler.unscale_(world_model_opt)
+                scaler_world_model.scale(model_loss_td["loss_world_model"]).backward()
+                scaler_world_model.unscale_(world_model_opt)
                 clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
-                scaler.step(world_model_opt)
+                scaler_world_model.step(world_model_opt)
+                scaler_world_model.update()
 
                 # compute actor
                 with autocast():
@@ -289,10 +292,11 @@ def main(cfg: "DictConfig"):
                     )
                 
                 actor_opt.zero_grad()
-                scaler.scale(actor_loss_td["loss_actor"]).backward()
-                scaler.unscale_(actor_opt)
+                scaler_actor.scale(actor_loss_td["loss_actor"]).backward()
+                scaler_actor.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
-                scaler.step(actor_opt)
+                scaler_actor.step(actor_opt)
+                scaler_actor.update()
                 # compute value
                 with autocast():
                     value_loss_td, sampled_tensordict = value_loss(
@@ -300,10 +304,11 @@ def main(cfg: "DictConfig"):
                     )
 
                 value_opt.zero_grad()
-                scaler.scale(value_loss_td["loss_value"]).backward()
-                scaler.unscale_(value_opt)
+                scaler_value.scale(value_loss_td["loss_value"]).backward()
+                scaler_value.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
-                scaler.step(value_opt)
+                scaler_value.step(value_opt)
+                scaler_value.update()
                 with torch.no_grad():
                     td_record = record(None)
                     if td_record is not None:
