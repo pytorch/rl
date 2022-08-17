@@ -142,7 +142,7 @@ class DreamerActorLoss(LossModule):
             tensordict.get("reward"), tensordict.get("predicted_value")
         )
 
-        actor_loss = -tensordict["lambda_target"].mean()
+        actor_loss = -tensordict.get("lambda_target").mean()
         return (
             TensorDict(
                 {
@@ -174,7 +174,7 @@ class DreamerValueLoss(LossModule):
         value_td = self.value_model(value_td)
 
         value_loss = 0.5 * self.value_loss(
-            value_td.get("predicted_value"), tensordict["lambda_target"].detach()
+            value_td.get("predicted_value"), tensordict.get("lambda_target").detach()
         )
 
         return (
@@ -184,5 +184,5 @@ class DreamerValueLoss(LossModule):
                 },
                 batch_size=[],
             ),
-            tensordict,
+            value_td.detach(),
         )

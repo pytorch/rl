@@ -11,8 +11,6 @@ from torch.nn.utils import clip_grad_norm_
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.trainers.trainers import Recorder
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.modules import TensorDictModule
-from torchrl.modules.tensordict_module.sequence import TensorDictSequence
 from torchrl.objectives.costs.dreamer import DreamerActorLoss, DreamerModelLoss, DreamerValueLoss
 from torchrl.record import VideoRecorder
 
@@ -39,7 +37,7 @@ from torchrl.trainers.helpers.replay_buffer import (
 
 from pathlib import Path
 
-### bf16
+### float16
 from  torch.cuda.amp import autocast, GradScaler
 @dataclass
 class DreamerConfig:
@@ -94,8 +92,6 @@ def main(cfg: "DictConfig"):
     from torchrl.trainers.loggers.wandb import WandbLogger
 
     cfg = correct_for_frame_skip(cfg)
-
-    dtype = torch.float16
 
     if not isinstance(cfg.reward_scaling, float):
         cfg.reward_scaling = 1.0
@@ -272,6 +268,7 @@ def main(cfg: "DictConfig"):
             for j in range(cfg.optim_steps_per_batch):
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
+
                 with autocast():
                     model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
                     actor_loss_td, sampled_tensordict = actor_loss(
@@ -279,8 +276,7 @@ def main(cfg: "DictConfig"):
                     )
                     value_loss_td, sampled_tensordict = value_loss(
                         sampled_tensordict
-                    )
-                
+                    )                
                 
                 scaler.scale(model_loss_td["loss_world_model"]).backward()
                 scaler.scale(actor_loss_td["loss_actor"]).backward()
@@ -301,7 +297,7 @@ def main(cfg: "DictConfig"):
                 
                 scaler.step(value_opt)
                 value_opt.zero_grad()
-                
+
                 scaler.update()
 
                 with torch.no_grad():
