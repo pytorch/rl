@@ -85,6 +85,7 @@ DEFAULT_REWARD_SCALING = {
     "Humanoid-v2": 20,
     "humanoid": 100,
 }
+torch.cuda.empty_cache()
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
@@ -240,6 +241,7 @@ def main(cfg: "DictConfig"):
     path.mkdir(exist_ok=True)
 
     scaler= GradScaler()
+    
     for i, tensordict in enumerate(collector):
 
         # update weights of the inference policy
