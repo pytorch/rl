@@ -135,9 +135,9 @@ class DreamerEnv(ModelBasedEnv):
         td["action"] = self.action_spec.rand(shape=self.batch_size)
 
         if self.dtype is not None:
-            td["action"].dtype = self.dtype
-            td["prior_state"].dtype = self.dtype
-            td["belief"].dtype = self.dtype
+            td["action"] = td["action"].type(self.dtype)
+            td["prior_state"]= td["prior_state"].type(self.dtype)
+            td["belief"] = td["belief"].type(self.dtype)
 
         td = self.step(td)
         
