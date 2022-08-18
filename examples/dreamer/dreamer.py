@@ -310,7 +310,5 @@ def main(cfg: "DictConfig"):
                         )["reco_pixels"] - stats["loc"])/stats["scale"]
                         logger.log_video("reco_observation", reco_pxls.detach().cpu().numpy())
     
-            torch.cuda.empty_cache()
-
 if __name__ == "__main__":
     main()
