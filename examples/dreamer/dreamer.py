@@ -266,7 +266,7 @@ def main(cfg: "DictConfig"):
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
 
-                with autocast(dtype=torch.bfloat16):
+                with autocast(dtype=torch.float16):
                     model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
                     actor_loss_td, sampled_tensordict = actor_loss(
                         sampled_tensordict
