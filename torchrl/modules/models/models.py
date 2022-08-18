@@ -1090,12 +1090,10 @@ class ObsEncoder(nn.Module):
     def forward(self, observation):
         *batch_sizes, C, H, W = observation.shape
         if len(batch_sizes) == 0:
-            end_dim=0
+            end_dim = 0
         else:
-            end_dim = len(batch_sizes)-1
-        observation = torch.flatten(
-            observation, start_dim=0, end_dim=end_dim
-        )
+            end_dim = len(batch_sizes) - 1
+        observation = torch.flatten(observation, start_dim=0, end_dim=end_dim)
         obs_encoded = self.encoder(observation)
         latent = obs_encoded.reshape(*batch_sizes, -1)
         return latent

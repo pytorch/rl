@@ -55,6 +55,8 @@ class TrainingConfig:
     # Number of optimization steps in between two collection of data. See frames_per_batch below.
     # LR scheduler.
     batch_size: int = 256
+
+    batch_length: int = 50
     # batch size of the TensorDict retrieved from the replay buffer. Default=256.
     log_interval: int = 10000
     # logging interval, in terms of optimization steps. Default=10000.
@@ -97,10 +99,10 @@ def main(cfg: "DictConfig"):
     if not isinstance(cfg.reward_scaling, float):
         cfg.reward_scaling = 1.0
 
-    if torch.backends.mps.is_available():
-        device = torch.device("mps")
-    elif torch.cuda.is_available():
+    if torch.cuda.is_available():
         device = torch.device("cuda:0")
+    # elif torch.backends.mps.is_available():
+    #     device = torch.device("mps")
     else:
         device = torch.device("cpu")
     print(f"Using device {device}")
@@ -241,7 +243,7 @@ def main(cfg: "DictConfig"):
     path.mkdir(exist_ok=True)
     
     scaler= GradScaler()
-    
+    torch.cuda.empty_cache()
     for i, tensordict in enumerate(collector):
 
         # update weights of the inference policy
@@ -250,9 +252,13 @@ def main(cfg: "DictConfig"):
         if r0 is None:
             r0 = tensordict["reward"].mean().item()
         pbar.update(tensordict.numel())
-
-        current_frames = tensordict.numel()
-        collected_frames += current_frames
+        if "mask" in tensordict.keys():
+            current_frames = tensordict["mask"].sum()
+            tensordict = tensordict[tensordict.get("mask").squeeze(-1)]
+        else:
+            current_frames = tensordict.numel()
+            collected_frames += current_frames
+        tensordict = tensordict.reshape(-1, cfg.batch_length)
         replay_buffer.extend(tensordict.cpu())
 
         if collected_frames >= cfg.init_env_steps:
@@ -260,7 +266,7 @@ def main(cfg: "DictConfig"):
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
 
-                with autocast():
+                with autocast(dtype=torch.bfloat16):
                     model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
                     actor_loss_td, sampled_tensordict = actor_loss(
                         sampled_tensordict
