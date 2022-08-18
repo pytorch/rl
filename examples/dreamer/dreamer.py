@@ -305,9 +305,9 @@ def main(cfg: "DictConfig"):
                                 logger.log_scalar(key, value.detach().cpu().numpy(), step=collected_frames)
                     # Compute observation reco
                     if record._count % cfg.record_interval == 0 and cfg.record_video:
-                        reco_pxls = (model_based_env.decode_obs(
+                        reco_pxls = (255*(model_based_env.decode_obs(
                             sampled_tensordict[:4]
-                        )["reco_pixels"] - stats["loc"])/stats["scale"]
+                        )["reco_pixels"] - stats["loc"])/stats["scale"]).to(torch.uint8)
                         logger.log_video("reco_observation", reco_pxls.detach().cpu().numpy())
     
 if __name__ == "__main__":
