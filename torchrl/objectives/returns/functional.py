@@ -102,17 +102,20 @@ def vec_generalized_advantage_estimate(
     filter = torch.ones(time_steps * 2 - 1, 1)
     filter[1:] = gamma * lmbda
     filter = filter.cumprod(0)
-    first_below_thr = filter < 1e-7
+    first_below_thr = filter[1:] < 1e-7
     if first_below_thr.any():
         first_below_thr = first_below_thr.nonzero()[0, 0]
         filter = filter[:first_below_thr]
+    filter[0] = 0
     td0 = reward + not_done * gamma * next_state_value - state_value
     if len(batch_size) > 1:
-        td0 = td0.unflatten(0, len(batch_size))
-    advantage = _custom_conv1d(td0.transpose(-2, -1), filter)
+        td0 = td0.flatten(0, len(batch_size)-1)
+    advantage = _custom_conv1d(td0.transpose(-2, -1), filter).transpose(-2, -1)
+    # advantage[..., 1:, :] = advantage[..., 1:, :] * not_done[..., :-1, :]
+    # advantage = advantage * not_done
+    advantage = advantage + td0
     if len(batch_size) > 1:
         advantage = advantage.unflatten(0, batch_size)
-    advantage = advantage.transpose(-2, -1)
     value_target = advantage + state_value
     return advantage, value_target
 

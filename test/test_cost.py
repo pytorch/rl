@@ -1716,17 +1716,18 @@ def test_tdlambda(device, gamma, lmbda, N, T):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
-@pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
+@pytest.mark.parametrize("gamma", [0.99, 0.5, 0.1])
+@pytest.mark.parametrize("lmbda", [0.99, 0.5, 0.1])
 @pytest.mark.parametrize("N", [(3,), (7, 3)])
-@pytest.mark.parametrize("T", [3, 5, 200])
-def test_gae(device, gamma, lmbda, N, T):
+@pytest.mark.parametrize("T", [200, 5, 3])
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_gae(device, gamma, lmbda, N, T, dtype):
     torch.manual_seed(0)
 
     done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool).bernoulli_(0.1)
-    reward = torch.randn(*N, T, 1, device=device)
-    state_value = torch.randn(*N, T, 1, device=device)
-    next_state_value = torch.randn(*N, T, 1, device=device)
+    reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
+    state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+    next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
 
     r1 = vec_generalized_advantage_estimate(
         gamma, lmbda, state_value, next_state_value, reward, done
