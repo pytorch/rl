@@ -5,7 +5,7 @@
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import Callable, Optional, Union, Any
+from typing import Callable, Optional, Sequence, Union, Any
 
 import torch
 
@@ -258,13 +258,17 @@ def transformed_env_constructor(
         from_pixels = cfg.from_pixels
 
         if custom_env is None and custom_env_maker is None:
-            # if type(cfg.collector_devices) is str:
-            #     device = cfg.collector_devices
-            # elif type(cfg.collector_devices) is list:
-            #     device = cfg.collector_devices[0]
+            if isinstance(cfg.collector_devices, str):
+                device = cfg.collector_devices
+            elif isinstance(cfg.collector_devices, Sequence):
+                device = cfg.collector_devices[0]
+            else:
+                raise ValueError(
+                    "collector_devices must be either a string or a sequence of strings"
+                )
             env_kwargs = {
                 "env_name": env_name,
-                "device": "cpu",
+                "device": device,
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,
