@@ -2,7 +2,7 @@ env_name: cheetah
 env_task: run
 env_library: dm_control
 catframes: 1
-async_collection: True
+async_collection: False
 record_video: 0
 frame_skip: 2
 frames_per_batch: 1000
