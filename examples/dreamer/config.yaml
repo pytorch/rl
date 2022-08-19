@@ -13,7 +13,7 @@ total_frames: 5000000
 world_model_lr: 6e-4
 actor_value_lr: 8e-5
 from_pixels: True
-collector_devices: [cuda:0, cuda:0] #[cuda:1 ,cuda:1,cuda:1,cuda:1]
+collector_devices: [cuda:1, cuda:1] #[cuda:1 ,cuda:1,cuda:1,cuda:1]
 # collector_devices: [cpu, cpu, cpu, cpu]
 env_per_collector: 1
 num_workers: 2
