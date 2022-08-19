@@ -326,20 +326,20 @@ def main(cfg: "DictConfig"):
                         true_pixels = recover_pixels(world_model_td["pixels"], stats)
 
                         reco_pixels = recover_pixels(world_model_td["reco_pixels"], stats)
-
-                        world_model_td = world_model_td.select("posterior_states", "next_belief").detach()
-                        world_model_td.batch_size = [
-                            world_model_td.shape[0],
-                            world_model_td.get("next_belief").shape[1],
-                        ]
-                        world_model_td.rename_key("posterior_states", "prior_state")
-                        world_model_td.rename_key("next_belief", "belief")
-                        world_model_td = model_based_env.rollout(
-                            max_steps=true_pixels.shape[1],
-                            policy=actor_model,
-                            auto_reset=False,
-                            tensordict=world_model_td[:, 0],
-                        ).detach()
+                        with autocast(dtype=torch.float16):
+                            world_model_td = world_model_td.select("posterior_states", "next_belief").detach()
+                            world_model_td.batch_size = [
+                                world_model_td.shape[0],
+                                world_model_td.get("next_belief").shape[1],
+                            ]
+                            world_model_td.rename_key("posterior_states", "prior_state")
+                            world_model_td.rename_key("next_belief", "belief")
+                            world_model_td = model_based_env.rollout(
+                                max_steps=true_pixels.shape[1],
+                                policy=actor_model,
+                                auto_reset=False,
+                                tensordict=world_model_td[:, 0],
+                            ).detach()
                         imagine_pxls = recover_pixels(model_based_env.decode_obs(world_model_td)["reco_pixels"], stats)
 
                         stacked_pixels = torch.cat([true_pixels, reco_pixels, imagine_pxls], dim=-1)
