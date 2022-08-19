@@ -42,7 +42,7 @@ class WorldModelWrapper(TensorDictSequence):
     def get_world_modeler_operator(self) -> TensorDictSequence:
         """
 
-        Returns a stand-alone policy operator that maps an observation to an action.
+        Returns a world modeler operator that maps either an observation to a world state or a world state to the next world state.
 
         """
         return self.module[0]
@@ -50,7 +50,7 @@ class WorldModelWrapper(TensorDictSequence):
     def get_reward_operator(self) -> TensorDictSequence:
         """
 
-        Returns a stand-alone value network operator that maps an observation to a value estimate.
+        Returns a reward operator that maps a world state to a reward.
 
         """
         return self.module[1]

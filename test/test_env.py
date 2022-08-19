@@ -17,6 +17,7 @@ from mocking_classes import (
     MockSerialEnv,
     DiscreteActionConvMockEnv,
     DummyModelBasedEnv,
+    ActionObsMergeLinear,
 )
 from scipy.stats import chisquare
 from torch import nn
@@ -46,7 +47,7 @@ from torchrl.modules import (
     Actor,
     MLP,
 )
-from torchrl.objectives.costs.dreamer import DreamerModelLoss
+from torchrl.modules.tensordict_module import WorldModelWrapper
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -344,7 +345,21 @@ class TestModelBasedEnv:
 
         torch.manual_seed(seed)
         np.random.seed(seed)
-        mb_env = DummyModelBasedEnv(device=device, batch_size=torch.Size([10]))
+        world_model = WorldModelWrapper(
+            TensorDictModule(
+                ActionObsMergeLinear(5, 4),
+                in_keys=["hidden_observation", "action"],
+                out_keys=["next_hidden_observation"],
+            ),
+            TensorDictModule(
+                nn.Linear(4, 1),
+                in_keys=["hidden_observation"],
+                out_keys=["reward"],
+            ),
+        )
+        mb_env = DummyModelBasedEnv(
+            world_model, device=device, batch_size=torch.Size([10])
+        )
         mb_env.set_seed(seed)
         mb_env.reset()
         rollout1 = mb_env.rollout(max_steps=100)

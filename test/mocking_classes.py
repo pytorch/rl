@@ -20,8 +20,6 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based import ModelBasedEnv
-from torchrl.modules import TensorDictModule
-from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 
 spec_dict = {
     "bounded": BoundedTensorSpec,
@@ -358,23 +356,13 @@ class DummyModelBasedEnv(ModelBasedEnv):
 
     def __init__(
         self,
+        world_model,
         device="cpu",
         dtype=None,
         batch_size=None,
     ):
         super(DummyModelBasedEnv, self).__init__(
-            WorldModelWrapper(
-                TensorDictModule(
-                    ActionObsMergeLinear(5, 4),
-                    in_keys=["hidden_observation", "action"],
-                    out_keys=["next_hidden_observation"],
-                ),
-                TensorDictModule(
-                    nn.Linear(4, 1),
-                    in_keys=["hidden_observation"],
-                    out_keys=["reward"],
-                ),
-            ),
+            world_model,
             device,
             dtype,
             batch_size,
