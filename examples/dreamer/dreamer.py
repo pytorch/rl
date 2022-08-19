@@ -329,8 +329,8 @@ def main(cfg: "DictConfig"):
 
                         world_model_td = world_model_td.select("posterior_states", "next_belief").detach()
                         world_model_td.batch_size = [
-                            tensordict.shape[0],
-                            tensordict.get("next_belief").shape[1],
+                            world_model_td.shape[0],
+                            world_model_td.get("next_belief").shape[1],
                         ]
                         world_model_td.rename_key("posterior_states", "prior_state")
                         world_model_td.rename_key("next_belief", "belief")
