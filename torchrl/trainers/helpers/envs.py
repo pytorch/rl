@@ -258,9 +258,9 @@ def transformed_env_constructor(
         from_pixels = cfg.from_pixels
 
         if custom_env is None and custom_env_maker is None:
-            if cfg.collector_devices is str:
+            if type(cfg.collector_devices) is str:
                 device = cfg.collector_devices
-            elif cfg.collector_devices is list:
+            elif type(cfg.collector_devices) is list:
                 device = cfg.collector_devices[0]
             env_kwargs = {
                 "env_name": env_name,
