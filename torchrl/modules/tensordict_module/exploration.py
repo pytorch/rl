@@ -17,7 +17,7 @@ from torchrl.modules.tensordict_module.common import (
     TensorDictModuleWrapper,
 )
 
-__all__ = ["EGreedyWrapper", "AdditiveGaussianWrapper" "OrnsteinUhlenbeckProcessWrapper"]
+__all__ = ["EGreedyWrapper", "AdditiveGaussianWrapper", "OrnsteinUhlenbeckProcessWrapper"]
 
 from torchrl.data.tensordict.tensordict import TensorDictBase
 
