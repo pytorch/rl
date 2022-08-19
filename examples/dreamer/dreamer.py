@@ -38,7 +38,7 @@ from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
     ReplayArgsConfig,
 )
-
+from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 from pathlib import Path
 
 ### float16
@@ -121,7 +121,7 @@ def main(cfg: "DictConfig"):
         ]
     )
     logger = WandbLogger(
-        f"dreamer/{exp_name}", project="torchrl", group=f"Dreamer_{cfg.env_name}"
+        f"dreamer/{exp_name}", project="torchrl", group=f"Dreamer_{cfg.env_name}_additive_noise"
     )
     video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
@@ -174,7 +174,7 @@ def main(cfg: "DictConfig"):
         recorder = None
 
     #### Actor and value network
-    model_explore = policy
+    model_explore = AdditiveGaussianWrapper(policy, sigma_init=0.3, sigma_end=0.3)
 
     # model_explore = OrnsteinUhlenbeckProcessWrapper(
     #     policy,
