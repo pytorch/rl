@@ -9,6 +9,7 @@ import tqdm
 from hydra.core.config_store import ConfigStore
 from torch.nn.utils import clip_grad_norm_
 from torchrl.envs import ParallelEnv, EnvCreator
+from torchrl.envs.utils import set_exploration_mode
 from torchrl.trainers.trainers import Recorder
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.objectives.costs.dreamer import (
@@ -277,11 +278,11 @@ def main(cfg: "DictConfig"):
                 sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
 
                 with autocast(dtype=torch.float16):
-                    model_loss_td, sampled_tensordict = world_model_loss(
+                    model_loss_td, world_model_td = world_model_loss(
                         sampled_tensordict
                     )
-                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
-                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                    actor_loss_td, actor_td = actor_loss(world_model_td)
+                    value_loss_td, value_td = value_loss(actor_td)
 
                 scaler.scale(model_loss_td["loss_world_model"]).backward()
                 scaler.scale(actor_loss_td["loss_actor"]).backward()
@@ -305,7 +306,7 @@ def main(cfg: "DictConfig"):
 
                 scaler.update()
 
-                with torch.no_grad():
+                with torch.no_grad(), set_exploration_mode("mode"):
                     td_record = record(None)
                     if td_record is not None:
                         for key, value in td_record.items():
@@ -317,23 +318,33 @@ def main(cfg: "DictConfig"):
                                 )
                     # Compute observation reco
                     if record._count % cfg.record_interval == 0 and cfg.record_video:
-                        reco_pxls = (
-                            (
-                                255
-                                * (
-                                    model_based_env.decode_obs(sampled_tensordict[:4])[
-                                        "reco_pixels"
-                                    ]
-                                    - stats["loc"]
-                                )
-                                / stats["scale"]
-                            )
-                            .clamp(min=0, max=255)
-                        )
+                        true_pixels = sampled_tensordict["pixels"][:4]
+
+                        reco_pixels = recover_pixels(world_model_td["reco_pixels"][:4])
+
+                        imagined_states = world_model_td.select("posterior_states", "next_belief").detach()
+                        imagined_states.batch_size = [
+                            tensordict.shape[0],
+                            tensordict.get("next_belief").shape[1],
+                        ]
+                        imagined_states.rename_key("posterior_states", "prior_state")
+                        imagined_states.rename_key("next_belief", "belief")
+                        imagined_states = model_based_env.rollout(
+                            max_steps=true_pixels.shape[1],
+                            policy=actor_model,
+                            auto_reset=False,
+                            tensordict=imagined_states[:4, 0],
+                        ).detach()
+                        imagine_pxls = recover_pixels(model_based_env.decode_obs(imagined_states)["reco_pixels"], stats)
+
+                        stacked_pixels = torch.cat([true_pixels, reco_pixels, imagine_pxls], dim=-1)
                         logger.log_video(
-                            "reco_observation", reco_pxls.detach().cpu().numpy()
+                            "Pixels reconstruction and imagination", stacked_pixels.detach().cpu().numpy()
                         )
 
 
+
+def recover_pixels(pixels, stats):
+    return (255 * (pixels - stats["loc"]) / stats["scale"]).clamp(min=0, max=255)
 if __name__ == "__main__":
     main()
