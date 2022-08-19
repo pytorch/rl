@@ -1,6 +1,6 @@
-env_name: cheetah
-env_task: run
-env_library: dm_control
+env_name: HalfCheetah-v4
+env_task: ""
+env_library: gym
 catframes: 1
 async_collection: True
 record_video: 0
