@@ -259,9 +259,13 @@ def transformed_env_constructor(
 
         if custom_env is None and custom_env_maker is None:
             print(cfg.collector_devices[0])
+            if cfg.collector_devices is str:
+                device = cfg.collector_devices
+            elif cfg.collector_devices is list:
+                device = cfg.collector_devices[0]
             env_kwargs = {
                 "env_name": env_name,
-                "device": "cpu",
+                "device": device,
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,
