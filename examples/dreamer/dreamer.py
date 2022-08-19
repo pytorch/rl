@@ -174,7 +174,7 @@ def main(cfg: "DictConfig"):
         recorder = None
 
     #### Actor and value network
-    model_explore = AdditiveGaussianWrapper(policy, sigma_init=0.3, sigma_end=0.3)
+    model_explore = AdditiveGaussianWrapper(policy, sigma_init=0.3, sigma_end=0.3).to(device)
 
     # model_explore = OrnsteinUhlenbeckProcessWrapper(
     #     policy,
