@@ -140,7 +140,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         super().__init__(policy)
         self.register_buffer("sigma_init", torch.tensor([sigma_init]))
         self.register_buffer("sigma_end", torch.tensor([sigma_end]))
-        if self.eps_end > self.eps_init:
+        if self.sigma_end > self.sigma_init:
             raise RuntimeError("sigma should decrease over time or be constant")
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("sigma", torch.tensor([sigma_init]))
