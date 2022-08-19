@@ -260,7 +260,7 @@ def transformed_env_constructor(
         if custom_env is None and custom_env_maker is None:
             env_kwargs = {
                 "env_name": env_name,
-                "device": cfg.collector_devices[0],
+                "device": "cuda:0",
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,
