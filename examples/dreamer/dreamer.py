@@ -282,10 +282,10 @@ def main(cfg: "DictConfig"):
                         sampled_tensordict
                     )
                     if cfg.record_video:
-                        world_model_td = sampled_tensordict.select(
+                        world_model_td = sampled_tensordict.clone().select(
                             "pixels", "reco_pixels", "posterior_states", "next_belief"
 
-                        )[:4].clone().detach()
+                        )[:4].detach()
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
