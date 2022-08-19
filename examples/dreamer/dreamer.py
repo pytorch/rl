@@ -318,9 +318,9 @@ def main(cfg: "DictConfig"):
                                 )
                     # Compute observation reco
                     if record._count % cfg.record_interval == 0 and cfg.record_video:
-                        true_pixels = sampled_tensordict["pixels"][:4]
+                        true_pixels = recover_pixels(sampled_tensordict["pixels"][:4], stats)
 
-                        reco_pixels = recover_pixels(world_model_td["reco_pixels"][:4])
+                        reco_pixels = recover_pixels(world_model_td["reco_pixels"][:4], stats)
 
                         imagined_states = world_model_td.select("posterior_states", "next_belief").detach()
                         imagined_states.batch_size = [
