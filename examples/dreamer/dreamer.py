@@ -197,10 +197,10 @@ def main(cfg: "DictConfig"):
         make_env=create_env_fn,
         actor_model_explore=model_explore,
         cfg=cfg,
-        make_env_kwargs=[
-            {"device": device} if device >= 0 else {}
-            for device in cfg.collector_devices
-        ],
+        # make_env_kwargs=[
+        #     {"device": device}
+        #     for device in cfg.collector_devices
+        # ],
     )
 
     replay_buffer = make_replay_buffer(device, cfg)
@@ -283,7 +283,7 @@ def main(cfg: "DictConfig"):
                     )
                     if cfg.record_video:
                         world_model_td = sampled_tensordict.select(
-                            "reco_pixels", "posterior_states", "next_belief"
+                            "pixels", "reco_pixels", "posterior_states", "next_belief"
 
                         )[:4].clone().detach()
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
@@ -323,7 +323,7 @@ def main(cfg: "DictConfig"):
                                 )
                     # Compute observation reco
                     if cfg.record_video and record._count % cfg.record_interval == 0:
-                        true_pixels = recover_pixels(sampled_tensordict["pixels"], stats)
+                        true_pixels = recover_pixels(world_model_td["pixels"], stats)
 
                         reco_pixels = recover_pixels(world_model_td["reco_pixels"], stats)
 
