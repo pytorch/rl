@@ -199,7 +199,7 @@ def main(cfg: "DictConfig"):
         cfg=cfg,
         # make_env_kwargs=[
         #     {"device": device} if device >= 0 else {}
-        #     for device in args.env_rendering_devices
+        #     for device in cfg.env_rendering_devices
         # ],
     )
 
@@ -272,7 +272,7 @@ def main(cfg: "DictConfig"):
         tensordict = tensordict.reshape(-1, cfg.batch_length)
         replay_buffer.extend(tensordict.cpu())
 
-        if collected_frames >= cfg.init_env_steps:
+        if collected_frames >= cfg.init_random_frames:
             for j in range(cfg.optim_steps_per_batch):
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
