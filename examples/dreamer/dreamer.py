@@ -278,11 +278,15 @@ def main(cfg: "DictConfig"):
                 sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
 
                 with autocast(dtype=torch.float16):
-                    model_loss_td, world_model_td = world_model_loss(
+                    model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
-                    actor_loss_td, actor_td = actor_loss(world_model_td)
-                    value_loss_td, value_td = value_loss(actor_td)
+                    world_model_td = sampled_tensordict.select(
+                        "reco_pixels", "posterior_states", "next_belief"
+
+                    )[:4].clone().detach()
+                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
                 scaler.scale(model_loss_td["loss_world_model"]).backward()
                 scaler.scale(actor_loss_td["loss_actor"]).backward()
@@ -318,24 +322,24 @@ def main(cfg: "DictConfig"):
                                 )
                     # Compute observation reco
                     if record._count % cfg.record_interval == 0 and cfg.record_video:
-                        true_pixels = recover_pixels(sampled_tensordict["pixels"][:4], stats)
+                        true_pixels = recover_pixels(sampled_tensordict["pixels"], stats)
 
-                        reco_pixels = recover_pixels(world_model_td["reco_pixels"][:4], stats)
+                        reco_pixels = recover_pixels(world_model_td["reco_pixels"], stats)
 
-                        imagined_states = world_model_td.select("posterior_states", "next_belief").detach()
-                        imagined_states.batch_size = [
+                        world_model_td = world_model_td.select("posterior_states", "next_belief").detach()
+                        world_model_td.batch_size = [
                             tensordict.shape[0],
                             tensordict.get("next_belief").shape[1],
                         ]
-                        imagined_states.rename_key("posterior_states", "prior_state")
-                        imagined_states.rename_key("next_belief", "belief")
-                        imagined_states = model_based_env.rollout(
+                        world_model_td.rename_key("posterior_states", "prior_state")
+                        world_model_td.rename_key("next_belief", "belief")
+                        world_model_td = model_based_env.rollout(
                             max_steps=true_pixels.shape[1],
                             policy=actor_model,
                             auto_reset=False,
-                            tensordict=imagined_states[:4, 0],
+                            tensordict=world_model_td[:, 0],
                         ).detach()
-                        imagine_pxls = recover_pixels(model_based_env.decode_obs(imagined_states)["reco_pixels"], stats)
+                        imagine_pxls = recover_pixels(model_based_env.decode_obs(world_model_td)["reco_pixels"], stats)
 
                         stacked_pixels = torch.cat([true_pixels, reco_pixels, imagine_pxls], dim=-1)
                         logger.log_video(
