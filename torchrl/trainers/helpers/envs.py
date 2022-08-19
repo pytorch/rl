@@ -258,7 +258,6 @@ def transformed_env_constructor(
         from_pixels = cfg.from_pixels
 
         if custom_env is None and custom_env_maker is None:
-            print(cfg.collector_devices[0])
             if cfg.collector_devices is str:
                 device = cfg.collector_devices
             elif cfg.collector_devices is list:
