@@ -75,6 +75,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     _safe = False
     _lazy = False
+    _inplace_set = False
     is_meta = False
 
     def __getstate__(self) -> dict:
@@ -1566,7 +1567,7 @@ dtype=torch.float32)},
         ) not in [len(index), 0]:
             raise IndexError(_STR_MIXED_INDEX_ERROR)
         if isinstance(index, str):
-            self.set(index, value, inplace=False)
+            self.set(index, value, inplace=self._inplace_set)
         elif isinstance(index, tuple) and all(
             isinstance(sub_index, str) for sub_index in index
         ):
@@ -2647,6 +2648,7 @@ torch.Size([3, 2])
         cls._lazy = True
         cls._is_shared = None
         cls._is_memmap = None
+        cls._inplace_set = True
         return TensorDictBase.__new__(cls)
 
     def __init__(
