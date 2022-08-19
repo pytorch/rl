@@ -1203,8 +1203,6 @@ class RSSMPosterior(nn.Module):
         self.hidden_dim = hidden_dim
 
     def forward(self, belief, obs_embedding):
-        if obs_embedding.dim() == 1:
-            obs_embedding = obs_embedding.unsqueeze(0)
         if belief is None:
             *batch_sizes, _ = obs_embedding.shape
             belief = torch.zeros(
