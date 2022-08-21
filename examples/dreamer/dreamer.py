@@ -99,7 +99,7 @@ DEFAULT_REWARD_SCALING = {
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
 
-    from torchrl.trainers.loggers.wandb import WandbLogger
+#    from torchrl.trainers.loggers.wandb import WandbLogger
 
     cfg = correct_for_frame_skip(cfg)
 
@@ -121,9 +121,10 @@ def main(cfg: "DictConfig"):
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
-    logger = WandbLogger(
-        f"dreamer/{exp_name}", project="torchrl", group=f"Dreamer_{cfg.env_name}_additive_noise"
-    )
+    logger=None
+#    logger = WandbLogger(
+#        f"dreamer/{exp_name}", project="torchrl", group=f"Dreamer_{cfg.env_name}_additive_noise"
+#    )
     video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
     stats = None
@@ -253,7 +254,9 @@ def main(cfg: "DictConfig"):
     path = Path("./log")
     path.mkdir(exist_ok=True)
 
-    scaler = GradScaler()
+    scaler1 = GradScaler()
+    scaler2 = GradScaler()
+    scaler3 = GradScaler()
     torch.cuda.empty_cache()
     for i, tensordict in enumerate(collector):
 
@@ -286,34 +289,35 @@ def main(cfg: "DictConfig"):
                             "pixels", "reco_pixels", "posterior_states", "next_belief"
 
                         )[:4].detach()
-                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
-                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
-
-                scaler.scale(model_loss_td["loss_world_model"]).backward()
-                scaler.scale(actor_loss_td["loss_actor"]).backward()
-                scaler.scale(value_loss_td["loss_value"]).backward()
-
-                scaler.unscale_(world_model_opt)
+                scaler1.scale(model_loss_td["loss_world_model"]).backward()
+                scaler1.unscale_(world_model_opt)
                 clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
-                scaler.unscale_(actor_opt)
-                clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
-                scaler.unscale_(value_opt)
-                clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
-
-                scaler.step(world_model_opt)
+                scaler1.step(world_model_opt)
                 world_model_opt.zero_grad()
+                scaler1.update()
 
-                scaler.step(actor_opt)
+                with autocast(dtype=torch.float16):
+                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+                scaler2.scale(actor_loss_td["loss_actor"]).backward()
+                scaler2.unscale_(actor_opt)
+                clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
+                scaler2.step(actor_opt)
                 actor_opt.zero_grad()
+                scaler2.update()
 
-                scaler.step(value_opt)
+                with autocast(dtype=torch.float16):
+                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                scaler3.scale(value_loss_td["loss_value"]).backward()
+                scaler3.unscale_(value_opt)
+                clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
+                scaler3.step(value_opt)
                 value_opt.zero_grad()
+                scaler3.update()
 
-                scaler.update()
 
                 with torch.no_grad(), set_exploration_mode("mode"):
                     td_record = record(None)
-                    if td_record is not None:
+                    if td_record is not None and logger is not None:
                         for key, value in td_record.items():
                             if key in ["r_evaluation", "total_r_evaluation"]:
                                 logger.log_scalar(
@@ -343,13 +347,15 @@ def main(cfg: "DictConfig"):
                         imagine_pxls = recover_pixels(model_based_env.decode_obs(world_model_td)["reco_pixels"], stats)
 
                         stacked_pixels = torch.cat([true_pixels, reco_pixels, imagine_pxls], dim=-1)
-                        logger.log_video(
-                            "Pixels reconstruction and imagination", stacked_pixels.detach().cpu().numpy()
-                        )
-
+                        if logger is not None:
+                            logger.log_video(
+                                "Pixels reconstruction and imagination", stacked_pixels.detach().cpu().numpy()
+                            )
+                        else:
+                            torch.save(stacked_pixels, "stacked_pixels.pt")
 
 
 def recover_pixels(pixels, stats):
-    return (255 * (pixels - stats["loc"]) / stats["scale"]).clamp(min=0, max=255)
+    return (255 * (pixels * stats["scale"] + stats["loc"])).clamp(min=0, max=255).to(torch.uint8)
 if __name__ == "__main__":
     main()
