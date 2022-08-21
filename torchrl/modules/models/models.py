@@ -7,13 +7,12 @@ from numbers import Number
 from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import torch
-import torch.distributions as d
 from torch import nn
 from torch.nn import functional as F
 
 from torchrl import prod
 from torchrl.data import DEVICE_TYPING
-from torchrl.modules.distributions import NormalParamWrapper, TanhNormal
+from torchrl.modules.distributions import NormalParamWrapper
 from torchrl.modules.models.utils import (
     _find_depth,
     LazyMapping,
@@ -1157,7 +1156,8 @@ class RSSMPriorRollout(nn.Module):
 class RSSMPrior(nn.Module):
     def __init__(self, hidden_dim=200, rnn_hidden_dim=200, state_dim=20):
         super().__init__()
-        ### Prior
+
+        # Prior
         self.rnn = nn.GRUCell(hidden_dim, rnn_hidden_dim)
         self.action_state_projector = nn.Sequential(nn.LazyLinear(hidden_dim), nn.ELU())
         self.rnn_to_prior_projector = NormalParamWrapper(

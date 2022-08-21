@@ -6,14 +6,14 @@
 from __future__ import annotations
 
 import abc
-from typing import Optional, Union, List, Tuple, Callable
+from copy import deepcopy
 from typing import Optional, Union, List
+from typing import Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 
-from torchrl.data import TensorDict
 from torchrl.data import (
     TensorDict,
     TensorSpec,
@@ -24,7 +24,7 @@ from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 from ..data.utils import DEVICE_TYPING
 from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
 from .common import EnvBase
-from copy import deepcopy
+
 
 class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     """
@@ -72,6 +72,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         )
         self.world_model = world_model
         self._inplace_update = False
+
     def set_specs_from_env(self, env: EnvBase):
         """
         Sets the specs of the environment from the specs of the given environment.

@@ -17,7 +17,11 @@ from torchrl.modules.tensordict_module.common import (
     TensorDictModuleWrapper,
 )
 
-__all__ = ["EGreedyWrapper", "AdditiveGaussianWrapper", "OrnsteinUhlenbeckProcessWrapper"]
+__all__ = [
+    "EGreedyWrapper",
+    "AdditiveGaussianWrapper",
+    "OrnsteinUhlenbeckProcessWrapper",
+]
 
 from torchrl.data.tensordict.tensordict import TensorDictBase
 
@@ -111,6 +115,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
             tensordict.set(self.td_module.out_keys[0], out)
         return tensordict
 
+
 class AdditiveGaussianWrapper(TensorDictModuleWrapper):
     """
     Additive Gaussian PO wrapper.
@@ -158,7 +163,8 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             self.sigma.data[0] = max(
                 self.sigma_end.item(),
                 (
-                    self.sigma - (self.sigma_init - self.sigma_end) / self.annealing_num_steps
+                    self.sigma
+                    - (self.sigma_init - self.sigma_end) / self.annealing_num_steps
                 ).item(),
             )
 
@@ -175,6 +181,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             out = spec.project(out)
             tensordict.set(self.action_key, out)
         return tensordict
+
 
 class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     """

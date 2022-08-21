@@ -4,8 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from turtle import forward
-
 import torch
 import torch.nn as nn
 
@@ -95,7 +93,12 @@ class DreamerModelLoss(LossModule):
         )
 
     def kl_loss(self, prior_mean, prior_std, posterior_mean, posterior_std):
-        kl = torch.log(prior_std/posterior_std) + (posterior_std**2 + (prior_mean - posterior_mean)**2)/(2*prior_std**2) - 0.5
+        kl = (
+            torch.log(prior_std / posterior_std)
+            + (posterior_std ** 2 + (prior_mean - posterior_mean) ** 2)
+            / (2 * prior_std ** 2)
+            - 0.5
+        )
         kl = kl.mean().clamp(min=self.free_nats)
         return kl
 
@@ -158,6 +161,8 @@ class DreamerActorLoss(LossModule):
         return vec_td_lambda_return_estimate(
             self.gamma, self.lmbda, value, reward, done
         )
+
+
 class DreamerValueLoss(LossModule):
     def __init__(
         self,

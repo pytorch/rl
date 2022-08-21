@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-import re
 from typing import Optional, Sequence
 
 import torch
@@ -1200,7 +1199,7 @@ def make_dreamer(
     use_decoder_in_env: bool = False,
 ) -> nn.ModuleList:
 
-    ### Modules
+    # Modules
     obs_encoder = ObsEncoder()
     obs_decoder = ObsDecoder()
     rssm_prior = RSSMPrior(
@@ -1222,7 +1221,7 @@ def make_dreamer(
         rnn_hidden_dim=cfg.rssm_hidden_dim,
     )
 
-    ### World Model and reward model
+    # World Model and reward model
     world_modeler = TensorDictSequence(
         TensorDictModule(
             obs_encoder,
@@ -1258,7 +1257,7 @@ def make_dreamer(
             out_keys=["predicted_reward"],
         ),
     )
-    ## Actor value and policy
+    # Actor value and policy
     actor_model = ProbabilisticTensorDictModule(
         TensorDictModule(
             actor_module,
