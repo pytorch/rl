@@ -8,7 +8,6 @@ from collections import OrderedDict
 from typing import Iterable, Optional, Union
 
 import torch
-import torch.distributions as d
 from torch import nn, Tensor
 from torch.nn import functional as F
 

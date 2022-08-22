@@ -2,23 +2,27 @@ import dataclasses
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+
 import hydra
 import torch
 import torch.cuda
 import tqdm
 from hydra.core.config_store import ConfigStore
+
+# float16
+from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.utils import set_exploration_mode
-from torchrl.trainers.trainers import Recorder
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
+from torchrl.envs.utils import set_exploration_mode
+from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 from torchrl.objectives.costs.dreamer import (
     DreamerActorLoss,
     DreamerModelLoss,
     DreamerValueLoss,
 )
 from torchrl.record import VideoRecorder
-
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     OffPolicyCollectorConfig,
@@ -39,11 +43,7 @@ from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
     ReplayArgsConfig,
 )
-from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
-from pathlib import Path
-
-### float16
-from torch.cuda.amp import autocast, GradScaler
+from torchrl.trainers.trainers import Recorder
 
 
 @dataclass
@@ -99,8 +99,6 @@ DEFAULT_REWARD_SCALING = {
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
 
-    from torchrl.trainers.loggers.wandb import WandbLogger
-
     cfg = correct_for_frame_skip(cfg)
 
     if not isinstance(cfg.reward_scaling, float):
@@ -121,9 +119,32 @@ def main(cfg: "DictConfig"):
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
-    logger = WandbLogger(
-        f"dreamer/{exp_name}", project="torchrl", group=f"Dreamer_{cfg.env_name}_additive_noise"
-    )
+
+    if cfg.logger == "wandb":
+        from torchrl.trainers.loggers.wandb import WandbLogger
+
+        logger = WandbLogger(
+            f"dreamer/{exp_name}",
+            project="torchrl",
+            group=f"Dreamer_{cfg.env_name}_additive_noise",
+        )
+    elif cfg.logger == "csv":
+        from torchrl.trainers.loggers.csv import CSVLogger
+
+        logger = CSVLogger(
+            f"{exp_name}",
+            log_dir="dreamer",
+        )
+    elif cfg.logger == "tensorboard":
+        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
+
+        logger = TensorboardLogger(
+            f"{exp_name}",
+            log_dir="dreamer",
+        )
+    else:
+        raise NotImplementedError(cfg.logger)
+
     video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
     stats = None
@@ -150,19 +171,19 @@ def main(cfg: "DictConfig"):
         value_key="predicted_value",
     )
 
-    #### Losses
+    # Losses
     world_model_loss = DreamerModelLoss(world_model, cfg).to(device)
     actor_loss = DreamerActorLoss(actor_model, value_model, model_based_env, cfg).to(
         device
     )
     value_loss = DreamerValueLoss(value_model).to(device)
 
-    ### optimizers
+    # optimizers
     world_model_opt = torch.optim.Adam(world_model.parameters(), lr=cfg.world_model_lr)
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
 
-    #### Recorder
+    # Recorder
     if cfg.record_video:
         recorder = VideoRecorder(
             cfg=cfg,
@@ -174,8 +195,10 @@ def main(cfg: "DictConfig"):
     else:
         recorder = None
 
-    #### Actor and value network
-    model_explore = AdditiveGaussianWrapper(policy, sigma_init=0.3, sigma_end=0.3).to(device)
+    # Actor and value network
+    model_explore = AdditiveGaussianWrapper(policy, sigma_init=0.3, sigma_end=0.3).to(
+        device
+    )
 
     # model_explore = OrnsteinUhlenbeckProcessWrapper(
     #     policy,
@@ -246,14 +269,16 @@ def main(cfg: "DictConfig"):
 
     final_seed = collector.set_seed(cfg.seed)
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
-    ## Training loop
+    # Training loop
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.total_frames)
     r0 = None
     path = Path("./log")
     path.mkdir(exist_ok=True)
 
-    scaler = GradScaler()
+    scaler1 = GradScaler()
+    scaler2 = GradScaler()
+    scaler3 = GradScaler()
     torch.cuda.empty_cache()
     for i, tensordict in enumerate(collector):
 
@@ -282,38 +307,44 @@ def main(cfg: "DictConfig"):
                         sampled_tensordict
                     )
                     if cfg.record_video:
-                        world_model_td = sampled_tensordict.clone().select(
-                            "pixels", "reco_pixels", "posterior_states", "next_belief"
-
-                        )[:4].detach()
-                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
-                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
-
-                scaler.scale(model_loss_td["loss_world_model"]).backward()
-                scaler.scale(actor_loss_td["loss_actor"]).backward()
-                scaler.scale(value_loss_td["loss_value"]).backward()
-
-                scaler.unscale_(world_model_opt)
+                        world_model_td = (
+                            sampled_tensordict.clone()
+                            .select(
+                                "pixels",
+                                "reco_pixels",
+                                "posterior_states",
+                                "next_belief",
+                            )[:4]
+                            .detach()
+                        )
+                scaler1.scale(model_loss_td["loss_world_model"]).backward()
+                scaler1.unscale_(world_model_opt)
                 clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
-                scaler.unscale_(actor_opt)
-                clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
-                scaler.unscale_(value_opt)
-                clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
-
-                scaler.step(world_model_opt)
+                scaler1.step(world_model_opt)
                 world_model_opt.zero_grad()
+                scaler1.update()
 
-                scaler.step(actor_opt)
+                with autocast(dtype=torch.float16):
+                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+                scaler2.scale(actor_loss_td["loss_actor"]).backward()
+                scaler2.unscale_(actor_opt)
+                clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
+                scaler2.step(actor_opt)
                 actor_opt.zero_grad()
+                scaler2.update()
 
-                scaler.step(value_opt)
+                with autocast(dtype=torch.float16):
+                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                scaler3.scale(value_loss_td["loss_value"]).backward()
+                scaler3.unscale_(value_opt)
+                clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
+                scaler3.step(value_opt)
                 value_opt.zero_grad()
-
-                scaler.update()
+                scaler3.update()
 
                 with torch.no_grad(), set_exploration_mode("mode"):
                     td_record = record(None)
-                    if td_record is not None:
+                    if td_record is not None and logger is not None:
                         for key, value in td_record.items():
                             if key in ["r_evaluation", "total_r_evaluation"]:
                                 logger.log_scalar(
@@ -325,9 +356,13 @@ def main(cfg: "DictConfig"):
                     if cfg.record_video and record._count % cfg.record_interval == 0:
                         true_pixels = recover_pixels(world_model_td["pixels"], stats)
 
-                        reco_pixels = recover_pixels(world_model_td["reco_pixels"], stats)
+                        reco_pixels = recover_pixels(
+                            world_model_td["reco_pixels"], stats
+                        )
                         with autocast(dtype=torch.float16):
-                            world_model_td = world_model_td.select("posterior_states", "next_belief").detach()
+                            world_model_td = world_model_td.select(
+                                "posterior_states", "next_belief"
+                            ).detach()
                             world_model_td.batch_size = [
                                 world_model_td.shape[0],
                                 world_model_td.get("next_belief").shape[1],
@@ -340,16 +375,30 @@ def main(cfg: "DictConfig"):
                                 auto_reset=False,
                                 tensordict=world_model_td[:, 0],
                             ).detach()
-                        imagine_pxls = recover_pixels(model_based_env.decode_obs(world_model_td)["reco_pixels"], stats)
-
-                        stacked_pixels = torch.cat([true_pixels, reco_pixels, imagine_pxls], dim=-1)
-                        logger.log_video(
-                            "Pixels reconstruction and imagination", stacked_pixels.detach().cpu().numpy()
+                        imagine_pxls = recover_pixels(
+                            model_based_env.decode_obs(world_model_td)["reco_pixels"],
+                            stats,
                         )
 
+                        stacked_pixels = torch.cat(
+                            [true_pixels, reco_pixels, imagine_pxls], dim=-1
+                        )
+                        if logger is not None:
+                            logger.log_video(
+                                "Pixels reconstruction and imagination",
+                                stacked_pixels.detach().cpu().numpy(),
+                            )
+                        else:
+                            torch.save(stacked_pixels, "stacked_pixels.pt")
 
 
 def recover_pixels(pixels, stats):
-    return (255 * (pixels - stats["loc"]) / stats["scale"]).clamp(min=0, max=255)
+    return (
+        (255 * (pixels * stats["scale"] + stats["loc"]))
+        .clamp(min=0, max=255)
+        .to(torch.uint8)
+    )
+
+
 if __name__ == "__main__":
     main()
