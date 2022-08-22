@@ -8,7 +8,9 @@ from typing import Any
 
 
 @dataclass
-class RecorderConfig:
+class LoggerConfig:
+    logger: str = "csv"
+    # recorder type to be used. One of 'tensorboard', 'wandb' or 'csv'
     record_video: bool = False
     # whether a video of the task should be rendered during logging.
     no_video: bool = True
