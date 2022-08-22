@@ -56,6 +56,8 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     def __init__(
         self,
         world_model: Union[nn.Module, List[TensorDictModule], TensorDictSequence],
+        params: Optional[List[torch.Tensor]] = None,
+        buffers: Optional[List[torch.Tensor]] = None,
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
@@ -64,6 +66,8 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
             device=device, dtype=dtype, batch_size=batch_size
         )
         self.world_model = world_model
+        self.world_model_params = params
+        self.world_model_buffers = buffers
 
     def set_specs_from_env(self, env: EnvBase):
         """
@@ -80,7 +84,14 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         # step method requires to be immutable
         tensordict_out = tensordict.clone()
         # Compute world state
-        tensordict_out = self.world_model(tensordict_out)
+        if self.world_model_params is not None:
+            tensordict_out= self.world_model(
+                tensordict_out["world_state"],
+                params=self.world_model_params,
+                buffers=self.world_model_buffers,
+            )
+        else:
+            tensordict_out = self.world_model(tensordict_out)
         # Step requires a done flag. No sense for MBRL so we set it to False
         if "done" not in self.world_model.out_keys:
             tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool)
