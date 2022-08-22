@@ -18,6 +18,7 @@ from torchrl.modules import (
     TensorDictModule,
     NormalParamWrapper,
     TensorDictSequence,
+    ProbabilisticTensorDictModule,
 )
 from torchrl.modules.distributions import (
     Delta,
@@ -51,6 +52,7 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
     ProbabilisticActor,
 )
+from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 
 DISTRIBUTIONS = {
     "delta": Delta,
@@ -1176,6 +1178,74 @@ def make_redq_model(
             net(td)
     del td
     return model
+
+
+def make_mbpo_model(
+    proof_environment: EnvBase,
+    cfg: "DictConfig",
+    device: DEVICE_TYPING = "cpu",
+    in_keys: Optional[Sequence[str]] = None,
+    observation_key="observation",
+    action_key="action",
+    **kwargs,
+) -> nn.ModuleList:
+    if cfg.from_pixels:
+        raise NotImplementedError("from_pixels not implemented")
+    else:
+        single_world_model_backbone = TensorDictModule(
+            MLP(
+                out_features=cfg.hidden_world_model,
+                depth=cfg.num_layers_world_model - 1,
+                num_cells=cfg.num_layers_world_model,
+                activation_class=nn.SiLU,
+                activate_last_layer=True,
+            ),
+            in_keys=[observation_key, action_key],
+            out_keys=["hidden"],
+        )
+        single_world_model_state_pred = TensorDictModule(
+            NormalParamWrapper(
+                nn.Linear(
+                    cfg.hidden_world_model,
+                    2 * proof_environment.observation_spec.shape[1],
+                )
+            ),
+            in_keys=["hidden"],
+            out_keys=["state_loc", "state_scale"],
+        )
+        single_world_modeler = ProbabilisticTensorDictModule(
+            TensorDictSequence(
+                single_world_model_backbone, single_world_model_state_pred
+            ),
+            dist_param_keys=["state_loc", "state_scale"],
+            out_key_sample=f"next_{observation_key}",
+        )
+        single_world_model_reward_pred = ProbabilisticTensorDictModule(
+            TensorDictModule(
+                NormalParamWrapper(
+                    nn.Linear(cfg.hidden_world_model, 2),
+                    in_keys=["hidden"],
+                    out_keys=["reward_loc", "reward_scale"],
+                ),
+                dist_param_keys=["reward_loc", "reward_scale"],
+                out_key_sample="reward",
+            )
+        )
+        single_world_model = WorldModelWrapper(single_world_modeler, single_world_model_reward_pred).to(device)
+        with torch.no_grad(), set_exploration_mode("random"):
+            td = proof_environment.rollout(1000)
+            td = td.to(device)
+            single_world_model(td)
+        del td
+        return single_world_model
+
+
+@dataclass
+class MBPOConfig:
+    world_model_lr: float = 1e-3
+    sac_lr: float = 1e-3
+    num_layers_world_model: int = 4
+    hidden_size_world_model: int = 200
 
 
 @dataclass
