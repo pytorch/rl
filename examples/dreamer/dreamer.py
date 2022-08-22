@@ -99,8 +99,6 @@ DEFAULT_REWARD_SCALING = {
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
 
-    from torchrl.trainers.loggers.wandb import WandbLogger
-
     cfg = correct_for_frame_skip(cfg)
 
     if not isinstance(cfg.reward_scaling, float):
@@ -121,11 +119,32 @@ def main(cfg: "DictConfig"):
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
-    logger = WandbLogger(
-        f"dreamer/{exp_name}",
-        project="torchrl",
-        group=f"Dreamer_{cfg.env_name}_additive_noise",
-    )
+
+    if cfg.logger == "wandb":
+        from torchrl.trainers.loggers.wandb import WandbLogger
+
+        logger = WandbLogger(
+            f"dreamer/{exp_name}",
+            project="torchrl",
+            group=f"Dreamer_{cfg.env_name}_additive_noise",
+        )
+    elif cfg.logger == "csv":
+        from torchrl.trainers.loggers.csv import CSVLogger
+
+        logger = CSVLogger(
+            f"{exp_name}",
+            log_dir="dreamer",
+        )
+    elif cfg.logger == "tensorboard":
+        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
+
+        logger = TensorboardLogger(
+            f"{exp_name}",
+            log_dir="dreamer",
+        )
+    else:
+        raise NotImplementedError(cfg.logger)
+
     video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
     stats = None
