@@ -57,7 +57,7 @@ python examples/redq/redq.py env_name="cheetah" env_task="run" env_library="dm_c
 
 ## Humanoid
 
-## Ant
+## cheetah
 Here we can see some results for the SAC and REDQ algorithm on the Ant environement.
 We average the results over 5 different seeds and plot the standard error.
 <p align="center">
