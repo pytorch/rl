@@ -121,7 +121,8 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         # Compute world state
         tensordict_out = self.world_model(tensordict_in)
         # Step requires a done flag. No sense for MBRL so we set it to False
-        tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool)
+        if "done" not in self.world_model.out_keys:
+            tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool)
         return tensordict_out
 
     @abc.abstractmethod
