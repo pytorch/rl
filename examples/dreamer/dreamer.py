@@ -288,12 +288,8 @@ def main(cfg: "DictConfig"):
         if r0 is None:
             r0 = tensordict["reward"].mean().item()
         pbar.update(tensordict.numel())
-        if "mask" in tensordict.keys():
-            current_frames = tensordict["mask"].sum()
-            tensordict = tensordict[tensordict.get("mask").squeeze(-1)]
-        else:
-            current_frames = tensordict.numel()
-            collected_frames += current_frames
+        current_frames = tensordict.numel()
+        collected_frames += current_frames
         tensordict = tensordict.reshape(-1, cfg.batch_length)
         replay_buffer.extend(tensordict.cpu())
 
