@@ -28,3 +28,4 @@ image_size : 64
 buffer_size: 20000
 init_env_steps: 1000
 init_random_frames: 5000
+logger: csv
