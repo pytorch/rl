@@ -38,7 +38,7 @@ from torchrl.trainers.helpers.models import (
     make_dreamer,
     DreamerConfig,
 )
-from torchrl.trainers.helpers.recorder import RecorderConfig
+from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
     ReplayArgsConfig,
