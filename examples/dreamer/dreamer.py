@@ -74,7 +74,7 @@ config_fields = [
     for config_cls in (
         OffPolicyCollectorConfig,
         EnvConfig,
-        RecorderConfig,
+        LoggerConfig,
         ReplayArgsConfig,
         DreamerConfig,
         TrainingConfig,
