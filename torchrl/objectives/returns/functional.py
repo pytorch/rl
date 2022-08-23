@@ -205,7 +205,7 @@ def _custom_conv1d(tensor, filter):
         # rather than compute them all and discard, we stack just the slices
         # of val_pad that we care about, and apply the filter manually
         batched_val_pad = torch.stack(
-            [val_pad[..., i:i + filter.shape[-1]] for i in range(tensor.shape[-1])],
+            [val_pad[..., i : i + filter.shape[-1]] for i in range(tensor.shape[-1])],
             dim=1,
         )
 

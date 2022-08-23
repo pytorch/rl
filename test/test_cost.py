@@ -1777,9 +1777,7 @@ def test_custom_conv1d_tensor(device, gamma, N, T):
     gammas = torch.cumprod(gammas, -2)
     filter = gammas[..., :-1, :]
 
-    out_custom = _custom_conv1d(
-        values.view(-1, 1, T), filter
-    ).reshape(values.shape)
+    out_custom = _custom_conv1d(values.view(-1, 1, T), filter).reshape(values.shape)
 
     torch.testing.assert_close(out, out_custom, rtol=1e-4, atol=1e-4)
 
