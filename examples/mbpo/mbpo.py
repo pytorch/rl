@@ -70,7 +70,7 @@ class TrainingConfig:
     # LR scheduler.
     grad_clip: float = 1000
     # batch size of the TensorDict retrieved from the replay buffer. Default=256.
-    optimize_model_every: int = 250
+    optimize_model_every_n_optim_steps: int = 250
     num_sac_training_steps_per_optim_step: int = 20
     normalize_rewards_online: bool = False
     # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
@@ -317,12 +317,13 @@ def main(cfg: "DictConfig"):
         current_frames = tensordict.numel()
         collected_frames += current_frames
         tensordict = tensordict.view(-1)
+        original_keys = tensordict.keys()
         real_replay_buffer.extend(tensordict.cpu())
 
         if collected_frames >= cfg.init_random_frames:
             for j in range(cfg.optim_steps_per_batch):
                 # Train Model
-                if j % cfg.optimize_model_every == 0:
+                if j % cfg.optimize_model_every_n_optim_steps == 0:
                     for _ in range(len(real_replay_buffer) // cfg.model_batch_size):
                         model_sampled_tensordict = real_replay_buffer.sample(
                             cfg.model_batch_size
@@ -337,7 +338,7 @@ def main(cfg: "DictConfig"):
                         world_model_opt.zero_grad()
                         scaler1.update()
 
-                    # Sample data from model and buffer
+                    # Sample data from model and buffer it
                     with torch.no_grad(), set_exploration_mode("random"):
                         for _ in range(len(real_replay_buffer) // cfg.model_batch_size):
                             model_sampled_tensordict = real_replay_buffer.sample(
@@ -349,12 +350,13 @@ def main(cfg: "DictConfig"):
                                 auto_reset=False,
                                 tensordict=model_sampled_tensordict,
                             )
+                            fake_traj_tensordict = fake_traj_tensordict.select(*original_keys)
                             fake_replay_buffer.extend(
                                 fake_traj_tensordict.view(-1).cpu()
                             )
 
-                for _ in range(cfg.num_sac_training_steps):
-
+                for _ in range(cfg.num_sac_training_steps_per_optim_step):
+                    
                     num_real_samples = int(cfg.sac_batch_size * cfg.real_data_ratio)
 
                     num_fake_samples = cfg.sac_batch_size - num_real_samples
@@ -365,25 +367,24 @@ def main(cfg: "DictConfig"):
                             real_replay_buffer.sample(num_real_samples),
                         ],
                         dim=0,
-                    )
+                    ).to(device)
+                    ### Train agent
+                    with autocast(dtype=torch.float16):
+                        sac_loss_td = sac_loss(agent_sampled_tensordict)
+                        sac_loss_sum = (
+                            sac_loss_td["loss_actor"]
+                            + sac_loss_td["loss_qvalue"]
+                            + sac_loss_td["loss_value"]
+                            + sac_loss_td["loss_alpha"]
+                        )
+                    scaler2.scale(sac_loss_sum).backward()
+                    scaler2.unscale_(sac_opt)
+                    clip_grad_norm_(sac_loss_sum.parameters(), cfg.grad_clip)
+                    scaler2.step(sac_opt)
+                    sac_opt.zero_grad()
+                    scaler2.update()
 
-                ### Train agent
-                with autocast(dtype=torch.float16):
-                    sac_loss_td = sac_loss(agent_sampled_tensordict)
-                    sac_loss_sum = (
-                        sac_loss_td["loss_actor"]
-                        + sac_loss_td["loss_qvalue"]
-                        + sac_loss_td["loss_value"]
-                        + sac_loss_td["loss_alpha"]
-                    )
-                scaler2.scale(sac_loss_sum).backward()
-                scaler2.unscale_(sac_opt)
-                clip_grad_norm_(sac_loss_sum.parameters(), cfg.grad_clip)
-                scaler2.step(sac_opt)
-                sac_opt.zero_grad()
-                scaler2.update()
-
-                target_net_updater.step()
+                    target_net_updater.step()
 
                 with torch.no_grad(), set_exploration_mode("mode"):
                     td_record = record(None)

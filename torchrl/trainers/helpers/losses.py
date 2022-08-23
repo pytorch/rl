@@ -237,6 +237,7 @@ def make_mbpo_model_loss(
         world_model,
         params=world_model_params,
         buffers=world_model_buffers,
+        num_networks=cfg.num_world_models_ensemble,
         device=device,
         dtype=dtype,
         batch_size=batch_size,
