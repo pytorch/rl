@@ -6,7 +6,7 @@
 import re
 from copy import deepcopy
 from textwrap import indent
-from typing import Iterable, Sequence, Union, Type, Optional, Tuple
+from typing import Sequence, Union, Type, Optional, Tuple
 
 from torch import Tensor
 from torch import distributions as d
