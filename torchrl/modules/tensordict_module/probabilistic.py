@@ -6,7 +6,7 @@
 import re
 from copy import deepcopy
 from textwrap import indent
-from typing import Sequence, Union, Type, Optional, Tuple
+from typing import Iterable, Sequence, Union, Type, Optional, Tuple
 
 from torch import Tensor
 from torch import distributions as d
@@ -50,11 +50,12 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         module (nn.Module): a nn.Module used to map the input to the output parameter space. Can be a functional
             module (FunctionalModule or FunctionalModuleWithBuffers), in which case the `forward` method will expect
             the params (and possibly) buffers keyword arguments.
-        dist_param_keys (str or iterable of str): key(s) that will be produced
+        dist_param_keys (str or iterable of str or dict): key(s) that will be produced
             by the inner TDModule and that will be used to build the distribution.
-            Importantly, those keys must match the keywords used by the distribution
+            Importantly, if it's an iterable of str or strthose keys must match the keywords used by the distribution
             class of interest, e.g. `"loc"` and `"scale"` for the Normal distribution
-            and similar.
+            and similar. If dict, the keys are the keys of the distribution and the values are the
+            keys in the tensordict that will get match to the corresponding distribution keyß.
         out_key_sample (str or iterable of str): keys where the sampled values will be
             written. Importantly, if this key is part of the `out_keys` of the inner model,
             the sampling step will be skipped.
@@ -160,7 +161,9 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             dist_param_keys = [dist_param_keys]
         if isinstance(out_key_sample, str):
             out_key_sample = [out_key_sample]
-        for key in dist_param_keys:
+        if not isinstance(dist_param_keys, dict):
+            dist_param_keys = {param_key: param_key for param_key in dist_param_keys}
+        for key in dist_param_keys.values():
             if key not in module.out_keys:
                 raise RuntimeError(
                     f"The key {key} could not be found in the wrapped module `{type(module)}.out_keys`."
@@ -175,7 +178,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             module=module, spec=spec, in_keys=in_keys, out_keys=out_keys, safe=safe
         )
         self.dist_param_keys = dist_param_keys
-        _check_all_str(self.dist_param_keys)
+        _check_all_str(self.dist_param_keys.keys())
+        _check_all_str(self.dist_param_keys.values())
 
         self.default_interaction_mode = default_interaction_mode
         if isinstance(distribution_class, str):
@@ -227,9 +231,12 @@ class ProbabilisticTensorDictModule(TensorDictModule):
 
     def build_dist_from_params(self, tensordict_out: TensorDictBase) -> d.Distribution:
         try:
-            dist = self.distribution_class(
-                **tensordict_out.select(*self.dist_param_keys)
-            )
+            selected_td_out = tensordict_out.select(*self.dist_param_keys.values())
+            dist_kwargs = {
+                dist_key: selected_td_out[td_key]
+                for dist_key, td_key in self.dist_param_keys.items()
+            }
+            dist = self.distribution_class(**dist_kwargs)
         except TypeError as err:
             if "an unexpected keyword argument" in str(err):
                 raise TypeError(
