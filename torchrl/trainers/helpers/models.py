@@ -1184,10 +1184,8 @@ def make_mbpo_model(
     proof_environment: EnvBase,
     cfg: "DictConfig",
     device: DEVICE_TYPING = "cpu",
-    in_keys: Optional[Sequence[str]] = None,
-    observation_key="observation",
+    observation_key="observation_vector",
     action_key="action",
-    **kwargs,
 ) -> nn.ModuleList:
     if cfg.from_pixels:
         raise NotImplementedError("from_pixels not implemented")
@@ -1196,7 +1194,7 @@ def make_mbpo_model(
             MLP(
                 out_features=cfg.hidden_world_model,
                 depth=cfg.num_layers_world_model - 1,
-                num_cells=cfg.num_layers_world_model,
+                num_cells=cfg.hidden_world_model,
                 activation_class=nn.SiLU,
                 activate_last_layer=True,
             ),
@@ -1207,31 +1205,42 @@ def make_mbpo_model(
             NormalParamWrapper(
                 nn.Linear(
                     cfg.hidden_world_model,
-                    2 * proof_environment.observation_spec.shape[1],
+                    2
+                    * proof_environment.observation_spec[
+                        f"next_{observation_key}"
+                    ].shape[-1],
                 )
             ),
             in_keys=["hidden"],
-            out_keys=["state_loc", "state_scale"],
+            out_keys=[f"next_{observation_key}_loc", f"next_{observation_key}_scale"],
         )
         single_world_modeler = ProbabilisticTensorDictModule(
             TensorDictSequence(
                 single_world_model_backbone, single_world_model_state_pred
             ),
-            dist_param_keys=["state_loc", "state_scale"],
+            distribution_class=d.Normal,
+            dist_param_keys=[
+                f"next_{observation_key}_loc",
+                f"next_{observation_key}_scale",
+            ],
             out_key_sample=f"next_{observation_key}",
         )
         single_world_model_reward_pred = ProbabilisticTensorDictModule(
             TensorDictModule(
                 NormalParamWrapper(
                     nn.Linear(cfg.hidden_world_model, 2),
-                    in_keys=["hidden"],
-                    out_keys=["reward_loc", "reward_scale"],
                 ),
-                dist_param_keys=["reward_loc", "reward_scale"],
-                out_key_sample="reward",
-            )
+                in_keys=["hidden"],
+                out_keys=["reward_loc", "reward_scale"],
+            ),
+            distribution_class=d.Normal,
+            dist_param_keys=["reward_loc", "reward_scale"],
+            out_key_sample="reward",
         )
-        single_world_model = WorldModelWrapper(single_world_modeler, single_world_model_reward_pred).to(device)
+
+        single_world_model = WorldModelWrapper(
+            single_world_modeler, single_world_model_reward_pred
+        ).to(device)
         with torch.no_grad(), set_exploration_mode("random"):
             td = proof_environment.rollout(1000)
             td = td.to(device)

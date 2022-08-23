@@ -1,4 +1,3 @@
-
 import dataclasses
 import uuid
 from dataclasses import dataclass
@@ -17,12 +16,7 @@ from torch.nn.utils import clip_grad_norm_
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.objectives.costs import (
-    MBPOModelLoss
-)
-from torchrl.modules import (
-    OrnsteinUhlenbeckProcessWrapper
-)
+from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 from torchrl.trainers.helpers.models import (
     SACModelConfig,
     make_sac_model,
@@ -33,7 +27,11 @@ from torchrl.trainers.helpers.collectors import (
     OffPolicyCollectorConfig,
 )
 from torchrl.trainers.helpers.recorder import RecorderConfig
-from torchrl.trainers.helpers.losses import make_sac_loss, LossConfig
+from torchrl.trainers.helpers.losses import (
+    make_sac_loss,
+    LossConfig,
+    make_mbpo_model_loss,
+)
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     get_stats_random_rollout,
@@ -51,23 +49,34 @@ from torchrl.trainers.helpers.replay_buffer import (
 )
 from torchrl.trainers.trainers import Recorder
 
+
 @dataclass
 class MBPOConfig:
     world_model_lr: float = 1e-3
+    hidden_world_model: int = 256
+    num_layers_world_model: int = 4
     sac_lr: float = 1e-3
+    model_batch_size: int = 256
+    sac_batch_size: int = 256
+    real_data_ratio: float = 0.1
+    num_world_models_ensemble: int = 7
 
 
 @dataclass
 class TrainingConfig:
-    optim_steps_per_batch: int = 500
+    optim_steps_per_batch: int = 1000
     # Number of optimization steps in between two collection of data. See frames_per_batch below.
     # LR scheduler.
-    batch_size: int = 256
-
-    batch_length: int = 50
+    grad_clip: float = 1000
     # batch size of the TensorDict retrieved from the replay buffer. Default=256.
-    log_interval: int = 10000
-    # logging interval, in terms of optimization steps. Default=10000.
+    optimize_model_every_n_steps: int = 250
+    num_sac_training_steps_per_optim_step: int = 20
+    normalize_rewards_online: bool = False
+    # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
+    normalize_rewards_online_scale: float = 1.0
+    # Final scale of the normalized rewards.
+    normalize_rewards_online_decay: float = 0.9999
+    # Decay of the reward moving averaging
 
 
 config_fields = [
@@ -175,7 +184,13 @@ def main(cfg: "DictConfig"):
 
     #### MBPO models ####
 
-    world_model, model_based_env = make_mbpo(cfg=cfg, env=proof_env)
+    single_world_model = make_mbpo_model(
+        proof_env,
+        cfg,
+        device=device,
+        observation_key="observation_vector",
+        action_key="action",
+    )
     sac_model = make_sac_model(
         proof_env,
         cfg=cfg,
@@ -183,12 +198,14 @@ def main(cfg: "DictConfig"):
     )
 
     # Losses
-    world_model_loss = MBPOModelLoss(
-        world_model,
-    ).to(device)
+    world_model_loss, model_based_env = make_mbpo_model_loss(
+        single_world_model, cfg, observation_key="observation_vector", device=device
+    )
     sac_loss, target_net_updater = make_sac_loss(sac_model, cfg)
     # optimizers
-    world_model_opt = torch.optim.Adam(world_model.parameters(), lr=cfg.world_model_lr)
+    world_model_opt = torch.optim.Adam(
+        world_model_loss.parameters(), lr=cfg.world_model_lr
+    )
     sac_opt = torch.optim.Adam(sac_loss.parameters(), lr=cfg.sac_lr)
 
     # Recorder
@@ -234,7 +251,8 @@ def main(cfg: "DictConfig"):
         # ],
     )
 
-    replay_buffer = make_replay_buffer(device, cfg)
+    real_replay_buffer = make_replay_buffer(device, cfg)
+    fake_replay_buffer = make_replay_buffer(device, cfg)
 
     recorder = transformed_env_constructor(
         cfg,
@@ -297,30 +315,69 @@ def main(cfg: "DictConfig"):
         pbar.update(tensordict.numel())
         current_frames = tensordict.numel()
         collected_frames += current_frames
-        tensordict = tensordict.reshape(-1, cfg.batch_length)
-        replay_buffer.extend(tensordict.cpu())
+        tensordict = tensordict.view(-1)
+        real_replay_buffer.extend(tensordict.cpu())
 
         if collected_frames >= cfg.init_random_frames:
             for j in range(cfg.optim_steps_per_batch):
-                # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
+                # Train Model
+                if j % cfg.optimize_model_every == 0:
+                    for _ in range(len(real_replay_buffer) / cfg.model_batch_size):
+                        model_sampled_tensordict = real_replay_buffer.sample(
+                            cfg.model_batch_size
+                        ).to(device)
 
-                with autocast(dtype=torch.float16):
-                    model_loss_td, sampled_tensordict = world_model_loss(
-                        sampled_tensordict
+                        with autocast(dtype=torch.float16):
+                            model_loss_td = world_model_loss(model_sampled_tensordict)
+                        scaler1.scale(model_loss_td["loss_world_model"]).backward()
+                        scaler1.unscale_(world_model_opt)
+                        clip_grad_norm_(world_model_loss.parameters(), cfg.grad_clip)
+                        scaler1.step(world_model_opt)
+                        world_model_opt.zero_grad()
+                        scaler1.update()
+
+                    # Sample data from model and buffer
+                    with torch.no_grad(), set_exploration_mode("random"):
+                        for _ in range(len(real_replay_buffer) / cfg.model_batch_size):
+                            model_sampled_tensordict = real_replay_buffer.sample(
+                                cfg.model_batch_size
+                            ).to(device)
+                            fake_traj_tensordict = model_based_env.rollout(
+                                max_steps=cfg.imagination_horizon,
+                                policy=policy,
+                                auto_reset=False,
+                                tensordict=model_sampled_tensordict,
+                            )
+                            fake_replay_buffer.extend(
+                                fake_traj_tensordict.view(-1).cpu()
+                            )
+
+                for _ in range(cfg.num_sac_training_steps):
+
+                    num_real_samples = int(cfg.sac_batch_size * cfg.real_data_ratio)
+
+                    num_fake_samples = cfg.sac_batch_size - num_real_samples
+
+                    agent_sampled_tensordict = torch.cat(
+                        [
+                            fake_replay_buffer.sample(num_fake_samples),
+                            real_replay_buffer.sample(num_real_samples),
+                        ],
+                        dim=0,
                     )
-                scaler1.scale(model_loss_td["loss_world_model"]).backward()
-                scaler1.unscale_(world_model_opt)
-                clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
-                scaler1.step(world_model_opt)
-                world_model_opt.zero_grad()
-                scaler1.update()
 
+                ### Train agent
                 with autocast(dtype=torch.float16):
-                    sac_loss_td, sampled_tensordict = sac_loss(sampled_tensordict)
-                scaler2.scale(sac_loss_td["loss_sac"]).backward()
+                    sac_loss_td = sac_loss(agent_sampled_tensordict)
+                    sac_loss_sum = (
+                        sac_loss_td["loss_actor"]
+                        + sac_loss_td["loss_qvalue"]
+                        + sac_loss_td["loss_value"]
+                        + sac_loss_td["loss_alpha"]
+                    )
+                scaler2.scale(sac_loss_sum).backward()
                 scaler2.unscale_(sac_opt)
-                clip_grad_norm_(sac_loss.parameters(), cfg.grad_clip)
+                clip_grad_norm_(sac_loss_sum.parameters(), cfg.grad_clip)
                 scaler2.step(sac_opt)
                 sac_opt.zero_grad()
                 scaler2.update()
@@ -337,5 +394,7 @@ def main(cfg: "DictConfig"):
                                     value.detach().cpu().numpy(),
                                     step=collected_frames,
                                 )
+
+
 if __name__ == "__main__":
     main()
