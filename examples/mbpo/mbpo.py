@@ -55,12 +55,14 @@ class MBPOConfig:
     world_model_lr: float = 1e-3
     hidden_world_model: int = 256
     num_layers_world_model: int = 4
-    imagination_horizon: int = 10
-    sac_lr: float = 1e-3
+    imagination_horizon: int = 1
+    sac_lr: float = 0.0003
     model_batch_size: int = 256
     sac_batch_size: int = 256
     real_data_ratio: float = 0.1
     num_world_models_ensemble: int = 7
+    optimize_model_every_n_optim_steps: int = 250
+    num_sac_training_steps_per_optim_step: int = 20
 
 
 @dataclass
@@ -70,8 +72,6 @@ class TrainingConfig:
     # LR scheduler.
     grad_clip: float = 1000
     # batch size of the TensorDict retrieved from the replay buffer. Default=256.
-    optimize_model_every_n_optim_steps: int = 250
-    num_sac_training_steps_per_optim_step: int = 20
     normalize_rewards_online: bool = False
     # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
     normalize_rewards_online_scale: float = 1.0
@@ -200,7 +200,11 @@ def main(cfg: "DictConfig"):
 
     # Losses
     world_model_loss, model_based_env = make_mbpo_model_loss(
-        single_world_model, proof_env, cfg, observation_key="observation_vector", device=device
+        single_world_model,
+        proof_env,
+        cfg,
+        observation_key="observation_vector",
+        device=device,
     )
     sac_loss, target_net_updater = make_sac_loss(sac_model, cfg)
     # optimizers
@@ -350,24 +354,37 @@ def main(cfg: "DictConfig"):
                                 auto_reset=False,
                                 tensordict=model_sampled_tensordict,
                             )
-                            fake_traj_tensordict = fake_traj_tensordict.select(*original_keys)
+                            fake_traj_tensordict = fake_traj_tensordict.select(
+                                *original_keys
+                            )
                             fake_replay_buffer.extend(
                                 fake_traj_tensordict.view(-1).cpu()
                             )
 
                 for _ in range(cfg.num_sac_training_steps_per_optim_step):
-                    
+
                     num_real_samples = int(cfg.sac_batch_size * cfg.real_data_ratio)
 
                     num_fake_samples = cfg.sac_batch_size - num_real_samples
 
-                    agent_sampled_tensordict = torch.cat(
-                        [
-                            fake_replay_buffer.sample(num_fake_samples),
-                            real_replay_buffer.sample(num_real_samples),
-                        ],
-                        dim=0,
-                    ).to(device)
+                    agent_sampled_tensordict = fake_replay_buffer.sample(cfg.sac_batch_size)
+
+                    # fake_sampled_tensordict = fake_replay_buffer.sample(
+                    #     num_fake_samples
+                    # )
+
+                    # real_sampled_tensordict = real_replay_buffer.sample(
+                    #     num_real_samples
+                    # )
+
+                    # agent_sampled_tensordict = torch.cat(
+                    #     [
+                    #         fake_sampled_tensordict,
+                    #         real_sampled_tensordict,
+                    #     ],
+                    #     dim=0,
+                    # ).to(device)
+
                     ### Train agent
                     with autocast(dtype=torch.float16):
                         sac_loss_td = sac_loss(agent_sampled_tensordict)
@@ -379,7 +396,7 @@ def main(cfg: "DictConfig"):
                         )
                     scaler2.scale(sac_loss_sum).backward()
                     scaler2.unscale_(sac_opt)
-                    clip_grad_norm_(sac_loss_sum.parameters(), cfg.grad_clip)
+                    clip_grad_norm_(sac_loss.parameters(), cfg.grad_clip)
                     scaler2.step(sac_opt)
                     sac_opt.zero_grad()
                     scaler2.update()

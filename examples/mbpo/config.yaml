@@ -30,3 +30,14 @@ loss_function: smooth_l1
 batch_transform: 1
 buffer_prefetch: 64
 norm_stats: 1
+world_model_lr: 1e-3
+hidden_world_model: 256
+num_layers_world_model: 4
+imagination_horizon: 1
+sac_lr: 0.0003
+model_batch_size: 256
+sac_batch_size: 256
+real_data_ratio: 0.1
+num_world_models_ensemble: 7
+optimize_model_every_n_optim_steps: 250
+num_sac_training_steps_per_optim_step: 20
