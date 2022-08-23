@@ -55,6 +55,7 @@ from torchrl.objectives.costs.reinforce import ReinforceLoss
 from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
 from torchrl.objectives.returns.advantages import TDEstimate, GAE, TDLambdaEstimate
 from torchrl.objectives.returns.functional import (
+    _custom_conv1d,
     vec_td_lambda_advantage_estimate,
     td_lambda_advantage_estimate,
 )
@@ -1711,6 +1712,74 @@ def test_tdlambda(device, gamma, lmbda, N, T):
         gamma, lmbda, state_value, next_state_value, reward, done
     )
     torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
+@pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
+@pytest.mark.parametrize("N", [(3,), (7, 3)])
+@pytest.mark.parametrize("T", [3, 5, 200])
+def test_tdlambda_tensor_gamma(device, gamma, lmbda, N, T):
+    torch.manual_seed(0)
+
+    done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+    reward = torch.randn(*N, T, 1, device=device)
+    state_value = torch.randn(*N, T, 1, device=device)
+    next_state_value = torch.randn(*N, T, 1, device=device)
+
+    gamma_tensor = torch.full((*N, T, 1), gamma, device=device)
+
+    v1 = vec_td_lambda_advantage_estimate(
+        gamma, lmbda, state_value, next_state_value, reward, done
+    )
+    v2 = vec_td_lambda_advantage_estimate(
+        gamma_tensor, lmbda, state_value, next_state_value, reward, done
+    )
+
+    torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+
+    # # same with last done being true
+    done[..., -1, :] = True  # terminating trajectory
+    gamma_tensor[..., -1, :] = 0.0
+
+    v1 = vec_td_lambda_advantage_estimate(
+        gamma, lmbda, state_value, next_state_value, reward, done
+    )
+    v2 = vec_td_lambda_advantage_estimate(
+        gamma_tensor, lmbda, state_value, next_state_value, reward, done
+    )
+
+    torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
+@pytest.mark.parametrize("N", [(3,), (3, 7)])
+@pytest.mark.parametrize("T", [3, 5, 200])
+def test_custom_conv1d_tensor(device, gamma, N, T):
+    """
+    Tests the _custom_conv1d logic against a manual for-loop implementation
+    """
+    torch.manual_seed(0)
+
+    gamma = torch.rand(*N, T, 1, device=device)
+    values = torch.randn(*N, 1, T, device=device)
+
+    out = torch.zeros(*N, 1, T, device=device)
+    for i in range(T):
+        for j in reversed(range(i, T)):
+            out[..., i] = out[..., i] * gamma[..., i, :] + values[..., j]
+
+    # some reshaping code vendored from vec_td_lambda_return_estimate
+    gamma = gamma.view(-1, T)
+    gammas = torch.ones(*gamma.shape, T + 1, 1, device=device)
+    gammas[..., 1:, :] = gamma[..., None, None]
+    gammas = torch.cumprod(gammas, -2)
+    filter = gammas[..., :-1, :]
+
+    out_custom = _custom_conv1d(values.view(-1, 1, T), filter).reshape(values.shape)
+
+    torch.testing.assert_close(out, out_custom, rtol=1e-4, atol=1e-4)
 
 
 @pytest.mark.parametrize(
