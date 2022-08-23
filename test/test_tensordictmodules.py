@@ -115,9 +115,9 @@ class TestTDModule:
 
         kwargs = {"distribution_class": TanhNormal}
         if out_keys == ["loc", "scale"]:
-            dist_param_keys=["loc", "scale"]
+            dist_param_keys = ["loc", "scale"]
         elif out_keys == ["loc_1", "scale_1"]:
-            dist_param_keys={"loc": "loc_1", "scale": "scale_1"}
+            dist_param_keys = {"loc": "loc_1", "scale": "scale_1"}
         else:
             raise NotImplementedError
 

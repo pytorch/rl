@@ -161,7 +161,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             dist_param_keys = [dist_param_keys]
         if isinstance(out_key_sample, str):
             out_key_sample = [out_key_sample]
-        if not isinstance(dist_param_keys,dict):
+        if not isinstance(dist_param_keys, dict):
             dist_param_keys = {param_key: param_key for param_key in dist_param_keys}
         for key in dist_param_keys.values():
             if key not in module.out_keys:
@@ -231,11 +231,12 @@ class ProbabilisticTensorDictModule(TensorDictModule):
 
     def build_dist_from_params(self, tensordict_out: TensorDictBase) -> d.Distribution:
         try:
-            selected_td_out =tensordict_out.select(*self.dist_param_keys.values())
-            dist_kwargs = {dist_key: selected_td_out[td_key] for dist_key, td_key in self.dist_param_keys.items()}
-            dist = self.distribution_class(
-                **dist_kwargs
-            )
+            selected_td_out = tensordict_out.select(*self.dist_param_keys.values())
+            dist_kwargs = {
+                dist_key: selected_td_out[td_key]
+                for dist_key, td_key in self.dist_param_keys.items()
+            }
+            dist = self.distribution_class(**dist_kwargs)
         except TypeError as err:
             if "an unexpected keyword argument" in str(err):
                 raise TypeError(
