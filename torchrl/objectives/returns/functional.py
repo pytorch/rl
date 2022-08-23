@@ -5,7 +5,6 @@
 
 from typing import Tuple
 
-import functorch
 import torch
 
 __all__ = [
@@ -197,26 +196,25 @@ def _custom_conv1d(tensor, filter):
     )
 
     if filter.ndimension() > 2:
-        # filter will have shape batch_dims x timesteps x timesteps x 1
-        # reshape to batch_dims x timesteps x 1 x 1 x timesteps ready for convolving
-        filter = filter.view(*filter.shape[:-2], 1, 1, filter.shape[-2])
+        # filter will have shape batch_dims x timesteps x filter_dim x 1
+        # reshape to batch_dims x timesteps x 1 x filter_dim ready for convolving
+        filter = filter.view(*filter.shape[:-2], 1, filter.shape[-2])
 
-        # add dimension to val-pad as we are going to vectorise over the first
-        # axis (batch) since we have different filter per batch
-        val_pad = val_pad.unsqueeze(1)
+        # because time is represented on two different dimensions, we don't
+        # need all convolutions, just those lying along a diagonal
+        # rather than compute them all and discard, we stack just the slices
+        # of val_pad that we care about, and apply the filter manually
+        batched_val_pad = torch.stack(
+            [val_pad[..., i:i + filter.shape[-1]] for i in range(tensor.shape[-1])],
+            dim=1,
+        )
 
-        # vectorise application of filters to each batch. we have multiple
-        # filters and just one trajectory to apply it to.
-        # TODO: there's a lot of redundancy here since we only care about the
-        # diagonal entries. how to simplify?
-        conv1d_batch = functorch.vmap(torch.conv1d, (None, 0))
-
-        # vectorise over batch dimension
-        out = functorch.vmap(conv1d_batch)(val_pad, filter)
-
-        # out has dimensions batch x timesteps x 1 x 1 x timesteps
-        # we only care about the diagonal timestep entries
-        out = torch.diagonal(out, dim1=-4, dim2=-1).squeeze(-3)
+        # this is just a batched matrix multiplication, but einsum makes it
+        # easy to keep the many dimensions under control. Here b = batch,
+        # t = timestep, s = singleton, j is the filter dimension that should
+        # get summed out. we swap the order of s and t here rather than
+        # reshape / create a view later
+        out = torch.einsum("btsj,btsj->bst", batched_val_pad, filter)
     else:
         # shape = val.shape
         filter = filter.squeeze(-1).unsqueeze(0).unsqueeze(0)  # 1 x 1 x T
