@@ -219,6 +219,7 @@ def make_ppo_loss(model, cfg) -> PPOLoss:
 
 def make_mbpo_model_loss(
     single_world_model,
+    proof_env,
     cfg,
     observation_key="observation_vector",
     device="cpu",
@@ -230,8 +231,8 @@ def make_mbpo_model_loss(
         single_world_model, cfg, observation_key=observation_key
     ).to(device)
     world_model = model_loss_module.world_model
-    world_model_params = world_model.world_model_params
-    world_model_buffers = world_model.world_model_buffers
+    world_model_params = model_loss_module.world_model_params
+    world_model_buffers = model_loss_module.world_model_buffers
     model_based_env = MBPOEnv(
         world_model,
         params=world_model_params,
@@ -240,6 +241,7 @@ def make_mbpo_model_loss(
         dtype=dtype,
         batch_size=batch_size,
     ).to(device)
+    model_based_env.set_specs_from_env(proof_env)
     return model_loss_module, model_based_env
 
 

@@ -55,6 +55,7 @@ class MBPOConfig:
     world_model_lr: float = 1e-3
     hidden_world_model: int = 256
     num_layers_world_model: int = 4
+    imagination_horizon: int = 10
     sac_lr: float = 1e-3
     model_batch_size: int = 256
     sac_batch_size: int = 256
@@ -69,7 +70,7 @@ class TrainingConfig:
     # LR scheduler.
     grad_clip: float = 1000
     # batch size of the TensorDict retrieved from the replay buffer. Default=256.
-    optimize_model_every_n_steps: int = 250
+    optimize_model_every: int = 250
     num_sac_training_steps_per_optim_step: int = 20
     normalize_rewards_online: bool = False
     # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
@@ -199,7 +200,7 @@ def main(cfg: "DictConfig"):
 
     # Losses
     world_model_loss, model_based_env = make_mbpo_model_loss(
-        single_world_model, cfg, observation_key="observation_vector", device=device
+        single_world_model, proof_env, cfg, observation_key="observation_vector", device=device
     )
     sac_loss, target_net_updater = make_sac_loss(sac_model, cfg)
     # optimizers
@@ -322,7 +323,7 @@ def main(cfg: "DictConfig"):
             for j in range(cfg.optim_steps_per_batch):
                 # Train Model
                 if j % cfg.optimize_model_every == 0:
-                    for _ in range(len(real_replay_buffer) / cfg.model_batch_size):
+                    for _ in range(len(real_replay_buffer) // cfg.model_batch_size):
                         model_sampled_tensordict = real_replay_buffer.sample(
                             cfg.model_batch_size
                         ).to(device)
@@ -338,7 +339,7 @@ def main(cfg: "DictConfig"):
 
                     # Sample data from model and buffer
                     with torch.no_grad(), set_exploration_mode("random"):
-                        for _ in range(len(real_replay_buffer) / cfg.model_batch_size):
+                        for _ in range(len(real_replay_buffer) // cfg.model_batch_size):
                             model_sampled_tensordict = real_replay_buffer.sample(
                                 cfg.model_batch_size
                             ).to(device)

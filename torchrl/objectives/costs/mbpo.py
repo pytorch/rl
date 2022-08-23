@@ -41,14 +41,14 @@ class MBPOModelLoss(LossModule):
             buffers=self.world_model_buffers,
             vmap=True,
         )
-        loss_obs = self.model_loss(tensordict_expand[f"{self.observation_key}_loc"], tensordict_expand[f"{self.observation_key}_scale"], tensordict[f"next_{self.observation_key}"])
+        loss_obs = self.model_loss(tensordict_expand[f"next_{self.observation_key}_loc"], tensordict_expand[f"next_{self.observation_key}_scale"], tensordict[f"next_{self.observation_key}"])
         loss_reward = self.model_loss(tensordict_expand[f"reward_loc"], tensordict_expand[f"reward_scale"], tensordict[f"reward"])
         if self.lambda_obs is None or self.lambda_reward is None:
             N = tensordict[f"next_{self.observation_key}"].shape[-1]
             loss_model = (N-1)/N * loss_obs + 1/N * loss_reward
         else:
             loss_model = self.lambda_obs * loss_obs + self.lambda_reward * loss_reward
-        return TensorDict({"loss_world_model": loss_model})
+        return TensorDict({"loss_world_model": loss_model}, [])
 
     def model_loss(self, mean, sigma, target):
         log_likelihood =  torch.pow(mean - target, 2) / (2 * torch.pow(sigma, 2)) + torch.log(sigma)

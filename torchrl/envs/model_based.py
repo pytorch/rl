@@ -130,7 +130,7 @@ class MBPOEnv(ModelBasedEnv):
         # Compute world state
         sampled_model_id = randint(0, self.num_networks-1)
         tensordict_out= self.world_model(
-            tensordict_out["world_state"],
+            tensordict_out,
             params=self.world_model_params[sampled_model_id],
             buffers=self.world_model_buffers[sampled_model_id],
         )
