@@ -87,7 +87,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         # Compute world state
         if self.world_model_params is not None:
             tensordict_out= self.world_model(
-                tensordict_out["world_state"],
+                tensordict_out,
                 params=self.world_model_params,
                 buffers=self.world_model_buffers,
             )
