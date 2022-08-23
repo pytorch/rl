@@ -296,7 +296,7 @@ def vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done):
     lambdas = torch.cumprod(lambdas, -2)
 
     first_below_thr = gammas < 1e-7
-    if gammas.ndimension() > 2:
+    while first_below_thr.ndimension() > 2:
         # if we have multiple gammas, we only want to truncate if _all_ of
         # the geometric sequences fall below the threshold
         first_below_thr = first_below_thr.all(axis=0)
