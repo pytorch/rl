@@ -8,11 +8,11 @@ from __future__ import annotations
 import os
 from collections import OrderedDict
 from copy import deepcopy
-from logging import warn
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
 from time import sleep
 from typing import Callable, Optional, Sequence, Union, Any, List, Dict
+from warnings import warn
 
 import torch
 from torch import multiprocessing as mp
@@ -21,8 +21,8 @@ from torchrl import _check_for_faulty_process
 from torchrl.data import TensorDict, TensorSpec, CompositeSpec
 from torchrl.data.tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
-from torchrl.envs.common import EnvBase, make_tensordict
-from torchrl.envs.env_creator import EnvCreator
+from torchrl.envs.common import EnvBase
+from torchrl.envs.env_creator import get_env_metadata
 
 __all__ = ["SerialEnv", "ParallelEnv"]
 
@@ -69,38 +69,6 @@ class _dispatch_caller_serial:
 
     def __call__(self, *args, **kwargs):
         return [_callable(*args, **kwargs) for _callable in self.list_callable]
-
-
-class _dummy_env_context:
-    def __init__(self, fun, kwargs, device):
-        self.fun = fun
-        if not isinstance(fun, list) and isinstance(kwargs, list):
-            kwargs = kwargs[0]
-        self.kwargs = kwargs
-        self.device = device
-
-    def __enter__(self):
-        if isinstance(self.fun, list):
-            # multi-task
-            self.dummy_env = [
-                fun(**kwargs) for fun, kwargs in zip(self.fun, self.kwargs)
-            ]
-            if self.device is not None:
-                for dummy_env in self.dummy_env:
-                    dummy_env.to(self.device)
-        else:
-            self.dummy_env = self.fun(**self.kwargs)
-            if self.device is not None:
-                self.dummy_env.to(self.device)
-        return self.dummy_env
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if isinstance(self.dummy_env, list):
-            for dummy_env in self.dummy_env:
-                dummy_env.close()
-        else:
-            self.dummy_env.close()
-        del self.dummy_env
 
 
 class _BatchedEnv(EnvBase):
@@ -208,8 +176,6 @@ class _BatchedEnv(EnvBase):
                 deepcopy(create_env_kwargs) for _ in range(num_workers)
             ]
 
-        self._prepare_dummy_env(create_env_fn, create_env_kwargs)
-
         self.policy_proof = policy_proof
         self.num_workers = num_workers
         self.create_env_fn = create_env_fn
@@ -232,38 +198,63 @@ class _BatchedEnv(EnvBase):
         self._device = None
         self._dummy_env_str = None
         self._seeds = None
+        # self._prepare_dummy_env(create_env_fn, create_env_kwargs)
+        self._get_metadata(create_env_fn, create_env_kwargs)
 
-    def _prepare_dummy_env(
+    def _get_metadata(
         self, create_env_fn: List[Callable], create_env_kwargs: List[Dict]
     ):
-        self._dummy_env_instance = None
         if self._single_task:
-            try:
-                self._dummy_env_fun = CloudpickleWrapper(
-                    create_env_fn[0], **create_env_kwargs[0]
-                )
-            except RuntimeError as err:
-                if isinstance(create_env_fn[0], EnvCreator):
-                    self._dummy_env_fun = create_env_fn[0]
-                    self._dummy_env_fun.create_env_kwargs.update(create_env_kwargs[0])
-                else:
-                    raise err
+            # if EnvCreator, the metadata are already there
+            self.meta_data = get_env_metadata(
+                create_env_fn[0], create_env_kwargs[0]
+            ).expand(self.num_workers)
         else:
             n_tasks = len(create_env_fn)
-            self._dummy_env_fun = []
+            self.meta_data = []
             for i in range(n_tasks):
-                try:
-                    self._dummy_env_fun.append(
-                        CloudpickleWrapper(create_env_fn[i], **create_env_kwargs[i])
-                    )
-                except RuntimeError as err:
-                    if isinstance(create_env_fn[i], EnvCreator):
-                        self._dummy_env_fun.append(create_env_fn[i])
-                        self._dummy_env_fun[i].create_env_kwargs.update(
-                            create_env_kwargs[i]
-                        )
-                    else:
-                        raise err
+                self.meta_data.append(
+                    get_env_metadata(create_env_fn[i], create_env_kwargs[i])
+                )
+        self._set_properties()
+
+    # def _prepare_dummy_env(
+    #     self, create_env_fn: List[Callable], create_env_kwargs: List[Dict]
+    # ):
+    #     self._dummy_env_instance = None
+    #     if self._single_task:
+    #         # if EnvCreator, the metadata are already there
+    #         if isinstance(create_env_fn[0], EnvCreator):
+    #             self._dummy_env_fun = create_env_fn[0]
+    #             self._dummy_env_fun.create_env_kwargs.update(create_env_kwargs[0])
+    #         # get the metadata
+    #
+    #         try:
+    #             self._dummy_env_fun = CloudpickleWrapper(
+    #                 create_env_fn[0], **create_env_kwargs[0]
+    #             )
+    #         except RuntimeError as err:
+    #             if isinstance(create_env_fn[0], EnvCreator):
+    #                 self._dummy_env_fun = create_env_fn[0]
+    #                 self._dummy_env_fun.create_env_kwargs.update(create_env_kwargs[0])
+    #             else:
+    #                 raise err
+    #     else:
+    #         n_tasks = len(create_env_fn)
+    #         self._dummy_env_fun = []
+    #         for i in range(n_tasks):
+    #             try:
+    #                 self._dummy_env_fun.append(
+    #                     CloudpickleWrapper(create_env_fn[i], **create_env_kwargs[i])
+    #                 )
+    #             except RuntimeError as err:
+    #                 if isinstance(create_env_fn[i], EnvCreator):
+    #                     self._dummy_env_fun.append(create_env_fn[i])
+    #                     self._dummy_env_fun[i].create_env_kwargs.update(
+    #                         create_env_kwargs[i]
+    #                     )
+    #                 else:
+    #                     raise err
 
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
@@ -280,60 +271,35 @@ class _BatchedEnv(EnvBase):
                 _kwargs.update(_new_kwargs)
 
     def _set_properties(self):
-        with self._dummy_env_context as dummy_env:
-            if self._single_task:
-                self._batch_size = torch.Size([self.num_workers, *dummy_env.batch_size])
-                self._action_spec = dummy_env.action_spec
-                self._observation_spec = dummy_env.observation_spec
-                self._reward_spec = dummy_env.reward_spec
-                self._dummy_env_str = str(dummy_env)
-                self._device = torch.device(dummy_env.device)
-            else:
-                self._batch_size = torch.Size(
-                    [self.num_workers, *dummy_env[0].batch_size]
-                )
-                self._device = torch.device(dummy_env[0].device)
-                # TODO: check that all action_spec and reward spec match (issue #351)
-                self._action_spec = dummy_env[0].action_spec
-                self._reward_spec = dummy_env[0].reward_spec
-                self._observation_spec = {}
-                for env in dummy_env:
-                    self._observation_spec.update(dict(**env.observation_spec))
-                self._observation_spec = CompositeSpec(**self._observation_spec)
-                self._dummy_env_str = str(dummy_env[0])
-
-    @property
-    def _dummy_env_context(self) -> _dummy_env_context:
-        """Returns a context manager that will create a dummy env and delete it afterwards"""
-        return _dummy_env_context(
-            self._dummy_env_fun, self.create_env_kwargs, self._device
-        )
-
-    @property
-    def _dummy_env(self) -> EnvBase:
-        """Returns a closed dummy environment. This is used to check the type of attributes that will
-        be gathered on remote processed.
-        """
-        if self._dummy_env_instance is None:
-            if self._single_task:
-                self._dummy_env_instance = self._dummy_env_fun(
-                    **self.create_env_kwargs[0]
-                )
-                self._dummy_env_instance.close()
-            else:
-                self._dummy_env_instance = [
-                    _dummy_env_fun(**create_env_kwargs)
-                    for _dummy_env_fun, create_env_kwargs in zip(
-                        self._dummy_env_fun, self.create_env_kwargs
-                    )
-                ]
-                for env in self._dummy_env_instance:
-                    env.close()
-        return self._dummy_env_instance
-
-    @_dummy_env.setter
-    def _dummy_env(self, value: EnvBase) -> None:
-        self._dummy_env_instance = value
+        if self._single_task:
+            self._batch_size = self.meta_data.batch_size
+            self._action_spec = self.meta_data.specs["action_spec"]
+            self._observation_spec = self.meta_data.specs["observation_spec"]
+            self._reward_spec = self.meta_data.specs["reward_spec"]
+            self._input_spec = self.meta_data.specs["input_spec"]
+            self._dummy_env_str = self.meta_data.env_str
+            self._device = self.meta_data.device
+            self._env_tensordict = self.meta_data.tensordict
+        else:
+            self._batch_size = torch.Size(
+                [self.num_workers, *self.meta_data[0].batch_size]
+            )
+            self._device = self.meta_data[0].device
+            # TODO: check that all action_spec and reward spec match (issue #351)
+            self._action_spec = self.meta_data[0].specs["action_spec"]
+            self._reward_spec = self.meta_data[0].specs["reward_spec"]
+            self._observation_spec = {}
+            for md in self.meta_data:
+                self._observation_spec.update(dict(**md.specs["observation_spec"]))
+            self._observation_spec = CompositeSpec(**self._observation_spec)
+            self._input_spec = {}
+            for md in self.meta_data:
+                self._input_spec.update(dict(**md.specs["input_spec"]))
+            self._input_spec = CompositeSpec(**self._input_spec)
+            self._dummy_env_str = str(self.meta_data[0])
+            self._env_tensordict = torch.stack(
+                [meta_data.tensordict for meta_data in self.meta_data], 0
+            )
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
@@ -394,76 +360,64 @@ class _BatchedEnv(EnvBase):
 
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
-        with self._dummy_env_context as dummy_env:
-            if self._single_task:
-                input_spec = dummy_env.input_spec
-                shared_tensordict_parent = make_tensordict(
-                    dummy_env,
-                    self.policy_proof,
+        if self._single_task:
+            shared_tensordict_parent = self._env_tensordict.clone()
+            if not self._env_tensordict.shape[0] == self.num_workers:
+                raise RuntimeError(
+                    "batched environment base tensordict has the wrong shape"
                 )
-                shared_tensordict_parent = shared_tensordict_parent.expand(
-                    self.num_workers
-                ).clone()
-                raise_no_selected_keys = False
-                if self.selected_keys is None:
-                    self.selected_keys = list(shared_tensordict_parent.keys())
-                    if self.excluded_keys is not None:
-                        self.selected_keys = set(self.selected_keys).difference(
-                            self.excluded_keys
-                        )
-                    else:
-                        raise_no_selected_keys = True
-            else:
-                shared_tensordict_parent = torch.stack(
-                    [
-                        make_tensordict(
-                            _dummy_env,
-                            self.policy_proof,
-                        )
-                        for _dummy_env in dummy_env
-                    ],
-                    0,
-                )
-                raise_no_selected_keys = False
-                if self.selected_keys is None:
-                    self.selected_keys = [
-                        list(tensordict.keys())
-                        for tensordict in shared_tensordict_parent.tensordicts
-                    ]
-                    if self.excluded_keys is not None:
-                        self.excluded_keys = [
-                            self.excluded_keys for _ in range(self.num_workers)
-                        ]
-                        self.selected_keys = [
-                            set(selected_keys).difference(excluded_keys)
-                            for selected_keys, excluded_keys in zip(
-                                self.selected_keys, self.excluded_keys
-                            )
-                        ]
-                    else:
-                        raise_no_selected_keys = True
-
-            if self.env_input_keys is not None:
-                if not all(
-                    action_key in self.selected_keys
-                    for action_key in self.env_input_keys
-                ):
-                    raise KeyError(
-                        "One of the action keys is not part of the selected keys or is part of the excluded keys. Action "
-                        "keys need to be part of the selected keys for env.step() to be called."
+            raise_no_selected_keys = False
+            if self.selected_keys is None:
+                self.selected_keys = list(shared_tensordict_parent.keys())
+                if self.excluded_keys is not None:
+                    self.selected_keys = set(self.selected_keys).difference(
+                        self.excluded_keys
                     )
-            else:
-                if self._single_task:
-                    self.env_input_keys = sorted(list(input_spec.keys()))
                 else:
-                    env_input_keys = set()
-                    for env in dummy_env:
-                        env_input_keys = env_input_keys.union(env.input_spec.keys())
-                    self.env_input_keys = sorted(list(env_input_keys))
-                if not len(self.env_input_keys):
-                    raise RuntimeError(
-                        f"found 0 action keys in {sorted(list(self.selected_keys))}"
+                    raise_no_selected_keys = True
+        else:
+            shared_tensordict_parent = self._env_tensordict.clone()
+            raise_no_selected_keys = False
+            if self.selected_keys is None:
+                self.selected_keys = [
+                    list(tensordict.keys())
+                    for tensordict in shared_tensordict_parent.tensordicts
+                ]
+                if self.excluded_keys is not None:
+                    self.excluded_keys = [
+                        self.excluded_keys for _ in range(self.num_workers)
+                    ]
+                    self.selected_keys = [
+                        set(selected_keys).difference(excluded_keys)
+                        for selected_keys, excluded_keys in zip(
+                            self.selected_keys, self.excluded_keys
+                        )
+                    ]
+                else:
+                    raise_no_selected_keys = True
+
+        if self.env_input_keys is not None:
+            if not all(
+                action_key in self.selected_keys for action_key in self.env_input_keys
+            ):
+                raise KeyError(
+                    "One of the action keys is not part of the selected keys or is part of the excluded keys. Action "
+                    "keys need to be part of the selected keys for env.step() to be called."
+                )
+        else:
+            if self._single_task:
+                self.env_input_keys = sorted(list(self.input_spec.keys()))
+            else:
+                env_input_keys = set()
+                for meta_data in self.meta_data:
+                    env_input_keys = env_input_keys.union(
+                        meta_data.specs["input_spec"].keys()
                     )
+                self.env_input_keys = sorted(list(env_input_keys))
+            if not len(self.env_input_keys):
+                raise RuntimeError(
+                    f"found 0 action keys in {sorted(list(self.selected_keys))}"
+                )
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
                 *self.selected_keys
@@ -673,8 +627,8 @@ class SerialEnv(_BatchedEnv):
                 raise AttributeError(f"Getting {attr} resulted in an exception")
             try:
                 # determine if attr is a callable
-                callable_attr = callable(getattr(self._dummy_env, attr))
                 list_attr = [getattr(env, attr) for env in self._envs]
+                callable_attr = callable(list_attr[0])
                 if callable_attr:
                     if self.is_closed:
                         raise RuntimeError(
@@ -687,8 +641,7 @@ class SerialEnv(_BatchedEnv):
                     return list_attr
             except AttributeError:
                 raise AttributeError(
-                    f"attribute {attr} not found in "
-                    f"{self._dummy_env.__class__.__name__}"
+                    f"attribute {attr} not found in " f"{self._dummy_env_str}"
                 )
 
     def to(self, device: DEVICE_TYPING):
@@ -896,7 +849,7 @@ class ParallelEnv(_BatchedEnv):
             if attr in self._excluded_wrapped_keys:
                 raise AttributeError(f"Getting {attr} resulted in an exception")
             try:
-                _ = getattr(self._dummy_env, attr)
+                # _ = getattr(self._dummy_env, attr)
                 if self.is_closed:
                     raise RuntimeError(
                         "Trying to access attributes of closed/non started "
@@ -907,8 +860,7 @@ class ParallelEnv(_BatchedEnv):
                 return _dispatch_caller_parallel(attr, self)
             except AttributeError:
                 raise AttributeError(
-                    f"attribute {attr} not found in "
-                    f"{self._dummy_env.__class__.__name__}"
+                    f"attribute {attr} not found in " f"{self._dummy_env_str}"
                 )
 
     def to(self, device: DEVICE_TYPING):

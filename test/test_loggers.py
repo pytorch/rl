@@ -5,7 +5,6 @@ from time import sleep
 
 import pytest
 import torch
-from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 from torchrl.trainers.loggers.csv import CSVLogger
 from torchrl.trainers.loggers.tensorboard import TensorboardLogger, _has_tb
 from torchrl.trainers.loggers.wandb import WandbLogger, _has_wandb
@@ -30,7 +29,11 @@ class TestTensorboard:
                     step=steps[i] if steps else None,
                 )
 
-            sleep(0.01)
+            sleep(0.01)  # wait until events are registered
+            from tensorboard.backend.event_processing.event_accumulator import (
+                EventAccumulator,
+            )
+
             event_acc = EventAccumulator(logger.experiment.get_logdir())
             event_acc.Reload()
             assert len(event_acc.Scalars("foo")) == 3, str(event_acc.Scalars("foo"))

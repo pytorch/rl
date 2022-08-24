@@ -180,6 +180,28 @@ def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
     assert_allclose_td(rollout0, rollout2)
 
 
+@pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
+@pytest.mark.parametrize(
+    "env_lib,env_args,env_kwargs",
+    [
+        [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
+        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": True}],
+        [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
+        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": False}],
+        [GymEnv, ("ALE/Pong-v5",), {}],
+    ],
+)
+def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
+    env = env_lib(*env_args, **env_kwargs)
+    td = env.rollout(max_steps=5)[0]
+    fake_td = env.fake_tensordict()
+    assert set(fake_td.keys()) == set(td.keys())
+    for key in fake_td.keys():
+        assert fake_td.get(key).shape == td.get(key).shape
+        assert fake_td.get(key).dtype == td.get(key).dtype
+        assert fake_td.get(key).device == td.get(key).device
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
