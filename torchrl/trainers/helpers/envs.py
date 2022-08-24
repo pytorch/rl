@@ -154,7 +154,10 @@ def make_env_transforms(
         double_to_float_inv_list += ["action"]  # DMControl requires double-precision
     if not from_pixels:
         selected_keys = [
-            key for key in env.observation_spec.keys() if "pixels" not in key
+            key
+            for key in env.observation_spec.keys()
+            if ("pixels" not in key)
+            and (key.strip("next_") not in env.input_spec.keys())
         ]
 
         # even if there is a single tensor, it'll be renamed in "next_observation_vector"

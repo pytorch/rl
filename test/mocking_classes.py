@@ -284,7 +284,8 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
 
 class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
     observation_spec = CompositeSpec(
-        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3]))
+        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3])),
+        next_pixels_orig=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3])),
     )
     from_pixels = True
 
@@ -326,6 +327,7 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
 class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
     observation_spec = CompositeSpec(
         next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3])),
+        next_pixels_orig=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3])),
     )
     from_pixels = True
 
