@@ -4,7 +4,7 @@ env_library: gym
 async_collection: 1
 record_video: 0
 normalize_rewards_online: 1
-normalize_rewards_online_scale: 5
+normalize_rewards_online_scale: 1
 frame_skip: 1
 frames_per_batch: 1000
 optim_steps_per_batch: 1000
@@ -20,7 +20,7 @@ from_pixels: 0
 collector_devices: [cpu,cpu]
 env_per_collector: 1
 num_workers: 2
-value_network_update_interval: 200
+value_network_update_interval: 1
 record_interval: 1000
 max_frames_per_traj: 1000
 annealing_frames: 1000000
@@ -28,16 +28,17 @@ init_env_steps: 1000
 record_frames: 1000
 loss_function: smooth_l1
 batch_transform: 1
-buffer_prefetch: 64
+buffer_prefetch: 0
 norm_stats: 1
 world_model_lr: 1e-3
 hidden_world_model: 256
 num_layers_world_model: 4
 imagination_horizon: 1
 sac_lr: 0.0003
+hard_update : True
 model_batch_size: 256
 sac_batch_size: 256
-real_data_ratio: 0.1
+real_data_ratio: 0.05
 num_world_models_ensemble: 7
-optimize_model_every_n_optim_steps: 250
-num_sac_training_steps_per_optim_step: 20
+num_model_rollouts: 400
+num_sac_training_steps_per_optim_step: 40
