@@ -148,7 +148,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if "_action_spec" not in self.__dir__():
             self._action_spec = None
         if "_input_spec" not in self.__dir__():
-            self._input_spec = CompositeSpec(action=self._action_spec)
+            self._input_spec = None
         if "_reward_spec" not in self.__dir__():
             self._reward_spec = None
         if "_observation_spec" not in self.__dir__():
@@ -542,6 +542,31 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.is_done = self.is_done.to(device)
         self.device = device
         return self
+
+    def fake_tensordict(self) -> TensorDictBase:
+        """
+        Returns a fake tensordict with key-value pairs that match in shape, device
+        and dtype what can be expected during an environment rollout.
+
+        """
+        input_spec = self.input_spec
+        fake_input = input_spec.rand()
+        observation_spec = self.observation_spec
+        fake_obs = observation_spec.rand()
+        fake_obs_step = step_tensordict(fake_obs)
+        reward_spec = self.reward_spec
+        fake_reward = reward_spec.rand()
+        fake_td = TensorDict(
+            {
+                **fake_obs_step,
+                **fake_obs,
+                **fake_input,
+                "reward": fake_reward,
+                "done": fake_reward.to(torch.bool),
+            },
+            batch_size=self.batch_size,
+        )
+        return fake_td
 
 
 class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):

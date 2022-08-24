@@ -29,8 +29,10 @@ __all__ = [
     "BoundedTensorSpec",
     "OneHotDiscreteTensorSpec",
     "UnboundedContinuousTensorSpec",
+    "UnboundedDiscreteTensorSpec",
     "NdBoundedTensorSpec",
     "NdUnboundedContinuousTensorSpec",
+    "NdUnboundedDiscreteTensorSpec",
     "BinaryDiscreteTensorSpec",
     "MultOneHotDiscreteTensorSpec",
     "CompositeSpec",
@@ -427,18 +429,25 @@ class BoundedTensorSpec(TensorSpec):
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
         a, b = self.space
-        out = (
-            torch.zeros(
-                *shape, *self.shape, dtype=self.dtype, device=self.device
-            ).uniform_()
-            * (b - a)
-            + a
-        )
-        if (out > b).any():
-            out[out > b] = b.expand_as(out)[out > b]
-        if (out < a).any():
-            out[out < a] = a.expand_as(out)[out < a]
-        return out
+        shape = [*shape, *self.shape]
+        if self.dtype in (torch.float, torch.double, torch.half):
+            out = (
+                torch.zeros(shape, dtype=self.dtype, device=self.device).uniform_()
+                * (b - a)
+                + a
+            )
+            if (out > b).any():
+                out[out > b] = b.expand_as(out)[out > b]
+            if (out < a).any():
+                out[out < a] = a.expand_as(out)[out < a]
+            return out
+        else:
+            interval = self.space.maximum - self.space.minimum
+            r = torch.rand(*interval.shape, device=interval.device)
+            r = interval * r
+            r = self.space.minimum + r
+            r = r.to(self.dtype).to(self.device)
+            return r
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         minimum = self.space.minimum.to(val.device)
@@ -590,6 +599,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
     Args:
         device (str, int or torch.device, optional): device of the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
+            (should be an floating point dtype such as float, double etc.)
 
     """
 
@@ -605,7 +615,46 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         super().__init__(torch.Size((1,)), box, device, dtype, "composite")
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
-        return torch.randn(*shape, *self.shape, device=self.device, dtype=self.dtype)
+        shape = [*shape, *self.shape]
+        return torch.randn(shape, device=self.device, dtype=self.dtype)
+
+    def is_in(self, val: torch.Tensor) -> bool:
+        return True
+
+
+@dataclass(repr=False)
+class UnboundedDiscreteTensorSpec(TensorSpec):
+    """
+    An unbounded, unidimensional, discrete tensor spec.
+
+    Args:
+        device (str, int or torch.device, optional): device of the tensors.
+        dtype (str or torch.dtype, optional): dtype of the tensors
+            (should be an integer dtype such as long, uint8 etc.)
+
+    """
+
+    shape: torch.Size
+    space: ContinuousBox
+    device: torch.device = torch.device("cpu")
+    dtype: torch.dtype = torch.uint8
+    domain: str = ""
+
+    def __init__(self, device=None, dtype=None):
+        dtype, device = _default_dtype_and_device(dtype, device)
+        box = ContinuousBox(
+            torch.tensor(torch.iinfo(dtype).min, device=device),
+            torch.tensor(torch.iinfo(dtype).max, device=device),
+        )
+        super().__init__(torch.Size((1,)), box, device, dtype, "composite")
+
+    def rand(self, shape=torch.Size([])) -> torch.Tensor:
+        interval = self.space.maximum - self.space.minimum
+        r = torch.rand(interval.shape, device=interval.device)
+        r = r * interval
+        r = self.space.minimum + r
+        r = r.to(self.dtype)
+        return r.to(self.device)
 
     def is_in(self, val: torch.Tensor) -> bool:
         return True
@@ -711,7 +760,8 @@ class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
 
     Args:
         device (str, int or torch.device, optional): device of the tensors.
-        dtype (str or torch.dtype, optional): dtype of the tensors.
+        dtype (str or torch.dtype, optional): dtype of the tensors
+            (should be an floating point dtype such as float, double etc.)
     """
 
     def __init__(
@@ -727,6 +777,41 @@ class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
         super(UnboundedContinuousTensorSpec, self).__init__(
             shape=shape,
             space=None,
+            device=device,
+            dtype=dtype,
+            domain="continuous",
+        )
+
+
+@dataclass(repr=False)
+class NdUnboundedDiscreteTensorSpec(UnboundedDiscreteTensorSpec):
+    """
+    An unbounded, multi-dimensional, discrete tensor spec.
+
+    Args:
+        device (str, int or torch.device, optional): device of the tensors.
+        dtype (str or torch.dtype, optional): dtype of the tensors
+            (should be an integer dtype such as long, uint8 etc.)
+    """
+
+    def __init__(
+        self,
+        shape: Union[torch.Size, int],
+        device: Optional[DEVICE_TYPING] = None,
+        dtype: Optional[Union[str, torch.dtype]] = None,
+    ):
+        if isinstance(shape, int):
+            shape = torch.Size([shape])
+
+        dtype, device = _default_dtype_and_device(dtype, device)
+        space = ContinuousBox(
+            torch.full(shape, torch.iinfo(dtype).min, device=device),
+            torch.full(shape, torch.iinfo(dtype).max, device=device),
+        )
+
+        super(UnboundedDiscreteTensorSpec, self).__init__(
+            shape=shape,
+            space=space,
             device=device,
             dtype=dtype,
             domain="continuous",
@@ -763,9 +848,8 @@ class BinaryDiscreteTensorSpec(TensorSpec):
         super().__init__(shape, box, device, dtype, domain="discrete")
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
-        return torch.zeros(
-            *shape, *self.shape, device=self.device, dtype=self.dtype
-        ).bernoulli_()
+        shape = [*shape, *self.shape]
+        return torch.zeros(shape, device=self.device, dtype=self.dtype).bernoulli_()
 
     def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
         if not isinstance(index, torch.Tensor):
