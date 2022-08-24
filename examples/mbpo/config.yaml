@@ -28,7 +28,7 @@ init_env_steps: 1000
 record_frames: 1000
 loss_function: smooth_l1
 batch_transform: 1
-buffer_prefetch: 0
+buffer_prefetch: 64
 norm_stats: 1
 world_model_lr: 1e-3
 hidden_world_model: 256
