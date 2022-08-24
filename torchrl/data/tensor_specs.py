@@ -38,6 +38,8 @@ __all__ = [
 
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 
+_CHECK_IMAGES = os.environ.get("CHECK_IMAGES", False)
+
 DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
@@ -233,6 +235,16 @@ class TensorSpec:
             if isinstance(val, np.ndarray) and not all(
                 stride > 0 for stride in val.strides
             ):
+                if _CHECK_IMAGES:
+                    # images can become noisy during training. if the CHECK_IMAGES
+                    # env variable is True, we check that no more than half of the
+                    # pixels are black or white.
+                    # Because this only happens with mujoco, we'll always end up
+                    # with images with a negative stride: hence we can safely put
+                    # the check here.
+                    v = (val == 0) | (val == 255)
+                    v = v.sum() / v.size
+                    assert v < 0.5, f"numpy: {val.shape}"
                 val = val.copy()
             val = torch.tensor(val, dtype=self.dtype, device=self.device)
         if not _NO_CHECK_SPEC_ENCODE:

@@ -211,7 +211,7 @@ def transformed_env_constructor(
     logger: Optional[Logger] = None,
     stats: Optional[dict] = None,
     norm_obs_only: bool = False,
-    use_env_creator: bool = True,
+    use_env_creator: bool = False,
     custom_env_maker: Optional[Callable] = None,
     custom_env: Optional[EnvBase] = None,
     return_transformed_envs: bool = True,

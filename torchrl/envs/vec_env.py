@@ -396,6 +396,7 @@ class _BatchedEnv(EnvBase):
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
         with self._dummy_env_context as dummy_env:
             if self._single_task:
+                input_spec = dummy_env.input_spec
                 shared_tensordict_parent = make_tensordict(
                     dummy_env,
                     self.policy_proof,
@@ -442,26 +443,27 @@ class _BatchedEnv(EnvBase):
                     else:
                         raise_no_selected_keys = True
 
-        if self.env_input_keys is not None:
-            if not all(
-                action_key in self.selected_keys for action_key in self.env_input_keys
-            ):
-                raise KeyError(
-                    "One of the action keys is not part of the selected keys or is part of the excluded keys. Action "
-                    "keys need to be part of the selected keys for env.step() to be called."
-                )
-        else:
-            if self._single_task:
-                self.env_input_keys = sorted(list(self._dummy_env.input_spec.keys()))
+            if self.env_input_keys is not None:
+                if not all(
+                    action_key in self.selected_keys
+                    for action_key in self.env_input_keys
+                ):
+                    raise KeyError(
+                        "One of the action keys is not part of the selected keys or is part of the excluded keys. Action "
+                        "keys need to be part of the selected keys for env.step() to be called."
+                    )
             else:
-                env_input_keys = set()
-                for env in self._dummy_env:
-                    env_input_keys = env_input_keys.union(env.input_spec.keys())
-                self.env_input_keys = sorted(list(env_input_keys))
-            if not len(self.env_input_keys):
-                raise RuntimeError(
-                    f"found 0 action keys in {sorted(list(self.selected_keys))}"
-                )
+                if self._single_task:
+                    self.env_input_keys = sorted(list(input_spec.keys()))
+                else:
+                    env_input_keys = set()
+                    for env in dummy_env:
+                        env_input_keys = env_input_keys.union(env.input_spec.keys())
+                    self.env_input_keys = sorted(list(env_input_keys))
+                if not len(self.env_input_keys):
+                    raise RuntimeError(
+                        f"found 0 action keys in {sorted(list(self.selected_keys))}"
+                    )
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
                 *self.selected_keys

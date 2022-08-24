@@ -34,26 +34,16 @@ from torchrl.trainers.helpers.envs import (
     transformed_env_constructor,
     EnvConfig,
 )
+from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.models import (
     make_dreamer,
     DreamerConfig,
 )
-from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
     ReplayArgsConfig,
 )
 from torchrl.trainers.trainers import Recorder
-
-
-@dataclass
-class DreamerConfig:
-    state_dim: int = 20
-    rssm_hidden_dim: int = 200
-    grad_clip: int = 100
-    world_model_lr: float = 6e-4
-    actor_value_lr: float = 8e-5
-    imagination_horizon: int = 15
 
 
 @dataclass
@@ -183,18 +173,6 @@ def main(cfg: "DictConfig"):
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
 
-    # Recorder
-    if cfg.record_video:
-        recorder = VideoRecorder(
-            cfg=cfg,
-            env=proof_env,
-            device=device,
-            logger=logger,
-            tag=video_tag,
-        )
-    else:
-        recorder = None
-
     # Actor and value network
     model_explore = AdditiveGaussianWrapper(policy, sigma_init=0.3, sigma_end=0.3).to(
         device
@@ -234,6 +212,7 @@ def main(cfg: "DictConfig"):
         norm_obs_only=True,
         stats=stats,
         logger=logger,
+        use_env_creator=False,
     )()
 
     # remove video recorder from recorder to have matching state_dict keys
