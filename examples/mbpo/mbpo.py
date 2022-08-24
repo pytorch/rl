@@ -62,7 +62,7 @@ class MBPOConfig:
     real_data_ratio: float = 0.1
     num_world_models_ensemble: int = 7
     num_model_rollouts: int = 400
-    # model_train_freq: int = 250
+    train_model_every_k_optim_step: int = 250
     num_sac_training_steps_per_optim_step: int = 20
 
 
@@ -327,63 +327,65 @@ def main(cfg: "DictConfig"):
 
         if collected_frames >= cfg.init_random_frames:
             # Train model on current replay buffer
-            for _ in range(len(real_replay_buffer) // cfg.model_batch_size):
-                model_sampled_tensordict = real_replay_buffer.sample(
-                    cfg.model_batch_size
-                ).to(device)
-
-                with autocast(dtype=torch.float16):
-                    model_loss_td = world_model_loss(model_sampled_tensordict)
-                scaler1.scale(model_loss_td["loss_world_model"]).backward()
-                scaler1.unscale_(world_model_opt)
-                clip_grad_norm_(world_model_loss.parameters(), cfg.grad_clip)
-                scaler1.step(world_model_opt)
-                world_model_opt.zero_grad()
-                scaler1.update()
+            
             for j in range(cfg.optim_steps_per_batch):
                 # Train Model
                 # Sample data from model and buffer it
-                with torch.no_grad(), set_exploration_mode("random"):
-                    for _ in range(cfg.num_model_rollouts):
+                if j%cfg.train_model_every_k_optim_step==0 and cfg.real_data_ratio<1.0:
+                    for _ in range(len(real_replay_buffer) // cfg.model_batch_size):
                         model_sampled_tensordict = real_replay_buffer.sample(
                             cfg.model_batch_size
                         ).to(device)
-                        fake_traj_tensordict = model_based_env.rollout(
-                            max_steps=cfg.imagination_horizon,
-                            policy=policy,
-                            auto_reset=False,
-                            tensordict=model_sampled_tensordict,
+
+                        with autocast(dtype=torch.float16):
+                            model_loss_td = world_model_loss(model_sampled_tensordict)
+                        scaler1.scale(model_loss_td["loss_world_model"]).backward()
+                        scaler1.unscale_(world_model_opt)
+                        clip_grad_norm_(world_model_loss.parameters(), cfg.grad_clip)
+                        scaler1.step(world_model_opt)
+                        world_model_opt.zero_grad()
+                        scaler1.update()
+                    with torch.no_grad(), set_exploration_mode("random"):
+                        for _ in range(cfg.num_model_rollouts):
+                            model_sampled_tensordict = real_replay_buffer.sample(
+                                cfg.model_batch_size
+                            ).to(device)
+                            fake_traj_tensordict = model_based_env.rollout(
+                                max_steps=cfg.imagination_horizon,
+                                policy=policy,
+                                auto_reset=False,
+                                tensordict=model_sampled_tensordict,
+                            )
+                            fake_traj_tensordict = fake_traj_tensordict.select(
+                                *original_keys
+                            )
+                            fake_replay_buffer.extend(
+                                fake_traj_tensordict.view(-1).cpu()
+                            )
+
+                    for _ in range(cfg.num_sac_training_steps_per_optim_step):
+
+                        num_real_samples = int(cfg.sac_batch_size * cfg.real_data_ratio)
+
+                        num_fake_samples = cfg.sac_batch_size - num_real_samples
+
+                        # agent_sampled_tensordict = fake_replay_buffer.sample(cfg.sac_batch_size)
+
+                        fake_sampled_tensordict = fake_replay_buffer.sample(
+                            num_fake_samples
                         )
-                        fake_traj_tensordict = fake_traj_tensordict.select(
-                            *original_keys
-                        )
-                        fake_replay_buffer.extend(
-                            fake_traj_tensordict.view(-1).cpu()
+
+                        real_sampled_tensordict = real_replay_buffer.sample(
+                            num_real_samples
                         )
 
-                for _ in range(cfg.num_sac_training_steps_per_optim_step):
-
-                    num_real_samples = int(cfg.sac_batch_size * cfg.real_data_ratio)
-
-                    num_fake_samples = cfg.sac_batch_size - num_real_samples
-
-                    # agent_sampled_tensordict = fake_replay_buffer.sample(cfg.sac_batch_size)
-
-                    fake_sampled_tensordict = fake_replay_buffer.sample(
-                        num_fake_samples
-                    )
-
-                    real_sampled_tensordict = real_replay_buffer.sample(
-                        num_real_samples
-                    )
-
-                    agent_sampled_tensordict = torch.cat(
-                        [
-                            fake_sampled_tensordict,
-                            real_sampled_tensordict,
-                        ],
-                        dim=0,
-                    ).to(device)
+                        agent_sampled_tensordict = torch.cat(
+                            [
+                                fake_sampled_tensordict,
+                                real_sampled_tensordict,
+                            ],
+                            dim=0,
+                        ).to(device)
 
                     ### Train agent
                     with autocast(dtype=torch.float16):
