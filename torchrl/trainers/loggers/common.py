@@ -17,8 +17,9 @@ class Logger:
 
     """
 
-    def __init__(self, exp_name: str) -> None:
+    def __init__(self, exp_name: str, log_dir: str) -> None:
         self.exp_name = exp_name
+        self.log_dir = log_dir
         self.experiment = self._create_experiment()
 
     @abc.abstractmethod
