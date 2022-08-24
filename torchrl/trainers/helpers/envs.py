@@ -211,7 +211,7 @@ def transformed_env_constructor(
     logger: Optional[Logger] = None,
     stats: Optional[dict] = None,
     norm_obs_only: bool = False,
-    use_env_creator: bool = True,
+    use_env_creator: bool = False,
     custom_env_maker: Optional[Callable] = None,
     custom_env: Optional[EnvBase] = None,
     return_transformed_envs: bool = True,
@@ -258,9 +258,17 @@ def transformed_env_constructor(
         from_pixels = cfg.from_pixels
 
         if custom_env is None and custom_env_maker is None:
+            if isinstance(cfg.collector_devices, str):
+                device = cfg.collector_devices
+            elif isinstance(cfg.collector_devices, Sequence):
+                device = cfg.collector_devices[0]
+            else:
+                raise ValueError(
+                    "collector_devices must be either a string or a sequence of strings"
+                )
             env_kwargs = {
                 "env_name": env_name,
-                "device": "cpu",
+                "device": device,
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,

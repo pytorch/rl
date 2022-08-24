@@ -38,6 +38,8 @@ __all__ = [
 
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 
+_CHECK_IMAGES = os.environ.get("CHECK_IMAGES", False)
+
 DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
@@ -230,6 +232,13 @@ class TensorSpec:
 
         """
         if not isinstance(val, torch.Tensor):
+            if _CHECK_IMAGES and val.dtype is np.dtype("uint8"):
+                # images can become noisy during training. if the CHECK_IMAGES
+                # env variable is True, we check that no more than half of the
+                # pixels are black or white.
+                v = (val == 0) | (val == 255)
+                v = v.sum() / v.size
+                assert v < 0.5, f"numpy: {val.shape}"
             if isinstance(val, np.ndarray) and not all(
                 stride > 0 for stride in val.strides
             ):
