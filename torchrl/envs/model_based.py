@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+from random import randint
 from typing import Optional, Union, List
 
 import numpy as np
@@ -17,7 +18,6 @@ from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 from ..data.utils import DEVICE_TYPING
 from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
 from .common import EnvBase
-from random import randint
 
 
 class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
@@ -86,7 +86,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         tensordict_out = tensordict.clone()
         # Compute world state
         if self.world_model_params is not None:
-            tensordict_out= self.world_model(
+            tensordict_out = self.world_model(
                 tensordict_out,
                 params=self.world_model_params,
                 buffers=self.world_model_buffers,
@@ -108,14 +108,16 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
 
 
 class MBPOEnv(ModelBasedEnv):
-    def __init__(self, 
+    def __init__(
+        self,
         world_model: Union[nn.Module, List[TensorDictModule], TensorDictSequence],
         params: Optional[List[torch.Tensor]],
         buffers: Optional[List[torch.Tensor]],
         num_networks: int,
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
-        batch_size: Optional[torch.Size] = None,):
+        batch_size: Optional[torch.Size] = None,
+    ):
         super(MBPOEnv, self).__init__(
             world_model=world_model,
             params=params,
@@ -130,18 +132,20 @@ class MBPOEnv(ModelBasedEnv):
         tensordict_out = tensordict.clone()
         # Compute world state
         sampled_model_id = torch.randint(0, self.num_networks, tensordict_out.shape)
-        tensordict_out= self.world_model(
+        tensordict_out = self.world_model(
             tensordict_out,
             params=self.world_model_params,
             buffers=self.world_model_buffers,
-            vmap=True
+            vmap=True,
         )
-        tensordict_out = tensordict_out[sampled_model_id, torch.arange(tensordict_out.shape[1])]
+        tensordict_out = tensordict_out[
+            sampled_model_id, torch.arange(tensordict_out.shape[1])
+        ]
         # Step requires a done flag. No sense for MBRL so we set it to False
         if "done" not in self.world_model.out_keys:
             tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool)
         return tensordict_out
-        
+
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
         td = self.observation_spec.rand(shape=self.batch_size)
         td["action"] = self.action_spec.rand(shape=self.batch_size)

@@ -71,6 +71,7 @@ DEFAULT_REWARD_SCALING = {
 def main(cfg: "DictConfig"):
     # from torchrl.trainers.loggers.tensorboard import TensorboardLogger
     from torchrl.trainers.loggers.wandb import WandbLogger
+
     cfg = correct_for_frame_skip(cfg)
 
     if not isinstance(cfg.reward_scaling, float):

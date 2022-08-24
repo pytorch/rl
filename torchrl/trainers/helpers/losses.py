@@ -4,8 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-from torchrl.envs.model_based import MBPOEnv
 
+from torchrl.envs.model_based import MBPOEnv
 from torchrl.objectives.costs.mbpo import MBPOModelLoss
 
 __all__ = [
@@ -15,7 +15,7 @@ __all__ = [
     "make_target_updater",
     "make_ppo_loss",
     "make_redq_loss",
-    "make_mbpo_model_loss"
+    "make_mbpo_model_loss",
 ]
 
 from typing import Optional, Tuple, Any

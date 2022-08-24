@@ -1220,8 +1220,8 @@ def make_mbpo_model(
             ),
             distribution_class=d.Normal,
             dist_param_keys={
-                "loc":f"next_{observation_key}_loc",
-                "scale":f"next_{observation_key}_scale",
+                "loc": f"next_{observation_key}_loc",
+                "scale": f"next_{observation_key}_scale",
             },
             out_key_sample=f"next_{observation_key}",
         )
@@ -1234,7 +1234,7 @@ def make_mbpo_model(
                 out_keys=["reward_loc", "reward_scale"],
             ),
             distribution_class=d.Normal,
-            dist_param_keys={"loc": "reward_loc", "scale":"reward_scale"},
+            dist_param_keys={"loc": "reward_loc", "scale": "reward_scale"},
             out_key_sample="reward",
         )
 

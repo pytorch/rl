@@ -17,20 +17,10 @@ from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
-from torchrl.trainers.helpers.models import (
-    SACModelConfig,
-    make_sac_model,
-)
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     OffPolicyCollectorConfig,
-)
-from torchrl.trainers.helpers.recorder import RecorderConfig
-from torchrl.trainers.helpers.losses import (
-    make_sac_loss,
-    LossConfig,
-    make_mbpo_model_loss,
 )
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
@@ -39,10 +29,20 @@ from torchrl.trainers.helpers.envs import (
     transformed_env_constructor,
     EnvConfig,
 )
+from torchrl.trainers.helpers.losses import (
+    make_sac_loss,
+    LossConfig,
+    make_mbpo_model_loss,
+)
+from torchrl.trainers.helpers.models import (
+    SACModelConfig,
+    make_sac_model,
+)
 from torchrl.trainers.helpers.models import (
     make_mbpo_model,
     MBPOConfig,
 )
+from torchrl.trainers.helpers.recorder import RecorderConfig
 from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
     ReplayArgsConfig,
@@ -327,11 +327,11 @@ def main(cfg: "DictConfig"):
 
         if collected_frames >= cfg.init_random_frames:
             # Train model on current replay buffer
-            
+
             for j in range(cfg.optim_steps_per_batch):
                 # Train Model
                 # Sample data from model and buffer it
-                if j%cfg.train_model_every_k_optim_step==0 and cfg.real_data_ratio<1.0:
+                if j % cfg.train_model_every_k_optim_step == 0:
                     for _ in range(len(real_replay_buffer) // cfg.model_batch_size):
                         model_sampled_tensordict = real_replay_buffer.sample(
                             cfg.model_batch_size
