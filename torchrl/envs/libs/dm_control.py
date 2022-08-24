@@ -136,6 +136,13 @@ class DMControlWrapper(GymLikeEnv):
         pixels_only: bool = False,
         **kwargs,
     ):
+        # TODO: remove this
+        import traceback
+        try:
+            raise RuntimeError()
+        except:
+            print(f"building env on proc {os.getpid()}")
+            traceback.print_stack()
         self.from_pixels = from_pixels
         self.pixels_only = pixels_only
 
