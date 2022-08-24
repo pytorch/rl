@@ -30,8 +30,10 @@ class TestTensorboard:
                 )
 
             sleep(0.01)  # wait until events are registered
-            from tensorboard.backend.event_processing.event_accumulator import \
-                EventAccumulator
+            from tensorboard.backend.event_processing.event_accumulator import (
+                EventAccumulator,
+            )
+
             event_acc = EventAccumulator(logger.experiment.get_logdir())
             event_acc.Reload()
             assert len(event_acc.Scalars("foo")) == 3, str(event_acc.Scalars("foo"))
