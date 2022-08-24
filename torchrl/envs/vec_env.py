@@ -238,6 +238,13 @@ class _BatchedEnv(EnvBase):
     ):
         self._dummy_env_instance = None
         if self._single_task:
+            # if EnvCreator, the metadata are already there
+            if isinstance(create_env_fn[0], EnvCreator):
+                self._dummy_env_fun = create_env_fn[0]
+                self._dummy_env_fun.create_env_kwargs.update(
+                    create_env_kwargs[0])
+            # get the metadata
+
             try:
                 self._dummy_env_fun = CloudpickleWrapper(
                     create_env_fn[0], **create_env_kwargs[0]
