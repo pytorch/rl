@@ -363,47 +363,47 @@ def main(cfg: "DictConfig"):
                             fake_traj_tensordict.view(-1).cpu()
                         )
 
-                    for _ in range(cfg.num_sac_training_steps_per_optim_step):
+                for _ in range(cfg.num_sac_training_steps_per_optim_step):
 
-                        num_real_samples = int(cfg.sac_batch_size * cfg.real_data_ratio)
+                    num_real_samples = int(cfg.sac_batch_size * cfg.real_data_ratio)
 
-                        num_fake_samples = cfg.sac_batch_size - num_real_samples
+                    num_fake_samples = cfg.sac_batch_size - num_real_samples
 
-                        # agent_sampled_tensordict = fake_replay_buffer.sample(cfg.sac_batch_size)
+                    # agent_sampled_tensordict = fake_replay_buffer.sample(cfg.sac_batch_size)
 
-                        fake_sampled_tensordict = fake_replay_buffer.sample(
-                            num_fake_samples
-                        )
+                    fake_sampled_tensordict = fake_replay_buffer.sample(
+                        num_fake_samples
+                    )
 
-                        real_sampled_tensordict = real_replay_buffer.sample(
-                            num_real_samples
-                        )
+                    real_sampled_tensordict = real_replay_buffer.sample(
+                        num_real_samples
+                    )
 
-                        agent_sampled_tensordict = torch.cat(
-                            [
-                                fake_sampled_tensordict,
-                                real_sampled_tensordict,
-                            ],
-                            dim=0,
-                        ).to(device)
+                    agent_sampled_tensordict = torch.cat(
+                        [
+                            fake_sampled_tensordict,
+                            real_sampled_tensordict,
+                        ],
+                        dim=0,
+                    ).to(device)
 
-                    ### Train agent
-                    with autocast(dtype=torch.float16):
-                        sac_loss_td = sac_loss(agent_sampled_tensordict)
-                        sac_loss_sum = (
-                            sac_loss_td["loss_actor"]
-                            + sac_loss_td["loss_qvalue"]
-                            + sac_loss_td["loss_value"]
-                            + sac_loss_td["loss_alpha"]
-                        )
-                    scaler2.scale(sac_loss_sum).backward()
-                    scaler2.unscale_(sac_opt)
-                    clip_grad_norm_(sac_loss.parameters(), cfg.grad_clip)
-                    scaler2.step(sac_opt)
-                    sac_opt.zero_grad()
-                    scaler2.update()
+                ### Train agent
+                with autocast(dtype=torch.float16):
+                    sac_loss_td = sac_loss(agent_sampled_tensordict)
+                    sac_loss_sum = (
+                        sac_loss_td["loss_actor"]
+                        + sac_loss_td["loss_qvalue"]
+                        + sac_loss_td["loss_value"]
+                        + sac_loss_td["loss_alpha"]
+                    )
+                scaler2.scale(sac_loss_sum).backward()
+                scaler2.unscale_(sac_opt)
+                clip_grad_norm_(sac_loss.parameters(), cfg.grad_clip)
+                scaler2.step(sac_opt)
+                sac_opt.zero_grad()
+                scaler2.update()
 
-                    target_net_updater.step()
+                target_net_updater.step()
 
                 with torch.no_grad(), set_exploration_mode("mode"):
                     td_record = record(None)
