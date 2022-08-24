@@ -32,7 +32,44 @@ dtype_map = {
     torch.bool: bool,
 }
 
-__all__ = ["Specs", "make_tensordict"]
+__all__ = [
+    "Specs",
+    "make_tensordict",
+    "EnvBase",
+    "EnvMetaData",
+]
+
+
+class EnvMetaData:
+    def __init__(
+        self,
+        tensordict: TensorDictBase,
+        specs: Specs,
+        batch_size: torch.Size,
+        env_str: str,
+        device: torch.device,
+    ):
+        self.tensordict = tensordict
+        self.specs = specs
+        self.batch_size = batch_size
+        self.env_str = env_str
+        self.device = device
+
+    @staticmethod
+    def build_metadata_from_env(env):
+        tensordict = env.fake_tensordict()
+        specs = env.specs
+        batch_size = env.batch_size
+        env_str = str(env)
+        device = env.device
+        return EnvMetaData(tensordict, specs, batch_size, env_str, device)
+
+    def expand(self, *size: int):
+        tensordict = self.tensordict.expand(*size).to_tensordict()
+        batch_size = torch.Size([*size, *self.batch_size])
+        return EnvMetaData(
+            tensordict, self.specs, batch_size, self.env_str, self.device
+        )
 
 
 class Specs:
