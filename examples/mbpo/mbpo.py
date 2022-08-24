@@ -345,23 +345,23 @@ def main(cfg: "DictConfig"):
                         scaler1.step(world_model_opt)
                         world_model_opt.zero_grad()
                         scaler1.update()
-                    with torch.no_grad(), set_exploration_mode("random"):
-                        for _ in range(cfg.num_model_rollouts):
-                            model_sampled_tensordict = real_replay_buffer.sample(
-                                cfg.model_batch_size
-                            ).to(device)
-                            fake_traj_tensordict = model_based_env.rollout(
-                                max_steps=cfg.imagination_horizon,
-                                policy=policy,
-                                auto_reset=False,
-                                tensordict=model_sampled_tensordict,
-                            )
-                            fake_traj_tensordict = fake_traj_tensordict.select(
-                                *original_keys
-                            )
-                            fake_replay_buffer.extend(
-                                fake_traj_tensordict.view(-1).cpu()
-                            )
+                with torch.no_grad(), set_exploration_mode("random"):
+                    for _ in range(cfg.num_model_rollouts):
+                        model_sampled_tensordict = real_replay_buffer.sample(
+                            cfg.model_batch_size
+                        ).to(device)
+                        fake_traj_tensordict = model_based_env.rollout(
+                            max_steps=cfg.imagination_horizon,
+                            policy=policy,
+                            auto_reset=False,
+                            tensordict=model_sampled_tensordict,
+                        )
+                        fake_traj_tensordict = fake_traj_tensordict.select(
+                            *original_keys
+                        )
+                        fake_replay_buffer.extend(
+                            fake_traj_tensordict.view(-1).cpu()
+                        )
 
                     for _ in range(cfg.num_sac_training_steps_per_optim_step):
 
