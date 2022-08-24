@@ -26,6 +26,7 @@ from torchrl.trainers.helpers.envs import (
     transformed_env_constructor,
     EnvConfig,
 )
+from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.losses import make_ddpg_loss, LossConfig
 from torchrl.trainers.helpers.models import (
     make_ddpg_actor,
