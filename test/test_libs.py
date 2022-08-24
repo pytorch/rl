@@ -18,7 +18,8 @@ if _has_dmc:
     from dm_control.suite.wrappers import pixels
 
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.envs import GymEnv, GymWrapper, DMControlEnv, DMControlWrapper
+from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
+from torchrl.envs.libs.gym import GymEnv, GymWrapper
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
