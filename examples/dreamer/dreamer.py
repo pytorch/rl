@@ -143,7 +143,6 @@ def main(cfg: "DictConfig"):
             cfg,
             key="next_pixels" if cfg.from_pixels else "next_observation_vector",
         )
-        # make sure proof_env is closed
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
     proof_env = transformed_env_constructor(

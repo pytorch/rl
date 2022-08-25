@@ -350,7 +350,8 @@ def parallel_env_constructor(
 def get_stats_random_rollout(
     cfg: "DictConfig", proof_environment: EnvBase = None, key: Optional[str] = None
 ):
-    if proof_environment is None:
+    proof_env_is_none = proof_environment is None
+    if proof_env_is_none:
         proof_environment = transformed_env_constructor(
             cfg=cfg, use_env_creator=False
         )()
@@ -364,7 +365,7 @@ def get_stats_random_rollout(
     while n < cfg.init_env_steps:
         _td_stats = proof_environment.rollout(max_steps=cfg.init_env_steps)
         n += _td_stats.numel()
-        _td_stats_select = _td_stats.to_tensordict().select(key).cpu()
+        _td_stats_select = _td_stats.select(key).to_tensordict().cpu()
         if not len(list(_td_stats_select.keys())):
             raise RuntimeError(
                 f"key {key} not found in tensordict with keys {list(_td_stats.keys())}"
@@ -401,6 +402,11 @@ def get_stats_random_rollout(
     if not torch.isfinite(s).all():
         raise RuntimeError("non-finite values found in sd")
     stats = {"loc": m, "scale": s}
+    if proof_env_is_none:
+        proof_environment.close()
+        if proof_environment.device != torch.device("cpu") and torch.cuda.device_count() > 0:
+            torch.cuda.empty_cache()
+        del proof_environment
     return stats
 
 
