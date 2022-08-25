@@ -512,6 +512,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordicts = []
         if not self.is_done:
             for i in range(max_steps):
+                print(f"rollout: {i}")
                 if auto_cast_to_device:
                     tensordict = tensordict.to(policy_device)
                 tensordict = policy(tensordict)
