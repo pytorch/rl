@@ -21,10 +21,10 @@ from torchrl.data import (
 from ...data.utils import numpy_to_torch_dtype_dict, DEVICE_TYPING
 from ..gym_like import GymLikeEnv
 
-if torch.has_cuda and torch.cuda.device_count() > 1:
-    n = torch.cuda.device_count() - 1
-    os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
-    print("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
+# if torch.has_cuda and torch.cuda.device_count() > 1:
+#     n = torch.cuda.device_count() - 1
+#     os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
+#     print("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
 
 try:
 

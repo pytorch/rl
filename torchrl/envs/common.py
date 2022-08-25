@@ -512,8 +512,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordicts = []
         if not self.is_done:
             for i in range(max_steps):
-                if torch.has_cuda:
-                    torch.cuda.synchronize()
                 if auto_cast_to_device:
                     tensordict = tensordict.to(policy_device)
                 tensordict = policy(tensordict)
