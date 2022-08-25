@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+from copy import deepcopy
 from numbers import Number
 from typing import Any, Callable, Iterator, Optional, Union, Dict
 
@@ -77,6 +78,15 @@ class EnvMetaData:
         specs = self.specs.to(device)
         return EnvMetaData(tensordict, specs, self.batch_size, self.env_str, device)
 
+    def __setstate__(self, state):
+        state["tensordict"] = state["tensordict"].to_tensordict().to(state["device"])
+        state["specs"] = deepcopy(state["specs"]).to(state["device"])
+        self.__dict__.update(state)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["tensordict"] = state["tensordict"].to("cpu")
+        state["specs"] = state["specs"].to("cpu")
 
 class Specs:
     """Container for action, observation and reward specs.
