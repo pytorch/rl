@@ -124,6 +124,7 @@ def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
         if isinstance(t, RewardScaling):
             t.scale.fill_(1.0)
             t.loc.fill_(0.0)
+    return recorder
 
 def call_record(logger, record, collected_frames, world_model_td, stats, model_based_env, actor_model, cfg):
     td_record = record(None)
