@@ -1361,7 +1361,7 @@ class DreamerConfig:
     world_model_lr: float = 6e-4
     actor_value_lr: float = 8e-5
     imagination_horizon: int = 15
-
+    model_device: str = ""
 
 @dataclass
 class PPOModelConfig:

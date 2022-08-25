@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import os
-from copy import deepcopy
 from dataclasses import dataclass
 from textwrap import indent
 from typing import (
@@ -255,7 +254,7 @@ class TensorSpec:
                     v = (val == 0) | (val == 255)
                     v = v.sum() / v.size
                     assert v < 0.5, f"numpy: {val.shape}"
-                val = deepcopy(val)
+                val = val.copy()
             val = torch.tensor(val, dtype=self.dtype, device=self.device)
         if not _NO_CHECK_SPEC_ENCODE:
             self.assert_is_in(val)

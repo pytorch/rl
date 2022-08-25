@@ -181,10 +181,10 @@ def main(cfg: "DictConfig"):
     if not isinstance(cfg.reward_scaling, float):
         cfg.reward_scaling = 1.0
 
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() and not cfg.model_device:
         device = torch.device("cuda:0")
-    # elif torch.backends.mps.is_available():
-    #     device = torch.device("mps")
+    elif cfg.model_device:
+        device = torch.device(cfg.model_device)
     else:
         device = torch.device("cpu")
     print(f"Using device {device}")
