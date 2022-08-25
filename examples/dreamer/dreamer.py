@@ -162,6 +162,8 @@ def main(cfg: "DictConfig"):
         action_key="action",
         value_key="predicted_value",
     )
+    proof_env.close()
+    del proof_env
 
     # Losses
     world_model_loss = DreamerModelLoss(world_model, cfg).to(device)
@@ -180,15 +182,7 @@ def main(cfg: "DictConfig"):
         device
     )
 
-    # model_explore = OrnsteinUhlenbeckProcessWrapper(
-    #     policy,
-    #     annealing_num_steps=cfg.annealing_frames,
-    #     sigma=cfg.ou_sigma,
-    #     theta=cfg.ou_theta,
-    # ).to(device)
-
     action_dim_gsde, state_dim_gsde = None, None
-    proof_env.close()
     create_env_fn = parallel_env_constructor(
         cfg=cfg,
         stats=stats,
