@@ -97,7 +97,7 @@ class GymLikeEnv(_EnvWrapper):
             ):  # or any?
                 break
 
-        obs_dict = self._read_obs(deepcopy(obs))
+        obs_dict = self._read_obs(obs)
 
         if reward is None:
             reward = np.nan
