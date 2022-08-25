@@ -487,6 +487,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             TensorDict object containing the resulting trajectory.
 
         """
+        if torch.has_cuda:
+            torch.cuda.synchronize()
+
         try:
             policy_device = next(policy.parameters()).device
         except AttributeError:
