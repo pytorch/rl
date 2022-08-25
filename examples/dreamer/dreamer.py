@@ -406,7 +406,7 @@ def main(cfg: "DictConfig"):
 
                 do_log = False
 
-        call_record(logger, record, collected_frames, world_model_td, stats, model_based_env, actor_model, cfg)
+            call_record(logger, record, collected_frames, world_model_td, stats, model_based_env, actor_model, cfg)
 
 def recover_pixels(pixels, stats):
     return (
