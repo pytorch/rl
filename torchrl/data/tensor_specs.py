@@ -255,7 +255,7 @@ class TensorSpec:
                     v = v.sum() / v.size
                     assert v < 0.5, f"numpy: {val.shape}"
                 val = val.copy()
-            val = torch.tensor(val, dtype=self.dtype, device=self.device)
+            val = torch.tensor(val).to(self.dtype).to(self.device)#, dtype=self.dtype, device=self.device)
         if not _NO_CHECK_SPEC_ENCODE:
             self.assert_is_in(val)
         return val
