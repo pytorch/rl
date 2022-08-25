@@ -62,6 +62,7 @@ from torchrl.modules.tensordict_module.actors import (
 from torchrl.modules.tensordict_module.world_models import (
     WorldModelWrapper,
 )
+from torchrl.trainers.helpers import transformed_env_constructor
 
 DISTRIBUTIONS = {
     "delta": Delta,
@@ -1161,12 +1162,13 @@ def make_redq_model(
 
 
 def make_dreamer(
-    proof_environment: EnvBase,
     cfg: "DictConfig",
+    proof_environment: EnvBase=None,
     device: DEVICE_TYPING = "cpu",
     action_key: str = "action",
     value_key: str = "predicted_value",
     use_decoder_in_env: bool = False,
+    stats: Optional[dict]=None
 ) -> nn.ModuleList:
 
     # Modules
@@ -1309,6 +1311,12 @@ def make_dreamer(
         obs_decoder=mb_env_obs_decoder,
     )
 
+    proof_env_is_none = proof_environment is None
+    if proof_env_is_none:
+        proof_environment = transformed_env_constructor(
+            cfg=cfg, use_env_creator=False, stats=stats
+        )()
+
     model_based_env.set_specs_from_env(proof_environment)
 
     world_model = world_model.to(device)
@@ -1335,6 +1343,11 @@ def make_dreamer(
         td = value_model(td)
 
     policy = policy.to(device)
+    if proof_env_is_none:
+        proof_environment.close()
+        torch.cuda.empty_cache()
+        del proof_environment
+
     del td
     return world_model, model_based_env, actor_model, value_model, policy
 

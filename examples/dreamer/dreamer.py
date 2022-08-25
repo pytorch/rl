@@ -151,19 +151,14 @@ def main(cfg: "DictConfig"):
         )
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
-    proof_env = transformed_env_constructor(
-        cfg=cfg, use_env_creator=False, stats=stats
-    )()
     world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
-        proof_environment=proof_env,
+        stats=stats,
         cfg=cfg,
         device=device,
         use_decoder_in_env=True,
         action_key="action",
         value_key="predicted_value",
     )
-    proof_env.close()
-    del proof_env
 
     # Losses
     world_model_loss = DreamerModelLoss(world_model, cfg).to(device)
