@@ -85,6 +85,12 @@ DEFAULT_REWARD_SCALING = {
     "humanoid": 100,
 }
 
+def grad_norm(optimizer: torch.optim.Optimizer):
+    sum_of_sq = 0.0
+    for pg in optimizer.param_groups:
+        for p in pg["params"]:
+            sum_of_sq += p.grad.pow(2).sum()
+    return sum_of_sq.sqrt().item()
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
@@ -273,6 +279,11 @@ def main(cfg: "DictConfig"):
             step=collected_frames,
         )
 
+        if i % 100 == 0:
+            do_log = True
+        else:
+            do_log = False
+
         if collected_frames >= cfg.init_random_frames:
             for j in range(cfg.optim_steps_per_batch):
                 # sample from replay buffer
@@ -293,94 +304,113 @@ def main(cfg: "DictConfig"):
                             )[:4]
                             .detach()
                         )
-                logger.log_scalar(
-                    "loss_world_model",
-                    model_loss_td["loss_world_model"].detach().cpu().item(),
-                    step=collected_frames,
-                )
+
                 scaler1.scale(model_loss_td["loss_world_model"]).backward()
                 scaler1.unscale_(world_model_opt)
                 clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
                 scaler1.step(world_model_opt)
+                if j == cfg.optim_steps_per_batch - 1 and do_log:
+                    logger.log_scalar(
+                        "loss_world_model",
+                        model_loss_td["loss_world_model"].detach().cpu().item(),
+                        step=collected_frames,
+                    )
+                    logger.log_scalar(
+                        "grad_world_model",
+                        grad_norm(world_model_opt),
+                        step=collected_frames,
+                    )
                 world_model_opt.zero_grad()
                 scaler1.update()
 
                 with autocast(dtype=torch.float16):
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
-                logger.log_scalar(
-                    "loss_actor",
-                    actor_loss_td["loss_actor"].detach().cpu().item(),
-                    step=collected_frames,
-                )
                 scaler2.scale(actor_loss_td["loss_actor"]).backward()
                 scaler2.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
                 scaler2.step(actor_opt)
+                if j == cfg.optim_steps_per_batch - 1 and do_log:
+                    logger.log_scalar(
+                        "loss_actor",
+                        actor_loss_td["loss_actor"].detach().cpu().item(),
+                        step=collected_frames,
+                    )
+                    logger.log_scalar(
+                        "grad_actor",
+                        grad_norm(actor_opt),
+                        step=collected_frames,
+                    )
                 actor_opt.zero_grad()
                 scaler2.update()
 
                 with autocast(dtype=torch.float16):
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
-                logger.log_scalar(
-                    "loss_value",
-                    value_loss_td["loss_value"].detach().cpu().item(),
-                    step=collected_frames,
-                )
                 scaler3.scale(value_loss_td["loss_value"]).backward()
                 scaler3.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
                 scaler3.step(value_opt)
+                if j == cfg.optim_steps_per_batch - 1 and do_log:
+                    logger.log_scalar(
+                        "loss_value",
+                        value_loss_td["loss_value"].detach().cpu().item(),
+                        step=collected_frames,
+                    )
+                    logger.log_scalar(
+                        "grad_value",
+                        grad_norm(value_opt),
+                        step=collected_frames,
+                    )
                 value_opt.zero_grad()
                 scaler3.update()
 
-                with torch.no_grad(), set_exploration_mode("mode"):
-                    td_record = record(None)
-                    if td_record is not None and logger is not None:
-                        for key, value in td_record.items():
-                            if key in ["r_evaluation", "total_r_evaluation"]:
-                                logger.log_scalar(
-                                    key,
-                                    value.detach().cpu().numpy(),
-                                    step=collected_frames,
-                                )
-                    # Compute observation reco
-                    if cfg.record_video and record._count % cfg.record_interval == 0:
-                        true_pixels = recover_pixels(world_model_td["pixels"], stats)
+                do_log = False
 
-                        reco_pixels = recover_pixels(
-                            world_model_td["reco_pixels"], stats
-                        )
-                        with autocast(dtype=torch.float16):
-                            world_model_td = world_model_td.select(
-                                "posterior_states", "next_belief"
-                            ).detach()
-                            world_model_td.batch_size = [
-                                world_model_td.shape[0],
-                                world_model_td.get("next_belief").shape[1],
-                            ]
-                            world_model_td.rename_key("posterior_states", "prior_state")
-                            world_model_td.rename_key("next_belief", "belief")
-                            world_model_td = model_based_env.rollout(
-                                max_steps=true_pixels.shape[1],
-                                policy=actor_model,
-                                auto_reset=False,
-                                tensordict=world_model_td[:, 0],
-                            ).detach()
-                        imagine_pxls = recover_pixels(
-                            model_based_env.decode_obs(world_model_td)["reco_pixels"],
-                            stats,
-                        )
-
-                        stacked_pixels = torch.cat(
-                            [true_pixels, reco_pixels, imagine_pxls], dim=-1
-                        )
-                        if logger is not None:
-                            logger.log_video(
-                                "pixels_rec_and_imag",
-                                stacked_pixels.detach().cpu().numpy(),
+            with torch.no_grad(), set_exploration_mode("mode"):
+                td_record = record(None)
+                if td_record is not None and logger is not None:
+                    for key, value in td_record.items():
+                        if key in ["r_evaluation", "total_r_evaluation"]:
+                            logger.log_scalar(
+                                key,
+                                value.detach().cpu().numpy(),
+                                step=collected_frames,
                             )
-                        else:
-                            torch.save(stacked_pixels, "stacked_pixels.pt")
+                # Compute observation reco
+                if cfg.record_video and record._count % cfg.record_interval == 0:
+                    true_pixels = recover_pixels(world_model_td["pixels"], stats)
+
+                    reco_pixels = recover_pixels(
+                        world_model_td["reco_pixels"], stats
+                    )
+                    with autocast(dtype=torch.float16):
+                        world_model_td = world_model_td.select(
+                            "posterior_states", "next_belief"
+                        ).detach()
+                        world_model_td.batch_size = [
+                            world_model_td.shape[0],
+                            world_model_td.get("next_belief").shape[1],
+                        ]
+                        world_model_td.rename_key("posterior_states", "prior_state")
+                        world_model_td.rename_key("next_belief", "belief")
+                        world_model_td = model_based_env.rollout(
+                            max_steps=true_pixels.shape[1],
+                            policy=actor_model,
+                            auto_reset=False,
+                            tensordict=world_model_td[:, 0],
+                        ).detach()
+                    imagine_pxls = recover_pixels(
+                        model_based_env.decode_obs(world_model_td)["reco_pixels"],
+                        stats,
+                    )
+
+                    stacked_pixels = torch.cat(
+                        [true_pixels, reco_pixels, imagine_pxls], dim=-1
+                    )
+                    if logger is not None:
+                        logger.log_video(
+                            "pixels_rec_and_imag",
+                            stacked_pixels.detach().cpu().numpy(),
+                        )
 
 
 def recover_pixels(pixels, stats):
