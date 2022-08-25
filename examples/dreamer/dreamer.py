@@ -147,6 +147,7 @@ def main(cfg: "DictConfig"):
         )
         # make sure proof_env is closed
         proof_env.close()
+        del proof_env
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
     proof_env = transformed_env_constructor(

@@ -662,7 +662,8 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def __getattr__(self, attr: str) -> Any:
-        if attr in self.__dir__():
+        dir = self.__dict__.keys()
+        if attr in dir:
             return self.__getattribute__(
                 attr
             )  # make sure that appropriate exceptions are raised
