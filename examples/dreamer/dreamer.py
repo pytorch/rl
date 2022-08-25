@@ -116,7 +116,7 @@ def main(cfg: "DictConfig"):
         logger = WandbLogger(
             f"dreamer/{exp_name}",
             project="torchrl",
-            group=f"Dreamer_{cfg.env_name}_additive_noise",
+            group=f"Dreamer_{cfg.env_name}",
         )
     elif cfg.logger == "csv":
         from torchrl.trainers.loggers.csv import CSVLogger
@@ -265,8 +265,13 @@ def main(cfg: "DictConfig"):
         pbar.update(tensordict.numel())
         current_frames = tensordict.numel()
         collected_frames += current_frames
-        tensordict = tensordict.reshape(-1, cfg.batch_length)
+        tensordict = tensordict.view(-1, cfg.batch_length)
         replay_buffer.extend(tensordict.cpu())
+        logger.log_scalar(
+            "r_training",
+            tensordict["reward"].mean().detach().cpu().item(),
+            step=collected_frames,
+        )
 
         if collected_frames >= cfg.init_random_frames:
             for j in range(cfg.optim_steps_per_batch):
@@ -288,6 +293,11 @@ def main(cfg: "DictConfig"):
                             )[:4]
                             .detach()
                         )
+                logger.log_scalar(
+                    "loss_world_model",
+                    model_loss_td["loss_world_model"].detach().cpu().item(),
+                    step=collected_frames,
+                )
                 scaler1.scale(model_loss_td["loss_world_model"]).backward()
                 scaler1.unscale_(world_model_opt)
                 clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
@@ -297,6 +307,11 @@ def main(cfg: "DictConfig"):
 
                 with autocast(dtype=torch.float16):
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+                logger.log_scalar(
+                    "loss_actor",
+                    actor_loss_td["loss_actor"].detach().cpu().item(),
+                    step=collected_frames,
+                )
                 scaler2.scale(actor_loss_td["loss_actor"]).backward()
                 scaler2.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
@@ -306,6 +321,11 @@ def main(cfg: "DictConfig"):
 
                 with autocast(dtype=torch.float16):
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                logger.log_scalar(
+                    "loss_value",
+                    value_loss_td["loss_value"].detach().cpu().item(),
+                    step=collected_frames,
+                )
                 scaler3.scale(value_loss_td["loss_value"]).backward()
                 scaler3.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
@@ -356,7 +376,7 @@ def main(cfg: "DictConfig"):
                         )
                         if logger is not None:
                             logger.log_video(
-                                "Pixels reconstruction and imagination",
+                                "pixels_rec_and_imag",
                                 stacked_pixels.detach().cpu().numpy(),
                             )
                         else:

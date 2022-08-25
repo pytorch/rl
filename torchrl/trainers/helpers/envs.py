@@ -347,6 +347,7 @@ def parallel_env_constructor(
     return parallel_env
 
 
+@torch.inference_mode()
 def get_stats_random_rollout(
     cfg: "DictConfig", proof_environment: EnvBase = None, key: Optional[str] = None
 ):
@@ -404,7 +405,10 @@ def get_stats_random_rollout(
     stats = {"loc": m, "scale": s}
     if proof_env_is_none:
         proof_environment.close()
-        if proof_environment.device != torch.device("cpu") and torch.cuda.device_count() > 0:
+        if (
+            proof_environment.device != torch.device("cpu")
+            and torch.cuda.device_count() > 0
+        ):
             torch.cuda.empty_cache()
         del proof_environment
     return stats
