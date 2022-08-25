@@ -87,6 +87,8 @@ class EnvMetaData:
         state = self.__dict__.copy()
         state["tensordict"] = state["tensordict"].to("cpu")
         state["specs"] = state["specs"].to("cpu")
+        return state
+
 
 class Specs:
     """Container for action, observation and reward specs.
@@ -196,24 +198,21 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.device = torch.device(device)
         self._is_done = None
         self.dtype = dtype_map.get(dtype, dtype)
-        module_attrs = dir(self.__class__)
-        attrs = list(self.__dict__.keys())
-        mod_dir = module_attrs + attrs
-        if "is_closed" not in mod_dir:
+        if "is_closed" not in self.__dir__():
             self.is_closed = True
-        if "_action_spec" not in mod_dir:
+        if "_action_spec" not in self.__dir__():
             self._action_spec = None
-        if "_input_spec" not in mod_dir:
+        if "_input_spec" not in self.__dir__():
             self._input_spec = None
-        if "_reward_spec" not in mod_dir:
+        if "_reward_spec" not in self.__dir__():
             self._reward_spec = None
-        if "_observation_spec" not in mod_dir:
+        if "_observation_spec" not in self.__dir__():
             self._observation_spec = None
         if batch_size is not None:
             # we want an error to be raised if we pass batch_size but
             # it's already been set
             self.batch_size = batch_size
-        elif ("batch_size" not in mod_dir) and (
+        elif ("batch_size" not in self.__dir__()) and (
             "batch_size" not in self.__class__.__dict__
         ):
             self.batch_size = torch.Size([])
@@ -596,8 +595,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.reward_spec = self.reward_spec.to(device)
         self.observation_spec = self.observation_spec.to(device)
         self.input_spec = self.input_spec.to(device)
+
         self.is_done = self.is_done.to(device)
-        super().to(device)
+        self.device = device
         return self
 
     def fake_tensordict(self) -> TensorDictBase:
@@ -683,11 +683,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def __getattr__(self, attr: str) -> Any:
-        # module_attrs = dir(self.__class__)
-        # attrs = list(self.__dict__.keys())
-        # mod_dir = module_attrs + attrs
-        mod_dir = self.__dir__()
-        if attr in mod_dir:
+        if attr in self.__dir__():
             return self.__getattribute__(
                 attr
             )  # make sure that appropriate exceptions are raised
@@ -699,7 +695,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
                 f"Got attribute {attr}."
             )
 
-        elif "_env" in mod_dir:
+        elif "_env" in self.__dir__():
             env = self.__getattribute__("_env")
             return getattr(env, attr)
         super().__getattr__(attr)
