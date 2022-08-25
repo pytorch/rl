@@ -1175,7 +1175,7 @@ def make_dreamer(
     if proof_env_is_none:
         proof_environment = transformed_env_constructor(
             cfg=cfg, use_env_creator=False, stats=stats
-        )()
+        )().to("cpu")
 
     # Modules
     obs_encoder = ObsEncoder()
