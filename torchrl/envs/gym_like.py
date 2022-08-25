@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import warnings
+from copy import deepcopy
 from typing import Optional, Union, Tuple
 
 import numpy as np
@@ -96,7 +97,7 @@ class GymLikeEnv(_EnvWrapper):
             ):  # or any?
                 break
 
-        obs_dict = self._read_obs(obs)
+        obs_dict = self._read_obs(deepcopy(obs))
 
         if reward is None:
             reward = np.nan
