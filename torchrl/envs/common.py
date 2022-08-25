@@ -44,7 +44,7 @@ class EnvMetaData:
     def __init__(
         self,
         tensordict: TensorDictBase,
-        specs: Specs,
+        specs: CompositeSpec,
         batch_size: torch.Size,
         env_str: str,
         device: torch.device,
@@ -56,20 +56,26 @@ class EnvMetaData:
         self.device = device
 
     @staticmethod
-    def build_metadata_from_env(env):
+    def build_metadata_from_env(env) -> EnvMetaData:
         tensordict = env.fake_tensordict()
-        specs = env.specs
+        specs = {key: getattr(env, key) for key in Specs._keys if key.endswith("_spec")}
+        specs = CompositeSpec(**specs)
         batch_size = env.batch_size
         env_str = str(env)
         device = env.device
         return EnvMetaData(tensordict, specs, batch_size, env_str, device)
 
-    def expand(self, *size: int):
+    def expand(self, *size: int) -> EnvMetaData:
         tensordict = self.tensordict.expand(*size).to_tensordict()
         batch_size = torch.Size([*size, *self.batch_size])
         return EnvMetaData(
             tensordict, self.specs, batch_size, self.env_str, self.device
         )
+
+    def to(self, device: DEVICE_TYPING) -> EnvMetaData:
+        tensordict = self.tensordict.to(device)
+        specs = self.specs.to(device)
+        return EnvMetaData(tensordict, specs, self.batch_size, self.env_str, device)
 
 
 class Specs:
@@ -564,7 +570,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.is_closed = True
 
     def __del__(self):
-        if not self.is_closed:
+        # if del occurs before env has been set up, we don't want a recursion
+        # error
+        if "is_closed" in self.__dict__ and not self.is_closed:
             self.close()
 
     def to(self, device: DEVICE_TYPING) -> EnvBase:

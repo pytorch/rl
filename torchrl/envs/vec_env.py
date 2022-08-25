@@ -511,6 +511,11 @@ class _BatchedEnv(EnvBase):
         if device == self.device:
             return self
         self._device = device
+        self.meta_data = (
+            self.meta_data.to(device)
+            if self._single_task
+            else [meta_data.to(device) for meta_data in self.meta_data]
+        )
         if not self.is_closed:
             warn(
                 "Casting an open environment to another device requires closing and re-opening it. "
