@@ -1171,6 +1171,12 @@ def make_dreamer(
     stats: Optional[dict]=None
 ) -> nn.ModuleList:
 
+    proof_env_is_none = proof_environment is None
+    if proof_env_is_none:
+        proof_environment = transformed_env_constructor(
+            cfg=cfg, use_env_creator=False, stats=stats
+        )()
+
     # Modules
     obs_encoder = ObsEncoder()
     obs_decoder = ObsDecoder()
@@ -1311,11 +1317,6 @@ def make_dreamer(
         obs_decoder=mb_env_obs_decoder,
     )
 
-    proof_env_is_none = proof_environment is None
-    if proof_env_is_none:
-        proof_environment = transformed_env_constructor(
-            cfg=cfg, use_env_creator=False, stats=stats
-        )()
 
     model_based_env.set_specs_from_env(proof_environment)
 
