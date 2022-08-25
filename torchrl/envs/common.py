@@ -180,21 +180,24 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.device = torch.device(device)
         self._is_done = None
         self.dtype = dtype_map.get(dtype, dtype)
-        if "is_closed" not in self.__dir__():
+        module_attrs = dir(self.__class__)
+        attrs = list(self.__dict__.keys())
+        mod_dir = module_attrs + attrs
+        if "is_closed" not in mod_dir:
             self.is_closed = True
-        if "_action_spec" not in self.__dir__():
+        if "_action_spec" not in mod_dir:
             self._action_spec = None
-        if "_input_spec" not in self.__dir__():
+        if "_input_spec" not in mod_dir:
             self._input_spec = None
-        if "_reward_spec" not in self.__dir__():
+        if "_reward_spec" not in mod_dir:
             self._reward_spec = None
-        if "_observation_spec" not in self.__dir__():
+        if "_observation_spec" not in mod_dir:
             self._observation_spec = None
         if batch_size is not None:
             # we want an error to be raised if we pass batch_size but
             # it's already been set
             self.batch_size = batch_size
-        elif ("batch_size" not in self.__dir__()) and (
+        elif ("batch_size" not in mod_dir) and (
             "batch_size" not in self.__class__.__dict__
         ):
             self.batch_size = torch.Size([])
@@ -662,8 +665,10 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def __getattr__(self, attr: str) -> Any:
-        dir = self.__dict__.keys()
-        if attr in dir:
+        module_attrs = dir(self.__class__)
+        attrs = list(self.__dict__.keys())
+        mod_dir = module_attrs + attrs
+        if attr in mod_dir:
             return self.__getattribute__(
                 attr
             )  # make sure that appropriate exceptions are raised
@@ -675,7 +680,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
                 f"Got attribute {attr}."
             )
 
-        elif "_env" in self.__dir__():
+        elif "_env" in mod_dir:
             env = self.__getattribute__("_env")
             return getattr(env, attr)
         super().__getattr__(attr)
