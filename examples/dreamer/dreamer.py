@@ -92,6 +92,86 @@ def grad_norm(optimizer: torch.optim.Optimizer):
             sum_of_sq += p.grad.pow(2).sum()
     return sum_of_sq.sqrt().item()
 
+
+def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
+    recorder = transformed_env_constructor(
+        cfg,
+        video_tag=video_tag,
+        norm_obs_only=True,
+        stats=stats,
+        logger=logger,
+        use_env_creator=False,
+    )()
+
+    # remove video recorder from recorder to have matching state_dict keys
+    if cfg.record_video:
+        recorder_rm = TransformedEnv(recorder.base_env)
+        for transform in recorder.transform:
+            if not isinstance(transform, VideoRecorder):
+                recorder_rm.append_transform(transform)
+    else:
+        recorder_rm = recorder
+
+    if isinstance(create_env_fn, ParallelEnv):
+        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
+        create_env_fn.close()
+    elif isinstance(create_env_fn, EnvCreator):
+        recorder_rm.load_state_dict(create_env_fn().state_dict())
+    else:
+        recorder_rm.load_state_dict(create_env_fn.state_dict())
+    # reset reward scaling
+    for t in recorder.transform:
+        if isinstance(t, RewardScaling):
+            t.scale.fill_(1.0)
+            t.loc.fill_(0.0)
+
+def call_record(logger, record, collected_frames, world_model_td, stats, model_based_env, actor_model, cfg):
+    td_record = record(None)
+    if td_record is not None and logger is not None:
+        for key, value in td_record.items():
+            if key in ["r_evaluation", "total_r_evaluation"]:
+                logger.log_scalar(
+                    key,
+                    value.detach().cpu().numpy(),
+                    step=collected_frames,
+                )
+    # Compute observation reco
+    if cfg.record_video and record._count % cfg.record_interval == 0:
+        true_pixels = recover_pixels(world_model_td["pixels"], stats)
+
+        reco_pixels = recover_pixels(
+            world_model_td["reco_pixels"], stats
+        )
+        with autocast(dtype=torch.float16):
+            world_model_td = world_model_td.select(
+                "posterior_states", "next_belief"
+            ).detach()
+            world_model_td.batch_size = [
+                world_model_td.shape[0],
+                world_model_td.get("next_belief").shape[1],
+            ]
+            world_model_td.rename_key("posterior_states", "prior_state")
+            world_model_td.rename_key("next_belief", "belief")
+            world_model_td = model_based_env.rollout(
+                max_steps=true_pixels.shape[1],
+                policy=actor_model,
+                auto_reset=False,
+                tensordict=world_model_td[:, 0],
+            ).detach()
+        imagine_pxls = recover_pixels(
+            model_based_env.decode_obs(world_model_td)["reco_pixels"],
+            stats,
+        )
+
+        stacked_pixels = torch.cat(
+            [true_pixels, reco_pixels, imagine_pxls], dim=-1
+        )
+        if logger is not None:
+            logger.log_video(
+                "pixels_rec_and_imag",
+                stacked_pixels.detach().cpu().numpy(),
+            )
+
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
 
@@ -197,45 +277,16 @@ def main(cfg: "DictConfig"):
 
     replay_buffer = make_replay_buffer(device, cfg)
 
-    recorder = transformed_env_constructor(
-        cfg,
-        video_tag=video_tag,
-        norm_obs_only=True,
-        stats=stats,
-        logger=logger,
-        use_env_creator=False,
-    )()
-
-    # remove video recorder from recorder to have matching state_dict keys
-    if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.base_env)
-        for transform in recorder.transform:
-            if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform)
-    else:
-        recorder_rm = recorder
-
-    if isinstance(create_env_fn, ParallelEnv):
-        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
-        create_env_fn.close()
-    elif isinstance(create_env_fn, EnvCreator):
-        recorder_rm.load_state_dict(create_env_fn().state_dict())
-    else:
-        recorder_rm.load_state_dict(create_env_fn.state_dict())
-    # reset reward scaling
-    for t in recorder.transform:
-        if isinstance(t, RewardScaling):
-            t.scale.fill_(1.0)
-            t.loc.fill_(0.0)
 
     record = Recorder(
         record_frames=cfg.record_frames,
         frame_skip=cfg.frame_skip,
         policy_exploration=policy,
-        recorder=recorder,
+        recorder=make_recorder_env(cfg, video_tag, stats, logger, create_env_fn),
         record_interval=cfg.record_interval,
         log_keys=cfg.recorder_log_keys,
     )
+
 
     final_seed = collector.set_seed(cfg.seed)
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
@@ -354,53 +405,7 @@ def main(cfg: "DictConfig"):
 
                 do_log = False
 
-            with torch.no_grad(), set_exploration_mode("mode"):
-                td_record = record(None)
-                if td_record is not None and logger is not None:
-                    for key, value in td_record.items():
-                        if key in ["r_evaluation", "total_r_evaluation"]:
-                            logger.log_scalar(
-                                key,
-                                value.detach().cpu().numpy(),
-                                step=collected_frames,
-                            )
-                # Compute observation reco
-                if cfg.record_video and record._count % cfg.record_interval == 0:
-                    true_pixels = recover_pixels(world_model_td["pixels"], stats)
-
-                    reco_pixels = recover_pixels(
-                        world_model_td["reco_pixels"], stats
-                    )
-                    with autocast(dtype=torch.float16):
-                        world_model_td = world_model_td.select(
-                            "posterior_states", "next_belief"
-                        ).detach()
-                        world_model_td.batch_size = [
-                            world_model_td.shape[0],
-                            world_model_td.get("next_belief").shape[1],
-                        ]
-                        world_model_td.rename_key("posterior_states", "prior_state")
-                        world_model_td.rename_key("next_belief", "belief")
-                        world_model_td = model_based_env.rollout(
-                            max_steps=true_pixels.shape[1],
-                            policy=actor_model,
-                            auto_reset=False,
-                            tensordict=world_model_td[:, 0],
-                        ).detach()
-                    imagine_pxls = recover_pixels(
-                        model_based_env.decode_obs(world_model_td)["reco_pixels"],
-                        stats,
-                    )
-
-                    stacked_pixels = torch.cat(
-                        [true_pixels, reco_pixels, imagine_pxls], dim=-1
-                    )
-                    if logger is not None:
-                        logger.log_video(
-                            "pixels_rec_and_imag",
-                            stacked_pixels.detach().cpu().numpy(),
-                        )
-
+            call_record(logger, record, collected_frames, world_model_td, stats, model_based_env, actor_model, cfg)
 
 def recover_pixels(pixels, stats):
     return (
