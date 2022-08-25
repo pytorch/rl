@@ -138,6 +138,7 @@ class DMControlWrapper(GymLikeEnv):
     ):
         # TODO: remove this
         import traceback
+
         try:
             raise RuntimeError()
         except:

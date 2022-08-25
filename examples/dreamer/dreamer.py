@@ -139,15 +139,11 @@ def main(cfg: "DictConfig"):
 
     stats = None
     if not cfg.vecnorm and cfg.norm_stats:
-        proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False)()
         stats = get_stats_random_rollout(
             cfg,
-            proof_env,
             key="next_pixels" if cfg.from_pixels else "next_observation_vector",
         )
         # make sure proof_env is closed
-        proof_env.close()
-        del proof_env
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
     proof_env = transformed_env_constructor(

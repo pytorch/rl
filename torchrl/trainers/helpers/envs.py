@@ -348,8 +348,13 @@ def parallel_env_constructor(
 
 
 def get_stats_random_rollout(
-    cfg: "DictConfig", proof_environment: EnvBase, key: Optional[str] = None
+    cfg: "DictConfig", proof_environment: EnvBase = None, key: Optional[str] = None
 ):
+    if proof_environment is None:
+        proof_environment = transformed_env_constructor(
+            cfg=cfg, use_env_creator=False
+        )()
+
     print("computing state stats")
     if not hasattr(cfg, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
