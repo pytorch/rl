@@ -362,18 +362,14 @@ def get_stats_random_rollout(
         raise AttributeError("init_env_steps missing from arguments.")
 
     n = 0
-    td_stats = []
+    val_stats = []
     while n < cfg.init_env_steps:
         _td_stats = proof_environment.rollout(max_steps=cfg.init_env_steps)
         n += _td_stats.numel()
-        _td_stats_select = _td_stats.select(key).to_tensordict().cpu()
-        if not len(list(_td_stats_select.keys())):
-            raise RuntimeError(
-                f"key {key} not found in tensordict with keys {list(_td_stats.keys())}"
-            )
-        td_stats.append(_td_stats_select)
-        del _td_stats, _td_stats_select
-    td_stats = torch.cat(td_stats, 0)
+        val = _td_stats.get(key).cpu()
+        val_stats.append(val)
+        del _td_stats, val
+    val_stats = torch.cat(val_stats, 0)
 
     if key is None:
         keys = list(proof_environment.observation_spec.keys())
@@ -385,18 +381,18 @@ def get_stats_random_rollout(
             )
 
     if key == "next_pixels":
-        m = td_stats.get(key).mean()
-        s = td_stats.get(key).std().clamp_min(1e-5)
+        m = val_stats.mean()
+        s = val_stats.std()
     else:
-        m = td_stats.get(key).mean(dim=0)
-        s = td_stats.get(key).std(dim=0)
+        m = val_stats.mean(dim=0)
+        s = val_stats.std(dim=0)
     m[s == 0] = 0.0
     s[s == 0] = 1.0
 
     print(
-        f"stats computed for {td_stats.numel()} steps. Got: \n"
+        f"stats computed for {val_stats.numel()} steps. Got: \n"
         f"loc = {m}, \n"
-        f"scale: {s}"
+        f"scale = {s}"
     )
     if not torch.isfinite(m).all():
         raise RuntimeError("non-finite values found in mean")
