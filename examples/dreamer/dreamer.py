@@ -129,9 +129,7 @@ def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
 
 @torch.inference_mode()
 def call_record(logger, record, collected_frames, sampled_tensordict, stats, model_based_env, actor_model, cfg):
-    print("recording")
     td_record = record(None)
-    print("recording done")
     if td_record is not None and logger is not None:
         for key, value in td_record.items():
             if key in ["r_evaluation", "total_r_evaluation"]:
@@ -150,7 +148,6 @@ def call_record(logger, record, collected_frames, sampled_tensordict, stats, mod
                 "next_belief",
             )[:4].detach().to_tendordict()
         )
-        print("obs recording")
         true_pixels = recover_pixels(world_model_td["pixels"], stats)
 
         reco_pixels = recover_pixels(
@@ -185,7 +182,6 @@ def call_record(logger, record, collected_frames, sampled_tensordict, stats, mod
                 "pixels_rec_and_imag",
                 stacked_pixels.detach().cpu().numpy(),
             )
-        print("obs recording done")
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
