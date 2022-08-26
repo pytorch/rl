@@ -137,7 +137,7 @@ def call_record(logger, record, collected_frames, sampled_tensordict, stats, mod
             if key in ["r_evaluation", "total_r_evaluation"]:
                 logger.log_scalar(
                     key,
-                    value.detach().cpu().item(),
+                    value.cpu().item(),
                     step=collected_frames,
                 )
     # Compute observation reco
@@ -159,7 +159,7 @@ def call_record(logger, record, collected_frames, sampled_tensordict, stats, mod
         with autocast(dtype=torch.float16):
             world_model_td = world_model_td.select(
                 "posterior_states", "next_belief"
-            ).detach()
+            )
             world_model_td.batch_size = [
                 world_model_td.shape[0],
                 world_model_td.get("next_belief").shape[1],
@@ -171,7 +171,7 @@ def call_record(logger, record, collected_frames, sampled_tensordict, stats, mod
                 policy=actor_model,
                 auto_reset=False,
                 tensordict=world_model_td[:, 0],
-            ).detach()
+            )
         imagine_pxls = recover_pixels(
             model_based_env.decode_obs(world_model_td)["reco_pixels"],
             stats,
@@ -334,7 +334,7 @@ def main(cfg: "DictConfig"):
             step=collected_frames,
         )
 
-        if i % 100 == 0:
+        if i % cfg.record_interval == 0:
             do_log = True
         else:
             do_log = False
