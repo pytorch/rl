@@ -305,8 +305,8 @@ def main(cfg: "DictConfig"):
     scaler1 = GradScaler()
     scaler2 = GradScaler()
     scaler3 = GradScaler()
-    torch.cuda.empty_cache()
     for i, tensordict in enumerate(collector):
+        torch.cuda.empty_cache()
 
         # update weights of the inference policy
         collector.update_policy_weights_()
