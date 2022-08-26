@@ -140,14 +140,8 @@ def call_record(logger, record, collected_frames, sampled_tensordict, stats, mod
                 )
     # Compute observation reco
     if cfg.record_video and record._count % cfg.record_interval == 0:
-        world_model_td = (
-            sampled_tensordict.select(
-                "pixels",
-                "reco_pixels",
-                "posterior_states",
-                "next_belief",
-            )[:4].detach().to_tensordict()
-        )
+        world_model_td = sampled_tensordict
+
         true_pixels = recover_pixels(world_model_td["pixels"], stats)
 
         reco_pixels = recover_pixels(
@@ -344,7 +338,15 @@ def main(cfg: "DictConfig"):
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
-                    sampled_tensordict_save = sampled_tensordict.detach().to_tensordict()
+                    if cfg.record_video and (record._count + 1) % cfg.record_interval == 0:
+                        sampled_tensordict_save = sampled_tensordict.select(
+                            "pixels",
+                            "reco_pixels",
+                            "posterior_states",
+                            "next_belief",
+                        )[:4].detach().to_tensordict()
+                    else:
+                        sampled_tensordict_save = None
 
                 scaler1.scale(model_loss_td["loss_world_model"]).backward()
                 scaler1.unscale_(world_model_opt)
