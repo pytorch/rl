@@ -440,6 +440,9 @@ class BoundedTensorSpec(TensorSpec):
 
     def rand(self, shape=torch.Size([])) -> torch.Tensor:
         a, b = self.space
+        safe_interval = 0.0001 * (b - a)
+        a = a + safe_interval
+        b = b - safe_interval
         shape = [*shape, *self.shape]
         if self.dtype in (torch.float, torch.double, torch.half):
             out = (
