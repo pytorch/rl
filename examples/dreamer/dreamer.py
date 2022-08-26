@@ -126,18 +126,31 @@ def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
             t.loc.fill_(0.0)
     return recorder
 
-def call_record(logger, record, collected_frames, world_model_td, stats, model_based_env, actor_model, cfg):
+
+@torch.inference_mode()
+def call_record(logger, record, collected_frames, sampled_tensordict, stats, model_based_env, actor_model, cfg):
+    print("recording")
     td_record = record(None)
+    print("recording done")
     if td_record is not None and logger is not None:
         for key, value in td_record.items():
             if key in ["r_evaluation", "total_r_evaluation"]:
                 logger.log_scalar(
                     key,
-                    value.detach().cpu().numpy(),
+                    value.detach().cpu().item(),
                     step=collected_frames,
                 )
     # Compute observation reco
     if cfg.record_video and record._count % cfg.record_interval == 0:
+        world_model_td = (
+            sampled_tensordict.select(
+                "pixels",
+                "reco_pixels",
+                "posterior_states",
+                "next_belief",
+            )[:4].detach().to_tendordict()
+        )
+        print("obs recording")
         true_pixels = recover_pixels(world_model_td["pixels"], stats)
 
         reco_pixels = recover_pixels(
@@ -172,6 +185,7 @@ def call_record(logger, record, collected_frames, world_model_td, stats, model_b
                 "pixels_rec_and_imag",
                 stacked_pixels.detach().cpu().numpy(),
             )
+        print("obs recording done")
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
@@ -181,7 +195,7 @@ def main(cfg: "DictConfig"):
     if not isinstance(cfg.reward_scaling, float):
         cfg.reward_scaling = 1.0
 
-    if torch.cuda.is_available() and not cfg.model_device:
+    if torch.cuda.is_available() and not cfg.model_device != "":
         device = torch.device("cuda:0")
     elif cfg.model_device:
         device = torch.device(cfg.model_device)
@@ -334,17 +348,6 @@ def main(cfg: "DictConfig"):
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
-                    if cfg.record_video:
-                        world_model_td = (
-                            sampled_tensordict.clone()
-                            .select(
-                                "pixels",
-                                "reco_pixels",
-                                "posterior_states",
-                                "next_belief",
-                            )[:4]
-                            .detach()
-                        )
 
                 scaler1.scale(model_loss_td["loss_world_model"]).backward()
                 scaler1.unscale_(world_model_opt)
@@ -406,7 +409,7 @@ def main(cfg: "DictConfig"):
 
                 do_log = False
 
-            call_record(logger, record, collected_frames, world_model_td, stats, model_based_env, actor_model, cfg)
+            call_record(logger, record, collected_frames, sampled_tensordict, stats, model_based_env, actor_model, cfg)
 
 def recover_pixels(pixels, stats):
     return (
