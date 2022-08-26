@@ -695,6 +695,9 @@ class _MultiDataCollector(_DataCollector):
         self._policy_dict = {}
         self._get_weights_fn_dict = {}
         for i, _device in enumerate(devices):
+            if _device in self._policy_dict:
+                devices[i] = _device
+                continue
             _policy, _device, _get_weight_fn = self._get_policy_and_device(
                 policy=policy,
                 device=_device,
@@ -792,6 +795,9 @@ class _MultiDataCollector(_DataCollector):
             pipe_child.close()
             self.procs.append(proc)
             self.pipes.append(pipe_parent)
+            msg = pipe_parent.recv()
+            if msg != "instantiated":
+                raise RuntimeError(msg)
         self.queue_out = queue_out
         self.closed = False
 
@@ -1261,6 +1267,7 @@ def _main_async_collector(
         print("Sync data collector created")
     dc_iter = iter(dc)
     j = 0
+    pipe_child.send("instantiated")
 
     has_timed_out = False
     counter = 0
