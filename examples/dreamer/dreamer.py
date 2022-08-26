@@ -146,7 +146,7 @@ def call_record(logger, record, collected_frames, sampled_tensordict, stats, mod
                 "reco_pixels",
                 "posterior_states",
                 "next_belief",
-            )[:4].detach().to_tendordict()
+            )[:4].detach().to_tensordict()
         )
         true_pixels = recover_pixels(world_model_td["pixels"], stats)
 
