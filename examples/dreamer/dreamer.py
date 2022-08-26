@@ -344,6 +344,7 @@ def main(cfg: "DictConfig"):
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
+                    sampled_tensordict_save = sampled_tensordict.detach().to_tensordict()
 
                 scaler1.scale(model_loss_td["loss_world_model"]).backward()
                 scaler1.unscale_(world_model_opt)
@@ -405,7 +406,7 @@ def main(cfg: "DictConfig"):
 
                 do_log = False
 
-            call_record(logger, record, collected_frames, sampled_tensordict, stats, model_based_env, actor_model, cfg)
+            call_record(logger, record, collected_frames, sampled_tensordict_save, stats, model_based_env, actor_model, cfg)
 
 def recover_pixels(pixels, stats):
     return (
