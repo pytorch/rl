@@ -155,6 +155,8 @@ def sync_sync_collector(
             kwargs["device"] = kwargs.pop("devices")
         if "passing_devices" in kwargs:
             kwargs["passing_device"] = kwargs.pop("passing_devices")
+        if not isinstance(env_kwargs, dict):
+            env_kwargs = env_kwargs[0]
         return _make_collector(
             SyncDataCollector,
             env_fns=env_fns,
