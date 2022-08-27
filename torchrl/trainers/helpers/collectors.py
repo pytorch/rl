@@ -151,6 +151,10 @@ def sync_sync_collector(
 
     """
     if callable(env_fns) or len(env_fns) == 1:
+        if "devices" in kwargs:
+            kwargs["device"] = kwargs.pop("devices")
+        if "passing_devices" in kwargs:
+            kwargs["passing_device"] = kwargs.pop("passing_devices")
         return _make_collector(
             SyncDataCollector,
             env_fns=env_fns,
