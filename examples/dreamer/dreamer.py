@@ -279,6 +279,7 @@ def main(cfg: "DictConfig"):
         #     for device in cfg.collector_devices
         # ],
     )
+    print("collector:", collector)
 
     replay_buffer = make_replay_buffer(device, cfg)
 

@@ -9,12 +9,15 @@ from typing import Callable, List, Optional, Type, Union, Dict, Any
 from torchrl.collectors.collectors import (
     _DataCollector,
     _MultiDataCollector,
+    SyncDataCollector,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
 )
 from torchrl.data import MultiStep
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import ParallelEnv
+from torchrl.envs.common import EnvBase
+from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule
 
 __all__ = [
     "sync_sync_collector",
@@ -23,8 +26,6 @@ __all__ = [
     "make_collector_onpolicy",
 ]
 
-from torchrl.envs.common import EnvBase
-from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule
 
 
 def sync_async_collector(
@@ -95,7 +96,7 @@ def sync_sync_collector(
     num_env_per_collector: Optional[int] = None,
     num_collectors: Optional[int] = None,
     **kwargs,
-) -> MultiSyncDataCollector:
+) -> Union[SyncDataCollector, MultiSyncDataCollector]:
     """
     Runs synchronous collectors, each running synchronous environments.
 
@@ -149,6 +150,15 @@ def sync_sync_collector(
         **kwargs: Other kwargs passed to the data collectors
 
     """
+    if callable(env_fns) or len(env_fns) == 1:
+        return _make_collector(
+            SyncDataCollector,
+            env_fns=env_fns,
+            env_kwargs=env_kwargs,
+            num_env_per_collector=num_env_per_collector,
+            num_collectors=num_collectors,
+            **kwargs,
+        )
     return _make_collector(
         MultiSyncDataCollector,
         env_fns=env_fns,
