@@ -155,6 +155,8 @@ def sync_sync_collector(
             kwargs["device"] = kwargs.pop("devices")
         if "passing_devices" in kwargs:
             kwargs["passing_device"] = kwargs.pop("passing_devices")
+        if not callable(env_fns):
+            env_fns = env_fns[0]
         if not isinstance(env_kwargs, dict):
             env_kwargs = env_kwargs[0]
         return _make_collector(
@@ -211,7 +213,7 @@ def _make_collector(
                 "num_env was not a list but num_env_per_collector and num_collectors were not both specified,"
                 f"got num_env_per_collector={num_env_per_collector} and num_collectors={num_collectors}"
             )
-    if not isinstance(env_kwargs, list):
+    if not isinstance(env_kwargs, list) and collector_class is not SyncDataCollector:
         env_kwargs = [env_kwargs for _ in range(num_env)]
 
     env_fns_split = [
@@ -240,6 +242,10 @@ def _make_collector(
             for _env_fn, _env_kwargs in zip(env_fns_split, env_kwargs_split)
         ]
         env_kwargs = None
+    if collector_class is SyncDataCollector:
+        if len(env_fns) > 1:
+            raise RuntimeError(f"Something went wrong: expected a single env constructor but got {len(env_fns)}")
+        env_fns = env_fns[0]
     return collector_class(
         create_env_fn=env_fns,
         create_env_kwargs=env_kwargs,
