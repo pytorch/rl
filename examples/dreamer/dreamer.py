@@ -15,7 +15,6 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 from torchrl.objectives.costs.dreamer import (
     DreamerActorLoss,
@@ -85,6 +84,7 @@ DEFAULT_REWARD_SCALING = {
     "humanoid": 100,
 }
 
+
 def grad_norm(optimizer: torch.optim.Optimizer):
     sum_of_sq = 0.0
     for pg in optimizer.param_groups:
@@ -128,7 +128,16 @@ def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
 
 
 @torch.inference_mode()
-def call_record(logger, record, collected_frames, sampled_tensordict, stats, model_based_env, actor_model, cfg):
+def call_record(
+    logger,
+    record,
+    collected_frames,
+    sampled_tensordict,
+    stats,
+    model_based_env,
+    actor_model,
+    cfg,
+):
     td_record = record(None)
     if td_record is not None and logger is not None:
         for key, value in td_record.items():
@@ -144,13 +153,9 @@ def call_record(logger, record, collected_frames, sampled_tensordict, stats, mod
 
         true_pixels = recover_pixels(world_model_td["pixels"], stats)
 
-        reco_pixels = recover_pixels(
-            world_model_td["reco_pixels"], stats
-        )
+        reco_pixels = recover_pixels(world_model_td["reco_pixels"], stats)
         with autocast(dtype=torch.float16):
-            world_model_td = world_model_td.select(
-                "posterior_states", "next_belief"
-            )
+            world_model_td = world_model_td.select("posterior_states", "next_belief")
             world_model_td.batch_size = [
                 world_model_td.shape[0],
                 world_model_td.get("next_belief").shape[1],
@@ -168,14 +173,13 @@ def call_record(logger, record, collected_frames, sampled_tensordict, stats, mod
             stats,
         )
 
-        stacked_pixels = torch.cat(
-            [true_pixels, reco_pixels, imagine_pxls], dim=-1
-        )
+        stacked_pixels = torch.cat([true_pixels, reco_pixels, imagine_pxls], dim=-1)
         if logger is not None:
             logger.log_video(
                 "pixels_rec_and_imag",
                 stacked_pixels.detach().cpu().numpy(),
             )
+
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
@@ -283,7 +287,6 @@ def main(cfg: "DictConfig"):
 
     replay_buffer = make_replay_buffer(device, cfg)
 
-
     record = Recorder(
         record_frames=cfg.record_frames,
         frame_skip=cfg.frame_skip,
@@ -292,7 +295,6 @@ def main(cfg: "DictConfig"):
         record_interval=cfg.record_interval,
         log_keys=cfg.recorder_log_keys,
     )
-
 
     final_seed = collector.set_seed(cfg.seed)
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
@@ -325,7 +327,7 @@ def main(cfg: "DictConfig"):
             step=collected_frames,
         )
 
-        if i % cfg.record_interval == 0:
+        if (i % cfg.record_interval) == 0:
             do_log = True
         else:
             do_log = False
@@ -339,13 +341,20 @@ def main(cfg: "DictConfig"):
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
-                    if cfg.record_video and (record._count + 1) % cfg.record_interval == 0:
-                        sampled_tensordict_save = sampled_tensordict.select(
-                            "pixels",
-                            "reco_pixels",
-                            "posterior_states",
-                            "next_belief",
-                        )[:4].detach().to_tensordict()
+                    if (
+                        cfg.record_video
+                        and (record._count + 1) % cfg.record_interval == 0
+                    ):
+                        sampled_tensordict_save = (
+                            sampled_tensordict.select(
+                                "pixels",
+                                "reco_pixels",
+                                "posterior_states",
+                                "next_belief",
+                            )[:4]
+                            .detach()
+                            .to_tensordict()
+                        )
                     else:
                         sampled_tensordict_save = None
 
@@ -406,10 +415,20 @@ def main(cfg: "DictConfig"):
                     )
                 value_opt.zero_grad()
                 scaler3.update()
+                if j == cfg.optim_steps_per_batch - 1:
+                    do_log = False
 
-                do_log = False
+            call_record(
+                logger,
+                record,
+                collected_frames,
+                sampled_tensordict_save,
+                stats,
+                model_based_env,
+                actor_model,
+                cfg,
+            )
 
-            call_record(logger, record, collected_frames, sampled_tensordict_save, stats, model_based_env, actor_model, cfg)
 
 def recover_pixels(pixels, stats):
     return (

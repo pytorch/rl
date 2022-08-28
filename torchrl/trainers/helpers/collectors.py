@@ -27,7 +27,6 @@ __all__ = [
 ]
 
 
-
 def sync_async_collector(
     env_fns: Union[Callable, List[Callable]],
     env_kwargs: Optional[Union[dict, List[dict]]],
@@ -240,7 +239,9 @@ def _make_collector(
         env_kwargs = None
     if collector_class is SyncDataCollector:
         if len(env_fns) > 1:
-            raise RuntimeError(f"Something went wrong: expected a single env constructor but got {len(env_fns)}")
+            raise RuntimeError(
+                f"Something went wrong: expected a single env constructor but got {len(env_fns)}"
+            )
         env_fns = env_fns[0]
         env_kwargs = env_kwargs[0]
     return collector_class(

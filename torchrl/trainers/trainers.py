@@ -33,7 +33,6 @@ from torchrl.data import (
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import expand_right, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule

@@ -1163,12 +1163,12 @@ def make_redq_model(
 
 def make_dreamer(
     cfg: "DictConfig",
-    proof_environment: EnvBase=None,
+    proof_environment: EnvBase = None,
     device: DEVICE_TYPING = "cpu",
     action_key: str = "action",
     value_key: str = "predicted_value",
     use_decoder_in_env: bool = False,
-    stats: Optional[dict]=None
+    stats: Optional[dict] = None,
 ) -> nn.ModuleList:
 
     proof_env_is_none = proof_environment is None
@@ -1317,7 +1317,6 @@ def make_dreamer(
         obs_decoder=mb_env_obs_decoder,
     )
 
-
     model_based_env.set_specs_from_env(proof_environment)
 
     world_model = world_model.to(device)
@@ -1362,6 +1361,7 @@ class DreamerConfig:
     actor_value_lr: float = 8e-5
     imagination_horizon: int = 15
     model_device: str = ""
+
 
 @dataclass
 class PPOModelConfig:
