@@ -317,7 +317,7 @@ def main(cfg: "DictConfig"):
         pbar.update(tensordict.numel())
         current_frames = tensordict.numel()
         collected_frames += current_frames
-        tensordict = tensordict.reshape(-1, cfg.batch_length)
+        # tensordict = tensordict.reshape(-1, cfg.batch_length)
         replay_buffer.extend(tensordict.cpu())
         logger.log_scalar(
             "r_training",
