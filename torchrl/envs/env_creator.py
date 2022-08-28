@@ -6,15 +6,15 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Union
 
 import torch
 
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import CloudpickleWrapper
-from torchrl.envs.common import EnvBase
+from torchrl.envs.common import EnvBase, EnvMetaData
 
-__all__ = ["EnvCreator"]
+__all__ = ["EnvCreator", "get_env_metadata"]
 
 
 class EnvCreator:
@@ -89,6 +89,7 @@ class EnvCreator:
             create_env_kwargs if isinstance(create_env_kwargs, dict) else dict()
         )
         self.initialized = False
+        self._meta_data = None
         self._share_memory = share_memory
         self.init_()
 
@@ -107,6 +108,18 @@ class EnvCreator:
             elif isinstance(item, torch.Tensor):
                 del state_dict[key]
 
+    @property
+    def meta_data(self):
+        if self._meta_data is None:
+            raise RuntimeError(
+                "meta_data is None in EnvCreator. " "Make sure init_() has been called."
+            )
+        return self._meta_data
+
+    @meta_data.setter
+    def meta_data(self, value: EnvMetaData):
+        self._meta_data = value
+
     def init_(self) -> EnvCreator:
         shadow_env = self.create_env_fn(**self.create_env_kwargs)
         tensordict = shadow_env.reset()
@@ -116,6 +129,7 @@ class EnvCreator:
         if self._share_memory:
             self.share_memory(self._transform_state_dict)
         self.initialized = True
+        self.meta_data = EnvMetaData.build_metadata_from_env(shadow_env)
         shadow_env.close()
         del shadow_env
         return self
@@ -148,3 +162,34 @@ class EnvCreator:
 
 def env_creator(fun: Callable) -> EnvCreator:
     return EnvCreator(fun)
+
+
+def get_env_metadata(
+    env_or_creator: Union[EnvBase, Callable], kwargs: Optional[Dict] = None
+):
+    if isinstance(env_or_creator, (EnvBase,)):
+        return EnvMetaData.build_metadata_from_env(env_or_creator)
+    elif not isinstance(env_or_creator, EnvBase) and not isinstance(
+        env_or_creator, EnvCreator
+    ):
+        # then env is a creator
+        if kwargs is None:
+            kwargs = dict()
+        env = env_or_creator(**kwargs)
+        return EnvMetaData.build_metadata_from_env(env)
+    elif isinstance(env_or_creator, EnvCreator):
+        if not (
+            kwargs == env_or_creator.create_env_kwargs
+            or kwargs is None
+            or len(kwargs) == 0
+        ):
+            raise RuntimeError(
+                "kwargs mismatch between EnvCreator and the kwargs provided to get_env_metadata:"
+                f"got EnvCreator.create_env_kwargs={env_or_creator.create_env_kwargs} and "
+                f"kwargs = {kwargs}"
+            )
+        return env_or_creator.meta_data
+    else:
+        raise NotImplementedError(
+            f"env of type {type(env_or_creator)} is not supported by get_env_metadata."
+        )

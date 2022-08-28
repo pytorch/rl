@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+from copy import deepcopy
 from numbers import Number
 from typing import Any, Callable, Iterator, Optional, Union, Dict
 
@@ -32,7 +33,61 @@ dtype_map = {
     torch.bool: bool,
 }
 
-__all__ = ["Specs", "make_tensordict"]
+__all__ = [
+    "Specs",
+    "make_tensordict",
+    "EnvBase",
+    "EnvMetaData",
+]
+
+
+class EnvMetaData:
+    def __init__(
+        self,
+        tensordict: TensorDictBase,
+        specs: CompositeSpec,
+        batch_size: torch.Size,
+        env_str: str,
+        device: torch.device,
+    ):
+        self.tensordict = tensordict
+        self.specs = specs
+        self.batch_size = batch_size
+        self.env_str = env_str
+        self.device = device
+
+    @staticmethod
+    def build_metadata_from_env(env) -> EnvMetaData:
+        tensordict = env.fake_tensordict()
+        specs = {key: getattr(env, key) for key in Specs._keys if key.endswith("_spec")}
+        specs = CompositeSpec(**specs)
+        batch_size = env.batch_size
+        env_str = str(env)
+        device = env.device
+        return EnvMetaData(tensordict, specs, batch_size, env_str, device)
+
+    def expand(self, *size: int) -> EnvMetaData:
+        tensordict = self.tensordict.expand(*size).to_tensordict()
+        batch_size = torch.Size([*size, *self.batch_size])
+        return EnvMetaData(
+            tensordict, self.specs, batch_size, self.env_str, self.device
+        )
+
+    def to(self, device: DEVICE_TYPING) -> EnvMetaData:
+        tensordict = self.tensordict.to(device)
+        specs = self.specs.to(device)
+        return EnvMetaData(tensordict, specs, self.batch_size, self.env_str, device)
+
+    def __setstate__(self, state):
+        state["tensordict"] = state["tensordict"].to_tensordict().to(state["device"])
+        state["specs"] = deepcopy(state["specs"]).to(state["device"])
+        self.__dict__.update(state)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["tensordict"] = state["tensordict"].to("cpu")
+        state["specs"] = state["specs"].to("cpu")
+        return state
 
 
 class Specs:
@@ -148,7 +203,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if "_action_spec" not in self.__dir__():
             self._action_spec = None
         if "_input_spec" not in self.__dir__():
-            self._input_spec = CompositeSpec(action=self._action_spec)
+            self._input_spec = None
         if "_reward_spec" not in self.__dir__():
             self._reward_spec = None
         if "_observation_spec" not in self.__dir__():
@@ -527,7 +582,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.is_closed = True
 
     def __del__(self):
-        if not self.is_closed:
+        # if del occurs before env has been set up, we don't want a recursion
+        # error
+        if "is_closed" in self.__dict__ and not self.is_closed:
             self.close()
 
     def to(self, device: DEVICE_TYPING) -> EnvBase:
@@ -542,6 +599,31 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.is_done = self.is_done.to(device)
         self.device = device
         return self
+
+    def fake_tensordict(self) -> TensorDictBase:
+        """
+        Returns a fake tensordict with key-value pairs that match in shape, device
+        and dtype what can be expected during an environment rollout.
+
+        """
+        input_spec = self.input_spec
+        fake_input = input_spec.rand()
+        observation_spec = self.observation_spec
+        fake_obs = observation_spec.rand()
+        fake_obs_step = step_tensordict(fake_obs)
+        reward_spec = self.reward_spec
+        fake_reward = reward_spec.rand()
+        fake_td = TensorDict(
+            {
+                **fake_obs_step,
+                **fake_obs,
+                **fake_input,
+                "reward": fake_reward,
+                "done": fake_reward.to(torch.bool),
+            },
+            batch_size=self.batch_size,
+        )
+        return fake_td
 
 
 class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
