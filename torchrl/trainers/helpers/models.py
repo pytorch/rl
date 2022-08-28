@@ -1361,6 +1361,8 @@ class DreamerConfig:
     actor_value_lr: float = 8e-5
     imagination_horizon: int = 15
     model_device: str = ""
+    normalize_rewards_online: bool = False
+    # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
     normalize_rewards_online_scale: float = 1.0
     # Final scale of the normalized rewards.
     normalize_rewards_online_decay: float = 0.9999
