@@ -457,7 +457,7 @@ def test_collector_vecnorm_envcreator():
     are modified after the collector is run for more steps.
 
     """
-    from torchrl.envs import GymEnv
+    from torchrl.envs.libs.gym import GymEnv
 
     num_envs = 4
     env_make = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
