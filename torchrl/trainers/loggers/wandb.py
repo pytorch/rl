@@ -148,6 +148,7 @@ class WandbLogger(Logger):
                 f"be silenced from now on but the values will keep being incremented."
             )
             step = self._prev_video_step + 1
+        self._prev_video_step = step
         self.experiment.log(
             {name: wandb.Video(video, fps=fps, format=format)}, step=step, **kwargs
         )
