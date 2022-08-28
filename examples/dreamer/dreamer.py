@@ -335,7 +335,7 @@ def main(cfg: "DictConfig"):
         if collected_frames >= cfg.init_random_frames:
             for j in range(cfg.optim_steps_per_batch):
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
+                sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
 
                 with autocast(dtype=torch.float16):
                     model_loss_td, sampled_tensordict = world_model_loss(

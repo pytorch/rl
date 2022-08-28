@@ -2,12 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+from typing import Optional
 
 import torch
 import torch.nn as nn
 
 from torchrl.data import TensorDict
+from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import hold_out_net
 from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
@@ -20,47 +21,47 @@ class DreamerModelLoss(LossModule):
     the observation, the reconstruction observation, the reward and the predicted reward.
 
     Args:
-        reco_loss (nn.Module): loss function for the reconstruction of the observation
-        reward_loss (nn.Module): loss function for the prediction of the reward
+        TODO
 
     """
 
     def __init__(
         self,
-        world_model: nn.Module,
+        world_model: TensorDictModule,
         cfg: "DictConfig",
         lambda_kl: float = 1.0,
         lambda_reco: float = 1.0,
         lambda_reward: float = 1.0,
-        reco_loss: nn.Module = nn.MSELoss(reduction="none"),
-        reward_loss: nn.Module = nn.MSELoss(),
+        reco_loss: Optional[nn.Module] = None,
+        reward_loss: Optional[nn.Module] = None,
         free_nats: int = 3,
     ):
         super().__init__()
         self.world_model = world_model
         self.cfg = cfg
-        self.reco_loss = reco_loss
-        self.reward_loss = reward_loss
+        self.reco_loss = reco_loss if reco_loss is not None else nn.MSELoss(reduction="none")
+        self.reward_loss = reward_loss if reward_loss is not None else nn.MSELoss()
         self.lambda_kl = lambda_kl
         self.lambda_reco = lambda_reco
         self.lambda_reward = lambda_reward
         self.free_nats = free_nats
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
+        tensordict = tensordict.clone(recursive=False)
         tensordict.batch_size = [tensordict.shape[0]]
-        tensordict["prior_state"] = torch.zeros(
+        tensordict.set("prior_state", torch.zeros(
             (tensordict.batch_size[0], self.cfg.state_dim), device=self.device
-        )
-        tensordict["belief"] = torch.zeros(
+        ))
+        tensordict.set("belief", torch.zeros(
             (tensordict.batch_size[0], self.cfg.rssm_hidden_dim), device=self.device
-        )
+        ))
         tensordict = self.world_model(tensordict)
         # compute model loss
         kl_loss = self.kl_loss(
-            tensordict["prior_means"],
-            tensordict["prior_stds"],
-            tensordict["posterior_means"],
-            tensordict["posterior_stds"],
+            tensordict.get("prior_means"),
+            tensordict.get("prior_stds"),
+            tensordict.get("posterior_means"),
+            tensordict.get("posterior_stds"),
         )
         reco_loss = (
             0.5
@@ -83,9 +84,9 @@ class DreamerModelLoss(LossModule):
             TensorDict(
                 {
                     "loss_world_model": loss,
-                    "loss_kl": kl_loss,
-                    "loss_reco": reco_loss,
-                    "loss_reward": reward_loss,
+                    # "loss_kl": kl_loss,
+                    # "loss_reco": reco_loss,
+                    # "loss_reward": reward_loss,
                 },
                 [],
             ),
@@ -141,9 +142,9 @@ class DreamerActorLoss(LossModule):
             )
             with hold_out_net(self.value_model):
                 tensordict = self.value_model(tensordict)
-        tensordict["lambda_target"] = self.lambda_target(
+        tensordict.set("lambda_target", self.lambda_target(
             tensordict.get("reward"), tensordict.get("predicted_value")
-        )
+        ))
 
         actor_loss = -tensordict.get("lambda_target").mean()
         return (
@@ -157,7 +158,7 @@ class DreamerActorLoss(LossModule):
         )
 
     def lambda_target(self, reward, value):
-        done = torch.zeros(reward.shape).bool().to(reward.device)
+        done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
         return vec_td_lambda_return_estimate(
             self.gamma, self.lmbda, value, reward, done
         )
@@ -167,11 +168,11 @@ class DreamerValueLoss(LossModule):
     def __init__(
         self,
         value_model,
-        value_loss: nn.Module = nn.MSELoss(),
+        value_loss: Optional[nn.Module] = None,
     ):
         super().__init__()
         self.value_model = value_model
-        self.value_loss = value_loss
+        self.value_loss = value_loss if value_loss is not None else nn.MSELoss()
 
     def forward(self, tensordict) -> torch.Tensor:
         tensordict = self.value_model(tensordict)
