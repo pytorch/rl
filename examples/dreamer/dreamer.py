@@ -42,7 +42,7 @@ from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
     ReplayArgsConfig,
 )
-from torchrl.trainers.trainers import Recorder
+from torchrl.trainers.trainers import Recorder, RewardNormalizer
 
 
 @dataclass
@@ -249,6 +249,17 @@ def main(cfg: "DictConfig"):
         value_key="predicted_value",
     )
 
+    # reward normalization
+    if cfg.normalize_rewards_online:
+        # if used the running statistics of the rewards are computed and the
+        # rewards used for training will be normalized based on these.
+        reward_normalizer = RewardNormalizer(
+            scale=cfg.normalize_rewards_online_scale,
+            decay=cfg.normalize_rewards_online_decay,
+        )
+    else:
+        reward_normalizer = None
+
     # Losses
     world_model_loss = DreamerModelLoss(world_model, cfg).to(device)
     actor_loss = DreamerActorLoss(actor_model, value_model, model_based_env, cfg).to(
@@ -313,7 +324,8 @@ def main(cfg: "DictConfig"):
 
         # update weights of the inference policy
         collector.update_policy_weights_()
-
+        if reward_normalizer is not None:
+            reward_normalizer.update_reward_stats(tensordict)
         if r0 is None:
             r0 = tensordict["reward"].mean().item()
         pbar.update(tensordict.numel())
@@ -335,7 +347,13 @@ def main(cfg: "DictConfig"):
         if collected_frames >= cfg.init_random_frames:
             for j in range(cfg.optim_steps_per_batch):
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
+                sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(
+                    device, non_blocking=True
+                )
+                if reward_normalizer is not None:
+                    sampled_tensordict = reward_normalizer.normalize_reward(
+                        sampled_tensordict
+                    )
 
                 with autocast(dtype=torch.float16):
                     model_loss_td, sampled_tensordict = world_model_loss(

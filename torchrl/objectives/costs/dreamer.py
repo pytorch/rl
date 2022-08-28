@@ -39,7 +39,9 @@ class DreamerModelLoss(LossModule):
         super().__init__()
         self.world_model = world_model
         self.cfg = cfg
-        self.reco_loss = reco_loss if reco_loss is not None else nn.MSELoss(reduction="none")
+        self.reco_loss = (
+            reco_loss if reco_loss is not None else nn.MSELoss(reduction="none")
+        )
         self.reward_loss = reward_loss if reward_loss is not None else nn.MSELoss()
         self.lambda_kl = lambda_kl
         self.lambda_reco = lambda_reco
@@ -49,12 +51,18 @@ class DreamerModelLoss(LossModule):
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recursive=False)
         tensordict.batch_size = [tensordict.shape[0]]
-        tensordict.set("prior_state", torch.zeros(
-            (tensordict.batch_size[0], self.cfg.state_dim), device=self.device
-        ))
-        tensordict.set("belief", torch.zeros(
-            (tensordict.batch_size[0], self.cfg.rssm_hidden_dim), device=self.device
-        ))
+        tensordict.set(
+            "prior_state",
+            torch.zeros(
+                (tensordict.batch_size[0], self.cfg.state_dim), device=self.device
+            ),
+        )
+        tensordict.set(
+            "belief",
+            torch.zeros(
+                (tensordict.batch_size[0], self.cfg.rssm_hidden_dim), device=self.device
+            ),
+        )
         tensordict = self.world_model(tensordict)
         # compute model loss
         kl_loss = self.kl_loss(
@@ -142,9 +150,12 @@ class DreamerActorLoss(LossModule):
             )
             with hold_out_net(self.value_model):
                 tensordict = self.value_model(tensordict)
-        tensordict.set("lambda_target", self.lambda_target(
-            tensordict.get("reward"), tensordict.get("predicted_value")
-        ))
+        tensordict.set(
+            "lambda_target",
+            self.lambda_target(
+                tensordict.get("reward"), tensordict.get("predicted_value")
+            ),
+        )
 
         actor_loss = -tensordict.get("lambda_target").mean()
         return (
