@@ -149,7 +149,7 @@ def sync_sync_collector(
         **kwargs: Other kwargs passed to the data collectors
 
     """
-    if callable(env_fns) or len(env_fns) == 1:
+    if num_collectors == 1:
         if "devices" in kwargs:
             kwargs["device"] = kwargs.pop("devices")
         if "passing_devices" in kwargs:
