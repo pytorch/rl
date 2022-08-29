@@ -20,11 +20,11 @@ TorchRL aims at having as few dependencies as possible (python standard library,
 
 On the low-level end, torchrl comes with a set of highly re-usable functionals for [cost functions](torchrl/objectives/costs), [returns](torchrl/objectives/returns) and data processing.
 
-TorchRL aims at a high modularity <text id="1">(1)</text> and good runtime performance <text id="2">(2)</text>.
+TorchRL aims at a high modularity (1) and good runtime performance (2).
 
 On the high-level end, TorchRL provides:
 - [`TensorDict`](torchrl/data/tensordict/tensordict.py), 
-a convenient data structure[<sup>(1)</sup>](#1) to pass data from 
+a convenient data structure<sup>(1)</sup> to pass data from 
 one object to another without friction.
 `TensorDict` makes it easy to re-use pieces of code across environments, models and
 algorithms. For instance, here's how to code a rollout in TorchRL:
@@ -45,7 +45,7 @@ out = torch.stack(out, 0)  # TensorDict supports multiple tensor operations
 ```
 Check our [tutorial](tutorials/tensordict.ipynb) for more information.
 - An associated [`TensorDictModule` class](torchrl/modules/tensordict_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible! 
-- multiprocess [data collectors](torchrl/collectors/collectors.py)[<sup>(2)</sup>](#2) that work synchronously or asynchronously:
+- multiprocess [data collectors](torchrl/collectors/collectors.py)<sup>(2)</sup> that work synchronously or asynchronously:
 ```python
 collector = MultiaSyncDataCollector(
     [make_env, make_env], 
@@ -62,7 +62,7 @@ for i, tensordict_data in enumerate(collector):
     optim.zero_grad()
     collector.update_policy_weights_()
 ```
-- efficient[<sup>(2)</sup>](#2) and generic[<sup>(1)</sup>](#1) [replay buffers](torchrl/data/replay_buffers/replay_buffers.py) that with modularized storage:
+- efficient<sup>(2)</sup> and generic<sup>(1)</sup> [replay buffers](torchrl/data/replay_buffers/replay_buffers.py) that with modularized storage:
 ```python
 storage = LazyMemmapStorage(  # memory-mapped (physical) storage
     cfg.buffer_size,
@@ -79,7 +79,7 @@ buffer = TensorDictPrioritizedReplayBuffer(
 )
 ```
 - [interfaces for environments](torchrl/envs)
-from common libraries (OpenAI gym, deepmind control lab, etc.)[<sup>(1)</sup>](#1) and [wrappers](torchrl/envs/vec_env.py) for parallel execution[<sup>(2)</sup>](#2), 
+from common libraries (OpenAI gym, deepmind control lab, etc.)<sup>(1)</sup> and [wrappers](torchrl/envs/vec_env.py) for parallel execution<sup>(2)</sup>, 
 as well as a new pytorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py):
 ```python
 env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
@@ -88,8 +88,8 @@ tensordict = env_parallel.rollout(max_steps=20)
 assert tensordict.shape == [4, 20]  # 4 envs, 20 steps rollout
 ```
 
-- cross-library [environment transforms](torchrl/envs/transforms/transforms.py)[<sup>(1)</sup>](#1), 
-executed on device and in a vectorized fashion[<sup>(2)</sup>](#2), 
+- cross-library [environment transforms](torchrl/envs/transforms/transforms.py)<sup>(1)</sup>, 
+executed on device and in a vectorized fashion<sup>(2)</sup>, 
 which process and prepare the data coming out of the environments to be used by the agent:
 ```python
 env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
@@ -102,8 +102,8 @@ tensordict = env.reset()
 assert tensordict.device == torch.device("cuda:0")
 ```
 
-- various tools for distributed learning (e.g. [memory mapped tensors](torchrl/data/tensordict/memmap.py))[<sup>(2)</sup>](#2);
-- various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py))[<sup>(1)</sup>](#1):
+- various tools for distributed learning (e.g. [memory mapped tensors](torchrl/data/tensordict/memmap.py))<sup>(2)</sup>;
+- various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py))<sup>(1)</sup>:
 ```python
 common_module = ConvNet(
     bias_last_layer=True,
@@ -143,7 +143,7 @@ actor_value = ActorValueOperator(common_module, policy_module, value_module)
 # standalone policy from this
 standalone_policy = actor_value.get_policy_operator()
 ```
-- exploration [wrappers](torchrl/modules/tensordict_module/exploration.py) and [modules](torchrl/modules/models/exploration.py) to easily swap between exploration and exploitation[<sup>(1)</sup>](#1):
+- exploration [wrappers](torchrl/modules/tensordict_module/exploration.py) and [modules](torchrl/modules/models/exploration.py) to easily swap between exploration and exploitation<sup>(1)</sup>:
 ```python
 policy_explore = EGreedyWrapper(policy)
 with set_exploration_mode("random"):
@@ -152,7 +152,7 @@ with set_exploration_mode("mode"):
     tensordict = policy_explore(tensordict)  # will not use eps-greedy
 ```
 - various [recipes](torchrl/trainers/helpers/models.py) to build models that correspond to the environment being deployed;
-- a generic [trainer class](torchrl/trainers/trainers.py)[<sup>(1)</sup>](#1).
+- a generic [trainer class](torchrl/trainers/trainers.py)<sup>(1)</sup>.
 
 A series of [examples](examples/) are provided with an illustrative purpose:
 - [DQN (and add-ons up to Rainbow)](examples/dqn/dqn.py)
