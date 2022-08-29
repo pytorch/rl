@@ -20,11 +20,11 @@ TorchRL aims at having as few dependencies as possible (python standard library,
 
 On the low-level end, torchrl comes with a set of highly re-usable functionals for [cost functions](torchrl/objectives/costs), [returns](torchrl/objectives/returns) and data processing.
 
-TorchRL aims at a high _modularity_ and good **runtime performance**.
+TorchRL aims at a high modularity (1) and good runtime performance (2).
 
 On the high-level end, TorchRL provides:
 - [`TensorDict`](torchrl/data/tensordict/tensordict.py), 
-_a convenient data structure_ to pass data from 
+a convenient data structure^{(1)} to pass data from 
 one object to another without friction.
 `TensorDict` makes it easy to re-use pieces of code across environments, models and
 algorithms. For instance, here's how to code a rollout in TorchRL:
