@@ -29,7 +29,7 @@ class DreamerModelLoss(LossModule):
         world_model: TensorDictModule,
         cfg: "DictConfig",
         lambda_kl: float = 1.0,
-        lambda_reco: float = 1.0,
+        lambda_reco: float = 0.1,
         lambda_reward: float = 1.0,
         reco_loss: Optional[str] = None,
         reward_loss: Optional[str] = None,
@@ -72,7 +72,7 @@ class DreamerModelLoss(LossModule):
             tensordict.get("pixels"),
             tensordict.get("reco_pixels"),
             self.reco_loss,
-        ).mean()
+        ).mean((0, 1)).sum()
         reward_loss = distance_loss(
             tensordict.get("reward"),
             tensordict.get("predicted_reward"),
