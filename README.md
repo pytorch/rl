@@ -105,9 +105,48 @@ assert tensordict.device == torch.device("cuda:0")
 - various tools for <span style="color:red">distributed learning (e.g. [memory mapped tensors](torchrl/data/tensordict/memmap.py))</span>;
 - <span style="color:#228800">various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py))</span>:
 ```python
+common_module = ConvNet(
+    bias_last_layer=True,
+    depth=None,
+    num_cells=[32, 64, 64],
+    kernel_sizes=[8, 4, 3],
+    strides=[4, 2, 1],
+)
+common_module = TensorDictModule(
+    common_module,
+    in_keys=["pixels"],
+    out_keys=["hidden"],
+)
+policy_module = NormalParamsWrapper(
+    MLP(
+        num_cells=[64, 64],
+        out_features=32,
+        activation=nn.ELU,
+    )
+)
+policy_module = ProbabilisticTensorDict(  # stochastic policy
+    TensorDictModule(
+        policy_module,
+        in_keys=["hidden"],
+        out_keys=["loc", "scale"],
+    ),
+    dist_param_keys=["loc", "scale"],
+    out_key_sample="action",
+    distribution_class=TanhNormal,
+)
+value_module = MLP(
+    num_cells=[64, 64],
+    out_features=1,
+    activation=nn.ELU,
+)
+actor_value = ActorValueOperator(common_module, policy_module, value_module)
+# standalone policy from this
+standalone_policy = actor_value.get_policy_operator()
+```
+- [exploration wrappers](torchrl/modules/tensordict_module/exploration.py) and [modules](torchrl/modules/models/exploration.py) to easily swap between exploration and exploitation:
+```python
 
 ```
-- [exploration wrappers](torchrl/modules/tensordict_module/exploration.py) and [modules](torchrl/modules/models/exploration.py);
 - various [recipes](torchrl/trainers/helpers/models.py) to build models that correspond to the environment being deployed;
 - a generic [trainer class](torchrl/trainers/trainers.py).
 
