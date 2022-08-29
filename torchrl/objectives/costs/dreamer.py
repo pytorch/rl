@@ -5,12 +5,11 @@
 from typing import Optional
 
 import torch
-import torch.nn as nn
 
 from torchrl.data import TensorDict
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
-from torchrl.objectives.costs.utils import hold_out_net
+from torchrl.objectives.costs.utils import hold_out_net, distance_loss
 from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
 
 
@@ -32,17 +31,15 @@ class DreamerModelLoss(LossModule):
         lambda_kl: float = 1.0,
         lambda_reco: float = 1.0,
         lambda_reward: float = 1.0,
-        reco_loss: Optional[nn.Module] = None,
-        reward_loss: Optional[nn.Module] = None,
+        reco_loss: Optional[str] = None,
+        reward_loss: Optional[str] = None,
         free_nats: int = 3,
     ):
         super().__init__()
         self.world_model = world_model
         self.cfg = cfg
-        self.reco_loss = (
-            reco_loss if reco_loss is not None else nn.MSELoss(reduction="none")
-        )
-        self.reward_loss = reward_loss if reward_loss is not None else nn.MSELoss()
+        self.reco_loss = reco_loss if reco_loss is not None else "smooth_l1"
+        self.reward_loss = reward_loss if reward_loss is not None else "smooth_l1"
         self.lambda_kl = lambda_kl
         self.lambda_reco = lambda_reco
         self.lambda_reward = lambda_reward
@@ -71,18 +68,16 @@ class DreamerModelLoss(LossModule):
             tensordict.get("posterior_means"),
             tensordict.get("posterior_stds"),
         )
-        reco_loss = (
-            0.5
-            * self.reco_loss(
-                tensordict.get("pixels"),
-                tensordict.get("reco_pixels"),
-            )
-            .mean(dim=[0, 1])
-            .sum()
-        )
-        reward_loss = 0.5 * self.reward_loss(
-            tensordict.get("reward"), tensordict.get("predicted_reward")
-        )
+        reco_loss = distance_loss(
+            tensordict.get("pixels"),
+            tensordict.get("reco_pixels"),
+            self.reco_loss,
+        ).mean()
+        reward_loss = distance_loss(
+            tensordict.get("reward"),
+            tensordict.get("predicted_reward"),
+            self.reward_loss,
+        ).mean()
         loss = (
             self.lambda_kl * kl_loss
             + self.lambda_reco * reco_loss
@@ -108,7 +103,7 @@ class DreamerModelLoss(LossModule):
             / (2 * prior_std ** 2)
             - 0.5
         )
-        kl = kl.mean().clamp(min=self.free_nats)
+        kl = kl.clamp_min(self.free_nats).mean()
         return kl
 
 
@@ -179,16 +174,18 @@ class DreamerValueLoss(LossModule):
     def __init__(
         self,
         value_model,
-        value_loss: Optional[nn.Module] = None,
+        value_loss: Optional[str] = None,
     ):
         super().__init__()
         self.value_model = value_model
-        self.value_loss = value_loss if value_loss is not None else nn.MSELoss()
+        self.value_loss = value_loss if value_loss is not None else "smooth_l1"
 
     def forward(self, tensordict) -> torch.Tensor:
         tensordict = self.value_model(tensordict)
-        value_loss = 0.5 * self.value_loss(
-            tensordict.get("predicted_value"), tensordict.get("lambda_target")
+        value_loss = distance_loss(
+            tensordict.get("predicted_value"),
+            tensordict.get("lambda_target"),
+            self.value_loss,
         )
 
         return (
