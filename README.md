@@ -20,15 +20,93 @@ TorchRL aims at having as few dependencies as possible (python standard library,
 
 On the low-level end, torchrl comes with a set of highly re-usable functionals for [cost functions](torchrl/objectives/costs), [returns](torchrl/objectives/returns) and data processing.
 
-On the high-level end, torchrl provides:
-- multiprocess [data collectors](torchrl/collectors/collectors.py);
-- efficient and generic [replay buffers](torchrl/data/replay_buffers/replay_buffers.py);
-- [TensorDict](torchrl/data/tensordict/tensordict.py), a convenient data structure to pass data from one object to another without friction;
+TorchRL aims at a high <span style="color:#228800">modularity</span> and good <span style="color:red">runtime performance</span>.
+
+On the high-level end, TorchRL provides:
+- [`TensorDict`](torchrl/data/tensordict/tensordict.py), 
+<span style="color:#228800">a convenient data structure</span> to pass data from 
+one object to another without friction.
+`TensorDict` makes it easy to re-use pieces of code across environments, models and
+algorithms. For instance, here's how to code a rollout in TorchRL:
+```python
+tensordict = env.reset()
+policy = TensorDictModule(
+    model, 
+    in_keys=["observation_pixels", "observation_vector"],
+    out_keys=["action"],
+)
+out = []
+for i in range(n_steps):
+    tensordict = policy(tensordict)
+    tensordict = env.step(tensordict)
+    out.append(tensordict)
+    tensordict = step_tensordict(tensordict)  # renames next_observation_* keys to observation_*
+out = torch.stack(out, 0)  # TensorDict supports multiple tensor operations
+```
+Check our [tutorial](tutorials/tensordict.ipynb) for more information.
 - An associated [`TensorDictModule` class](torchrl/modules/tensordict_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible! 
-- [interfaces for environments](torchrl/envs) from common libraries (OpenAI gym, deepmind control lab, etc.) and [wrappers for parallel execution](torchrl/envs/vec_env.py), as well as a new pytorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py);
-- [environment transforms](torchrl/envs/transforms/transforms.py), which process and prepare the data coming out of the environments to be used by the agent;
-- various tools for distributed learning (e.g. [memory mapped tensors](torchrl/data/tensordict/memmap.py));
-- various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py));
+- <span style="color:red">multiprocess [data collectors](torchrl/collectors/collectors.py)</span> that work synchronously or asynchronously:
+```python
+collector = MultiaSyncDataCollector(
+    [make_env, make_env], 
+    policy=policy, 
+    devices=["cuda:0", "cuda:0"],
+    total_frames=10000,
+    frames_per_batch=50,
+    ...
+)
+for i, tensordict_data in enumerate(collector):
+    loss = loss_module(tensordict_data)
+    loss.backward()
+    optim.step()
+    optim.zero_grad()
+    collector.update_policy_weights_()
+```
+- <span style="color:red">efficient</span> and <span style="color:#228800">generic</span> [replay buffers](torchrl/data/replay_buffers/replay_buffers.py) that with modularized storage:
+```python
+storage = LazyMemmapStorage(  # memory-mapped (physical) storage
+    cfg.buffer_size,
+    scratch_dir="/tmp/"
+)
+buffer = TensorDictPrioritizedReplayBuffer(
+    buffer_size=10000,
+    alpha=0.7,
+    beta=0.5,
+    collate_fn=lambda x: x,
+    pin_memory=device != torch.device("cpu"),
+    prefetch=10,  # multi-threaded sampling
+    storage=storage
+)
+```
+- <span style="color:#228800">[interfaces for environments](torchrl/envs)
+from common libraries (OpenAI gym, deepmind control lab, etc.)</span> and <span style="color:red">[wrappers](torchrl/envs/vec_env.py) for parallel execution</span>, 
+as well as a new pytorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py):
+```python
+env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
+env_parallel = ParallelEnv(4, env_make)  # creates 4 envs in parallel
+tensordict = env_parallel.rollout(max_steps=20)
+assert tensordict.shape == [4, 20]  # 4 envs, 20 steps rollout
+```
+
+- <span style="color:#228800">cross-library [environment transforms](torchrl/envs/transforms/transforms.py)</span>, 
+<span style="color:red">executed on device and in a vectorized fashion</span>, 
+which process and prepare the data coming out of the environments to be used by the agent:
+```python
+env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
+env_base = ParallelEnv(4, env_make, device="cuda:0")  # creates 4 envs in parallel
+env = TransformedEnv(
+    env_base, 
+    Compose(ToTensor(), ObservationNorm(loc=0.5, scale=1.0)),  # executes the transforms once and on device
+)
+tensordict = env.reset()
+assert tensordict.device == torch.device("cuda:0")
+```
+
+- various tools for <span style="color:red">distributed learning (e.g. [memory mapped tensors](torchrl/data/tensordict/memmap.py))</span>;
+- <span style="color:#228800">various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py))</span>:
+```python
+
+```
 - [exploration wrappers](torchrl/modules/tensordict_module/exploration.py) and [modules](torchrl/modules/models/exploration.py);
 - various [recipes](torchrl/trainers/helpers/models.py) to build models that correspond to the environment being deployed;
 - a generic [trainer class](torchrl/trainers/trainers.py).
