@@ -20,11 +20,11 @@ TorchRL aims at having as few dependencies as possible (python standard library,
 
 On the low-level end, torchrl comes with a set of highly re-usable functionals for [cost functions](torchrl/objectives/costs), [returns](torchrl/objectives/returns) and data processing.
 
-TorchRL aims at a high __modularity__ and good **runtime performance**.
+TorchRL aims at a high _modularity_ and good **runtime performance**.
 
 On the high-level end, TorchRL provides:
 - [`TensorDict`](torchrl/data/tensordict/tensordict.py), 
-__a convenient data structure__ to pass data from 
+_a convenient data structure_ to pass data from 
 one object to another without friction.
 `TensorDict` makes it easy to re-use pieces of code across environments, models and
 algorithms. For instance, here's how to code a rollout in TorchRL:
@@ -62,7 +62,7 @@ for i, tensordict_data in enumerate(collector):
     optim.zero_grad()
     collector.update_policy_weights_()
 ```
-- **efficient** and __generic__ [replay buffers](torchrl/data/replay_buffers/replay_buffers.py) that with modularized storage:
+- **efficient** and _generic_ [replay buffers](torchrl/data/replay_buffers/replay_buffers.py) that with modularized storage:
 ```python
 storage = LazyMemmapStorage(  # memory-mapped (physical) storage
     cfg.buffer_size,
@@ -78,8 +78,8 @@ buffer = TensorDictPrioritizedReplayBuffer(
     storage=storage
 )
 ```
-- __[interfaces for environments](torchrl/envs)
-from common libraries (OpenAI gym, deepmind control lab, etc.)__ and **[wrappers](torchrl/envs/vec_env.py) for parallel execution**, 
+- _[interfaces for environments](torchrl/envs)
+from common libraries (OpenAI gym, deepmind control lab, etc.)_ and **[wrappers](torchrl/envs/vec_env.py) for parallel execution**, 
 as well as a new pytorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py):
 ```python
 env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
@@ -88,7 +88,7 @@ tensordict = env_parallel.rollout(max_steps=20)
 assert tensordict.shape == [4, 20]  # 4 envs, 20 steps rollout
 ```
 
-- __cross-library [environment transforms](torchrl/envs/transforms/transforms.py)__, 
+- _cross-library [environment transforms](torchrl/envs/transforms/transforms.py)_, 
 **executed on device and in a vectorized fashion**, 
 which process and prepare the data coming out of the environments to be used by the agent:
 ```python
@@ -103,7 +103,7 @@ assert tensordict.device == torch.device("cuda:0")
 ```
 
 - various tools for **distributed learning (e.g. [memory mapped tensors](torchrl/data/tensordict/memmap.py))**;
-- __various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py))__:
+- _various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py))_:
 ```python
 common_module = ConvNet(
     bias_last_layer=True,
@@ -143,7 +143,7 @@ actor_value = ActorValueOperator(common_module, policy_module, value_module)
 # standalone policy from this
 standalone_policy = actor_value.get_policy_operator()
 ```
-- __exploration [wrappers](torchrl/modules/tensordict_module/exploration.py) and [modules](torchrl/modules/models/exploration.py) to easily swap between exploration and exploitation__:
+- _exploration [wrappers](torchrl/modules/tensordict_module/exploration.py) and [modules](torchrl/modules/models/exploration.py) to easily swap between exploration and exploitation_:
 ```python
 policy_explore = EGreedyWrapper(policy)
 with set_exploration_mode("random"):
@@ -152,7 +152,7 @@ with set_exploration_mode("mode"):
     tensordict = policy_explore(tensordict)  # will not use eps-greedy
 ```
 - various [recipes](torchrl/trainers/helpers/models.py) to build models that correspond to the environment being deployed;
-- __a generic [trainer class](torchrl/trainers/trainers.py)__.
+- _a generic [trainer class](torchrl/trainers/trainers.py)_.
 
 A series of [examples](examples/) are provided with an illustrative purpose:
 - [DQN (and add-ons up to Rainbow)](examples/dqn/dqn.py)
