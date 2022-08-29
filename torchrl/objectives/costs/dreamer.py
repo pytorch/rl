@@ -186,7 +186,7 @@ class DreamerValueLoss(LossModule):
             tensordict.get("predicted_value"),
             tensordict.get("lambda_target"),
             self.value_loss,
-        )
+        ).mean()
 
         return (
             TensorDict(
