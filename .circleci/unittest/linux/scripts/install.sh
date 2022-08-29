@@ -45,7 +45,9 @@ fi
 
 printf "Installing functorch\n"
 pip3 install ninja  # Makes the build go faster
-pip3 install "git+https://github.com/pytorch/functorch.git"
+#pip3 install "git+https://github.com/pytorch/functorch.git"
+PYTORCH_VERSION=`python -c "import torch.version; print(torch.version.git_version)"`
+pip install "git+https://github.com/pytorch/pytorch.git@$PYTORCH_VERSION#subdirectory=functorch"
 
 # smoke test
 python -c "import functorch"

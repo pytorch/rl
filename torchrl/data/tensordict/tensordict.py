@@ -1543,7 +1543,11 @@ dtype=torch.float32)},
         # if return_simple_view and not self.is_memmap():
         return TensorDict(
             source={key: item[idx] for key, item in self.items()},
-            _meta_source={key: item[idx] for key, item in self.items_meta()},
+            _meta_source={
+                key: item[idx]
+                for key, item in self.items_meta(make_unset=False)
+                if not item.is_tensordict()
+            },
             batch_size=_getitem_batch_size(self.batch_size, idx),
             device=self._device_safe(),
         )

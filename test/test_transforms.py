@@ -19,7 +19,7 @@ from torchrl.data import (
 )
 from torchrl.data import TensorDict
 from torchrl.envs import EnvCreator, SerialEnv
-from torchrl.envs import GymEnv, ParallelEnv
+from torchrl.envs import ParallelEnv
 from torchrl.envs import (
     Resize,
     GrayScale,
@@ -34,7 +34,7 @@ from torchrl.envs import (
     RewardScaling,
     BinarizeReward,
 )
-from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm, TransformedEnv
 from torchrl.envs.transforms.transforms import (
     _has_tv,
