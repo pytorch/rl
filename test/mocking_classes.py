@@ -369,9 +369,9 @@ class DummyModelBasedEnv(ModelBasedEnv):
     ):
         super(DummyModelBasedEnv, self).__init__(
             world_model,
-            device,
-            dtype,
-            batch_size,
+            device=device,
+            dtype=dtype,
+            batch_size=batch_size,
         )
         self.action_spec = NdUnboundedContinuousTensorSpec((1,))
         self.observation_spec = NdUnboundedContinuousTensorSpec((4,))
