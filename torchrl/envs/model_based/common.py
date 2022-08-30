@@ -11,8 +11,8 @@ from typing import Optional, Union, List
 import numpy as np
 import torch
 import torch.nn as nn
-
 from torchrl.data import TensorDict
+
 from ...data.utils import DEVICE_TYPING
 from ...modules.tensordict_module import TensorDictModule, TensorDictSequence
 from ..common import EnvBase
@@ -127,7 +127,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         tensordict_out = tensordict.clone()
         # Compute world state
         if self.world_model_params is not None:
-            tensordict_out= self.world_model(
+            tensordict_out = self.world_model(
                 tensordict_out,
                 params=self.world_model_params,
                 buffers=self.world_model_buffers,
