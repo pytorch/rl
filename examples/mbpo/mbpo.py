@@ -138,7 +138,7 @@ def main(cfg: "DictConfig"):
     logger = WandbLogger(
         f"mbpo/{exp_name}",
         project="torchrl",
-        group=f"MBPO_{cfg.env_name}",
+        group=f"MBPO_{cfg.env_name}_with_real",
     )
 
     # if cfg.logger == "wandb":
