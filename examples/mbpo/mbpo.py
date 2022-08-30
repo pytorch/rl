@@ -363,27 +363,27 @@ def main(cfg: "DictConfig"):
                 if len(fake_replay_buffer) > cfg.init_random_frames:
                     for _ in range(cfg.num_sac_training_steps_per_optim_step):
 
-                        # num_real_samples = int(cfg.sac_batch_size * cfg.real_data_ratio)
+                        num_real_samples = int(cfg.sac_batch_size * cfg.real_data_ratio)
 
-                        # num_fake_samples = cfg.sac_batch_size - num_real_samples
+                        num_fake_samples = cfg.sac_batch_size - num_real_samples
 
-                        agent_sampled_tensordict = fake_replay_buffer.sample(cfg.sac_batch_size)
+                        # agent_sampled_tensordict = fake_replay_buffer.sample(cfg.sac_batch_size)
 
-                        # fake_sampled_tensordict = fake_replay_buffer.sample(
-                        #     num_fake_samples
-                        # )
+                        fake_sampled_tensordict = fake_replay_buffer.sample(
+                            num_fake_samples
+                        )
 
-                        # real_sampled_tensordict = real_replay_buffer.sample(
-                        #     num_real_samples
-                        # )
+                        real_sampled_tensordict = real_replay_buffer.sample(
+                            num_real_samples
+                        )
 
-                        # agent_sampled_tensordict = torch.cat(
-                        #     [
-                        #         fake_sampled_tensordict,
-                        #         real_sampled_tensordict,
-                        #     ],
-                        #     dim=0,
-                        # ).to(device)
+                        agent_sampled_tensordict = torch.cat(
+                            [
+                                fake_sampled_tensordict,
+                                real_sampled_tensordict,
+                            ],
+                            dim=0,
+                        ).to(device)
 
                         ### Train agent
                         with autocast(dtype=torch.float16):
