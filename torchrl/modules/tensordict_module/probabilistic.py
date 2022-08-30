@@ -52,10 +52,10 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             the params (and possibly) buffers keyword arguments.
         dist_param_keys (str or iterable of str or dict): key(s) that will be produced
             by the inner TDModule and that will be used to build the distribution.
-            Importantly, if it's an iterable of str or strthose keys must match the keywords used by the distribution
+            Importantly, if it's an iterable of string or a string, those keys must match the keywords used by the distribution
             class of interest, e.g. `"loc"` and `"scale"` for the Normal distribution
-            and similar. If dict, the keys are the keys of the distribution and the values are the
-            keys in the tensordict that will get match to the corresponding distribution keyß.
+            and similar. If dist_param_keys is a dictionary,, the keys are the keys of the distribution and the values are the
+            keys in the tensordict that will get match to the corresponding distribution keys.
         out_key_sample (str or iterable of str): keys where the sampled values will be
             written. Importantly, if this key is part of the `out_keys` of the inner model,
             the sampling step will be skipped.
@@ -142,7 +142,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
     def __init__(
         self,
         module: TensorDictModule,
-        dist_param_keys: Union[str, Sequence[str]],
+        dist_param_keys: Union[str, Sequence[str], dict],
         out_key_sample: Union[str, Sequence[str]],
         spec: Optional[TensorSpec] = None,
         safe: bool = False,
