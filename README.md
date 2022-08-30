@@ -206,7 +206,7 @@ and not
 OS: macOS **** (x86_64)
 ```
 
-We have documented some [common issues (and workarounds)](COMMON_MUJOCO_ISSUES.md) when rendering Mujoco environments.
+We have documented some [common issues (and workarounds)](knowledge_base/MUJOCO_INSTALLATION.md) when rendering Mujoco environments.
 
 ## Running examples
 
