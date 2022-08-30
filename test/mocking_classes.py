@@ -19,7 +19,7 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase
-from torchrl.envs.model_based import ModelBasedEnv
+from torchrl.envs.model_based.common import ModelBasedEnv
 
 spec_dict = {
     "bounded": BoundedTensorSpec,
@@ -352,6 +352,12 @@ class DummyModelBasedEnv(ModelBasedEnv):
     """
     Dummy environnement for Model Based RL algorithms.
     This class is meant to be used to test the model based environnement.
+
+    Args:
+        world_model (WorldModel): the world model to use for the environnement.
+        device (str): the device to use for the environnement.
+        dtype (torch.dtype): the dtype to use for the environnement.
+        batch_size (int): the batch size to use for the environnement.
     """
 
     def __init__(
