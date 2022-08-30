@@ -240,7 +240,16 @@ pip3 install --pre torch torchvision --extra-index-url https://download.pytorch.
 
 and functorch
 ```
+pip3 install ninja  # Makes the build go faster
 pip install "git+https://github.com/pytorch/functorch.git"
+```
+
+If this fails, you can get the latest version of functorch that was marked to be 
+compatible with the current torch version:
+```bash
+pip3 install ninja  # Makes the build go faster
+PYTORCH_VERSION=`python -c "import torch.version; print(torch.version.git_version)"`
+pip install "git+https://github.com/pytorch/pytorch.git@$PYTORCH_VERSION#subdirectory=functorch"
 ```
 
 If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message 
