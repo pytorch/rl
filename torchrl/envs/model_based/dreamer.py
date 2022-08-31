@@ -40,11 +40,17 @@ class DreamerEnv(ModelBasedEnv):
         """
         super().set_specs_from_env(env)
         self.observation_spec = CompositeSpec(
-            prior_state=NdUnboundedContinuousTensorSpec(shape=self.prior_shape),
-            belief=NdUnboundedContinuousTensorSpec(shape=self.belief_shape),
+            next_prior_state=NdUnboundedContinuousTensorSpec(
+                shape=self.prior_shape, device=self.device
+            ),
+            next_belief=NdUnboundedContinuousTensorSpec(
+                shape=self.belief_shape, device=self.device
+            ),
         )
         self.input_spec = CompositeSpec(
-            **self.observation_spec, action=self.action_spec
+            prior_state=self.observation_spec["next_prior_state"],
+            belief=self.observation_spec["next_belief"],
+            action=self.action_spec,
         )
 
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
