@@ -379,12 +379,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def numel(self) -> int:
         return prod(self.batch_size)
 
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seed of the environment and returns the next seed to be used (
         which is the input seed if a single environment is present)
 
         Args:
-            seed: integer
+            seed (int): seed to be set
+            static_seed (bool, optional): if True, the seed is not incremented.
+                Defaults to False
 
         Returns:
             integer representing the "next seed": i.e. the seed that should be
@@ -394,7 +396,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if seed is not None:
             torch.manual_seed(seed)
         self._set_seed(seed)
-        if seed is not None:
+        if seed is not None and not static_seed:
             new_seed = seed_generator(seed)
             seed = new_seed
         return seed
@@ -738,11 +740,13 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         except AttributeError:
             pass
 
-    def set_seed(self, seed: Optional[int] = None) -> Optional[int]:
+    def set_seed(
+        self, seed: Optional[int] = None, static_seed: bool = False
+    ) -> Optional[int]:
         if seed is not None:
             torch.manual_seed(seed)
         self._set_seed(seed)
-        if seed is not None:
+        if seed is not None and not static_seed:
             new_seed = seed_generator(seed)
             seed = new_seed
         return seed

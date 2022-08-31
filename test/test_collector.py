@@ -446,7 +446,8 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
 
 
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
-def test_collector_vecnorm_envcreator():
+@pytest.mark.parametrize("static_seed", [True, False])
+def test_collector_vecnorm_envcreator(static_seed):
     """
     High level test of the following pipeline:
      (1) Design a function that creates an environment with VecNorm
@@ -470,12 +471,19 @@ def test_collector_vecnorm_envcreator():
     )
 
     init_seed = 0
-    new_seed = c.set_seed(init_seed)
+    new_seed = c.set_seed(init_seed, static_seed=static_seed)
+    if static_seed:
+        assert new_seed == init_seed
+    else:
+        assert new_seed != init_seed
 
     seed = init_seed
     for i in range(num_envs * num_data_collectors):
         seed = seed_generator(seed)
-    assert new_seed == seed
+    if not static_seed:
+        assert new_seed == seed
+    else:
+        assert new_seed != seed
 
     c_iter = iter(c)
     next(c_iter)
