@@ -31,6 +31,7 @@ except ImportError:
         "functional programming should work, but functionality and performance "
         "may be affected. Consider installing functorch and/or upgrating pytorch."
     )
+    from torchrl.modules.functional_modules import FunctionalModuleWithBuffers
 
 from torch import nn, Tensor
 
