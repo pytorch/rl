@@ -259,19 +259,36 @@ class LossModule(nn.Module):
                     ).unflatten_keys(".")
                 )
 
-
-            target_buffers = [p.detach().clone() for p in getattr(self, buffer_name)]
-            for i, p in enumerate(target_buffers):
-                name = "_".join([name_buffers_target, str(i)])
-                self.register_buffer(name, p)
-                target_buffers[i] = name
-            setattr(
-                self.__class__,
-                name_buffers_target,
-                property(
-                    lambda _self: [getattr(_self, _name) for _name in target_buffers]
-                ),
-            )
+            if _has_functorch:
+                target_buffers = [p.detach().clone() for p in getattr(self, buffer_name)]
+                for i, p in enumerate(target_buffers):
+                    name = "_".join([name_buffers_target, str(i)])
+                    self.register_buffer(name, p)
+                    target_buffers[i] = name
+                setattr(
+                    self.__class__,
+                    name_buffers_target,
+                    property(
+                        lambda _self: [getattr(_self, _name) for _name in target_buffers]
+                    ),
+                )
+            else:
+                target_buffers = getattr(self, buffer_name).detach().clone()
+                target_buffers_items = sorted(list(target_buffers.flatten_keys(".").items()))
+                target_buffers_list = []
+                for i, (key, val) in enumerate(target_buffers_items):
+                    name = "_".join([name_buffers_target, str(i)])
+                    self.register_buffer(name, val)
+                    target_buffers_list.append((name, key))
+                setattr(
+                    self.__class__,
+                    name_buffers_target,
+                    lambda _self: TensorDict(
+                        {key: getattr(_self, _name) for (_name, key) in target_buffers_list},
+                        [],
+                        device=self.device,
+                    ).unflatten_keys(".")
+                )
 
         else:
             setattr(self.__class__, name_params_target, None)
