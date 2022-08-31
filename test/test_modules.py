@@ -19,6 +19,10 @@ from torchrl.modules import (
     ProbabilisticActor,
     LSTMNet,
 )
+from torchrl.modules.functional_modules import (
+    FunctionalModule,
+    FunctionalModuleWithBuffers,
+)
 from torchrl.modules.models import NoisyLinear, MLP, NoisyLazyLinear
 
 
@@ -297,6 +301,30 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
     torch.testing.assert_close(tds_vec["y"], tds_loop["y"])
     torch.testing.assert_close(tds_vec["hidden0_out"][-1], tds_loop["hidden0_out"][-1])
     torch.testing.assert_close(tds_vec["hidden1_out"][-1], tds_loop["hidden1_out"][-1])
+
+
+class TestFunctionalModules:
+    def test_func_seq(self):
+        module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 3))
+        fmodule, params = FunctionalModule._create_from(module)
+        x = torch.randn(3)
+        assert (fmodule(params, x) == module(x)).all()
+
+    def test_func_bn(self):
+        module = nn.Sequential(nn.Linear(3, 4), nn.BatchNorm1d(4))
+        module.eval()
+        fmodule, params_and_buffers = FunctionalModuleWithBuffers._create_from(module)
+        print(params_and_buffers)
+        x = torch.randn(10, 3)
+        assert (fmodule(params_and_buffers, x) == module(x)).all()
+
+    def test_func_transformer(self):
+        module = nn.Transformer(128)
+        module.eval()
+        fmodule, params_and_buffers = FunctionalModuleWithBuffers._create_from(module)
+        print(params_and_buffers)
+        x = torch.randn(10, 128)
+        torch.testing.assert_close(fmodule(params_and_buffers, x, x), module(x, x))
 
 
 if __name__ == "__main__":
