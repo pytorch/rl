@@ -227,18 +227,38 @@ class LossModule(nn.Module):
         name_params_target = "_target_" + param_name
         name_buffers_target = "_target_" + buffer_name
         if create_target_params:
-            target_params = [p.detach().clone() for p in getattr(self, param_name)]
-            for i, p in enumerate(target_params):
-                name = "_".join([name_params_target, str(i)])
-                self.register_buffer(name, p)
-                target_params[i] = name
-            setattr(
-                self.__class__,
-                name_params_target,
-                property(
-                    lambda _self: [getattr(_self, _name) for _name in target_params]
-                ),
-            )
+            if _has_functorch:
+                target_params = [p.detach().clone() for p in getattr(self, param_name)]
+                for i, p in enumerate(target_params):
+                    name = "_".join([name_params_target, str(i)])
+                    self.register_buffer(name, p)
+                    target_params[i] = name
+                setattr(
+                    self.__class__,
+                    name_params_target,
+                    property(
+                        lambda _self: [getattr(_self, _name) for _name in
+                                       target_params]
+                    ),
+                )
+            else:
+                target_params = getattr(self, param_name).detach().clone()
+                target_params_items = sorted(list(target_params.flatten_keys(".").items()))
+                target_params_list = []
+                for i, (key, val) in enumerate(target_params_items):
+                    name = "_".join([name_params_target, str(i)])
+                    self.register_buffer(name, val)
+                    target_params_list.append((name, key))
+                setattr(
+                    self.__class__,
+                    name_params_target,
+                    lambda _self: TensorDict(
+                        {key: getattr(_self, _name) for (_name, key) in target_params_list},
+                        [],
+                        device=self.device,
+                    ).unflatten_keys(".")
+                )
+
 
             target_buffers = [p.detach().clone() for p in getattr(self, buffer_name)]
             for i, p in enumerate(target_buffers):
