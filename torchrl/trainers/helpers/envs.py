@@ -9,9 +9,11 @@ from typing import Callable, Optional, Sequence, Union, Any
 
 import torch
 
-from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
+from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
+from torchrl.envs.libs.dm_control import DMControlEnv
+from torchrl.envs.libs.gym import GymEnv, RetroEnv
 from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,

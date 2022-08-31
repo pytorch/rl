@@ -104,7 +104,7 @@ def make_dqn_actor(
     Examples:
         >>> from torchrl.trainers.helpers.models import make_dqn_actor, DiscreteModelConfig
         >>> from torchrl.trainers.helpers.envs import EnvConfig
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import ToTensorImage, TransformedEnv
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
@@ -238,7 +238,7 @@ def make_ddpg_actor(
     Examples:
         >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.trainers.helpers.models import make_ddpg_actor, parser_model_args_continuous
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
@@ -440,7 +440,7 @@ def make_ppo_model(
     Examples:
         >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.trainers.helpers.models import make_ppo_model, parser_model_args_continuous
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
@@ -735,7 +735,7 @@ def make_sac_model(
     Examples:
         >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.trainers.helpers.models import make_sac_model, parser_model_args_continuous
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
@@ -955,7 +955,7 @@ def make_redq_model(
     Examples:
         >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.trainers.helpers.models import make_redq_model, parser_model_args_continuous
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore

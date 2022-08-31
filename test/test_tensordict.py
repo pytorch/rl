@@ -984,6 +984,12 @@ class TestTensorDicts:
         assert (td_squeeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
+    def test_write_on_subtd(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        sub_td = td.get_sub_tensordict(0)
+        sub_td["a"] = torch.full((3, 2, 1, 5), 1, device=device)
+        assert (td["a"][0] == 1).all()
+
     def test_pad(self, td_name, device):
         td = getattr(self, td_name)(device)
         paddings = [

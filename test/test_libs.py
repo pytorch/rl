@@ -7,6 +7,9 @@ import argparse
 import numpy as np
 import pytest
 import torch
+from _utils_internal import get_available_devices
+from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs.libs.dm_control import _has_dmc
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
 
@@ -18,7 +21,9 @@ if _has_dmc:
     from dm_control.suite.wrappers import pixels
 
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.envs import GymEnv, GymWrapper, DMControlEnv, DMControlWrapper
+from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
+from torchrl.envs.libs.gym import GymEnv, GymWrapper
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
@@ -200,6 +205,46 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
         assert fake_td.get(key).shape == td.get(key).shape
         assert fake_td.get(key).dtype == td.get(key).dtype
         assert fake_td.get(key).device == td.get(key).device
+
+
+@pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
+@pytest.mark.parametrize(
+    "env_lib,env_args,env_kwargs",
+    [
+        [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
+        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": True}],
+        [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
+        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": False}],
+        [GymEnv, ("ALE/Pong-v5",), {}],
+    ],
+)
+@pytest.mark.parametrize("device", get_available_devices())
+class TestCollectorLib:
+    def test_collector_run(self, env_lib, env_args, env_kwargs, device):
+        env_fn = EnvCreator(lambda: env_lib(*env_args, **env_kwargs, device=device))
+        env = ParallelEnv(3, env_fn)
+        collector = MultiaSyncDataCollector(
+            create_env_fn=[env, env],
+            policy=RandomPolicy(env.action_spec),
+            total_frames=-1,
+            max_frames_per_traj=100,
+            frames_per_batch=21,
+            init_random_frames=-1,
+            reset_at_each_iter=False,
+            split_trajs=True,
+            devices=[device, device],
+            passing_devices=[device, device],
+            update_at_each_batch=False,
+            init_with_lag=False,
+            exploration_mode="random",
+        )
+        for i, data in enumerate(collector):
+            if i == 3:
+                break
+        assert data.shape[0] == 3
+        assert data.shape[1] == 7
+        collector.shutdown()
+        del env
 
 
 if __name__ == "__main__":

@@ -1732,7 +1732,7 @@ class VecNorm(Transform):
             deviation (for numerical underflow). Default is 1e-4.
 
     Examples:
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> t = VecNorm(decay=0.9)
         >>> env = GymEnv("Pendulum-v0")
         >>> env = TransformedEnv(env, t)

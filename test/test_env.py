@@ -29,9 +29,8 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import EnvCreator, ObservationNorm, CatTensors, DoubleToFloat
-from torchrl.envs import GymEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
-from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
