@@ -15,7 +15,7 @@ from torchrl.objectives import (
     next_state_value as get_next_state_value,
     distance_loss,
 )
-from torchrl.objectives.costs.common import LossModule
+from torchrl.objectives.costs.common import LossModule, _has_functorch
 
 
 class REDQLoss_deprecated(LossModule):
@@ -66,6 +66,8 @@ class REDQLoss_deprecated(LossModule):
         delay_qvalue: bool = True,
         gSDE: bool = False,
     ):
+        if not _has_functorch:
+            raise ImportError("REDQ requires functorch to be installed.")
         super().__init__()
         self.convert_to_functional(
             actor_network,
