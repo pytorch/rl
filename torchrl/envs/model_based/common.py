@@ -95,6 +95,10 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
 
     """
 
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(cls, _run_checks=False)
+
     def __init__(
         self,
         world_model: TensorDictModule,

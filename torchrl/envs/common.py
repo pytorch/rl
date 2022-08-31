@@ -220,6 +220,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._inplace_update = True
+        cls._run_checks = kwargs.get("_run_checks", True)
         return super().__new__(cls)
 
     @property
@@ -294,7 +295,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             obs = tensordict_out.get(key)
             self.observation_spec.type_check(obs, key)
 
-        if tensordict_out._get_meta("reward").dtype is not self.reward_spec.dtype:
+        if self._run_checks and (tensordict_out._get_meta("reward").dtype is not self.reward_spec.dtype):
             raise TypeError(
                 f"expected reward.dtype to be {self.reward_spec.dtype} "
                 f"but got {tensordict_out.get('reward').dtype}"
