@@ -8,7 +8,7 @@ from copy import copy
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from mocking_classes import ContinuousActionVecMockEnv
+from mocking_classes import ContinuousActionVecMockEnv, DiscreteActionConvMockEnvNumpy
 from torch import Tensor
 from torch import multiprocessing as mp
 from torchrl import prod
@@ -33,6 +33,7 @@ from torchrl.envs import (
     FlattenObservation,
     RewardScaling,
     BinarizeReward,
+    R3MTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm, TransformedEnv
@@ -1010,6 +1011,63 @@ class TestTransforms:
             assert env._action_spec is not None
             assert env._observation_spec is not None
             assert env._reward_spec is not None
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("model", ["resnet18", "resnet34", "resnet50"])
+class TestR3M:
+    @pytest.mark.parametrize("tensor_pixels_key", [None, "funny_key"])
+    def test_r3m_instantiation(self, model, tensor_pixels_key, device):
+        keys_in = ["next_pixels"]
+        keys_out = ["next_vec"]
+        r3m = R3MTransform(
+            model,
+            keys_in=keys_in,
+            keys_out=keys_out,
+            tensor_pixels_key=tensor_pixels_key,
+        )
+        base_env = DiscreteActionConvMockEnvNumpy().to(device)
+        transformed_env = TransformedEnv(base_env, r3m)
+        td = transformed_env.reset()
+        assert td.device == device
+        exp_keys = {"vec", "done", "pixels", "pixels_orig"}
+        if tensor_pixels_key:
+            exp_keys.add(tensor_pixels_key)
+        assert set(td.keys()) == exp_keys
+
+        td = transformed_env.rand_step(td)
+        exp_keys = exp_keys.union(
+            {"next_vec", "next_pixels", "next_pixels_orig", "action", "reward"}
+        )
+        assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
+
+    def test_r3m_parallel(self, model, device):
+        keys_in = ["next_pixels"]
+        keys_out = ["next_vec"]
+        tensor_pixels_key = None
+        r3m = R3MTransform(
+            model,
+            keys_in=keys_in,
+            keys_out=keys_out,
+            tensor_pixels_key=tensor_pixels_key,
+        )
+        base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
+        transformed_env = TransformedEnv(base_env, r3m)
+        td = transformed_env.reset()
+        assert td.device == device
+        assert td.batch_size == torch.Size([4])
+        exp_keys = {"vec", "done", "pixels", "pixels_orig"}
+        if tensor_pixels_key:
+            exp_keys.add(tensor_pixels_key)
+        assert set(td.keys()) == exp_keys
+
+        td = transformed_env.rand_step(td)
+        exp_keys = exp_keys.union(
+            {"next_vec", "next_pixels", "next_pixels_orig", "action", "reward"}
+        )
+        assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
+        transformed_env.close()
+        del transformed_env
 
 
 if __name__ == "__main__":

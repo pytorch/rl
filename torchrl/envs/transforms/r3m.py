@@ -1,3 +1,5 @@
+from typing import List
+
 import torch
 from torch.hub import load_state_dict_from_url
 from torch.nn import Identity
@@ -48,7 +50,7 @@ class _R3MNet(Transform):
                 f"model {model_name} is currently not supported by R3M"
             )
         convnet.fc = Identity()
-        super().__init__(keys_in=in_keys)
+        super().__init__(keys_in=in_keys, keys_out=out_keys)
         self.convnet = convnet
 
     def _call(self, tensordict):
@@ -87,32 +89,54 @@ class _R3MNet(Transform):
 
 
 class R3MTransform(Compose):
-    """
-    TODO
+    """R3M Transform class.
+
+    R3M provides pre-trained ResNet weights aimed at facilitating visual
+    embedding for robotic tasks. The models are trained using Ego4d.
+    See the paper:
+        R3M: A Universal Visual Representation for Robot Manipulation (Suraj Nair,
+            Aravind Rajeswaran, Vikash Kumar, Chelsea Finn, Abhinav Gupta)
+            https://arxiv.org/abs/2203.12601
+
+    Args:
+        model_name (str): one of resnet50, resnet34 or resnet18
+        keys_in (list of str, optional): list of input keys. If left empty, the
+            "next_pixels" key is assumed.
+        keys_out (list of str, optional): list of output keys. If left empty,
+             "next_r3m_vec" is assumed.
+        size (int, optional): Size of the image to feed to resnet.
+            Defaults to 244.
+        download (bool, optional): if True, the weights will be downloaded using
+            the torch.hub download API (i.e. weights will be cached for future use).
+            Defaults to False.
+        tensor_pixels_key (str, optional): Optionally, one can keep the intermediate
+            image transform (after normalization) in the output tensordict.
+            If no value is provided, this won't be collected.
     """
 
     def __init__(
         self,
-        model_name,
-        keys_in=None,
-        keys_out=None,
-        size=244,
-        download=False,
-        tensor_pixel_key=None,
+        model_name: str,
+        keys_in: List[str] = None,
+        keys_out: List[str] = None,
+        size: int = 244,
+        download: bool = False,
+        tensor_pixels_key: str = None,
     ):
         self.download = download
         # ToTensor
-        if tensor_pixel_key is None:
-            tensor_pixel_key = keys_in
+        if tensor_pixels_key is None:
+            tensor_pixels_key = keys_in
+        else:
+            tensor_pixels_key = [tensor_pixels_key]
         totensor = ToTensorImage(
-            unsqueeze=False, keys_in=keys_in, keys_out=tensor_pixel_key
+            unsqueeze=False, keys_in=keys_in, keys_out=tensor_pixels_key
         )
-        keys_out = totensor.keys_out
         # Normalize
         mean = [0.485, 0.456, 0.406]
         std = [0.229, 0.224, 0.225]
         normalize = ObservationNorm(
-            keys_in=tensor_pixel_key,
+            keys_in=tensor_pixels_key,
             loc=torch.tensor(mean).view(3, 1, 1),
             scale=torch.tensor(std).view(3, 1, 1),
             standard_normal=True,
@@ -120,8 +144,10 @@ class R3MTransform(Compose):
         # Resize: note that resize is a no-op if the tensor has the desired size already
         resize = Resize(size, size)
         # R3M
+        if keys_out is None:
+            keys_out = ["next_r3m_vec"]
         network = _R3MNet(
-            in_keys=tensor_pixel_key, out_keys=keys_out, model_name=model_name
+            in_keys=tensor_pixels_key, out_keys=keys_out, model_name=model_name
         )
         transforms = [totensor, resize, normalize, network]
         super().__init__(*transforms)
