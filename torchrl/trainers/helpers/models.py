@@ -1314,6 +1314,8 @@ def make_dreamer(
                 out_keys=["reward"],
             ),
         ),
+        prior_shape = torch.Size([cfg.state_dim]),
+        belief_shape = torch.Size([cfg.rssm_hidden_dim]),
         obs_decoder=mb_env_obs_decoder,
     )
 
@@ -1330,7 +1332,6 @@ def make_dreamer(
         td["belief"] = torch.zeros((td.batch_size[0], cfg.rssm_hidden_dim))
         td = td.to(device)
         world_model(td)
-    model_based_env.latent_spec = (td["prior_state"].shape[-1], td["belief"].shape[-1])
     model_based_env = model_based_env.to(device)
 
     actor_model = actor_model.to(device)
