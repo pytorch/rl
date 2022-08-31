@@ -75,6 +75,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     _safe = False
     _lazy = False
+    _inplace_set = False
     is_meta = False
 
     def __getstate__(self) -> dict:
@@ -1542,7 +1543,11 @@ dtype=torch.float32)},
         # if return_simple_view and not self.is_memmap():
         return TensorDict(
             source={key: item[idx] for key, item in self.items()},
-            _meta_source={key: item[idx] for key, item in self.items_meta()},
+            _meta_source={
+                key: item[idx]
+                for key, item in self.items_meta(make_unset=False)
+                if not item.is_tensordict()
+            },
             batch_size=_getitem_batch_size(self.batch_size, idx),
             device=self._device_safe(),
         )
@@ -1566,7 +1571,7 @@ dtype=torch.float32)},
         ) not in [len(index), 0]:
             raise IndexError(_STR_MIXED_INDEX_ERROR)
         if isinstance(index, str):
-            self.set(index, value, inplace=False)
+            self.set(index, value, inplace=self._inplace_set)
         elif isinstance(index, tuple) and all(
             isinstance(sub_index, str) for sub_index in index
         ):
@@ -2647,6 +2652,7 @@ torch.Size([3, 2])
         cls._lazy = True
         cls._is_shared = None
         cls._is_memmap = None
+        cls._inplace_set = True
         return TensorDictBase.__new__(cls)
 
     def __init__(

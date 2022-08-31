@@ -1,9 +1,8 @@
 import tempfile
 
 from torch.utils.tensorboard import SummaryWriter
-from torchrl.envs import DMControlEnv, GymEnv
-from torchrl.envs.libs.dm_control import _has_dmc
-from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
+from torchrl.envs.libs.gym import _has_gym, GymEnv
 
 
 def test_dm_control():

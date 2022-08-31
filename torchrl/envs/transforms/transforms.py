@@ -195,6 +195,19 @@ class Transform(nn.Module):
         """
         return action_spec
 
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        """Transforms the input spec such that the resulting spec matches
+        transform mapping.
+
+        Args:
+            input_spec (TensorSpec): spec before the transform
+
+        Returns:
+            expected spec after the transform
+
+        """
+        return input_spec
+
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         """Transforms the observation spec such that the resulting spec
         matches transform mapping.
@@ -343,6 +356,20 @@ class TransformedEnv(EnvBase):
         else:
             action_spec = self._action_spec
         return action_spec
+
+    @property
+    def input_spec(self) -> TensorSpec:
+        """Action spec of the transformed_in environment"""
+
+        if self._input_spec is None or not self.cache_specs:
+            input_spec = self.transform.transform_input_spec(
+                deepcopy(self.base_env.input_spec)
+            )
+            if self.cache_specs:
+                self._input_spec = input_spec
+        else:
+            input_spec = self._input_spec
+        return input_spec
 
     @property
     def reward_spec(self) -> TensorSpec:
@@ -562,9 +589,14 @@ class Compose(Transform):
         return tensordict
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
-        for t in self.transforms:
+        for t in self.transforms[::-1]:
             action_spec = t.transform_action_spec(action_spec)
         return action_spec
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        for t in self.transforms[::-1]:
+            input_spec = t.transform_input_spec(input_spec)
+        return input_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms:
@@ -1314,6 +1346,15 @@ class DoubleToFloat(Transform):
             self._transform_spec(action_spec)
         return action_spec
 
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        for key in self.keys_inv_in:
+            if input_spec[key].dtype is not torch.double:
+                raise TypeError(
+                    f"input_spec[{key}].dtype is not double: {input_spec[key].dtype}"
+                )
+            self._transform_spec(input_spec[key])
+        return input_spec
+
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if "reward" in self.keys_in:
             if reward_spec.dtype is not torch.double:
@@ -1521,6 +1562,11 @@ class DiscreteActionProjection(Transform):
         action_spec.space.n = self.max_n
         return action_spec
 
+    def tranform_input_spec(self, input_spec: CompositeSpec):
+        input_spec_out = deepcopy(input_spec)
+        input_spec_out["action"] = self.transform_action_spec(input_spec_out["action"])
+        return input_spec_out
+
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(max_N={self.max_n}, M={self.m}, "
@@ -1686,7 +1732,7 @@ class VecNorm(Transform):
             deviation (for numerical underflow). Default is 1e-4.
 
     Examples:
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> t = VecNorm(decay=0.9)
         >>> env = GymEnv("Pendulum-v0")
         >>> env = TransformedEnv(env, t)
