@@ -92,17 +92,27 @@ class R3MTransform(Compose):
     """
 
     def __init__(
-        self, model_name, keys_in=None, keys_out=None, size=244, download=False
+        self,
+        model_name,
+        keys_in=None,
+        keys_out=None,
+        size=244,
+        download=False,
+        tensor_pixel_key=None,
     ):
         self.download = download
         # ToTensor
-        totensor = ToTensorImage(unsqueeze=False, keys_in=keys_in, keys_out=keys_out)
+        if tensor_pixel_key is None:
+            tensor_pixel_key = keys_in
+        totensor = ToTensorImage(
+            unsqueeze=False, keys_in=keys_in, keys_out=tensor_pixel_key
+        )
         keys_out = totensor.keys_out
         # Normalize
         mean = [0.485, 0.456, 0.406]
         std = [0.229, 0.224, 0.225]
         normalize = ObservationNorm(
-            keys_in=totensor.keys_out,
+            keys_in=tensor_pixel_key,
             loc=torch.tensor(mean).view(3, 1, 1),
             scale=torch.tensor(std).view(3, 1, 1),
             standard_normal=True,
@@ -110,7 +120,9 @@ class R3MTransform(Compose):
         # Resize: note that resize is a no-op if the tensor has the desired size already
         resize = Resize(size, size)
         # R3M
-        network = _R3MNet(in_keys=keys_out, out_keys=keys_out, model_name=model_name)
+        network = _R3MNet(
+            in_keys=tensor_pixel_key, out_keys=keys_out, model_name=model_name
+        )
         transforms = [totensor, resize, normalize, network]
         super().__init__(*transforms)
         if self.download:
