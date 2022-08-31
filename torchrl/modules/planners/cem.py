@@ -2,71 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import abc
-from typing import Optional
 
 import torch
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import EnvBase
-from torchrl.modules import TensorDictModule
+from torchrl.modules.planners import MPCPlannerBase
 
-
-class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
-    """
-    MPCPlannerBase Module. This class inherits from TensorDictModule. This is an abstract class and must be implemented by the user.
-    Provided a TensorDict, this module will perform a Model Predictive Control (MPC) planning step.
-    At the end of the planning step, the MPCPlanner will return the action that should be taken.
-
-    Args:
-        env (Environment): The environment to perform the planning step on (Can be ModelBasedEnv or EnvBase).
-        action_key (str): The key in the TensorDict to use to store the action.
-
-    Returns:
-        TensorDict: The TensorDict with the action added.
-    """
-
-    def __init__(
-        self,
-        env: EnvBase,
-        action_key: str = "action",
-    ):
-        out_keys = [action_key]
-        in_keys = [env.input_spec.keys()]
-        super().__init__(env, in_keys=in_keys, out_keys=out_keys)
-        self.env = env
-        self.action_spec = env.action_spec
-
-    def _call_module(self, tensordict: TensorDictBase) -> torch.Tensor:
-        return self.planning(tensordict)
-
-    @abc.abstractmethod
-    def planning(self, tensordict: TensorDictBase) -> torch.Tensor:
-        """
-        Perform the MPC planning step.
-        Args:
-            tensordict (TensorDict): The TensorDict to perform the planning step on.
-        Returns:
-            TensorDict: The TensorDict with the action added.
-        """
-        raise NotImplementedError()
-
-    def forward(
-        self,
-        tensordict: TensorDictBase,
-        tensordict_out: Optional[TensorDictBase] = None,
-        **kwargs,
-    ) -> TensorDictBase:
-        if "params" in kwargs or "vmap" in kwargs:
-            raise ValueError("params not supported")
-        action = self._call_module(tensordict)
-        tensors = (action,)
-        tensordict_out = self._write_to_tensordict(
-            tensordict,
-            tensors,
-            tensordict_out,
-        )
-        return tensordict_out
-
+__all__ = ["CEMPlanner"]
 
 class CEMPlanner(MPCPlannerBase):
     """
@@ -102,17 +44,17 @@ class CEMPlanner(MPCPlannerBase):
         reward_key: str = "reward",
         action_key: str = "action",
     ):
-        super().__init__(env, action_key)
+        super().__init__(env=env, action_key=action_key)
         self.planning_horizon = planning_horizon
         self.optim_steps = optim_steps
         self.num_candidates = num_candidates
         self.num_top_k_candidates = num_top_k_candidates
         self.reward_key = reward_key
 
-    def planning(self, tensordict: TensorDictBase) -> torch.Tensor:
-        batch_size = tensordict.batch_size
+    def planning(self, td: TensorDictBase) -> torch.Tensor:
+        batch_size = td.batch_size
         expanded_original_td = (
-            tensordict.clone().expand(*batch_size, self.num_candidates).flatten()
+            td.clone().expand(*batch_size, self.num_candidates).view(-1)
         )
         flatten_batch_size = batch_size.numel()
         actions_means = torch.zeros(
@@ -120,14 +62,16 @@ class CEMPlanner(MPCPlannerBase):
             1,
             self.planning_horizon,
             *self.action_spec.shape,
-            device=tensordict.device,
+            device=td.device,
+            dtype=self.env.action_spec.dtype,
         )
         actions_stds = torch.ones(
             flatten_batch_size,
             1,
             self.planning_horizon,
             *self.action_spec.shape,
-            device=tensordict.device,
+            device=td.device,
+            dtype=self.env.action_spec.dtype,
         )
         for _ in range(self.optim_steps):
             actions = actions_means + actions_stds * torch.randn(
@@ -135,13 +79,15 @@ class CEMPlanner(MPCPlannerBase):
                 self.num_candidates,
                 self.planning_horizon,
                 *self.action_spec.shape,
-                device=tensordict.device,
+                device=td.device,
+                dtype=self.env.action_spec.dtype,
             )
             actions = actions.view(
                 flatten_batch_size * self.num_candidates,
                 self.planning_horizon,
                 *self.action_spec.shape,
             )
+            actions = self.env.action_spec.project(actions)
             optim_td = expanded_original_td.clone()
             policy = PrecomputedActionsSequentialSetter(actions)
             optim_td = self.env.rollout(
@@ -157,7 +103,7 @@ class CEMPlanner(MPCPlannerBase):
             )
             _, top_k = rewards.topk(self.num_top_k_candidates, dim=1)
             top_k += (
-                torch.arange(0, flatten_batch_size, device=tensordict.device).unsqueeze(
+                torch.arange(0, flatten_batch_size, device=td.device).unsqueeze(
                     1
                 )
                 * self.num_candidates

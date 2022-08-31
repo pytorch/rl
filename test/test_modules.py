@@ -18,7 +18,9 @@ from torchrl.modules import (
     ValueOperator,
     ProbabilisticActor,
     LSTMNet,
+    CEMPlanner,
 )
+from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.modules.models import NoisyLinear, MLP, NoisyLazyLinear
 
 
@@ -297,6 +299,33 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
     torch.testing.assert_close(tds_vec["y"], tds_loop["y"])
     torch.testing.assert_close(tds_vec["hidden0_out"][-1], tds_loop["hidden0_out"][-1])
     torch.testing.assert_close(tds_vec["hidden1_out"][-1], tds_loop["hidden1_out"][-1])
+
+
+class TestPlanner:
+    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("env_name", ["Pendulum-v1"])
+    def test_CEM_model_free_env(self, device, env_name, seed=0):
+        env = GymEnv(env_name, frame_skip=1, device=device)
+        env.set_seed(seed)
+        planner = CEMPlanner(
+            env,
+            planning_horizon=10,
+            optim_steps=2,
+            num_candidates=100,
+            num_top_k_candidates=3,
+        ).to(device)
+        td = env.reset()
+        td = planner(td)
+        td_copy = td.clone()
+        assert td.get("action").shape == env.action_spec.shape
+
+        assert env.action_spec.is_in(td.get("action"))
+
+        for key in td.keys():
+            if key != "action":
+                assert torch.allclose(td[key], td_copy[key])
+            
 
 
 if __name__ == "__main__":
