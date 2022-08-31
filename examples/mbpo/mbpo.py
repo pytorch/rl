@@ -29,6 +29,7 @@ from torchrl.trainers.helpers.envs import (
     transformed_env_constructor,
     EnvConfig,
 )
+from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.losses import (
     make_sac_loss,
     LossConfig,
@@ -42,28 +43,11 @@ from torchrl.trainers.helpers.models import (
     make_mbpo_model,
     MBPOConfig,
 )
-from torchrl.trainers.helpers.recorder import RecorderConfig
 from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
     ReplayArgsConfig,
 )
 from torchrl.trainers.trainers import Recorder
-
-
-@dataclass
-class MBPOConfig:
-    world_model_lr: float = 1e-3
-    hidden_world_model: int = 256
-    num_layers_world_model: int = 4
-    imagination_horizon: int = 1
-    sac_lr: float = 0.0003
-    model_batch_size: int = 256
-    sac_batch_size: int = 256
-    real_data_ratio: float = 0.1
-    num_world_models_ensemble: int = 7
-    num_model_rollouts: int = 400
-    train_model_every_k_optim_step: int = 250
-    num_sac_training_steps_per_optim_step: int = 20
 
 
 @dataclass
@@ -87,7 +71,7 @@ config_fields = [
         OffPolicyCollectorConfig,
         EnvConfig,
         SACModelConfig,
-        RecorderConfig,
+        LoggerConfig,
         ReplayArgsConfig,
         LossConfig,
         MBPOConfig,
@@ -133,40 +117,24 @@ def main(cfg: "DictConfig"):
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
-    from torchrl.trainers.loggers.wandb import WandbLogger
 
-    logger = WandbLogger(
-        f"mbpo/{exp_name}",
-        project="torchrl",
-        group=f"MBPO_{cfg.env_name}_with_real",
-    )
+    if cfg.logger == "tensorboard":
+        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
 
-    # if cfg.logger == "wandb":
-    #     from torchrl.trainers.loggers.wandb import WandbLogger
+        logger = TensorboardLogger(log_dir="mbpo_logging", exp_name=exp_name)
+    elif cfg.logger == "csv":
+        from torchrl.trainers.loggers.csv import CSVLogger
 
-    #     logger = WandbLogger(
-    #         f"mbpo/{exp_name}",
-    #         project="torchrl",
-    #         group=f"MBPO_{cfg.env_name}",
-    #     )
-    # elif cfg.logger == "csv":
-    #     from torchrl.trainers.loggers.csv import CSVLogger
+        logger = CSVLogger(log_dir="mbpo_logging", exp_name=exp_name)
+    elif cfg.logger == "wandb":
+        from torchrl.trainers.loggers.wandb import WandbLogger
 
-    #     logger = CSVLogger(
-    #         f"{exp_name}",
-    #         log_dir="mbpo",
-    #     )
-    # elif cfg.logger == "tensorboard":
-    #     from torchrl.trainers.loggers.tensorboard import TensorboardLogger
-
-    #     logger = TensorboardLogger(
-    #         f"{exp_name}",
-    #         log_dir="mbpo",
-    #     )
-    # else:
-    #     raise NotImplementedError(cfg.logger)
-
-    video_tag = f"MBPO_policy_test" if cfg.record_video else ""
+        logger = WandbLogger(
+            f"mbpo/{exp_name}",
+            project="torchrl",
+            group=f"MBPO_{cfg.env_name}",
+        )
+    video_tag = "MBPO_policy_test" if cfg.record_video else ""
 
     stats = None
     if not cfg.vecnorm and cfg.norm_stats:
@@ -184,7 +152,7 @@ def main(cfg: "DictConfig"):
         cfg=cfg, use_env_creator=False, stats=stats
     )()
 
-    #### MBPO models ####
+    # MBPO models
 
     single_world_model = make_mbpo_model(
         proof_env,
@@ -354,12 +322,8 @@ def main(cfg: "DictConfig"):
                         auto_reset=False,
                         tensordict=model_sampled_tensordict,
                     )
-                    fake_traj_tensordict = fake_traj_tensordict.select(
-                        *original_keys
-                    )
-                    fake_replay_buffer.extend(
-                        fake_traj_tensordict.view(-1).cpu()
-                    )
+                    fake_traj_tensordict = fake_traj_tensordict.select(*original_keys)
+                    fake_replay_buffer.extend(fake_traj_tensordict.view(-1).cpu())
                 if len(fake_replay_buffer) > cfg.init_random_frames:
                     for _ in range(cfg.num_sac_training_steps_per_optim_step):
 
@@ -385,7 +349,7 @@ def main(cfg: "DictConfig"):
                             dim=0,
                         ).to(device)
 
-                        ### Train agent
+                        # Train agent
                         with autocast(dtype=torch.float16):
                             sac_loss_td = sac_loss(agent_sampled_tensordict)
                             sac_loss_sum = (

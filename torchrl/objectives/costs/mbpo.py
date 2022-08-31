@@ -4,10 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
-import torch.nn as nn
 
 from torchrl.data import TensorDict
-from .common import LossModule
+from torchrl.objectives import LossModule
 
 
 class MBPOModelLoss(LossModule):
@@ -57,9 +56,9 @@ class MBPOModelLoss(LossModule):
             tensordict[f"next_{self.observation_key}"],
         )
         loss_reward = self.model_loss(
-            tensordict_expand[f"reward_loc"],
-            tensordict_expand[f"reward_scale"],
-            tensordict[f"reward"],
+            tensordict_expand["reward_loc"],
+            tensordict_expand["reward_scale"],
+            tensordict["reward"],
         )
         if self.lambda_obs is None or self.lambda_reward is None:
             N = tensordict[f"next_{self.observation_key}"].shape[-1]

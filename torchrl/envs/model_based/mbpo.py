@@ -10,10 +10,11 @@ import torch
 
 from torchrl.data import TensorDict
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.modules.tensordict_module import TensorDictModule
 from torchrl.envs.model_based import ModelBasedEnv
+from torchrl.modules.tensordict_module import TensorDictModule
 
 __all__ = ["ModelBasedEnv"]
+
 
 class MBPOEnv(ModelBasedEnv):
     def __init__(

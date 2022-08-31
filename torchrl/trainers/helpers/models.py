@@ -1222,9 +1222,17 @@ def make_mbpo_model(
 @dataclass
 class MBPOConfig:
     world_model_lr: float = 1e-3
-    sac_lr: float = 1e-3
+    hidden_world_model: int = 256
     num_layers_world_model: int = 4
-    hidden_size_world_model: int = 200
+    imagination_horizon: int = 1
+    sac_lr: float = 0.0003
+    model_batch_size: int = 256
+    sac_batch_size: int = 256
+    real_data_ratio: float = 0.1
+    num_world_models_ensemble: int = 7
+    num_model_rollouts: int = 400
+    train_model_every_k_optim_step: int = 250
+    num_sac_training_steps_per_optim_step: int = 20
 
 
 @dataclass
