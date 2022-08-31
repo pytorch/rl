@@ -68,8 +68,7 @@ class LossModule(nn.Module):
         # tensors as lazy calls to `getattr(self, name_of_tensor)`.
         # Otherwise, casting the module to a device will keep old references
         # to uncast tensors
-        if not _has_functorch:
-            raise ImportError(FUNCTORCH_ERROR)
+
 
         network_orig = module
         if hasattr(module, "make_functional_with_buffers"):
@@ -78,11 +77,16 @@ class LossModule(nn.Module):
                 module_buffers,
             ) = module.make_functional_with_buffers(clone=True)
         else:
-            (
-                functional_module,
-                module_params,
-                module_buffers,
-            ) = functorch.make_functional_with_buffers(module)
+            if _has_functorch:
+                (
+                    functional_module,
+                    module_params,
+                    module_buffers,
+                ) = functorch.make_functional_with_buffers(module)
+            else:
+                functional_module, module_params = FunctionalModuleWithBuffers._create_from(module)
+                module_buffers = None
+
             for _ in functional_module.parameters():
                 # Erase meta params
                 none_state = [None for _ in module_params + module_buffers]
@@ -111,9 +115,17 @@ class LossModule(nn.Module):
         # unless we need to expand them, in that case we'll delete the weights to make sure that the user does not
         # run anything with them expecting them to be updated
         params = list(params)
-        module_buffers = list(module_buffers)
+        if module_buffers is not None:
+            module_buffers = list(module_buffers)
+        else:
+            module_buffers = []
 
         if expand_dim:
+            if not _has_functorch:
+                raise ImportError(
+                    "expanding params is only possible when functorch is installed,"
+                    "as this feature requires calls to the vmap operator."
+                )
             if compare_against is not None:
                 compare_against = set(compare_against)
             else:

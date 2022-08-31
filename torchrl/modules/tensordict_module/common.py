@@ -438,11 +438,12 @@ class TensorDictModule(nn.Module):
 
         """
         if not _has_functorch:
-            raise ImportError(
-                "Trying to create a functional module without functorch being "
-                "installed. Consider installing functorch to use this "
-                "functionality."
-            )
+            make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
+            print("using torchrl's functional modules. This is an experimental feature "
+                  "with no working guarantee.")
+        else:
+            make_functional_with_buffers = functorch.make_functional_with_buffers
+
         if clone:
             self_copy = deepcopy(self)
         else:
@@ -466,7 +467,11 @@ class TensorDictModule(nn.Module):
                 break
 
         module = self_copy.module
-        fmodule, params, buffers = functorch.make_functional_with_buffers(module)
+        if not _has_functorch:
+            fmodule, params = make_functional_with_buffers(module)
+            buffers = None
+        else:
+            fmodule, params, buffers = make_functional_with_buffers(module)
         self_copy.module = fmodule
 
         # Erase meta params

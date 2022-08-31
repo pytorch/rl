@@ -62,6 +62,7 @@ class FunctionalModuleWithBuffers(nn.Module):
         return FunctionalModuleWithBuffers(model_copy), param_tensordict
 
     def forward(self, params, *args, **kwargs):
+        kwargs.pop("buffers", None)
         # Temporarily load the state back onto self.stateless_model
         old_state = _swap_state(
             self.stateless_model, params, return_old_tensordict=_RESET_OLD_TENSORDICT
