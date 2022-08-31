@@ -4,17 +4,19 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from typing import Optional, Union, List
 from copy import deepcopy
+from typing import Optional, Union, List
+
 import numpy as np
 import torch
-from torchrl.data import TensorDict
 
+from torchrl.data import TensorDict
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.modules.tensordict_module import TensorDictModule
 from torchrl.envs.common import EnvBase
+from torchrl.modules.tensordict_module import TensorDictModule
 
 __all__ = ["ModelBasedEnv"]
+
 
 class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     """
