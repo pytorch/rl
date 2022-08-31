@@ -10,7 +10,7 @@ import torch
 from torch import nn, distributions as d
 
 from torchrl.data import DEVICE_TYPING, CompositeSpec
-from torchrl.envs.common import _EnvClass
+from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     ActorValueOperator,
@@ -75,13 +75,13 @@ __all__ = [
 
 
 def make_dqn_actor(
-    proof_environment: _EnvClass, cfg: "DictConfig", device: torch.device
+    proof_environment: EnvBase, cfg: "DictConfig", device: torch.device
 ) -> Actor:
     """
     DQN constructor helper function.
 
     Args:
-        proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec.
+        proof_environment (EnvBase): a dummy environment to retrieve the observation and action spec.
         cfg (DictConfig): contains arguments of the DQN script
         device (torch.device): device on which the model must be cast
 
@@ -91,7 +91,7 @@ def make_dqn_actor(
     Examples:
         >>> from torchrl.trainers.helpers.models import make_dqn_actor, DiscreteModelConfig
         >>> from torchrl.trainers.helpers.envs import EnvConfig
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import ToTensorImage, TransformedEnv
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
@@ -198,7 +198,7 @@ def make_dqn_actor(
 
 
 def make_ddpg_actor(
-    proof_environment: _EnvClass,
+    proof_environment: EnvBase,
     cfg: "DictConfig",
     actor_net_kwargs: Optional[dict] = None,
     value_net_kwargs: Optional[dict] = None,
@@ -208,7 +208,7 @@ def make_ddpg_actor(
     DDPG constructor helper function.
 
     Args:
-        proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec
+        proof_environment (EnvBase): a dummy environment to retrieve the observation and action spec
         cfg (DictConfig): contains arguments of the DDPG script
         actor_net_kwargs (dict, optional): kwargs to be used for the policy network (either DdpgCnnActor or
             DdpgMlpActor).
@@ -225,7 +225,7 @@ def make_ddpg_actor(
     Examples:
         >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.trainers.helpers.models import make_ddpg_actor, parser_model_args_continuous
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
@@ -400,7 +400,7 @@ def make_ddpg_actor(
 
 
 def make_ppo_model(
-    proof_environment: _EnvClass,
+    proof_environment: EnvBase,
     cfg: "DictConfig",
     device: DEVICE_TYPING,
     in_keys_actor: Optional[Sequence[str]] = None,
@@ -414,7 +414,7 @@ def make_ppo_model(
     Other configurations can easily be implemented by modifying this function at will.
 
     Args:
-        proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec
+        proof_environment (EnvBase): a dummy environment to retrieve the observation and action spec
         cfg (DictConfig): contains arguments of the PPO script
         device (torch.device): device on which the model must be cast.
         in_keys_actor (iterable of strings, optional): observation key to be read by the actor, usually one of
@@ -427,7 +427,7 @@ def make_ppo_model(
     Examples:
         >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.trainers.helpers.models import make_ppo_model, parser_model_args_continuous
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
@@ -479,21 +479,6 @@ def make_ppo_model(
     # proof_environment.set_seed(cfg.seed)
     specs = proof_environment.specs  # TODO: use env.sepcs
     action_spec = specs["action_spec"]
-    obs_spec = specs["observation_spec"]
-
-    if observation_key is not None:
-        obs_spec = obs_spec[observation_key]
-    else:
-        obs_spec_values = list(obs_spec.values())
-        if len(obs_spec_values) > 1:
-            raise RuntimeError(
-                "There is more than one observation in the spec, PPO helper "
-                "cannot infer automatically which to pick. "
-                "Please indicate which key to read via the `observation_key` "
-                "keyword in this helper."
-            )
-        else:
-            obs_spec = obs_spec_values[0]
 
     if in_keys_actor is None and proof_environment.from_pixels:
         in_keys_actor = ["pixels"]
@@ -704,7 +689,7 @@ def make_ppo_model(
 
 
 def make_sac_model(
-    proof_environment: _EnvClass,
+    proof_environment: EnvBase,
     cfg: "DictConfig",
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
@@ -721,7 +706,7 @@ def make_sac_model(
     Other configurations can easily be implemented by modifying this function at will.
 
     Args:
-        proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec
+        proof_environment (EnvBase): a dummy environment to retrieve the observation and action spec
         cfg (DictConfig): contains arguments of the SAC script
         device (torch.device, optional): device on which the model must be cast. Default is "cpu".
         in_keys (iterable of strings, optional): observation key to be read by the actor, usually one of
@@ -737,7 +722,7 @@ def make_sac_model(
     Examples:
         >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.trainers.helpers.models import make_sac_model, parser_model_args_continuous
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
@@ -803,21 +788,6 @@ def make_sac_model(
 
     proof_environment.reset()
     action_spec = proof_environment.action_spec
-    obs_spec = proof_environment.observation_spec
-
-    if observation_key is not None:
-        obs_spec = obs_spec[observation_key]
-    else:
-        obs_spec_values = list(obs_spec.values())
-        if len(obs_spec_values) > 1:
-            raise RuntimeError(
-                "There is more than one observation in the spec, SAC helper "
-                "cannot infer automatically which to pick. "
-                "Please indicate which key to read via the `observation_key` "
-                "keyword in this helper."
-            )
-        else:
-            obs_spec = obs_spec_values[0]
 
     if actor_net_kwargs is None:
         actor_net_kwargs = {}
@@ -941,7 +911,7 @@ def make_sac_model(
 
 
 def make_redq_model(
-    proof_environment: _EnvClass,
+    proof_environment: EnvBase,
     cfg: "DictConfig",
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
@@ -957,7 +927,7 @@ def make_redq_model(
     A single instance of the Q-value model is returned. It will be multiplicated by the loss function.
 
     Args:
-        proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec
+        proof_environment (EnvBase): a dummy environment to retrieve the observation and action spec
         cfg (DictConfig): contains arguments of the REDQ script
         device (torch.device, optional): device on which the model must be cast. Default is "cpu".
         in_keys (iterable of strings, optional): observation key to be read by the actor, usually one of
@@ -972,7 +942,7 @@ def make_redq_model(
     Examples:
         >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.trainers.helpers.models import make_redq_model, parser_model_args_continuous
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore

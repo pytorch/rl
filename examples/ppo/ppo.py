@@ -13,6 +13,7 @@ from hydra.core.config_store import ConfigStore
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
+from torchrl.objectives import GAE
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,
@@ -25,12 +26,12 @@ from torchrl.trainers.helpers.envs import (
     transformed_env_constructor,
     EnvConfig,
 )
+from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.losses import make_ppo_loss, PPOLossConfig
 from torchrl.trainers.helpers.models import (
     make_ppo_model,
     PPOModelConfig,
 )
-from torchrl.trainers.helpers.recorder import RecorderConfig
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
 
 config_fields = [
@@ -41,7 +42,7 @@ config_fields = [
         EnvConfig,
         PPOLossConfig,
         PPOModelConfig,
-        RecorderConfig,
+        LoggerConfig,
     )
     for config_field in dataclasses.fields(config_cls)
 ]
@@ -53,7 +54,6 @@ cs.store(name="config", node=Config)
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):
-    from torchrl.trainers.loggers.tensorboard import TensorboardLogger
 
     cfg = correct_for_frame_skip(cfg)
 
@@ -74,7 +74,18 @@ def main(cfg: "DictConfig"):
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
-    logger = TensorboardLogger(f"ppo_logging/{exp_name}")
+    if cfg.logger == "tensorboard":
+        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
+
+        logger = TensorboardLogger(log_dir="ppo_logging", exp_name=exp_name)
+    elif cfg.logger == "csv":
+        from torchrl.trainers.loggers.csv import CSVLogger
+
+        logger = CSVLogger(log_dir="ppo_logging", exp_name=exp_name)
+    elif cfg.logger == "wandb":
+        from torchrl.trainers.loggers.wandb import WandbLogger
+
+        logger = WandbLogger(log_dir="ppo_logging", exp_name=exp_name)
     video_tag = exp_name if cfg.record_video else ""
 
     stats = None
@@ -172,6 +183,24 @@ def main(cfg: "DictConfig"):
     )
     if cfg.loss == "kl":
         trainer.register_op("pre_optim_steps", loss_module.reset)
+
+    if not cfg.advantage_in_loss:
+        critic_model = model.get_value_operator()
+        advantage = GAE(
+            cfg.gamma,
+            cfg.lmbda,
+            value_network=critic_model,
+            average_rewards=True,
+            gradient_mode=False,
+        )
+        trainer.register_op(
+            "process_optim_batch",
+            advantage,
+        )
+        trainer._process_optim_batch_ops = [
+            trainer._process_optim_batch_ops[-1],
+            *trainer._process_optim_batch_ops[:-1],
+        ]
 
     final_seed = collector.set_seed(cfg.seed)
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")

@@ -9,9 +9,11 @@ from typing import Callable, Optional, Union, Any
 
 import torch
 
-from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
-from torchrl.envs.common import _EnvClass
+from torchrl.envs import ParallelEnv
+from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
+from torchrl.envs.libs.dm_control import DMControlEnv
+from torchrl.envs.libs.gym import GymEnv, RetroEnv
 from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,
@@ -154,7 +156,10 @@ def make_env_transforms(
         double_to_float_inv_list += ["action"]  # DMControl requires double-precision
     if not from_pixels:
         selected_keys = [
-            key for key in env.observation_spec.keys() if "pixels" not in key
+            key
+            for key in env.observation_spec.keys()
+            if ("pixels" not in key)
+            and (key.strip("next_") not in env.input_spec.keys())
         ]
 
         # even if there is a single tensor, it'll be renamed in "next_observation_vector"
@@ -211,9 +216,9 @@ def transformed_env_constructor(
     logger: Optional[Logger] = None,
     stats: Optional[dict] = None,
     norm_obs_only: bool = False,
-    use_env_creator: bool = True,
+    use_env_creator: bool = False,
     custom_env_maker: Optional[Callable] = None,
-    custom_env: Optional[_EnvClass] = None,
+    custom_env: Optional[EnvBase] = None,
     return_transformed_envs: bool = True,
     action_dim_gsde: Optional[int] = None,
     state_dim_gsde: Optional[int] = None,
@@ -236,7 +241,7 @@ def transformed_env_constructor(
             of torchrl env wrappers, a custom callable
             can be passed instead. In this case it will override the
             constructor retrieved from `args`.
-        custom_env (_EnvClass, optional): if an existing environment needs to be
+        custom_env (EnvBase, optional): if an existing environment needs to be
             transformed_in, it can be passed directly to this helper. `custom_env_maker`
             and `custom_env` are exclusive features.
         return_transformed_envs (bool, optional): if True, a transformed_in environment
@@ -258,9 +263,17 @@ def transformed_env_constructor(
         from_pixels = cfg.from_pixels
 
         if custom_env is None and custom_env_maker is None:
+            if isinstance(cfg.collector_devices, str):
+                device = cfg.collector_devices
+            elif isinstance(cfg.collector_devices, Sequence):
+                device = cfg.collector_devices[0]
+            else:
+                raise ValueError(
+                    "collector_devices must be either a string or a sequence of strings"
+                )
             env_kwargs = {
                 "env_name": env_name,
-                "device": "cpu",
+                "device": device,
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,
@@ -337,7 +350,7 @@ def parallel_env_constructor(
 
 
 def get_stats_random_rollout(
-    cfg: "DictConfig", proof_environment: _EnvClass, key: Optional[str] = None
+    cfg: "DictConfig", proof_environment: EnvBase, key: Optional[str] = None
 ):
     print("computing state stats")
     if not hasattr(cfg, "init_env_steps"):

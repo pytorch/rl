@@ -8,20 +8,21 @@ from __future__ import annotations
 import os
 from collections import OrderedDict
 from copy import deepcopy
-from logging import warn
 from multiprocessing import connection
+from multiprocessing.synchronize import Lock as MpLock
 from time import sleep
-from typing import Callable, Optional, Sequence, Union, Any, List
+from typing import Callable, Optional, Sequence, Union, Any, List, Dict
+from warnings import warn
 
 import torch
 from torch import multiprocessing as mp
 
 from torchrl import _check_for_faulty_process
-from torchrl.data import TensorDict, TensorSpec
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from torchrl.data import TensorDict, TensorSpec, CompositeSpec
+from torchrl.data.tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
-from torchrl.envs.common import _EnvClass, make_tensordict
-from torchrl.envs.env_creator import EnvCreator
+from torchrl.envs.common import EnvBase
+from torchrl.envs.env_creator import get_env_metadata
 
 __all__ = ["SerialEnv", "ParallelEnv"]
 
@@ -70,24 +71,7 @@ class _dispatch_caller_serial:
         return [_callable(*args, **kwargs) for _callable in self.list_callable]
 
 
-class _dummy_env_context:
-    def __init__(self, fun, kwargs, device):
-        self.fun = fun
-        self.kwargs = kwargs
-        self.device = device
-
-    def __enter__(self):
-        self.dummy_env = self.fun(**self.kwargs)
-        if self.device is not None:
-            self.dummy_env.to(self.device)
-        return self.dummy_env
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.dummy_env.close()
-        del self.dummy_env
-
-
-class _BatchedEnv(_EnvClass):
+class _BatchedEnv(EnvBase):
     """
 
     Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.
@@ -100,7 +84,10 @@ class _BatchedEnv(_EnvClass):
     Args:
         num_workers: number of workers (i.e. env instances) to be deployed simultaneously;
         create_env_fn (callable or list of callables): function (or list of functions) to be used for the environment
-            creation;
+            creation.
+            If a single task is used, a callable should be used and not a list of identical callables:
+            if a list of callable is provided, the environment will be executed as if multiple, diverse tasks were
+            needed, which comes with a slight compute overhead;
         create_env_kwargs (dict or list of dicts, optional): kwargs to be used with the environments being created;
         env_input_keys (list of str, optional): list of keys that are to be considered policy-output. If the policy has it,
             the attribute policy.out_keys can be used.
@@ -108,7 +95,7 @@ class _BatchedEnv(_EnvClass):
             drastically decrease the IO burden when the tensordict is placed in shared memory / memory map.
             env_input_keys will typically contain "action" and if this list is not provided this object
             will look for corresponding keys. When working with stateless models, it is important to include the
-            state to be read by the environment. If none is provided, _BatchedEnv will use the `_EnvClass.input_spec`
+            state to be read by the environment. If none is provided, _BatchedEnv will use the `EnvBase.input_spec`
             keys as indicators of the keys to be sent to the env.
         pin_memory (bool): if True and device is "cpu", calls `pin_memory` on the tensordicts when created.
         selected_keys (list of str, optional): keys that have to be returned by the environment.
@@ -119,9 +106,9 @@ class _BatchedEnv(_EnvClass):
             replay buffer) and/or limit the amount of data passed from one process to the other;
         excluded_keys (list of str, optional): list of keys to be excluded from the returned tensordicts.
             See selected_keys for more details;
-        share_individual_td (bool): if True, a different tensordict is created for every process/worker and a lazy
+        share_individual_td (bool, optional): if True, a different tensordict is created for every process/worker and a lazy
             stack is returned.
-            default = False;
+            default = None (False if single task);
         shared_memory (bool): whether or not the returned tensordict will be placed in shared memory;
         memmap (bool): whether or not the returned tensordict will be placed in memory map.
         policy_proof (callable, optional): if provided, it'll be used to get the list of
@@ -145,15 +132,13 @@ class _BatchedEnv(_EnvClass):
     def __init__(
         self,
         num_workers: int,
-        create_env_fn: Union[
-            Callable[[], _EnvClass], Sequence[Callable[[], _EnvClass]]
-        ],
+        create_env_fn: Union[Callable[[], EnvBase], Sequence[Callable[[], EnvBase]]],
         create_env_kwargs: Union[dict, Sequence[dict]] = None,
         env_input_keys: Optional[Sequence[str]] = None,
         pin_memory: bool = False,
         selected_keys: Optional[Sequence[str]] = None,
         excluded_keys: Optional[Sequence[str]] = None,
-        share_individual_td: bool = False,
+        share_individual_td: Optional[bool] = None,
         shared_memory: bool = True,
         memmap: bool = False,
         policy_proof: Optional[Callable] = None,
@@ -169,6 +154,7 @@ class _BatchedEnv(_EnvClass):
         super().__init__(device=None)
         self.is_closed = True
 
+        self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
         if callable(create_env_fn):
             create_env_fn = [create_env_fn for _ in range(num_workers)]
         else:
@@ -177,23 +163,18 @@ class _BatchedEnv(_EnvClass):
                     f"num_workers and len(create_env_fn) mismatch, "
                     f"got {len(create_env_fn)} and {num_workers}"
                 )
+            if (
+                share_individual_td is False and not self._single_task
+            ):  # then it has been explicitly set by the user
+                raise ValueError(
+                    "share_individual_td must be set to None or True when using multi-task batched environments"
+                )
+            share_individual_td = True
         create_env_kwargs = dict() if create_env_kwargs is None else create_env_kwargs
         if isinstance(create_env_kwargs, dict):
             create_env_kwargs = [
                 deepcopy(create_env_kwargs) for _ in range(num_workers)
             ]
-
-        self._dummy_env_instance = None
-        try:
-            self._dummy_env_fun = CloudpickleWrapper(
-                create_env_fn[0], **create_env_kwargs[0]
-            )
-        except RuntimeError as err:
-            if isinstance(create_env_fn[0], EnvCreator):
-                self._dummy_env_fun = create_env_fn[0]
-                self._dummy_env_fun.create_env_kwargs.update(create_env_kwargs[0])
-            else:
-                raise err
 
         self.policy_proof = policy_proof
         self.num_workers = num_workers
@@ -203,7 +184,7 @@ class _BatchedEnv(_EnvClass):
         self.pin_memory = pin_memory
         self.selected_keys = selected_keys
         self.excluded_keys = excluded_keys
-        self.share_individual_td = share_individual_td
+        self.share_individual_td = bool(share_individual_td)
         self._share_memory = shared_memory
         self._memmap = memmap
         if self._share_memory and self._memmap:
@@ -217,6 +198,63 @@ class _BatchedEnv(_EnvClass):
         self._device = None
         self._dummy_env_str = None
         self._seeds = None
+        # self._prepare_dummy_env(create_env_fn, create_env_kwargs)
+        self._get_metadata(create_env_fn, create_env_kwargs)
+
+    def _get_metadata(
+        self, create_env_fn: List[Callable], create_env_kwargs: List[Dict]
+    ):
+        if self._single_task:
+            # if EnvCreator, the metadata are already there
+            self.meta_data = get_env_metadata(
+                create_env_fn[0], create_env_kwargs[0]
+            ).expand(self.num_workers)
+        else:
+            n_tasks = len(create_env_fn)
+            self.meta_data = []
+            for i in range(n_tasks):
+                self.meta_data.append(
+                    get_env_metadata(create_env_fn[i], create_env_kwargs[i])
+                )
+        self._set_properties()
+
+    # def _prepare_dummy_env(
+    #     self, create_env_fn: List[Callable], create_env_kwargs: List[Dict]
+    # ):
+    #     self._dummy_env_instance = None
+    #     if self._single_task:
+    #         # if EnvCreator, the metadata are already there
+    #         if isinstance(create_env_fn[0], EnvCreator):
+    #             self._dummy_env_fun = create_env_fn[0]
+    #             self._dummy_env_fun.create_env_kwargs.update(create_env_kwargs[0])
+    #         # get the metadata
+    #
+    #         try:
+    #             self._dummy_env_fun = CloudpickleWrapper(
+    #                 create_env_fn[0], **create_env_kwargs[0]
+    #             )
+    #         except RuntimeError as err:
+    #             if isinstance(create_env_fn[0], EnvCreator):
+    #                 self._dummy_env_fun = create_env_fn[0]
+    #                 self._dummy_env_fun.create_env_kwargs.update(create_env_kwargs[0])
+    #             else:
+    #                 raise err
+    #     else:
+    #         n_tasks = len(create_env_fn)
+    #         self._dummy_env_fun = []
+    #         for i in range(n_tasks):
+    #             try:
+    #                 self._dummy_env_fun.append(
+    #                     CloudpickleWrapper(create_env_fn[i], **create_env_kwargs[i])
+    #                 )
+    #             except RuntimeError as err:
+    #                 if isinstance(create_env_fn[i], EnvCreator):
+    #                     self._dummy_env_fun.append(create_env_fn[i])
+    #                     self._dummy_env_fun[i].create_env_kwargs.update(
+    #                         create_env_kwargs[i]
+    #                     )
+    #                 else:
+    #                     raise err
 
     def update_kwargs(self, kwargs: Union[dict, List[dict]]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
@@ -233,34 +271,35 @@ class _BatchedEnv(_EnvClass):
                 _kwargs.update(_new_kwargs)
 
     def _set_properties(self):
-        with self._dummy_env_context as dummy_env:
-            self._batch_size = torch.Size([self.num_workers, *dummy_env.batch_size])
-            self._action_spec = dummy_env.action_spec
-            self._observation_spec = dummy_env.observation_spec
-            self._reward_spec = dummy_env.reward_spec
-            self._dummy_env_str = str(dummy_env)
-            self._device = torch.device(dummy_env.device)
-
-    @property
-    def _dummy_env_context(self) -> _dummy_env_context:
-        """Returns a context manager that will create a dummy env and delete it afterwards"""
-        return _dummy_env_context(
-            self._dummy_env_fun, self.create_env_kwargs[0], self._device
-        )
-
-    @property
-    def _dummy_env(self) -> _EnvClass:
-        """Returns a closed dummy environment. This is used to check the type of attributes that will
-        be gathered on remote processed.
-        """
-        if self._dummy_env_instance is None:
-            self._dummy_env_instance = self._dummy_env_fun(**self.create_env_kwargs[0])
-            self._dummy_env_instance.close()
-        return self._dummy_env_instance
-
-    @_dummy_env.setter
-    def _dummy_env(self, value: _EnvClass) -> None:
-        self._dummy_env_instance = value
+        if self._single_task:
+            self._batch_size = self.meta_data.batch_size
+            self._action_spec = self.meta_data.specs["action_spec"]
+            self._observation_spec = self.meta_data.specs["observation_spec"]
+            self._reward_spec = self.meta_data.specs["reward_spec"]
+            self._input_spec = self.meta_data.specs["input_spec"]
+            self._dummy_env_str = self.meta_data.env_str
+            self._device = self.meta_data.device
+            self._env_tensordict = self.meta_data.tensordict
+        else:
+            self._batch_size = torch.Size(
+                [self.num_workers, *self.meta_data[0].batch_size]
+            )
+            self._device = self.meta_data[0].device
+            # TODO: check that all action_spec and reward spec match (issue #351)
+            self._action_spec = self.meta_data[0].specs["action_spec"]
+            self._reward_spec = self.meta_data[0].specs["reward_spec"]
+            self._observation_spec = {}
+            for md in self.meta_data:
+                self._observation_spec.update(dict(**md.specs["observation_spec"]))
+            self._observation_spec = CompositeSpec(**self._observation_spec)
+            self._input_spec = {}
+            for md in self.meta_data:
+                self._input_spec.update(dict(**md.specs["input_spec"]))
+            self._input_spec = CompositeSpec(**self._input_spec)
+            self._dummy_env_str = str(self.meta_data[0])
+            self._env_tensordict = torch.stack(
+                [meta_data.tensordict for meta_data in self.meta_data], 0
+            )
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
@@ -321,25 +360,42 @@ class _BatchedEnv(_EnvClass):
 
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
-        with self._dummy_env_context as dummy_env:
-            shared_tensordict_parent = make_tensordict(
-                dummy_env,
-                self.policy_proof,
-            )
-
-        shared_tensordict_parent = shared_tensordict_parent.expand(
-            self.num_workers
-        ).clone()
-
-        raise_no_selected_keys = False
-        if self.selected_keys is None:
-            self.selected_keys = list(shared_tensordict_parent.keys())
-            if self.excluded_keys is not None:
-                self.selected_keys = set(self.selected_keys).difference(
-                    self.excluded_keys
+        if self._single_task:
+            shared_tensordict_parent = self._env_tensordict.clone()
+            if not self._env_tensordict.shape[0] == self.num_workers:
+                raise RuntimeError(
+                    "batched environment base tensordict has the wrong shape"
                 )
-            else:
-                raise_no_selected_keys = True
+            raise_no_selected_keys = False
+            if self.selected_keys is None:
+                self.selected_keys = list(shared_tensordict_parent.keys())
+                if self.excluded_keys is not None:
+                    self.selected_keys = set(self.selected_keys).difference(
+                        self.excluded_keys
+                    )
+                else:
+                    raise_no_selected_keys = True
+        else:
+            shared_tensordict_parent = self._env_tensordict.clone()
+            raise_no_selected_keys = False
+            if self.selected_keys is None:
+                self.selected_keys = [
+                    list(tensordict.keys())
+                    for tensordict in shared_tensordict_parent.tensordicts
+                ]
+                if self.excluded_keys is not None:
+                    self.excluded_keys = [
+                        self.excluded_keys for _ in range(self.num_workers)
+                    ]
+                    self.selected_keys = [
+                        set(selected_keys).difference(excluded_keys)
+                        for selected_keys, excluded_keys in zip(
+                            self.selected_keys, self.excluded_keys
+                        )
+                    ]
+                else:
+                    raise_no_selected_keys = True
+
         if self.env_input_keys is not None:
             if not all(
                 action_key in self.selected_keys for action_key in self.env_input_keys
@@ -349,25 +405,50 @@ class _BatchedEnv(_EnvClass):
                     "keys need to be part of the selected keys for env.step() to be called."
                 )
         else:
-            self.env_input_keys = sorted(list(self._dummy_env.input_spec.keys()))
+            if self._single_task:
+                self.env_input_keys = sorted(list(self.input_spec.keys()))
+            else:
+                env_input_keys = set()
+                for meta_data in self.meta_data:
+                    env_input_keys = env_input_keys.union(
+                        meta_data.specs["input_spec"].keys()
+                    )
+                self.env_input_keys = sorted(list(env_input_keys))
             if not len(self.env_input_keys):
                 raise RuntimeError(
                     f"found 0 action keys in {sorted(list(self.selected_keys))}"
                 )
-        shared_tensordict_parent = shared_tensordict_parent.select(*self.selected_keys)
-        self.shared_tensordict_parent = shared_tensordict_parent.to(self.device)
+        if self._single_task:
+            shared_tensordict_parent = shared_tensordict_parent.select(
+                *self.selected_keys
+            )
+            self.shared_tensordict_parent = shared_tensordict_parent.to(self.device)
+        else:
+            shared_tensordict_parent = torch.stack(
+                [
+                    tensordict.select(*selected_keys).to(self.device)
+                    for tensordict, selected_keys in zip(
+                        shared_tensordict_parent, self.selected_keys
+                    )
+                ],
+                0,
+            )
+            self.shared_tensordict_parent = shared_tensordict_parent
 
         if self.share_individual_td:
-            self.shared_tensordicts = [
-                td.clone() for td in self.shared_tensordict_parent.unbind(0)
-            ]
+            if not isinstance(self.shared_tensordict_parent, LazyStackedTensorDict):
+                self.shared_tensordicts = [
+                    td.clone() for td in self.shared_tensordict_parent.unbind(0)
+                ]
+                self.shared_tensordict_parent = torch.stack(self.shared_tensordicts, 0)
+            else:
+                self.shared_tensordicts = self.shared_tensordict_parent
             if self._share_memory:
                 for td in self.shared_tensordicts:
                     td.share_memory_()
             elif self._memmap:
                 for td in self.shared_tensordicts:
                     td.memmap_()
-            self.shared_tensordict_parent = torch.stack(self.shared_tensordicts, 0)
         else:
             if self._share_memory:
                 self.shared_tensordict_parent.share_memory_()
@@ -430,6 +511,11 @@ class _BatchedEnv(_EnvClass):
         if device == self.device:
             return self
         self._device = device
+        self.meta_data = (
+            self.meta_data.to(device)
+            if self._single_task
+            else [meta_data.to(device) for meta_data in self.meta_data]
+        )
         if not self.is_closed:
             warn(
                 "Casting an open environment to another device requires closing and re-opening it. "
@@ -532,7 +618,7 @@ class SerialEnv(_BatchedEnv):
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
-            return self.__getattribute__(
+            return super().__getattr__(
                 attr
             )  # make sure that appropriate exceptions are raised
         elif attr.startswith("__"):
@@ -546,8 +632,8 @@ class SerialEnv(_BatchedEnv):
                 raise AttributeError(f"Getting {attr} resulted in an exception")
             try:
                 # determine if attr is a callable
-                callable_attr = callable(getattr(self._dummy_env, attr))
                 list_attr = [getattr(env, attr) for env in self._envs]
+                callable_attr = callable(list_attr[0])
                 if callable_attr:
                     if self.is_closed:
                         raise RuntimeError(
@@ -560,8 +646,7 @@ class SerialEnv(_BatchedEnv):
                     return list_attr
             except AttributeError:
                 raise AttributeError(
-                    f"attribute {attr} not found in "
-                    f"{self._dummy_env.__class__.__name__}"
+                    f"attribute {attr} not found in " f"{self._dummy_env_str}"
                 )
 
     def to(self, device: DEVICE_TYPING):
@@ -758,7 +843,7 @@ class ParallelEnv(_BatchedEnv):
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
-            return self.__getattribute__(
+            return super().__getattr__(
                 attr
             )  # make sure that appropriate exceptions are raised
         elif attr.startswith("__"):
@@ -769,7 +854,7 @@ class ParallelEnv(_BatchedEnv):
             if attr in self._excluded_wrapped_keys:
                 raise AttributeError(f"Getting {attr} resulted in an exception")
             try:
-                _ = getattr(self._dummy_env, attr)
+                # _ = getattr(self._dummy_env, attr)
                 if self.is_closed:
                     raise RuntimeError(
                         "Trying to access attributes of closed/non started "
@@ -780,8 +865,7 @@ class ParallelEnv(_BatchedEnv):
                 return _dispatch_caller_parallel(attr, self)
             except AttributeError:
                 raise AttributeError(
-                    f"attribute {attr} not found in "
-                    f"{self._dummy_env.__class__.__name__}"
+                    f"attribute {attr} not found in " f"{self._dummy_env_str}"
                 )
 
     def to(self, device: DEVICE_TYPING):
@@ -798,11 +882,24 @@ class ParallelEnv(_BatchedEnv):
         return self
 
 
+def recursively_strip_locks_from_state_dict(state_dict: OrderedDict) -> OrderedDict:
+    return OrderedDict(
+        **{
+            k: recursively_strip_locks_from_state_dict(item)
+            if isinstance(item, OrderedDict)
+            else None
+            if isinstance(item, MpLock)
+            else item
+            for k, item in state_dict.items()
+        }
+    )
+
+
 def _run_worker_pipe_shared_mem(
     idx: int,
     parent_pipe: connection.Connection,
     child_pipe: connection.Connection,
-    env_fun: Union[_EnvClass, Callable],
+    env_fun: Union[EnvBase, Callable],
     env_fun_kwargs: dict,
     pin_memory: bool,
     env_input_keys: dict,
@@ -811,7 +908,7 @@ def _run_worker_pipe_shared_mem(
 ) -> None:
     parent_pipe.close()
     pid = os.getpid()
-    if not isinstance(env_fun, _EnvClass):
+    if not isinstance(env_fun, EnvBase):
         env = env_fun(**env_fun_kwargs)
     else:
         if env_fun_kwargs:
@@ -921,7 +1018,7 @@ def _run_worker_pipe_shared_mem(
             child_pipe.send((msg, None))
 
         elif cmd == "state_dict":
-            state_dict = env.state_dict()
+            state_dict = recursively_strip_locks_from_state_dict(env.state_dict())
             msg = "state_dict"
             child_pipe.send((msg, state_dict))
 

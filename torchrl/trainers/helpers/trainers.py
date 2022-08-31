@@ -13,7 +13,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
-from torchrl.envs.common import _EnvClass
+from torchrl.envs.common import EnvBase
 from torchrl.modules import TensorDictModule, TensorDictModuleWrapper, reset_noise
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
@@ -24,7 +24,6 @@ from torchrl.trainers.trainers import (
     ReplayBufferTrainer,
     LogReward,
     RewardNormalizer,
-    mask_batch,
     BatchSubSampler,
     UpdateWeights,
     Recorder,
@@ -70,7 +69,9 @@ class TrainerConfig:
     normalize_rewards_online: bool = False
     # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
     normalize_rewards_online_scale: float = 1.0
-    # Final value of the normalized rewards.
+    # Final scale of the normalized rewards.
+    normalize_rewards_online_decay: float = 0.9999
+    # Decay of the reward moving averaging
     sub_traj_len: int = -1
     # length of the trajectories that sub-samples must have in online settings.
 
@@ -78,7 +79,7 @@ class TrainerConfig:
 def make_trainer(
     collector: _DataCollector,
     loss_module: LossModule,
-    recorder: Optional[_EnvClass] = None,
+    recorder: Optional[EnvBase] = None,
     target_net_updater: Optional[_TargetNetUpdate] = None,
     policy_exploration: Optional[
         Union[TensorDictModuleWrapper, TensorDictModule]
@@ -92,7 +93,7 @@ def make_trainer(
     Args:
         collector (_DataCollector): A data collector to be used to collect data.
         loss_module (LossModule): A TorchRL loss module
-        recorder (_EnvClass, optional): a recorder environment. If None, the trainer will train the policy without
+        recorder (EnvBase, optional): a recorder environment. If None, the trainer will train the policy without
             testing it.
         target_net_updater (_TargetNetUpdate, optional): A target network update object.
         policy_exploration (TDModule or TensorDictModuleWrapper, optional): a policy to be used for recording and exploration
@@ -113,7 +114,7 @@ def make_trainer(
         >>> from torchrl.envs import EnvCreator
         >>> from torchrl.collectors.collectors import SyncDataCollector
         >>> from torchrl.data import TensorDictReplayBuffer
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.modules import TensorDictModuleWrapper, TensorDictModule, ValueOperator, EGreedyWrapper
         >>> from torchrl.objectives.costs.common import LossModule
         >>> from torchrl.objectives.costs.utils import _TargetNetUpdate
@@ -218,7 +219,7 @@ def make_trainer(
         trainer.register_op("process_optim_batch", rb_trainer.sample)
         trainer.register_op("post_loss", rb_trainer.update_priority)
     else:
-        trainer.register_op("batch_process", mask_batch)
+        # trainer.register_op("batch_process", mask_batch)
         trainer.register_op(
             "process_optim_batch",
             BatchSubSampler(batch_size=cfg.batch_size, sub_traj_len=cfg.sub_traj_len),
@@ -233,7 +234,10 @@ def make_trainer(
     if cfg.normalize_rewards_online:
         # if used the running statistics of the rewards are computed and the
         # rewards used for training will be normalized based on these.
-        reward_normalizer = RewardNormalizer(scale=cfg.normalize_rewards_online_scale)
+        reward_normalizer = RewardNormalizer(
+            scale=cfg.normalize_rewards_online_scale,
+            decay=cfg.normalize_rewards_online_decay,
+        )
         trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
         trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 

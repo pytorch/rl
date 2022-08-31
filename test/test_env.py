@@ -26,9 +26,9 @@ from torchrl.data.tensor_specs import (
     NdBoundedTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
-from torchrl.envs import EnvCreator, ObservationNorm
-from torchrl.envs import GymEnv
-from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs import EnvCreator, ObservationNorm, CatTensors, DoubleToFloat
+from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
+from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
@@ -271,6 +271,95 @@ def _make_envs(
 
 
 class TestParallel:
+    @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
+    @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
+    @pytest.mark.parametrize("share_individual_td", [True, False])
+    def test_multi_task_serial_parallel(self, env_task, share_individual_td):
+        tasks = env_task.split(",")
+        if len(tasks) == 1:
+            single_task = True
+            env_make = lambda: DMControlEnv("humanoid", tasks[0])
+        elif len(set(tasks)) == 1 and len(tasks) == 3:
+            single_task = True
+            env_make = [lambda: DMControlEnv("humanoid", tasks[0])] * 3
+        else:
+            single_task = False
+            env_make = [lambda: DMControlEnv("humanoid", task) for task in tasks]
+
+        if not share_individual_td and not single_task:
+            with pytest.raises(
+                ValueError, match="share_individual_td must be set to None"
+            ):
+                env_serial = SerialEnv(
+                    3, env_make, share_individual_td=share_individual_td
+                )
+            with pytest.raises(
+                ValueError, match="share_individual_td must be set to None"
+            ):
+                env_parallel = ParallelEnv(
+                    3, env_make, share_individual_td=share_individual_td
+                )
+            return
+
+        env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
+        env_serial.start()
+        assert env_serial._single_task is single_task
+        env_parallel = ParallelEnv(3, env_make, share_individual_td=share_individual_td)
+        env_parallel.start()
+        assert env_parallel._single_task is single_task
+
+        env_serial.set_seed(0)
+        torch.manual_seed(0)
+        td_serial = env_serial.rollout(max_steps=50)
+
+        env_parallel.set_seed(0)
+        torch.manual_seed(0)
+        td_parallel = env_parallel.rollout(max_steps=50)
+
+        assert_allclose_td(td_serial, td_parallel)
+
+    @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
+    def test_multitask(self):
+        env1 = DMControlEnv("humanoid", "stand")
+        env1_obs_keys = list(env1.observation_spec.keys())
+        env2 = DMControlEnv("humanoid", "walk")
+        env2_obs_keys = list(env2.observation_spec.keys())
+        env1_maker = lambda: TransformedEnv(
+            DMControlEnv("humanoid", "stand"),
+            Compose(
+                CatTensors(env1_obs_keys, "next_observation_stand", del_keys=False),
+                CatTensors(env1_obs_keys, "next_observation"),
+                DoubleToFloat(
+                    keys_in=["next_observation_stand", "next_observation"],
+                    keys_inv_in=["action"],
+                ),
+            ),
+        )
+        env2_maker = lambda: TransformedEnv(
+            DMControlEnv("humanoid", "walk"),
+            Compose(
+                CatTensors(env2_obs_keys, "next_observation_walk", del_keys=False),
+                CatTensors(env2_obs_keys, "next_observation"),
+                DoubleToFloat(
+                    keys_in=["next_observation_walk", "next_observation"],
+                    keys_inv_in=["action"],
+                ),
+            ),
+        )
+        env = ParallelEnv(2, [env1_maker, env2_maker])
+        assert not env._single_task
+
+        td = env.rollout(10, return_contiguous=False)
+        assert "observation_walk" not in td.keys()
+        assert "observation_walk" in td[1].keys()
+        assert "observation_walk" not in td[0].keys()
+        assert "observation_stand" in td[0].keys()
+        assert "observation_stand" not in td[1].keys()
+        assert "observation_walk" in td[:, 0][1].keys()
+        assert "observation_walk" not in td[:, 0][0].keys()
+        assert "observation_stand" in td[:, 0][0].keys()
+        assert "observation_stand" not in td[:, 0][1].keys()
+
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
     @pytest.mark.parametrize("frame_skip", [4, 1])

@@ -10,7 +10,6 @@ import torch
 from torch import distributions as d
 
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
-from torchrl.envs.utils import step_tensordict
 from torchrl.modules import TensorDictModule
 from ...modules.tensordict_module import ProbabilisticTensorDictModule
 
@@ -77,9 +76,9 @@ class PPOLoss(LossModule):
         self.advantage_diff_key = advantage_diff_key
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_coef
-        self.entropy_coef = entropy_coef
-        self.critic_coef = critic_coef
-        self.gamma = gamma
+        self.register_buffer("entropy_coef", torch.tensor(entropy_coef))
+        self.register_buffer("critic_coef", torch.tensor(critic_coef))
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_critic_type = loss_critic_type
         self.advantage_module = advantage_module
 
@@ -129,19 +128,14 @@ class PPOLoss(LossModule):
                 loss_function=self.loss_critic_type,
             )
         else:
-            with torch.no_grad():
-                reward = tensordict.get("reward")
-                next_td = step_tensordict(tensordict)
-                next_value = self.critic(
-                    next_td, params=self.critic_params, buffers=self.critic_buffers
-                ).get("state_value")
-                value_target = reward + next_value * self.gamma
-            tensordict_select = tensordict.select(*self.critic.in_keys).clone()
+            advantage = tensordict.get(self.advantage_key)
+            tensordict_select = tensordict.select(*self.critic.in_keys)
             value = self.critic(
                 tensordict_select,
                 params=self.critic_params,
                 buffers=self.critic_buffers,
             ).get("state_value")
+            value_target = advantage + value.detach()
             loss_value = distance_loss(
                 value, value_target, loss_function=self.loss_critic_type
             )
@@ -221,8 +215,11 @@ class ClipPPOLoss(PPOLoss):
             loss_critic_type=loss_critic_type,
             **kwargs,
         )
-        self.clip_epsilon = clip_epsilon
-        self._clip_bounds = (
+        self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
+
+    @property
+    def _clip_bounds(self):
+        return (
             math.log1p(-self.clip_epsilon),
             math.log1p(self.clip_epsilon),
         )
@@ -337,7 +334,7 @@ class KLPENPPOLoss(PPOLoss):
 
         self.dtarg = dtarg
         self._beta_init = beta
-        self.beta = beta
+        self.register_buffer("beta", torch.tensor(beta))
 
         if increment < 1.0:
             raise ValueError(
@@ -375,9 +372,9 @@ class KLPENPPOLoss(PPOLoss):
         kl = kl.unsqueeze(-1)
         neg_loss = neg_loss - self.beta * kl
         if kl.mean() > self.dtarg * 1.5:
-            self.beta *= self.increment
+            self.beta.data *= self.increment
         elif kl.mean() < self.dtarg / 1.5:
-            self.beta *= self.decrement
+            self.beta.data *= self.decrement
         td_out = TensorDict(
             {
                 "loss_objective": -neg_loss.mean(),

@@ -16,7 +16,7 @@ from torchrl.data import (
     TensorSpec,
     CompositeSpec,
 )
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from torchrl.data.tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from torchrl.modules.tensordict_module.common import TensorDictModule
 from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,
@@ -35,8 +35,14 @@ class TensorDictSequence(TensorDictModule):
 
     Args:
          modules (iterable of TDModules): ordered sequence of TDModule instances to be run sequentially.
+         partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
+            If so, the only module that will be executed are those who can be executed given the keys that
+            are present.
+            Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is `True` AND if the
+            stack does not have the required keys, then TensorDictSequence will scan through the sub-tensordicts
+            looking for those that have the required keys, if any.
 
-    TDSequence supportse functional, modular and vmap coding:
+    TDSequence supports functional, modular and vmap coding:
     Examples:
         >>> from torchrl.modules.tensordict_module import ProbabilisticTensorDictModule
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
@@ -114,7 +120,19 @@ class TensorDictSequence(TensorDictModule):
     def __init__(
         self,
         *modules: TensorDictModule,
+        partial_tolerant: bool = False,
     ):
+        in_keys, out_keys = self._compute_in_and_out_keys(modules)
+
+        super().__init__(
+            spec=None,
+            module=nn.ModuleList(list(modules)),
+            in_keys=in_keys,
+            out_keys=out_keys,
+        )
+        self.partial_tolerant = partial_tolerant
+
+    def _compute_in_and_out_keys(self, modules: List[TensorDictModule]) -> Tuple[List]:
         in_keys = []
         out_keys = []
         for module in modules:
@@ -130,13 +148,7 @@ class TensorDictSequence(TensorDictModule):
             for i, out_key in enumerate(out_keys)
             if out_key not in out_keys[i + 1 :]
         ]
-
-        super().__init__(
-            spec=None,
-            module=nn.ModuleList(list(modules)),
-            in_keys=in_keys,
-            out_keys=out_keys,
-        )
+        return in_keys, out_keys
 
     @staticmethod
     def _find_functional_module(module: TensorDictModule) -> nn.Module:
@@ -191,9 +203,68 @@ class TensorDictSequence(TensorDictModule):
             out.append(param_list[a:b])
         return out
 
+    def select_subsequence(
+        self, in_keys: Iterable[str] = None, out_keys: Iterable[str] = None
+    ) -> "TensorDictSequence":
+        """
+        Returns a new TensorDictSequence with only the modules that are necessary to compute
+        the given output keys with the given input keys.
+
+        Args:
+            in_keys: input keys of the subsequence we want to select
+            out_keys: output keys of the subsequence we want to select
+
+        Returns:
+            A new TensorDictSequence with only the modules that are necessary acording to the given input and output keys.
+        """
+        if in_keys is None:
+            in_keys = deepcopy(self.in_keys)
+        if out_keys is None:
+            out_keys = deepcopy(self.out_keys)
+        id_to_keep = {i for i in range(len(self.module))}
+        for i, module in enumerate(self.module):
+            if all(key in in_keys for key in module.in_keys):
+                in_keys.extend(module.out_keys)
+            else:
+                id_to_keep.remove(i)
+        for i, module in reversed(list(enumerate(self.module))):
+            if i in id_to_keep:
+                if any(key in out_keys for key in module.out_keys):
+                    out_keys.extend(module.in_keys)
+                else:
+                    id_to_keep.remove(i)
+        id_to_keep = sorted(list(id_to_keep))
+
+        modules = [self.module[i] for i in id_to_keep]
+
+        if modules == []:
+            raise ValueError(
+                "No modules left after selection. Make sure that in_keys and out_keys are coherent."
+            )
+
+        return TensorDictSequence(*modules)
+
+    def _run_module(self, module, tensordict, **kwargs):
+        tensordict_keys = set(tensordict.keys())
+        if not self.partial_tolerant or all(
+            key in tensordict_keys for key in module.in_keys
+        ):
+            tensordict = module(tensordict, **kwargs)
+        elif self.partial_tolerant and isinstance(tensordict, LazyStackedTensorDict):
+            for sub_td in tensordict.tensordicts:
+                tensordict_keys = set(sub_td.keys())
+                if all(key in tensordict_keys for key in module.in_keys):
+                    module(sub_td, **kwargs)
+            tensordict._update_valid_keys()
+        return tensordict
+
     def forward(
-        self, tensordict: TensorDictBase, tensordict_out=None, **kwargs
+        self,
+        tensordict: TensorDictBase,
+        tensordict_out=None,
+        **kwargs,
     ) -> TensorDictBase:
+
         if "params" in kwargs and "buffers" in kwargs:
             param_splits = self._split_param(kwargs["params"], "params")
             buffer_splits = self._split_param(kwargs["buffers"], "buffers")
@@ -208,8 +279,8 @@ class TensorDictSequence(TensorDictModule):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, 0, *(0,) * len(module.in_keys))
-                tensordict = module(
-                    tensordict, params=param, buffers=buffer, **kwargs_pruned
+                tensordict = self._run_module(
+                    module, tensordict, params=param, buffers=buffer, **kwargs_pruned
                 )
 
         elif "params" in kwargs:
@@ -221,14 +292,16 @@ class TensorDictSequence(TensorDictModule):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
                     kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
-                tensordict = module(tensordict, params=param, **kwargs_pruned)
+                tensordict = self._run_module(
+                    module, tensordict, params=param, **kwargs_pruned
+                )
 
         elif not len(kwargs):
             for module in self.module:
-                tensordict = module(tensordict)
+                tensordict = self._run_module(module, tensordict, **kwargs)
         else:
             raise RuntimeError(
-                "TensorDictSequence does not support keyword arguments other than 'tensordict_out', 'params', 'buffers' and 'vmap'"
+                "TensorDictSequence does not support keyword arguments other than 'tensordict_out', 'in_keys', 'out_keys' 'params', 'buffers' and 'vmap'"
             )
         if tensordict_out is not None:
             tensordict_out.update(tensordict, inplace=True)
