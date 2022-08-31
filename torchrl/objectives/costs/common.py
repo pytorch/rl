@@ -10,14 +10,17 @@ __all__ = ["LossModule"]
 from typing import Iterator, Optional, Tuple, List, Union
 
 import torch
+
 _has_functorch = False
 try:
     import functorch
     from functorch._src.make_functional import _swap_state
 except ImportError:
-    print("failed to import functorch. TorchRL's features that do not require "
-          "functional programming should work, but functionality and performance "
-          "may be affected. Consider installing functorch and/or upgrating pytorch.")
+    print(
+        "failed to import functorch. TorchRL's features that do not require "
+        "functional programming should work, but functionality and performance "
+        "may be affected. Consider installing functorch and/or upgrating pytorch."
+    )
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 from torch import nn
@@ -69,7 +72,6 @@ class LossModule(nn.Module):
         # Otherwise, casting the module to a device will keep old references
         # to uncast tensors
 
-
         network_orig = module
         if hasattr(module, "make_functional_with_buffers"):
             functional_module, (
@@ -84,7 +86,10 @@ class LossModule(nn.Module):
                     module_buffers,
                 ) = functorch.make_functional_with_buffers(module)
             else:
-                functional_module, module_params = FunctionalModuleWithBuffers._create_from(module)
+                (
+                    functional_module,
+                    module_params,
+                ) = FunctionalModuleWithBuffers._create_from(module)
                 module_buffers = None
 
             for _ in functional_module.parameters():
@@ -115,10 +120,7 @@ class LossModule(nn.Module):
         # unless we need to expand them, in that case we'll delete the weights to make sure that the user does not
         # run anything with them expecting them to be updated
         params = list(params)
-        if module_buffers is not None:
-            module_buffers = list(module_buffers)
-        else:
-            module_buffers = []
+        module_buffers = list(module_buffers)
 
         if expand_dim:
             if not _has_functorch:
@@ -154,31 +156,56 @@ class LossModule(nn.Module):
             # # delete weights of original model as they do not correspond to the optimized weights
             # network_orig.to("meta")
 
+        params_list = (
+            params if _has_functorch else list(params.flatten_keys(".").values())
+        )
+        set_params = set(self.parameters())
         setattr(
             self,
             "_" + param_name,
             nn.ParameterList(
                 [
                     p
-                    for p in params
-                    if isinstance(p, nn.Parameter) and p not in set(self.parameters())
+                    for p in params_list
+                    if isinstance(p, nn.Parameter) and p not in set_params
                 ]
             ),
         )
         setattr(self, param_name, params)
 
-        # we register each buffer independently
-        for i, p in enumerate(module_buffers):
-            _name = module_name + f"_buffer_{i}"
-            self.register_buffer(_name, p)
-            # replace buffer by its name
-            module_buffers[i] = _name
         buffer_name = module_name + "_buffers"
-        setattr(
-            self.__class__,
-            buffer_name,
-            property(lambda _self: [getattr(_self, _name) for _name in module_buffers]),
-        )
+        if _has_functorch:
+            # we register each buffer independently
+            for i, p in enumerate(module_buffers):
+                _name = module_name + f"_buffer_{i}"
+                self.register_buffer(_name, p)
+                # replace buffer by its name
+                module_buffers[i] = _name
+            setattr(
+                self.__class__,
+                buffer_name,
+                property(
+                    lambda _self: [getattr(_self, _name) for _name in module_buffers]
+                ),
+            )
+        else:
+            for i, (key, value) in enumerate(
+                sorted(list(module_buffers.flatten_keys(".").items()))
+            ):
+                _name = module_name + f"_buffer_{i}"
+                self.register_buffer(_name, p)
+                # replace buffer by its name
+                module_buffers[i] = (_name, key)
+            setattr(
+                self.__class__,
+                buffer_name,
+                property(
+                    lambda _self: TensorDict(
+                        {key: getattr(_self, _name) for (_name, key) in module_buffers},
+                        [],
+                    ).unflatten_keys(".")
+                ),
+            )
 
         # we set the functional module
         setattr(self, module_name, functional_module)

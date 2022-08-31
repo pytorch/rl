@@ -11,11 +11,14 @@ from typing import List, Iterable, Union, Tuple
 _has_functorch = False
 try:
     import functorch
+
     _has_functorch = True
-except ImportError as err:
-    print("failed to import functorch. TorchRL's features that do not require "
-          "functional programming should work, but functionality and performance "
-          "may be affected. Consider installing functorch and/or upgrating pytorch.")
+except ImportError:
+    print(
+        "failed to import functorch. TorchRL's features that do not require "
+        "functional programming should work, but functionality and performance "
+        "may be affected. Consider installing functorch and/or upgrating pytorch."
+    )
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 import torch

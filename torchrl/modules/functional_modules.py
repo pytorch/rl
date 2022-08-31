@@ -56,7 +56,9 @@ class FunctionalModuleWithBuffers(nn.Module):
         param_tensordict = extract_weights(model_copy)
         buffers = extract_buffers(model_copy)
         if buffers is None:
-            buffers = TensorDict({}, param_tensordict.batch_size, device=param_tensordict.device)
+            buffers = TensorDict(
+                {}, param_tensordict.batch_size, device=param_tensordict.device
+            )
         if disable_autograd_tracking:
             param_tensordict.apply(lambda x: x.requires_grad_(False), inplace=True)
         return FunctionalModuleWithBuffers(model_copy), param_tensordict, buffers
