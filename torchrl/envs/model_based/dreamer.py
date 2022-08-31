@@ -50,7 +50,7 @@ class DreamerEnv(ModelBasedEnv):
         self.input_spec = CompositeSpec(
             prior_state=self.observation_spec["next_prior_state"],
             belief=self.observation_spec["next_belief"],
-            action=self.action_spec,
+            action=self.action_spec.to(self.device),
         )
 
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
