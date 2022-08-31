@@ -252,11 +252,13 @@ class LossModule(nn.Module):
                 setattr(
                     self.__class__,
                     name_params_target,
-                    lambda _self: TensorDict(
-                        {key: getattr(_self, _name) for (_name, key) in target_params_list},
-                        [],
-                        device=self.device,
-                    ).unflatten_keys(".")
+                    property(
+                        lambda _self: TensorDict(
+                            {key: getattr(_self, _name) for (_name, key) in target_params_list},
+                            [],
+                            device=self.device,
+                        ).unflatten_keys(".")
+                    )
                 )
 
             if _has_functorch:
@@ -283,11 +285,13 @@ class LossModule(nn.Module):
                 setattr(
                     self.__class__,
                     name_buffers_target,
-                    lambda _self: TensorDict(
-                        {key: getattr(_self, _name) for (_name, key) in target_buffers_list},
-                        [],
-                        device=self.device,
-                    ).unflatten_keys(".")
+                    property(
+                        lambda _self: TensorDict(
+                            {key: getattr(_self, _name) for (_name, key) in target_buffers_list},
+                            [],
+                            device=self.device,
+                        ).unflatten_keys(".")
+                        )
                 )
 
         else:
