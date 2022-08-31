@@ -10,10 +10,10 @@ import numpy as np
 import torch
 from torchrl.data import TensorDict, CompositeSpec, NdUnboundedContinuousTensorSpec
 
-from ...data.utils import DEVICE_TYPING
-from ...modules.tensordict_module import TensorDictModule
-from .common import ModelBasedEnv
-from ..common import EnvBase
+from torchrl.data.utils import DEVICE_TYPING
+from torchrl.modules.tensordict_module import TensorDictModule
+from torchrl.envs.model_based import ModelBasedEnv
+from torchrl.envs import EnvBase
 
 class DreamerEnv(ModelBasedEnv):
     def __init__(
@@ -26,7 +26,7 @@ class DreamerEnv(ModelBasedEnv):
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = torch.Size([1]),
     ):
-        super(DreamerEnv, self).__init__(world_model, device, dtype, batch_size)
+        super(DreamerEnv, self).__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
         self.obs_decoder = obs_decoder
         self.prior_shape = prior_shape
         self.belief_shape = belief_shape

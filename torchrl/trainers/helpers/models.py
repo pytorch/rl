@@ -11,7 +11,7 @@ from torch import nn, distributions as d
 
 from torchrl.data import DEVICE_TYPING, CompositeSpec
 from torchrl.envs.common import EnvBase
-from torchrl.envs.model_based import DreamerEnv
+from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     ActorValueOperator,
