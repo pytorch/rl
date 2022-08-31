@@ -210,6 +210,7 @@ class LossModule(nn.Module):
                     lambda _self: TensorDict(
                         {key: getattr(_self, _name) for (_name, key) in module_buffers_list},
                         [],
+                        device=self.device,
                     ).unflatten_keys(".")
                 ),
             )
