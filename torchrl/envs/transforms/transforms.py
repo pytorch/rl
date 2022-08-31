@@ -410,11 +410,7 @@ class TransformedEnv(EnvBase):
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
-        for key, value in state_dict.items():
-            if key in self.transform.state_dict():
-                self.transform.state_dict()[key].copy_(value.clone())
-            else:
-                self.transform.state_dict()[key] = value.clone()
+        self.transform.load_state_dict(state_dict, **kwargs)
 
     def eval(self) -> TransformedEnv:
         if "transform" in self.__dir__():

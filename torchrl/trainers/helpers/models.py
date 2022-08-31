@@ -1314,8 +1314,8 @@ def make_dreamer(
                 out_keys=["reward"],
             ),
         ),
-        prior_shape = torch.Size([cfg.state_dim]),
-        belief_shape = torch.Size([cfg.rssm_hidden_dim]),
+        prior_shape=torch.Size([cfg.state_dim]),
+        belief_shape=torch.Size([cfg.rssm_hidden_dim]),
         obs_decoder=mb_env_obs_decoder,
     )
 
