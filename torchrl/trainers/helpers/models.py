@@ -1230,6 +1230,7 @@ class MBPOConfig:
     sac_batch_size: int = 256
     real_data_ratio: float = 0.1
     num_world_models_ensemble: int = 7
+    num_elites: int = 5
     num_model_rollouts: int = 400
     train_model_every_k_optim_step: int = 250
     num_sac_training_steps_per_optim_step: int = 20

@@ -45,6 +45,7 @@ from torchrl.trainers.helpers.models import (
 )
 from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
+    make_model_replay_buffer,
     ReplayArgsConfig,
 )
 from torchrl.trainers.trainers import Recorder
@@ -82,16 +83,6 @@ config_fields = [
 Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
 cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
-
-DEFAULT_REWARD_SCALING = {
-    "Hopper-v1": 5,
-    "Walker2d-v1": 5,
-    "HalfCheetah-v1": 5,
-    "cheetah": 5,
-    "Ant-v2": 5,
-    "Humanoid-v2": 20,
-    "humanoid": 100,
-}
 
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
@@ -132,7 +123,7 @@ def main(cfg: "DictConfig"):
         logger = WandbLogger(
             f"mbpo/{exp_name}",
             project="torchrl",
-            group=f"MBPO_{cfg.env_name}",
+            group=f"MBPO_{cfg.env_name}_with_elites",
         )
     video_tag = "MBPO_policy_test" if cfg.record_video else ""
 
@@ -226,7 +217,7 @@ def main(cfg: "DictConfig"):
     )
 
     real_replay_buffer = make_replay_buffer(device, cfg)
-    fake_replay_buffer = make_replay_buffer(device, cfg)
+    fake_replay_buffer = make_model_replay_buffer(device, cfg)
 
     recorder = transformed_env_constructor(
         cfg,
@@ -312,18 +303,19 @@ def main(cfg: "DictConfig"):
                         scaler1.step(world_model_opt)
                         world_model_opt.zero_grad()
                         scaler1.update()
-                with torch.no_grad(), set_exploration_mode("random"):
-                    model_sampled_tensordict = real_replay_buffer.sample(
-                        cfg.num_model_rollouts
-                    ).to(device)
-                    fake_traj_tensordict = model_based_env.rollout(
-                        max_steps=cfg.imagination_horizon,
-                        policy=policy,
-                        auto_reset=False,
-                        tensordict=model_sampled_tensordict,
-                    )
-                    fake_traj_tensordict = fake_traj_tensordict.select(*original_keys)
-                    fake_replay_buffer.extend(fake_traj_tensordict.view(-1).cpu())
+                    with torch.no_grad(), set_exploration_mode("random"):
+                        for _ in range(cfg.train_model_every_k_optim_step):
+                            model_sampled_tensordict = real_replay_buffer.sample(
+                                cfg.num_model_rollouts
+                            ).to(device)
+                            fake_traj_tensordict = model_based_env.rollout(
+                                max_steps=cfg.imagination_horizon,
+                                policy=policy,
+                                auto_reset=False,
+                                tensordict=model_sampled_tensordict,
+                            )
+                            fake_traj_tensordict = fake_traj_tensordict.select(*original_keys)
+                            fake_replay_buffer.extend(fake_traj_tensordict.view(-1).cpu())
                 if len(fake_replay_buffer) > cfg.init_random_frames:
                     for _ in range(cfg.num_sac_training_steps_per_optim_step):
 

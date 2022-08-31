@@ -71,4 +71,7 @@ class MBPOModelLoss(LossModule):
         log_likelihood = torch.pow(mean - target, 2) / (
             2 * torch.pow(sigma, 2)
         ) + torch.log(sigma)
-        return torch.sum(torch.mean(log_likelihood, dim=(1, 2)))
+        log_likelihood = torch.mean(log_likelihood, dim=(1, 2))
+        log_likelihood, _ = torch.sort(log_likelihood)
+        log_likelihood = log_likelihood[: self.cfg.num_elites]
+        return torch.mean(log_likelihood)

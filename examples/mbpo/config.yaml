@@ -8,16 +8,15 @@ normalize_rewards_online_scale: 1
 frame_skip: 1
 frames_per_batch: 1000
 optim_steps_per_batch: 1000
-total_frames: 1000000
+total_frames: 400000
 prb: 1
-ou_exploration: 1
+ou_exploration: 0
 multi_step: 1
 init_random_frames: 5000
 activation: elu
 gSDE: 0
 from_pixels: 0
 collector_devices: [cuda:1,cuda:1,cuda:1,cuda:1]
-# collector_devices: [cpu,cpu]
 env_per_collector: 2
 num_workers: 8
 value_network_update_interval: 200
@@ -42,3 +41,6 @@ num_world_models_ensemble: 7
 num_model_rollouts: 400
 num_sac_training_steps_per_optim_step: 40
 train_model_every_k_optim_step: 250
+target_entropy: -3
+model_buffer_size: 400000
+logger: wandb
