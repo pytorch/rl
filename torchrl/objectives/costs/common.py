@@ -15,6 +15,8 @@ _has_functorch = False
 try:
     import functorch
     from functorch._src.make_functional import _swap_state
+
+    _has_functorch = True
 except ImportError:
     print(
         "failed to import functorch. TorchRL's features that do not require "

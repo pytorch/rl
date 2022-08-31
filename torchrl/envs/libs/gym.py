@@ -24,9 +24,11 @@ from ..utils import classproperty
 
 try:
     import gym
+    from packaging import version
+
+    gym_version = version.parse(gym.__version__)
 
     _has_gym = True
-
 except ImportError:
     _has_gym = False
 
@@ -249,9 +251,16 @@ class GymEnv(GymWrapper):
 
     """
 
-    def __init__(self, env_name, disable_env_checker=True, **kwargs):
+    def __init__(self, env_name, disable_env_checker=None, **kwargs):
         kwargs["env_name"] = env_name
-        kwargs["disable_env_checker"] = disable_env_checker
+        if gym_version >= version.parse("0.24.0"):
+            kwargs["disable_env_checker"] = (
+                disable_env_checker if disable_env_checker is not None else True
+            )
+        elif disable_env_checker is not None:
+            raise RuntimeError(
+                "disable_env_checker should only be set if gym version is > 0.24"
+            )
         super().__init__(**kwargs)
 
     def _build_env(

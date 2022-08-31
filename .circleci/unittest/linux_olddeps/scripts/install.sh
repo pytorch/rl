@@ -34,13 +34,9 @@ git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
-    # use pip to install pytorch as conda can frequently pick older release
-#    conda install -y pytorch torchvision cpuonly -c pytorch-nightly
-    pip3 install torch==1.10.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+    conda install pytorch==1.10.0 torchvision==0.11.0 torchaudio==0.10.0 cpuonly -c pytorch
 else
-#    conda install -y pytorch torchvision cudatoolkit=11.3 -c pytorch-nightly
-    pip3 install torch==1.10.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
+    conda install pytorch==1.10.0 torchvision==0.11.0 torchaudio==0.10.0 cudatoolkit=11.3 -c pytorch -c conda-forge
 fi
 
 printf "* Installing torchrl\n"

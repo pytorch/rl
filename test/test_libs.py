@@ -15,7 +15,7 @@ from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
 
 if _has_gym:
     import gym
-    from gym.wrappers.pixel_observation import PixelObservationWrapper
+    from torchrl.envs.libs.gym import PixelObservationWrapper
 if _has_dmc:
     from dm_control import suite
     from dm_control.suite.wrappers import pixels
@@ -29,13 +29,28 @@ from torchrl.envs.libs.gym import GymEnv, GymWrapper
 
 IS_OSX = platform == "darwin"
 
+if _has_gym:
+    from packaging import version
+
+    gym_version = version.parse(gym.__version__)
+    PENDULUM_VERSIONED = (
+        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
+    )
+    PONG_VERSIONED = (
+        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
+    )
+else:
+    # placeholders
+    PENDULUM_VERSIONED = "Pendulum-v1"
+    PENDULUM_VERSIONED = "ALE/Pong-v5"
+
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
 @pytest.mark.parametrize(
     "env_name",
     [
-        "ALE/Pong-v5",
-        "Pendulum-v1",
+        PONG_VERSIONED,
+        PENDULUM_VERSIONED,
     ],
 )
 @pytest.mark.parametrize("frame_skip", [1, 3])
@@ -48,10 +63,10 @@ IS_OSX = platform == "darwin"
     ],
 )
 def test_gym(env_name, frame_skip, from_pixels, pixels_only):
-    if env_name == "ALE/Pong-v5" and not from_pixels:
+    if env_name == PONG_VERSIONED and not from_pixels:
         raise pytest.skip("already pixel")
     elif (
-        env_name == "Pendulum-v1"
+        env_name == PENDULUM_VERSIONED
         and from_pixels
         and (not torch.has_cuda or not torch.cuda.device_count())
     ):
@@ -82,7 +97,7 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
     final_seed0, final_seed1 = final_seed
     assert final_seed0 == final_seed1
 
-    if env_name == "ALE/Pong-v5":
+    if env_name == PONG_VERSIONED:
         base_env = gym.make(env_name, frameskip=frame_skip)
         frame_skip = 1
     else:
@@ -198,7 +213,7 @@ def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
         [GymEnv, ("HalfCheetah-v4",), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
         [GymEnv, ("HalfCheetah-v4",), {"from_pixels": False}],
-        [GymEnv, ("ALE/Pong-v5",), {}],
+        [GymEnv, (PONG_VERSIONED,), {}],
     ],
 )
 def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
@@ -221,7 +236,7 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
         [GymEnv, ("HalfCheetah-v4",), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
         [GymEnv, ("HalfCheetah-v4",), {"from_pixels": False}],
-        [GymEnv, ("ALE/Pong-v5",), {}],
+        [GymEnv, (PONG_VERSIONED,), {}],
     ],
 )
 @pytest.mark.parametrize("device", get_available_devices())
