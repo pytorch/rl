@@ -194,19 +194,21 @@ class LossModule(nn.Module):
                 ),
             )
         else:
+            buffers_iter = list(module_buffers.flatten_keys(".").items())
+            module_buffers_list = []
             for i, (key, value) in enumerate(
-                sorted(list(module_buffers.flatten_keys(".").items()))
+                sorted(buffers_iter)
             ):
                 _name = module_name + f"_buffer_{i}"
                 self.register_buffer(_name, p)
                 # replace buffer by its name
-                module_buffers[i] = (_name, key)
+                module_buffers_list.append((_name, key))
             setattr(
                 self.__class__,
                 buffer_name,
                 property(
                     lambda _self: TensorDict(
-                        {key: getattr(_self, _name) for (_name, key) in module_buffers},
+                        {key: getattr(_self, _name) for (_name, key) in module_buffers_list},
                         [],
                     ).unflatten_keys(".")
                 ),
