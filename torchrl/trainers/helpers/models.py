@@ -1368,6 +1368,8 @@ class DreamerConfig:
     # Final scale of the normalized rewards.
     normalize_rewards_online_decay: float = 0.9999
     # Decay of the reward moving averaging
+    exploration: str = "additive_gaussian"
+    # One of "additive_gaussian", "ou_exploration" or ""
 
 
 @dataclass
