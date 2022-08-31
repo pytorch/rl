@@ -48,7 +48,7 @@ class MockingOptim:
 class MockingCollector:
     called_update_policy_weights_ = False
 
-    def set_seed(self, seed):
+    def set_seed(self, seed, **kwargs):
         return seed
 
     def update_policy_weights_(self):
