@@ -274,10 +274,16 @@ class LossModule(nn.Module):
         if hasattr(self, target_name):
             target_params = getattr(self, target_name)
             if target_params is not None:
+                if isinstance(target_params, TensorDictBase):
+                    return target_params
                 return tuple(target_params)
             else:
-                # detach params as a surrogate for targets
-                return tuple(p.detach() for p in getattr(self, param_name))
+                params = getattr(self, param_name)
+                if isinstance(params, TensorDictBase):
+                    return params.detach()
+                else:
+                    # detach params as a surrogate for targets
+                    return tuple(p.detach() for p in params)
 
         else:
             raise RuntimeError(
@@ -290,9 +296,15 @@ class LossModule(nn.Module):
         if hasattr(self, target_name):
             target_buffers = getattr(self, target_name)
             if target_buffers is not None:
+                if isinstance(target_buffers, TensorDictBase):
+                    return target_buffers
                 return tuple(target_buffers)
             else:
-                return tuple(p.detach() for p in getattr(self, buffer_name))
+                buffers = getattr(self, buffer_name)
+                if isinstance(buffers, TensorDictBase):
+                    return buffers.detach()
+                else:
+                    return tuple(p.detach() for p in buffers)
 
         else:
             raise RuntimeError(
