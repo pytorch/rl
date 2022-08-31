@@ -6,7 +6,17 @@
 import argparse
 from copy import deepcopy
 
-import functorch
+from torchrl.modules.functional_modules import FunctionalModuleWithBuffers
+
+_has_functorch = True
+try:
+    import functorch
+    make_functional_with_buffers = functorch.make_functional_with_buffers
+
+except ImportError:
+    _has_functorch = False
+    make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
+
 import numpy as np
 import pytest
 import torch
@@ -1422,7 +1432,8 @@ class TestPPO:
         loss_fn = loss_class(
             actor, value, advantage_module=advantage, gamma=0.9, loss_critic_type="l2"
         )
-        floss_fn, params, buffers = functorch.make_functional_with_buffers(loss_fn)
+
+        floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
 
         loss = floss_fn(params, buffers, td)
         loss_critic = loss["loss_critic"]
