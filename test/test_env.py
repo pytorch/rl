@@ -45,6 +45,26 @@ from torchrl.modules import (
     MLP,
 )
 
+if _has_gym:
+    from packaging import version
+    import gym
+
+    gym_version = version.parse(gym.__version__)
+    PENDULUM_VERSIONED = (
+        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
+    )
+    CARTPOLE_VERSIONED = (
+        "CartPole-v1" if gym_version > version.parse("0.20.0") else "CartPole-v0"
+    )
+    PONG_VERSIONED = (
+        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
+    )
+else:
+    # placeholders
+    PENDULUM_VERSIONED = "Pendulum-v1"
+    CARTPOLE_VERSIONED = "CartPole-v1"
+    PONG_VERSIONED = "ALE/Pong-v5"
+
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
     with open(os.path.join(this_dir, "configs", "atari.yaml"), "r") as file:
@@ -101,7 +121,7 @@ except FileNotFoundError:
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
-@pytest.mark.parametrize("env_name", ["Pendulum-v1", "CartPole-v1"])
+@pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, CARTPOLE_VERSIONED])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_env_seed(env_name, frame_skip, seed=0):
     env = GymEnv(env_name, frame_skip=frame_skip)
@@ -133,7 +153,7 @@ def test_env_seed(env_name, frame_skip, seed=0):
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
-@pytest.mark.parametrize("env_name", ["Pendulum-v1", "ALE/Pong-v5"])
+@pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, PONG_VERSIONED])
 @pytest.mark.parametrize("frame_skip", [1, 4])
 def test_rollout(env_name, frame_skip, seed=0):
     env = GymEnv(env_name, frame_skip=frame_skip)
@@ -361,7 +381,7 @@ class TestParallel:
         assert "observation_stand" not in td[:, 0][1].keys()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
+    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [False, True])
     @pytest.mark.parametrize("transformed_out", [False, True])
@@ -411,7 +431,7 @@ class TestParallel:
         env0.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", ["Pendulum-v1"])
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [True, False])
     @pytest.mark.parametrize("transformed_out", [True, False])
@@ -498,8 +518,8 @@ class TestParallel:
     @pytest.mark.parametrize(
         "env_name",
         [
-            "Pendulum-v1",
-            "ALE/Pong-v5",
+            PENDULUM_VERSIONED,
+            PONG_VERSIONED,
         ],
     )
     @pytest.mark.parametrize("frame_skip", [4, 1])
@@ -545,7 +565,7 @@ class TestParallel:
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     def test_parallel_env_shutdown(self):
-        env_make = EnvCreator(lambda: GymEnv("Pendulum-v1"))
+        env_make = EnvCreator(lambda: GymEnv(PENDULUM_VERSIONED))
         env = ParallelEnv(4, env_make)
         env.reset()
         assert not env.is_closed
@@ -577,7 +597,7 @@ class TestParallel:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
+    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
     @pytest.mark.parametrize("transformed_in", [True, False])
     @pytest.mark.parametrize("transformed_out", [False, True])
     @pytest.mark.parametrize("open_before", [False, True])
@@ -653,7 +673,7 @@ class TestParallel:
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
+    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
     @pytest.mark.parametrize("transformed_in", [True, False])
     @pytest.mark.parametrize("transformed_out", [True, False])
     def test_parallel_env_device(
@@ -689,7 +709,7 @@ class TestParallel:
         env0.close()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "Pendulum-v1"])
+    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("device", get_available_devices())
     def test_parallel_env_transform_consistency(self, env_name, frame_skip, device):
@@ -876,13 +896,13 @@ class TestSpec:
 @pytest.mark.skipif(not _has_gym, reason="no gym")
 def test_seed():
     torch.manual_seed(0)
-    env1 = GymEnv("Pendulum-v1")
+    env1 = GymEnv(PENDULUM_VERSIONED)
     env1.set_seed(0)
     state0_1 = env1.reset()
     state1_1 = env1.step(state0_1.set("action", env1.action_spec.rand()))
 
     torch.manual_seed(0)
-    env2 = GymEnv("Pendulum-v1")
+    env2 = GymEnv(PENDULUM_VERSIONED)
     env2.set_seed(0)
     state0_2 = env2.reset()
     state1_2 = env2.step(state0_2.set("action", env2.action_spec.rand()))

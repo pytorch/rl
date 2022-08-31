@@ -44,6 +44,18 @@ from torchrl.envs.transforms.transforms import (
     CenterCrop,
 )
 
+if _has_gym:
+    from packaging import version
+    import gym
+
+    gym_version = version.parse(gym.__version__)
+    PENDULUM_VERSIONED = (
+        "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
+    )
+else:
+    # placeholders
+    PENDULUM_VERSIONED = "Pendulum-v1"
+
 TIMEOUT = 10.0
 
 
@@ -80,7 +92,7 @@ def test_vecnorm_parallel_auto(nprc):
     prcs = []
     if _has_gym:
         make_env = EnvCreator(
-            lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm(decay=1.0))
+            lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED), VecNorm(decay=1.0))
         )
     else:
         make_env = EnvCreator(
@@ -174,7 +186,7 @@ def _run_parallelenv(parallel_env, queue_in, queue_out):
 
 def test_parallelenv_vecnorm():
     if _has_gym:
-        make_env = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
+        make_env = EnvCreator(lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED), VecNorm()))
         env_input_keys = None
     else:
         make_env = EnvCreator(
@@ -221,11 +233,11 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     torch.manual_seed(0)
 
     if parallel is None:
-        env = GymEnv("Pendulum-v1")
+        env = GymEnv(PENDULUM_VERSIONED)
     elif parallel:
-        env = ParallelEnv(num_workers=5, create_env_fn=lambda: GymEnv("Pendulum-v1"))
+        env = ParallelEnv(num_workers=5, create_env_fn=lambda: GymEnv(PENDULUM_VERSIONED))
     else:
-        env = SerialEnv(num_workers=5, create_env_fn=lambda: GymEnv("Pendulum-v1"))
+        env = SerialEnv(num_workers=5, create_env_fn=lambda: GymEnv(PENDULUM_VERSIONED))
 
     env.set_seed(0)
     t = VecNorm(decay=1.0)

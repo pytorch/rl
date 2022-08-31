@@ -42,7 +42,7 @@ if _has_gym:
 else:
     # placeholders
     PENDULUM_VERSIONED = "Pendulum-v1"
-    PENDULUM_VERSIONED = "ALE/Pong-v5"
+    PONG_VERSIONED = "ALE/Pong-v5"
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
