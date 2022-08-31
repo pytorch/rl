@@ -185,6 +185,7 @@ class TestDQN:
         )
         return td
 
+    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_dqn(self, delay_value, device):
@@ -210,6 +211,37 @@ class TestDQN:
             assert not any(
                 (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
             )
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.skipif(_has_functorch, reason="functorch installed")
+    @pytest.mark.parametrize("delay_value", (False, True))
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_dqn(self, delay_value, device):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        td = self._create_mock_data_dqn(device=device)
+        loss_fn = DQNLoss(actor, gamma=0.9, loss_function="l2", delay_value=delay_value)
+        with _check_td_steady(td):
+            loss = loss_fn(td)
+        assert loss_fn.priority_key in td.keys()
+
+        sum([item for _, item in loss.items()]).backward()
+        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
+
+        # Check param update effect on targets
+        target_value = loss_fn.target_value_network_params.clone()
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_value2 = loss_fn.target_value_network_params.clone()
+        if loss_fn.delay_value:
+            assert_allclose_td(target_value, target_value2)
+        else:
+            assert not (target_value == target_value2).any()
 
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
