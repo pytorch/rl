@@ -3,22 +3,18 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from __future__ import annotations
-
 import abc
-from copy import deepcopy
 from typing import Optional, Union, List
-from typing import Tuple
-
+from copy import deepcopy
 import numpy as np
 import torch
-import torch.nn as nn
 from torchrl.data import TensorDict
 
-from ...data.utils import DEVICE_TYPING
-from ...modules.tensordict_module import TensorDictModule, TensorDictSequence
-from ..common import EnvBase
+from torchrl.data.utils import DEVICE_TYPING
+from torchrl.modules.tensordict_module import TensorDictModule
+from torchrl.envs.common import EnvBase
 
+__all__ = ["ModelBasedEnv"]
 
 class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     """
@@ -99,7 +95,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
 
     def __init__(
         self,
-        world_model: Union[nn.Module, List[TensorDictModule], TensorDictSequence],
+        world_model: TensorDictModule,
         params: Optional[List[torch.Tensor]] = None,
         buffers: Optional[List[torch.Tensor]] = None,
         device: DEVICE_TYPING = "cpu",
@@ -120,40 +116,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         self.observation_spec = deepcopy(env.observation_spec)
         self.action_spec = deepcopy(env.action_spec)
         self.reward_spec = deepcopy(env.reward_spec)
-        self.input_spec = env.input_spec
-
-    def step(self, tensordict: TensorDict) -> TensorDict:
-        """Makes a step in the environment.
-        Step accepts a single argument, tensordict, which usually carries an 'action' key which indicates the action
-        to be taken.
-        Step will call an out-place private method, _step, which is the method to be re-written by ModelBasedEnv subclasses.
-        ModelBasedEnv do not type check like EnvBase since the dtypes can change according to the models dtypes (ex : float16 for a model trained on float32)
-
-        Args:
-            tensordict (TensorDictBase): Tensordict containing the action to be taken.
-
-        Returns:
-            the input tensordict, modified in place with the resulting observations, done state and reward
-            (+ others if needed).
-
-        """
-
-        tensordict.is_locked = True  # make sure _step does not modify the tensordict
-        tensordict_out = self._step(tensordict)
-        tensordict.is_locked = False
-
-        if tensordict_out is tensordict:
-            raise RuntimeError(
-                "EnvBase._step should return outplace changes to the input "
-                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
-                "tensordict.select()) inside _step before writing new tensors onto this new instance."
-            )
-        self.is_done = tensordict_out.get("done")
-        tensordict.update(tensordict_out, inplace=self._inplace_update)
-
-        del tensordict_out
-        return tensordict
-        
+        self.input_spec = deepcopy(env.input_spec)
 
     def _step(
         self,
