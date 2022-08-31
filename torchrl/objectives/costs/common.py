@@ -11,6 +11,8 @@ from typing import Iterator, Optional, Tuple, List, Union
 
 import torch
 
+from torchrl.modules.functional_modules import FunctionalModuleWithBuffers
+
 _has_functorch = False
 try:
     import functorch
@@ -125,7 +127,11 @@ class LossModule(nn.Module):
             params = list(params)
             module_buffers = list(module_buffers)
         else:
-            params = TensorDict({name: value for name,value in network_orig.named_parameters()}, []).unflatten_keys(".")
+            params = TensorDict(
+                {name: value for name,value in network_orig.named_parameters()}, []
+            ).unflatten_keys(".")
+            if isinstance(network_orig, TensorDictModule):
+                params = params["module"]
 
         if expand_dim:
             if not _has_functorch:
