@@ -1,0 +1,26 @@
+channels:
+  - pytorch==1.10.0
+  - defaults
+dependencies:
+  - pip
+  - protobuf
+  - pip:
+    - hypothesis
+    - future
+    - cloudpickle
+    - gym==0.13
+    - pygame
+    - gym[accept-rom-license]
+    - gym[atari]
+    - moviepy
+    - tqdm
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - expecttest
+    - pyyaml
+    - scipy
+    - hydra-core
+    - tensorboard
+    - dm_control==0.0.403778684

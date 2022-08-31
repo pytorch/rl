@@ -9,9 +9,17 @@ __all__ = ["LossModule"]
 
 from typing import Iterator, Optional, Tuple, List, Union
 
-import functorch
 import torch
-from functorch._src.make_functional import _swap_state
+_has_functorch = False
+try:
+    import functorch
+    from functorch._src.make_functional import _swap_state
+except ImportError:
+    print("failed to import functorch. TorchRL's features that do not require "
+          "functional programming should work, but functionality and performance "
+          "may be affected. Consider installing functorch and/or upgrating pytorch.")
+    FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
+
 from torch import nn
 from torch.nn import Parameter
 
@@ -60,6 +68,8 @@ class LossModule(nn.Module):
         # tensors as lazy calls to `getattr(self, name_of_tensor)`.
         # Otherwise, casting the module to a device will keep old references
         # to uncast tensors
+        if not _has_functorch:
+            raise ImportError(FUNCTORCH_ERROR)
 
         network_orig = module
         if hasattr(module, "make_functional_with_buffers"):

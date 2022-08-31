@@ -8,7 +8,16 @@ from __future__ import annotations
 from copy import copy, deepcopy
 from typing import List, Iterable, Union, Tuple
 
-import functorch
+_has_functorch = False
+try:
+    import functorch
+    _has_functorch = True
+except ImportError as err:
+    print("failed to import functorch. TorchRL's features that do not require "
+          "functional programming should work, but functionality and performance "
+          "may be affected. Consider installing functorch and/or upgrating pytorch.")
+    FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
+
 import torch
 from torch import nn, Tensor
 
@@ -152,6 +161,8 @@ class TensorDictSequence(TensorDictModule):
 
     @staticmethod
     def _find_functional_module(module: TensorDictModule) -> nn.Module:
+        if not _has_functorch:
+            raise ImportError(FUNCTORCH_ERROR)
         fmodule = module
         while not isinstance(
             fmodule, (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers)
