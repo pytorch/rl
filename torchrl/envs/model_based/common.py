@@ -108,6 +108,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         self.world_model = world_model
         self.world_model_params = params
         self.world_model_buffers = buffers
+        self._inplace_update = False
 
     def set_specs_from_env(self, env: EnvBase):
         """
