@@ -8,5 +8,5 @@ from .collectors import *
 from .envs import *
 from .losses import *
 from .models import *
-from .recorder import *
+from .logger import *
 from .replay_buffer import *

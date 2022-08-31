@@ -3,21 +3,19 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from __future__ import annotations
-
 import abc
-from random import randint
+from copy import deepcopy
 from typing import Optional, Union, List
 
 import numpy as np
 import torch
-import torch.nn as nn
 
 from torchrl.data import TensorDict
-from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
-from ..data.utils import DEVICE_TYPING
-from ..modules.tensordict_module import TensorDictModule, TensorDictSequence
-from .common import EnvBase
+from torchrl.data.utils import DEVICE_TYPING
+from torchrl.envs.common import EnvBase
+from torchrl.modules.tensordict_module import TensorDictModule
+
+__all__ = ["ModelBasedEnv"]
 
 
 class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
@@ -25,13 +23,56 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     Basic environnement for Model Based RL algorithms.
 
     This class is a wrapper around the model of the MBRL algorithm.
-    This class is meant to give an env framework to a world model and a reward model.
+    This class is meant to give an env framework to a world model (including but not limited to observations, reward, done state and safety constraints models).
     It is meant to behave as a classical environment.
+
+    This class is meant to be used as a base class for other environments. It is not meant to be used directly.
+
+    An example of use is the following:
+    ```python
+    import torch
+    class MyMBEnv(ModelBasedEnv):
+        def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
+            super(MyEnv, self).__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
+        def _reset(self):
+            td = TensorDict(
+                {
+                    "hidden_observation": torch.randn(*self.batch_size, 4),
+                    "next_hidden_observation": torch.randn(*self.batch_size, 4),
+                    "action": torch.randn(*self.batch_size, 1),
+                },
+                batch_size=self.batch_size,
+            )
+            return td
+        def _set_seed(self, seed: int) -> int:
+            return seed + 1
+    ```
+    Then, you can use this environment as follows:
+    ```python
+        from torchrl.modules import MLP, WorldModelWrapper
+        import torch.nn as nn
+        world_model = WorldModelWrapper(
+            TensorDictModule(
+                MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
+                in_keys=["hidden_observation", "action"],
+                out_keys=["next_hidden_observation"],
+            ),
+            TensorDictModule(
+                nn.Linear(4, 1),
+                in_keys=["hidden_observation"],
+                out_keys=["reward"],
+            ),
+        )
+        world_model = MyWorldModel()
+        env = MyMBEnv(world_model)
+        td = env.reset()
+        env.rollout(td, max_steps=10)
+    ```
+
 
     Properties:
         - observation_spec (CompositeSpec): sampling spec of the observations;
         - action_spec (TensorSpec): sampling spec of the actions;
-        - input_spec (CompositeSpec): sampling spec of the actions and/or other inputs;
         - reward_spec (TensorSpec): sampling spec of the rewards;
         - batch_size (torch.Size): number of environments contained in the instance;
         - device (torch.device): device where the env input and output are expected to live
@@ -56,7 +97,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
 
     def __init__(
         self,
-        world_model: Union[nn.Module, List[TensorDictModule], TensorDictSequence],
+        world_model: TensorDictModule,
         params: Optional[List[torch.Tensor]] = None,
         buffers: Optional[List[torch.Tensor]] = None,
         device: DEVICE_TYPING = "cpu",
@@ -69,14 +110,16 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         self.world_model = world_model
         self.world_model_params = params
         self.world_model_buffers = buffers
+        self._inplace_update = False
 
     def set_specs_from_env(self, env: EnvBase):
         """
         Sets the specs of the environment from the specs of the given environment.
         """
-        self.observation_spec = env.observation_spec
-        self.action_spec = env.action_spec
-        self.reward_spec = env.reward_spec
+        self.observation_spec = deepcopy(env.observation_spec)
+        self.action_spec = deepcopy(env.action_spec)
+        self.reward_spec = deepcopy(env.reward_spec)
+        self.input_spec = deepcopy(env.input_spec)
 
     def _step(
         self,

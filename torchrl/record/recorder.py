@@ -117,12 +117,13 @@ class VideoRecorder(ObservationTransform):
             tag = "_".join([self.tag, suffix])
         obs = torch.stack(self.obs, 0).unsqueeze(0).cpu()
         del self.obs
-        self.logger.log_video(
-            name=tag,
-            video=obs,
-            step=self.iter,
-            **self.video_kwargs,
-        )
+        if self.logger is not None:
+            self.logger.log_video(
+                name=tag,
+                video=obs,
+                step=self.iter,
+                **self.video_kwargs,
+            )
         del obs
         self.iter += 1
         self.count = 0

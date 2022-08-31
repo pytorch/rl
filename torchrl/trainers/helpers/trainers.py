@@ -114,7 +114,7 @@ def make_trainer(
         >>> from torchrl.envs import EnvCreator
         >>> from torchrl.collectors.collectors import SyncDataCollector
         >>> from torchrl.data import TensorDictReplayBuffer
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.modules import TensorDictModuleWrapper, TensorDictModule, ValueOperator, EGreedyWrapper
         >>> from torchrl.objectives.costs.common import LossModule
         >>> from torchrl.objectives.costs.utils import _TargetNetUpdate

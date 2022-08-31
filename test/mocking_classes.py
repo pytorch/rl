@@ -19,7 +19,7 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase
-from torchrl.envs.model_based import ModelBasedEnv
+from torchrl.envs.model_based.common import ModelBasedEnv
 
 spec_dict = {
     "bounded": BoundedTensorSpec,
@@ -127,7 +127,8 @@ class MockSerialEnv(EnvBase):
 class DiscreteActionVecMockEnv(_MockEnv):
     size = 7
     observation_spec = CompositeSpec(
-        next_observation=NdUnboundedContinuousTensorSpec(shape=torch.Size([size]))
+        next_observation=NdUnboundedContinuousTensorSpec(shape=torch.Size([size])),
+        next_observation_orig=NdUnboundedContinuousTensorSpec(shape=torch.Size([size])),
     )
     action_spec = OneHotDiscreteTensorSpec(7)
     reward_spec = UnboundedContinuousTensorSpec()
@@ -185,7 +186,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
 class ContinuousActionVecMockEnv(_MockEnv):
     size = 7
     observation_spec = CompositeSpec(
-        next_observation=NdUnboundedContinuousTensorSpec(shape=torch.Size([size]))
+        next_observation=NdUnboundedContinuousTensorSpec(shape=torch.Size([size])),
+        next_observation_orig=NdUnboundedContinuousTensorSpec(shape=torch.Size([size])),
     )
     action_spec = NdBoundedTensorSpec(-1, 1, (7,))
     reward_spec = UnboundedContinuousTensorSpec()
@@ -261,7 +263,8 @@ class DiscreteActionVecPolicy:
 
 class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
     observation_spec = CompositeSpec(
-        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([1, 7, 7]))
+        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([1, 7, 7])),
+        next_pixels_orig=NdUnboundedContinuousTensorSpec(shape=torch.Size([1, 7, 7])),
     )
     action_spec = OneHotDiscreteTensorSpec(7)
     reward_spec = UnboundedContinuousTensorSpec()
@@ -283,7 +286,8 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
 
 class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
     observation_spec = CompositeSpec(
-        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3]))
+        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3])),
+        next_pixels_orig=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3])),
     )
     from_pixels = True
 
@@ -301,7 +305,8 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
 
 class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
     observation_spec = CompositeSpec(
-        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([1, 7, 7]))
+        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([1, 7, 7])),
+        next_pixels_orig=NdUnboundedContinuousTensorSpec(shape=torch.Size([1, 7, 7])),
     )
     action_spec = NdBoundedTensorSpec(-1, 1, (7,))
     reward_spec = UnboundedContinuousTensorSpec()
@@ -323,7 +328,8 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
 
 class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
     observation_spec = CompositeSpec(
-        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3]))
+        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3])),
+        next_pixels_orig=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3])),
     )
     from_pixels = True
 
@@ -352,6 +358,12 @@ class DummyModelBasedEnv(ModelBasedEnv):
     """
     Dummy environnement for Model Based RL algorithms.
     This class is meant to be used to test the model based environnement.
+
+    Args:
+        world_model (WorldModel): the world model to use for the environnement.
+        device (str): the device to use for the environnement.
+        dtype (torch.dtype): the dtype to use for the environnement.
+        batch_size (int): the batch size to use for the environnement.
     """
 
     def __init__(
@@ -363,9 +375,9 @@ class DummyModelBasedEnv(ModelBasedEnv):
     ):
         super(DummyModelBasedEnv, self).__init__(
             world_model,
-            device,
-            dtype,
-            batch_size,
+            device=device,
+            dtype=dtype,
+            batch_size=batch_size,
         )
         self.action_spec = NdUnboundedContinuousTensorSpec((1,))
         self.observation_spec = NdUnboundedContinuousTensorSpec((4,))
