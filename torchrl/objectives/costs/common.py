@@ -28,7 +28,7 @@ except ImportError:
 from torch import nn
 from torch.nn import Parameter
 
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.modules import TensorDictModule
 
 
@@ -116,13 +116,16 @@ class LossModule(nn.Module):
 
         param_name = module_name + "_params"
 
-        # we keep the original parameters and not the copy returned by functorch
-        params = network_orig.parameters()
+        if _has_functorch:
+            # we keep the original parameters and not the copy returned by functorch
+            params = network_orig.parameters()
 
-        # unless we need to expand them, in that case we'll delete the weights to make sure that the user does not
-        # run anything with them expecting them to be updated
-        params = list(params)
-        module_buffers = list(module_buffers)
+            # unless we need to expand them, in that case we'll delete the weights to make sure that the user does not
+            # run anything with them expecting them to be updated
+            params = list(params)
+            module_buffers = list(module_buffers)
+        else:
+            params = TensorDict({name: value for name,value in network_orig.named_parameters()}, []).unflatten_keys(".")
 
         if expand_dim:
             if not _has_functorch:
