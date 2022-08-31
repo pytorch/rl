@@ -7,7 +7,6 @@ from types import ModuleType
 from typing import List, Optional, Sequence, Dict
 
 import torch
-from packaging import version
 
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
