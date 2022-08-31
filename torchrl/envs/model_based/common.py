@@ -3,20 +3,18 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from __future__ import annotations
-
 import abc
 from typing import Optional, Union, List
-
+from copy import deepcopy
 import numpy as np
 import torch
-import torch.nn as nn
 from torchrl.data import TensorDict
 
-from ...data.utils import DEVICE_TYPING
-from ...modules.tensordict_module import TensorDictModule, TensorDictSequence
-from ..common import EnvBase
+from torchrl.data.utils import DEVICE_TYPING
+from torchrl.modules.tensordict_module import TensorDictModule
+from torchrl.envs.common import EnvBase
 
+__all__ = ["ModelBasedEnv"]
 
 class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     """
@@ -97,7 +95,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
 
     def __init__(
         self,
-        world_model: Union[nn.Module, List[TensorDictModule], TensorDictSequence],
+        world_model: TensorDictModule,
         params: Optional[List[torch.Tensor]] = None,
         buffers: Optional[List[torch.Tensor]] = None,
         device: DEVICE_TYPING = "cpu",
@@ -115,10 +113,10 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         """
         Sets the specs of the environment from the specs of the given environment.
         """
-        self.observation_spec = env.observation_spec
-        self.action_spec = env.action_spec
-        self.reward_spec = env.reward_spec
-        self.input_spec = env.input_spec
+        self.observation_spec = deepcopy(env.observation_spec)
+        self.action_spec = deepcopy(env.action_spec)
+        self.reward_spec = deepcopy(env.reward_spec)
+        self.input_spec = deepcopy(env.input_spec)
 
     def _step(
         self,
