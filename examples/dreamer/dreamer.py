@@ -15,7 +15,10 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
+from torchrl.modules.tensordict_module.exploration import (
+    AdditiveGaussianWrapper,
+    OrnsteinUhlenbeckProcessWrapper,
+)
 from torchrl.objectives.costs.dreamer import (
     DreamerActorLoss,
     DreamerModelLoss,
@@ -73,16 +76,6 @@ config_fields = [
 Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
 cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
-
-DEFAULT_REWARD_SCALING = {
-    "Hopper-v1": 5,
-    "Walker2d-v1": 5,
-    "HalfCheetah-v1": 5,
-    "cheetah": 5,
-    "Ant-v2": 5,
-    "Humanoid-v2": 20,
-    "humanoid": 100,
-}
 
 
 def grad_norm(optimizer: torch.optim.Optimizer):
@@ -273,9 +266,16 @@ def main(cfg: "DictConfig"):
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
 
     # Actor and value network
-    model_explore = AdditiveGaussianWrapper(policy, sigma_init=0.3, sigma_end=0.3).to(
-        device
-    )
+    if cfg.exploration == "additive_gaussian":
+        exploration_policy = AdditiveGaussianWrapper(
+            policy, sigma_init=0.3, sigma_end=0.3
+        ).to(device)
+    elif cfg.exploration == "ou_exploration":
+        exploration_policy = OrnsteinUhlenbeckProcessWrapper(
+            policy, annealing_num_steps=cfg.total_frames
+        ).to(device)
+    elif cfg.exploration == "":
+        exploration_policy = policy.to(device)
 
     action_dim_gsde, state_dim_gsde = None, None
     create_env_fn = parallel_env_constructor(
@@ -287,7 +287,7 @@ def main(cfg: "DictConfig"):
 
     collector = make_collector_offpolicy(
         make_env=create_env_fn,
-        actor_model_explore=model_explore,
+        actor_model_explore=exploration_policy,
         cfg=cfg,
         # make_env_kwargs=[
         #     {"device": device}
@@ -320,10 +320,6 @@ def main(cfg: "DictConfig"):
     scaler2 = GradScaler()
     scaler3 = GradScaler()
     for i, tensordict in enumerate(collector):
-        torch.cuda.empty_cache()
-
-        # update weights of the inference policy
-        collector.update_policy_weights_()
         if reward_normalizer is not None:
             reward_normalizer.update_reward_stats(tensordict)
         if r0 is None:
@@ -446,6 +442,10 @@ def main(cfg: "DictConfig"):
                 actor_model,
                 cfg,
             )
+        if hasattr(exploration_policy, "step"):
+            exploration_policy.step(collected_frames)
+        # update weights of the inference policy
+        collector.update_policy_weights_()
 
 
 def recover_pixels(pixels, stats):

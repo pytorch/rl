@@ -1248,7 +1248,7 @@ def make_dreamer(
         distribution_class=TanhNormal,
     )
     value_model = TensorDictModule(
-        MLP(out_features=1, depth=3, num_cells=400, activation_class=nn.ELU),
+        MLP(out_features=1, depth=3, num_cells=300, activation_class=nn.ELU),
         in_keys=["prior_state", "belief"],
         out_keys=[value_key],
     )

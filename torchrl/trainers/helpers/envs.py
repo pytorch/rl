@@ -409,7 +409,10 @@ def get_stats_random_rollout(
         ):
             torch.cuda.empty_cache()
         del proof_environment
-    return stats
+    with torch.inference_mode(False):
+        # inference mode will cause the state dict loading to fail
+        stats = {k: v.clone() for k, v in stats.items()}
+        return stats
 
 
 @dataclass

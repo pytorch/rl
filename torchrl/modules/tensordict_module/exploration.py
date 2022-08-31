@@ -173,7 +173,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         if exploration_mode() == "random" or exploration_mode() is None:
             out = tensordict.get(self.action_key)
             sigma = self.sigma.item()
-            noise = torch.rand(tensordict.shape, device=tensordict.device) * sigma
+            noise = torch.randn(tensordict.shape, device=tensordict.device) * sigma
             spec = self.td_module.spec
             if isinstance(spec, CompositeSpec):
                 spec = spec[self.action_key]
