@@ -313,18 +313,17 @@ class TestFunctionalModules:
     def test_func_bn(self):
         module = nn.Sequential(nn.Linear(3, 4), nn.BatchNorm1d(4))
         module.eval()
-        fmodule, params_and_buffers = FunctionalModuleWithBuffers._create_from(module)
-        print(params_and_buffers)
+        fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
         x = torch.randn(10, 3)
-        assert (fmodule(params_and_buffers, x) == module(x)).all()
+        assert (fmodule(params, buffers, x) == module(x)).all()
 
     def test_func_transformer(self):
         module = nn.Transformer(128)
         module.eval()
-        fmodule, params_and_buffers = FunctionalModuleWithBuffers._create_from(module)
-        print(params_and_buffers)
+        fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
+        print(params, buffers)
         x = torch.randn(10, 128)
-        torch.testing.assert_close(fmodule(params_and_buffers, x, x), module(x, x))
+        torch.testing.assert_close(fmodule(params, buffers, x, x), module(x, x))
 
 
 if __name__ == "__main__":

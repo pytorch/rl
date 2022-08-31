@@ -55,23 +55,28 @@ class FunctionalModuleWithBuffers(nn.Module):
         model_copy = deepcopy(model)
         param_tensordict = extract_weights(model_copy)
         buffers = extract_buffers(model_copy)
-        if buffers is not None:
-            param_tensordict = param_tensordict.update(buffers)
+        if buffers is None:
+            buffers = TensorDict({}, param_tensordict.batch_size, device=param_tensordict.device)
         if disable_autograd_tracking:
             param_tensordict.apply(lambda x: x.requires_grad_(False), inplace=True)
-        return FunctionalModuleWithBuffers(model_copy), param_tensordict
+        return FunctionalModuleWithBuffers(model_copy), param_tensordict, buffers
 
-    def forward(self, params, *args, **kwargs):
+    def forward(self, params, buffers, *args, **kwargs):
         # Temporarily load the state back onto self.stateless_model
         old_state = _swap_state(
             self.stateless_model, params, return_old_tensordict=_RESET_OLD_TENSORDICT
         )
+        old_state_buffers = _swap_state(
+            self.stateless_model, buffers, return_old_tensordict=_RESET_OLD_TENSORDICT
+        )
+
         try:
             return self.stateless_model(*args, **kwargs)
         finally:
             # Remove the loaded state on self.stateless_model
             if _RESET_OLD_TENSORDICT:
                 _swap_state(self.stateless_model, old_state)
+                _swap_state(self.stateless_model, old_state_buffers)
 
 
 def extract_weights(model):
