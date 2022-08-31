@@ -5,7 +5,7 @@
 
 from dataclasses import dataclass
 
-from torchrl.envs.model_based import MBPOEnv
+from torchrl.envs.model_based.mbpo import MBPOEnv
 from torchrl.objectives.costs.mbpo import MBPOModelLoss
 
 __all__ = [
