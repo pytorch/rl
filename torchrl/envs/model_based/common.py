@@ -118,6 +118,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         self.observation_spec = env.observation_spec
         self.action_spec = env.action_spec
         self.reward_spec = env.reward_spec
+        self.input_spec = env.input_spec
 
     def _step(
         self,
