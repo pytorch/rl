@@ -205,6 +205,7 @@ def main(cfg: "DictConfig"):
             f"dreamer/{exp_name}",
             project="torchrl",
             group=f"Dreamer_{cfg.env_name}",
+            offline=cfg.offline_logging,
         )
     elif cfg.logger == "csv":
         from torchrl.trainers.loggers.csv import CSVLogger
