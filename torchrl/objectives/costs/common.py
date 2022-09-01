@@ -27,7 +27,7 @@ except ImportError:
     )
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
-from torch import nn
+from torch import nn, Tensor
 from torch.nn import Parameter
 
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
@@ -455,6 +455,10 @@ class LossModule(nn.Module):
         for p in self.parameters():
             return p.device
         return torch.device("cpu")
+
+    def register_buffer(self, name: str, tensor: Optional[Tensor], persistent: bool = True) -> None:
+        tensor = tensor.to(self.device)
+        return super().register_buffer(name, tensor, persistent)
 
     def parameters(self, recurse: bool = True) -> Iterator[Parameter]:
         for name, param in self.named_parameters(recurse=recurse):
