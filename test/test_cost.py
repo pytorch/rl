@@ -1583,7 +1583,7 @@ class TestPPO:
                     assert "value" in key or "critic" in key
                 if p.grad is None:
                     assert "actor" in key
-                    assert "value" in key or "critic" in key
+                    assert "value" not in key and "critic" not in key
 
         if _has_functorch:
             for param in params:
@@ -1607,7 +1607,7 @@ class TestPPO:
             for key, p in params.flatten_keys(".").items():
                 if p.grad is not None and p.grad.norm() > 0.0:
                     assert "actor" in key
-                    assert "value" in key or "critic" in key
+                    assert "value" not in key and "critic" not in key
                 if p.grad is None:
                     assert "actor" not in key
                     assert "value" in key or "critic" in key
