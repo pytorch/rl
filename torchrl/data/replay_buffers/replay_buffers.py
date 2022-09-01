@@ -127,7 +127,7 @@ class ReplayBuffer:
         storage: Optional[Storage] = None,
     ):
         if storage is None:
-            storage = ListStorage()
+            storage = ListStorage(size)
         self._storage = storage
         self._capacity = size
         self._cursor = 0
