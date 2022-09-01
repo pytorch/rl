@@ -1201,7 +1201,8 @@ class SACModelConfig:
     # cells of the value net
     activation: str = "tanh"
     # activation function, either relu or elu or tanh, Default=tanh
-
+    model_device: str = ""
+    # device where the model to be trained should sit
 
 @dataclass
 class DDPGModelConfig:
