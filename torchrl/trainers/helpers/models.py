@@ -1204,6 +1204,7 @@ class SACModelConfig:
     model_device: str = ""
     # device where the model to be trained should sit
 
+
 @dataclass
 class DDPGModelConfig:
     annealing_frames: int = 1000000
