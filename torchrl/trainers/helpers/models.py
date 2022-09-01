@@ -1221,6 +1221,7 @@ def make_mbpo_model(
 
 @dataclass
 class MBPOConfig:
+    model_holdout_ratio: float = 0.2
     world_model_lr: float = 1e-3
     hidden_world_model: int = 256
     num_layers_world_model: int = 4

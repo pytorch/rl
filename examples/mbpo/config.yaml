@@ -16,9 +16,12 @@ init_random_frames: 5000
 activation: elu
 gSDE: 0
 from_pixels: 0
-collector_devices: [cuda:1,cuda:1,cuda:1,cuda:1]
-env_per_collector: 2
-num_workers: 8
+# collector_devices: [cuda:1,cuda:1,cuda:1,cuda:1]
+# env_per_collector: 2
+# num_workers: 8
+collector_devices: [cpu]
+env_per_collector: 1
+num_workers: 1
 value_network_update_interval: 200
 record_interval: 1000
 max_frames_per_traj: 1000
@@ -43,4 +46,5 @@ num_sac_training_steps_per_optim_step: 40
 train_model_every_k_optim_step: 250
 target_entropy: -3
 model_buffer_size: 400000
+model_holdout_ratio: 0.2
 logger: wandb

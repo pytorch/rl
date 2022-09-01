@@ -36,11 +36,13 @@ class MBPOEnv(ModelBasedEnv):
             batch_size=batch_size,
         )
         self.num_networks = num_networks
+        self.elites = torch.arange(self.num_networks)
 
     def _step(self, tensordict: TensorDict) -> TensorDict:
         tensordict_out = tensordict.clone()
         # Compute world state
-        sampled_model_id = torch.randint(0, self.num_networks, tensordict_out.shape)
+        sampled_model_id = self.elites[torch.randint(0, len(self.elites), tensordict_out.shape)]
+
         tensordict_out = self.world_model(
             tensordict_out,
             params=self.world_model_params,

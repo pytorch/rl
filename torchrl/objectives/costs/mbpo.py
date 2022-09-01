@@ -50,12 +50,12 @@ class MBPOModelLoss(LossModule):
             buffers=self.world_model_buffers,
             vmap=True,
         )
-        loss_obs = self.model_loss(
+        loss_obs, per_network_loss_obs= self.model_loss(
             tensordict_expand[f"next_{self.observation_key}_loc"],
             tensordict_expand[f"next_{self.observation_key}_scale"],
             tensordict[f"next_{self.observation_key}"],
         )
-        loss_reward = self.model_loss(
+        loss_reward, per_network_loss_reward = self.model_loss(
             tensordict_expand["reward_loc"],
             tensordict_expand["reward_scale"],
             tensordict["reward"],
@@ -63,15 +63,15 @@ class MBPOModelLoss(LossModule):
         if self.lambda_obs is None or self.lambda_reward is None:
             N = tensordict[f"next_{self.observation_key}"].shape[-1]
             loss_model = (N - 1) / N * loss_obs + 1 / N * loss_reward
+            per_network_loss = (N - 1) / N * per_network_loss_obs + 1 / N * per_network_loss_reward
         else:
             loss_model = self.lambda_obs * loss_obs + self.lambda_reward * loss_reward
-        return TensorDict({"loss_world_model": loss_model}, [])
+            per_network_loss = self.lambda_obs * per_network_loss_obs + self.lambda_reward * per_network_loss_reward
+        return TensorDict({"loss_world_model": loss_model, "per_network_world_model_loss": per_network_loss}, [])
 
     def model_loss(self, mean, sigma, target):
         log_likelihood = torch.pow(mean - target, 2) / (
             2 * torch.pow(sigma, 2)
         ) + torch.log(sigma)
         log_likelihood = torch.mean(log_likelihood, dim=(1, 2))
-        log_likelihood, _ = torch.sort(log_likelihood)
-        log_likelihood = log_likelihood[: self.cfg.num_elites]
-        return torch.mean(log_likelihood)
+        return torch.mean(log_likelihood), log_likelihood

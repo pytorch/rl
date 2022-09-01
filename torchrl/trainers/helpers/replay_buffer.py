@@ -80,11 +80,25 @@ def make_model_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> Replay
         )
     return buffer
 
+from torchrl.data.replay_buffers.rb_prototype import WithandWithoutReplacementTensorDictReplayBuffer
+def make_with_and_without_replacement_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer:
+    """Builds a replay buffer using the config built from ReplayArgsConfig."""
+    device = torch.device(device)
+    buffer = WithandWithoutReplacementTensorDictReplayBuffer(
+        pin_memory=device != torch.device("cpu"),
+        prefetch=cfg.buffer_prefetch,
+        storage=LazyMemmapStorage(
+            cfg.buffer_size,
+            scratch_dir=cfg.buffer_scratch_dir,
+            # device=device,  # when using prefetch, this can overload the GPU memory
+        ),
+    )
+    return buffer
 
 @dataclass
 class ReplayArgsConfig:
     buffer_size: int = 1000000
-    
+
     model_buffer_size: int = 1000000
     # buffer size, in number of frames stored. Default=1e6
     prb: bool = False
