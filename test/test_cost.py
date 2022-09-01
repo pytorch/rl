@@ -1544,15 +1544,15 @@ class TestPPO:
         if advantage == "gae":
             advantage = GAE(
                 gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
-            )
+            ).to(device)
         elif advantage == "td":
             advantage = TDEstimate(
                 gamma=0.9, value_network=value, gradient_mode=gradient_mode
-            )
+            ).to(device)
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimate(
                 gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
-            )
+            ).to(device)
         else:
             raise NotImplementedError
 
