@@ -1664,7 +1664,7 @@ dtype=torch.float32)},
         return self.select()
 
     def is_empty(self):
-        for i in self.items_meta():
+        for i in self.items():
             return False
         return True
 
