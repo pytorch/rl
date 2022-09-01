@@ -163,6 +163,8 @@ class _TargetNetUpdate:
         for source, target in zip(self._sources.values(), self._targets.values()):
             if isinstance(source, TensorDictBase):
                 # native functional modules
+                print("source", source)
+                print("target", target)
                 source = list(zip(*sorted(list(source.items()))))[1]
                 target = list(zip(*sorted(list(target.items()))))[1]
 
@@ -182,6 +184,8 @@ class _TargetNetUpdate:
         for source, target in zip(self._sources.values(), self._targets.values()):
             if isinstance(source, TensorDictBase):
                 # native functional modules
+                print("source", source)
+                print("target", target)
                 source = list(zip(*sorted(list(source.items()))))[1]
                 target = list(zip(*sorted(list(target.items()))))[1]
             for p_source, p_target in zip(source, target):
