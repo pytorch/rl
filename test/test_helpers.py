@@ -17,8 +17,10 @@ from mocking_classes import (
     DiscreteActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
 )
+from packaging import version
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.utils import set_exploration_mode
+from torchrl.modules.tensordict_module.common import _has_functorch
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import EnvConfig
 from torchrl.trainers.helpers.models import (
@@ -33,6 +35,12 @@ from torchrl.trainers.helpers.models import (
     SACModelConfig,
     REDQModelConfig,
 )
+
+TORCH_VERSION = version.parse(torch.__version__)
+if TORCH_VERSION < version.parse("1.12.0"):
+    UNSQUEEZE_SINGLETON = True
+else:
+    UNSQUEEZE_SINGLETON = False
 
 ## these tests aren't truly unitary but setting up a fake env for the
 # purpose of building a model with args is a lot of unstable scaffoldings
@@ -81,7 +89,11 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
 
         actor = make_dqn_actor(proof_environment, cfg, device)
         td = proof_environment.reset().to(device)
-        actor(td)
+        if UNSQUEEZE_SINGLETON and not td.ndimension():
+            # Linear and conv used to break for non-batched data
+            actor(td.unsqueeze(0))
+        else:
+            actor(td)
 
         expected_keys = ["done", "action", "action_value"]
         if from_pixels:
@@ -137,7 +149,11 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
         actor, value = make_ddpg_actor(proof_environment, device=device, cfg=cfg)
         td = proof_environment.reset().to(device)
         with set_exploration_mode(exploration):
-            actor(td)
+            if UNSQUEEZE_SINGLETON and not td.ndimension():
+                # Linear and conv used to break for non-batched data
+                actor(td.unsqueeze(0))
+            else:
+                actor(td)
         expected_keys = ["done", "action", "param"]
         if from_pixels:
             expected_keys += ["pixels", "hidden", "pixels_orig"]
@@ -161,7 +177,11 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
             else:
                 torch.testing.assert_close(td.get("action"), tsf_loc)
 
-        value(td)
+        if UNSQUEEZE_SINGLETON and not td.ndimension():
+            # Linear and conv used to break for non-batched data
+            value(td.unsqueeze(0))
+        else:
+            value(td)
         expected_keys += ["state_action_value"]
         try:
             _assert_keys_match(td, expected_keys)
@@ -245,7 +265,12 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
         td = proof_environment.reset().to(device)
         td_clone = td.clone()
         with set_exploration_mode(exploration):
-            actor(td_clone)
+            if UNSQUEEZE_SINGLETON and not td_clone.ndimension():
+                # Linear and conv used to break for non-batched data
+                actor(td_clone.unsqueeze(0))
+            else:
+                actor(td_clone)
+
         try:
             _assert_keys_match(td_clone, expected_keys)
         except AssertionError:
@@ -277,7 +302,11 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
             expected_keys += ["_eps_gSDE"]
 
         td_clone = td.clone()
-        value(td_clone)
+        if UNSQUEEZE_SINGLETON and not td_clone.ndimension():
+            # Linear and conv used to break for non-batched data
+            value(td_clone.unsqueeze(0))
+        else:
+            value(td_clone)
         try:
             _assert_keys_match(td_clone, expected_keys)
         except AssertionError:
@@ -338,7 +367,12 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
         td = proof_environment.reset().to(device)
         td_clone = td.clone()
         with set_exploration_mode(exploration):
-            actor(td_clone)
+            if UNSQUEEZE_SINGLETON and not td_clone.ndimension():
+                # Linear and conv used to break for non-batched data
+                actor(td_clone.unsqueeze(0))
+            else:
+                actor(td_clone)
+
         expected_keys = [
             "done",
             "pixels" if len(from_pixels) else "observation_vector",
@@ -364,7 +398,12 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             proof_environment.close()
             raise
 
-        qvalue(td_clone)
+        if UNSQUEEZE_SINGLETON and not td_clone.ndimension():
+            # Linear and conv used to break for non-batched data
+            qvalue(td_clone.unsqueeze(0))
+        else:
+            qvalue(td_clone)
+
         expected_keys = [
             "done",
             "observation_vector",
@@ -383,7 +422,11 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             proof_environment.close()
             raise
 
-        value(td)
+        if UNSQUEEZE_SINGLETON and not td.ndimension():
+            # Linear and conv used to break for non-batched data
+            value(td.unsqueeze(0))
+        else:
+            value(td)
         expected_keys = [
             "done",
             "observation_vector",
@@ -402,6 +445,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
         del proof_environment
 
 
+@pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
 @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])

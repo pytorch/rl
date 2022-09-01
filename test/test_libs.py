@@ -36,12 +36,16 @@ if _has_gym:
     PENDULUM_VERSIONED = (
         "Pendulum-v1" if gym_version > version.parse("0.20.0") else "Pendulum-v0"
     )
+    HC_VERSIONED = (
+        "HalfCheetah-v4" if gym_version > version.parse("0.20.0") else "HalfCheetah-v2"
+    )
     PONG_VERSIONED = (
         "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
     )
 else:
     # placeholders
     PENDULUM_VERSIONED = "Pendulum-v1"
+    HC_VERSIONED = "HalfCheetah-v4"
     PONG_VERSIONED = "ALE/Pong-v5"
 
 
@@ -210,9 +214,9 @@ def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
     "env_lib,env_args,env_kwargs",
     [
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
-        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": True}],
+        [GymEnv, (HC_VERSIONED,), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
-        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": False}],
+        [GymEnv, (HC_VERSIONED,), {"from_pixels": False}],
         [GymEnv, (PONG_VERSIONED,), {}],
     ],
 )
@@ -233,9 +237,9 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
     "env_lib,env_args,env_kwargs",
     [
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
-        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": True}],
+        [GymEnv, (HC_VERSIONED,), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
-        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": False}],
+        [GymEnv, (HC_VERSIONED,), {"from_pixels": False}],
         [GymEnv, (PONG_VERSIONED,), {}],
     ],
 )
