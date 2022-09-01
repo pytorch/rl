@@ -114,7 +114,7 @@ class TestAdditiveGaussian:
             distribution_class=TanhNormal,
             default_interaction_mode="random",
         ).to(device)
-        exploratory_policy = AdditiveGaussianWrapper(policy)
+        exploratory_policy = AdditiveGaussianWrapper(policy).to(device)
 
         sigma_init = (
             action_spec.project(
@@ -161,7 +161,7 @@ class TestAdditiveGaussian:
             distribution_class=TanhNormal,
             default_interaction_mode="random",
         ).to(device)
-        exploratory_policy = AdditiveGaussianWrapper(policy)
+        exploratory_policy = AdditiveGaussianWrapper(policy).to(device)
 
         tensordict = TensorDict(
             batch_size=[batch],
