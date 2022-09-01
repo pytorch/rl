@@ -22,7 +22,6 @@ if _has_dmc:
 
 from sys import platform
 
-from opengl_rendering import create_opengl_context
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
@@ -45,6 +44,7 @@ if _has_gym:
     )
 
     if gym_version < version.parse("0.24.0"):
+        from opengl_rendering import create_opengl_context
         create_opengl_context()
 else:
     # placeholders
