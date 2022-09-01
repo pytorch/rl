@@ -273,7 +273,7 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
     out_key = "pixels"
     _out_key = "pixels_orig"
     input_spec = CompositeSpec(
-        **{_out_key: observation_spec["next_pixels"], "action": action_spec}
+        **{_out_key: observation_spec["next_pixels_orig"], "action": action_spec}
     )
 
     def _get_out_obs(self, obs):
@@ -289,6 +289,13 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
         next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3])),
         next_pixels_orig=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3])),
     )
+    action_spec = OneHotDiscreteTensorSpec(7)
+    out_key = "pixels"
+    _out_key = "pixels_orig"
+    input_spec = CompositeSpec(
+        **{_out_key: observation_spec["next_pixels_orig"], "action": action_spec}
+    )
+
     from_pixels = True
 
     def _get_out_obs(self, obs):
