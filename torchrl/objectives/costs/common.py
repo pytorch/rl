@@ -273,7 +273,6 @@ class LossModule(nn.Module):
                 params,
                 module_buffers,
             ) = FunctionalModuleWithBuffers._create_from(module)
-            module_buffers = None
 
         param_name = module_name + "_params"
 
