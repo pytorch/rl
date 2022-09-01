@@ -270,19 +270,23 @@ class LossModule(nn.Module):
         else:
             (
                 functional_module,
-                module_params,
+                params,
                 module_buffers,
             ) = FunctionalModuleWithBuffers._create_from(module)
             module_buffers = None
-            del module_params
 
         param_name = module_name + "_params"
 
-        # params = TensorDict(
-        #     {name: value for name, value in network_orig.named_parameters()}, []
-        # ).unflatten_keys(".")
-        # if isinstance(network_orig, TensorDictModule):
-        #     params = params["module"]
+        # params must be retrieved directly because make_functional will copy the content
+        params_vals = TensorDict(
+            {name: value for name, value in network_orig.named_parameters()}, []
+        )
+        # rename params_vals keys to match params
+        keys1 = sorted(list(params.flatten_keys(".").keys()))
+        keys2 = sorted(list(params_vals.keys()))
+        for key1, key2 in zip(keys1, keys2):
+            params_vals.rename_key(key2, key1)
+        params = params_vals.unflatten_keys(".")
 
         if expand_dim:
             raise ImportError(
