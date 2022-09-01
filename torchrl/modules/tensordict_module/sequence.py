@@ -400,15 +400,23 @@ class TensorDictSequence(TensorDictModule):
             self_copy.module = copy(self_copy.module)
         else:
             self_copy = self
-        params = []
-        buffers = []
+        if not _has_functorch:
+            params = TensorDict({}, [])
+            buffers = TensorDict({}, [])
+        else:
+            params = []
+            buffers = []
         for i, module in enumerate(self.module):
             self_copy.module[i], (
                 _params,
                 _buffers,
             ) = module.make_functional_with_buffers(clone=True)
-            params.extend(_params)
-            buffers.extend(_buffers)
+            if not _has_functorch:
+                params[str(i)] = _params
+                buffers[str(i)] = _buffers
+            else:
+                params.extend(_params)
+                buffers.extend(_buffers)
         return self_copy, (params, buffers)
 
     def get_dist(
