@@ -102,7 +102,10 @@ class TestAdditiveGaussian:
             net, in_keys=["observation"], out_keys=["loc", "scale"]
         )
         action_spec = NdBoundedTensorSpec(
-            -torch.ones(d_act), torch.ones(d_act), (d_act,)
+            -torch.ones(d_act, device=device),
+            torch.ones(d_act, device=device),
+            (d_act,),
+            device=device,
         )
         policy = ProbabilisticActor(
             spec=action_spec,
@@ -146,7 +149,10 @@ class TestAdditiveGaussian:
             net, in_keys=["observation"], out_keys=["loc", "scale"]
         )
         action_spec = NdBoundedTensorSpec(
-            -torch.ones(d_act), torch.ones(d_act), (d_act,)
+            -torch.ones(d_act, device=device),
+            torch.ones(d_act, device=device),
+            (d_act,),
+            device=device,
         )
         policy = ProbabilisticActor(
             spec=action_spec,
