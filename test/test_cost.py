@@ -1577,7 +1577,7 @@ class TestPPO:
                     assert "actor" in name
                     assert "critic" not in name
         else:
-            for key, p in params.flatten_keys(".").item():
+            for key, p in params.flatten_keys(".").items():
                 if p.grad is not None and p.grad.norm() > 0.0:
                     assert "actor" not in key
                     assert "critic" in key
@@ -1604,7 +1604,7 @@ class TestPPO:
             for param in params:
                 param.grad = None
         else:
-            for key, p in params.flatten_keys(".").item():
+            for key, p in params.flatten_keys(".").items():
                 if p.grad is not None and p.grad.norm() > 0.0:
                     assert "actor" in key
                     assert "critic" not in key
