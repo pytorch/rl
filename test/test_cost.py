@@ -1772,9 +1772,15 @@ def test_updater(mode, value_network_update_interval, device):
             self.convert_to_functional(module1, "module1", create_target_params=True)
             module2 = torch.nn.BatchNorm2d(10).eval()
             self.module2 = module2
-            for target in self.target_module1_params:
+            if _has_functorch:
+                iterator_params = self.target_module1_params
+                iterator_buffers = self.target_module1_buffers
+            else:
+                iterator_params = self.target_module1_params.values()
+                iterator_buffers = self.target_module1_buffers.values()
+            for target in iterator_params:
                 target.data.normal_()
-            for target in self.target_module1_buffers:
+            for target in iterator_buffers:
                 if target.dtype is not torch.int64:
                     target.data.normal_()
                 else:
