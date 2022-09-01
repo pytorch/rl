@@ -386,7 +386,6 @@ def main(cfg: "DictConfig"):
                         real_sampled_tensordict, _ = real_replay_buffer.sample(
                             num_real_samples, mode="with_replacement"
                         )
-                        real_sampled_tensordict = real_sampled_tensordict.to(device)
 
                         agent_sampled_tensordict = torch.cat(
                             [
