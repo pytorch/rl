@@ -361,7 +361,6 @@ class LossModule(nn.Module):
                     ).unflatten_keys(".")
                 ),
             )
-            print("module params target:", name_params_target, getattr(self, name_params_target))
 
             target_buffers = getattr(self, buffer_name).detach().clone()
             target_buffers_items = sorted(
@@ -386,7 +385,6 @@ class LossModule(nn.Module):
                     ).unflatten_keys(".")
                 ),
             )
-            print("module buffers target:", name_buffers_target, getattr(self, name_buffers_target))
 
         else:
             setattr(self.__class__, name_params_target, None)
