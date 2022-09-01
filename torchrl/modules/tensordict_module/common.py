@@ -18,6 +18,8 @@ from typing import (
 
 import torch
 
+from torchrl.modules import functional_modules
+
 _has_functorch = False
 try:
     import functorch
@@ -232,7 +234,11 @@ class TensorDictModule(nn.Module):
     @property
     def is_functional(self):
         if not _has_functorch:
-            return False
+            return isinstance(
+                self.module,
+                (functional_modules.FunctionalModule,
+                 functional_modules.FunctionalModuleWithBuffers),
+            )
         return isinstance(
             self.module,
             (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers),

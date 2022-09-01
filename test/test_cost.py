@@ -1561,9 +1561,6 @@ class TestPPO:
         )
 
         floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
-        print(params)
-        print(buffers)
-        print(td)
 
         loss = floss_fn(params, buffers, td)
         loss_critic = loss["loss_critic"]
