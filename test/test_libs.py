@@ -45,6 +45,7 @@ if _has_gym:
 
     if gym_version < version.parse("0.24.0"):
         from opengl_rendering import create_opengl_context
+
         create_opengl_context()
 else:
     # placeholders
