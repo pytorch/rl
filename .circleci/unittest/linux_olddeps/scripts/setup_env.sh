@@ -85,6 +85,7 @@ if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
 fi
 
 conda env update --file "${this_dir}/environment.yml" --prune
+conda install -c conda-forge fltk -y
 
 wget https://www.rarlab.com/rar/rarlinux-x64-5.7.1.tar.gz
 tar -xzvf rarlinux-x64-5.7.1.tar.gz
