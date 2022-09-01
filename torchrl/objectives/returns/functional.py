@@ -279,7 +279,7 @@ def vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done):
 
     first_below_thr_gamma = None
 
-    if isinstance(gamma, torch.Tensor) and gamma.ndimension() > 0:
+    if isinstance(gamma, torch.Tensor) and gamma.ndimension() > 0 and gamma.numel() > 1:
         gamma = gamma.view(-1, T)
         gammas = torch.ones(*gamma.shape, T + 1, 1, device=device)
         gammas[..., 1:, :] = gamma[..., None, None]
