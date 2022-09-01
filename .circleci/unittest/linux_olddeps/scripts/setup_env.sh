@@ -65,7 +65,7 @@ fi
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
 conda env config vars set \
   MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
-  DISPLAY=unix:0.0 \
+  DISPLAY=:99 \
   MJLIB_PATH=$root_dir/.mujoco/mujoco210/bin/libmujoco210.so \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
