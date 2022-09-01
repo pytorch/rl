@@ -1568,27 +1568,51 @@ class TestPPO:
         loss_critic.backward(retain_graph=True)
         # check that grads are independent and non null
         named_parameters = loss_fn.named_parameters()
-        for (name, _), p in zip(named_parameters, params):
-            if p.grad is not None and p.grad.norm() > 0.0:
-                assert "actor" not in name
-                assert "critic" in name
-            if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+        if _has_functorch:
+            for (name, _), p in zip(named_parameters, params):
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" not in name
+                    assert "critic" in name
+                if p.grad is None:
+                    assert "actor" in name
+                    assert "critic" not in name
+        else:
+            for key, p in params.flatten_keys(".").item():
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" not in key
+                    assert "critic" in key
+                if p.grad is None:
+                    assert "actor" in key
+                    assert "critic" not in key
 
-        for param in params:
-            param.grad = None
+        if _has_functorch:
+            for param in params:
+                param.grad = None
+        else:
+            for param in params.flatten_keys(".").values():
+                param.grad = None
         loss_objective.backward()
         named_parameters = loss_fn.named_parameters()
-        for (name, _), p in zip(named_parameters, params):
-            if p.grad is not None and p.grad.norm() > 0.0:
-                assert "actor" in name
-                assert "critic" not in name
-            if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
-        for param in params:
-            param.grad = None
+        if _has_functorch:
+            for (name, _), p in zip(named_parameters, params):
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" in name
+                    assert "critic" not in name
+                if p.grad is None:
+                    assert "actor" not in name
+                    assert "critic" in name
+            for param in params:
+                param.grad = None
+        else:
+            for key, p in params.flatten_keys(".").item():
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" in key
+                    assert "critic" not in key
+                if p.grad is None:
+                    assert "actor" not in key
+                    assert "critic" in key
+            for param in params.flatten_keys(".").values():
+                param.grad = None
 
 
 class TestReinforce:

@@ -281,7 +281,10 @@ class LossModule(nn.Module):
         params_vals = TensorDict(
             {name: value for name, value in network_orig.named_parameters()}, []
         )
-        # rename params_vals keys to match params
+        # rename params_vals keys to match params: otherwise we'll have to deal with
+        # module.module.param or such names. We assume that there is a constant prefix
+        # and that, when sorted, all keys will match. We could check that the values
+        # do match too.
         keys1 = sorted(list(params.flatten_keys(".").keys()))
         keys2 = sorted(list(params_vals.keys()))
         for key1, key2 in zip(keys1, keys2):
