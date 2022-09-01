@@ -13,6 +13,18 @@ if version.parse(torch.__version__) > version.parse("1.11.0"):
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 
+if _has_gym:
+    from packaging import version
+    import gym
+
+    gym_version = version.parse(gym.__version__)
+    PONG_VERSIONED = (
+        "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
+    )
+else:
+    # placeholders
+    PONG_VERSIONED = "ALE/Pong-v5"
+
 
 def test_dm_control():
     assert _has_dmc
@@ -28,7 +40,7 @@ def test_dm_control():
 
 def test_gym():
     assert _has_gym
-    env = GymEnv("ALE/Pong-v5")
+    env = GymEnv(PONG_VERSIONED)
     env.reset()
 
 

@@ -455,7 +455,9 @@ class LossModule(nn.Module):
             return p.device
         return torch.device("cpu")
 
-    def register_buffer(self, name: str, tensor: Optional[Tensor], persistent: bool = True) -> None:
+    def register_buffer(
+        self, name: str, tensor: Optional[Tensor], persistent: bool = True
+    ) -> None:
         tensor = tensor.to(self.device)
         return super().register_buffer(name, tensor, persistent)
 
