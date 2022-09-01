@@ -165,7 +165,8 @@ class _TargetNetUpdate:
                 # native functional modules
                 source = list(zip(*sorted(list(source.items()))))[1]
                 target = list(zip(*sorted(list(target.items()))))[1]
-
+            elif isinstance(source, TensorDictBase) and source.is_empty():
+                continue
             for p_source, p_target in zip(source, target):
                 if p_target.requires_grad:
                     raise RuntimeError("the target parameter is part of a graph.")
@@ -184,6 +185,8 @@ class _TargetNetUpdate:
                 # native functional modules
                 source = list(zip(*sorted(list(source.items()))))[1]
                 target = list(zip(*sorted(list(target.items()))))[1]
+            elif isinstance(source, TensorDictBase) and source.is_empty():
+                continue
             for p_source, p_target in zip(source, target):
                 if p_target.requires_grad:
                     raise RuntimeError("the target parameter is part of a graph.")
