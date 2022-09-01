@@ -505,14 +505,17 @@ class TestParallel:
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [False, True])
     @pytest.mark.parametrize("transformed_out", [True, False])
+    @pytest.mark.parametrize("static_seed", [True, False])
     def test_parallel_env_seed(
-        self, env_name, frame_skip, transformed_in, transformed_out
+        self, env_name, frame_skip, transformed_in, transformed_out, static_seed
     ):
         env_parallel, env_serial, _ = _make_envs(
             env_name, frame_skip, transformed_in, transformed_out, 5
         )
 
-        out_seed_serial = env_serial.set_seed(0)
+        out_seed_serial = env_serial.set_seed(0, static_seed=static_seed)
+        if static_seed:
+            assert out_seed_serial == 0
         td0_serial = env_serial.reset()
         torch.manual_seed(0)
 
@@ -524,7 +527,9 @@ class TestParallel:
             td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
         )
 
-        out_seed_parallel = env_parallel.set_seed(0)
+        out_seed_parallel = env_parallel.set_seed(0, static_seed=static_seed)
+        if static_seed:
+            assert out_seed_serial == 0
         td0_parallel = env_parallel.reset()
 
         torch.manual_seed(0)

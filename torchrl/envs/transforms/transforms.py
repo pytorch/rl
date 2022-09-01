@@ -396,9 +396,9 @@ class TransformedEnv(EnvBase):
         tensordict_out = self.transform(tensordict_out)
         return tensordict_out
 
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Set the seeds of the environment"""
-        return self.base_env.set_seed(seed)
+        return self.base_env.set_seed(seed, static_seed=static_seed)
 
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         out_tensordict = self.base_env.reset(execute_step=False, **kwargs)
