@@ -605,6 +605,7 @@ class TestTDModule:
         elif safe and spec_type == "bounded":
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
+    @pytest.mark.skipif(not _has_functorch, reason="vmap can only be used with functorch")
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     def test_vmap_probabilistic(self, safe, spec_type):
