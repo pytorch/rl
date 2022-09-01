@@ -28,7 +28,8 @@ from torchrl.data import (
     TensorSpec,
     CompositeSpec,
 )
-from torchrl.data.tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase, \
+    LazyStackedTensorDict, TensorDict
 from torchrl.modules.tensordict_module.common import TensorDictModule
 from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,
