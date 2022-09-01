@@ -420,8 +420,14 @@ class TensorDictSequence(TensorDictModule):
 
         if isinstance(self.module[-1], ProbabilisticTensorDictModule):
             if "params" in kwargs and "buffers" in kwargs:
-                param_splits = self._split_param(kwargs["params"], "params")
-                buffer_splits = self._split_param(kwargs["buffers"], "buffers")
+                params = kwargs["params"]
+                buffers = kwargs["buffers"]
+                if isinstance(params, TensorDictBase):
+                    param_splits = list(zip(*sorted(list(params.items()))))[1]
+                    buffer_splits = list(zip(*sorted(list(buffers.items()))))[1]
+                else:
+                    param_splits = self._split_param(kwargs["params"], "params")
+                    buffer_splits = self._split_param(kwargs["buffers"], "buffers")
                 kwargs_pruned = {
                     key: item
                     for key, item in kwargs.items()
@@ -443,7 +449,11 @@ class TensorDictSequence(TensorDictModule):
                         )
 
             elif "params" in kwargs:
-                param_splits = self._split_param(kwargs["params"], "params")
+                params = kwargs["params"]
+                if isinstance(params, TensorDictBase):
+                    param_splits = list(zip(*sorted(list(params.items()))))[1]
+                else:
+                    param_splits = self._split_param(kwargs["params"], "params")
                 kwargs_pruned = {
                     key: item for key, item in kwargs.items() if key not in ("params",)
                 }
