@@ -22,5 +22,4 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
-    - tensorboard
     - dm_control==0.0.403778684
