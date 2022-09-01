@@ -316,7 +316,7 @@ class LossModule(nn.Module):
         module_buffers_list = []
         for i, (key, value) in enumerate(sorted(buffers_iter)):
             _name = module_name + f"_buffer_{i}"
-            self.register_buffer(_name, p)
+            self.register_buffer(_name, value)
             # replace buffer by its name
             module_buffers_list.append((_name, key))
         setattr(
