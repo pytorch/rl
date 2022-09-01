@@ -42,8 +42,8 @@ conda activate "${env_dir}"
 printf "* Installing mujoco and related\n"
 mkdir -p $root_dir/.mujoco
 cd $root_dir/.mujoco/
-wget https://github.com/deepmind/mujoco/releases/download/2.1.1/mujoco-2.1.1-linux-x86_64.tar.gz
-tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
+#wget https://github.com/deepmind/mujoco/releases/download/2.1.1/mujoco-2.1.1-linux-x86_64.tar.gz
+#tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
 wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
 tar -xf mujoco210-linux-x86_64.tar.gz
 cd $this_dir
@@ -63,9 +63,10 @@ else
 fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
-conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
+conda env config vars set \
+  MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   DISPLAY=unix:0.0 \
-  MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
+  MJLIB_PATH=$root_dir/.mujoco/mujoco210/bin/libmujoco210.so \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=$PRIVATE_MUJOCO_GL \
