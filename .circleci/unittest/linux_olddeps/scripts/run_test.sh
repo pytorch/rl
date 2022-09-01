@@ -20,4 +20,5 @@ export MKL_THREADING_LAYER=GNU
 
 pytest test/smoke_test.py -v --durations 20
 pytest test/smoke_test_deps.py -v --durations 20
-xvfb-run -s ":99 -screen 0 1280x1024x24" pytest --instafail -v --durations 20
+#xvfb-run -s ":99 -screen 0 1280x1024x24" pytest --instafail -v --durations 20
+pytest --instafail -v --durations 20
