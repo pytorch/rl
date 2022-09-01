@@ -7,7 +7,16 @@ import argparse
 
 import pytest
 import torch
-from functorch import make_functional, make_functional_with_buffers
+
+
+_has_functorch = False
+try:
+    from functorch import make_functional, make_functional_with_buffers
+    _has_functorch = True
+except ImportError:
+    from torchrl.modules.functional_modules import FunctionalModule, FunctionalModuleWithBuffers
+    make_functional = FunctionalModule._create_from
+    make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
 from torch import nn
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import (
