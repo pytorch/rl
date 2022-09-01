@@ -22,6 +22,7 @@ if _has_dmc:
 
 from sys import platform
 
+from opengl_rendering import create_opengl_context
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
@@ -42,6 +43,9 @@ if _has_gym:
     PONG_VERSIONED = (
         "ALE/Pong-v5" if gym_version > version.parse("0.20.0") else "Pong-v4"
     )
+
+    if gym_version < version.parse("0.24.0"):
+        create_opengl_context()
 else:
     # placeholders
     PENDULUM_VERSIONED = "Pendulum-v1"
