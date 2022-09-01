@@ -1704,7 +1704,11 @@ class TestTDSequence:
         else:
             td = TensorDict({"a": torch.randn(3), "b": torch.randn(4)}, [])
             if functional:
-                tdmodule(td, params=params1 + params2 + params3)
+                if _has_functorch:
+                    params = params1 + params2 + params3
+                else:
+                    params = TensorDict({str(i): params for i, params in enumerate((params1, params2, params3))}, [])
+                tdmodule(td, params=params)
             else:
                 tdmodule(td)
             assert "loc" in td.keys()
