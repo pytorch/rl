@@ -159,6 +159,7 @@ def _copy(self: List[int]):
         out.append(elem)
     return out
 
+
 def infer_size_impl(shape: List[int], numel: int) -> List[int]:
     # Copy-paste from https://github.com/pytorch/pytorch/blob/35d4fa444b67cbcbe34a862782ddf2d92f5b1ce7/torch/jit/_shape_functions.py
     # for torch < 1.11

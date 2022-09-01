@@ -264,7 +264,7 @@ class LossModule(nn.Module):
         network_orig = module
         if hasattr(module, "make_functional_with_buffers"):
             functional_module, (
-                _,
+                params,
                 module_buffers,
             ) = module.make_functional_with_buffers(clone=True)
         else:
@@ -278,11 +278,11 @@ class LossModule(nn.Module):
 
         param_name = module_name + "_params"
 
-        params = TensorDict(
-            {name: value for name, value in network_orig.named_parameters()}, []
-        ).unflatten_keys(".")
-        if isinstance(network_orig, TensorDictModule):
-            params = params["module"]
+        # params = TensorDict(
+        #     {name: value for name, value in network_orig.named_parameters()}, []
+        # ).unflatten_keys(".")
+        # if isinstance(network_orig, TensorDictModule):
+        #     params = params["module"]
 
         if expand_dim:
             raise ImportError(

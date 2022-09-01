@@ -7,15 +7,19 @@ import argparse
 
 import pytest
 import torch
-
 from torchrl.data.tensordict.tensordict import TensorDictBase
 
 _has_functorch = False
 try:
     from functorch import make_functional, make_functional_with_buffers
+
     _has_functorch = True
 except ImportError:
-    from torchrl.modules.functional_modules import FunctionalModule, FunctionalModuleWithBuffers
+    from torchrl.modules.functional_modules import (
+        FunctionalModule,
+        FunctionalModuleWithBuffers,
+    )
+
     make_functional = FunctionalModule._create_from
     make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
 from torch import nn
@@ -529,7 +533,9 @@ class TestTDModule:
         elif safe and spec_type == "bounded":
             assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
 
-    @pytest.mark.skipif(not _has_functorch, reason="vmap can only be used with functorch")
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     def test_vmap(self, safe, spec_type):
@@ -606,7 +612,9 @@ class TestTDModule:
         elif safe and spec_type == "bounded":
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
-    @pytest.mark.skipif(not _has_functorch, reason="vmap can only be used with functorch")
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     def test_vmap_probabilistic(self, safe, spec_type):
@@ -696,7 +704,9 @@ class TestTDModule:
         elif safe and spec_type == "bounded":
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
-    @pytest.mark.skipif(not _has_functorch, reason="vmap can only be used with functorch")
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     def test_vmap_probabilistic_laterconstruct(self, safe, spec_type):
@@ -1381,7 +1391,9 @@ class TestTDSequence:
         elif safe and spec_type == "bounded":
             assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
 
-    @pytest.mark.skipif(not _has_functorch, reason="vmap can only be used with functorch")
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     def test_vmap(self, safe, spec_type):
@@ -1480,7 +1492,9 @@ class TestTDSequence:
         elif safe and spec_type == "bounded":
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
-    @pytest.mark.skipif(not _has_functorch, reason="vmap can only be used with functorch")
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     def test_vmap_probabilistic(self, safe, spec_type):
@@ -1689,7 +1703,13 @@ class TestTDSequence:
                 if _has_functorch:
                     params = params1 + params2 + params3
                 else:
-                    params = TensorDict({str(i): params for i, params in enumerate((params1, params2, params3))}, [])
+                    params = TensorDict(
+                        {
+                            str(i): params
+                            for i, params in enumerate((params1, params2, params3))
+                        },
+                        [],
+                    )
                 tdmodule(td, params=params)
             else:
                 tdmodule(td)
@@ -1707,7 +1727,13 @@ class TestTDSequence:
                 if _has_functorch:
                     params = params1 + params2 + params3
                 else:
-                    params = TensorDict({str(i): params for i, params in enumerate((params1, params2, params3))}, [])
+                    params = TensorDict(
+                        {
+                            str(i): params
+                            for i, params in enumerate((params1, params2, params3))
+                        },
+                        [],
+                    )
                 tdmodule(td, params=params)
             else:
                 tdmodule(td)
