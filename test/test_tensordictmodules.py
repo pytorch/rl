@@ -8,6 +8,7 @@ import argparse
 import pytest
 import torch
 
+from torchrl.data.tensordict.tensordict import TensorDictBase
 
 _has_functorch = False
 try:
@@ -981,7 +982,10 @@ class TestTDSequence:
         fnet1, params1 = make_functional(net1)
         fdummy_net, _ = make_functional(dummy_net)
         fnet2, params2 = make_functional(net2)
-        params = list(params1) + list(params2)
+        if isinstance(params1, TensorDictBase):
+            params = TensorDict({"0": params1, "1": params2}, [])
+        else:
+            params = list(params1) + list(params2)
 
         if spec_type is None:
             spec = None
@@ -1057,7 +1061,10 @@ class TestTDSequence:
         fnet2 = TensorDictModule(
             module=fnet2, in_keys=["hidden"], out_keys=["loc", "scale"]
         )
-        params = list(params1) + list(params2)
+        if isinstance(params1, TensorDictBase):
+            params = TensorDict({"0": params1, "1": params2}, [])
+        else:
+            params = list(params1) + list(params2)
 
         if spec_type is None:
             spec = None
@@ -1144,8 +1151,14 @@ class TestTDSequence:
         fdummy_net, _, _ = make_functional_with_buffers(dummy_net)
         fnet2, params2, buffers2 = make_functional_with_buffers(net2)
 
-        params = list(params1) + list(params2)
-        buffers = list(buffers1) + list(buffers2)
+        if isinstance(params1, TensorDictBase):
+            params = TensorDict({"0": params1, "1": params2}, [])
+        else:
+            params = list(params1) + list(params2)
+        if isinstance(buffers1, TensorDictBase):
+            buffers = TensorDict({"0": buffers1, "1": buffers2}, [])
+        else:
+            buffers = list(buffers1) + list(buffers2)
 
         if spec_type is None:
             spec = None
@@ -1229,8 +1242,14 @@ class TestTDSequence:
         net2 = TensorDictModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
         fnet2, (params2, buffers2) = net2.make_functional_with_buffers()
 
-        params = list(params1) + list(params2)
-        buffers = list(buffers1) + list(buffers2)
+        if isinstance(params1, TensorDictBase):
+            params = TensorDict({"0": params1, "1": params2}, [])
+        else:
+            params = list(params1) + list(params2)
+        if isinstance(buffers1, TensorDictBase):
+            buffers = TensorDict({"0": buffers1, "1": buffers2}, [])
+        else:
+            buffers = list(buffers1) + list(buffers2)
 
         if spec_type is None:
             spec = None
