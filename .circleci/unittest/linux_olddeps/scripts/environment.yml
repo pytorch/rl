@@ -23,3 +23,4 @@ dependencies:
     - scipy
     - hydra-core
     - dm_control==0.0.403778684
+    - mujoco-py
