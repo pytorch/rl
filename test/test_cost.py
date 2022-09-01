@@ -33,7 +33,7 @@ from torchrl.data import (
 from torchrl.data.postprocs.postprocs import MultiStep
 
 # from torchrl.data.postprocs.utils import expand_as_right
-from torchrl.data.tensordict.tensordict import assert_allclose_td
+from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDictBase
 from torchrl.data.utils import expand_as_right
 from torchrl.modules import DistributionalQValueActor, QValueActor, TensorDictModule
 from torchrl.modules.distributions.continuous import TanhNormal, NormalParamWrapper
@@ -1795,24 +1795,68 @@ def test_updater(mode, value_network_update_interval, device):
         upd = SoftUpdate(module, 1 - 1 / value_network_update_interval)
     upd.init_()
     for _, v in upd._targets.items():
-        for _v in v:
-            if _v.dtype is not torch.int64:
-                _v.copy_(torch.randn_like(_v))
-            else:
-                _v += 10
+        if isinstance(v, TensorDictBase):
+            for _v in v.values():
+                if _v.dtype is not torch.int64:
+                    _v.copy_(torch.randn_like(_v))
+                else:
+                    _v += 10
+        else:
+            for _v in v:
+                if _v.dtype is not torch.int64:
+                    _v.copy_(torch.randn_like(_v))
+                else:
+                    _v += 10
 
     # total dist
-    d0 = sum(
-        [
-            (target_val[0] - val[0]).norm().item()
-            for (_, target_val), (_, val) in zip(
-                upd._targets.items(), upd._sources.items()
-            )
-        ]
-    )
+    if _has_functorch:
+        d0 = sum(
+            [
+                (target_val[0] - val[0]).norm().item()
+                for (_, target_val), (_, val) in zip(
+                    upd._targets.items(), upd._sources.items()
+                )
+            ]
+        )
+    else:
+        d0 = 0.0
+        for (_, target_val), (_, val) in zip(
+            upd._targets.items(), upd._sources.items()
+        ):
+            for key in target_val.keys():
+                if target_val[key].dtype == torch.long:
+                    continue
+                d0 += (target_val[key] - val[key]).norm().item()
+
     assert d0 > 0
     if mode == "hard":
         for i in range(value_network_update_interval + 1):
+            # test that no update is occuring until value_network_update_interval
+            if _has_functorch:
+                d1 = sum(
+                    [
+                        (target_val[0] - val[0]).norm().item()
+                        for (_, target_val), (_, val) in zip(
+                            upd._targets.items(), upd._sources.items()
+                        )
+                    ]
+                )
+            else:
+                d1 = 0.0
+                for (_, target_val), (_, val) in zip(
+                    upd._targets.items(), upd._sources.items()
+                ):
+                    for key in target_val.keys():
+                        if target_val[key].dtype == torch.long:
+                            continue
+                        d1 += (target_val[key] - val[key]).norm().item()
+
+            assert d1 == d0, i
+            assert upd.counter == i
+            upd.step()
+        assert upd.counter == 0
+        # test that a new update has occured
+        if _has_functorch:
             d1 = sum(
                 [
                     (target_val[0] - val[0]).norm().item()
@@ -1821,23 +1865,43 @@ def test_updater(mode, value_network_update_interval, device):
                     )
                 ]
             )
-            assert d1 == d0, i
-            assert upd.counter == i
-            upd.step()
-        assert upd.counter == 0
-        d1 = sum(
-            [
-                (target_val[0] - val[0]).norm().item()
-                for (_, target_val), (_, val) in zip(
-                    upd._targets.items(), upd._sources.items()
-                )
-            ]
-        )
+        else:
+            d1 = 0.0
+            for (_, target_val), (_, val) in zip(
+                upd._targets.items(), upd._sources.items()
+            ):
+                for key in target_val.keys():
+                    if target_val[key].dtype == torch.long:
+                        continue
+                    d1 += (target_val[key] - val[key]).norm().item()
         assert d1 < d0
 
     elif mode == "soft":
         upd.step()
-        d1 = sum(
+        if _has_functorch:
+            d1 = sum(
+                [
+                    (target_val[0] - val[0]).norm().item()
+                    for (_, target_val), (_, val) in zip(
+                        upd._targets.items(), upd._sources.items()
+                    )
+                ]
+            )
+        else:
+            d1 = 0.0
+            for (_, target_val), (_, val) in zip(
+                upd._targets.items(), upd._sources.items()
+            ):
+                for key in target_val.keys():
+                    if target_val[key].dtype == torch.long:
+                        continue
+                    d1 += (target_val[key] - val[key]).norm().item()
+        assert d1 < d0
+
+    upd.init_()
+    upd.step()
+    if _has_functorch:
+        d2 = sum(
             [
                 (target_val[0] - val[0]).norm().item()
                 for (_, target_val), (_, val) in zip(
@@ -1845,18 +1909,15 @@ def test_updater(mode, value_network_update_interval, device):
                 )
             ]
         )
-        assert d1 < d0
-
-    upd.init_()
-    upd.step()
-    d2 = sum(
-        [
-            (target_val[0] - val[0]).norm().item()
-            for (_, target_val), (_, val) in zip(
-                upd._targets.items(), upd._sources.items()
-            )
-        ]
-    )
+    else:
+        d2 = 0.0
+        for (_, target_val), (_, val) in zip(
+            upd._targets.items(), upd._sources.items()
+        ):
+            for key in target_val.keys():
+                if target_val[key].dtype == torch.long:
+                    continue
+                d2 += (target_val[key] - val[key]).norm().item()
     assert d2 < 1e-6
 
 
@@ -1950,6 +2011,7 @@ def test_custom_conv1d_tensor(device, gamma, N, T):
     torch.testing.assert_close(out, out_custom, rtol=1e-4, atol=1e-4)
 
 
+@pytest.mark.skipif(not _has_functorch, reason="no vmap allowed without functorch")
 @pytest.mark.parametrize(
     "dest,expected_dtype,expected_device",
     list(

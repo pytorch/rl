@@ -15,6 +15,7 @@ from typing import (
     Sequence,
     Union,
 )
+from warnings import warn
 
 import torch
 
@@ -236,8 +237,10 @@ class TensorDictModule(nn.Module):
         if not _has_functorch:
             return isinstance(
                 self.module,
-                (functional_modules.FunctionalModule,
-                 functional_modules.FunctionalModuleWithBuffers),
+                (
+                    functional_modules.FunctionalModule,
+                    functional_modules.FunctionalModuleWithBuffers,
+                ),
             )
         return isinstance(
             self.module,
@@ -452,7 +455,7 @@ class TensorDictModule(nn.Module):
         """
         if not _has_functorch:
             make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
-            print(
+            warn(
                 "using torchrl's functional modules. This is an experimental feature "
                 "with no working guarantee."
             )
