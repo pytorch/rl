@@ -1544,15 +1544,15 @@ class TestPPO:
         if advantage == "gae":
             advantage = GAE(
                 gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
-            ).to(device)
+            )
         elif advantage == "td":
             advantage = TDEstimate(
                 gamma=0.9, value_network=value, gradient_mode=gradient_mode
-            ).to(device)
+            )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimate(
                 gamma=0.9, lmbda=0.9, value_network=value, gradient_mode=gradient_mode
-            ).to(device)
+            )
         else:
             raise NotImplementedError
 
@@ -1561,6 +1561,9 @@ class TestPPO:
         )
 
         floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
+        print(params)
+        print(buffers)
+        print(td)
 
         loss = floss_fn(params, buffers, td)
         loss_critic = loss["loss_critic"]
