@@ -85,7 +85,8 @@ fi
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
-yum -y install unar
-wget http://www.atarimania.com/roms/Roms.rar
-unrar Roms.rar
+wget https://www.rarlab.com/rar/rarlinux-x64-5.7.1.tar.gz
+tar -xzvf rarlinux-x64-5.7.1.tar.gz
+mdkir Roms
+./rar/unrar e Roms.rar ./Roms -y
 python -m atari_py.import_roms Roms
