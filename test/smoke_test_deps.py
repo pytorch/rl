@@ -14,8 +14,8 @@ from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 
 if _has_gym:
-    from packaging import version
     import gym
+    from packaging import version
 
     gym_version = version.parse(gym.__version__)
     PONG_VERSIONED = (

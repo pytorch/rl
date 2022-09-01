@@ -8,6 +8,7 @@ from numbers import Number
 import pytest
 import torch
 from _utils_internal import get_available_devices
+from packaging import version
 from torch import nn
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
@@ -317,11 +318,14 @@ class TestFunctionalModules:
         x = torch.randn(10, 3)
         assert (fmodule(params, buffers, x) == module(x)).all()
 
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("1.12.0"),
+        reason="breaks with previous torch versions",
+    )
     def test_func_transformer(self):
         module = nn.Transformer(128)
         module.eval()
         fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
-        print(params, buffers)
         x = torch.randn(10, 128)
         torch.testing.assert_close(fmodule(params, buffers, x, x), module(x, x))
 
