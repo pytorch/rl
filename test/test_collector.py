@@ -32,8 +32,8 @@ from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
 
 if _has_gym:
-    from packaging import version
     import gym
+    from packaging import version
 
     gym_version = version.parse(gym.__version__)
     PENDULUM_VERSIONED = (

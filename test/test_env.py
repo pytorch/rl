@@ -46,8 +46,8 @@ from torchrl.modules import (
 )
 
 if _has_gym:
-    from packaging import version
     import gym
+    from packaging import version
 
     gym_version = version.parse(gym.__version__)
     PENDULUM_VERSIONED = (

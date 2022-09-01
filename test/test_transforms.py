@@ -45,8 +45,8 @@ from torchrl.envs.transforms.transforms import (
 )
 
 if _has_gym:
-    from packaging import version
     import gym
+    from packaging import version
 
     gym_version = version.parse(gym.__version__)
     PENDULUM_VERSIONED = (
@@ -186,7 +186,9 @@ def _run_parallelenv(parallel_env, queue_in, queue_out):
 
 def test_parallelenv_vecnorm():
     if _has_gym:
-        make_env = EnvCreator(lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED), VecNorm()))
+        make_env = EnvCreator(
+            lambda: TransformedEnv(GymEnv(PENDULUM_VERSIONED), VecNorm())
+        )
         env_input_keys = None
     else:
         make_env = EnvCreator(
@@ -235,7 +237,9 @@ def test_vecnorm(parallel, thr=0.2, N=200):  # 10000):
     if parallel is None:
         env = GymEnv(PENDULUM_VERSIONED)
     elif parallel:
-        env = ParallelEnv(num_workers=5, create_env_fn=lambda: GymEnv(PENDULUM_VERSIONED))
+        env = ParallelEnv(
+            num_workers=5, create_env_fn=lambda: GymEnv(PENDULUM_VERSIONED)
+        )
     else:
         env = SerialEnv(num_workers=5, create_env_fn=lambda: GymEnv(PENDULUM_VERSIONED))
 
