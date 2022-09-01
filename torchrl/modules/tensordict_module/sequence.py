@@ -283,8 +283,8 @@ class TensorDictSequence(TensorDictModule):
             params = kwargs["params"]
             buffers = kwargs["buffers"]
             if isinstance(params, TensorDictBase):
-                param_splits = list(zip(*sorted(list(params.items()))))[0]
-                buffer_splits = list(zip(*sorted(list(buffers.items()))))[0]
+                param_splits = list(zip(*sorted(list(params.items()))))[1]
+                buffer_splits = list(zip(*sorted(list(buffers.items()))))[1]
             else:
                 param_splits = self._split_param(kwargs["params"], "params")
                 buffer_splits = self._split_param(kwargs["buffers"], "buffers")
@@ -306,7 +306,7 @@ class TensorDictSequence(TensorDictModule):
         elif "params" in kwargs:
             params = kwargs["params"]
             if isinstance(params, TensorDictBase):
-                param_splits = list(zip(*sorted(list(params.items()))))[0]
+                param_splits = list(zip(*sorted(list(params.items()))))[1]
             else:
                 param_splits = self._split_param(kwargs["params"], "params")
             kwargs_pruned = {
