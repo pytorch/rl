@@ -69,9 +69,11 @@ class _MockEnv(EnvBase):
     def maxstep(self):
         return 100
 
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed=False) -> int:
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
+        if static_seed:
+            return seed
         return seed_generator(seed)
 
     def custom_fun(self):
@@ -96,11 +98,13 @@ class MockSerialEnv(EnvBase):
         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
         self.is_closed = False
 
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         assert seed >= 1
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
         self.max_val = max(self.counter + 100, self.counter * 2)
+        if static_seed:
+            return seed
         return seed_generator(seed)
 
     def _step(self, tensordict):

@@ -212,7 +212,7 @@ class Trainer:
         return self
 
     def set_seed(self):
-        seed = self.collector.set_seed(self.seed)
+        seed = self.collector.set_seed(self.seed, static_seed=False)
         torch.manual_seed(seed)
         np.random.seed(seed)
 
