@@ -1413,6 +1413,7 @@ class CatTensors(Transform):
         out_key: str = "observation_vector",
         dim: int = -1,
         del_keys: bool = True,
+        unsqueeze_if_oor: bool = False,
     ):
         if keys_in is None:
             raise Exception("CatTensors requires keys to be non-empty")
@@ -1438,12 +1439,24 @@ class CatTensors(Transform):
             )
         self.dim = dim
         self.del_keys = del_keys
+        self.unsqueeze_if_oor = unsqueeze_if_oor
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if all([key in tensordict.keys() for key in self.keys_in]):
-            out_tensor = torch.cat(
-                [tensordict.get(key) for key in self.keys_in], dim=self.dim
-            )
+            values = [tensordict.get(key) for key in self.keys_in]
+            if self.unsqueeze_if_oor:
+                pos_idx = self.dim > 0
+                abs_idx = self.dim if pos_idx else -self.dim - 1
+                values = [
+                    v
+                    if abs_idx < v.ndimension()
+                    else v.unsqueeze(0)
+                    if not pos_idx
+                    else v.unsqueeze(-1)
+                    for v in values
+                ]
+
+            out_tensor = torch.cat(values, dim=self.dim)
             tensordict.set(self.keys_out[0], out_tensor)
             if self.del_keys:
                 tensordict.exclude(*self.keys_in, inplace=True)
