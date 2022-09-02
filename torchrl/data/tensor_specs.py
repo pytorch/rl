@@ -321,7 +321,8 @@ class TensorSpec:
         if not self.is_in(value):
             raise AssertionError(
                 f"Encoding failed because value is not in space. "
-                f"Consider calling project(val) first. value was = {value}"
+                f"Consider calling project(val) first. value was = {value} "
+                f"and spec was {self}."
             )
 
     def type_check(self, value: torch.Tensor, key: str = None) -> None:

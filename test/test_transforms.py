@@ -1032,7 +1032,7 @@ class TestTransforms:
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("model", ["resnet18", "resnet34", "resnet50"])
 class TestR3M:
-    @pytest.mark.parametrize("tensor_pixels_key", [None, "funny_key"])
+    @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
     def test_r3m_instantiation(self, model, tensor_pixels_key, device):
         keys_in = ["next_pixels"]
         keys_out = ["next_vec"]
@@ -1040,21 +1040,56 @@ class TestR3M:
             model,
             keys_in=keys_in,
             keys_out=keys_out,
-            tensor_pixels_key=tensor_pixels_key,
+            tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
         transformed_env = TransformedEnv(base_env, r3m)
         td = transformed_env.reset()
         assert td.device == device
-        exp_keys = {"vec", "done", "pixels", "pixels_orig"}
+        exp_keys = {"vec", "done", "pixels_orig"}
         if tensor_pixels_key:
-            exp_keys.add(tensor_pixels_key)
-        assert set(td.keys()) == exp_keys
+            exp_keys.add(tensor_pixels_key[0])
+        assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
 
         td = transformed_env.rand_step(td)
-        exp_keys = exp_keys.union(
-            {"next_vec", "next_pixels", "next_pixels_orig", "action", "reward"}
+        exp_keys = exp_keys.union({"next_vec", "next_pixels_orig", "action", "reward"})
+        assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
+
+    @pytest.mark.parametrize("stack_images", [True, False])
+    def test_r3m_mult_images(self, model, device, stack_images):
+        keys_in = ["next_pixels", "next_pixels2"]
+        keys_out = ["next_vec"] if stack_images else ["next_vec", "next_vec2"]
+        r3m = R3MTransform(
+            model,
+            keys_in=keys_in,
+            keys_out=keys_out,
+            stack_images=stack_images,
         )
+        base_env = TransformedEnv(
+            DiscreteActionConvMockEnvNumpy().to(device),
+            CatTensors(["next_pixels"], "next_pixels2", del_keys=False),
+        )
+
+        transformed_env = TransformedEnv(base_env, r3m)
+        td = transformed_env.reset()
+        assert td.device == device
+        if stack_images:
+            exp_keys = {"pixels_orig", "done", "vec"}
+            assert td["vec"].shape[0] == 2
+            assert td["vec"].ndimension() == 2
+            assert set(td.keys()) == exp_keys
+        else:
+            exp_keys = {"pixels_orig", "done", "vec", "vec2"}
+            assert td["vec"].shape[0] != 2
+            assert td["vec"].ndimension() == 1
+            assert td["vec2"].shape[0] != 2
+            assert td["vec2"].ndimension() == 1
+            assert set(td.keys()) == exp_keys
+
+        td = transformed_env.rand_step(td)
+        exp_keys = exp_keys.union({"next_vec", "next_pixels_orig", "action", "reward"})
+        if not stack_images:
+            exp_keys = exp_keys.union({"next_vec2"})
         assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
 
     def test_r3m_parallel(self, model, device):
@@ -1065,22 +1100,20 @@ class TestR3M:
             model,
             keys_in=keys_in,
             keys_out=keys_out,
-            tensor_pixels_key=tensor_pixels_key,
+            tensor_pixels_keys=tensor_pixels_key,
         )
         base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
         transformed_env = TransformedEnv(base_env, r3m)
         td = transformed_env.reset()
         assert td.device == device
         assert td.batch_size == torch.Size([4])
-        exp_keys = {"vec", "done", "pixels", "pixels_orig"}
+        exp_keys = {"vec", "done", "pixels_orig"}
         if tensor_pixels_key:
             exp_keys.add(tensor_pixels_key)
         assert set(td.keys()) == exp_keys
 
         td = transformed_env.rand_step(td)
-        exp_keys = exp_keys.union(
-            {"next_vec", "next_pixels", "next_pixels_orig", "action", "reward"}
-        )
+        exp_keys = exp_keys.union({"next_vec", "next_pixels_orig", "action", "reward"})
         assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
         transformed_env.close()
         del transformed_env
