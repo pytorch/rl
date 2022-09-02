@@ -5,7 +5,7 @@
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import Callable, Optional, Union, Any
+from typing import Callable, Optional, Union, Any, Sequence
 
 import torch
 
