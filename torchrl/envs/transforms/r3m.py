@@ -119,8 +119,8 @@ class R3MTransform(Compose):
             Defaults to False.
         download_path (str, optional): path where to download the models.
             Default is None (cache path determined by torch.hub utils).
-        tensor_pixels_key (list of str, optional): Optionally, one can keep the
-            intermediate image transform (after normalization) in the output tensordict.
+        tensor_pixels_keys (list of str, optional): Optionally, one can keep the
+            original images (as collected from the env) in the output tensordict.
             If no value is provided, this won't be collected.
     """
 
@@ -133,27 +133,43 @@ class R3MTransform(Compose):
         stack_images: bool = True,
         download: bool = False,
         download_path: Optional[str] = None,
-        tensor_pixels_key: List[str] = None,
+        tensor_pixels_keys: List[str] = None,
     ):
         self.download = download
         self.download_path = download_path
         # ToTensor
-        if tensor_pixels_key is None:
-            tensor_pixels_key = keys_in
+        transforms = []
+        if tensor_pixels_keys:
+            for i in range(len(keys_in)):
+                transforms.append(
+                    CatTensors(
+                        keys_in=[keys_in[i]],
+                        out_key=tensor_pixels_keys[i],
+                        del_keys=False,
+                    )
+                )
+
         totensor = ToTensorImage(
-            unsqueeze=False, keys_in=keys_in, keys_out=tensor_pixels_key
+            unsqueeze=False,
+            keys_in=keys_in,
         )
+        transforms.append(totensor)
+
         # Normalize
         mean = [0.485, 0.456, 0.406]
         std = [0.229, 0.224, 0.225]
         normalize = ObservationNorm(
-            keys_in=tensor_pixels_key,
+            keys_in=keys_in,
             loc=torch.tensor(mean).view(3, 1, 1),
             scale=torch.tensor(std).view(3, 1, 1),
             standard_normal=True,
         )
+        transforms.append(normalize)
+
         # Resize: note that resize is a no-op if the tensor has the desired size already
-        resize = Resize(size, size, keys_in=tensor_pixels_key)
+        resize = Resize(size, size, keys_in=keys_in)
+        transforms.append(resize)
+
         # R3M
         if keys_out is None:
             if stack_images:
@@ -169,7 +185,7 @@ class R3MTransform(Compose):
 
         if stack_images:
             cattensors = CatTensors(
-                tensor_pixels_key,
+                keys_in,
                 keys_out[0],
                 dim=-4,
                 unsqueeze_if_oor=True,
@@ -180,15 +196,15 @@ class R3MTransform(Compose):
                 model_name=model_name,
                 del_keys=False,
             )
-            transforms = [totensor, resize, normalize, cattensors, network]
+            transforms = [*transforms, cattensors, network]
         else:
             network = _R3MNet(
-                in_keys=tensor_pixels_key,
+                in_keys=keys_in,
                 out_keys=keys_out,
                 model_name=model_name,
                 del_keys=True,
             )
-            transforms = [totensor, resize, normalize, network]
+            transforms = [*transforms, normalize, network]
 
         super().__init__(*transforms)
         if self.download:

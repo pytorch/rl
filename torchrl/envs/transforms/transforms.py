@@ -1393,6 +1393,10 @@ class CatTensors(Transform):
             Default is -1.
         del_keys (bool, optional): if True, the input values will be deleted after
             concatenation. Default is True.
+        unsqueeze_if_oor (bool, optional): if True, CatTensor will check that
+            the dimension indicated exist for the tensors to concatenate. If not,
+            the tensors will be unsqueezed along that dimension.
+            Default is False.
 
     Examples:
         >>> transform = CatTensors(keys_in=["key1", "key2"])
@@ -1401,6 +1405,12 @@ class CatTensors(Transform):
         >>> _ = transform(td)
         >>> print(td.get("observation_vector"))
         tensor([[0., 1.]])
+        >>> transform = CatTensors(keys_in=["key1", "key2"], dim=-2, unsqueeze_if_oor=True)
+        >>> td = TensorDict({"key1": torch.zeros(1),
+        ...     "key2": torch.ones(1)}, [])
+        >>> _ = transform(td)
+        >>> print(td.get("observation_vector").shape)
+        torch.Size([2, 1])
 
     """
 
