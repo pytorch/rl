@@ -12,6 +12,7 @@ from torchrl.envs.transforms import (
     Resize,
     Transform,
     CatTensors,
+    FlattenObservation,
 )
 
 try:
@@ -196,7 +197,8 @@ class R3MTransform(Compose):
                 model_name=model_name,
                 del_keys=False,
             )
-            transforms = [*transforms, cattensors, network]
+            flatten = FlattenObservation(-2, -1, keys_out)
+            transforms = [*transforms, cattensors, network, flatten]
         else:
             network = _R3MNet(
                 in_keys=keys_in,
