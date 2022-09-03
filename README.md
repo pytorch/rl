@@ -33,7 +33,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     <details>
       <summary>Code</summary>
     
-    ```python
+    ```diff
     - obs, done = env.reset()
     + tensordict = env.reset()
     policy = TensorDictModule(
