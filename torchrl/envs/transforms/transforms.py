@@ -50,6 +50,7 @@ __all__ = [
     "ToTensorImage",
     "ObservationNorm",
     "FlattenObservation",
+    "UnsqueezeTransform",
     "RewardScaling",
     "ObservationTransform",
     "CatFrames",
@@ -1025,6 +1026,79 @@ class FlattenObservation(ObservationTransform):
             f"{self.__class__.__name__}("
             f"first_dim={int(self.first_dim)}, last_dim={int(self.last_dim)})"
         )
+
+
+class UnsqueezeTransform(Transform):
+    """Flatten adjacent dimensions of a tensor.
+
+    Args:
+        unsqueeze_dim (int): dimension to unsqueeze.
+    """
+
+    inplace = False
+
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._unsqueeze_dim = None
+        return super().__new__(cls)
+
+    def __init__(
+        self,
+        unsqueeze_dim: int,
+        keys_in: Optional[Sequence[str]] = None,
+        keys_out: Optional[Sequence[str]] = None,
+    ):
+        if not _has_tv:
+            raise ImportError(
+                "Torchvision not found. The Resize transform relies on "
+                "torchvision implementation. "
+                "Consider installing this dependency."
+            )
+        if keys_in is None:
+            keys_in = IMAGE_KEYS  # default
+        super().__init__(keys_in=keys_in, keys_out=keys_out)
+        self._unsqueeze_dim_orig = unsqueeze_dim
+
+    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
+        if self._unsqueeze_dim_orig < 0:
+            self._unsqueeze_dim = self._unsqueeze_dim_orig
+        else:
+            parent = self.parent
+            batch_size = parent.batch_size
+            self._unsqueeze_dim = self._unsqueeze_dim_orig + len(batch_size)
+        return super().set_parent(parent)
+
+    @property
+    def unsqueeze_dim(self):
+        if self._unsqueeze_dim is None:
+            return self._unsqueeze_dim_orig
+        return self._unsqueeze_dim
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._unsqueeze_dim_orig >= 0:
+            self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
+        return super().forward(tensordict)
+
+    def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        observation = observation.unsqueeze(self.unsqueeze_dim)
+        return observation
+
+    @_apply_to_composite
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        self._unsqueeze_dim = self._unsqueeze_dim_orig
+        space = observation_spec.space
+        if isinstance(space, ContinuousBox):
+            space.minimum = self._apply_transform(space.minimum)
+            space.maximum = self._apply_transform(space.maximum)
+            observation_spec.shape = space.minimum.shape
+        else:
+            observation_spec.shape = self._apply_transform(
+                torch.zeros(observation_spec.shape)
+            ).shape
+        return observation_spec
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(unsqueeze_dim={int(self.unsqueeze_dim)})"
 
 
 class GrayScale(ObservationTransform):

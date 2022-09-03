@@ -13,6 +13,7 @@ from torchrl.envs.transforms import (
     Transform,
     CatTensors,
     FlattenObservation,
+    UnsqueezeTransform,
 )
 
 try:
@@ -97,6 +98,15 @@ class _R3MNet(Transform):
         self._load_weights(self.model_name, self, dir_prefix)
 
 
+def _init_first(fun):
+    def new_fun(self, *args, **kwargs):
+        if not self.initialized:
+            self._init()
+        return fun(self, *args, **kwargs)
+
+    return new_fun
+
+
 class R3MTransform(Compose):
     """R3M Transform class.
 
@@ -125,6 +135,12 @@ class R3MTransform(Compose):
             If no value is provided, this won't be collected.
     """
 
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._is_3d = None
+        cls.initialized = False
+        return super().__new__(cls)
+
     def __init__(
         self,
         model_name: str,
@@ -136,8 +152,24 @@ class R3MTransform(Compose):
         download_path: Optional[str] = None,
         tensor_pixels_keys: List[str] = None,
     ):
+        super().__init__()
+        self.keys_in = keys_in
         self.download = download
         self.download_path = download_path
+        self.model_name = model_name
+        self.keys_out = keys_out
+        self.size = size
+        self.stack_images = stack_images
+        self.tensor_pixels_keys = tensor_pixels_keys
+
+    def _init(self):
+        keys_in = self.keys_in
+        model_name = self.model_name
+        keys_out = self.keys_out
+        size = self.size
+        stack_images = self.stack_images
+        tensor_pixels_keys = self.tensor_pixels_keys
+
         # ToTensor
         transforms = []
         if tensor_pixels_keys:
@@ -178,18 +210,27 @@ class R3MTransform(Compose):
             else:
                 keys_out = [f"next_r3m_vec_{i}" for i in range(len(keys_in))]
         elif stack_images and len(keys_out) != 1:
-            raise ValueError("key_out must be of length 1 if stack_images is True.")
+            raise ValueError(
+                f"key_out must be of length 1 if stack_images is True. Got keys_out={keys_out}"
+            )
         elif not stack_images and len(keys_out) != len(keys_in):
             raise ValueError(
                 "key_out must be of length equal to keys_in if stack_images is False."
             )
 
-        if stack_images:
+        if stack_images and len(keys_in) > 1:
+            if self.is_3d:
+                unsqueeze = UnsqueezeTransform(
+                    keys_in=keys_in,
+                    keys_out=keys_in,
+                    unsqueeze_dim=-4,
+                )
+                transforms.append(unsqueeze)
+
             cattensors = CatTensors(
                 keys_in,
                 keys_out[0],
                 dim=-4,
-                unsqueeze_if_oor=True,
             )
             network = _R3MNet(
                 in_keys=keys_out,
@@ -208,6 +249,25 @@ class R3MTransform(Compose):
             )
             transforms = [*transforms, normalize, network]
 
-        super().__init__(*transforms)
+        for transform in transforms:
+            self.append(transform)
         if self.download:
             self[-1].load_weights(dir_prefix=self.download_path)
+        self.initialized = True
+
+    @property
+    def is_3d(self):
+        if self._is_3d is None:
+            parent = self.parent
+            for key in parent.observation_spec.keys():
+                self._is_3d = len(parent.observation_spec[key].shape) == 3
+                break
+        return self._is_3d
+
+    forward = _init_first(Compose.forward)
+    transform_action_spec = _init_first(Compose.transform_action_spec)
+    transform_observation_spec = _init_first(Compose.transform_observation_spec)
+    transform_input_spec = _init_first(Compose.transform_input_spec)
+    transform_reward_spec = _init_first(Compose.transform_reward_spec)
+    reset = _init_first(Compose.reset)
+    init = _init_first(Compose.init)
