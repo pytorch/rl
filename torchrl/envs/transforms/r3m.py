@@ -139,6 +139,8 @@ class R3MTransform(Compose):
     def __new__(cls, *args, **kwargs):
         cls._is_3d = None
         cls.initialized = False
+        cls._device = None
+        cls._dtype = None
         return super().__new__(cls)
 
     def __init__(
@@ -255,6 +257,11 @@ class R3MTransform(Compose):
             self[-1].load_weights(dir_prefix=self.download_path)
         self.initialized = True
 
+        if self._device is not None:
+            self.to(self._device)
+        if self._dtype is not None:
+            self.to(self._dtype)
+
     @property
     def is_3d(self):
         if self._is_3d is None:
@@ -263,6 +270,13 @@ class R3MTransform(Compose):
                 self._is_3d = len(parent.observation_spec[key].shape) == 3
                 break
         return self._is_3d
+
+    def to(self, dest: Union[DEVICE_TYPING, torch.dtype]):
+        if isinstance(dest, torch.dtype):
+            self._dtype = dest
+        else:
+            self._device = dest
+        return super().to(dest)
 
     forward = _init_first(Compose.forward)
     transform_action_spec = _init_first(Compose.transform_action_spec)

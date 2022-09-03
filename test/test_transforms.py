@@ -1108,12 +1108,17 @@ class TestR3M:
             DiscreteActionConvMockEnvNumpy().to(device),
             CatTensors(["next_pixels"], "next_pixels2", del_keys=False),
         )
+        assert base_env_constructor().device == device
         if parallel:
             base_env = ParallelEnv(3, base_env_constructor)
         else:
             base_env = base_env_constructor()
+        assert base_env.device == device
 
         transformed_env = TransformedEnv(base_env, r3m)
+        assert transformed_env.device == device
+        assert r3m.device == device
+
         td = transformed_env.reset()
         assert td.device == device
         if stack_images:

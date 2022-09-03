@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 from copy import deepcopy, copy
+from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Union
 from warnings import warn
 
@@ -672,8 +673,10 @@ class Compose(Transform):
         return len(self.transforms)
 
     def __repr__(self) -> str:
-        layers_str = ", \n\t".join([str(trsf) for trsf in self.transforms])
-        return f"{self.__class__.__name__}(\n\t{layers_str})"
+        layers_str = ",\n".join(
+            [indent(str(trsf), 4 * " ") for trsf in self.transforms]
+        )
+        return f"{self.__class__.__name__}(\n{indent(layers_str, 4 * ' ')})"
 
 
 class ToTensorImage(ObservationTransform):
