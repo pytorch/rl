@@ -34,7 +34,8 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
       <summary>Code</summary>
     
     ```python
-    tensordict = env.reset()
+    - obs, done = env.reset()
+    + tensordict = env.reset()
     policy = TensorDictModule(
         model, 
         in_keys=["observation_pixels", "observation_vector"],
@@ -42,11 +43,16 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     )
     out = []
     for i in range(n_steps):
-        tensordict = policy(tensordict)
-        tensordict = env.step(tensordict)
-        out.append(tensordict)
-        tensordict = step_tensordict(tensordict)  # renames next_observation_* keys to observation_*
-    out = torch.stack(out, 0)  # TensorDict supports multiple tensor operations
+    -     action, log_prob = policy(obs)
+    -     next_obs, reward, done, info = env.step(action)
+    -     out.append((obs, next_obs, action, log_prob, reward, done))
+    -     obs = next_obs
+    +     tensordict = policy(tensordict)
+    +     tensordict = env.step(tensordict)
+    +     out.append(tensordict)
+    +     tensordict = step_tensordict(tensordict)  # renames next_observation_* keys to observation_*
+    - obs, next_obs, action, log_prob, reward, done = [torch.stack(vals, 0) for vals in zip(*out)]
+    + out = torch.stack(out, 0)  # TensorDict supports multiple tensor operations
     ```
     </details>
 
