@@ -318,7 +318,7 @@ Before installing anything, make sure you have the latest version of the `ninja`
 ```
 conda create --name torch_rl python=3.9
 conda activate torch_rl
-pip install ninja
+pip3 install ninja
 ```
 
 Depending on the use of functorch that you want to make, you may want to install the latest (nightly) pytorch release or the latest stable version of pytorch:
@@ -333,7 +333,7 @@ conda install pytorch torchvision cudatoolkit=11.3 -c pytorch
 # For CPU-only build
 conda install pytorch torchvision cpuonly -c pytorch
 
-pip install functorch
+pip3 install functorch
 ```
 
 **Nightly**
@@ -349,7 +349,7 @@ pip3 install --pre torch torchvision --extra-index-url https://download.pytorch.
 and functorch
 ```
 pip3 install ninja  # Makes the build go faster
-pip install "git+https://github.com/pytorch/functorch.git"
+pip3 install "git+https://github.com/pytorch/functorch.git"
 ```
 
 If this fails, you can get the latest version of functorch that was marked to be 
@@ -357,28 +357,28 @@ compatible with the current torch version:
 ```bash
 pip3 install ninja  # Makes the build go faster
 PYTORCH_VERSION=`python -c "import torch.version; print(torch.version.git_version)"`
-pip install "git+https://github.com/pytorch/pytorch.git@$PYTORCH_VERSION#subdirectory=functorch"
+pip3 install "git+https://github.com/pytorch/pytorch.git@$PYTORCH_VERSION#subdirectory=functorch"
 ```
 
 If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message 
 `(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
 
 ```
-ARCHFLAGS="-arch arm64" pip install "git+https://github.com/pytorch/functorch.git"
+ARCHFLAGS="-arch arm64" pip3 install "git+https://github.com/pytorch/functorch.git"
 ```
 
 **Torchrl**
 
 You can install the latest release by using
 ```
-pip install torchrl
+pip3 install torchrl
 ```
 This should work on linux and MacOs (not M1). For Windows and M1/M2 machines, one 
 should install the library locally (see below).
 
 To install extra dependencies, call
 ```
-pip install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils]"
+pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils]"
 ```
 or a subset of these.
 
@@ -416,19 +416,19 @@ The following libraries can be installed depending on the usage one wants to
 make of torchrl:
 ```
 # diverse
-pip install tqdm tensorboard "hydra-core>=1.1" hydra-submitit-launcher
+pip3 install tqdm tensorboard "hydra-core>=1.1" hydra-submitit-launcher
 
 # rendering
-pip install moviepy
+pip3 install moviepy
 
 # deepmind control suite
-pip install dm_control 
+pip3 install dm_control 
 
 # gym, atari games
-pip install gym "gym[accept-rom-license]" pygame gym_retro
+pip3 install gym "gym[accept-rom-license]" pygame gym_retro
 
 # tests
-pip install pytest pyyaml pytest-instafail
+pip3 install pytest pyyaml pytest-instafail
 ```
 
 **Troubleshooting**
