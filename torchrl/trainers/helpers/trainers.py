@@ -86,7 +86,7 @@ def make_trainer(
     ] = None,
     replay_buffer: Optional[ReplayBuffer] = None,
     logger: Optional[Logger] = None,
-    cfg: "DictConfig" = None,
+    cfg: "DictConfig" = None,  # noqa: F821
 ) -> Trainer:
     """Creates a Trainer instance given its constituents.
 

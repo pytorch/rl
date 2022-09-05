@@ -339,7 +339,7 @@ class ConvNet(nn.Sequential):
         self,
         in_features: Optional[int] = None,
         depth: Optional[int] = None,
-        num_cells: Union[Sequence, int] = [32, 32, 32],
+        num_cells: Union[Sequence, int] = None,
         kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 3,
         strides: Union[Sequence, int] = 1,
         paddings: Union[Sequence, int] = 0,
@@ -353,6 +353,8 @@ class ConvNet(nn.Sequential):
         squeeze_output: bool = False,
         device: DEVICE_TYPING = "cpu",
     ):
+        if num_cells is None:
+            num_cells = [32, 32, 32]
 
         self.in_features = in_features
         self.activation_class = activation_class

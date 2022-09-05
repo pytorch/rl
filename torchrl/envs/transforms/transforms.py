@@ -1859,10 +1859,12 @@ class VecNorm(Transform):
         self,
         keys_in: Optional[Sequence[str]] = None,
         shared_td: Optional[TensorDictBase] = None,
-        lock: mp.Lock = (mp.Lock()),
+        lock: mp.Lock = None,
         decay: float = 0.9999,
         eps: float = 1e-4,
     ) -> None:
+        if lock is None:
+            lock = mp.Lock()
         if keys_in is None:
             keys_in = ["next_observation", "reward"]
         super().__init__(keys_in)

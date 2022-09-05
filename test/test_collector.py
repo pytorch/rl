@@ -478,7 +478,7 @@ def test_collector_vecnorm_envcreator(static_seed):
         assert new_seed != init_seed
 
     seed = init_seed
-    for i in range(num_envs * num_data_collectors):
+    for _ in range(num_envs * num_data_collectors):
         seed = seed_generator(seed)
     if not static_seed:
         assert new_seed == seed
@@ -572,7 +572,10 @@ def test_update_weights(use_async):
 def test_excluded_keys(collector_class, exclude):
     if not exclude and collector_class is not SyncDataCollector:
         pytest.skip("defining _exclude_private_keys is not possible")
-    make_env = lambda: ContinuousActionVecMockEnv()
+
+    def make_env():
+        return ContinuousActionVecMockEnv()
+
     dummy_env = make_env()
     obs_spec = dummy_env.observation_spec["next_observation"]
     policy_module = nn.Linear(obs_spec.shape[-1], dummy_env.action_spec.shape[-1])
