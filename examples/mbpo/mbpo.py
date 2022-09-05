@@ -331,7 +331,7 @@ def main(cfg: "DictConfig"):
 
                     per_network_world_model_loss_train = world_model_train_losses[
                         "per_network_world_model_loss"
-                    ].sum(dim=0) / (num_model_train_steps * cfg.model_batch_size)
+                    ].mean(dim=0)
 
                     if j == 0:
                         logger.log_scalar(
@@ -373,7 +373,7 @@ def main(cfg: "DictConfig"):
                         ].mean()
                         per_network_world_model_loss_test = world_model_test_losses[
                             "per_network_world_model_loss"
-                        ].sum(dim=0) / (num_model_test_steps * cfg.model_batch_size)
+                        ].mean(dim=0)
 
                         if j == 0:
                             logger.log_scalar(
