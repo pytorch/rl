@@ -7,7 +7,7 @@ import torch
 
 from ..tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from .replay_buffers import pin_memory_output, stack_tensors, stack_td
-from .samplers import Sampler, RandomSampler, WithandWithoutReplacementRandomSampler
+from .samplers import Sampler, RandomSampler
 from .storages import Storage, ListStorage
 from .utils import INT_CLASSES, to_numpy
 from .writers import Writer, RoundRobinWriter
@@ -41,9 +41,18 @@ class ReplayBuffer:
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
     ) -> None:
-        self._storage = storage or ListStorage(max_size=1_000)
-        self._sampler = sampler or RandomSampler()
-        self._writer = writer or RoundRobinWriter()
+        if storage is None:
+            self._storage = ListStorage(max_size=1_000)
+        else:
+            self._storage = storage
+        if sampler is None:
+            self._sampler = RandomSampler()
+        else:
+            self._sampler = sampler
+        if writer is None:
+            self._writer = RoundRobinWriter()
+        else:
+            self._writer = writer
         self._writer.register_storage(self._storage)
 
         self._collate_fn = collate_fn or stack_tensors
@@ -242,44 +251,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
     def sample(self, batch_size: int, include_info: bool = False) -> TensorDictBase:
         data, info = super().sample(batch_size)
-        if include_info:
-            for k, v in info.items():
-                data.set(k, torch.tensor(v, device=data.device), inplace=True)
-        return data, info
-
-class WithandWithoutReplacementTensorDictReplayBuffer(TensorDictReplayBuffer):
-    def __init__(self, **kw) -> None:
-        kw["sampler"] = WithandWithoutReplacementRandomSampler()
-        super().__init__(**kw)
-
-    def reset_sampler(self) -> None:
-        self._sampler.reset(self._storage)
-        
-    @pin_memory_output
-    def _sample(self, batch_size: int, mode="with_replacement") -> Tuple[Any, dict]:
-        with self._replay_lock:
-            index, info = self._sampler.sample(self._storage, batch_size, mode=mode)
-            data = self._storage[index]
-        if not isinstance(index, INT_CLASSES):
-            data = self._collate_fn(data)
-        return data, info
-       
-    def sample(self, batch_size: int, include_info: bool = False, mode="with_replacement") -> TensorDictBase:
-        if not self._prefetch:
-            return self._sample(batch_size, mode=mode)
-
-        if len(self._prefetch_queue) == 0:
-            ret = self._sample(batch_size, mode=mode)
-        else:
-            with self._futures_lock:
-                ret = self._prefetch_queue.popleft().result()
-
-        with self._futures_lock:
-            while len(self._prefetch_queue) < self._prefetch_cap:
-                fut = self._prefetch_executor.submit(self._sample, batch_size, mode=mode)
-                self._prefetch_queue.append(fut)
-
-        data, info = ret
         if include_info:
             for k, v in info.items():
                 data.set(k, torch.tensor(v, device=data.device), inplace=True)

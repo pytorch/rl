@@ -14,6 +14,10 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data.replay_buffers.samplers import WithoutReplacementRandomSampler
+from torchrl.data.replay_buffers.rb_prototype import TensorDictReplayBuffer as rb_proto_TensorDictReplayBuffer
+from torchrl.data.replay_buffers.samplers import WithoutReplacementRandomSampler
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 
 __all__ = ["make_replay_buffer"]
 
@@ -49,51 +53,38 @@ def make_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer
         )
     return buffer
 
-def make_model_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer:
+def make_mbpo_replay_buffers(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer:
     """Builds a replay buffer using the config built from ReplayArgsConfig."""
     device = torch.device(device)
-    if not cfg.prb:
-        buffer = TensorDictReplayBuffer(
-            cfg.model_buffer_size,
-            collate_fn=lambda x: x,
-            pin_memory=device != torch.device("cpu"),
-            prefetch=cfg.buffer_prefetch,
-            storage=LazyMemmapStorage(
-                cfg.model_buffer_size,
-                scratch_dir=cfg.buffer_scratch_dir,
-                # device=device,  # when using prefetch, this can overload the GPU memory
-            ),
-        )
-    else:
-        buffer = TensorDictPrioritizedReplayBuffer(
-            cfg.model_buffer_size,
-            alpha=0.7,
-            beta=0.5,
-            collate_fn=lambda x: x,
-            pin_memory=device != torch.device("cpu"),
-            prefetch=cfg.buffer_prefetch,
-            storage=LazyMemmapStorage(
-                cfg.model_buffer_size,
-                scratch_dir=cfg.buffer_scratch_dir,
-                # device=device,  # when using prefetch, this can overload the GPU memory
-            ),
-        )
-    return buffer
-
-from torchrl.data.replay_buffers.rb_prototype import WithandWithoutReplacementTensorDictReplayBuffer
-def make_with_and_without_replacement_replay_buffer(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer:
-    """Builds a replay buffer using the config built from ReplayArgsConfig."""
-    device = torch.device(device)
-    buffer = WithandWithoutReplacementTensorDictReplayBuffer(
+    data_storage = LazyMemmapStorage(
+        cfg.buffer_size,
+        scratch_dir=cfg.buffer_scratch_dir,
+        # device=device,  # when using prefetch, this can overload the GPU memory
+    )
+    with_replacement_data_buffer = rb_proto_TensorDictReplayBuffer(
+        collate_fn=lambda x: x,
+        pin_memory=device != torch.device("cpu"),
+        prefetch=cfg.buffer_prefetch,
+        storage=data_storage
+    )
+    without_replacement_data_buffer = rb_proto_TensorDictReplayBuffer(
+        collate_fn=lambda x: x,
+        sampler = WithoutReplacementRandomSampler(),
+        pin_memory=device != torch.device("cpu"),
+        prefetch=cfg.buffer_prefetch,
+        storage=data_storage,
+    )
+    model_buffer = rb_proto_TensorDictReplayBuffer(
+        collate_fn=lambda x: x,
         pin_memory=device != torch.device("cpu"),
         prefetch=cfg.buffer_prefetch,
         storage=LazyMemmapStorage(
-            cfg.buffer_size,
+            cfg.model_buffer_size,
             scratch_dir=cfg.buffer_scratch_dir,
             # device=device,  # when using prefetch, this can overload the GPU memory
         ),
     )
-    return buffer
+    return with_replacement_data_buffer, without_replacement_data_buffer, model_buffer
 
 @dataclass
 class ReplayArgsConfig:
