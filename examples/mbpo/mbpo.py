@@ -458,36 +458,36 @@ def main(cfg: "DictConfig"):
                         scaler2.update()
 
                         target_net_updater.step()
-                    sac_losses_mean = torch.stack(sac_losses_list, dim=0).mean(dim=0)
+                    sac_losses_mean = torch.stack(sac_losses_list, dim=0)
                     if j == 0:
                         logger.log_scalar(
                             "loss_actor",
-                            sac_losses_mean["loss_actor"],
+                            sac_losses_mean["loss_actor"].mean(),
                             step=collected_frames,
                         )
                         logger.log_scalar(
                             "loss_qvalue",
-                            sac_losses_mean["loss_qvalue"],
+                            sac_losses_mean["loss_qvalue"].mean(),
                             step=collected_frames,
                         )
                         logger.log_scalar(
                             "loss_value",
-                            sac_losses_mean["loss_value"],
+                            sac_losses_mean["loss_value"].mean(),
                             step=collected_frames,
                         )
                         logger.log_scalar(
                             "loss_alpha",
-                            sac_losses_mean["loss_alpha"],
+                            sac_losses_mean["loss_alpha"].mean(),
                             step=collected_frames,
                         )
                         logger.log_scalar(
                             "alpha",
-                            sac_losses_mean["alpha"],
+                            sac_losses_mean["alpha"].mean(),
                             step=collected_frames,
                         )
                         logger.log_scalar(
                             "entropy",
-                            sac_losses_mean["entropy"],
+                            sac_losses_mean["entropy"].mean(),
                             step=collected_frames,
                         )
 
