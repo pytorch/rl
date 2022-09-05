@@ -133,7 +133,7 @@ class Specs:
         if not isinstance(self["observation_spec"], CompositeSpec):
             raise RuntimeError("observation_spec is expected to be of Composite type.")
         else:
-            for i, (key, item) in enumerate(self["observation_spec"].items()):
+            for (key, item) in self["observation_spec"].items():
                 if not key.startswith("next_"):
                     raise RuntimeError(
                         f"All observation keys must start with the `'next_'` prefix. Found {key}"
@@ -379,12 +379,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def numel(self) -> int:
         return prod(self.batch_size)
 
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seed of the environment and returns the next seed to be used (
         which is the input seed if a single environment is present)
 
         Args:
-            seed: integer
+            seed (int): seed to be set
+            static_seed (bool, optional): if True, the seed is not incremented.
+                Defaults to False
 
         Returns:
             integer representing the "next seed": i.e. the seed that should be
@@ -394,7 +396,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if seed is not None:
             torch.manual_seed(seed)
         self._set_seed(seed)
-        if seed is not None:
+        if seed is not None and not static_seed:
             new_seed = seed_generator(seed)
             seed = new_seed
         return seed
@@ -718,7 +720,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _build_env(self, **kwargs) -> "gym.Env":
+    def _build_env(self, **kwargs) -> "gym.Env":  # noqa: F821
         """Creates an environment from the target library and stores it with the `_env` attribute.
 
         When overwritten, this function should pass all the required kwargs to the env instantiation method.
@@ -727,7 +729,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _make_specs(self, env: "gym.Env") -> None:
+    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         raise NotImplementedError
 
     def close(self) -> None:
@@ -738,11 +740,13 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         except AttributeError:
             pass
 
-    def set_seed(self, seed: Optional[int] = None) -> Optional[int]:
+    def set_seed(
+        self, seed: Optional[int] = None, static_seed: bool = False
+    ) -> Optional[int]:
         if seed is not None:
             torch.manual_seed(seed)
         self._set_seed(seed)
-        if seed is not None:
+        if seed is not None and not static_seed:
             new_seed = seed_generator(seed)
             seed = new_seed
         return seed

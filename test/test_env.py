@@ -200,21 +200,32 @@ def _make_envs(
 ):
     torch.manual_seed(0)
     if not transformed_in:
-        create_env_fn = lambda: GymEnv(env_name, frame_skip=frame_skip, device=device)
+
+        def create_env_fn():
+            return GymEnv(env_name, frame_skip=frame_skip, device=device)
+
     else:
         if env_name == "ALE/Pong-v5":
-            create_env_fn = lambda: TransformedEnv(
-                GymEnv(env_name, frame_skip=frame_skip, device=device),
-                Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
-            )
+
+            def create_env_fn():
+                return TransformedEnv(
+                    GymEnv(env_name, frame_skip=frame_skip, device=device),
+                    Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
+                )
+
         else:
-            create_env_fn = lambda: TransformedEnv(
-                GymEnv(env_name, frame_skip=frame_skip, device=device),
-                Compose(
-                    ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
-                    RewardClipping(0, 0.1),
-                ),
-            )
+
+            def create_env_fn():
+                return TransformedEnv(
+                    GymEnv(env_name, frame_skip=frame_skip, device=device),
+                    Compose(
+                        ObservationNorm(
+                            keys_in=["next_observation"], loc=0.5, scale=1.1
+                        ),
+                        RewardClipping(0, 0.1),
+                    ),
+                )
+
     env0 = create_env_fn()
     env_parallel = ParallelEnv(
         N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
@@ -224,13 +235,16 @@ def _make_envs(
     )
     if transformed_out:
         if env_name == "ALE/Pong-v5":
-            t_out = lambda: (
-                Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
-                if not transformed_in
-                else Compose(
-                    *[ObservationNorm(keys_in=["next_pixels"], loc=0, scale=1)]
+
+            def t_out():
+                return (
+                    Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
+                    if not transformed_in
+                    else Compose(
+                        *[ObservationNorm(keys_in=["next_pixels"], loc=0, scale=1)]
+                    )
                 )
-            )
+
             env0 = TransformedEnv(
                 env0,
                 t_out(),
@@ -244,16 +258,23 @@ def _make_envs(
                 t_out(),
             )
         else:
-            t_out = lambda: (
-                Compose(
-                    ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
-                    RewardClipping(0, 0.1),
+
+            def t_out():
+                return (
+                    Compose(
+                        ObservationNorm(
+                            keys_in=["next_observation"], loc=0.5, scale=1.1
+                        ),
+                        RewardClipping(0, 0.1),
+                    )
+                    if not transformed_in
+                    else Compose(
+                        ObservationNorm(
+                            keys_in=["next_observation"], loc=1.0, scale=1.0
+                        )
+                    )
                 )
-                if not transformed_in
-                else Compose(
-                    ObservationNorm(keys_in=["next_observation"], loc=1.0, scale=1.0)
-                )
-            )
+
             env0 = TransformedEnv(
                 env0,
                 t_out(),
@@ -278,7 +299,10 @@ class TestParallel:
         tasks = env_task.split(",")
         if len(tasks) == 1:
             single_task = True
-            env_make = lambda: DMControlEnv("humanoid", tasks[0])
+
+            def env_make():
+                return DMControlEnv("humanoid", tasks[0])
+
         elif len(set(tasks)) == 1 and len(tasks) == 3:
             single_task = True
             env_make = [lambda: DMControlEnv("humanoid", tasks[0])] * 3
@@ -290,15 +314,11 @@ class TestParallel:
             with pytest.raises(
                 ValueError, match="share_individual_td must be set to None"
             ):
-                env_serial = SerialEnv(
-                    3, env_make, share_individual_td=share_individual_td
-                )
+                SerialEnv(3, env_make, share_individual_td=share_individual_td)
             with pytest.raises(
                 ValueError, match="share_individual_td must be set to None"
             ):
-                env_parallel = ParallelEnv(
-                    3, env_make, share_individual_td=share_individual_td
-                )
+                ParallelEnv(3, env_make, share_individual_td=share_individual_td)
             return
 
         env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
@@ -324,28 +344,33 @@ class TestParallel:
         env1_obs_keys = list(env1.observation_spec.keys())
         env2 = DMControlEnv("humanoid", "walk")
         env2_obs_keys = list(env2.observation_spec.keys())
-        env1_maker = lambda: TransformedEnv(
-            DMControlEnv("humanoid", "stand"),
-            Compose(
-                CatTensors(env1_obs_keys, "next_observation_stand", del_keys=False),
-                CatTensors(env1_obs_keys, "next_observation"),
-                DoubleToFloat(
-                    keys_in=["next_observation_stand", "next_observation"],
-                    keys_inv_in=["action"],
+
+        def env1_maker():
+            return TransformedEnv(
+                DMControlEnv("humanoid", "stand"),
+                Compose(
+                    CatTensors(env1_obs_keys, "next_observation_stand", del_keys=False),
+                    CatTensors(env1_obs_keys, "next_observation"),
+                    DoubleToFloat(
+                        keys_in=["next_observation_stand", "next_observation"],
+                        keys_inv_in=["action"],
+                    ),
                 ),
-            ),
-        )
-        env2_maker = lambda: TransformedEnv(
-            DMControlEnv("humanoid", "walk"),
-            Compose(
-                CatTensors(env2_obs_keys, "next_observation_walk", del_keys=False),
-                CatTensors(env2_obs_keys, "next_observation"),
-                DoubleToFloat(
-                    keys_in=["next_observation_walk", "next_observation"],
-                    keys_inv_in=["action"],
+            )
+
+        def env2_maker():
+            return TransformedEnv(
+                DMControlEnv("humanoid", "walk"),
+                Compose(
+                    CatTensors(env2_obs_keys, "next_observation_walk", del_keys=False),
+                    CatTensors(env2_obs_keys, "next_observation"),
+                    DoubleToFloat(
+                        keys_in=["next_observation_walk", "next_observation"],
+                        keys_inv_in=["action"],
+                    ),
                 ),
-            ),
-        )
+            )
+
         env = ParallelEnv(2, [env1_maker, env2_maker])
         assert not env._single_task
 
@@ -505,14 +530,17 @@ class TestParallel:
     @pytest.mark.parametrize("frame_skip", [4, 1])
     @pytest.mark.parametrize("transformed_in", [False, True])
     @pytest.mark.parametrize("transformed_out", [True, False])
+    @pytest.mark.parametrize("static_seed", [True, False])
     def test_parallel_env_seed(
-        self, env_name, frame_skip, transformed_in, transformed_out
+        self, env_name, frame_skip, transformed_in, transformed_out, static_seed
     ):
         env_parallel, env_serial, _ = _make_envs(
             env_name, frame_skip, transformed_in, transformed_out, 5
         )
 
-        out_seed_serial = env_serial.set_seed(0)
+        out_seed_serial = env_serial.set_seed(0, static_seed=static_seed)
+        if static_seed:
+            assert out_seed_serial == 0
         td0_serial = env_serial.reset()
         torch.manual_seed(0)
 
@@ -524,7 +552,9 @@ class TestParallel:
             td_serial[:, 0].get("next_" + key), td_serial[:, 1].get(key)
         )
 
-        out_seed_parallel = env_parallel.set_seed(0)
+        out_seed_parallel = env_parallel.set_seed(0, static_seed=static_seed)
+        if static_seed:
+            assert out_seed_serial == 0
         td0_parallel = env_parallel.reset()
 
         torch.manual_seed(0)

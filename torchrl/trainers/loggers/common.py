@@ -23,7 +23,7 @@ class Logger:
         self.experiment = self._create_experiment()
 
     @abc.abstractmethod
-    def _create_experiment(self) -> "Experiment":
+    def _create_experiment(self) -> "Experiment":  # noqa: F821
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -35,7 +35,7 @@ class Logger:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def log_hparams(self, cfg: "DictConfig") -> None:
+    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
         raise NotImplementedError
 
     @abc.abstractmethod

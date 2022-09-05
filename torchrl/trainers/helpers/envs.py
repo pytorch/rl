@@ -5,7 +5,7 @@
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import Callable, Optional, Union, Any
+from typing import Callable, Optional, Union, Any, Sequence
 
 import torch
 
@@ -47,7 +47,7 @@ LIBS = {
 }
 
 
-def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":
+def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
     """
     Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the
     frame_skip.
@@ -211,7 +211,7 @@ def make_env_transforms(
 
 
 def transformed_env_constructor(
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     video_tag: str = "",
     logger: Optional[Logger] = None,
     stats: Optional[dict] = None,
@@ -312,7 +312,7 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(
-    cfg: "DictConfig", **kwargs
+    cfg: "DictConfig", **kwargs  # noqa: F821
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
@@ -350,7 +350,9 @@ def parallel_env_constructor(
 
 
 def get_stats_random_rollout(
-    cfg: "DictConfig", proof_environment: EnvBase, key: Optional[str] = None
+    cfg: "DictConfig",
+    proof_environment: EnvBase,
+    key: Optional[str] = None,  # noqa: F821
 ):
     print("computing state stats")
     if not hasattr(cfg, "init_env_steps"):

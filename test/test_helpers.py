@@ -503,12 +503,11 @@ def test_redq_make(device, from_pixels, gsde, exploration):
 @pytest.mark.parametrize("initial_seed", range(5))
 def test_seed_generator(initial_seed):
     num_seeds = 100
-    prev_seeds = []
 
     # Check unique seed generation
     if initial_seed == 0:
         with pytest.raises(ValueError) as e:
-            seeds0 = generate_seeds(initial_seed - 1, num_seeds)
+            generate_seeds(initial_seed - 1, num_seeds)
         return
     else:
         seeds0 = generate_seeds(initial_seed - 1, num_seeds)

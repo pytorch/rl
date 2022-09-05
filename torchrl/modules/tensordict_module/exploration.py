@@ -17,7 +17,11 @@ from torchrl.modules.tensordict_module.common import (
     TensorDictModuleWrapper,
 )
 
-__all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
+__all__ = [
+    "EGreedyWrapper",
+    "AdditiveGaussianWrapper",
+    "OrnsteinUhlenbeckProcessWrapper",
+]
 
 from torchrl.data.tensordict.tensordict import TensorDictBase
 
@@ -109,6 +113,77 @@ class EGreedyWrapper(TensorDictModuleWrapper):
                 spec = spec[self.action_key]
             out = cond * spec.rand(tensordict.shape).to(out.device) + (1 - cond) * out
             tensordict.set(self.td_module.out_keys[0], out)
+        return tensordict
+
+
+class AdditiveGaussianWrapper(TensorDictModuleWrapper):
+    """
+    Additive Gaussian PO wrapper.
+
+    Args:
+        policy (TensorDictModule): a policy.
+        sigma_init (scalar, optional): initial epsilon value.
+            default: 1.0
+        sigma_end (scalar, optional): final epsilon value.
+            default: 0.1
+        annealing_num_steps (int, optional): number of steps it will take for
+            sigma to reach the `sigma_end` value.
+        action_key (str, optional): if the policy module has more than one output key,
+            its output spec will be of type CompositeSpec. One needs to know where to
+            find the action spec.
+            Default is "action".
+
+    """
+
+    def __init__(
+        self,
+        policy: TensorDictModule,
+        sigma_init: float = 1.0,
+        sigma_end: float = 0.1,
+        annealing_num_steps: int = 1000,
+        action_key: str = "action",
+    ):
+        super().__init__(policy)
+        self.register_buffer("sigma_init", torch.tensor([sigma_init]))
+        self.register_buffer("sigma_end", torch.tensor([sigma_end]))
+        if self.sigma_end > self.sigma_init:
+            raise RuntimeError("sigma should decrease over time or be constant")
+        self.annealing_num_steps = annealing_num_steps
+        self.register_buffer("sigma", torch.tensor([sigma_init]))
+        self.action_key = action_key
+
+    def step(self, frames: int = 1) -> None:
+        """A step of sigma decay.
+        After self.annealing_num_steps, this function is a no-op.
+
+        Args:
+            frames (int): number of frames since last step.
+
+        """
+        for _ in range(frames):
+            self.sigma.data[0] = max(
+                self.sigma_end.item(),
+                (
+                    self.sigma
+                    - (self.sigma_init - self.sigma_end) / self.annealing_num_steps
+                ).item(),
+            )
+
+    def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
+        sigma = self.sigma.item()
+        noise = torch.randn(action.shape, device=action.device) * sigma
+        spec = self.td_module.spec
+        if isinstance(spec, CompositeSpec):
+            spec = spec[self.action_key]
+        action = action + noise
+        action = spec.project(action)
+        return action
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        tensordict = self.td_module.forward(tensordict)
+        if exploration_mode() == "random" or exploration_mode() is None:
+            out = tensordict.get(self.action_key)
+            tensordict.set(self.action_key, out)
         return tensordict
 
 

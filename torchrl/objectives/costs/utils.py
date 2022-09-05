@@ -99,7 +99,7 @@ class _TargetNetUpdate:
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],  # noqa: F821
     ):
 
         _target_names = []
@@ -208,7 +208,7 @@ class SoftUpdate(_TargetNetUpdate):
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "REDQLoss"],
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "REDQLoss"],  # noqa: F821
         eps: float = 0.999,
     ):
         if not (eps < 1.0 and eps > 0.0):
@@ -236,7 +236,7 @@ class HardUpdate(_TargetNetUpdate):
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],  # noqa: F821
         value_network_update_interval: float = 1000,
     ):
         super(HardUpdate, self).__init__(loss_module)
