@@ -1091,6 +1091,7 @@ class TestR3M:
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union({"next_vec", "next_pixels_orig", "action", "reward"})
         assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
+        transformed_env.close()
 
     @pytest.mark.parametrize("stack_images", [True, False])
     @pytest.mark.parametrize("parallel", [True, False])
@@ -1139,6 +1140,7 @@ class TestR3M:
         if not stack_images:
             exp_keys = exp_keys.union({"next_vec2"})
         assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
+        transformed_env.close()
 
     def test_r3m_parallel(self, model, device):
         keys_in = ["next_pixels"]

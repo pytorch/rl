@@ -278,6 +278,14 @@ class R3MTransform(Compose):
             self._device = dest
         return super().to(dest)
 
+    @property
+    def device(self):
+        return self._device
+
+    @property
+    def dtype(self):
+        return self._dtype
+
     forward = _init_first(Compose.forward)
     transform_action_spec = _init_first(Compose.transform_action_spec)
     transform_observation_spec = _init_first(Compose.transform_observation_spec)
