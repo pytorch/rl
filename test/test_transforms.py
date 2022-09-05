@@ -1041,7 +1041,7 @@ class TestTransforms:
         try:
             env.insert_transform(-7, FiniteTensorDictCheck())
             assert 1 == 6
-        except ValueError as ve:
+        except ValueError:
             assert len(env.transform) == 6
             assert env._action_spec is not None
             assert env._observation_spec is not None
@@ -1050,7 +1050,7 @@ class TestTransforms:
         try:
             env.insert_transform(7, FiniteTensorDictCheck())
             assert 1 == 6
-        except ValueError as ve:
+        except ValueError:
             assert len(env.transform) == 6
             assert env._action_spec is not None
             assert env._observation_spec is not None
@@ -1059,7 +1059,7 @@ class TestTransforms:
         try:
             env.insert_transform(4, "ffff")
             assert 1 == 6
-        except ValueError as ve:
+        except ValueError:
             assert len(env.transform) == 6
             assert env._action_spec is not None
             assert env._observation_spec is not None

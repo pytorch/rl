@@ -333,27 +333,27 @@ def test_permute_exceptions(device):
     }
     td1 = TensorDict(batch_size=(4, 5, 6), source=d)
 
-    with pytest.raises(RuntimeError) as e_info:
+    with pytest.raises(RuntimeError):
         td2 = td1.permute(1, 1, 0)
         _ = td2.shape
 
-    with pytest.raises(RuntimeError) as e_info:
+    with pytest.raises(RuntimeError):
         td2 = td1.permute(3, 2, 1, 0)
         _ = td2.shape
 
-    with pytest.raises(RuntimeError) as e_info:
+    with pytest.raises(RuntimeError):
         td2 = td1.permute(2, -1, 0)
         _ = td2.shape
 
-    with pytest.raises(IndexError) as e_info:
+    with pytest.raises(IndexError):
         td2 = td1.permute(2, 3, 0)
         _ = td2.shape
 
-    with pytest.raises(IndexError) as e_info:
+    with pytest.raises(IndexError):
         td2 = td1.permute(2, -4, 0)
         _ = td2.shape
 
-    with pytest.raises(RuntimeError) as e_info:
+    with pytest.raises(RuntimeError):
         td2 = td1.permute(2, 1)
         _ = td2.shape
 
@@ -1476,6 +1476,7 @@ class TestTensorDictsRequiresGrad:
         batch_size = td.batch_size
         new_td = td.expand(3)
         assert new_td._get_meta("b").requires_grad
+        assert new_td.batch_size == torch.Size([3, *batch_size])
 
     def test_cast(self, td_name, device):
         torch.manual_seed(1)
@@ -1953,14 +1954,14 @@ def test_requires_grad(device):
     stacked_td = LazyStackedTensorDict(*tensordicts, stack_dim=0)
     # First stacked tensor has requires_grad == True
     assert list(stacked_td.values_meta())[0].requires_grad is True
-    td0 = SavedTensorDict(tensordicts[0])
+    SavedTensorDict(tensordicts[0])
     with pytest.raises(
         Exception,
         match=re.escape(
             "SavedTensorDicts is not compatible with gradients, one of Tensors has requires_grad equals True"
         ),
     ):
-        td5 = SavedTensorDict(tensordicts[5])
+        SavedTensorDict(tensordicts[5])
 
 
 @pytest.mark.parametrize("device", get_available_devices())

@@ -1153,11 +1153,11 @@ class TestREDQ:
         td_clone2 = td.clone()
         torch.manual_seed(0)
         with _check_td_steady(td_clone1):
-            loss1 = loss_fn(td_clone1)
+            loss_fn(td_clone1)
 
         torch.manual_seed(0)
         with _check_td_steady(td_clone2):
-            loss2 = loss_fn_deprec(td_clone2)
+            loss_fn_deprec(td_clone2)
 
         # TODO: find a way to compare the losses: problem is that we sample actions either sequentially or in batch,
         #  so setting seed has little impact
@@ -1530,14 +1530,14 @@ class TestReinforce:
             retain_graph=True,
         )
         with pytest.raises(RuntimeError, match="One of the "):
-            grad_actor = autograd.grad(
+            autograd.grad(
                 loss_td.get("loss_actor"),
                 value_net.parameters(),
                 retain_graph=True,
                 allow_unused=False,
             )
         with pytest.raises(RuntimeError, match="One of the "):
-            grad_value = autograd.grad(
+            autograd.grad(
                 loss_td.get("loss_value"),
                 actor_net.parameters(),
                 retain_graph=True,

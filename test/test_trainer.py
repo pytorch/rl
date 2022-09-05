@@ -262,7 +262,7 @@ def test_recorder():
         )
 
         for _ in range(N):
-            out = recorder(None)
+            recorder(None)
 
         for (_, _, filenames) in walk(folder):
             filename = filenames[0]
