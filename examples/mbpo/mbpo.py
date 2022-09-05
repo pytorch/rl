@@ -320,7 +320,7 @@ def main(cfg: "DictConfig"):
                         world_model_opt.zero_grad()
                         scaler1.update()
                         world_model_train_losses.append(
-                            model_sampled_tensordict.detach()
+                            model_loss_td.detach()
                         )
                     world_model_train_losses = torch.stack(
                         world_model_train_losses, dim=0
