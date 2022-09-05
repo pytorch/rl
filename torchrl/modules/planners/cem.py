@@ -13,6 +13,7 @@ __all__ = ["CEMPlanner"]
 class CEMPlanner(MPCPlannerBase):
     """
     CEMPlanner Module. This class inherits from TensorDictModule.
+    
     Provided a TensorDict, this module will perform a CEM planning step.
     The CEM planning step is performed by sampling actions from a Gaussian distribution with zero mean and unit variance.
     The actions are then used to perform a rollout in the environment.
@@ -54,7 +55,7 @@ class CEMPlanner(MPCPlannerBase):
     def planning(self, td: TensorDictBase) -> torch.Tensor:
         batch_size = td.batch_size
         expanded_original_td = (
-            td.clone().expand(*batch_size, self.num_candidates).view(-1)
+            td.expand(*batch_size, self.num_candidates).view(-1)
         )
         flatten_batch_size = batch_size.numel()
         actions_means = torch.zeros(
