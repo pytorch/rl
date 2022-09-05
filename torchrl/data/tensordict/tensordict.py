@@ -3596,7 +3596,7 @@ class SavedTensorDict(TensorDictBase):
             raise Exception(
                 "SavedTensorDicts is not compatible with gradients, one of Tensors has requires_grad equals True"
             )
-        self.file = tempfile.NamedTemporaryFile()
+        self.file = tempfile.NamedTemporaryFile()  # noqa: P201
         self.filename = self.file.name
         # if source.is_memmap():
         #     source = source.clone()

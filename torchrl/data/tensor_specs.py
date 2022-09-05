@@ -918,7 +918,9 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             shape, space, device, dtype, domain="discrete"
         )
 
-    def rand(self, shape: torch.Size = torch.Size([])) -> torch.Tensor:
+    def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
         x = torch.cat(
             [
                 torch.nn.functional.one_hot(

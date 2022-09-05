@@ -199,7 +199,7 @@ class ProbabilisticTDModule(TensorDictModule):
 
         """
         num_params = (
-            getattr(self.distribution_class, "num_params")
+            self.distribution_class.num_params
             if hasattr(self.distribution_class, "num_params")
             else 1
         )

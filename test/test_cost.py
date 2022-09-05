@@ -1875,10 +1875,10 @@ def test_shared_params(dest, expected_dtype, expected_device):
         assert isinstance(p, nn.Parameter)
         assert p.dtype is expected_dtype
         assert p.device == torch.device(expected_device)
-    loss.qvalue_network_params[0].dtype is expected_dtype
-    loss.qvalue_network_params[1].dtype is expected_dtype
-    loss.qvalue_network_params[0].device == torch.device(expected_device)
-    loss.qvalue_network_params[1].device == torch.device(expected_device)
+    assert loss.qvalue_network_params[0].dtype is expected_dtype
+    assert loss.qvalue_network_params[1].dtype is expected_dtype
+    assert loss.qvalue_network_params[0].device == torch.device(expected_device)
+    assert loss.qvalue_network_params[1].device == torch.device(expected_device)
     assert (loss.qvalue_network_params[0] == loss.actor_network_params[0]).all()
     assert (loss.qvalue_network_params[1] == loss.actor_network_params[1]).all()
 

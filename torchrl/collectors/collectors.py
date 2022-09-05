@@ -231,7 +231,9 @@ class SyncDataCollector(_DataCollector):
 
     def __init__(
         self,
-        create_env_fn: Union[EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]],
+        create_env_fn: Union[
+            EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]
+        ],  # noqa: F821
         policy: Optional[
             Union[
                 ProbabilisticTensorDictModule,
@@ -1228,7 +1230,7 @@ def _main_async_collector(
     pipe_parent: connection.Connection,
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
-    create_env_fn: Union[EnvBase, "EnvCreator", Callable[[], EnvBase]],
+    create_env_fn: Union[EnvBase, "EnvCreator", Callable[[], EnvBase]],  # noqa: F821
     create_env_kwargs: dict,
     policy: Callable[[TensorDictBase], TensorDictBase],
     frames_per_worker: int,

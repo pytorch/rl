@@ -720,7 +720,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _build_env(self, **kwargs) -> "gym.Env":
+    def _build_env(self, **kwargs) -> "gym.Env":  # noqa: F821
         """Creates an environment from the target library and stores it with the `_env` attribute.
 
         When overwritten, this function should pass all the required kwargs to the env instantiation method.
@@ -729,7 +729,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _make_specs(self, env: "gym.Env") -> None:
+    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         raise NotImplementedError
 
     def close(self) -> None:

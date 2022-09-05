@@ -106,7 +106,7 @@ class CSVLogger(Logger):
             **kwargs,
         )
 
-    def log_hparams(self, cfg: "DictConfig") -> None:
+    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
         """
         Logs the hyperparameters of the experiment.
 
