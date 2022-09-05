@@ -41,10 +41,10 @@ model_batch_size: 256
 sac_batch_size: 256
 real_data_ratio: 0.05
 num_world_models_ensemble: 7
+num_elites: 5
 num_model_rollouts: 400
 num_sac_training_steps_per_optim_step: 40
 train_model_every_k_optim_step: 250
-target_entropy: -3
 model_buffer_size: 400000
 model_holdout_ratio: 0.2
 logger: wandb
