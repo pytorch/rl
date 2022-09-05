@@ -478,7 +478,7 @@ def test_collector_vecnorm_envcreator(static_seed):
         assert new_seed != init_seed
 
     seed = init_seed
-    for i in range(num_envs * num_data_collectors):
+    for _ in range(num_envs * num_data_collectors):
         seed = seed_generator(seed)
     if not static_seed:
         assert new_seed == seed

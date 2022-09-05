@@ -944,7 +944,7 @@ class TestTransforms:
         pin_mem = PinMemoryTransform()
         td = TensorDict({key: torch.randn(3) for key in ["a", "b", "c"]}, [])
         pin_mem(td)
-        for key, item in td.items():
+        for item in td.values():
             assert item.is_pinned
 
     def test_append(self):

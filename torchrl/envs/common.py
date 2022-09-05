@@ -133,7 +133,7 @@ class Specs:
         if not isinstance(self["observation_spec"], CompositeSpec):
             raise RuntimeError("observation_spec is expected to be of Composite type.")
         else:
-            for i, (key, item) in enumerate(self["observation_spec"].items()):
+            for (key, item) in self["observation_spec"].items():
                 if not key.startswith("next_"):
                     raise RuntimeError(
                         f"All observation keys must start with the `'next_'` prefix. Found {key}"

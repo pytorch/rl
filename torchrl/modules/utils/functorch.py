@@ -99,7 +99,9 @@ class apply_to_class:
         return split_name_dict
 
 
-def make_split_names_dict(split_names, p, b=[], split_name_dict=None):
+def make_split_names_dict(split_names, p, b=None, split_name_dict=None):
+    if b is None:
+        b = []
     if split_name_dict is None:
         split_name_dict = dict()
 

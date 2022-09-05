@@ -318,7 +318,9 @@ class ProbabilisticTDModule(TensorDictModule):
         out = super().to(dest)
         return out
 
-    def __deepcopy__(self, memodict={}):
+    def __deepcopy__(self, memodict=None):
+        if memodict is None:
+            memodict = dict()
         self._dist = None
         cls = self.__class__
         result = cls.__new__(cls)

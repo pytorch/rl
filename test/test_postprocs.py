@@ -100,7 +100,7 @@ class TestSplits:
         workers = torch.arange(num_workers)
 
         out = []
-        for i in range(traj_len):
+        for _ in range(traj_len):
             done = steps_count == traj_ids  # traj_id 0 has 0 steps, 1 has 1 step etc.
 
             td = TensorDict(
