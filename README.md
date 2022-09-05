@@ -61,13 +61,13 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     ```diff
     - for i, (obs, next_obs, action, hidden_state, reward, done) in enumerate(collector):
     + for i, tensordict in enumerate(collector):
-        - replay_buffer.add((obs, next_obs, action, log_prob, reward, done))
-        + replay_buffer.add(tensordict)
+    -     replay_buffer.add((obs, next_obs, action, log_prob, reward, done))
+    +     replay_buffer.add(tensordict)
         for j in range(num_optim_steps):
-            - obs, next_obs, action, hidden_state, reward, done = replay_buffer.sample(batch_size)
-            - loss = loss_fn(obs, next_obs, action, hidden_state, reward, done)
-            + tensordict = replay_buffer.sample(batch_size)
-            + loss = loss_fn(tensordict)
+    -         obs, next_obs, action, hidden_state, reward, done = replay_buffer.sample(batch_size)
+    -         loss = loss_fn(obs, next_obs, action, hidden_state, reward, done)
+    +         tensordict = replay_buffer.sample(batch_size)
+    +         loss = loss_fn(tensordict)
             loss.backward()
             optim.step()
             optim.zero_grad()
