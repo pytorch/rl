@@ -20,7 +20,7 @@ TorchRL aims at having as few dependencies as possible (python standard library,
 
 On the low-level end, torchrl comes with a set of highly re-usable functionals for [cost functions](torchrl/objectives/costs), [returns](torchrl/objectives/returns) and data processing.
 
-TorchRL aims at a high modularity (1) and good runtime performance (2).
+TorchRL aims at (1) a high modularity and (2) good runtime performance.
 
 ## Features
 
@@ -98,8 +98,40 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     Check our [TensorDict tutorial](tutorials/tensordict.ipynb) for more information.
     
 - An associated [`TensorDictModule` class](torchrl/modules/tensordict_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible! 
+    <details>
+      <summary>Code</summary>
+    
+    ```diff
+    transformer_model = nn.Transformer(nhead=16, num_encoder_layers=12)
+    + td_module = TensorDictModule(transformer_model, in_keys=["src", "tgt"], out_keys=["out"])
+    src = torch.rand((10, 32, 512))
+    tgt = torch.rand((20, 32, 512))
+    + tensordict = TensorDict({"src": src, "tgt": tgt}, batch_size=[20, 32])
+    - out = transformer_model(src, tgt)
+    + td_module(tensordict)
+    + out = tensordict["out"]
+    ```
+  
+    The `TensorDictSequence` class allows to branch sequences of `nn.Module` instances in a highly modular way.
+    For instance, here is an implementation of a transformer using the encoder and decoder blocks:
+    ```python
+    encoder_module = TransformerEncoder(...)
+    encoder = TensorDictModule(encoder_module, in_keys=["src", "src_mask"], out_keys=["memory"])
+    decoder_module = TransformerDecoder(...)
+    decoder = TensorDictModule(decoder_module, in_keys=["tgt", "memory"], out_keys=["output"])
+    transformer = TensorDictSequence(encoder, decoder)
+    assert transformer.in_keys == ["src", "src_mask", "tgt"]
+    assert transformer.out_keys == ["memory", "output"]
+    ```
+    
+    `TensorDictSequence` allows to isolate subgraphs by querying a set of desired input / output keys:
+    ```python
+    transformer.select_subsequence(out_keys=["memory"])  # returns the encoder
+    transformer.select_subsequence(in_keys=["tgt", "memory"])  # returns the decoder
+    ```
+    </details>
     The corresponding [tutorial](tutorials/tensordictmodule.ipynb) provides more context about its features.
-
+ 
 - A common [interface for environments](torchrl/envs)
     which supports common libraries (OpenAI gym, deepmind control lab, etc.)<sup>(1)</sup> and state-less execution (e.g. Model-based environments). 
     The [batched environments](torchrl/envs/vec_env.py) containers allow parallel execution<sup>(2)</sup>.
