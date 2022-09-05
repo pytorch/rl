@@ -54,17 +54,78 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     - obs, next_obs, action, log_prob, reward, done = [torch.stack(vals, 0) for vals in zip(*out)]
     + out = torch.stack(out, 0)  # TensorDict supports multiple tensor operations
     ```
+    TensorDict abstracts away the input / output signatures of the modules, env, collectors, replay buffers and losses of the library, allowing its primitives
+    to be easily recycled across settings.
+    Here's another example of an off-policy training loop in TorchRL (assuming that a data collector, a replay buffer, a loss and an optimizer have been instantiated):
+    
+    ```diff
+    - for i, (obs, next_obs, action, hidden_state, reward, done) in enumerate(collector):
+    + for i, tensordict in enumerate(collector):
+        - replay_buffer.add((obs, next_obs, action, log_prob, reward, done))
+        + replay_buffer.add(tensordict)
+        for j in range(num_optim_steps):
+            - obs, next_obs, action, hidden_state, reward, done = replay_buffer.sample(batch_size)
+            - loss = loss_fn(obs, next_obs, action, hidden_state, reward, done)
+            + tensordict = replay_buffer.sample(batch_size)
+            + loss = loss_fn(tensordict)
+            loss.backward()
+            optim.step()
+            optim.zero_grad()
+    ```
+    Again, this training loop can be re-used across algorithms as it makes a minimal number of assumptions about the structure of the data.
+    
+    TensorDict supports multiple tensor operations on its device and shape
+    (the shape of TensorDict, or its batch size, is the common arbitrary N first dimensions of all its contained tensors):
+    ```python
+    # stack and cat
+    tensordict = torch.stack(list_of_tensordicts, 0)
+    tensordict = torch.cat(list_of_tensordicts, 0)
+    # reshape
+    tensordict = tensordict.view(-1)
+    tensordict = tensordict.permute(0, 2, 1)
+    tensordict = tensordict.unsqueeze(-1)
+    tensordict = tensordict.squeeze(-1)
+    # indexing
+    tensordict = tensordict[:2]
+    tensordict[:, 2] = sub_tensordict
+    # device and memory location
+    tensordict.cuda()
+    tensordict.to("cuda:1")
+    tensordict.share_memory_()
+    ```
     </details>
 
-    Check our [tutorial](tutorials/tensordict.ipynb) for more information.
+    Check our [TensorDict tutorial](tutorials/tensordict.ipynb) for more information.
+    
 - An associated [`TensorDictModule` class](torchrl/modules/tensordict_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible! 
-- multiprocess [data collectors](torchrl/collectors/collectors.py)<sup>(2)</sup> that work synchronously or asynchronously:
+    The corresponding [tutorial](tutorials/tensordictmodule.ipynb) provides more context about its features.
+
+- A common [interface for environments](torchrl/envs)
+    which supports common libraries (OpenAI gym, deepmind control lab, etc.)<sup>(1)</sup> and state-less execution (e.g. Model-based environments). 
+    The [batched environments](torchrl/envs/vec_env.py) containers allow parallel execution<sup>(2)</sup>.
+    A common pytorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py) is also provided.
     <details>
       <summary>Code</summary>
     
     ```python
+    env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
+    env_parallel = ParallelEnv(4, env_make)  # creates 4 envs in parallel
+    tensordict = env_parallel.rollout(max_steps=20, policy=None)  # random rollout (no policy given)
+    assert tensordict.shape == [4, 20]  # 4 envs, 20 steps rollout
+    env_parallel.action_spec.is_in(tensordict["action"])  # spec check returns True
+    ```
+    </details>
+
+- multiprocess [data collectors](torchrl/collectors/collectors.py)<sup>(2)</sup> that work synchronously or asynchronously. 
+    Through the use of TensorDict, TorchRL's training loops are made very similar to regular training loops in supervised 
+    learning (although the "dataloader" -- read data collector -- is modified on-the-fly):
+    <details>
+      <summary>Code</summary>
+    
+    ```python
+    env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
     collector = MultiaSyncDataCollector(
-        [make_env, make_env], 
+        [env_make, env_make], 
         policy=policy, 
         devices=["cuda:0", "cuda:0"],
         total_frames=10000,
@@ -80,7 +141,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     ```
     </details>
 
-- efficient<sup>(2)</sup> and generic<sup>(1)</sup> [replay buffers](torchrl/data/replay_buffers/replay_buffers.py) that with modularized storage:
+- efficient<sup>(2)</sup> and generic<sup>(1)</sup> [replay buffers](torchrl/data/replay_buffers/replay_buffers.py) with modularized storage:
     <details>
       <summary>Code</summary>
     
@@ -101,23 +162,9 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     ```
     </details>
 
-- [interfaces for environments](torchrl/envs)
-from common libraries (OpenAI gym, deepmind control lab, etc.)<sup>(1)</sup> and [wrappers](torchrl/envs/vec_env.py) for parallel execution<sup>(2)</sup>, 
-as well as a new pytorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py):
-    <details>
-      <summary>Code</summary>
-    
-    ```python
-    env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
-    env_parallel = ParallelEnv(4, env_make)  # creates 4 envs in parallel
-    tensordict = env_parallel.rollout(max_steps=20)
-    assert tensordict.shape == [4, 20]  # 4 envs, 20 steps rollout
-    ```
-    </details>
-
 - cross-library [environment transforms](torchrl/envs/transforms/transforms.py)<sup>(1)</sup>, 
-executed on device and in a vectorized fashion<sup>(2)</sup>, 
-which process and prepare the data coming out of the environments to be used by the agent:
+    executed on device and in a vectorized fashion<sup>(2)</sup>, 
+    which process and prepare the data coming out of the environments to be used by the agent:
     <details>
       <summary>Code</summary>
     
@@ -126,10 +173,25 @@ which process and prepare the data coming out of the environments to be used by 
     env_base = ParallelEnv(4, env_make, device="cuda:0")  # creates 4 envs in parallel
     env = TransformedEnv(
         env_base, 
-        Compose(ToTensorImage(), ObservationNorm(loc=0.5, scale=1.0)),  # executes the transforms once and on device
+        Compose(
+            ToTensorImage(), 
+            ObservationNorm(loc=0.5, scale=1.0)),  # executes the transforms once and on device
     )
     tensordict = env.reset()
     assert tensordict.device == torch.device("cuda:0")
+    ```
+    Other transforms include: reward scaling (`RewardScaling`), shape operations (concatenation of tensors, unsqueezing etc.), contatenation of
+    successive operations (`CatFrames`), resizing (`Resize`) and many more.
+
+    Unlike other libraries, the transforms are stacked as a list (and not wrapped in each other), which makes it
+    easy to add and remove them at will:
+    ```python
+    env.insert_transform(0, NoopResetEnv())  # inserts the NoopResetEnv transform at the index 0
+    ```
+    Nevertheless, transforms can access and execute operations on the parent environment:
+    ```python
+    transform = env.transform[1]  # gathers the second transform of the list
+    parent_env = transform.parent  # returns the base environment of the second transform, i.e. the base env + the first transform
     ```
     </details>
 
@@ -139,6 +201,7 @@ which process and prepare the data coming out of the environments to be used by 
       <summary>Code</summary>
     
     ```python
+    # create an nn.Module
     common_module = ConvNet(
         bias_last_layer=True,
         depth=None,
@@ -146,11 +209,15 @@ which process and prepare the data coming out of the environments to be used by 
         kernel_sizes=[8, 4, 3],
         strides=[4, 2, 1],
     )
+    # Wrap it in a TensorDictModule, indicating what key to read in and where to
+    # write out the output
     common_module = TensorDictModule(
         common_module,
         in_keys=["pixels"],
         out_keys=["hidden"],
     )
+    # Wrap the policy module in NormalParamsWrapper, such that the output
+    # tensor is split in loc and scale, and scale is mapped onto a positive space 
     policy_module = NormalParamsWrapper(
         MLP(
             num_cells=[64, 64],
@@ -158,7 +225,9 @@ which process and prepare the data coming out of the environments to be used by 
             activation=nn.ELU,
         )
     )
-    policy_module = ProbabilisticTensorDict(  # stochastic policy
+    # Wrap the nn.Module in a ProbabilisticTensorDictModule, indicating how
+    # to build the torch.distribution.Distribution object and what to do with it
+    policy_module = ProbabilisticTensorDictModule(  # stochastic policy
         TensorDictModule(
             policy_module,
             in_keys=["hidden"],
@@ -173,6 +242,7 @@ which process and prepare the data coming out of the environments to be used by 
         out_features=1,
         activation=nn.ELU,
     )
+    # Wrap the policy and value funciton in a common module
     actor_value = ActorValueOperator(common_module, policy_module, value_module)
     # standalone policy from this
     standalone_policy = actor_value.get_policy_operator()
