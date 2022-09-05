@@ -215,7 +215,11 @@ def main(cfg: "DictConfig"):
         # ],
     )
 
-    with_replacement_data_buffer, without_replacement_data_buffer, model_buffer = make_mbpo_replay_buffers(device, cfg)
+    (
+        with_replacement_data_buffer,
+        without_replacement_data_buffer,
+        model_buffer,
+    ) = make_mbpo_replay_buffers(device, cfg)
     recorder = transformed_env_constructor(
         cfg,
         video_tag=video_tag,
@@ -288,18 +292,23 @@ def main(cfg: "DictConfig"):
                 # Train Model
                 # Sample data from model and buffer it
                 if j % cfg.train_model_every_k_optim_step == 0:
-                    # world_model_train_losses = []
-                    without_replacement_data_buffer._sampler.reset(without_replacement_data_buffer._storage)
-                    num_model_steps = len(without_replacement_data_buffer) // cfg.model_batch_size
+                    world_model_train_losses = []
+                    without_replacement_data_buffer._sampler.reset(
+                        without_replacement_data_buffer._storage
+                    )
+                    num_model_steps = (
+                        len(without_replacement_data_buffer) // cfg.model_batch_size
+                    )
                     num_model_train_steps = int(
                         num_model_steps * cfg.model_holdout_ratio
                     )
                     num_model_test_steps = num_model_steps - num_model_train_steps
 
                     for _ in range(num_model_train_steps):
-                        model_sampled_tensordict, _ = without_replacement_data_buffer.sample(
-                            cfg.model_batch_size
-                        )
+                        (
+                            model_sampled_tensordict,
+                            _,
+                        ) = without_replacement_data_buffer.sample(cfg.model_batch_size)
                         model_sampled_tensordict = model_sampled_tensordict.to(device)
 
                         with autocast(dtype=torch.float16):
@@ -310,21 +319,41 @@ def main(cfg: "DictConfig"):
                         scaler1.step(world_model_opt)
                         world_model_opt.zero_grad()
                         scaler1.update()
-                        # world_model_train_losses.append(model_sampled_tensordict.detach())
-                    # world_model_train_losses = torch.stack(
-                    #     world_model_train_losses, dim=0
-                    # )
-                    # loss_world_model_train = world_model_train_losses[
-                    #     "loss_world_model"
-                    # ].mean()
-                    # per_network_world_model_loss_train = world_model_train_losses[
-                    #     "per_network_world_model_loss"
-                    # ].sum(dim=0) / (num_model_train_steps * cfg.model_batch_size)
+                        world_model_train_losses.append(
+                            model_sampled_tensordict.detach()
+                        )
+                    world_model_train_losses = torch.stack(
+                        world_model_train_losses, dim=0
+                    )
+                    loss_world_model_train = world_model_train_losses[
+                        "loss_world_model"
+                    ].mean()
+
+                    per_network_world_model_loss_train = world_model_train_losses[
+                        "per_network_world_model_loss"
+                    ].sum(dim=0) / (num_model_train_steps * cfg.model_batch_size)
+
+                    if j == 0:
+                        logger.log_scalar(
+                            "loss_world_model_train",
+                            loss_world_model_train,
+                            step=collected_frames,
+                        )
+
+                        for i, loss in enumerate(per_network_world_model_loss_train):
+                            logger.log_scalar(
+                                f"loss_world_model_train_network_{i}",
+                                loss,
+                                step=collected_frames,
+                            )
 
                     with torch.no_grad():
                         world_model_test_losses = []
                         for _ in range(num_model_test_steps):
-                            model_sampled_tensordict, _ = without_replacement_data_buffer.sample(
+                            (
+                                model_sampled_tensordict,
+                                _,
+                            ) = without_replacement_data_buffer.sample(
                                 cfg.model_batch_size
                             )
                             model_sampled_tensordict = model_sampled_tensordict.to(
@@ -339,10 +368,25 @@ def main(cfg: "DictConfig"):
                         world_model_test_losses = torch.stack(
                             world_model_test_losses, dim=0
                         )
-                        # loss_world_model_test = world_model_test_losses["loss_world_model"].mean()
+                        loss_world_model_test = world_model_test_losses[
+                            "loss_world_model"
+                        ].mean()
                         per_network_world_model_loss_test = world_model_test_losses[
                             "per_network_world_model_loss"
                         ].sum(dim=0) / (num_model_test_steps * cfg.model_batch_size)
+
+                        if j == 0:
+                            logger.log_scalar(
+                                "loss_world_model_test",
+                                loss_world_model_test,
+                                step=collected_frames,
+                            )
+                            for i, loss in enumerate(per_network_world_model_loss_test):
+                                logger.log_scalar(
+                                    f"loss_world_model_test_network_{i}",
+                                    loss,
+                                    step=collected_frames,
+                                )
                         elites = torch.argsort(per_network_world_model_loss_test)[
                             : cfg.num_elites
                         ]
@@ -350,7 +394,10 @@ def main(cfg: "DictConfig"):
 
                     with torch.no_grad(), set_exploration_mode("random"):
                         for _ in range(cfg.train_model_every_k_optim_step):
-                            model_sampled_tensordict, _ = with_replacement_data_buffer.sample(
+                            (
+                                model_sampled_tensordict,
+                                _,
+                            ) = with_replacement_data_buffer.sample(
                                 cfg.num_model_rollouts
                             )
                             model_sampled_tensordict = model_sampled_tensordict.to(
@@ -365,10 +412,9 @@ def main(cfg: "DictConfig"):
                             fake_traj_tensordict = fake_traj_tensordict.select(
                                 *original_keys
                             )
-                            model_buffer.extend(
-                                fake_traj_tensordict.view(-1).cpu()
-                            )
+                            model_buffer.extend(fake_traj_tensordict.view(-1).cpu())
                 if len(model_buffer) > cfg.init_random_frames:
+                    sac_losses_list = []
                     for _ in range(cfg.num_sac_training_steps_per_optim_step):
 
                         num_real_samples = int(cfg.sac_batch_size * cfg.real_data_ratio)
@@ -381,9 +427,10 @@ def main(cfg: "DictConfig"):
                             num_fake_samples
                         )
 
-                        real_sampled_tensordict, _ = with_replacement_data_buffer.sample(
-                            num_real_samples
-                        )
+                        (
+                            real_sampled_tensordict,
+                            _,
+                        ) = with_replacement_data_buffer.sample(num_real_samples)
 
                         agent_sampled_tensordict = torch.cat(
                             [
@@ -402,6 +449,7 @@ def main(cfg: "DictConfig"):
                                 + sac_loss_td["loss_value"]
                                 + sac_loss_td["loss_alpha"]
                             )
+                        sac_losses_list.append(sac_loss_td.detach())
                         scaler2.scale(sac_loss_sum).backward()
                         scaler2.unscale_(sac_opt)
                         clip_grad_norm_(sac_loss.parameters(), cfg.grad_clip)
@@ -410,6 +458,38 @@ def main(cfg: "DictConfig"):
                         scaler2.update()
 
                         target_net_updater.step()
+                    sac_losses_mean = torch.stack(sac_losses_list, dim=0).mean(dim=0)
+                    if j == 0:
+                        logger.log_scalar(
+                            "loss_actor",
+                            sac_losses_mean["loss_actor"],
+                            step=collected_frames,
+                        )
+                        logger.log_scalar(
+                            "loss_qvalue",
+                            sac_losses_mean["loss_qvalue"],
+                            step=collected_frames,
+                        )
+                        logger.log_scalar(
+                            "loss_value",
+                            sac_losses_mean["loss_value"],
+                            step=collected_frames,
+                        )
+                        logger.log_scalar(
+                            "loss_alpha",
+                            sac_losses_mean["loss_alpha"],
+                            step=collected_frames,
+                        )
+                        logger.log_scalar(
+                            "alpha",
+                            sac_losses_mean["alpha"],
+                            step=collected_frames,
+                        )
+                        logger.log_scalar(
+                            "entropy",
+                            sac_losses_mean["entropy"],
+                            step=collected_frames,
+                        )
 
                 with torch.no_grad(), set_exploration_mode("mode"):
                     td_record = record(None)
