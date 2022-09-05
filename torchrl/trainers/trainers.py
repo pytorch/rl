@@ -176,8 +176,8 @@ class Trainer:
     def save_trainer(self, force_save: bool = False) -> None:
         _save = force_save
         if self.save_trainer_file is not None:
-            if (self._collected_frames - self._last_save) > self.save_trainer_interval:
-                self._last_save = self._collected_frames
+            if (self.collected_frames - self._last_save) > self.save_trainer_interval:
+                self._last_save = self.collected_frames
                 _save = True
         if _save and self.save_trainer_file:
             torch.save(self.state_dict(), self.save_trainer_file)
@@ -212,7 +212,7 @@ class Trainer:
         return self
 
     def set_seed(self):
-        seed = self.collector.set_seed(self.seed)
+        seed = self.collector.set_seed(self.seed, static_seed=False)
         torch.manual_seed(seed)
         np.random.seed(seed)
 
@@ -220,7 +220,7 @@ class Trainer:
         state_dict = OrderedDict(
             env=self.collector.state_dict(),
             loss_module=self.loss_module.state_dict(),
-            _collected_frames=self._collected_frames,
+            _collected_frames=self.collected_frames,
             _last_log=self._last_log,
             _last_save=self._last_save,
             _optim_count=self._optim_count,
@@ -378,6 +378,7 @@ class Trainer:
             if self.collected_frames >= self.total_frames:
                 self.save_trainer(force_save=True)
                 break
+            self.save_trainer()
 
         self.collector.shutdown()
 

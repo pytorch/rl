@@ -150,7 +150,7 @@ class DMControlWrapper(GymLikeEnv):
             )
         return env
 
-    def _make_specs(self, env: "gym.Env") -> None:
+    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         # specs are defined when first called
         return
 
@@ -197,7 +197,7 @@ class DMControlWrapper(GymLikeEnv):
         return _seed
 
     def _output_transform(
-        self, timestep_tuple: Tuple["TimeStep"]
+        self, timestep_tuple: Tuple["TimeStep"]  # noqa: F821
     ) -> Tuple[np.ndarray, float, bool]:
         if type(timestep_tuple) is not tuple:
             timestep_tuple = (timestep_tuple,)
