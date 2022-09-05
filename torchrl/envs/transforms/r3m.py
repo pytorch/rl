@@ -1,10 +1,10 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import torch
 from torch.hub import load_state_dict_from_url
 from torch.nn import Identity
 
-from torchrl.data import TensorDict
+from torchrl.data import TensorDict, DEVICE_TYPING
 from torchrl.envs.transforms import (
     ToTensorImage,
     Compose,
