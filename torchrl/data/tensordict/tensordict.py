@@ -3845,7 +3845,7 @@ class SavedTensorDict(TensorDictBase):
             self_copy = copy(self)
             self_copy._device = dest
             self_copy._dict_meta = deepcopy(self._dict_meta)
-            for item in self.values_meta():
+            for k, item in self.items_meta():
                 self_copy._dict_meta[k].device = dest
             return self_copy
         if isinstance(dest, torch.Size):
