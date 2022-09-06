@@ -351,7 +351,7 @@ def make_gammas_tensor(gamma, T, device, rolling_gamma):
         # gammas = gammas_cont
 
         # vectorized version
-        gammas = torch.ones(gammas.shape[0], T, T, 1)
+        gammas = torch.ones(gamma.shape[0], T, T, 1)
         s0 = gamma.unsqueeze(-1).expand(gamma.shape[0], T, T).contiguous()
         s1 = roll_by_gather(s0, 0, shifts=-torch.arange(T))
         s2 = s1.flip(-1).triu().flip(-1).transpose(-2, -1)
@@ -363,7 +363,7 @@ def make_gammas_tensor(gamma, T, device, rolling_gamma):
         gammas[..., 1:, :] = gamma[..., None, None]
     return gammas
 
-def vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done):
+def vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done, rolling_gamma: Optional[bool]=None):
     """Vectorized TD(lambda) return estimate.
 
     Args:
@@ -375,6 +375,28 @@ def vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done):
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
+        rolling_gamma (bool, optional): if True, it is assumed that each gamma
+            if a gamma tensor is tied to a single event:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+                v2 + g2 v3 + g2 g3 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            if False, it is assumed that each gamma is tied to the upcoming
+            trajectory:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1**2 v3 + g**3 v4,
+                v2 + g2 v3 + g2**2 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            Default is True.
+
     """
 
     shape = next_state_value.shape
@@ -395,9 +417,7 @@ def vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done):
     first_below_thr_gamma = None
 
     if isinstance(gamma, torch.Tensor) and gamma.ndimension() > 0:
-        gamma = gamma.view(-1, T)
-        gammas = torch.ones(*gamma.shape, T + 1, 1, device=device)
-        gammas[..., 1:, :] = gamma[..., None, None]
+        gammas = make_gammas_tensor(gamma, T, device, rolling_gamma)
     else:
         gammas = torch.ones(T + 1, 1, device=device)
         gammas[1:] = gamma
