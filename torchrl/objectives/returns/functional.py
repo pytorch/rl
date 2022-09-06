@@ -106,9 +106,9 @@ def vec_generalized_advantage_estimate(
     gammalmbda = torch.full_like(not_done, gamma * lmbda) * not_done
     gammalmbda = gammalmbda.flatten(0, len(batch_size) - 1).squeeze(-1)
     gammalmbdas = torch.ones(*gammalmbda.shape, time_steps + 1, 1, device=device, dtype=dtype)
-    gammalmbdas[..., 1:, :] = gammalmbda[..., None, None]
+    gammalmbdas[..., 1:, :] = gammalmbda[..., None, :, None]
 
-    gammalmbdas = torch.cumprod(gammalmbdas, -2)
+    gammalmbdas = torch.cumprod(gammalmbdas[..., :-1, :], -2)
 
     filter = gammalmbdas
 
@@ -281,7 +281,8 @@ def _custom_conv1d(tensor, filter):
         # easy to keep the many dimensions under control. Here b = batch,
         # t = timestep, s = singleton, j is the filter dimension that should
         # get summed out. we swap the order of s and t here rather than
-        # reshape / create a view later
+        # reshape / create a view later.
+        # this is essentially identical to (batched_val_pad @ filter.transpose(-2, -1)).squeeze().unsqueeze(-2)
         out = torch.einsum("btsj,btsj->bst", batched_val_pad, filter)
     else:
         # shape = val.shape

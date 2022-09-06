@@ -1781,7 +1781,7 @@ def test_tdlambda_tensor_gamma(device, gamma, lmbda, N, T):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
+@pytest.mark.parametrize("gamma", [0.99, "rand"])
 @pytest.mark.parametrize("N", [(3,), (3, 7)])
 @pytest.mark.parametrize("T", [3, 5, 200])
 def test_custom_conv1d_tensor(device, gamma, N, T):
@@ -1790,13 +1790,23 @@ def test_custom_conv1d_tensor(device, gamma, N, T):
     """
     torch.manual_seed(0)
 
-    gamma = torch.rand(*N, T, 1, device=device)
-    values = torch.randn(*N, 1, T, device=device)
+    if gamma == "rand":
+        gamma = torch.rand(*N, T, 1, device=device)
+        rand_gamma = True
+    else:
+        gamma = torch.full((*N, T, 1), gamma)
+        rand_gamma = False
 
+    values = torch.randn(*N, 1, T, device=device)
     out = torch.zeros(*N, 1, T, device=device)
-    for i in range(T):
-        for j in reversed(range(i, T)):
-            out[..., i] = out[..., i] * gamma[..., i, :] + values[..., j]
+    if rand_gamma:
+        for i in range(T):
+            for j in reversed(range(i, T)):
+                out[..., i] = out[..., i] * gamma[..., i, :] + values[..., j]
+    else:
+        prev_val = 0.0
+        for i in reversed(range(T)):
+            prev_val = out[..., i] = prev_val * gamma[..., i, :] + values[..., i]
 
     # some reshaping code vendored from vec_td_lambda_return_estimate
     gamma = gamma.view(-1, T)
