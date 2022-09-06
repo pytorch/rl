@@ -1722,10 +1722,13 @@ def test_tdlambda(device, gamma, lmbda, N, T):
 @pytest.mark.parametrize("N", [(3,), (7, 3)])
 @pytest.mark.parametrize("T", [200, 5, 3])
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
-def test_gae(device, gamma, lmbda, N, T, dtype):
+@pytest.mark.parametrize("dones", [True, False])
+def test_gae(device, gamma, lmbda, N, T, dtype, dones):
     torch.manual_seed(0)
 
-    done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool).bernoulli_(0.1)
+    done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+    if dones:
+        done = done.bernoulli_(0.1).cumsum(-2).to(torch.bool)
     reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
     state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
     next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)

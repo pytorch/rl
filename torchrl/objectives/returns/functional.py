@@ -47,10 +47,12 @@ def generalized_advantage_estimate(
             raise RuntimeError(
                 "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
             )
-    not_done = 1 - done.to(next_state_value.dtype)
-    *batch_size, time_steps = not_done.shape[:-1]
+    dtype = next_state_value.dtype
     device = state_value.device
-    advantage = torch.empty(*batch_size, time_steps, 1, device=device)
+
+    not_done = 1 - done.to(dtype)
+    *batch_size, time_steps = not_done.shape[:-1]
+    advantage = torch.empty(*batch_size, time_steps, 1, device=device, dtype=dtype)
     prev_advantage = 0
     for t in reversed(range(time_steps)):
         delta = (
@@ -96,26 +98,38 @@ def vec_generalized_advantage_estimate(
             raise RuntimeError(
                 "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
             )
-    not_done = 1 - done.to(next_state_value.dtype)
+    device = state_value.device
+    dtype = state_value.dtype
+    not_done = 1 - done.to(dtype)
     *batch_size, time_steps = not_done.shape[:-1]
 
-    filter = torch.ones(time_steps * 2 - 1, 1)
-    filter[1:] = gamma * lmbda
-    filter = filter.cumprod(0)
-    first_below_thr = filter[1:] < 1e-7
-    if first_below_thr.any():
-        first_below_thr = first_below_thr.nonzero()[0, 0]
-        filter = filter[:first_below_thr]
-    filter[0] = 0
+    gammalmbda = torch.full_like(not_done, gamma * lmbda) * not_done
+    gammalmbda = gammalmbda.flatten(0, len(batch_size) - 1).squeeze(-1)
+    gammalmbdas = torch.ones(*gammalmbda.shape, time_steps + 1, 1, device=device, dtype=dtype)
+    gammalmbdas[..., 1:, :] = gammalmbda[..., None, None]
+
+    gammalmbdas = torch.cumprod(gammalmbdas, -2)
+
+    filter = gammalmbdas
+
+    # first_below_thr = gammalmbdas < 1e-7
+    # # if we have multiple gammas, we only want to truncate if _all_ of
+    # # the geometric sequences fall below the threshold
+    # first_below_thr = first_below_thr.all(axis=0)
+    # if first_below_thr.any():
+    #     gammalmbdas = gammalmbdas[..., :first_below_thr, :]
+
     td0 = reward + not_done * gamma * next_state_value - state_value
+
     if len(batch_size) > 1:
-        td0 = td0.flatten(0, len(batch_size)-1)
-    advantage = _custom_conv1d(td0.transpose(-2, -1), filter).transpose(-2, -1)
-    # advantage[..., 1:, :] = advantage[..., 1:, :] * not_done[..., :-1, :]
-    # advantage = advantage * not_done
-    advantage = advantage + td0
+        td0 = td0.flatten(0, len(batch_size) - 1)
+
+    advantage = _custom_conv1d(td0.transpose(-2, -1), filter)
+
     if len(batch_size) > 1:
         advantage = advantage.unflatten(0, batch_size)
+
+    advantage = advantage.transpose(-2, -1)
     value_target = advantage + state_value
     return advantage, value_target
 
