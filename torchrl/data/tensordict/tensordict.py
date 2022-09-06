@@ -259,7 +259,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         Args:
             key (str): name of the value
-            item (Tensor): value to be stored in the tensordict
+            item (torch.Tensor): value to be stored in the tensordict
             inplace (bool, optional): if True and if a key matches an existing
                 key in the tensordict, then the update will occur in-place
                 for that key-value pair. Default is `False`.
@@ -278,7 +278,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         Args:
             key (str): name of the value
-            item (Tensor): value to be stored in the tensordict
+            item (torch.Tensor): value to be stored in the tensordict
             no_check (bool, optional): if True, it is assumed that device and shape
                 match the original tensor and that the keys is in the tensordict.
 
@@ -299,7 +299,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         Args:
             key (str): name of the value
-            list_item (list of Tensor): value to be stacked and stored in the tensordict.
+            list_item (list of torch.Tensor): value to be stacked and stored in the tensordict.
             dim (int): dimension along which the tensors should be stacked.
             no_check (bool, optional): if True, it is assumed that device and shape
                 match the original tensor and that the keys is in the tensordict.
@@ -509,7 +509,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         Args:
             input_dict_or_td (TensorDictBase or dict): Does not keyword arguments
                 (unlike `dict.update()`).
-            idx (int, Tensor, iterable, slice): index of the tensordict
+            idx (int, torch.Tensor, iterable, slice): index of the tensordict
                 where the update should occur.
             clone (bool, optional): whether the tensors in the input (
                 tensor) dict should be cloned before being set. Default is
@@ -798,7 +798,7 @@ dtype=torch.float32)},
 
         Args:
             key (str): key to be modified.
-            value (Tensor): value to be set at the index `idx`
+            value (torch.Tensor): value to be set at the index `idx`
             idx (int, tensor or tuple): index where to write the values.
 
         Returns:
@@ -822,8 +822,8 @@ dtype=torch.float32)},
 
         Args:
             key (str): key to be retrieved.
-            idx (int, slice, Tensor, iterable): index of the tensor.
-            default (Tensor): default value to return if the key is
+            idx (int, slice, torch.Tensor, iterable): index of the tensor.
+            default (torch.Tensor): default value to return if the key is
                 not present in the tensordict.
 
         Returns:
@@ -958,10 +958,11 @@ dtype=torch.float32)},
             recursive (bool, optional): if True, each tensor contained in the
                 TensorDict will be copied too. Default is `True`.
         """
-        if not recursive:
-            return copy(self)
         return TensorDict(
-            source={key: value.clone() for key, value in self.items()},
+            source={
+                key: value.clone() if recursive else value
+                for key, value in self.items()
+            },
             batch_size=self.batch_size,
             device=self._device_safe(),
         )
@@ -1036,7 +1037,7 @@ dtype=torch.float32)},
         """Fills the values corresponding to the mask with the desired value.
 
         Args:
-            mask (boolean Tensor): mask of values to be filled. Shape
+            mask (boolean torch.Tensor): mask of values to be filled. Shape
                 must match tensordict shape.
             value: value to used to fill the tensors.
 
@@ -1060,7 +1061,7 @@ dtype=torch.float32)},
         """Out-of-place version of masked_fill
 
         Args:
-            mask (boolean Tensor): mask of values to be filled. Shape
+            mask (boolean torch.Tensor): mask of values to be filled. Shape
                 must match tensordict shape.
             value: value to used to fill the tensors.
 
@@ -1084,7 +1085,7 @@ dtype=torch.float32)},
         instance with similar keys pointing to masked values.
 
         Args:
-            mask (Tensor): boolean mask to be used for the tensors.
+            mask (torch.Tensor): boolean mask to be used for the tensors.
                 Shape must match the TensorDict batch_size.
 
         Examples:
@@ -1503,7 +1504,7 @@ dtype=torch.float32)},
     def __getitem__(self, idx: INDEX_TYPING) -> TensorDictBase:
         """Indexes all tensors according to idx and returns a new tensordict
         where the values share the storage of the original tensors (even
-        when the index is a Tensor). Any in-place modification to the
+        when the index is a torch.Tensor). Any in-place modification to the
         resulting tensordict will impact the parent tensordict too.
 
         Examples:
@@ -1545,8 +1546,6 @@ dtype=torch.float32)},
                 return out[idx[1:]]
             else:
                 return out
-        # elif isinstance(idx, Tensor) and idx.dtype == torch.bool:
-        #     return self.masked_select(idx)
 
         if not self.batch_size:
             raise RuntimeError(
