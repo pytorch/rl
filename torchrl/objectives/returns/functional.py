@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Tuple
+from typing import Tuple, Optional
 
 import torch
 
@@ -103,14 +103,8 @@ def vec_generalized_advantage_estimate(
     not_done = 1 - done.to(dtype)
     *batch_size, time_steps = not_done.shape[:-1]
 
-    gammalmbda = torch.full_like(not_done, gamma * lmbda) * not_done
-    gammalmbda = gammalmbda.flatten(0, len(batch_size) - 1).squeeze(-1)
-    gammalmbdas = torch.ones(*gammalmbda.shape, time_steps + 1, 1, device=device, dtype=dtype)
-    gammalmbdas[..., 1:, :] = gammalmbda[..., None, :, None]
-
-    gammalmbdas = torch.cumprod(gammalmbdas[..., :-1, :], -2)
-
-    filter = gammalmbdas
+    gammalmbdas = torch.full_like(not_done, gamma * lmbda) * not_done
+    gammalmbdas = make_gammas_tensor(gammalmbdas, time_steps, device, True)
 
     # first_below_thr = gammalmbdas < 1e-7
     # # if we have multiple gammas, we only want to truncate if _all_ of
@@ -124,7 +118,7 @@ def vec_generalized_advantage_estimate(
     if len(batch_size) > 1:
         td0 = td0.flatten(0, len(batch_size) - 1)
 
-    advantage = _custom_conv1d(td0.transpose(-2, -1), filter)
+    advantage = _custom_conv1d(td0.transpose(-2, -1), gammalmbdas)
 
     if len(batch_size) > 1:
         advantage = advantage.unflatten(0, batch_size)

@@ -59,7 +59,7 @@ from torchrl.objectives.returns.functional import (
     vec_td_lambda_advantage_estimate,
     td_lambda_advantage_estimate,
     vec_generalized_advantage_estimate,
-    generalized_advantage_estimate, roll_by_gather,
+    generalized_advantage_estimate, roll_by_gather, make_gammas_tensor,
 )
 
 
@@ -1810,6 +1810,7 @@ def test_custom_conv1d_tensor(device, gamma, N, T, rolling_gamma):
             prev_val = out[..., i] = prev_val * gamma[..., i, :] + values[..., i]
 
     gammas = make_gammas_tensor(gamma, T, device, rolling_gamma)
+    gammas = gammas.cumprod(-2)
     out_custom = _custom_conv1d(values.view(-1, 1, T), gammas).reshape(values.shape)
 
     torch.testing.assert_close(out, out_custom, rtol=1e-4, atol=1e-4)
