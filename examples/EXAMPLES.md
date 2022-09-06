@@ -55,9 +55,7 @@ python examples/sac/sac.py env_name="cheetah" env_task="run" env_library="dm_con
 python examples/redq/redq.py env_name="cheetah" env_task="run" env_library="dm_control"
 ```
 
-## Humanoid
-
-## cheetah
+## Ant
 Here we can see some results for the SAC and REDQ algorithm on the Ant environement.
 We average the results over 5 different seeds and plot the standard error.
 <p align="center">
@@ -66,8 +64,25 @@ We average the results over 5 different seeds and plot the standard error.
 To reproduce a single run:
 
 ```
-python examples/sac/sac.py env_name="Ant-v2" env_task="" env_library="gym"
+python examples/sac/sac.py env_name="Ant-v4" env_task="" env_library="gym"
 ```
 
 ``` 
-python examples/redq/redq.py env_name="Ant-v2" env_task="" env_library="gym"
+python examples/redq/redq.py env_name="Ant-v4" env_task="" env_library="gym"
+```
+
+## Walker2D
+Here we can see some results for the SAC and REDQ algorithm on the Walker2D environement.
+We average the results over 5 different seeds and plot the standard error.
+<p align="center">
+<img src="media/walker2d_chart.png" width="600px">
+</p>
+To reproduce a single run:
+
+```
+python examples/sac/sac.py env_name="Walker2D-v4" env_task="" env_library="gym"
+```
+
+``` 
+python examples/redq/redq.py env_name="Walker2D-v4" env_task="" env_library="gym"
+```
