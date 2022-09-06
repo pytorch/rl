@@ -209,7 +209,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             self_copy = self
 
         self_copy.module, other = self_copy.module.make_functional_with_buffers(
-            clone=True, native=native,
+            clone=True,
+            native=native,
         )
         return self_copy, other
 
