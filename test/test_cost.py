@@ -59,7 +59,7 @@ from torchrl.objectives.returns.functional import (
     vec_td_lambda_advantage_estimate,
     td_lambda_advantage_estimate,
     vec_generalized_advantage_estimate,
-    generalized_advantage_estimate,
+    generalized_advantage_estimate, roll_by_gather,
 )
 
 
@@ -1784,7 +1784,8 @@ def test_tdlambda_tensor_gamma(device, gamma, lmbda, N, T):
 @pytest.mark.parametrize("gamma", [0.99, "rand"])
 @pytest.mark.parametrize("N", [(3,), (3, 7)])
 @pytest.mark.parametrize("T", [3, 5, 200])
-def test_custom_conv1d_tensor(device, gamma, N, T):
+@pytest.mark.parametrize("rolling_gamma", [True, False])
+def test_custom_conv1d_tensor(device, gamma, N, T, rolling_gamma):
     """
     Tests the _custom_conv1d logic against a manual for-loop implementation
     """
@@ -1799,7 +1800,7 @@ def test_custom_conv1d_tensor(device, gamma, N, T):
 
     values = torch.randn(*N, 1, T, device=device)
     out = torch.zeros(*N, 1, T, device=device)
-    if rand_gamma:
+    if rand_gamma and not rolling_gamma:
         for i in range(T):
             for j in reversed(range(i, T)):
                 out[..., i] = out[..., i] * gamma[..., i, :] + values[..., j]
@@ -1810,10 +1811,33 @@ def test_custom_conv1d_tensor(device, gamma, N, T):
 
     # some reshaping code vendored from vec_td_lambda_return_estimate
     gamma = gamma.view(-1, T)
-    gammas = torch.ones(*gamma.shape, T + 1, 1, device=device)
-    gammas[..., 1:, :] = gamma[..., None, None]
-    gammas = torch.cumprod(gammas, -2)
-    filter = gammas[..., :-1, :]
+    if rolling_gamma:
+        # loop
+        gammas = gamma.unsqueeze(-2).expand(gamma.shape[0], T, T).contiguous()
+        for i in range(1, T):
+            s = gammas[:, i].clone()
+            gammas[:, i] = 0
+            gammas[:, i, :-i] = s[:, i:]
+        gammas = torch.cumprod(gammas.unsqueeze(-1), -2)
+        gammas_cont = torch.ones(gammas.shape[0], T, T, 1)
+        gammas_cont[..., 1:, :] = gammas[..., :-1, :]
+        gammas = gammas_cont
+
+        # vectorized version
+        gammas2 = torch.ones(gammas.shape[0], T, T, 1)
+        s0 = gamma.unsqueeze(-1).expand(gamma.shape[0], T, T).contiguous()
+        s1 = roll_by_gather(s0, 0, shifts=-torch.arange(T))
+        s2 = s1.flip(-1).triu().flip(-1).transpose(-2, -1)
+        gammas2[..., 1:, :] = s2[..., :-1].unsqueeze(-1)
+        gammas2 = gammas2.cumprod(-2)
+        torch.testing.assert_close(gammas, gammas2)
+
+    else:
+        gammas = torch.ones(*gamma.shape, T + 1, 1, device=device)
+        gammas[..., 1:, :] = gamma[..., None, None]
+        gammas = torch.cumprod(gammas, -2)
+
+    filter = gammas#[..., :-1, :]
 
     out_custom = _custom_conv1d(values.view(-1, 1, T), filter).reshape(values.shape)
 
