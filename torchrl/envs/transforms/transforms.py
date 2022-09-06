@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 from copy import deepcopy, copy
+from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Union
 from warnings import warn
 
@@ -14,11 +15,12 @@ import torch
 from torch import nn, Tensor
 
 try:
-    _has_tv = True
     from torchvision.transforms.functional import center_crop
     from torchvision.transforms.functional_tensor import (
         resize,
     )  # as of now resize is imported from torchvision
+
+    _has_tv = True
 except ImportError:
     _has_tv = False
 
@@ -49,6 +51,7 @@ __all__ = [
     "ToTensorImage",
     "ObservationNorm",
     "FlattenObservation",
+    "UnsqueezeTransform",
     "RewardScaling",
     "ObservationTransform",
     "CatFrames",
@@ -395,9 +398,9 @@ class TransformedEnv(EnvBase):
         tensordict_out = self.transform(tensordict_out)
         return tensordict_out
 
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Set the seeds of the environment"""
-        return self.base_env.set_seed(seed)
+        return self.base_env.set_seed(seed, static_seed=static_seed)
 
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         out_tensordict = self.base_env.reset(execute_step=False, **kwargs)
@@ -670,8 +673,10 @@ class Compose(Transform):
         return len(self.transforms)
 
     def __repr__(self) -> str:
-        layers_str = ", \n\t".join([str(trsf) for trsf in self.transforms])
-        return f"{self.__class__.__name__}(\n\t{layers_str})"
+        layers_str = ",\n".join(
+            [indent(str(trsf), 4 * " ") for trsf in self.transforms]
+        )
+        return f"{self.__class__.__name__}(\n{indent(layers_str, 4 * ' ')})"
 
 
 class ToTensorImage(ObservationTransform):
@@ -872,6 +877,8 @@ class Resize(ObservationTransform):
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         # flatten if necessary
+        if observation.shape[-2:] == torch.Size([self.w, self.h]):
+            return observation
         ndim = observation.ndimension()
         if ndim > 4:
             sizes = observation.shape[:-3]
@@ -1022,6 +1029,79 @@ class FlattenObservation(ObservationTransform):
             f"{self.__class__.__name__}("
             f"first_dim={int(self.first_dim)}, last_dim={int(self.last_dim)})"
         )
+
+
+class UnsqueezeTransform(Transform):
+    """Flatten adjacent dimensions of a tensor.
+
+    Args:
+        unsqueeze_dim (int): dimension to unsqueeze.
+    """
+
+    inplace = False
+
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._unsqueeze_dim = None
+        return super().__new__(cls)
+
+    def __init__(
+        self,
+        unsqueeze_dim: int,
+        keys_in: Optional[Sequence[str]] = None,
+        keys_out: Optional[Sequence[str]] = None,
+    ):
+        if not _has_tv:
+            raise ImportError(
+                "Torchvision not found. The Resize transform relies on "
+                "torchvision implementation. "
+                "Consider installing this dependency."
+            )
+        if keys_in is None:
+            keys_in = IMAGE_KEYS  # default
+        super().__init__(keys_in=keys_in, keys_out=keys_out)
+        self._unsqueeze_dim_orig = unsqueeze_dim
+
+    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
+        if self._unsqueeze_dim_orig < 0:
+            self._unsqueeze_dim = self._unsqueeze_dim_orig
+        else:
+            parent = self.parent
+            batch_size = parent.batch_size
+            self._unsqueeze_dim = self._unsqueeze_dim_orig + len(batch_size)
+        return super().set_parent(parent)
+
+    @property
+    def unsqueeze_dim(self):
+        if self._unsqueeze_dim is None:
+            return self._unsqueeze_dim_orig
+        return self._unsqueeze_dim
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._unsqueeze_dim_orig >= 0:
+            self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
+        return super().forward(tensordict)
+
+    def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        observation = observation.unsqueeze(self.unsqueeze_dim)
+        return observation
+
+    @_apply_to_composite
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        self._unsqueeze_dim = self._unsqueeze_dim_orig
+        space = observation_spec.space
+        if isinstance(space, ContinuousBox):
+            space.minimum = self._apply_transform(space.minimum)
+            space.maximum = self._apply_transform(space.maximum)
+            observation_spec.shape = space.minimum.shape
+        else:
+            observation_spec.shape = self._apply_transform(
+                torch.zeros(observation_spec.shape)
+            ).shape
+        return observation_spec
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(unsqueeze_dim={int(self.unsqueeze_dim)})"
 
 
 class GrayScale(ObservationTransform):
@@ -1390,6 +1470,10 @@ class CatTensors(Transform):
             Default is -1.
         del_keys (bool, optional): if True, the input values will be deleted after
             concatenation. Default is True.
+        unsqueeze_if_oor (bool, optional): if True, CatTensor will check that
+            the dimension indicated exist for the tensors to concatenate. If not,
+            the tensors will be unsqueezed along that dimension.
+            Default is False.
 
     Examples:
         >>> transform = CatTensors(keys_in=["key1", "key2"])
@@ -1398,6 +1482,12 @@ class CatTensors(Transform):
         >>> _ = transform(td)
         >>> print(td.get("observation_vector"))
         tensor([[0., 1.]])
+        >>> transform = CatTensors(keys_in=["key1", "key2"], dim=-2, unsqueeze_if_oor=True)
+        >>> td = TensorDict({"key1": torch.zeros(1),
+        ...     "key2": torch.ones(1)}, [])
+        >>> _ = transform(td)
+        >>> print(td.get("observation_vector").shape)
+        torch.Size([2, 1])
 
     """
 
@@ -1410,6 +1500,7 @@ class CatTensors(Transform):
         out_key: str = "observation_vector",
         dim: int = -1,
         del_keys: bool = True,
+        unsqueeze_if_oor: bool = False,
     ):
         if keys_in is None:
             raise Exception("CatTensors requires keys to be non-empty")
@@ -1435,12 +1526,24 @@ class CatTensors(Transform):
             )
         self.dim = dim
         self.del_keys = del_keys
+        self.unsqueeze_if_oor = unsqueeze_if_oor
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if all([key in tensordict.keys() for key in self.keys_in]):
-            out_tensor = torch.cat(
-                [tensordict.get(key) for key in self.keys_in], dim=self.dim
-            )
+            values = [tensordict.get(key) for key in self.keys_in]
+            if self.unsqueeze_if_oor:
+                pos_idx = self.dim > 0
+                abs_idx = self.dim if pos_idx else -self.dim - 1
+                values = [
+                    v
+                    if abs_idx < v.ndimension()
+                    else v.unsqueeze(0)
+                    if not pos_idx
+                    else v.unsqueeze(-1)
+                    for v in values
+                ]
+
+            out_tensor = torch.cat(values, dim=self.dim)
             tensordict.set(self.keys_out[0], out_tensor)
             if self.del_keys:
                 tensordict.exclude(*self.keys_in, inplace=True)
@@ -1756,10 +1859,12 @@ class VecNorm(Transform):
         self,
         keys_in: Optional[Sequence[str]] = None,
         shared_td: Optional[TensorDictBase] = None,
-        lock: mp.Lock = (mp.Lock()),
+        lock: mp.Lock = None,
         decay: float = 0.9999,
         eps: float = 1e-4,
     ) -> None:
+        if lock is None:
+            lock = mp.Lock()
         if keys_in is None:
             keys_in = ["next_observation", "reward"]
         super().__init__(keys_in)

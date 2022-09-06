@@ -1660,7 +1660,7 @@ dtype=torch.float32)},
         return self.select()
 
     def is_empty(self):
-        for i in self.items_meta():
+        for _ in self.items_meta():
             return False
         return True
 
@@ -2151,15 +2151,15 @@ class TensorDict(TensorDictBase):
         if self.device != torch.device("cpu"):
             # cuda tensors are shared by default
             return self
-        for key, value in self.items():
+        for value in self.values():
             value.share_memory_()
-        for key, value in self.items_meta():
+        for value in self.values_meta():
             value.share_memory_()
         self._is_shared = True
         return self
 
     def detach_(self) -> TensorDictBase:
-        for key, value in self.items():
+        for value in self.values():
             value.detach_()
         return self
 
@@ -2179,7 +2179,7 @@ class TensorDict(TensorDictBase):
             )
         for key, value in self.items():
             self._tensordict[key] = MemmapTensor(value, prefix=prefix)
-        for key, value in self.items_meta():
+        for value in self.values_meta():
             value.memmap_()
         self._is_memmap = True
         return self
@@ -2222,7 +2222,7 @@ class TensorDict(TensorDictBase):
     def masked_fill_(
         self, mask: torch.Tensor, value: Union[float, int, bool]
     ) -> TensorDictBase:
-        for key, item in self.items():
+        for item in self.values():
             mask_expand = expand_as_right(mask, item)
             item.masked_fill_(mask_expand, value)
         return self
@@ -3063,7 +3063,7 @@ class LazyStackedTensorDict(TensorDictBase):
         _batch_size = tensordicts[0].batch_size
         device = tensordicts[0]._device_safe()
 
-        for i, td in enumerate(tensordicts[1:]):
+        for td in tensordicts[1:]:
             if not isinstance(td, TensorDictBase):
                 raise TypeError(
                     f"Expected input to be TensorDictBase instance"
@@ -3596,7 +3596,7 @@ class SavedTensorDict(TensorDictBase):
             raise Exception(
                 "SavedTensorDicts is not compatible with gradients, one of Tensors has requires_grad equals True"
             )
-        self.file = tempfile.NamedTemporaryFile()
+        self.file = tempfile.NamedTemporaryFile()  # noqa: P201
         self.filename = self.file.name
         # if source.is_memmap():
         #     source = source.clone()

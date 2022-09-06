@@ -20,10 +20,14 @@ if _has_dmc:
     from dm_control import suite
     from dm_control.suite.wrappers import pixels
 
+from sys import platform
+
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.gym import GymEnv, GymWrapper
+
+IS_OSX = platform == "darwin"
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
@@ -56,7 +60,7 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
     tdreset = []
     tdrollout = []
     final_seed = []
-    for i in range(2):
+    for _ in range(2):
         env0 = GymEnv(
             env_name,
             frame_skip=frame_skip,
@@ -120,7 +124,7 @@ def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
     tds = []
     tds_reset = []
     final_seed = []
-    for i in range(2):
+    for _ in range(2):
         env0 = DMControlEnv(
             env_name,
             task,
@@ -185,6 +189,7 @@ def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
     assert_allclose_td(rollout0, rollout2)
 
 
+@pytest.mark.skipif(IS_OSX, reason="rendeing unstable on osx, skipping")
 @pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
 @pytest.mark.parametrize(
     "env_lib,env_args,env_kwargs",
@@ -207,6 +212,7 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
         assert fake_td.get(key).device == td.get(key).device
 
 
+@pytest.mark.skipif(IS_OSX, reason="rendeing unstable on osx, skipping")
 @pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
 @pytest.mark.parametrize(
     "env_lib,env_args,env_kwargs",
@@ -240,9 +246,9 @@ class TestCollectorLib:
         )
         for i, data in enumerate(collector):
             if i == 3:
+                assert data.shape[0] == 3
+                assert data.shape[1] == 7
                 break
-        assert data.shape[0] == 3
-        assert data.shape[1] == 7
         collector.shutdown()
         del env
 

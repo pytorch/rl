@@ -25,6 +25,7 @@ from torchrl.modules.tensordict_module.actors import ProbabilisticActor
 from torchrl.modules.tensordict_module.exploration import (
     _OrnsteinUhlenbeckProcess,
     OrnsteinUhlenbeckProcessWrapper,
+    AdditiveGaussianWrapper,
 )
 
 
@@ -77,7 +78,7 @@ def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     )
     out_noexp = []
     out = []
-    for i in range(n_steps):
+    for _ in range(n_steps):
         tensordict_noexp = policy(tensordict.select("observation"))
         tensordict = exploratory_policy(tensordict)
         out.append(tensordict.clone())
@@ -88,6 +89,98 @@ def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     assert (out_noexp.get("action") != out.get("action")).all()
     assert (out.get("action") <= 1.0).all(), out.get("action").min()
     assert (out.get("action") >= -1.0).all(), out.get("action").max()
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+class TestAdditiveGaussian:
+    def test_additivegaussian_sd(
+        self, device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0
+    ):
+        torch.manual_seed(seed)
+        net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
+        action_spec = NdBoundedTensorSpec(
+            -torch.ones(d_act, device=device),
+            torch.ones(d_act, device=device),
+            (d_act,),
+            device=device,
+        )
+        policy = ProbabilisticActor(
+            spec=action_spec,
+            module=module,
+            dist_param_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            default_interaction_mode="random",
+        ).to(device)
+        exploratory_policy = AdditiveGaussianWrapper(policy).to(device)
+
+        sigma_init = (
+            action_spec.project(
+                torch.randn(1000000, action_spec.shape[-1], device=device)
+            ).std()
+            * exploratory_policy.sigma_init
+        )
+        sigma_end = (
+            action_spec.project(
+                torch.randn(1000000, action_spec.shape[-1], device=device)
+            ).std()
+            * exploratory_policy.sigma_end
+        )
+        noisy_action = exploratory_policy._add_noise(
+            action_spec.rand((100000,)).zero_()
+        )
+        assert abs(noisy_action.std() - sigma_init) < 1e-1
+
+        for _ in range(exploratory_policy.annealing_num_steps):
+            exploratory_policy.step(1)
+        noisy_action = exploratory_policy._add_noise(
+            action_spec.rand((100000,)).zero_()
+        )
+        assert abs(noisy_action.std() - sigma_end) < 1e-1
+
+    def test_additivegaussian_wrapper(
+        self, device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0
+    ):
+        torch.manual_seed(seed)
+        net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
+        action_spec = NdBoundedTensorSpec(
+            -torch.ones(d_act, device=device),
+            torch.ones(d_act, device=device),
+            (d_act,),
+            device=device,
+        )
+        policy = ProbabilisticActor(
+            spec=action_spec,
+            module=module,
+            dist_param_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            default_interaction_mode="random",
+        ).to(device)
+        exploratory_policy = AdditiveGaussianWrapper(policy).to(device)
+
+        tensordict = TensorDict(
+            batch_size=[batch],
+            source={"observation": torch.randn(batch, d_obs, device=device)},
+            device=device,
+        )
+        out_noexp = []
+        out = []
+        for i in range(n_steps):
+            tensordict_noexp = policy(tensordict.select("observation"))
+            tensordict = exploratory_policy(tensordict)
+            out.append(tensordict.clone())
+            out_noexp.append(tensordict_noexp.clone())
+            tensordict.set_("observation", torch.randn(batch, d_obs, device=device))
+        out = torch.stack(out, 0)
+        out_noexp = torch.stack(out_noexp, 0)
+        assert (out_noexp.get("action") != out.get("action")).all()
+        assert (out.get("action") <= 1.0).all(), out.get("action").min()
+        assert (out.get("action") >= -1.0).all(), out.get("action").max()
 
 
 @pytest.mark.parametrize("state_dim", [7])

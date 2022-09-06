@@ -8,7 +8,7 @@ from copy import copy
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from mocking_classes import ContinuousActionVecMockEnv
+from mocking_classes import ContinuousActionVecMockEnv, DiscreteActionConvMockEnvNumpy
 from torch import Tensor
 from torch import multiprocessing as mp
 from torchrl import prod
@@ -33,6 +33,7 @@ from torchrl.envs import (
     FlattenObservation,
     RewardScaling,
     BinarizeReward,
+    R3MTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm, TransformedEnv
@@ -41,6 +42,7 @@ from torchrl.envs.transforms.transforms import (
     NoopResetEnv,
     PinMemoryTransform,
     CenterCrop,
+    UnsqueezeTransform,
 )
 
 TIMEOUT = 10.0
@@ -388,6 +390,58 @@ class TestTransforms:
             observation_spec = flatten.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].shape[-3] == expected_size
+
+    @pytest.mark.parametrize("unsqueeze_dim", [1, -2])
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("size", [[], [4]])
+    @pytest.mark.parametrize(
+        "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_unsqueeze(self, keys, size, nchannels, batch, device, unsqueeze_dim):
+        torch.manual_seed(0)
+        dont_touch = torch.randn(*batch, *size, nchannels, 16, 16, device=device)
+        unsqueeze = UnsqueezeTransform(unsqueeze_dim, keys_in=keys)
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
+                for key in keys
+            },
+            batch,
+        )
+        td.set("dont touch", dont_touch.clone())
+        unsqueeze(td)
+        expected_size = [*size, nchannels, 16, 16]
+        if unsqueeze_dim < 0:
+            expected_size.insert(len(expected_size) + unsqueeze_dim + 1, 1)
+        else:
+            expected_size.insert(unsqueeze_dim, 1)
+        expected_size = torch.Size(expected_size)
+
+        for key in keys:
+            assert td.get(key).shape[len(batch) :] == expected_size, (
+                batch,
+                size,
+                nchannels,
+                unsqueeze_dim,
+            )
+        assert (td.get("dont touch") == dont_touch).all()
+
+        if len(keys) == 1:
+            observation_spec = NdBoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
+            observation_spec = unsqueeze.transform_observation_spec(observation_spec)
+            assert observation_spec.shape == expected_size
+        else:
+            observation_spec = CompositeSpec(
+                **{
+                    key: NdBoundedTensorSpec(-1, 1, (*size, nchannels, 16, 16))
+                    for key in keys
+                }
+            )
+            observation_spec = unsqueeze.transform_observation_spec(observation_spec)
+            for key in keys:
+                assert observation_spec[key].shape == expected_size
 
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize(
@@ -890,7 +944,7 @@ class TestTransforms:
         pin_mem = PinMemoryTransform()
         td = TensorDict({key: torch.randn(3) for key in ["a", "b", "c"]}, [])
         pin_mem(td)
-        for key, item in td.items():
+        for item in td.values():
             assert item.is_pinned
 
     def test_append(self):
@@ -987,7 +1041,7 @@ class TestTransforms:
         try:
             env.insert_transform(-7, FiniteTensorDictCheck())
             assert 1 == 6
-        except ValueError as ve:
+        except ValueError:
             assert len(env.transform) == 6
             assert env._action_spec is not None
             assert env._observation_spec is not None
@@ -996,7 +1050,7 @@ class TestTransforms:
         try:
             env.insert_transform(7, FiniteTensorDictCheck())
             assert 1 == 6
-        except ValueError as ve:
+        except ValueError:
             assert len(env.transform) == 6
             assert env._action_spec is not None
             assert env._observation_spec is not None
@@ -1005,11 +1059,114 @@ class TestTransforms:
         try:
             env.insert_transform(4, "ffff")
             assert 1 == 6
-        except ValueError as ve:
+        except ValueError:
             assert len(env.transform) == 6
             assert env._action_spec is not None
             assert env._observation_spec is not None
             assert env._reward_spec is not None
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("model", ["resnet18", "resnet34", "resnet50"])
+class TestR3M:
+    @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
+    def test_r3m_instantiation(self, model, tensor_pixels_key, device):
+        keys_in = ["next_pixels"]
+        keys_out = ["next_vec"]
+        r3m = R3MTransform(
+            model,
+            keys_in=keys_in,
+            keys_out=keys_out,
+            tensor_pixels_keys=tensor_pixels_key,
+        )
+        base_env = DiscreteActionConvMockEnvNumpy().to(device)
+        transformed_env = TransformedEnv(base_env, r3m)
+        td = transformed_env.reset()
+        assert td.device == device
+        exp_keys = {"vec", "done", "pixels_orig"}
+        if tensor_pixels_key:
+            exp_keys.add(tensor_pixels_key[0])
+        assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
+
+        td = transformed_env.rand_step(td)
+        exp_keys = exp_keys.union({"next_vec", "next_pixels_orig", "action", "reward"})
+        assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
+        transformed_env.close()
+
+    @pytest.mark.parametrize("stack_images", [True, False])
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_r3m_mult_images(self, model, device, stack_images, parallel):
+        keys_in = ["next_pixels", "next_pixels2"]
+        keys_out = ["next_vec"] if stack_images else ["next_vec", "next_vec2"]
+        r3m = R3MTransform(
+            model,
+            keys_in=keys_in,
+            keys_out=keys_out,
+            stack_images=stack_images,
+        )
+
+        base_env_constructor = lambda: TransformedEnv(
+            DiscreteActionConvMockEnvNumpy().to(device),
+            CatTensors(["next_pixels"], "next_pixels2", del_keys=False),
+        )
+        assert base_env_constructor().device == device
+        if parallel:
+            base_env = ParallelEnv(3, base_env_constructor)
+        else:
+            base_env = base_env_constructor()
+        assert base_env.device == device
+
+        transformed_env = TransformedEnv(base_env, r3m)
+        assert transformed_env.device == device
+        assert r3m.device == device
+
+        td = transformed_env.reset()
+        assert td.device == device
+        if stack_images:
+            exp_keys = {"pixels_orig", "done", "vec"}
+            # assert td["vec"].shape[0] == 2
+            assert td["vec"].ndimension() == 1 + parallel
+            assert set(td.keys()) == exp_keys
+        else:
+            exp_keys = {"pixels_orig", "done", "vec", "vec2"}
+            assert td["vec"].shape[0 + parallel] != 2
+            assert td["vec"].ndimension() == 1 + parallel
+            assert td["vec2"].shape[0 + parallel] != 2
+            assert td["vec2"].ndimension() == 1 + parallel
+            assert set(td.keys()) == exp_keys
+
+        td = transformed_env.rand_step(td)
+        exp_keys = exp_keys.union({"next_vec", "next_pixels_orig", "action", "reward"})
+        if not stack_images:
+            exp_keys = exp_keys.union({"next_vec2"})
+        assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
+        transformed_env.close()
+
+    def test_r3m_parallel(self, model, device):
+        keys_in = ["next_pixels"]
+        keys_out = ["next_vec"]
+        tensor_pixels_key = None
+        r3m = R3MTransform(
+            model,
+            keys_in=keys_in,
+            keys_out=keys_out,
+            tensor_pixels_keys=tensor_pixels_key,
+        )
+        base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
+        transformed_env = TransformedEnv(base_env, r3m)
+        td = transformed_env.reset()
+        assert td.device == device
+        assert td.batch_size == torch.Size([4])
+        exp_keys = {"vec", "done", "pixels_orig"}
+        if tensor_pixels_key:
+            exp_keys.add(tensor_pixels_key)
+        assert set(td.keys()) == exp_keys
+
+        td = transformed_env.rand_step(td)
+        exp_keys = exp_keys.union({"next_vec", "next_pixels_orig", "action", "reward"})
+        assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
+        transformed_env.close()
+        del transformed_env
 
 
 if __name__ == "__main__":
