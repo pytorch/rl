@@ -8,7 +8,19 @@ from __future__ import annotations
 from copy import copy, deepcopy
 from typing import List, Iterable, Union, Tuple
 
-import functorch
+_has_functorch = False
+try:
+    import functorch
+
+    _has_functorch = True
+except ImportError:
+    print(
+        "failed to import functorch. TorchRL's features that do not require "
+        "functional programming should work, but functionality and performance "
+        "may be affected. Consider installing functorch and/or upgrating pytorch."
+    )
+    FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
+
 import torch
 from torch import nn, Tensor
 
@@ -16,7 +28,11 @@ from torchrl.data import (
     TensorSpec,
     CompositeSpec,
 )
-from torchrl.data.tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
+from torchrl.data.tensordict.tensordict import (
+    TensorDictBase,
+    LazyStackedTensorDict,
+    TensorDict,
+)
 from torchrl.modules.tensordict_module.common import TensorDictModule
 from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,
@@ -152,6 +168,8 @@ class TensorDictSequence(TensorDictModule):
 
     @staticmethod
     def _find_functional_module(module: TensorDictModule) -> nn.Module:
+        if not _has_functorch:
+            raise ImportError(FUNCTORCH_ERROR)
         fmodule = module
         while not isinstance(
             fmodule, (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers)
@@ -266,8 +284,15 @@ class TensorDictSequence(TensorDictModule):
     ) -> TensorDictBase:
 
         if "params" in kwargs and "buffers" in kwargs:
-            param_splits = self._split_param(kwargs["params"], "params")
-            buffer_splits = self._split_param(kwargs["buffers"], "buffers")
+            params = kwargs["params"]
+            buffers = kwargs["buffers"]
+            if isinstance(params, TensorDictBase):
+                # TODO: implement sorted values and items
+                param_splits = list(zip(*sorted(list(params.items()))))[1]
+                buffer_splits = list(zip(*sorted(list(buffers.items()))))[1]
+            else:
+                param_splits = self._split_param(kwargs["params"], "params")
+                buffer_splits = self._split_param(kwargs["buffers"], "buffers")
             kwargs_pruned = {
                 key: item
                 for key, item in kwargs.items()
@@ -278,20 +303,37 @@ class TensorDictSequence(TensorDictModule):
             ):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
-                    kwargs_pruned["vmap"] = (0, 0, *(0,) * len(module.in_keys))
+                    if not isinstance(kwargs_pruned["vmap"], tuple):
+                        kwargs_pruned["vmap"] = (0, 0, *(0,) * len(module.in_keys))
+                    else:
+                        kwargs_pruned["vmap"] = (
+                            *kwargs_pruned["vmap"][:2],
+                            *(0,) * len(module.in_keys),
+                        )
                 tensordict = self._run_module(
                     module, tensordict, params=param, buffers=buffer, **kwargs_pruned
                 )
 
         elif "params" in kwargs:
-            param_splits = self._split_param(kwargs["params"], "params")
+            params = kwargs["params"]
+            if isinstance(params, TensorDictBase):
+                # TODO: implement sorted values and items
+                param_splits = list(zip(*sorted(list(params.items()))))[1]
+            else:
+                param_splits = self._split_param(kwargs["params"], "params")
             kwargs_pruned = {
                 key: item for key, item in kwargs.items() if key not in ("params",)
             }
             for i, (module, param) in enumerate(zip(self.module, param_splits)):
                 if "vmap" in kwargs_pruned and i > 0:
                     # the tensordict is already expended
-                    kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
+                    if not isinstance(kwargs_pruned["vmap"], tuple):
+                        kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
+                    else:
+                        kwargs_pruned["vmap"] = (
+                            *kwargs_pruned["vmap"][:],
+                            *(0,) * len(module.in_keys),
+                        )
                 tensordict = self._run_module(
                     module, tensordict, params=param, **kwargs_pruned
                 )
@@ -337,10 +379,18 @@ class TensorDictSequence(TensorDictModule):
                 kwargs[out_key] = spec
         return CompositeSpec(**kwargs)
 
-    def make_functional_with_buffers(self, clone: bool = True):
+    def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
         """
         Transforms a stateful module in a functional module and returns its parameters and buffers.
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
+
+        Args:
+            clone (bool, optional): if True, a clone of the module is created before it is returned.
+                This is useful as it prevents the original module to be scraped off of its
+                parameters and buffers.
+                Defaults to True
+            native (bool, optional): if True, TorchRL's functional modules will be used.
+                Defaults to True
 
         Returns:
             A tuple of parameter and buffer tuples
@@ -376,15 +426,19 @@ class TensorDictSequence(TensorDictModule):
             self_copy.module = copy(self_copy.module)
         else:
             self_copy = self
-        params = []
-        buffers = []
+        params = [] if not native else TensorDict({}, [])
+        buffers = [] if not native else TensorDict({}, [])
         for i, module in enumerate(self.module):
             self_copy.module[i], (
                 _params,
                 _buffers,
-            ) = module.make_functional_with_buffers(clone=True)
-            params.extend(_params)
-            buffers.extend(_buffers)
+            ) = module.make_functional_with_buffers(clone=True, native=native)
+            if native or not _has_functorch:
+                params[str(i)] = _params
+                buffers[str(i)] = _buffers
+            else:
+                params.extend(_params)
+                buffers.extend(_buffers)
         return self_copy, (params, buffers)
 
     def get_dist(
@@ -396,8 +450,14 @@ class TensorDictSequence(TensorDictModule):
 
         if isinstance(self.module[-1], ProbabilisticTensorDictModule):
             if "params" in kwargs and "buffers" in kwargs:
-                param_splits = self._split_param(kwargs["params"], "params")
-                buffer_splits = self._split_param(kwargs["buffers"], "buffers")
+                params = kwargs["params"]
+                buffers = kwargs["buffers"]
+                if isinstance(params, TensorDictBase):
+                    param_splits = list(zip(*sorted(list(params.items()))))[1]
+                    buffer_splits = list(zip(*sorted(list(buffers.items()))))[1]
+                else:
+                    param_splits = self._split_param(kwargs["params"], "params")
+                    buffer_splits = self._split_param(kwargs["buffers"], "buffers")
                 kwargs_pruned = {
                     key: item
                     for key, item in kwargs.items()
@@ -419,7 +479,11 @@ class TensorDictSequence(TensorDictModule):
                         )
 
             elif "params" in kwargs:
-                param_splits = self._split_param(kwargs["params"], "params")
+                params = kwargs["params"]
+                if isinstance(params, TensorDictBase):
+                    param_splits = list(zip(*sorted(list(params.items()))))[1]
+                else:
+                    param_splits = self._split_param(kwargs["params"], "params")
                 kwargs_pruned = {
                     key: item for key, item in kwargs.items() if key not in ("params",)
                 }
