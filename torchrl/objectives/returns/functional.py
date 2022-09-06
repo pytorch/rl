@@ -335,6 +335,33 @@ def vec_td_lambda_advantage_estimate(
         - state_value
     )
 
+def make_gammas_tensor(gamma, T, device, rolling_gamma):
+    # some reshaping code vendored from vec_td_lambda_return_estimate
+    gamma = gamma.view(-1, T)
+    if rolling_gamma:
+        # # loop
+        # gammas = gamma.unsqueeze(-2).expand(gamma.shape[0], T, T).contiguous()
+        # for i in range(1, T):
+        #     s = gammas[:, i].clone()
+        #     gammas[:, i] = 0
+        #     gammas[:, i, :-i] = s[:, i:]
+        # gammas = torch.cumprod(gammas.unsqueeze(-1), -2)
+        # gammas_cont = torch.ones(gammas.shape[0], T, T, 1)
+        # gammas_cont[..., 1:, :] = gammas[..., :-1, :]
+        # gammas = gammas_cont
+
+        # vectorized version
+        gammas = torch.ones(gammas.shape[0], T, T, 1)
+        s0 = gamma.unsqueeze(-1).expand(gamma.shape[0], T, T).contiguous()
+        s1 = roll_by_gather(s0, 0, shifts=-torch.arange(T))
+        s2 = s1.flip(-1).triu().flip(-1).transpose(-2, -1)
+        gammas[..., 1:, :] = s2[..., :-1].unsqueeze(-1)
+        # torch.testing.assert_close(gammas, gammas2)
+
+    else:
+        gammas = torch.ones(*gamma.shape, T + 1, 1, device=device)
+        gammas[..., 1:, :] = gamma[..., None, None]
+    return gammas
 
 def vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done):
     """Vectorized TD(lambda) return estimate.
