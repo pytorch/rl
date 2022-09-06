@@ -331,7 +331,7 @@ class TensorDictSequence(TensorDictModule):
                         kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
                     else:
                         kwargs_pruned["vmap"] = (
-                            *kwargs_pruned["vmap"][:],
+                            *kwargs_pruned["vmap"][:1],
                             *(0,) * len(module.in_keys),
                         )
                 tensordict = self._run_module(

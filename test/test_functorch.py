@@ -141,6 +141,62 @@ def test_vmap_tdmodule_nativebuilt(moduletype, batch_params):
         ["linear", True],
     ],
 )
+def test_vmap_tdsequence(moduletype, batch_params):
+    if moduletype == "linear":
+        module1 = nn.Linear(3, 4)
+        fmodule1, params1 = FunctionalModule._create_from(module1)
+        module2 = nn.Linear(4, 5)
+        fmodule2, params2 = FunctionalModule._create_from(module2)
+    elif moduletype == "bn1":
+        module1 = nn.BatchNorm1d(3)
+        fmodule1, params1, buffers1 = FunctionalModuleWithBuffers._create_from(module1)
+        module2 = nn.BatchNorm1d(3)
+        fmodule2, params2, buffers2 = FunctionalModuleWithBuffers._create_from(module2)
+    else:
+        raise NotImplementedError
+    if moduletype == "linear":
+        tdmodule1 = TensorDictModule(fmodule1, in_keys=["x"], out_keys=["y"])
+        tdmodule2 = TensorDictModule(fmodule2, in_keys=["y"], out_keys=["z"])
+        params = TensorDict({"0": params1, "1": params2}, [])
+        tdmodule = TensorDictSequence(tdmodule1, tdmodule2)
+        assert {"0", "1"} == set(params.keys())
+        x = torch.randn(10, 1, 3)
+        td = TensorDict({"x": x}, [10])
+        if batch_params:
+            params = params.expand(10)
+            tdmodule(td, params=params, vmap=(0, 0))
+        else:
+            tdmodule(td, params=params, vmap=(None, 0))
+        z = td["z"]
+        assert z.shape == torch.Size([10, 1, 5])
+    elif moduletype == "bn1":
+        tdmodule1 = TensorDictModule(fmodule1, in_keys=["x"], out_keys=["y"])
+        tdmodule2 = TensorDictModule(fmodule2, in_keys=["y"], out_keys=["z"])
+        params = TensorDict({"0": params1, "1": params2}, [])
+        buffers = TensorDict({"0": buffers1, "1": buffers2}, [])
+        tdmodule = TensorDictSequence(tdmodule1, tdmodule2)
+        assert {"0", "1"} == set(params.keys())
+        assert {"0", "1"} == set(buffers.keys())
+        x = torch.randn(10, 2, 3)
+        td = TensorDict({"x": x}, [10])
+        if batch_params:
+            params = params.expand(10).contiguous()
+            buffers = buffers.expand(10).contiguous()
+            y = tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
+        else:
+            raise NotImplementedError
+        z = td["z"]
+        assert z.shape == torch.Size([10, 2, 3])
+
+
+@pytest.mark.parametrize(
+    "moduletype,batch_params",
+    [
+        ["linear", False],
+        ["bn1", True],
+        ["linear", True],
+    ],
+)
 def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
     if moduletype == "linear":
         module1 = nn.Linear(3, 4)
