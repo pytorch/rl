@@ -41,7 +41,9 @@ class MBPOEnv(ModelBasedEnv):
     def _step(self, tensordict: TensorDict) -> TensorDict:
         tensordict_out = tensordict.clone()
         # Compute world state
-        sampled_model_id = self.elites[torch.randint(0, len(self.elites), tensordict_out.shape)]
+        sampled_model_id = self.elites[
+            torch.randint(0, len(self.elites), tensordict_out.shape)
+        ]
 
         tensordict_out = self.world_model(
             tensordict_out,

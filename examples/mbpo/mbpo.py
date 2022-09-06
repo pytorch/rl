@@ -122,7 +122,7 @@ def main(cfg: "DictConfig"):
         logger = WandbLogger(
             f"mbpo/{exp_name}",
             project="torchrl",
-            group=f"MBPO_{cfg.env_name}_with_elites",
+            group=f"MBPO_{cfg.env_name}",
         )
     video_tag = "MBPO_policy_test" if cfg.record_video else ""
 
@@ -165,6 +165,8 @@ def main(cfg: "DictConfig"):
         observation_key="observation_vector",
         device=device,
     )
+
+    imagination_horizon_planner = ImaginationStepsPlanner(cfg)
     sac_loss, target_net_updater = make_sac_loss(sac_model, cfg)
     # optimizers
     world_model_opt = torch.optim.Adam(
@@ -284,7 +286,13 @@ def main(cfg: "DictConfig"):
         tensordict = tensordict.view(-1)
         original_keys = tensordict.keys()
         with_replacement_data_buffer.extend(tensordict.cpu())
-        without_replacement_data_buffer
+        imagination_horizon = imagination_horizon_planner(i)
+        model_buffer._storage.set_max_size(
+            imagination_horizon
+            * cfg.num_model_rollouts
+            * cfg.optim_steps_per_batch
+            * cfg.keep_model_samples_n_collect_steps
+        )
 
         if collected_frames >= cfg.init_random_frames:
             # Train model on current replay buffer
@@ -319,9 +327,7 @@ def main(cfg: "DictConfig"):
                         scaler1.step(world_model_opt)
                         world_model_opt.zero_grad()
                         scaler1.update()
-                        world_model_train_losses.append(
-                            model_loss_td.detach()
-                        )
+                        world_model_train_losses.append(model_loss_td.detach())
                     world_model_train_losses = torch.stack(
                         world_model_train_losses, dim=0
                     )
@@ -404,7 +410,7 @@ def main(cfg: "DictConfig"):
                                 device
                             )
                             fake_traj_tensordict = model_based_env.rollout(
-                                max_steps=cfg.imagination_horizon,
+                                max_steps=imagination_horizon,
                                 policy=policy,
                                 auto_reset=False,
                                 tensordict=model_sampled_tensordict,
@@ -501,6 +507,27 @@ def main(cfg: "DictConfig"):
                                     value.detach().cpu().numpy(),
                                     step=collected_frames,
                                 )
+
+
+class ImaginationStepsPlanner:
+    def __init__(self, cfg):
+        self.start_horizon = cfg.start_imagination_horizon
+        self.start_epoch = cfg.start_imagination_horizon_epoch
+        self.end_horizon = cfg.end_imagination_horizon
+        self.end_epoch = cfg.end_imagination_horizon_epoch
+
+    def __call__(self, epoch):
+        if epoch < self.start_epoch:
+            return self.start_horizon
+        elif epoch > self.end_epoch:
+            return self.end_horizon
+        else:
+            return int(
+                self.start_horizon
+                + (epoch - self.start_epoch)
+                * (self.end_horizon - self.start_horizon)
+                / (self.end_epoch - self.start_epoch)
+            )
 
 
 if __name__ == "__main__":

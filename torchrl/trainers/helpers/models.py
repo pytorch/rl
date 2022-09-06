@@ -1225,7 +1225,10 @@ class MBPOConfig:
     world_model_lr: float = 1e-3
     hidden_world_model: int = 256
     num_layers_world_model: int = 4
-    imagination_horizon: int = 1
+    start_imagination_horizon: int = 1
+    start_imagination_horizon_epoch: int = 20
+    end_imagination_horizon: int = 1
+    end_imagination_horizon_epoch: int = 100
     sac_lr: float = 0.0003
     model_batch_size: int = 256
     sac_batch_size: int = 256
@@ -1234,6 +1237,7 @@ class MBPOConfig:
     num_elites: int = 5
     num_model_rollouts: int = 400
     train_model_every_k_optim_step: int = 250
+    keep_model_samples_n_collect_steps: int = 1
     num_sac_training_steps_per_optim_step: int = 20
 
 

@@ -222,3 +222,24 @@ class LazyMemmapStorage(LazyTensorStorage):
                 )
         self._storage = out
         self.initialized = True
+
+
+class CappedStorage(Storage):
+    def __init__(self, storage, max_size=None):
+        max_size = max_size if max_size is not None else storage.max_size
+        super().__init__(max_size)
+        self.storage = storage
+
+    def set_max_size(self, max_size):
+        self.max_size = (
+            max_size if max_size <= self.storage.max_size else self.storage.max_size
+        )
+
+    def set(self, cursor: int, data: Any):
+        return self.storage.set(cursor, data)
+
+    def get(self, index: int) -> Any:
+        return self.storage.get(index)
+
+    def __len__(self):
+        return len(self.storage)

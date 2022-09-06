@@ -40,6 +40,7 @@ class RandomSampler(Sampler):
         index = np.random.randint(0, len(storage), size=batch_size)
         return index, {}
 
+
 class PrioritizedSampler(Sampler):
     """
         Prioritized sampler for replay buffer as presented in
@@ -177,10 +178,12 @@ class PrioritizedSampler(Sampler):
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
 
+
 class WithoutReplacementRandomSampler(Sampler):
     def reset(self, storage: Storage) -> None:
         self.order_index = 0
         self._random_order = np.random.permutation(len(storage))
+
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
         if not hasattr(self, "order_index"):
             self.reset(storage)
@@ -189,6 +192,6 @@ class WithoutReplacementRandomSampler(Sampler):
             self.reset(storage)
             next_order_index = batch_size
 
-        index = self._random_order[self.order_index:next_order_index]
+        index = self._random_order[self.order_index : next_order_index]
         self.order_index = next_order_index
         return index, {}
