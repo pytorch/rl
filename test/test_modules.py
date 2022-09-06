@@ -20,8 +20,8 @@ from torchrl.modules import (
     LSTMNet,
     CEMPlanner,
 )
-from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.modules.models import NoisyLinear, MLP, NoisyLazyLinear
+from test.mocking_classes import MockSerialEnv
 
 
 @pytest.mark.parametrize("in_features", [3, 10, None])
@@ -302,11 +302,9 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
 
 
 class TestPlanner:
-    @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("env_name", ["Pendulum-v1"])
     def test_CEM_model_free_env(self, device, env_name, seed=0):
-        env = GymEnv(env_name, frame_skip=1, device=device)
+        env = MockSerialEnv(device=device)
         env.set_seed(seed)
         planner = CEMPlanner(
             env,

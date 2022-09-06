@@ -89,7 +89,7 @@ class CEMPlanner(MPCPlannerBase):
                 *self.action_spec.shape,
             )
             actions = self.env.action_spec.project(actions)
-            optim_td = expanded_original_td.clone()
+            optim_td = expanded_original_td.to_tensordict()
             policy = PrecomputedActionsSequentialSetter(actions)
             optim_td = self.env.rollout(
                 max_steps=self.planning_horizon,
