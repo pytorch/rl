@@ -75,6 +75,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     _safe = False
     _lazy = False
+    _inplace_set = False
     is_meta = False
 
     def __getstate__(self) -> dict:
@@ -1558,7 +1559,11 @@ dtype=torch.float32)},
         # if return_simple_view and not self.is_memmap():
         return TensorDict(
             source={key: item[idx] for key, item in self.items()},
-            _meta_source={key: item[idx] for key, item in self.items_meta()},
+            _meta_source={
+                key: item[idx]
+                for key, item in self.items_meta(make_unset=False)
+                if not item.is_tensordict()
+            },
             batch_size=_getitem_batch_size(self.batch_size, idx),
             device=self._device_safe(),
         )
@@ -1582,7 +1587,7 @@ dtype=torch.float32)},
         ) not in [len(index), 0]:
             raise IndexError(_STR_MIXED_INDEX_ERROR)
         if isinstance(index, str):
-            self.set(index, value, inplace=False)
+            self.set(index, value, inplace=self._inplace_set)
         elif isinstance(index, tuple) and all(
             isinstance(sub_index, str) for sub_index in index
         ):
@@ -1671,7 +1676,7 @@ dtype=torch.float32)},
         return self.select()
 
     def is_empty(self):
-        for i in self.items_meta():
+        for _ in self.items_meta():
             return False
         return True
 
@@ -2162,15 +2167,15 @@ class TensorDict(TensorDictBase):
         if self.device != torch.device("cpu"):
             # cuda tensors are shared by default
             return self
-        for key, value in self.items():
+        for value in self.values():
             value.share_memory_()
-        for key, value in self.items_meta():
+        for value in self.values_meta():
             value.share_memory_()
         self._is_shared = True
         return self
 
     def detach_(self) -> TensorDictBase:
-        for key, value in self.items():
+        for value in self.values():
             value.detach_()
         return self
 
@@ -2190,7 +2195,7 @@ class TensorDict(TensorDictBase):
             )
         for key, value in self.items():
             self._tensordict[key] = MemmapTensor(value, prefix=prefix)
-        for key, value in self.items_meta():
+        for value in self.values_meta():
             value.memmap_()
         self._is_memmap = True
         return self
@@ -2233,7 +2238,7 @@ class TensorDict(TensorDictBase):
     def masked_fill_(
         self, mask: torch.Tensor, value: Union[float, int, bool]
     ) -> TensorDictBase:
-        for key, item in self.items():
+        for item in self.values():
             mask_expand = expand_as_right(mask, item)
             item.masked_fill_(mask_expand, value)
         return self
@@ -2663,6 +2668,7 @@ torch.Size([3, 2])
         cls._lazy = True
         cls._is_shared = None
         cls._is_memmap = None
+        cls._inplace_set = True
         return TensorDictBase.__new__(cls)
 
     def __init__(
@@ -3073,7 +3079,7 @@ class LazyStackedTensorDict(TensorDictBase):
         _batch_size = tensordicts[0].batch_size
         device = tensordicts[0]._device_safe()
 
-        for i, td in enumerate(tensordicts[1:]):
+        for td in tensordicts[1:]:
             if not isinstance(td, TensorDictBase):
                 raise TypeError(
                     f"Expected input to be TensorDictBase instance"
@@ -3606,7 +3612,7 @@ class SavedTensorDict(TensorDictBase):
             raise Exception(
                 "SavedTensorDicts is not compatible with gradients, one of Tensors has requires_grad equals True"
             )
-        self.file = tempfile.NamedTemporaryFile()
+        self.file = tempfile.NamedTemporaryFile()  # noqa: P201
         self.filename = self.file.name
         # if source.is_memmap():
         #     source = source.clone()

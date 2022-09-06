@@ -239,7 +239,7 @@ def _make_collector(
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     """
@@ -290,7 +290,7 @@ def make_collector_offpolicy(
         "passing_devices": cfg.collector_devices,
         "init_random_frames": cfg.init_random_frames,
         "pin_memory": cfg.pin_memory,
-        "split_trajs": ms is not None,
+        "split_trajs": True,
         # trajectories must be separated if multi-step is used
         "init_with_lag": cfg.init_with_lag,
         "exploration_mode": cfg.exploration_mode,
@@ -304,7 +304,7 @@ def make_collector_offpolicy(
 def make_collector_onpolicy(
     make_env: Callable[[], EnvBase],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     collector_helper = sync_sync_collector

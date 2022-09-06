@@ -16,6 +16,7 @@ from torchrl.data import (
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
     TensorSpec,
+    NdUnboundedDiscreteTensorSpec,
 )
 from ...data.utils import numpy_to_torch_dtype_dict, DEVICE_TYPING
 from ..gym_like import GymLikeEnv
@@ -64,9 +65,15 @@ def _dmcontrol_to_torchrl_spec_transform(
     elif isinstance(spec, dm_env.specs.Array):
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return NdUnboundedContinuousTensorSpec(
-            shape=spec.shape, dtype=dtype, device=device
-        )
+        if dtype in (torch.float, torch.double, torch.half):
+            return NdUnboundedContinuousTensorSpec(
+                shape=spec.shape, dtype=dtype, device=device
+            )
+        else:
+            return NdUnboundedDiscreteTensorSpec(
+                shape=spec.shape, dtype=dtype, device=device
+            )
+
     else:
         raise NotImplementedError
 
@@ -143,7 +150,7 @@ class DMControlWrapper(GymLikeEnv):
             )
         return env
 
-    def _make_specs(self, env: "gym.Env") -> None:
+    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         # specs are defined when first called
         return
 
@@ -190,7 +197,7 @@ class DMControlWrapper(GymLikeEnv):
         return _seed
 
     def _output_transform(
-        self, timestep_tuple: Tuple["TimeStep"]
+        self, timestep_tuple: Tuple["TimeStep"]  # noqa: F821
     ) -> Tuple[np.ndarray, float, bool]:
         if type(timestep_tuple) is not tuple:
             timestep_tuple = (timestep_tuple,)
