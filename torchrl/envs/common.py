@@ -220,6 +220,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._inplace_update = True
+        cls.is_stateful = True
         return super().__new__(cls)
 
     @property
@@ -272,6 +273,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
 
         # sanity check
+        self._assert_tensordict_shape(tensordict)
+
         if tensordict.get("action").dtype is not self.action_spec.dtype:
             raise TypeError(
                 f"expected action.dtype to be {self.action_spec.dtype} "
@@ -408,7 +411,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def _assert_tensordict_shape(self, tensordict: TensorDictBase) -> None:
-        if tensordict.batch_size != self.batch_size:
+        if tensordict.batch_size != self.batch_size and (
+            self.is_stateful or self.batch_size != torch.Size([])
+        ):
             raise RuntimeError(
                 f"Expected a tensordict with shape==env.shape, "
                 f"got {tensordict.batch_size} and {self.batch_size}"
