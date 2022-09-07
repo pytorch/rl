@@ -81,7 +81,7 @@ def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
         filter = filter.squeeze(-1).unsqueeze(0).unsqueeze(0)  # 1 x 1 x T
         out = torch.conv1d(val_pad, filter)
     # out = out.view(shape)
-    if not out.shape == tensor.shape:
+    if out.shape != tensor.shape:
         raise RuntimeError("wrong output shape")
     return out
 
