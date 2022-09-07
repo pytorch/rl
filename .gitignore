@@ -162,3 +162,10 @@ cython_debug/
 # vim
 *.swp
 *.swo
+
+# Vscode
+.vscode
+version.py
+torchrl/version.py
+wandb
+outputs

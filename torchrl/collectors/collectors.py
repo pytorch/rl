@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-import math
 import os
 import queue
 import time
@@ -12,7 +11,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from textwrap import indent
-from typing import Callable, Iterator, Optional, Sequence, Tuple, Union
+from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Dict
 
 import numpy as np
 import torch
@@ -20,7 +19,7 @@ from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
-from .. import _check_for_faulty_process
+from .. import _check_for_faulty_process, prod
 from ..modules.tensordict_module import ProbabilisticTensorDictModule
 from .utils import split_trajectories
 
@@ -33,9 +32,9 @@ __all__ = [
 
 from torchrl.envs.transforms import TransformedEnv
 from ..data import TensorSpec
-from ..data.tensordict.tensordict import _TensorDict, TensorDict
+from ..data.tensordict.tensordict import TensorDictBase, TensorDict
 from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
-from ..envs.common import _EnvClass
+from ..envs.common import EnvBase
 from ..envs.vec_env import _BatchedEnv
 
 _TIMEOUT = 1.0
@@ -63,7 +62,7 @@ class RandomPolicy:
         """
         self.action_spec = action_spec
 
-    def __call__(self, td: _TensorDict) -> _TensorDict:
+    def __call__(self, td: TensorDictBase) -> TensorDictBase:
         return td.set("action", self.action_spec.rand(td.batch_size))
 
 
@@ -73,6 +72,8 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
             k: recursive_map_to_cpu(item)
             if isinstance(item, OrderedDict)
             else item.cpu()
+            if isinstance(item, torch.Tensor)
+            else item
             for k, item in dictionary.items()
         }
     )
@@ -82,7 +83,10 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
     def _get_policy_and_device(
         self,
         policy: Optional[
-            Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
+            Union[
+                ProbabilisticTensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
         ] = None,
         device: Optional[DEVICE_TYPING] = None,
     ) -> Tuple[
@@ -105,7 +109,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         #     if create_env_kwargs is None:
         #         create_env_kwargs = dict()
         #     self.create_env_fn = create_env_fn
-        #     if isinstance(create_env_fn, _EnvClass):
+        #     if isinstance(create_env_fn, EnvBase):
         #         env = create_env_fn
         #     else:
         #         env = self.create_env_fn(**create_env_kwargs)
@@ -144,15 +148,15 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         if self.get_weights_fn is not None:
             self.policy.load_state_dict(self.get_weights_fn())
 
-    def __iter__(self) -> Iterator[_TensorDict]:
+    def __iter__(self) -> Iterator[TensorDictBase]:
         return self.iterator()
 
     @abc.abstractmethod
-    def iterator(self) -> Iterator[_TensorDict]:
+    def iterator(self) -> Iterator[TensorDictBase]:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -173,9 +177,9 @@ class SyncDataCollector(_DataCollector):
     Generic data collector for RL problems. Requires and environment constructor and a policy.
 
     Args:
-        create_env_fn (Callable), returns an instance of _EnvClass class.
+        create_env_fn (Callable), returns an instance of EnvBase class.
         policy (Callable, optional): Policy to be executed in the environment.
-            Must accept _TensorDict object as input.
+            Must accept TensorDictBase object as input.
         total_frames (int): lower bound of the total number of frames returned by the collector. The iterator will
             stop once the total number of frames equates or exceeds the total number of frames passed to the
             collector.
@@ -228,10 +232,13 @@ class SyncDataCollector(_DataCollector):
     def __init__(
         self,
         create_env_fn: Union[
-            _EnvClass, "EnvCreator", Sequence[Callable[[], _EnvClass]]
-        ],
+            EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]  # noqa: F821
+        ],  # noqa: F821
         policy: Optional[
-            Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
+            Union[
+                ProbabilisticTensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[dict] = None,
@@ -239,7 +246,7 @@ class SyncDataCollector(_DataCollector):
         frames_per_batch: int = 200,
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
-        postproc: Optional[Callable[[_TensorDict], _TensorDict]] = None,
+        postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: bool = True,
         device: DEVICE_TYPING = None,
         passing_device: DEVICE_TYPING = "cpu",
@@ -257,7 +264,7 @@ class SyncDataCollector(_DataCollector):
 
         if create_env_kwargs is None:
             create_env_kwargs = {}
-        if not isinstance(create_env_fn, _EnvClass):
+        if not isinstance(create_env_fn, EnvBase):
             env = create_env_fn(**create_env_kwargs)
         else:
             env = create_env_fn
@@ -270,7 +277,7 @@ class SyncDataCollector(_DataCollector):
                 env.update_kwargs(create_env_kwargs)
 
         self.passing_device = torch.device(passing_device)
-        self.env: _EnvClass = env.to(self.passing_device)
+        self.env: EnvBase = env.to(self.passing_device)
         self.closed = False
         self.n_env = self.env.numel()
 
@@ -295,8 +302,7 @@ class SyncDataCollector(_DataCollector):
         self.init_with_lag = init_with_lag and max_frames_per_traj > 0
         self.return_same_td = return_same_td
 
-        env.reset()
-        self._tensordict = env.current_tensordict
+        self._tensordict = env.reset()
         self._tensordict.set(
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
@@ -319,11 +325,13 @@ class SyncDataCollector(_DataCollector):
         self._has_been_done = None
         self._exclude_private_keys = True
 
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
 
         Args:
             seed (int): integer representing the seed to be used for the environment.
+            static_seed(bool, optional): if True, the seed is not incremented.
+                Defaults to False
 
         Returns:
             Output seed. This is useful when more than one environment is contained in the DataCollector, as the
@@ -336,12 +344,12 @@ class SyncDataCollector(_DataCollector):
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
-        return self.env.set_seed(seed)
+        return self.env.set_seed(seed, static_seed=static_seed)
 
-    def iterator(self) -> Iterator[_TensorDict]:
+    def iterator(self) -> Iterator[TensorDictBase]:
         """Iterates through the DataCollector.
 
-        Yields: _TensorDict objects containing (chunks of) trajectories
+        Yields: TensorDictBase objects containing (chunks of) trajectories
 
         """
         total_frames = self.total_frames
@@ -373,7 +381,7 @@ class SyncDataCollector(_DataCollector):
             if self._frames >= self.total_frames:
                 break
 
-    def _cast_to_policy(self, td: _TensorDict) -> _TensorDict:
+    def _cast_to_policy(self, td: TensorDictBase) -> TensorDictBase:
         policy_device = self.device
         if hasattr(self.policy, "in_keys"):
             td = td.select(*self.policy.in_keys)
@@ -386,8 +394,8 @@ class SyncDataCollector(_DataCollector):
         return self._td_policy
 
     def _cast_to_env(
-        self, td: _TensorDict, dest: Optional[_TensorDict] = None
-    ) -> _TensorDict:
+        self, td: TensorDictBase, dest: Optional[TensorDictBase] = None
+    ) -> TensorDictBase:
         env_device = self.env_device
         if dest is None:
             if self._td_env is None:
@@ -420,8 +428,8 @@ class SyncDataCollector(_DataCollector):
                 self._tensordict.set("reset_workers", done_or_terminated)
             else:
                 self._tensordict.zero_()
-            self.env.reset()
-            self._tensordict.update(self.env.current_tensordict, inplace=True)
+
+            self._tensordict.update(self.env.reset(), inplace=True)
             if self._tensordict.get("done").any():
                 raise RuntimeError(
                     f"Got {sum(self._tensordict.get('done'))} done envs after reset."
@@ -436,16 +444,15 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.set("step_count", steps)
 
     @torch.no_grad()
-    def rollout(self) -> _TensorDict:
+    def rollout(self) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
 
         Returns:
-            _TensorDict containing the computed rollout.
+            TensorDictBase containing the computed rollout.
 
         """
         if self.reset_at_each_iter:
-            self.env.reset()
-            self._tensordict.update(self.env.current_tensordict, inplace=True)
+            self._tensordict.update(self.env.reset(), inplace=True)
             self._tensordict.fill_("step_count", 0)
 
         n = self.env.batch_size[0] if len(self.env.batch_size) else 1
@@ -453,7 +460,7 @@ class SyncDataCollector(_DataCollector):
 
         tensordict_out = []
         with set_exploration_mode(self.exploration_mode):
-            for t in range(self.frames_per_batch):
+            for _ in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
@@ -487,7 +494,7 @@ class SyncDataCollector(_DataCollector):
         """Resets the environments to a new initial state."""
         if index is not None:
             # check that the env supports partial reset
-            if np.prod(self.env.batch_size) == 0:
+            if prod(self.env.batch_size) == 0:
                 raise RuntimeError("resetting unique env with index is not permitted.")
             reset_workers = torch.zeros(
                 *self.env.batch_size,
@@ -504,9 +511,8 @@ class SyncDataCollector(_DataCollector):
 
         if td_in:
             self._tensordict.update(td_in, inplace=True)
-        self.env.reset(**kwargs)
 
-        self._tensordict.update(self.env.current_tensordict, inplace=True)
+        self._tensordict.update(self.env.reset(**kwargs), inplace=True)
         self._tensordict.fill_("step_count", 0)
 
     def shutdown(self) -> None:
@@ -575,9 +581,9 @@ class _MultiDataCollector(_DataCollector):
     """Runs a given number of DataCollectors on separate processes.
 
     Args:
-        create_env_fn (list of Callabled): list of Callables, each returning an instance of _EnvClass
+        create_env_fn (list of Callabled): list of Callables, each returning an instance of EnvBase
         policy (Callable, optional): Instance of ProbabilisticTensorDictModule class.
-            Must accept _TensorDict object as input.
+            Must accept TensorDictBase object as input.
         total_frames (int): lower bound of the total number of frames returned by the collector. In parallel settings,
             the actual number of frames may well be greater than this as the closing signals are sent to the
             workers only once the total number of frames has been collected on the server.
@@ -625,9 +631,12 @@ class _MultiDataCollector(_DataCollector):
 
     def __init__(
         self,
-        create_env_fn: Sequence[Callable[[], _EnvClass]],
+        create_env_fn: Sequence[Callable[[], EnvBase]],
         policy: Optional[
-            Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
+            Union[
+                ProbabilisticTensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[Sequence[dict]] = None,
@@ -635,7 +644,7 @@ class _MultiDataCollector(_DataCollector):
         frames_per_batch: int = 200,
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
-        postproc: Optional[Callable[[_TensorDict], _TensorDict]] = None,
+        postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: bool = True,
         devices: DEVICE_TYPING = None,
         seed: Optional[int] = None,
@@ -690,6 +699,9 @@ class _MultiDataCollector(_DataCollector):
         self._policy_dict = {}
         self._get_weights_fn_dict = {}
         for i, _device in enumerate(devices):
+            if _device in self._policy_dict:
+                devices[i] = _device
+                continue
             _policy, _device, _get_weight_fn = self._get_policy_and_device(
                 policy=policy,
                 device=_device,
@@ -758,7 +770,7 @@ class _MultiDataCollector(_DataCollector):
             _passing_device = self.passing_devices[i]
             pipe_parent, pipe_child = mp.Pipe()  # send messages to procs
             if env_fun.__class__.__name__ != "EnvCreator" and not isinstance(
-                env_fun, _EnvClass
+                env_fun, EnvBase
             ):  # to avoid circular imports
                 env_fun = CloudpickleWrapper(env_fun)
 
@@ -787,6 +799,9 @@ class _MultiDataCollector(_DataCollector):
             pipe_child.close()
             self.procs.append(proc)
             self.pipes.append(pipe_parent)
+            msg = pipe_parent.recv()
+            if msg != "instantiated":
+                raise RuntimeError(msg)
         self.queue_out = queue_out
         self.closed = False
 
@@ -817,11 +832,13 @@ class _MultiDataCollector(_DataCollector):
         for pipe in self.pipes:
             pipe.close()
 
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
 
         Args:
             seed: integer representing the seed to be used for the environment.
+            static_seed (bool, optional): if True, the seed is not incremented.
+                Defaults to False
 
         Returns:
             Output seed. This is useful when more than one environment is
@@ -838,7 +855,7 @@ class _MultiDataCollector(_DataCollector):
         """
         _check_for_faulty_process(self.procs)
         for idx in range(self.num_workers):
-            self.pipes[idx].send((seed, "seed"))
+            self.pipes[idx].send(((seed, static_seed), "seed"))
             new_seed, msg = self.pipes[idx].recv()
             if msg != "seeded":
                 raise RuntimeError(f"Expected msg='seeded', got {msg}")
@@ -922,7 +939,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
     def _queue_len(self) -> int:
         return self.num_workers
 
-    def iterator(self) -> Iterator[_TensorDict]:
+    def iterator(self) -> Iterator[TensorDictBase]:
         i = -1
         frames = 0
         out_tensordicts_shared = OrderedDict()
@@ -943,7 +960,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             i += 1
             max_traj_idx = None
-            for k in range(self.num_workers):
+            for _ in range(self.num_workers):
                 new_data, j = self.queue_out.get()
                 if j == 0:
                     data, idx = new_data
@@ -984,7 +1001,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 out = split_trajectories(out)
                 frames += out.get("mask").sum()
             else:
-                frames += math.prod(out.shape)
+                frames += prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
@@ -994,7 +1011,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
             yield out
 
         del out_tensordicts_shared
-        self._shutdown_main()
+        # We shall not call shutdown just yet as user may want to retrieve state_dict
+        # self._shutdown_main()
 
 
 class MultiaSyncDataCollector(_MultiDataCollector):
@@ -1024,7 +1042,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     def frames_per_batch_worker(self):
         return self.frames_per_batch
 
-    def _get_from_queue(self, timeout=None) -> Tuple[int, int, _TensorDict]:
+    def _get_from_queue(self, timeout=None) -> Tuple[int, int, TensorDictBase]:
         new_data, j = self.queue_out.get(timeout=timeout)
         if j == 0:
             data, idx = new_data
@@ -1039,7 +1057,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     def _queue_len(self) -> int:
         return 1
 
-    def iterator(self) -> Iterator[_TensorDict]:
+    def iterator(self) -> Iterator[TensorDictBase]:
         if self.update_at_each_batch:
             self.update_policy_weights_()
 
@@ -1083,7 +1101,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                 out = out.exclude(*excluded_keys)
             yield out
 
-        self._shutdown_main()
+        # We don't want to shutdown yet, the user may want to call state_dict before
+        # self._shutdown_main()
         self.running = False
 
     def _shutdown_main(self) -> None:
@@ -1116,9 +1135,9 @@ class aSyncDataCollector(MultiaSyncDataCollector):
     is being created.
 
     Args:
-        create_env_fn (Callabled): Callable returning an instance of _EnvClass
+        create_env_fn (Callabled): Callable returning an instance of EnvBase
         policy (Callable, optional): Instance of ProbabilisticTensorDictModule class.
-            Must accept _TensorDict object as input.
+            Must accept TensorDictBase object as input.
         total_frames (int): lower bound of the total number of frames returned
             by the collector. In parallel settings, the actual number of
             frames may well be greater than this as the closing signals are
@@ -1169,9 +1188,12 @@ class aSyncDataCollector(MultiaSyncDataCollector):
 
     def __init__(
         self,
-        create_env_fn: Callable[[], _EnvClass],
+        create_env_fn: Callable[[], EnvBase],
         policy: Optional[
-            Union[ProbabilisticTensorDictModule, Callable[[_TensorDict], _TensorDict]]
+            Union[
+                ProbabilisticTensorDictModule,
+                Callable[[TensorDictBase], TensorDictBase],
+            ]
         ] = None,
         total_frames: Optional[int] = -1,
         create_env_kwargs: Optional[dict] = None,
@@ -1179,7 +1201,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         frames_per_batch: int = 200,
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
-        postproc: Optional[Callable[[_TensorDict], _TensorDict]] = None,
+        postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: bool = True,
         device: Optional[Union[int, str, torch.device]] = None,
         passing_device: Union[int, str, torch.device] = "cpu",
@@ -1208,9 +1230,9 @@ def _main_async_collector(
     pipe_parent: connection.Connection,
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
-    create_env_fn: Union[_EnvClass, "EnvCreator", Callable[[], _EnvClass]],
-    create_env_kwargs: dict,
-    policy: Callable[[_TensorDict], _TensorDict],
+    create_env_fn: Union[EnvBase, "EnvCreator", Callable[[], EnvBase]],  # noqa: F821
+    create_env_kwargs: Dict[str, Any],
+    policy: Callable[[TensorDictBase], TensorDictBase],
     frames_per_worker: int,
     max_frames_per_traj: int,
     frames_per_batch: int,
@@ -1251,6 +1273,7 @@ def _main_async_collector(
         print("Sync data collector created")
     dc_iter = iter(dc)
     j = 0
+    pipe_child.send("instantiated")
 
     has_timed_out = False
     counter = 0
@@ -1338,7 +1361,8 @@ def _main_async_collector(
             continue
 
         elif msg == "seed":
-            new_seed = dc.set_seed(data_in)
+            data_in, static_seed = data_in
+            new_seed = dc.set_seed(data_in, static_seed=static_seed)
             torch.manual_seed(data_in)
             np.random.seed(data_in)
             pipe_child.send((new_seed, "seeded"))

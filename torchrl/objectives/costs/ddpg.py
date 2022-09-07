@@ -9,7 +9,7 @@ from typing import Tuple
 
 import torch
 
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.modules import TensorDictModule
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.costs.utils import (
@@ -18,10 +18,10 @@ from torchrl.objectives.costs.utils import (
     next_state_value,
 )
 from ...envs.utils import set_exploration_mode
-from .common import _LossModule
+from .common import LossModule
 
 
-class DDPGLoss(_LossModule):
+class DDPGLoss(LossModule):
     """
     The DDPG Loss class.
     Args:
@@ -63,16 +63,16 @@ class DDPGLoss(_LossModule):
 
         self.actor_in_keys = actor_network.in_keys
 
-        self.gamma = gamma
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_funtion = loss_function
 
-    def forward(self, input_tensordict: _TensorDict) -> TensorDict:
+    def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DDPG losses given a tensordict sampled from the replay buffer.
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
 
         Args:
-            input_tensordict (_TensorDict): a tensordict with keys ["done", "reward"] and the in_keys of the actor
+            input_tensordict (TensorDictBase): a tensordict with keys ["done", "reward"] and the in_keys of the actor
                 and value networks.
 
         Returns:
@@ -111,7 +111,7 @@ class DDPGLoss(_LossModule):
 
     def _loss_actor(
         self,
-        tensordict: _TensorDict,
+        tensordict: TensorDictBase,
     ) -> torch.Tensor:
         td_copy = tensordict.select(*self.actor_in_keys).detach()
         td_copy = self.actor_network(
@@ -123,17 +123,11 @@ class DDPGLoss(_LossModule):
             td_copy = self.value_network(
                 td_copy, params=params, buffers=self.value_network_buffers
             )
-        # TODO: validate this experimentally
-        # td_copy = self.value_network(
-        #     td_copy,
-        #     params=self.target_value_network_params,
-        #     buffers=self.value_network_buffers,
-        # )
         return -td_copy.get("state_action_value")
 
     def _loss_value(
         self,
-        tensordict: _TensorDict,
+        tensordict: TensorDictBase,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys).detach()
@@ -165,4 +159,4 @@ class DDPGLoss(_LossModule):
             pred_val, target_value, loss_function=self.loss_funtion
         )
 
-        return loss_value, abs(pred_val - target_value), pred_val, target_value
+        return loss_value, (pred_val - target_value).pow(2), pred_val, target_value

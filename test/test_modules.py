@@ -19,6 +19,10 @@ from torchrl.modules import (
     ProbabilisticActor,
     LSTMNet,
 )
+from torchrl.modules.functional_modules import (
+    FunctionalModule,
+    FunctionalModuleWithBuffers,
+)
 from torchrl.modules.models import NoisyLinear, MLP, NoisyLazyLinear
 
 
@@ -87,9 +91,9 @@ def test_noisy(layer_class, device, seed=0):
     layer.reset_noise()
     y2 = layer(x)
     y3 = layer(x)
-    torch.testing.assert_allclose(y2, y3)
+    torch.testing.assert_close(y2, y3)
     with pytest.raises(AssertionError):
-        torch.testing.assert_allclose(y1, y2)
+        torch.testing.assert_close(y1, y2)
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -152,13 +156,11 @@ def test_actorcritic(device):
     td_policy = policy_op(td.clone())
     value_op = op.get_value_operator()
     td_value = value_op(td)
-    torch.testing.assert_allclose(td_total.get("action"), td_policy.get("action"))
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(td_total.get("action"), td_policy.get("action"))
+    torch.testing.assert_close(
         td_total.get("sample_log_prob"), td_policy.get("sample_log_prob")
     )
-    torch.testing.assert_allclose(
-        td_total.get("state_value"), td_value.get("state_value")
-    )
+    torch.testing.assert_close(td_total.get("state_value"), td_value.get("state_value"))
 
     value_params = set(
         list(op.get_value_operator().parameters()) + list(op.module[0].parameters())
@@ -299,6 +301,29 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
     torch.testing.assert_close(tds_vec["y"], tds_loop["y"])
     torch.testing.assert_close(tds_vec["hidden0_out"][-1], tds_loop["hidden0_out"][-1])
     torch.testing.assert_close(tds_vec["hidden1_out"][-1], tds_loop["hidden1_out"][-1])
+
+
+class TestFunctionalModules:
+    def test_func_seq(self):
+        module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 3))
+        fmodule, params = FunctionalModule._create_from(module)
+        x = torch.randn(3)
+        assert (fmodule(params, x) == module(x)).all()
+
+    def test_func_bn(self):
+        module = nn.Sequential(nn.Linear(3, 4), nn.BatchNorm1d(4))
+        module.eval()
+        fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
+        x = torch.randn(10, 3)
+        assert (fmodule(params, buffers, x) == module(x)).all()
+
+    def test_func_transformer(self):
+        module = nn.Transformer(128)
+        module.eval()
+        fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
+        print(params, buffers)
+        x = torch.randn(10, 128)
+        torch.testing.assert_close(fmodule(params, buffers, x, x), module(x, x))
 
 
 if __name__ == "__main__":

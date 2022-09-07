@@ -8,7 +8,7 @@ from typing import Any, Union
 import pkg_resources
 from torch.autograd.grad_mode import _DecoratorContextManager
 
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
@@ -19,21 +19,21 @@ class classproperty(property):
 
 
 def step_tensordict(
-    tensordict: _TensorDict,
-    next_tensordict: _TensorDict = None,
+    tensordict: TensorDictBase,
+    next_tensordict: TensorDictBase = None,
     keep_other: bool = True,
     exclude_reward: bool = True,
     exclude_done: bool = True,
     exclude_action: bool = True,
-) -> _TensorDict:
+) -> TensorDictBase:
     """
     Given a tensordict retrieved after a step, returns another tensordict with all the 'next_' prefixes are removed,
     i.e. all the `'next_some_other_string'` keys will be renamed onto `'some_other_string'` keys.
 
 
     Args:
-        tensordict (_TensorDict): tensordict with keys to be renamed
-        next_tensordict (_TensorDict, optional): destination tensordict
+        tensordict (TensorDictBase): tensordict with keys to be renamed
+        next_tensordict (TensorDictBase, optional): destination tensordict
         keep_other (bool, optional): if True, all keys that do not start with `'next_'` will be kept.
             Default is True.
         exclude_reward (bool, optional): if True, the `"reward"` key will be discarded
@@ -54,7 +54,7 @@ def step_tensordict(
         >>> td_out = []
         >>> env = make_env()
         >>> policy = make_policy()
-        >>> td = env.current_tensordict
+        >>> td = env.reset()
         >>> for i in range(max_steps):
         >>>     td = env.step(td)
         >>>     next_td = step_tensordict(td)
@@ -66,16 +66,19 @@ def step_tensordict(
 
     """
     other_keys = []
-    to_exclude = []
+    prohibited = set()
     if exclude_done:
-        to_exclude.append("done")
+        prohibited.add("done")
+    else:
+        other_keys.append("done")
     if exclude_reward:
-        to_exclude.append("reward")
+        prohibited.add("reward")
+    else:
+        other_keys.append("reward")
     if exclude_action:
-        to_exclude.append("action")
-    if to_exclude:
-        # we exclude those keys to make sure we aren't reporting time-specific values at the next step.
-        tensordict = tensordict.exclude(*to_exclude)
+        prohibited.add("action")
+    else:
+        other_keys.append("action")
     keys = [key for key in tensordict.keys() if key.startswith("next_")]
     if len(keys) == 0:
         raise RuntimeError(
@@ -83,10 +86,10 @@ def step_tensordict(
             tensordict,
         )
     new_keys = [key[5:] for key in keys]
+    prohibited = prohibited.union(keys).union(new_keys)
     if keep_other:
-        prohibited = set(keys).union(new_keys)
         other_keys = [key for key in tensordict.keys() if key not in prohibited]
-    select_tensordict = tensordict.select(*other_keys, *keys).clone()
+    select_tensordict = tensordict.select(*other_keys, *keys)
     for new_key, key in zip(new_keys, keys):
         select_tensordict.rename_key(key, new_key, safe=True)
     if next_tensordict is not None:

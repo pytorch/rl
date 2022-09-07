@@ -3,7 +3,6 @@ channels:
   - defaults
 dependencies:
   - pip
-  - cmake >= 3.18
   - pip:
     - hypothesis
     - future
@@ -11,6 +10,7 @@ dependencies:
     - pytest
     - pytest-cov
     - pytest-mock
+    - pytest-instafail
     - expecttest
     - pyyaml
     - scipy

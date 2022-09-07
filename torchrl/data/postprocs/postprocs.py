@@ -11,7 +11,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.data.utils import expand_as_right
 
 __all__ = ["MultiStep"]
@@ -139,7 +139,7 @@ class MultiStep(nn.Module):
             ).reshape(1, 1, -1),
         )
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Args:
             tensordict: TennsorDict instance with Batch x Time-steps x ...
                 dimensions.

@@ -1,18 +1,59 @@
 from __future__ import annotations
 
-from typing import Optional, Union, Tuple
+import warnings
+from typing import Optional, Union, Tuple, Any, Dict
 
 import numpy as np
 import torch
 
 from torchrl.data import TensorDict
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.common import _EnvWrapper
-from torchrl.envs.utils import step_tensordict
+
+__all__ = ["GymLikeEnv", "default_info_dict_reader"]
+
+
+class default_info_dict_reader:
+    """
+    Default info-key reader.
+
+    In cases where keys can be directly written to a tensordict (mostly if they abide to the
+    tensordict shape), one simply needs to indicate the keys to be registered during
+    instantiation.
+
+    Examples:
+        >>> from torchrl.envs import GymWrapper, default_info_dict_reader
+        >>> reader = default_info_dict_reader(["my_info_key"])
+        >>> # assuming "some_env-v0" returns a dict with a key "my_info_key"
+        >>> env = GymWrapper(gym.make("some_env-v0"))
+        >>> env.set_info_dict_reader(info_dict_reader=reader)
+        >>> tensordict = env.reset()
+        >>> tensordict = env.rand_step(tensordict)
+        >>> assert "my_info_key" in tensordict.keys()
+
+    """
+
+    def __init__(self, keys=None):
+        if keys is None:
+            keys = []
+        self.keys = keys
+
+    def __call__(
+        self, info_dict: Dict[str, Any], tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        if not isinstance(info_dict, dict) and len(self.keys):
+            warnings.warn(
+                f"Found an info_dict of type {type(info_dict)} "
+                f"but expected type or subtype `dict`."
+            )
+        for key in self.keys:
+            if key in info_dict:
+                tensordict[key] = info_dict[key]
+        return tensordict
 
 
 class GymLikeEnv(_EnvWrapper):
-    info_keys = []
+    _info_dict_reader: callable
 
     """
     A gym-like env is an environment whose behaviour is similar to gym environments in what
@@ -25,7 +66,7 @@ class GymLikeEnv(_EnvWrapper):
 
     where the outputs are the observation, reward and done state respectively.
     In this implementation, the info output is discarded (but specific keys can be read
-    by updating the `"info_keys"` class attribute).
+    by updating info_dict_reader, see `set_info_dict_reader` class method).
 
     By default, the first output is written at the "next_observation" key-value pair in the output tensordict, unless
     the first output is a dictionary. In that case, each observation output will be put at the corresponding
@@ -34,7 +75,12 @@ class GymLikeEnv(_EnvWrapper):
     It is also expected that env.reset() returns an observation similar to the one observed after a step is completed.
     """
 
-    def _step(self, tensordict: _TensorDict) -> _TensorDict:
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._info_dict_reader = None
+        return super().__new__(cls, *args, **kwargs)
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get("action")
         action_np = self.action_spec.to_numpy(action, safe=False)
 
@@ -65,14 +111,14 @@ class GymLikeEnv(_EnvWrapper):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
-        for key in self.info_keys:
-            data = info[0][key]
-            tensordict_out.set(key, data)
+        if self.info_dict_reader is not None:
+            self.info_dict_reader(*info, tensordict_out)
 
-        self.current_tensordict = step_tensordict(tensordict_out)
         return tensordict_out
 
-    def _reset(self, tensordict: Optional[_TensorDict] = None, **kwargs) -> _TensorDict:
+    def _reset(
+        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+    ) -> TensorDictBase:
         obs, *_ = self._output_transform((self._env.reset(**kwargs),))
         tensordict_out = TensorDict(
             source=self._read_obs(obs),
@@ -83,7 +129,9 @@ class GymLikeEnv(_EnvWrapper):
         tensordict_out.set("done", self._is_done)
         return tensordict_out
 
-    def _read_obs(self, observations: Union[dict, torch.Tensor, np.ndarray]) -> dict:
+    def _read_obs(
+        self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
+    ) -> Dict[str, Any]:
         if isinstance(observations, dict):
             observations = {"next_" + key: value for key, value in observations.items()}
         if not isinstance(observations, (TensorDict, dict)):
@@ -100,7 +148,41 @@ class GymLikeEnv(_EnvWrapper):
             )
         return step_outputs_tuple
 
+    def set_info_dict_reader(self, info_dict_reader: callable) -> GymLikeEnv:
+        """
+        Sets an info_dict_reader function. This function should take as input an
+        info_dict dictionary and the tensordict returned by the step function, and
+        write values in an ad-hoc manner from one to the other.
+
+        Args:
+            info_dict_reader (callable): a callable taking a input dictionary and
+                output tensordict as arguments. This function should modify the
+                tensordict in-place.
+
+        Returns: the same environment with the dict_reader registered.
+
+        Examples:
+            >>> from torchrl.envs import GymWrapper, default_info_dict_reader
+            >>> reader = default_info_dict_reader(["my_info_key"])
+            >>> # assuming "some_env-v0" returns a dict with a key "my_info_key"
+            >>> env = GymWrapper(gym.make("some_env-v0")).set_info_dict_reader(info_dict_reader=reader)
+            >>> tensordict = env.reset()
+            >>> tensordict = env.rand_step(tensordict)
+            >>> assert "my_info_key" in tensordict.keys()
+
+        """
+        self.info_dict_reader = info_dict_reader
+        return self
+
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(env={self._env}, batch_size={self.batch_size})"
         )
+
+    @property
+    def info_dict_reader(self):
+        return self._info_dict_reader
+
+    @info_dict_reader.setter
+    def info_dict_reader(self, value: callable):
+        self._info_dict_reader = value

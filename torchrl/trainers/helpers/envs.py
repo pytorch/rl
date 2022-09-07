@@ -5,13 +5,15 @@
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import Callable, Optional, Union, Any
+from typing import Callable, Optional, Union, Any, Sequence
 
 import torch
 
-from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
-from torchrl.envs.common import _EnvClass
+from torchrl.envs import ParallelEnv
+from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
+from torchrl.envs.libs.dm_control import DMControlEnv
+from torchrl.envs.libs.gym import GymEnv, RetroEnv
 from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,
@@ -29,6 +31,7 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.transforms.transforms import gSDENoise, FlattenObservation
 from torchrl.record.recorder import VideoRecorder
+from torchrl.trainers.loggers import Logger
 
 __all__ = [
     "correct_for_frame_skip",
@@ -44,7 +47,7 @@ LIBS = {
 }
 
 
-def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":
+def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
     """
     Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the
     frame_skip.
@@ -82,7 +85,7 @@ def make_env_transforms(
     env,
     cfg,
     video_tag,
-    writer,
+    logger,
     env_name,
     stats,
     norm_obs_only,
@@ -106,7 +109,7 @@ def make_env_transforms(
             center_crop = center_crop[0]
         env.append_transform(
             VideoRecorder(
-                writer=writer,
+                logger=logger,
                 tag=f"{video_tag}_{env_name}_video",
                 center_crop=center_crop,
             ),
@@ -128,13 +131,13 @@ def make_env_transforms(
         if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(first_dim=batch_dims))
-        env.append_transform(CatFrames(N=cfg.catframes, keys=["next_pixels"]))
+        env.append_transform(CatFrames(N=cfg.catframes, keys_in=["next_pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
         else:
             obs_stats = stats
         obs_stats["standard_normal"] = True
-        env.append_transform(ObservationNorm(**obs_stats, keys=["next_pixels"]))
+        env.append_transform(ObservationNorm(**obs_stats, keys_in=["next_pixels"]))
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0
@@ -145,19 +148,23 @@ def make_env_transforms(
         env.append_transform(RewardScaling(reward_loc, reward_scaling))
 
     double_to_float_list = []
+    double_to_float_inv_list = []
     if env_library is DMControlEnv:
         double_to_float_list += [
             "reward",
-            "action",
-        ]  # DMControl requires double-precision
+        ]
+        double_to_float_inv_list += ["action"]  # DMControl requires double-precision
     if not from_pixels:
         selected_keys = [
-            key for key in env.observation_spec.keys() if "pixels" not in key
+            key
+            for key in env.observation_spec.keys()
+            if ("pixels" not in key)
+            and (key.strip("next_") not in env.input_spec.keys())
         ]
 
         # even if there is a single tensor, it'll be renamed in "next_observation_vector"
         out_key = "next_observation_vector"
-        env.append_transform(CatTensors(keys=selected_keys, out_key=out_key))
+        env.append_transform(CatTensors(keys_in=selected_keys, out_key=out_key))
 
         if not vecnorm:
             if stats is None:
@@ -165,24 +172,34 @@ def make_env_transforms(
             else:
                 _stats = stats
             env.append_transform(
-                ObservationNorm(**_stats, keys=[out_key], standard_normal=True)
+                ObservationNorm(**_stats, keys_in=[out_key], standard_normal=True)
             )
         else:
             env.append_transform(
                 VecNorm(
-                    keys=[out_key, "reward"] if not _norm_obs_only else [out_key],
+                    keys_in=[out_key, "reward"] if not _norm_obs_only else [out_key],
                     decay=0.9999,
                 )
             )
 
         double_to_float_list.append(out_key)
-        env.append_transform(DoubleToFloat(keys=double_to_float_list))
+        env.append_transform(
+            DoubleToFloat(
+                keys_in=double_to_float_list, keys_inv_in=double_to_float_inv_list
+            )
+        )
 
         if hasattr(cfg, "catframes") and cfg.catframes:
-            env.append_transform(CatFrames(N=cfg.catframes, keys=[out_key], cat_dim=-1))
+            env.append_transform(
+                CatFrames(N=cfg.catframes, keys_in=[out_key], cat_dim=-1)
+            )
 
     else:
-        env.append_transform(DoubleToFloat(keys=double_to_float_list))
+        env.append_transform(
+            DoubleToFloat(
+                keys_in=double_to_float_list, keys_inv_in=double_to_float_inv_list
+            )
+        )
 
     if hasattr(cfg, "gSDE") and cfg.gSDE:
         env.append_transform(
@@ -194,14 +211,14 @@ def make_env_transforms(
 
 
 def transformed_env_constructor(
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     video_tag: str = "",
-    writer: Optional["SummaryWriter"] = None,
+    logger: Optional[Logger] = None,
     stats: Optional[dict] = None,
     norm_obs_only: bool = False,
-    use_env_creator: bool = True,
+    use_env_creator: bool = False,
     custom_env_maker: Optional[Callable] = None,
-    custom_env: Optional[_EnvClass] = None,
+    custom_env: Optional[EnvBase] = None,
     return_transformed_envs: bool = True,
     action_dim_gsde: Optional[int] = None,
     state_dim_gsde: Optional[int] = None,
@@ -212,8 +229,8 @@ def transformed_env_constructor(
 
     Args:
         cfg (DictConfig): a DictConfig containing the arguments of the script.
-        video_tag (str, optional): video tag to be passed to the SummaryWriter object
-        writer (SummaryWriter, optional): tensorboard writer associated with the script
+        video_tag (str, optional): video tag to be passed to the Logger object
+        logger (Logger, optional): logger associated with the script
         stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.
@@ -224,7 +241,7 @@ def transformed_env_constructor(
             of torchrl env wrappers, a custom callable
             can be passed instead. In this case it will override the
             constructor retrieved from `args`.
-        custom_env (_EnvClass, optional): if an existing environment needs to be
+        custom_env (EnvBase, optional): if an existing environment needs to be
             transformed_in, it can be passed directly to this helper. `custom_env_maker`
             and `custom_env` are exclusive features.
         return_transformed_envs (bool, optional): if True, a transformed_in environment
@@ -246,9 +263,17 @@ def transformed_env_constructor(
         from_pixels = cfg.from_pixels
 
         if custom_env is None and custom_env_maker is None:
+            if isinstance(cfg.collector_devices, str):
+                device = cfg.collector_devices
+            elif isinstance(cfg.collector_devices, Sequence):
+                device = cfg.collector_devices[0]
+            else:
+                raise ValueError(
+                    "collector_devices must be either a string or a sequence of strings"
+                )
             env_kwargs = {
                 "env_name": env_name,
-                "device": "cpu",
+                "device": device,
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,
@@ -271,7 +296,7 @@ def transformed_env_constructor(
             env,
             cfg,
             video_tag,
-            writer,
+            logger,
             env_name,
             stats,
             norm_obs_only,
@@ -287,7 +312,7 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(
-    cfg: "DictConfig", **kwargs
+    cfg: "DictConfig", **kwargs  # noqa: F821
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
@@ -325,7 +350,9 @@ def parallel_env_constructor(
 
 
 def get_stats_random_rollout(
-    cfg: "DictConfig", proof_environment: _EnvClass, key: Optional[str] = None
+    cfg: "DictConfig",  # noqa: F821
+    proof_environment: EnvBase,
+    key: Optional[str] = None,  # noqa: F821
 ):
     print("computing state stats")
     if not hasattr(cfg, "init_env_steps"):
@@ -336,8 +363,13 @@ def get_stats_random_rollout(
     while n < cfg.init_env_steps:
         _td_stats = proof_environment.rollout(max_steps=cfg.init_env_steps)
         n += _td_stats.numel()
-        td_stats.append(_td_stats.to_tensordict().select(key).cpu())
-        del _td_stats
+        _td_stats_select = _td_stats.to_tensordict().select(key).cpu()
+        if not len(list(_td_stats_select.keys())):
+            raise RuntimeError(
+                f"key {key} not found in tensordict with keys {list(_td_stats.keys())}"
+            )
+        td_stats.append(_td_stats_select)
+        del _td_stats, _td_stats_select
     td_stats = torch.cat(td_stats, 0)
 
     if key is None:
@@ -354,7 +386,9 @@ def get_stats_random_rollout(
         s = td_stats.get(key).std().clamp_min(1e-5)
     else:
         m = td_stats.get(key).mean(dim=0)
-        s = td_stats.get(key).std(dim=0).clamp_min(1e-5)
+        s = td_stats.get(key).std(dim=0)
+    m[s == 0] = 0.0
+    s[s == 0] = 1.0
 
     print(
         f"stats computed for {td_stats.numel()} steps. Got: \n"

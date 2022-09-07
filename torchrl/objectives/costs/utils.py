@@ -11,7 +11,7 @@ import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
 
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import step_tensordict
 from torchrl.modules import TensorDictModule
 
@@ -99,7 +99,7 @@ class _TargetNetUpdate:
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],  # noqa: F821
     ):
 
         _target_names = []
@@ -208,7 +208,7 @@ class SoftUpdate(_TargetNetUpdate):
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "REDQLoss"],
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "REDQLoss"],  # noqa: F821
         eps: float = 0.999,
     ):
         if not (eps < 1.0 and eps > 0.0):
@@ -236,7 +236,7 @@ class HardUpdate(_TargetNetUpdate):
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],  # noqa: F821
         value_network_update_interval: float = 1000,
     ):
         super(HardUpdate, self).__init__(loss_module)
@@ -263,9 +263,7 @@ class hold_out_net(_context_manager):
         try:
             self.p_example = next(network.parameters())
         except StopIteration:
-            raise RuntimeError(
-                "hold_out_net requires the network parameter set to be " "non-empty."
-            )
+            self.p_example = torch.tensor([])
         self._prev_state = []
 
     def __enter__(self) -> None:
@@ -291,7 +289,7 @@ class hold_out_params(_context_manager):
 
 @torch.no_grad()
 def next_state_value(
-    tensordict: _TensorDict,
+    tensordict: TensorDictBase,
     operator: Optional[TensorDictModule] = None,
     next_val_key: str = "state_action_value",
     gamma: float = 0.99,
@@ -307,7 +305,7 @@ def next_state_value(
     from the input tensordict.
 
     Args:
-        tensordict (_TensorDict): Tensordict containing a reward and done key (and a n_steps_to_next key for n-steps
+        tensordict (TensorDictBase): Tensordict containing a reward and done key (and a n_steps_to_next key for n-steps
             rewards).
         operator (ProbabilisticTDModule, optional): the value function operator. Should write a 'next_val_key'
             key-value in the input tensordict when called. It does not need to be provided if pred_next_val is given.

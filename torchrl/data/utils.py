@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import typing
 from typing import Any, Callable, List, Sequence, Tuple, Union
 
 import numpy as np
@@ -26,6 +27,10 @@ torch_to_numpy_dtype_dict = {
     value: key for key, value in numpy_to_torch_dtype_dict.items()
 }
 DEVICE_TYPING = Union[torch.device, str, int]
+if hasattr(typing, "get_args"):
+    DEVICE_TYPING_ARGS = typing.get_args(DEVICE_TYPING)
+else:
+    DEVICE_TYPING_ARGS = (torch.device, str, int)
 
 INDEX_TYPING = Union[None, int, slice, Tensor, List[Any], Tuple[Any, ...]]
 
@@ -57,8 +62,8 @@ class CloudpickleWrapper(object):
 
 
 def expand_as_right(
-    tensor: Union[torch.Tensor, "MemmapTensor"],
-    dest: Union[torch.Tensor, "MemmapTensor"],
+    tensor: Union[torch.Tensor, "MemmapTensor", "TensorDictBase"],  # noqa: F821
+    dest: Union[torch.Tensor, "MemmapTensor", "TensorDictBase"],  # noqa: F821
 ):
     """Expand a tensor on the right to match another tensor shape.
     Args:
@@ -89,11 +94,11 @@ def expand_as_right(
         )
     for _ in range(dest.ndimension() - tensor.ndimension()):
         tensor = tensor.unsqueeze(-1)
-    return tensor.expand_as(dest)
+    return tensor.expand(dest.shape)
 
 
 def expand_right(
-    tensor: Union[torch.Tensor, "MemmapTensor"], shape: Sequence[int]
+    tensor: Union[torch.Tensor, "MemmapTensor"], shape: Sequence[int]  # noqa: F821
 ) -> torch.Tensor:
     """Expand a tensor on the right to match a desired shape.
     Args:

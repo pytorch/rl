@@ -53,9 +53,34 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
-#conda install -y -c conda-forge glfw
-#conda install -y -c conda-forge mesa
-#conda install -y -c menpo osmesa
-#conda install -y -c conda-forge glew
+
+if [[ $OSTYPE == 'darwin'* ]]; then
+  PRIVATE_MUJOCO_GL=glfw
+elif [ "${CU_VERSION:-}" == cpu ]; then
+  PRIVATE_MUJOCO_GL=osmesa
+else
+  PRIVATE_MUJOCO_GL=egl
+fi
+
+export MUJOCO_GL=$PRIVATE_MUJOCO_GL
+conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
+  DISPLAY=unix:0.0 \
+  MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
+  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
+  SDL_VIDEODRIVER=dummy \
+  MUJOCO_GL=$PRIVATE_MUJOCO_GL \
+  PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
+
+# Software rendering requires GLX and OSMesa.
+if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
+  yum makecache
+  yum install -y glfw
+  yum install -y glew
+  yum install -y mesa-libGL
+  yum install -y mesa-libGL-devel
+  yum install -y mesa-libOSMesa-devel
+  yum -y install egl-utils
+  yum -y install freeglut
+fi
 
 conda env update --file "${this_dir}/environment.yml" --prune

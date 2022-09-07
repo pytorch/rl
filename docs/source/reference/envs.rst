@@ -8,9 +8,6 @@ torchrl.envs package
     :toctree: generated/
     :template: rl_template.rst
 
-    GymLikeEnv
-    GymEnv
-    DMControlEnv
     SerialEnv
     ParallelEnv
 

@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from .common import *
-from .libs import *
 from .vec_env import *
 from .transforms import *
 from .env_creator import *
+from .gym_like import *

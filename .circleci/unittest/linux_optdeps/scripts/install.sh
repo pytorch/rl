@@ -11,7 +11,6 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    cudatoolkit="cpuonly"
     version="cpu"
 else
     if [[ ${#CU_VERSION} -eq 4 ]]; then
@@ -21,35 +20,26 @@ else
     fi
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
-    cudatoolkit="cudatoolkit=${version}"
 fi
-
-case "$(uname -s)" in
-    Darwin*) os=MacOSX;;
-    *) os=Linux
-esac
 
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-#printf "Installing PyTorch with %s\n" "${cudatoolkit}"
-#if [ "${os}" == "MacOSX" ]; then
-#    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch "${cudatoolkit}" pytest
-#else
-#    conda install -y -c "pytorch-${UPLOAD_CHANNEL}" "pytorch-${UPLOAD_CHANNEL}"::pytorch[build="*${version}*"] "${cudatoolkit}" pytest
-#fi
-
-#printf "Installing PyTorch with %s\n" "${CU_VERSION}"
+printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
+    # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
     # use pip to install pytorch as conda can frequently pick older release
-    pip install torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html --pre
+#    conda install -y pytorch cpuonly -c pytorch-nightly
+    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 else
-    conda install -y pytorch cudatoolkit=10.2 -c pytorch-nightly
+    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 fi
 
 printf "Installing functorch\n"
-pip install ninja  # Makes the build go faster
-pip install "git+https://github.com/pytorch/functorch.git"
+python -m pip install ninja  # Makes the build go faster
+#python -m pip install "git+https://github.com/pytorch/functorch.git"
+PYTORCH_VERSION=`python -c "import torch.version; print(torch.version.git_version)"`
+pip install "git+https://github.com/pytorch/pytorch.git@$PYTORCH_VERSION#subdirectory=functorch"
 
 # smoke test
 python -c "import functorch"

@@ -6,11 +6,11 @@
 from numbers import Number
 from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
 
-import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
 
+from torchrl import prod
 from torchrl.data import DEVICE_TYPING
 from torchrl.modules.models.utils import (
     _find_depth,
@@ -180,7 +180,7 @@ class MLP(nn.Sequential):
 
         _out_features_num = out_features
         if not isinstance(out_features, Number):
-            _out_features_num = np.prod(out_features)
+            _out_features_num = prod(out_features)
         self.out_features = out_features
         self._out_features_num = _out_features_num
         self.activation_class = activation_class
@@ -339,7 +339,7 @@ class ConvNet(nn.Sequential):
         self,
         in_features: Optional[int] = None,
         depth: Optional[int] = None,
-        num_cells: Union[Sequence, int] = [32, 32, 32],
+        num_cells: Union[Sequence, int] = None,
         kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 3,
         strides: Union[Sequence, int] = 1,
         paddings: Union[Sequence, int] = 0,
@@ -353,6 +353,8 @@ class ConvNet(nn.Sequential):
         squeeze_output: bool = False,
         device: DEVICE_TYPING = "cpu",
     ):
+        if num_cells is None:
+            num_cells = [32, 32, 32]
 
         self.in_features = in_features
         self.activation_class = activation_class

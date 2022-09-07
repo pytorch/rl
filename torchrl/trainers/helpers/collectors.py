@@ -13,7 +13,7 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
 )
 from torchrl.data import MultiStep
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import ParallelEnv
 
 __all__ = [
@@ -23,7 +23,7 @@ __all__ = [
     "make_collector_onpolicy",
 ]
 
-from torchrl.envs.common import _EnvClass
+from torchrl.envs.common import EnvBase
 from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule
 
 
@@ -70,7 +70,7 @@ def sync_async_collector(
     and the policy should handle those envs in batch.
 
     Args:
-        env_fns: Callable (or list of Callables) returning an instance of _EnvClass class.
+        env_fns: Callable (or list of Callables) returning an instance of EnvBase class.
         env_kwargs: Optional. Dictionary (or list of dictionaries) containing the kwargs for the environment being created.
         num_env_per_collector: Number of environments per data collector. The product
             num_env_per_collector * num_collectors should be less or equal to the number of workers available.
@@ -141,7 +141,7 @@ def sync_sync_collector(
     and the policy should handle those envs in batch.
 
     Args:
-        env_fns: Callable (or list of Callables) returning an instance of _EnvClass class.
+        env_fns: Callable (or list of Callables) returning an instance of EnvBase class.
         env_kwargs: Optional. Dictionary (or list of dictionaries) containing the kwargs for the environment being created.
         num_env_per_collector: Number of environments per data collector. The product
             num_env_per_collector * num_collectors should be less or equal to the number of workers available.
@@ -163,7 +163,7 @@ def _make_collector(
     collector_class: Type,
     env_fns: Union[Callable, List[Callable]],
     env_kwargs: Optional[Union[dict, List[dict]]],
-    policy: Callable[[_TensorDict], _TensorDict],
+    policy: Callable[[TensorDictBase], TensorDictBase],
     max_frames_per_traj: int = -1,
     frames_per_batch: int = 200,
     total_frames: Optional[int] = None,
@@ -237,9 +237,9 @@ def _make_collector(
 
 
 def make_collector_offpolicy(
-    make_env: Callable[[], _EnvClass],
+    make_env: Callable[[], EnvBase],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     """
@@ -290,7 +290,7 @@ def make_collector_offpolicy(
         "passing_devices": cfg.collector_devices,
         "init_random_frames": cfg.init_random_frames,
         "pin_memory": cfg.pin_memory,
-        "split_trajs": ms is not None,
+        "split_trajs": True,
         # trajectories must be separated if multi-step is used
         "init_with_lag": cfg.init_with_lag,
         "exploration_mode": cfg.exploration_mode,
@@ -302,9 +302,9 @@ def make_collector_offpolicy(
 
 
 def make_collector_onpolicy(
-    make_env: Callable[[], _EnvClass],
+    make_env: Callable[[], EnvBase],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     collector_helper = sync_sync_collector

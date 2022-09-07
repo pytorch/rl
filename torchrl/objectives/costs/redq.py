@@ -11,10 +11,10 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
 from torchrl.modules import TensorDictModule
-from torchrl.objectives.costs.common import _LossModule
+from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import (
     distance_loss,
     hold_out_params,
@@ -24,7 +24,7 @@ from torchrl.objectives.costs.utils import (
 __all__ = ["REDQLoss"]
 
 
-class REDQLoss(_LossModule):
+class REDQLoss(LossModule):
     """
     REDQ Loss module.
 
@@ -97,7 +97,7 @@ class REDQLoss(_LossModule):
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
-        self.gamma = gamma
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.priority_key = priotity_key
         self.loss_function = loss_function
 
@@ -144,7 +144,7 @@ class REDQLoss(_LossModule):
             alpha = self.log_alpha.exp()
         return alpha
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
         next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]
         tensordict_select = tensordict.select(
@@ -269,7 +269,7 @@ class REDQLoss(_LossModule):
             pred_next_val=next_state_value,
         )
         pred_val = state_action_value_qvalue
-        td_error = abs(pred_val - target_value)
+        td_error = (pred_val - target_value).pow(2)
         loss_qval = distance_loss(
             pred_val,
             target_value.expand_as(pred_val),
@@ -288,12 +288,12 @@ class REDQLoss(_LossModule):
                 "loss_actor": loss_actor.mean(),
                 "loss_qvalue": loss_qval.mean(),
                 "loss_alpha": loss_alpha.mean(),
-                "alpha": self.alpha,
-                "entropy": -sample_log_prob.mean(),
-                "state_action_value_actor": state_action_value_actor.mean(),
-                "action_log_prob_actor": action_log_prob_actor.mean(),
-                "next_state_value": next_state_value.mean(),
-                "target_value": target_value.mean(),
+                "alpha": self.alpha.detach(),
+                "entropy": -sample_log_prob.mean().detach(),
+                "state_action_value_actor": state_action_value_actor.mean().detach(),
+                "action_log_prob_actor": action_log_prob_actor.mean().detach(),
+                "next_state_value": next_state_value.mean().detach(),
+                "target_value": target_value.mean().detach(),
             },
             [],
         )

@@ -9,18 +9,17 @@ from typing import Callable, Optional, Tuple
 import torch
 from torch import distributions as d
 
-from torchrl.data.tensordict.tensordict import _TensorDict, TensorDict
-from torchrl.envs.utils import step_tensordict
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.modules import TensorDictModule
 from ...modules.tensordict_module import ProbabilisticTensorDictModule
 
 __all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
 
 from torchrl.objectives.costs.utils import distance_loss
-from .common import _LossModule
+from .common import LossModule
 
 
-class PPOLoss(_LossModule):
+class PPOLoss(LossModule):
     """
     A parent PPO loss class.
 
@@ -66,18 +65,20 @@ class PPOLoss(_LossModule):
         critic_coef: float = 1.0,
         gamma: float = 0.99,
         loss_critic_type: str = "smooth_l1",
-        advantage_module: Optional[Callable[[_TensorDict], _TensorDict]] = None,
+        advantage_module: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
     ):
         super().__init__()
-        self.actor = actor
-        self.critic = critic
+        self.convert_to_functional(actor, "actor")
+        # we want to make sure there are no duplicates in the params: the
+        # params of critic must be refs to actor if they're shared
+        self.convert_to_functional(critic, "critic", compare_against=self.actor_params)
         self.advantage_key = advantage_key
         self.advantage_diff_key = advantage_diff_key
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_coef
-        self.entropy_coef = entropy_coef
-        self.critic_coef = critic_coef
-        self.gamma = gamma
+        self.register_buffer("entropy_coef", torch.tensor(entropy_coef))
+        self.register_buffer("critic_coef", torch.tensor(critic_coef))
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_critic_type = loss_critic_type
         self.advantage_module = advantage_module
 
@@ -93,7 +94,7 @@ class PPOLoss(_LossModule):
         return entropy.unsqueeze(-1)
 
     def _log_weight(
-        self, tensordict: _TensorDict
+        self, tensordict: TensorDictBase
     ) -> Tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
         action = tensordict.get("action")
@@ -101,7 +102,9 @@ class PPOLoss(_LossModule):
             raise RuntimeError("tensordict stored action requires grad.")
         tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
 
-        dist, *_ = self.actor.get_dist(tensordict_clone)
+        dist, *_ = self.actor.get_dist(
+            tensordict_clone, params=self.actor_params, buffers=self.actor_buffers
+        )
         log_prob = dist.log_prob(action)
         log_prob = log_prob.unsqueeze(-1)
 
@@ -112,7 +115,7 @@ class PPOLoss(_LossModule):
         log_weight = log_prob - prev_log_prob
         return log_weight, dist
 
-    def loss_critic(self, tensordict: _TensorDict) -> torch.Tensor:
+    def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         if self.advantage_diff_key in tensordict.keys():
             advantage_diff = tensordict.get(self.advantage_diff_key)
             if not advantage_diff.requires_grad:
@@ -125,19 +128,20 @@ class PPOLoss(_LossModule):
                 loss_function=self.loss_critic_type,
             )
         else:
-            with torch.no_grad():
-                reward = tensordict.get("reward")
-                next_td = step_tensordict(tensordict)
-                next_value = self.critic(next_td).get("state_value")
-                value_target = reward + next_value * self.gamma
-            tensordict_select = tensordict.select(*self.critic.in_keys).clone()
-            value = self.critic(tensordict_select).get("state_value")
+            advantage = tensordict.get(self.advantage_key)
+            tensordict_select = tensordict.select(*self.critic.in_keys)
+            value = self.critic(
+                tensordict_select,
+                params=self.critic_params,
+                buffers=self.critic_buffers,
+            ).get("state_value")
+            value_target = advantage + value.detach()
             loss_value = distance_loss(
                 value, value_target, loss_function=self.loss_critic_type
             )
         return self.critic_coef * loss_value
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.advantage_module is not None:
             tensordict = self.advantage_module(
                 tensordict,
@@ -211,13 +215,16 @@ class ClipPPOLoss(PPOLoss):
             loss_critic_type=loss_critic_type,
             **kwargs,
         )
-        self.clip_epsilon = clip_epsilon
-        self._clip_bounds = (
+        self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
+
+    @property
+    def _clip_bounds(self):
+        return (
             math.log1p(-self.clip_epsilon),
             math.log1p(self.clip_epsilon),
         )
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.advantage_module is not None:
             tensordict = self.advantage_module(tensordict)
         tensordict = tensordict.clone()
@@ -327,7 +334,7 @@ class KLPENPPOLoss(PPOLoss):
 
         self.dtarg = dtarg
         self._beta_init = beta
-        self.beta = beta
+        self.register_buffer("beta", torch.tensor(beta))
 
         if increment < 1.0:
             raise ValueError(
@@ -341,7 +348,7 @@ class KLPENPPOLoss(PPOLoss):
         self.decrement = decrement
         self.samples_mc_kl = samples_mc_kl
 
-    def forward(self, tensordict: _TensorDict) -> TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDict:
         if self.advantage_module is not None:
             tensordict = self.advantage_module(tensordict)
         tensordict = tensordict.clone()
@@ -354,7 +361,9 @@ class KLPENPPOLoss(PPOLoss):
         ).clone()
 
         previous_dist = self.actor.build_dist_from_params(tensordict_clone)
-        current_dist, *_ = self.actor.get_dist(tensordict_clone)
+        current_dist, *_ = self.actor.get_dist(
+            tensordict_clone, params=self.actor_params, buffers=self.actor_buffers
+        )
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
@@ -363,9 +372,9 @@ class KLPENPPOLoss(PPOLoss):
         kl = kl.unsqueeze(-1)
         neg_loss = neg_loss - self.beta * kl
         if kl.mean() > self.dtarg * 1.5:
-            self.beta *= self.increment
+            self.beta.data *= self.increment
         elif kl.mean() < self.dtarg / 1.5:
-            self.beta *= self.decrement
+            self.beta.data *= self.decrement
         td_out = TensorDict(
             {
                 "loss_objective": -neg_loss.mean(),

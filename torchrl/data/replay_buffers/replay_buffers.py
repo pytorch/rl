@@ -27,7 +27,7 @@ from torchrl.data.replay_buffers.utils import (
     to_torch,
 )
 from torchrl.data.tensordict.tensordict import (
-    _TensorDict,
+    TensorDictBase,
     stack as stack_td,
     LazyStackedTensorDict,
 )
@@ -131,10 +131,9 @@ class ReplayBuffer:
         self._storage = storage
         self._capacity = size
         self._cursor = 0
-        if collate_fn is not None:
-            self._collate_fn = collate_fn
-        else:
-            self._collate_fn = stack_tensors
+        if collate_fn is None:
+            collate_fn = stack_tensors
+        self._collate_fn = collate_fn
         self._pin_memory = pin_memory
 
         self._prefetch = prefetch is not None and prefetch > 0
@@ -240,7 +239,7 @@ class ReplayBuffer:
 
     @pin_memory_output
     def _sample(self, batch_size: int) -> Any:
-        index = np.random.randint(0, len(self._storage), size=batch_size)
+        index = torch.randint(0, len(self._storage), (batch_size,))
 
         with self._replay_lock:
             data = self._storage[index]
@@ -275,7 +274,7 @@ class ReplayBuffer:
 
     def __repr__(self) -> str:
         string = (
-            f"{self.__class__.__name__}(size={len(self)}, "
+            f"{type(self).__name__}(size={len(self)}, "
             f"pin_memory={self._pin_memory})"
         )
         return string
@@ -448,10 +447,11 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                 raise RuntimeError("negative p_min")
             mass = np.random.uniform(0.0, p_sum, size=batch_size)
             index = self._sum_tree.scan_lower_bound(mass)
-            if isinstance(index, torch.Tensor):
-                index.clamp_max_(len(self._storage) - 1)
-            else:
-                index = np.clip(index, None, len(self._storage) - 1)
+            if not isinstance(index, torch.Tensor):
+                index = torch.tensor(index)
+            if not index.ndimension():
+                index = index.reshape((1,))
+            index.clamp_max_(len(self._storage) - 1)
             data = self._storage[index]
             weight = self._sum_tree[index]
 
@@ -559,9 +559,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
         super().__init__(size, collate_fn, pin_memory, prefetch, storage=storage)
 
-    def sample(self, size: int) -> Any:
-        return super(TensorDictReplayBuffer, self).sample(size)
-
 
 class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
     """
@@ -620,7 +617,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         )
         self.priority_key = priority_key
 
-    def _get_priority(self, tensordict: _TensorDict) -> torch.Tensor:
+    def _get_priority(self, tensordict: TensorDictBase) -> torch.Tensor:
         if self.priority_key in tensordict.keys():
             if tensordict.batch_dims:
                 tensordict = tensordict.clone(recursive=False)
@@ -637,16 +634,16 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
             priority = self._default_priority
         return priority
 
-    def add(self, tensordict: _TensorDict) -> torch.Tensor:
+    def add(self, tensordict: TensorDictBase) -> torch.Tensor:
         priority = self._get_priority(tensordict)
         index = super().add(tensordict, priority)
         tensordict.set("index", index)
         return index
 
     def extend(
-        self, tensordicts: Union[_TensorDict, List[_TensorDict]]
+        self, tensordicts: Union[TensorDictBase, List[TensorDictBase]]
     ) -> torch.Tensor:
-        if isinstance(tensordicts, _TensorDict):
+        if isinstance(tensordicts, TensorDictBase):
             if self.priority_key in tensordicts.keys():
                 priorities = tensordicts.get(self.priority_key)
             else:
@@ -660,15 +657,6 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                 else:
                     tensordicts = tensordicts.contiguous()
                 tensordicts.batch_size = tensordicts.batch_size[:1]
-            # # we split the tensordict such that the setting of the "index" key herebelow results in a change in
-            # # the tensordicts stored in the buffer
-            # tensordicts = list(tensordicts.unbind(0))
-            tensordicts.set(
-                "index",
-                torch.zeros(
-                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
-                ),
-            )
             tensordicts.set(
                 "index",
                 torch.zeros(
@@ -678,15 +666,19 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         else:
             priorities = [self._get_priority(td) for td in tensordicts]
 
-        if not isinstance(tensordicts, _TensorDict):
+        if not isinstance(tensordicts, TensorDictBase):
             stacked_td = torch.stack(tensordicts, 0)
         else:
             stacked_td = tensordicts
         idx = super().extend(tensordicts, priorities)
-        stacked_td.set("index", idx, inplace=True)
+        stacked_td.set(
+            "index",
+            torch.tensor(idx, dtype=torch.int, device=stacked_td.device),
+            inplace=True,
+        )
         return idx
 
-    def update_priority(self, tensordict: _TensorDict) -> None:
+    def update_priority(self, tensordict: TensorDictBase) -> None:
         """Updates the priorities of the tensordicts stored in the replay
         buffer.
 
@@ -704,7 +696,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
             )
         return super().update_priority(tensordict.get("index"), priority=priority)
 
-    def sample(self, size: int, return_weight: bool = False) -> _TensorDict:
+    def sample(self, size: int, return_weight: bool = False) -> TensorDictBase:
         """
         Gather a batch of tensordicts according to the non-uniform multinomial
         distribution with weights computed with the priority_key of each

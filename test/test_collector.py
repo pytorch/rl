@@ -274,7 +274,7 @@ def test_concurrent_collector_seed(num_env, env_name, seed=100):
     ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [3, 1])
+@pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_collector_consistency(num_env, env_name, seed=100):
     if num_env == 1:
@@ -320,9 +320,9 @@ def test_collector_consistency(num_env, env_name, seed=100):
         device="cpu",
         pin_memory=False,
     )
-    collector = iter(collector)
-    b1 = next(collector)
-    b2 = next(collector)
+    collector_iter = iter(collector)
+    b1 = next(collector_iter)
+    b2 = next(collector_iter)
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b2)
 
@@ -334,6 +334,7 @@ def test_collector_consistency(num_env, env_name, seed=100):
     ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
 
     assert_allclose_td(rollout1a, b1.select(*rollout1a.keys()))
+    collector.shutdown()
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
@@ -445,7 +446,8 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
 
 
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
-def test_collector_vecnorm_envcreator():
+@pytest.mark.parametrize("static_seed", [True, False])
+def test_collector_vecnorm_envcreator(static_seed):
     """
     High level test of the following pipeline:
      (1) Design a function that creates an environment with VecNorm
@@ -456,7 +458,7 @@ def test_collector_vecnorm_envcreator():
     are modified after the collector is run for more steps.
 
     """
-    from torchrl.envs import GymEnv
+    from torchrl.envs.libs.gym import GymEnv
 
     num_envs = 4
     env_make = EnvCreator(lambda: TransformedEnv(GymEnv("Pendulum-v1"), VecNorm()))
@@ -469,12 +471,19 @@ def test_collector_vecnorm_envcreator():
     )
 
     init_seed = 0
-    new_seed = c.set_seed(init_seed)
+    new_seed = c.set_seed(init_seed, static_seed=static_seed)
+    if static_seed:
+        assert new_seed == init_seed
+    else:
+        assert new_seed != init_seed
 
     seed = init_seed
-    for i in range(num_envs * num_data_collectors):
+    for _ in range(num_envs * num_data_collectors):
         seed = seed_generator(seed)
-    assert new_seed == seed
+    if not static_seed:
+        assert new_seed == seed
+    else:
+        assert new_seed != seed
 
     c_iter = iter(c)
     next(c_iter)
@@ -482,8 +491,8 @@ def test_collector_vecnorm_envcreator():
 
     s = c.state_dict()
 
-    td1 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"].clone()
-    td2 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"].clone()
+    td1 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"]["td"].clone()
+    td2 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"]["td"].clone()
     assert (td1 == td2).all()
 
     next(c_iter)
@@ -491,8 +500,8 @@ def test_collector_vecnorm_envcreator():
 
     s = c.state_dict()
 
-    td3 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"].clone()
-    td4 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"].clone()
+    td3 = s["worker0"]["env_state_dict"]["worker3"]["_extra_state"]["td"].clone()
+    td4 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"]["td"].clone()
     assert (td3 == td4).all()
     assert (td1 != td4).any()
 
@@ -517,7 +526,7 @@ def test_update_weights(use_async):
     policy_state_dict = policy.state_dict()
     for worker in range(3):
         for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-            torch.testing.assert_allclose(
+            torch.testing.assert_close(
                 state_dict[f"worker{worker}"]["policy_state_dict"][k],
                 policy_state_dict[k].cpu(),
             )
@@ -533,7 +542,7 @@ def test_update_weights(use_async):
     for worker in range(3):
         for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
             with pytest.raises(AssertionError):
-                torch.testing.assert_allclose(
+                torch.testing.assert_close(
                     state_dict[f"worker{worker}"]["policy_state_dict"][k],
                     policy_state_dict[k].cpu(),
                 )
@@ -546,7 +555,7 @@ def test_update_weights(use_async):
     policy_state_dict = policy.state_dict()
     for worker in range(3):
         for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-            torch.testing.assert_allclose(
+            torch.testing.assert_close(
                 state_dict[f"worker{worker}"]["policy_state_dict"][k],
                 policy_state_dict[k].cpu(),
             )
@@ -563,7 +572,10 @@ def test_update_weights(use_async):
 def test_excluded_keys(collector_class, exclude):
     if not exclude and collector_class is not SyncDataCollector:
         pytest.skip("defining _exclude_private_keys is not possible")
-    make_env = lambda: ContinuousActionVecMockEnv()
+
+    def make_env():
+        return ContinuousActionVecMockEnv()
+
     dummy_env = make_env()
     obs_spec = dummy_env.observation_spec["next_observation"]
     policy_module = nn.Linear(obs_spec.shape[-1], dummy_env.action_spec.shape[-1])

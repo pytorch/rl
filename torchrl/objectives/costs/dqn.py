@@ -11,8 +11,8 @@ from torchrl.modules import (
     DistributionalQValueActor,
     QValueActor,
 )
-from ...data.tensordict.tensordict import _TensorDict
-from .common import _LossModule
+from ...data.tensordict.tensordict import TensorDictBase
+from .common import LossModule
 from .utils import distance_loss, next_state_value
 
 __all__ = [
@@ -21,7 +21,7 @@ __all__ = [
 ]
 
 
-class DQNLoss(_LossModule):
+class DQNLoss(LossModule):
     """
     The DQN Loss class.
     Args:
@@ -54,18 +54,18 @@ class DQNLoss(_LossModule):
             raise TypeError(
                 f"DQNLoss requires value_network to be of QValueActor dtype, got {type(value_network)}"
             )
-        self.gamma = gamma
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.loss_function = loss_function
         self.priority_key = priority_key
 
-    def forward(self, input_tensordict: _TensorDict) -> TensorDict:
+    def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """
         Computes the DQN loss given a tensordict sampled from the replay buffer.
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
 
         Args:
-            input_tensordict (_TensorDict): a tensordict with keys ["done", "reward", "action"] and the in_keys of
+            input_tensordict (TensorDictBase): a tensordict with keys ["done", "reward", "action"] and the in_keys of
                 the value network.
 
         Returns:
@@ -112,7 +112,7 @@ class DQNLoss(_LossModule):
                 buffers=self.target_value_network_buffers,
                 next_val_key="chosen_action_value",
             )
-        priority_tensor = abs(pred_val_index - target_value)
+        priority_tensor = (pred_val_index - target_value).pow(2)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)
         priority_tensor = priority_tensor.to(input_tensordict.device)
 
@@ -125,7 +125,7 @@ class DQNLoss(_LossModule):
         return TensorDict({"loss": loss.mean()}, [])
 
 
-class DistributionalDQNLoss(_LossModule):
+class DistributionalDQNLoss(LossModule):
     """
     A distributional DQN loss class.
     Distributional DQN uses a value network that outputs a distribution of
@@ -152,7 +152,7 @@ class DistributionalDQNLoss(_LossModule):
         delay_value: bool = False,
     ):
         super().__init__()
-        self.gamma = gamma
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.priority_key = priority_key
         self.delay_value = delay_value
         if not isinstance(value_network, DistributionalQValueActor):
@@ -167,7 +167,7 @@ class DistributionalDQNLoss(_LossModule):
             create_target_params=self.delay_value,
         )
 
-    def forward(self, input_tensordict: _TensorDict) -> TensorDict:
+    def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         # from https://github.com/Kaixhin/Rainbow/blob/9ff5567ad1234ae0ed30d8471e8f13ae07119395/agent.py
         device = self.device
         tensordict = TensorDict(

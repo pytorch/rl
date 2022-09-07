@@ -22,6 +22,8 @@ class TestShared:
         tensordict.zero_()
         print(f"zeroing time: {time.time() - t0}")
         command_pipe_child.send("done")
+        command_pipe_child.close()
+        del command_pipe_child, command_pipe_parent, tensordict
 
     @staticmethod
     def driver_func(subtd, td):
@@ -34,15 +36,17 @@ class TestShared:
         proc.start()
         command_pipe_child.close()
         command_pipe_parent.recv()
-        for key, item in subtd.items():
+        for item in subtd.values():
             assert (item == 0).all()
 
-        for key, item in td[0].items():
+        for item in td[0].values():
             assert (item == 0).all()
-        proc.join()
         command_pipe_parent.close()
+        proc.join()
+        del command_pipe_child, command_pipe_parent, proc
 
-    def test_shared(self):
+    @pytest.mark.parametrize("indexing_method", range(3))
+    def test_shared(self, indexing_method):
         torch.manual_seed(0)
         tensordict = TensorDict(
             source={
@@ -53,31 +57,21 @@ class TestShared:
             batch_size=[1000],
         )
 
-        td1 = tensordict.clone().share_memory_()
-        td2 = tensordict.clone().share_memory_()
-        td3 = tensordict.clone().share_memory_()
-        subtd2 = TensorDict(
-            source={key: item[0] for key, item in td2.items()}, batch_size=[]
-        )
-        assert subtd2.is_shared()
-        print("sub td2 is shared: ", subtd2.is_shared())
+        td = tensordict.clone().share_memory_()
+        if indexing_method == 0:
+            subtd = TensorDict(
+                source={key: item[0] for key, item in td.items()}, batch_size=[]
+            )
+        elif indexing_method == 1:
+            subtd = td.get_sub_tensordict(0)
+        elif indexing_method == 2:
+            subtd = td[0]
+        else:
+            raise NotImplementedError
 
-        subtd1 = td1.get_sub_tensordict(0)
-        t0 = time.time()
-        self.driver_func(subtd1, td1)
-        t_elapsed = time.time() - t0
-        print(f"execution on subtd: {t_elapsed}")
+        assert subtd.is_shared()
 
-        t0 = time.time()
-        self.driver_func(subtd2, td2)
-        t_elapsed = time.time() - t0
-        print(f"execution on plain td: {t_elapsed}")
-
-        subtd3 = td3[0]
-        t0 = time.time()
-        self.driver_func(subtd3, td3)
-        t_elapsed = time.time() - t0
-        print(f"execution on regular indexed td: {t_elapsed}")
+        self.driver_func(subtd, td)
 
 
 class TestStack:
@@ -102,6 +96,8 @@ class TestStack:
                 tensordict.update_at_(td, i)
         time_spent = time.time() - t0
         command_pipe_child.send(time_spent)
+        command_pipe_child.close()
+        del command_pipe_child, command_pipe_parent
 
     @staticmethod
     def driver_func(td, stack):
@@ -116,7 +112,7 @@ class TestStack:
         command_pipe_parent.send("stack" if stack else "serial")
         time_spent = command_pipe_parent.recv()
         print(f"stack {stack}: time={time_spent}")
-        for key, item in td.items():
+        for item in td.values():
             assert (item == 0).all()
         proc.join()
         command_pipe_parent.close()
@@ -204,22 +200,25 @@ def test_memmap(idx, dtype, large_scale=False):
     print("\nTesting writing to TD")
     for i in range(2):
         t0 = time.time()
-        td_sm[idx].update_(td_to_copy)
+        sub_td_sm = td_sm.get_sub_tensordict(idx)
+        sub_td_sm.update_(td_to_copy)
         if i == 1:
             print(f"sm td: {time.time() - t0:4.4f} sec")
-        torch.testing.assert_allclose(td_sm[idx].get("a"), td_to_copy.get("a"))
+        torch.testing.assert_close(sub_td_sm.get("a"), td_to_copy.get("a"))
 
         t0 = time.time()
-        td_memmap[idx].update_(td_to_copy)
+        sub_td_sm = td_memmap.get_sub_tensordict(idx)
+        sub_td_sm.update_(td_to_copy)
         if i == 1:
             print(f"memmap td: {time.time() - t0:4.4f} sec")
-        torch.testing.assert_allclose(td_memmap[idx].get("a"), td_to_copy.get("a"))
+        torch.testing.assert_close(sub_td_sm.get("a"), td_to_copy.get("a"))
 
         t0 = time.time()
-        td_saved[idx].update_(td_to_copy)
+        sub_td_sm = td_saved.get_sub_tensordict(idx)
+        sub_td_sm.update_(td_to_copy)
         if i == 1:
             print(f"saved td: {time.time() - t0:4.4f} sec")
-        torch.testing.assert_allclose(td_saved[idx].get("a"), td_to_copy.get("a"))
+        torch.testing.assert_close(sub_td_sm.get("a"), td_to_copy.get("a"))
 
 
 if __name__ == "__main__":

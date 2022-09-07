@@ -7,7 +7,7 @@ import torch
 from torch import Tensor
 
 from torchrl.data import TensorDict
-from torchrl.data.tensordict.tensordict import _TensorDict
+from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
 from torchrl.modules import TensorDictModule
 from torchrl.objectives import (
@@ -15,10 +15,10 @@ from torchrl.objectives import (
     next_state_value as get_next_state_value,
     distance_loss,
 )
-from torchrl.objectives.costs.common import _LossModule
+from torchrl.objectives.costs.common import LossModule
 
 
-class REDQLoss_deprecated(_LossModule):
+class REDQLoss_deprecated(LossModule):
     """
     REDQ Loss module.
     REDQ (RANDOMIZED ENSEMBLED DOUBLE Q-LEARNING: LEARNING FAST WITHOUT A MODEL
@@ -48,7 +48,6 @@ class REDQLoss_deprecated(_LossModule):
     """
 
     delay_actor: bool = False
-    delay_qvalue: bool = False
 
     def __init__(
         self,
@@ -64,6 +63,8 @@ class REDQLoss_deprecated(_LossModule):
         max_alpha: float = 10.0,
         fixed_alpha: bool = False,
         target_entropy: Union[str, Number] = "auto",
+        delay_qvalue: bool = True,
+        gSDE: bool = False,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -71,6 +72,11 @@ class REDQLoss_deprecated(_LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
+
+        # let's make sure that actor_network has `return_log_prob` set to True
+        self.actor_network.return_log_prob = True
+
+        self.delay_qvalue = delay_qvalue
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
@@ -80,7 +86,7 @@ class REDQLoss_deprecated(_LossModule):
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
-        self.gamma = gamma
+        self.register_buffer("gamma", torch.tensor(gamma))
         self.priority_key = priotity_key
         self.loss_function = loss_function
 
@@ -108,7 +114,7 @@ class REDQLoss_deprecated(_LossModule):
             )
 
         if target_entropy == "auto":
-            if actor_network.spec is None:
+            if actor_network.spec["action"] is None:
                 raise RuntimeError(
                     "Cannot infer the dimensionality of the action. Consider providing "
                     "the target entropy explicitely or provide the spec of the "
@@ -118,6 +124,7 @@ class REDQLoss_deprecated(_LossModule):
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
+        self.gSDE = gSDE
 
     @property
     def alpha(self):
@@ -127,7 +134,7 @@ class REDQLoss_deprecated(_LossModule):
             alpha = self.log_alpha.exp()
         return alpha
 
-    def forward(self, tensordict: _TensorDict) -> _TensorDict:
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         loss_actor, sample_log_prob = self._actor_loss(tensordict)
 
         loss_qval = self._qvalue_loss(tensordict)
@@ -149,7 +156,7 @@ class REDQLoss_deprecated(_LossModule):
 
         return td_out
 
-    def _actor_loss(self, tensordict: _TensorDict) -> Tuple[Tensor, Tensor]:
+    def _actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
         tensordict_clone = tensordict.select(*obs_keys)  # to avoid overwriting keys
         with set_exploration_mode("random"):
@@ -176,13 +183,11 @@ class REDQLoss_deprecated(_LossModule):
         ).mean(0)
         return loss_actor, tensordict_clone.get("sample_log_prob")
 
-    def _qvalue_loss(self, tensordict: _TensorDict) -> Tensor:
+    def _qvalue_loss(self, tensordict: TensorDictBase) -> Tensor:
         tensordict_save = tensordict
 
+        obs_keys = self.actor_network.in_keys
         next_obs_keys = [key for key in tensordict.keys() if key.startswith("next_")]
-        obs_keys = [key for key in tensordict.keys() if key.startswith("obs")]
-        if "pixels" in tensordict.keys():
-            raise RuntimeError("not suited for pixel-based experiments")
         tensordict = tensordict.select(
             "reward", "done", *next_obs_keys, *obs_keys, "action"
         )

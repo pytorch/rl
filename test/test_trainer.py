@@ -13,7 +13,7 @@ import torch
 
 try:
     from tensorboard.backend.event_processing import event_accumulator
-    from torch.utils.tensorboard import SummaryWriter
+    from torchrl.trainers.loggers import TensorboardLogger
 
     _has_tb = True
 except ImportError:
@@ -48,7 +48,7 @@ class MockingOptim:
 class MockingCollector:
     called_update_policy_weights_ = False
 
-    def set_seed(self, seed):
+    def set_seed(self, seed, **kwargs):
         return seed
 
     def update_policy_weights_(self):
@@ -224,7 +224,8 @@ def test_subsampler():
 @pytest.mark.skipif(not _has_tb, reason="No tensorboard library")
 def test_recorder():
     with tempfile.TemporaryDirectory() as folder:
-        writer = SummaryWriter(log_dir=folder)
+        print(folder)
+        logger = TensorboardLogger(exp_name=folder)
         args = Namespace()
         args.env_name = "ALE/Pong-v5"
         args.env_task = ""
@@ -249,7 +250,7 @@ def test_recorder():
             video_tag="tmp",
             norm_obs_only=True,
             stats={"loc": 0, "scale": 1},
-            writer=writer,
+            logger=logger,
         )()
 
         recorder = Recorder(
@@ -263,10 +264,10 @@ def test_recorder():
         for _ in range(N):
             recorder(None)
 
-        for (dirpath, dirnames, filenames) in walk(folder):
+        for (_, _, filenames) in walk(folder):
+            filename = filenames[0]
             break
 
-        filename = filenames[0]
         ea = event_accumulator.EventAccumulator(
             path.join(folder, filename),
             size_guidance={

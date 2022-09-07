@@ -7,26 +7,28 @@ from dataclasses import dataclass
 from typing import Optional, Union, List
 from warnings import warn
 
+import torch
 from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
-from torchrl.envs.common import _EnvClass
+from torchrl.envs.common import EnvBase
 from torchrl.modules import TensorDictModule, TensorDictModuleWrapper, reset_noise
-from torchrl.objectives.costs.common import _LossModule
+from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import _TargetNetUpdate
+from torchrl.trainers.loggers import Logger
 from torchrl.trainers.trainers import (
     Trainer,
     SelectKeys,
     ReplayBufferTrainer,
     LogReward,
     RewardNormalizer,
-    mask_batch,
     BatchSubSampler,
     UpdateWeights,
     Recorder,
     CountFramesLog,
+    ClearCudaCache,
 )
 
 OPTIMIZERS = {
@@ -67,35 +69,37 @@ class TrainerConfig:
     normalize_rewards_online: bool = False
     # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
     normalize_rewards_online_scale: float = 1.0
-    # Final value of the normalized rewards.
+    # Final scale of the normalized rewards.
+    normalize_rewards_online_decay: float = 0.9999
+    # Decay of the reward moving averaging
     sub_traj_len: int = -1
     # length of the trajectories that sub-samples must have in online settings.
 
 
 def make_trainer(
     collector: _DataCollector,
-    loss_module: _LossModule,
-    recorder: Optional[_EnvClass] = None,
+    loss_module: LossModule,
+    recorder: Optional[EnvBase] = None,
     target_net_updater: Optional[_TargetNetUpdate] = None,
     policy_exploration: Optional[
         Union[TensorDictModuleWrapper, TensorDictModule]
     ] = None,
     replay_buffer: Optional[ReplayBuffer] = None,
-    writer: Optional["SummaryWriter"] = None,
-    cfg: "DictConfig" = None,
+    logger: Optional[Logger] = None,
+    cfg: "DictConfig" = None,  # noqa: F821
 ) -> Trainer:
     """Creates a Trainer instance given its constituents.
 
     Args:
         collector (_DataCollector): A data collector to be used to collect data.
-        loss_module (_LossModule): A TorchRL loss module
-        recorder (_EnvClass, optional): a recorder environment. If None, the trainer will train the policy without
+        loss_module (LossModule): A TorchRL loss module
+        recorder (EnvBase, optional): a recorder environment. If None, the trainer will train the policy without
             testing it.
         target_net_updater (_TargetNetUpdate, optional): A target network update object.
         policy_exploration (TDModule or TensorDictModuleWrapper, optional): a policy to be used for recording and exploration
             updates (should be synced with the learnt policy).
         replay_buffer (ReplayBuffer, optional): a replay buffer to be used to collect data.
-        writer (SummaryWriter, optional): a tensorboard SummaryWriter to be used for logging.
+        logger (Logger, optional): a Logger to be used for logging.
         cfg (DictConfig, optional): a DictConfig containing the arguments of the script. If None, the default
             arguments are used.
 
@@ -105,14 +109,14 @@ def make_trainer(
     Examples:
         >>> import torch
         >>> import tempfile
-        >>> from torch.utils.tensorboard import SummaryWriter
+        >>> from torchrl.trainers.loggers import TensorboardLogger
         >>> from torchrl.trainers import Trainer
         >>> from torchrl.envs import EnvCreator
         >>> from torchrl.collectors.collectors import SyncDataCollector
         >>> from torchrl.data import TensorDictReplayBuffer
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.modules import TensorDictModuleWrapper, TensorDictModule, ValueOperator, EGreedyWrapper
-        >>> from torchrl.objectives.costs.common import _LossModule
+        >>> from torchrl.objectives.costs.common import LossModule
         >>> from torchrl.objectives.costs.utils import _TargetNetUpdate
         >>> from torchrl.objectives import DDPGLoss
         >>> env_maker = EnvCreator(lambda: GymEnv("Pendulum-v0"))
@@ -130,9 +134,9 @@ def make_trainer(
         >>> policy_exploration = EGreedyWrapper(policy)
         >>> replay_buffer = TensorDictReplayBuffer(1000)
         >>> dir = tempfile.gettempdir()
-        >>> writer = SummaryWriter(log_dir=dir)
+        >>> logger = TensorboardLogger(exp_name=dir)
         >>> trainer = make_trainer(collector, loss_module, recorder, target_net_updater, policy_exploration,
-        ...    replay_buffer, writer)
+        ...    replay_buffer, logger)
         >>> print(trainer)
 
     """
@@ -174,14 +178,13 @@ def make_trainer(
         f"target_net_updater = {target_net_updater}; \n"
         f"policy_exploration = {policy_exploration}; \n"
         f"replay_buffer = {replay_buffer}; \n"
-        f"writer = {writer}; \n"
+        f"logger = {logger}; \n"
         f"cfg = {cfg}; \n"
     )
 
-    if writer is not None:
+    if logger is not None:
         # log hyperparams
-        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(cfg).items())])
-        writer.add_text("hparams", txt)
+        logger.log_hparams(cfg)
 
     trainer = Trainer(
         collector=collector,
@@ -189,11 +192,14 @@ def make_trainer(
         total_frames=cfg.total_frames * cfg.frame_skip,
         loss_module=loss_module,
         optimizer=optimizer,
-        writer=writer,
+        logger=logger,
         optim_steps_per_batch=cfg.optim_steps_per_batch,
         clip_grad_norm=cfg.clip_grad_norm,
         clip_norm=cfg.clip_norm,
     )
+
+    if torch.cuda.device_count() > 0:
+        trainer.register_op("pre_optim_steps", ClearCudaCache(1))
 
     if hasattr(cfg, "noisy") and cfg.noisy:
         trainer.register_op("pre_optim_steps", lambda: loss_module.apply(reset_noise))
@@ -213,7 +219,7 @@ def make_trainer(
         trainer.register_op("process_optim_batch", rb_trainer.sample)
         trainer.register_op("post_loss", rb_trainer.update_priority)
     else:
-        trainer.register_op("batch_process", mask_batch)
+        # trainer.register_op("batch_process", mask_batch)
         trainer.register_op(
             "process_optim_batch",
             BatchSubSampler(batch_size=cfg.batch_size, sub_traj_len=cfg.sub_traj_len),
@@ -228,7 +234,10 @@ def make_trainer(
     if cfg.normalize_rewards_online:
         # if used the running statistics of the rewards are computed and the
         # rewards used for training will be normalized based on these.
-        reward_normalizer = RewardNormalizer(scale=cfg.normalize_rewards_online_scale)
+        reward_normalizer = RewardNormalizer(
+            scale=cfg.normalize_rewards_online_scale,
+            decay=cfg.normalize_rewards_online_decay,
+        )
         trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
         trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 
