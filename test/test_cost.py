@@ -1795,7 +1795,7 @@ def test_custom_conv1d_tensor(device, gamma, N, T, rolling_gamma):
         gamma = torch.rand(*N, T, 1, device=device)
         rand_gamma = True
     else:
-        gamma = torch.full((*N, T, 1), gamma)
+        gamma = torch.full((*N, T, 1), gamma, device=device)
         rand_gamma = False
 
     values = torch.randn(*N, 1, T, device=device)
@@ -1809,7 +1809,7 @@ def test_custom_conv1d_tensor(device, gamma, N, T, rolling_gamma):
         for i in reversed(range(T)):
             prev_val = out[..., i] = prev_val * gamma[..., i, :] + values[..., i]
 
-    gammas = _make_gammas_tensor(gamma, T, device, rolling_gamma)
+    gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
     gammas = gammas.cumprod(-2)
     out_custom = _custom_conv1d(values.view(-1, 1, T), gammas).reshape(values.shape)
 

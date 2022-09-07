@@ -100,13 +100,12 @@ def vec_generalized_advantage_estimate(
             raise RuntimeError(
                 "Last dimension of generalized_advantage_estimate inputs must be a singleton dimension."
             )
-    device = state_value.device
     dtype = state_value.dtype
     not_done = 1 - done.to(dtype)
     *batch_size, time_steps = not_done.shape[:-1]
 
     gammalmbdas = torch.full_like(not_done, gamma * lmbda) * not_done
-    gammalmbdas = _make_gammas_tensor(gammalmbdas, time_steps, device, True)
+    gammalmbdas = _make_gammas_tensor(gammalmbdas, time_steps, True)
     gammalmbdas = gammalmbdas.cumprod(-2)
     # first_below_thr = gammalmbdas < 1e-7
     # # if we have multiple gammas, we only want to truncate if _all_ of
@@ -307,7 +306,7 @@ def vec_td_lambda_return_estimate(
     first_below_thr_gamma = None
 
     if isinstance(gamma, torch.Tensor) and gamma.ndimension() > 0:
-        gammas = _make_gammas_tensor(gamma, T, device, rolling_gamma)
+        gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
     else:
         gammas = torch.ones(T + 1, 1, device=device)
         gammas[1:] = gamma

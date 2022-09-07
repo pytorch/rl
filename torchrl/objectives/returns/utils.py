@@ -6,7 +6,7 @@
 import torch
 
 
-def _custom_conv1d(tensor, filter):
+def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
     """Computes a conv1d filter over a value.
     This is usually used to compute a discounted return:
 
@@ -129,9 +129,11 @@ def roll_by_gather(mat: torch.Tensor, dim: int, shifts: torch.LongTensor):
         raise NotImplementedError(f"dim {dim} is not supported.")
 
 
-def _make_gammas_tensor(gamma, T, device, rolling_gamma):
+def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
     # some reshaping code vendored from vec_td_lambda_return_estimate
     gamma = gamma.view(-1, T)
+    dtype = gamma.dtype
+    device = gamma.device
     if rolling_gamma:
         # # loop
         # gammas = gamma.unsqueeze(-2).expand(gamma.shape[0], T, T).contiguous()
@@ -145,7 +147,7 @@ def _make_gammas_tensor(gamma, T, device, rolling_gamma):
         # gammas = gammas_cont
 
         # vectorized version
-        gammas = torch.ones(gamma.shape[0], T, T + 1, 1, dtype=gamma.dtype)
+        gammas = torch.ones(gamma.shape[0], T, T + 1, 1, dtype=dtype, device=device)
         s0 = gamma.unsqueeze(-1).expand(gamma.shape[0], T, T).contiguous()
         s1 = roll_by_gather(s0, 0, shifts=-torch.arange(T))
         s2 = s1.flip(-1).triu().flip(-1).transpose(-2, -1)
@@ -153,6 +155,6 @@ def _make_gammas_tensor(gamma, T, device, rolling_gamma):
         # torch.testing.assert_close(gammas, gammas2)
 
     else:
-        gammas = torch.ones(*gamma.shape, T + 1, 1, device=device)
+        gammas = torch.ones(*gamma.shape, T + 1, 1, device=device, dtype=dtype)
         gammas[..., 1:, :] = gamma[..., None, None]
     return gammas
