@@ -11,7 +11,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from textwrap import indent
-from typing import Callable, Iterator, Optional, Sequence, Tuple, Union
+from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Dict
 
 import numpy as np
 import torch
@@ -156,7 +156,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -231,7 +231,9 @@ class SyncDataCollector(_DataCollector):
 
     def __init__(
         self,
-        create_env_fn: Union[EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]],
+        create_env_fn: Union[
+            EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]  # noqa: F821
+        ],  # noqa: F821
         policy: Optional[
             Union[
                 ProbabilisticTensorDictModule,
@@ -323,11 +325,13 @@ class SyncDataCollector(_DataCollector):
         self._has_been_done = None
         self._exclude_private_keys = True
 
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
 
         Args:
             seed (int): integer representing the seed to be used for the environment.
+            static_seed(bool, optional): if True, the seed is not incremented.
+                Defaults to False
 
         Returns:
             Output seed. This is useful when more than one environment is contained in the DataCollector, as the
@@ -340,7 +344,7 @@ class SyncDataCollector(_DataCollector):
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
-        return self.env.set_seed(seed)
+        return self.env.set_seed(seed, static_seed=static_seed)
 
     def iterator(self) -> Iterator[TensorDictBase]:
         """Iterates through the DataCollector.
@@ -456,7 +460,7 @@ class SyncDataCollector(_DataCollector):
 
         tensordict_out = []
         with set_exploration_mode(self.exploration_mode):
-            for t in range(self.frames_per_batch):
+            for _ in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
@@ -828,11 +832,13 @@ class _MultiDataCollector(_DataCollector):
         for pipe in self.pipes:
             pipe.close()
 
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
 
         Args:
             seed: integer representing the seed to be used for the environment.
+            static_seed (bool, optional): if True, the seed is not incremented.
+                Defaults to False
 
         Returns:
             Output seed. This is useful when more than one environment is
@@ -849,7 +855,7 @@ class _MultiDataCollector(_DataCollector):
         """
         _check_for_faulty_process(self.procs)
         for idx in range(self.num_workers):
-            self.pipes[idx].send((seed, "seed"))
+            self.pipes[idx].send(((seed, static_seed), "seed"))
             new_seed, msg = self.pipes[idx].recv()
             if msg != "seeded":
                 raise RuntimeError(f"Expected msg='seeded', got {msg}")
@@ -954,7 +960,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             i += 1
             max_traj_idx = None
-            for k in range(self.num_workers):
+            for _ in range(self.num_workers):
                 new_data, j = self.queue_out.get()
                 if j == 0:
                     data, idx = new_data
@@ -1224,8 +1230,8 @@ def _main_async_collector(
     pipe_parent: connection.Connection,
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
-    create_env_fn: Union[EnvBase, "EnvCreator", Callable[[], EnvBase]],
-    create_env_kwargs: dict,
+    create_env_fn: Union[EnvBase, "EnvCreator", Callable[[], EnvBase]],  # noqa: F821
+    create_env_kwargs: Dict[str, Any],
     policy: Callable[[TensorDictBase], TensorDictBase],
     frames_per_worker: int,
     max_frames_per_traj: int,
@@ -1355,7 +1361,8 @@ def _main_async_collector(
             continue
 
         elif msg == "seed":
-            new_seed = dc.set_seed(data_in)
+            data_in, static_seed = data_in
+            new_seed = dc.set_seed(data_in, static_seed=static_seed)
             torch.manual_seed(data_in)
             np.random.seed(data_in)
             pipe_child.send((new_seed, "seeded"))

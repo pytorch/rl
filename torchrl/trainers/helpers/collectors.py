@@ -239,7 +239,7 @@ def _make_collector(
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     """
@@ -304,7 +304,7 @@ def make_collector_offpolicy(
 def make_collector_onpolicy(
     make_env: Callable[[], EnvBase],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     collector_helper = sync_sync_collector

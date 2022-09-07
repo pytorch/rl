@@ -11,7 +11,6 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    cudatoolkit="cpuonly"
     version="cpu"
     echo "Using cpu build"
 else
@@ -22,25 +21,15 @@ else
     fi
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
-    cudatoolkit="cudatoolkit=${version}"
 fi
-
-case "$(uname -s)" in
-    Darwin*) os=MacOSX;;
-    *) os=Linux
-esac
 
 # submodules
 git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
-    # use pip to install pytorch as conda can frequently pick older release
-#    conda install -y pytorch torchvision cpuonly -c pytorch
     pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
 else
-#    conda install -y pytorch torchvision cudatoolkit=11.3 -c pytorch
     pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
 fi
 

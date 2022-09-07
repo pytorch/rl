@@ -36,10 +36,10 @@ class TestShared:
         proc.start()
         command_pipe_child.close()
         command_pipe_parent.recv()
-        for key, item in subtd.items():
+        for item in subtd.values():
             assert (item == 0).all()
 
-        for key, item in td[0].items():
+        for item in td[0].values():
             assert (item == 0).all()
         command_pipe_parent.close()
         proc.join()
@@ -112,7 +112,7 @@ class TestStack:
         command_pipe_parent.send("stack" if stack else "serial")
         time_spent = command_pipe_parent.recv()
         print(f"stack {stack}: time={time_spent}")
-        for key, item in td.items():
+        for item in td.values():
             assert (item == 0).all()
         proc.join()
         command_pipe_parent.close()

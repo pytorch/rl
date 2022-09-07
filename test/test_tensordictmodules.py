@@ -82,9 +82,10 @@ class TestTDModule:
 
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
+    @pytest.mark.parametrize("out_keys", [["loc", "scale"], ["loc_1", "scale_1"]])
     @pytest.mark.parametrize("lazy", [True, False])
     @pytest.mark.parametrize("exp_mode", ["mode", "random", None])
-    def test_stateful_probabilistic(self, safe, spec_type, lazy, exp_mode):
+    def test_stateful_probabilistic(self, safe, spec_type, lazy, exp_mode, out_keys):
         torch.manual_seed(0)
         param_multiplier = 2
         if lazy:
@@ -97,7 +98,7 @@ class TestTDModule:
             module=NormalParamWrapper(net),
             spec=None,
             in_keys=in_keys,
-            out_keys=["loc", "scale"],
+            out_keys=out_keys,
         )
 
         if spec_type is None:
@@ -113,6 +114,12 @@ class TestTDModule:
         )
 
         kwargs = {"distribution_class": TanhNormal}
+        if out_keys == ["loc", "scale"]:
+            dist_param_keys = ["loc", "scale"]
+        elif out_keys == ["loc_1", "scale_1"]:
+            dist_param_keys = {"loc": "loc_1", "scale": "scale_1"}
+        else:
+            raise NotImplementedError
 
         if safe and spec is None:
             with pytest.raises(
@@ -123,7 +130,7 @@ class TestTDModule:
                 tensordict_module = ProbabilisticTensorDictModule(
                     module=net,
                     spec=spec,
-                    dist_param_keys=["loc", "scale"],
+                    dist_param_keys=dist_param_keys,
                     out_key_sample=["out"],
                     safe=safe,
                     **kwargs
@@ -133,7 +140,7 @@ class TestTDModule:
             tensordict_module = ProbabilisticTensorDictModule(
                 module=net,
                 spec=spec,
-                dist_param_keys=["loc", "scale"],
+                dist_param_keys=dist_param_keys,
                 out_key_sample=["out"],
                 safe=safe,
                 **kwargs
