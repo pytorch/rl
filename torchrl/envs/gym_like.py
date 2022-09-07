@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, Any, Dict
 
 import numpy as np
 import torch
@@ -38,7 +38,9 @@ class default_info_dict_reader:
             keys = []
         self.keys = keys
 
-    def __call__(self, info_dict: dict, tensordict: TensorDictBase) -> TensorDictBase:
+    def __call__(
+        self, info_dict: Dict[str, Any], tensordict: TensorDictBase
+    ) -> TensorDictBase:
         if not isinstance(info_dict, dict) and len(self.keys):
             warnings.warn(
                 f"Found an info_dict of type {type(info_dict)} "
@@ -127,7 +129,9 @@ class GymLikeEnv(_EnvWrapper):
         tensordict_out.set("done", self._is_done)
         return tensordict_out
 
-    def _read_obs(self, observations: Union[dict, torch.Tensor, np.ndarray]) -> dict:
+    def _read_obs(
+        self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
+    ) -> Dict[str, Any]:
         if isinstance(observations, dict):
             observations = {"next_" + key: value for key, value in observations.items()}
         if not isinstance(observations, (TensorDict, dict)):

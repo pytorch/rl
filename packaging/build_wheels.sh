@@ -16,7 +16,6 @@ python setup.py clean
 if [[ "$(uname)" == Darwin || "$OSTYPE" == "msys" ]]; then
     python_exec="$(which python)"
     bin_path=$(dirname $python_exec)
-    env_path=$(dirname $bin_path)
     if [[ "$(uname)" == Darwin ]]; then
         # Install delocate to relocate the required binaries
         pip_install "delocate>=0.9"
@@ -40,19 +39,3 @@ else
       rename "linux_x86_64" "manylinux1_x86_64" dist/*.whl
     fi
 fi
-
-#if [[ "$(uname)" == Darwin ]]; then
-#    pushd dist/
-#    python_exec="$(which python)"
-#    bin_path=$(dirname $python_exec)
-#    env_path=$(dirname $bin_path)
-#    for whl in *.whl; do
-#        DYLD_FALLBACK_LIBRARY_PATH="$env_path/lib/:$DYLD_FALLBACK_LIBRARY_PATH" delocate-wheel -v --ignore-missing-dependencies $whl
-#    done
-#else
-#    if [[ "$OSTYPE" == "msys" ]]; then
-#        "$script_dir/windows/internal/vc_env_helper.bat" python $script_dir/wheel/relocate.py
-#    else
-#        LD_LIBRARY_PATH="/usr/local/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH" python $script_dir/wheel/relocate.py
-#    fi
-#fi
