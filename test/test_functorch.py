@@ -182,7 +182,7 @@ def test_vmap_tdsequence(moduletype, batch_params):
         if batch_params:
             params = params.expand(10).contiguous()
             buffers = buffers.expand(10).contiguous()
-            y = tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
+            tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
         else:
             raise NotImplementedError
         z = td["z"]
@@ -234,7 +234,7 @@ def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
         if batch_params:
             params = params.expand(10).contiguous()
             buffers = buffers.expand(10).contiguous()
-            y = tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
+            tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
         else:
             raise NotImplementedError
         z = td["z"]

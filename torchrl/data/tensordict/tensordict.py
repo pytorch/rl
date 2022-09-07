@@ -28,6 +28,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    Any,
 )
 from warnings import warn
 
@@ -88,12 +89,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     _inplace_set = False
     is_meta = False
 
-    def __getstate__(self) -> dict:
+    def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
         del state["_dict_meta"]
         return state
 
-    def __setstate__(self, state: dict) -> None:
+    def __setstate__(self, state: dict) -> Dict[str, Any]:
         state["_dict_meta"] = KeyDependentDefaultDict(self._make_meta)
         self.__dict__.update(state)
 
@@ -1131,7 +1132,7 @@ dtype=torch.float32)},
         """
         raise NotImplementedError
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         """
 
         Returns:
@@ -3852,7 +3853,7 @@ class SavedTensorDict(TensorDictBase):
             self_copy = copy(self)
             self_copy._device = dest
             self_copy._dict_meta = deepcopy(self._dict_meta)
-            for k, item in self.items_meta():
+            for k in self.keys():
                 self_copy._dict_meta[k].device = dest
             return self_copy
         if isinstance(dest, torch.Size):
@@ -3992,7 +3993,9 @@ class _CustomOpTensorDict(TensorDictBase):
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
 
-    def _update_custom_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:
+    def _update_custom_op_kwargs(
+        self, source_meta_tensor: MetaTensor
+    ) -> Dict[str, Any]:
         """Allows for a transformation to be customized for a certain shape,
         device or dtype. By default, this is a no-op on self.custom_op_kwargs
 
@@ -4006,7 +4009,7 @@ class _CustomOpTensorDict(TensorDictBase):
         """
         return self.custom_op_kwargs
 
-    def _update_inv_op_kwargs(self, source_tensor: Tensor) -> dict:
+    def _update_inv_op_kwargs(self, source_tensor: Tensor) -> Dict[str, Any]:
         """Allows for an inverse transformation to be customized for a
         certain shape, device or dtype.
 
@@ -4321,7 +4324,9 @@ class SqueezedTensorDict(_CustomOpTensorDict):
 
 
 class ViewedTensorDict(_CustomOpTensorDict):
-    def _update_custom_op_kwargs(self, source_meta_tensor: MetaTensor) -> dict:
+    def _update_custom_op_kwargs(
+        self, source_meta_tensor: MetaTensor
+    ) -> Dict[str, Any]:
         new_dim_list = list(self.custom_op_kwargs.get("size"))
         new_dim_list += list(source_meta_tensor.shape[self._source.batch_dims :])
         new_dim = torch.Size(new_dim_list)
@@ -4394,7 +4399,7 @@ class PermutedTensorDict(_CustomOpTensorDict):
             return self._source
         return super().permute(*dims_list)
 
-    def add_missing_dims(self, num_dims: int, batch_dims: tuple) -> tuple:
+    def add_missing_dims(self, num_dims: int, batch_dims: Tuple[int]) -> Tuple[int]:
         dim_diff = num_dims - len(batch_dims)
         all_dims = [i for i in range(num_dims)]
         for i, x in enumerate(batch_dims):
@@ -4411,7 +4416,7 @@ class PermutedTensorDict(_CustomOpTensorDict):
         kwargs.update({"dims": new_dims})
         return kwargs
 
-    def _update_inv_op_kwargs(self, tensor: Tensor) -> dict:
+    def _update_inv_op_kwargs(self, tensor: Tensor) -> Dict[str, Any]:
         new_dims = self.add_missing_dims(
             self._source.batch_dims + len(tensor.shape[self.batch_dims :]),
             self.custom_op_kwargs["dims"],

@@ -1519,12 +1519,12 @@ class TestReinforce:
         )
 
         loss_td = loss_fn(td)
-        grad_actor = autograd.grad(
+        autograd.grad(
             loss_td.get("loss_actor"),
             actor_net.parameters(),
             retain_graph=True,
         )
-        grad_value = autograd.grad(
+        autograd.grad(
             loss_td.get("loss_value"),
             value_net.parameters(),
             retain_graph=True,
