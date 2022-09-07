@@ -48,11 +48,12 @@ def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
 
         # roll version
         T = tensor.shape[-1]
+        device = tensor.device
         batched_val_pad = (
             roll_by_gather(
                 tensor.expand(tensor.shape[0], filter.shape[-1], T).transpose(-2, -1),
                 0,
-                -torch.arange(filter.shape[-1]),
+                -torch.arange(filter.shape[-1], device=device),
             )
             .flip(-1)
             .triu(filter.shape[-1] - T)
@@ -167,7 +168,7 @@ def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
         # vectorized version
         gammas = torch.ones(gamma.shape[0], T, T + 1, 1, dtype=dtype, device=device)
         s0 = gamma.unsqueeze(-1).expand(gamma.shape[0], T, T)
-        s1 = roll_by_gather(s0, 0, shifts=-torch.arange(T))
+        s1 = roll_by_gather(s0, 0, shifts=-torch.arange(T, device=device))
 
         # we should triu here, but it's useless since there is a triu on the values
         # happening in _custom_conv1d
