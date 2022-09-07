@@ -79,7 +79,17 @@ class MetaTensor:
                 _is_shared = tensor.is_shared()
             if _is_memmap is None:
                 _is_memmap = isinstance(tensor, MemmapTensor)
-            device = tensor.device if not tensor.is_meta else device
+            # FIXME: using isinstance(tensor, TensorDictBase) would likely be
+            # better here, but creates circular import without more refactoring
+            device = (
+                (
+                    tensor._device_safe()
+                    if hasattr(tensor, "_device_safe")
+                    else tensor.device
+                )
+                if not tensor.is_meta
+                else device
+            )
             if _is_tensordict is None:
                 _is_tensordict = not _is_memmap and not isinstance(tensor, torch.Tensor)
             if not _is_tensordict:
