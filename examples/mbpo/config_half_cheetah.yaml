@@ -1,4 +1,4 @@
-env_name: Hopper-v4
+env_name: HalfCheetah-v4
 env_task: ""
 env_library: gym
 async_collection: 1
@@ -16,12 +16,9 @@ init_random_frames: 5000
 activation: elu
 gSDE: 0
 from_pixels: 0
-# collector_devices: [cuda:1,cuda:1,cuda:1,cuda:1]
-# env_per_collector: 2
-# num_workers: 8
-collector_devices: [cpu]
-env_per_collector: 1
-num_workers: 1
+collector_devices: [cuda:1,cuda:1,cuda:1,cuda:1]
+env_per_collector: 2
+num_workers: 8
 value_network_update_interval: 200
 record_interval: 1000
 max_frames_per_traj: 1000
@@ -37,7 +34,7 @@ hidden_world_model: 256
 num_layers_world_model: 4
 start_imagination_horizon: 1
 start_imagination_horizon_epoch: 20
-end_imagination_horizon: 15
+end_imagination_horizon: 1
 end_imagination_horizon_epoch: 100
 sac_lr: 3e-4
 model_batch_size: 256
@@ -47,7 +44,7 @@ num_world_models_ensemble: 7
 num_elites: 5
 num_model_rollouts: 400
 keep_model_samples_n_collect_steps: 1
-num_sac_training_steps_per_optim_step: 20
+num_sac_training_steps_per_optim_step: 40
 train_model_every_k_optim_step: 250
 model_buffer_size: 400000
 model_holdout_ratio: 0.2
