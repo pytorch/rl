@@ -7,6 +7,7 @@ from typing import Callable, Union
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 __all__ = ["mappings", "inv_softplus", "biased_softplus"]
 
@@ -45,6 +46,20 @@ class biased_softplus(nn.Module):
         return torch.nn.functional.softplus(x + self.bias) + self.min_val
 
 
+class minmax_softplus(nn.Module):
+    def __init__(self, min_logvar=-10, max_logvar=0.5):
+        super().__init__()
+        self.min_logvar = min_logvar
+        self.max_logvar = max_logvar
+
+    def forward(self, x):
+        logvar = 2 * torch.log(x)
+        logvar = self.max_logvar - F.softplus(self.max_logvar - logvar)
+        logvar = self.min_logvar + F.softplus(logvar - self.min_logvar)
+        x = torch.exp(logvar / 2)
+        return x
+
+
 def expln(x):
     """
     A smooth, continuous positive mapping presented in "State-Dependent
@@ -76,6 +91,7 @@ def mappings(key: str) -> Callable:
         "exp": torch.exp,
         "relu": torch.relu,
         "biased_softplus": biased_softplus(1.0),
+        "minmax_softplus": minmax_softplus(),
         "expln": expln,
     }
     if key in _mappings:

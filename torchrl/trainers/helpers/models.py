@@ -1179,7 +1179,9 @@ def make_mbpo_model(
                     * proof_environment.observation_spec[
                         f"next_{observation_key}"
                     ].shape[-1],
-                )
+                ),
+                scale_mapping="minmax_softplus",
+                scale_lb=1e-10,
             ),
             in_keys=["hidden"],
             out_keys=[f"next_{observation_key}_loc", f"next_{observation_key}_scale"],
@@ -1199,6 +1201,8 @@ def make_mbpo_model(
             TensorDictModule(
                 NormalParamWrapper(
                     nn.Linear(cfg.hidden_world_model, 2),
+                    scale_mapping="minmax_softplus",
+                    scale_lb=1e-10,
                 ),
                 in_keys=["hidden"],
                 out_keys=["reward_loc", "reward_scale"],

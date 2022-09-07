@@ -48,7 +48,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     >>>         return seed + 1
 
     Then, you can use this environment as follows:
-    
+
     >>> from torchrl.modules import MLP, WorldModelWrapper
     >>> import torch.nn as nn
     >>> world_model = WorldModelWrapper(
@@ -110,7 +110,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         self.world_model = world_model
         self.world_model_params = params
         self.world_model_buffers = buffers
-        
+
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._inplace_update = False
@@ -143,7 +143,9 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
             tensordict_out = self.world_model(tensordict_out)
         # Step requires a done flag. No sense for MBRL so we set it to False
         if "done" not in self.world_model.out_keys:
-            tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool, device=tensordict_out.device)
+            tensordict_out["done"] = torch.zeros(
+                tensordict_out.shape, dtype=torch.bool, device=tensordict_out.device
+            )
         return tensordict_out
 
     @abc.abstractmethod
