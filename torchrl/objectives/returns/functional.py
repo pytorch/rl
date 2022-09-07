@@ -118,11 +118,15 @@ def vec_generalized_advantage_estimate(
 
     if len(batch_size) > 1:
         td0 = td0.flatten(0, len(batch_size) - 1)
+    elif not len(batch_size):
+        td0 = td0.unsqueeze(0)
 
     advantage = _custom_conv1d(td0.transpose(-2, -1), gammalmbdas)
 
     if len(batch_size) > 1:
         advantage = advantage.unflatten(0, batch_size)
+    elif not len(batch_size):
+        advantage = advantage.squeeze(0)
 
     advantage = advantage.transpose(-2, -1)
     value_target = advantage + state_value
@@ -167,6 +171,7 @@ def td_lambda_return_estimate(
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
+    rolling_gamma: bool = None,
 ) -> torch.Tensor:
     """TD(lambda) return estimate.
 
@@ -178,6 +183,27 @@ def td_lambda_return_estimate(
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
+        rolling_gamma (bool, optional): if True, it is assumed that each gamma
+            if a gamma tensor is tied to a single event:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+                v2 + g2 v3 + g2 g3 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            if False, it is assumed that each gamma is tied to the upcoming
+            trajectory:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1**2 v3 + g**3 v4,
+                v2 + g2 v3 + g2**2 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            Default is True.
     """
     for tensor in (next_state_value, reward, done):
         if tensor.shape[-1] != 1:
@@ -192,10 +218,31 @@ def td_lambda_return_estimate(
     g = next_state_value[..., -1, :]
     T = returns.shape[-2]
 
-    for i in reversed(range(T)):
-        g = returns[..., i, :] = reward[..., i, :] + gamma * (
-            (1 - lmbda) * next_state_value[..., i, :] + lmbda * g
-        )
+    if not (isinstance(gamma, torch.Tensor) and gamma.shape == not_done.shape):
+        gamma = torch.full_like(next_state_value, gamma)
+        rolling_gamma = True
+    elif rolling_gamma is None:
+        rolling_gamma = True
+
+    if not (isinstance(lmbda, torch.Tensor) and lmbda.shape == not_done.shape):
+        lmbda = torch.full_like(next_state_value, lmbda)
+        rolling_gamma = True
+    elif rolling_gamma is None:
+        rolling_gamma = True
+
+    if rolling_gamma:
+        for i in reversed(range(T)):
+            g = returns[..., i, :] = reward[..., i, :] + gamma[..., i, :] * (
+                (1 - lmbda[..., i, :]) * next_state_value[..., i, :] + lmbda[..., i, :] * g
+            )
+    else:
+        for i in range(T):
+            g = next_state_value[..., -1, :]
+            for j in reversed(range(i, T)):
+                g = returns[..., i, :] = reward[..., j, :] + gamma[..., i, :] * (
+                    (1 - lmbda[..., i, :]) * next_state_value[..., j, :] +  lmbda[..., i, :] * g
+                )
+
     return returns
 
 
@@ -206,6 +253,7 @@ def td_lambda_advantage_estimate(
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
+    rolling_gamma: bool = None,
 ) -> torch.Tensor:
     """TD(lambda) advantage estimate.
 
@@ -219,16 +267,37 @@ def td_lambda_advantage_estimate(
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
+        rolling_gamma (bool, optional): if True, it is assumed that each gamma
+            if a gamma tensor is tied to a single event:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+                v2 + g2 v3 + g2 g3 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            if False, it is assumed that each gamma is tied to the upcoming
+            trajectory:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1**2 v3 + g**3 v4,
+                v2 + g2 v3 + g2**2 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            Default is True.
     """
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
-    returns = td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done)
+    returns = td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done, rolling_gamma)
     advantage = returns - state_value
     return advantage
 
 
 def vec_td_lambda_advantage_estimate(
-    gamma, lmbda, state_value, next_state_value, reward, done
+    gamma, lmbda, state_value, next_state_value, reward, done,     rolling_gamma: bool = None,
 ):
     """Vectorized TD(lambda) advantage estimate.
 
@@ -243,9 +312,30 @@ def vec_td_lambda_advantage_estimate(
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
+        rolling_gamma (bool, optional): if True, it is assumed that each gamma
+            if a gamma tensor is tied to a single event:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1 g2 v3 + g1 g2 g3 v4,
+                v2 + g2 v3 + g2 g3 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            if False, it is assumed that each gamma is tied to the upcoming
+            trajectory:
+              gamma = [g1, g2, g3, g4]
+              value = [v1, v2, v3, v4]
+              return = [
+                v1 + g1 v2 + g1**2 v3 + g**3 v4,
+                v2 + g2 v3 + g2**2 v4,
+                v3 + g3 v4,
+                v4,
+              ]
+            Default is True.
     """
     return (
-        vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done)
+        vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done, rolling_gamma)
         - state_value
     )
 
@@ -306,8 +396,14 @@ def vec_td_lambda_return_estimate(
     first_below_thr_gamma = None
 
     if isinstance(gamma, torch.Tensor) and gamma.ndimension() > 0:
+        if rolling_gamma is None:
+            rolling_gamma = True
         gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
     else:
+        if rolling_gamma is not None:
+            raise RuntimeError(
+                "rolling_gamma cannot be set if a non-tensor gamma is provided"
+            )
         gammas = torch.ones(T + 1, 1, device=device)
         gammas[1:] = gamma
 
@@ -317,18 +413,21 @@ def vec_td_lambda_return_estimate(
     lambdas[1:] = lmbda
     lambdas = torch.cumprod(lambdas, -2)
 
-    first_below_thr = gammas < 1e-7
-    while first_below_thr.ndimension() > 2:
-        # if we have multiple gammas, we only want to truncate if _all_ of
-        # the geometric sequences fall below the threshold
-        first_below_thr = first_below_thr.all(axis=0)
-    if first_below_thr.any():
-        first_below_thr_gamma = first_below_thr.nonzero()[0, 0]
-    first_below_thr = lambdas < 1e-7
-    if first_below_thr.any() and first_below_thr_gamma is not None:
-        first_below_thr = max(first_below_thr_gamma, first_below_thr.nonzero()[0, 0])
-        gammas = gammas[..., :first_below_thr, :]
-        lambdas = lambdas[:first_below_thr]
+    if not isinstance(gamma, torch.Tensor) or gamma.numel() <= 0:
+        first_below_thr = gammas < 1e-7
+        while first_below_thr.ndimension() > 2:
+            # if we have multiple gammas, we only want to truncate if _all_ of
+            # the geometric sequences fall below the threshold
+            first_below_thr = first_below_thr.all(axis=0)
+        if first_below_thr.any():
+            first_below_thr_gamma = first_below_thr.nonzero()[0, 0]
+        first_below_thr = lambdas < 1e-7
+        if first_below_thr.any() and first_below_thr_gamma is not None:
+            first_below_thr = max(
+                first_below_thr_gamma, first_below_thr.nonzero()[0, 0]
+            )
+            gammas = gammas[..., :first_below_thr, :]
+            lambdas = lambdas[:first_below_thr]
 
     gammas, gammas_prime = gammas[..., :-1, :], gammas[..., 1:, :]
     lambdas, lambdas_prime = lambdas[:-1], lambdas[1:]

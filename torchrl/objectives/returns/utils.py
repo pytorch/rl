@@ -45,16 +45,17 @@ def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
         #     [val_pad[..., i : i + filter.shape[-1]] for i in range(tensor.shape[-1])],
         #     dim=1,
         # )
+
         # roll version
         T = tensor.shape[-1]
         batched_val_pad = (
             roll_by_gather(
-                tensor.expand(tensor.shape[0], T + 1, T).transpose(-2, -1),
+                tensor.expand(tensor.shape[0], filter.shape[-1], T).transpose(-2, -1),
                 0,
-                -torch.arange(T + 1),
+                -torch.arange(filter.shape[-1]),
             )
             .flip(-1)
-            .triu(1)
+            .triu(filter.shape[-1] - T)
             .flip(-1)
             .unsqueeze(-2)
         )
@@ -65,6 +66,7 @@ def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
         # get summed out. we swap the order of s and t here rather than
         # reshape / create a view later.
         # this is essentially identical to (batched_val_pad @ filter.transpose(-2, -1)).squeeze().unsqueeze(-2)
+        # out = (batched_val_pad @ filter.transpose(-2, -1)).squeeze().unsqueeze(-2)
         out = torch.einsum("btsj,btsj->bst", batched_val_pad, filter)
     else:
         val_pad = torch.cat(
@@ -82,7 +84,9 @@ def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
         out = torch.conv1d(val_pad, filter)
     # out = out.view(shape)
     if out.shape != tensor.shape:
-        raise RuntimeError("wrong output shape")
+        raise RuntimeError(
+            f"wrong output shape: input shape: {tensor.shape}, output shape: {out.shape}"
+        )
     return out
 
 
@@ -113,13 +117,10 @@ def roll_by_gather(mat: torch.Tensor, dim: int, shifts: torch.LongTensor):
     device = mat.device
 
     if dim in (0, -2):
-        # print(mat)
         arange1 = (
             torch.arange(n_rows, device=device).unsqueeze(-1).expand((n_rows, n_cols))
         )
-        # print(arange1)
         arange2 = (arange1 - shifts) % n_rows
-        # print(arange2)
         return torch.gather(mat, -2, arange2.expand(*batch, *arange2.shape))
     elif dim in (1, -1):
         arange1 = torch.arange(n_cols, device=device).expand((n_rows, n_cols))
@@ -130,6 +131,23 @@ def roll_by_gather(mat: torch.Tensor, dim: int, shifts: torch.LongTensor):
 
 
 def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
+    """prepares a decay tensor for a matrix multiplication:
+    Given a tensor gamma of size [*batch, T, 1],
+    it will return a new tensor with size [*batch, T, T+1, 1].
+    In the rolling_gamma case, a rolling of the gamma values will be performed
+    along the T axis, e.g.:
+    [[ 1, g1, g2, g3],
+    [ 1, g2, g3, 0],
+    [ 1, g3, 0, 0]]
+
+    Args:
+        gamma:
+        T:
+        rolling_gamma:
+
+    Returns:
+
+    """
     # some reshaping code vendored from vec_td_lambda_return_estimate
     gamma = gamma.view(-1, T)
     dtype = gamma.dtype
@@ -148,11 +166,14 @@ def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
 
         # vectorized version
         gammas = torch.ones(gamma.shape[0], T, T + 1, 1, dtype=dtype, device=device)
-        s0 = gamma.unsqueeze(-1).expand(gamma.shape[0], T, T).contiguous()
+        s0 = gamma.unsqueeze(-1).expand(gamma.shape[0], T, T)
         s1 = roll_by_gather(s0, 0, shifts=-torch.arange(T))
-        s2 = s1.flip(-1).triu().flip(-1).transpose(-2, -1)
+
+        # we should triu here, but it's useless since there is a triu on the values
+        # happening in _custom_conv1d
+        # s2 = s1.flip(-1).triu().flip(-1).transpose(-2, -1)
+        s2 = s1.transpose(-2, -1)
         gammas[..., 1:, :] = s2.unsqueeze(-1)
-        # torch.testing.assert_close(gammas, gammas2)
 
     else:
         gammas = torch.ones(*gamma.shape, T + 1, 1, device=device, dtype=dtype)
