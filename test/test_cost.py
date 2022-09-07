@@ -55,12 +55,12 @@ from torchrl.objectives.costs.reinforce import ReinforceLoss
 from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
 from torchrl.objectives.returns.advantages import TDEstimate, GAE, TDLambdaEstimate
 from torchrl.objectives.returns.functional import (
-    _custom_conv1d,
     vec_td_lambda_advantage_estimate,
     td_lambda_advantage_estimate,
     vec_generalized_advantage_estimate,
-    generalized_advantage_estimate, roll_by_gather, make_gammas_tensor,
+    generalized_advantage_estimate,
 )
+from torchrl.objectives.returns.utils import _custom_conv1d, _make_gammas_tensor
 
 
 class _check_td_steady:
@@ -1809,7 +1809,7 @@ def test_custom_conv1d_tensor(device, gamma, N, T, rolling_gamma):
         for i in reversed(range(T)):
             prev_val = out[..., i] = prev_val * gamma[..., i, :] + values[..., i]
 
-    gammas = make_gammas_tensor(gamma, T, device, rolling_gamma)
+    gammas = _make_gammas_tensor(gamma, T, device, rolling_gamma)
     gammas = gammas.cumprod(-2)
     out_custom = _custom_conv1d(values.view(-1, 1, T), gammas).reshape(values.shape)
 
