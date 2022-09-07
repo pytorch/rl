@@ -8,7 +8,7 @@ from __future__ import annotations
 import abc
 from copy import deepcopy
 from numbers import Number
-from typing import Any, Callable, Iterator, Optional, Union, Dict
+from typing import Any, Callable, Iterator, Optional, Union, Dict, Sequence
 
 import numpy as np
 import torch
@@ -118,7 +118,7 @@ class Specs:
             raise KeyError(f"item must be one of {self._keys}")
         return getattr(self.env, item)
 
-    def keys(self) -> dict:
+    def keys(self) -> Sequence[str]:
         return self._keys
 
     def build_tensordict(
@@ -220,6 +220,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._inplace_update = True
+        cls.is_stateful = True
         return super().__new__(cls)
 
     @property
@@ -272,6 +273,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
 
         # sanity check
+        self._assert_tensordict_shape(tensordict)
+
         if tensordict.get("action").dtype is not self.action_spec.dtype:
             raise TypeError(
                 f"expected action.dtype to be {self.action_spec.dtype} "
@@ -408,7 +411,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def _assert_tensordict_shape(self, tensordict: TensorDictBase) -> None:
-        if tensordict.batch_size != self.batch_size:
+        if tensordict.batch_size != self.batch_size and (
+            self.is_stateful or self.batch_size != torch.Size([])
+        ):
             raise RuntimeError(
                 f"Expected a tensordict with shape==env.shape, "
                 f"got {tensordict.batch_size} and {self.batch_size}"
@@ -531,7 +536,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         else:
             raise Exception("reset env before calling rollout!")
 
-        out_td = torch.stack(tensordicts, len(self.batch_size))
+        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
+
+        out_td = torch.stack(tensordicts, len(batch_size))
         if return_contiguous:
             return out_td.contiguous()
         return out_td
@@ -643,7 +650,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
     """
 
     git_url: str = ""
-    available_envs: dict = {}
+    available_envs: Dict[str, Any] = {}
     libname: str = ""
 
     def __init__(

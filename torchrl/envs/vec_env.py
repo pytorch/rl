@@ -900,9 +900,9 @@ def _run_worker_pipe_shared_mem(
     parent_pipe: connection.Connection,
     child_pipe: connection.Connection,
     env_fun: Union[EnvBase, Callable],
-    env_fun_kwargs: dict,
+    env_fun_kwargs: Dict[str, Any],
     pin_memory: bool,
-    env_input_keys: dict,
+    env_input_keys: Dict[str, Any],
     device: DEVICE_TYPING = "cpu",
     verbose: bool = False,
 ) -> None:

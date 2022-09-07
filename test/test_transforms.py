@@ -1105,10 +1105,12 @@ class TestR3M:
             stack_images=stack_images,
         )
 
-        base_env_constructor = lambda: TransformedEnv(
-            DiscreteActionConvMockEnvNumpy().to(device),
-            CatTensors(["next_pixels"], "next_pixels2", del_keys=False),
-        )
+        def base_env_constructor():
+            return TransformedEnv(
+                DiscreteActionConvMockEnvNumpy().to(device),
+                CatTensors(["next_pixels"], "next_pixels2", del_keys=False),
+            )
+
         assert base_env_constructor().device == device
         if parallel:
             base_env = ParallelEnv(3, base_env_constructor)

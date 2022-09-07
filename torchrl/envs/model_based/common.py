@@ -9,6 +9,7 @@ from typing import Optional, Union, List
 
 import numpy as np
 import torch
+import torch.nn as nn
 
 from torchrl.data import TensorDict
 from torchrl.data.utils import DEVICE_TYPING
@@ -28,45 +29,44 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
 
     This class is meant to be used as a base class for other environments. It is not meant to be used directly.
 
-    An example of use is the following:
-    ```python
-    import torch
-    class MyMBEnv(ModelBasedEnv):
-        def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
-            super(MyEnv, self).__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
-        def _reset(self):
-            td = TensorDict(
-                {
-                    "hidden_observation": torch.randn(*self.batch_size, 4),
-                    "next_hidden_observation": torch.randn(*self.batch_size, 4),
-                    "action": torch.randn(*self.batch_size, 1),
-                },
-                batch_size=self.batch_size,
-            )
-            return td
-        def _set_seed(self, seed: int) -> int:
-            return seed + 1
-    ```
+    Example:
+    >>> import torch
+    >>> class MyMBEnv(ModelBasedEnv):
+    >>>     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
+    >>>         super(MyEnv, self).__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
+    >>>     def _reset(self):
+    >>>         td = TensorDict(
+    >>>             {
+    >>>                 "hidden_observation": torch.randn(*self.batch_size, 4),
+    >>>                 "next_hidden_observation": torch.randn(*self.batch_size, 4),
+    >>>                 "action": torch.randn(*self.batch_size, 1),
+    >>>             },
+    >>>             batch_size=self.batch_size,
+    >>>         )
+    >>>         return td
+    >>>     def _set_seed(self, seed: int) -> int:
+    >>>         return seed + 1
+
     Then, you can use this environment as follows:
-    ```python
-        from torchrl.modules import MLP, WorldModelWrapper
-        import torch.nn as nn
-        world_model = WorldModelWrapper(
-            TensorDictModule(
-                MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
-                in_keys=["hidden_observation", "action"],
-                out_keys=["next_hidden_observation"],
-            ),
-            TensorDictModule(
-                nn.Linear(4, 1),
-                in_keys=["hidden_observation"],
-                out_keys=["reward"],
-            ),
-        )
-        world_model = MyWorldModel()
-        env = MyMBEnv(world_model)
-        td = env.reset()
-        env.rollout(td, max_steps=10)
+    
+    >>> from torchrl.modules import MLP, WorldModelWrapper
+    >>> import torch.nn as nn
+    >>> world_model = WorldModelWrapper(
+    >>>     TensorDictModule(
+    >>>         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
+    >>>         in_keys=["hidden_observation", "action"],
+    >>>         out_keys=["next_hidden_observation"],
+    >>>     ),
+    >>>     TensorDictModule(
+    >>>         nn.Linear(4, 1),
+    >>>         in_keys=["hidden_observation"],
+    >>>         out_keys=["reward"],
+    >>>     ),
+    >>> )
+    >>> world_model = MyWorldModel()
+    >>> env = MyMBEnv(world_model)
+    >>> td = env.reset()
+    >>> env.rollout(td, max_steps=10)
     ```
 
 
@@ -110,7 +110,12 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         self.world_model = world_model
         self.world_model_params = params
         self.world_model_buffers = buffers
-        self._inplace_update = False
+        
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._inplace_update = False
+        cls.is_stateful = False
+        return nn.Module.__new__(cls)
 
     def set_specs_from_env(self, env: EnvBase):
         """
@@ -126,7 +131,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         tensordict: TensorDict,
     ) -> TensorDict:
         # step method requires to be immutable
-        tensordict_out = tensordict.clone()
+        tensordict_out = tensordict.clone(recursive=False)
         # Compute world state
         if self.world_model_params is not None:
             tensordict_out = self.world_model(
@@ -138,7 +143,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
             tensordict_out = self.world_model(tensordict_out)
         # Step requires a done flag. No sense for MBRL so we set it to False
         if "done" not in self.world_model.out_keys:
-            tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool)
+            tensordict_out["done"] = torch.zeros(tensordict_out.shape, dtype=torch.bool, device=tensordict_out.device)
         return tensordict_out
 
     @abc.abstractmethod
