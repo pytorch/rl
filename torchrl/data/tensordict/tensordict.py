@@ -33,6 +33,7 @@ from warnings import warn
 
 import numpy as np
 import torch
+from torch import Tensor
 from torch.jit._shape_functions import infer_size_impl
 
 from torchrl import KeyDependentDefaultDict, prod
@@ -50,6 +51,15 @@ from torchrl.data.utils import (
     INDEX_TYPING,
 )
 
+_has_functorch = False
+try:
+    from functorch import _C
+
+    _has_functorch = True
+except ImportError:
+    _has_functorch = False
+
+
 __all__ = [
     "TensorDict",
     "SubTensorDict",
@@ -60,7 +70,7 @@ __all__ = [
 
 TD_HANDLED_FUNCTIONS: Dict = dict()
 COMPATIBLE_TYPES = Union[
-    torch.Tensor,
+    Tensor,
     MemmapTensor,
 ]  # None? # leaves space for TensorDictBase
 
@@ -115,15 +125,14 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError
 
-    def size(self, dim: Optional[int] = None) -> Union[int, torch.Size]:
-        """
-        Return the shape of a tensordict at a specific dimension, if asked for.
-
-        Args:
-            dim (int, optional): if indicated, this dimension size will be returned
+    def size(self, dim: Optional[int] = None):
+        """Returns the size of the dimension indicated by `dim`. If dim is not
+        specified, returns the batch_size (or shape) of the TensorDict.
 
         """
-        return self.shape[dim] if dim is not None else self.shape
+        if dim is None:
+            return self.batch_size
+        return self.batch_size[dim]
 
     @property
     def requires_grad(self):
@@ -328,7 +337,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             )
         else:
             raise ValueError(
-                f"default should be None or a torch.Tensor instance, " f"got {default}"
+                f"default should be None or a Tensor instance, " f"got {default}"
             )
 
     @abc.abstractmethod
@@ -541,9 +550,7 @@ dtype=torch.float32)},
             )
         return self
 
-    def _convert_to_tensor(
-        self, array: np.ndarray
-    ) -> Union[torch.Tensor, MemmapTensor]:
+    def _convert_to_tensor(self, array: np.ndarray) -> Union[Tensor, MemmapTensor]:
         return torch.as_tensor(array, device=self.device)
 
     def _process_tensor(
@@ -552,13 +559,17 @@ dtype=torch.float32)},
         check_device: bool = True,
         check_tensor_shape: bool = True,
         check_shared: bool = False,
-    ) -> Union[torch.Tensor, MemmapTensor]:
+    ) -> Union[Tensor, MemmapTensor]:
 
         if not isinstance(input, _accepted_classes):
             tensor = self._convert_to_tensor(input)
         else:
             tensor = input
-        if "BatchedTensor" in str(tensor):  # TODO: find a proper way of doing that
+        if (
+            _has_functorch
+            and isinstance(tensor, Tensor)
+            and _C.is_batchedtensor(tensor)
+        ):  # TODO: find a proper way of doing that
             return tensor
 
         if check_device and self._device_safe() is not None:
@@ -947,10 +958,11 @@ dtype=torch.float32)},
             recursive (bool, optional): if True, each tensor contained in the
                 TensorDict will be copied too. Default is `True`.
         """
-        if not recursive:
-            return copy(self)
         return TensorDict(
-            source={key: value.clone() for key, value in self.items()},
+            source={
+                key: value.clone() if recursive else value
+                for key, value in self.items()
+            },
             batch_size=self.batch_size,
             device=self._device_safe(),
         )
@@ -966,7 +978,7 @@ dtype=torch.float32)},
         if kwargs is None:
             kwargs = {}
         if func not in TD_HANDLED_FUNCTIONS or not all(
-            issubclass(t, (torch.Tensor, TensorDictBase)) for t in types
+            issubclass(t, (Tensor, TensorDictBase)) for t in types
         ):
             return NotImplemented
         return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
@@ -997,21 +1009,16 @@ dtype=torch.float32)},
         n = len(new_size)
         for key, meta_tensor in self.items_meta():
             if (meta_tensor.ndimension() <= n) or (meta_tensor.shape[:n] != new_size):
-                if (
-                    n > 0
-                    and meta_tensor.ndimension() == n
-                    and meta_tensor.shape == new_size
-                ):
+                if meta_tensor.ndimension() == n and meta_tensor.shape == new_size:
                     raise RuntimeError(
                         "TensorDict requires tensors that have at least one more "
                         f'dimension than the batch_size. The tensor "{key}" has shape '
                         f"{meta_tensor.shape} which is the same as the new size."
                     )
-                elif n > 0:
-                    raise RuntimeError(
-                        f"the tensor {key} has shape {meta_tensor.shape} which "
-                        f"is incompatible with the new shape {new_size}."
-                    )
+                raise RuntimeError(
+                    f"the tensor {key} has shape {meta_tensor.shape} which "
+                    f"is incompatible with the new shape {new_size}."
+                )
 
     @abc.abstractmethod
     def _change_batch_size(self, new_size: torch.Size):
@@ -1026,9 +1033,7 @@ dtype=torch.float32)},
         return self.to(f"cuda:{device}")
 
     @abc.abstractmethod
-    def masked_fill_(
-        self, mask: torch.Tensor, value: Union[float, bool]
-    ) -> TensorDictBase:
+    def masked_fill_(self, mask: Tensor, value: Union[float, bool]) -> TensorDictBase:
         """Fills the values corresponding to the mask with the desired value.
 
         Args:
@@ -1052,9 +1057,7 @@ dtype=torch.float32)},
         raise NotImplementedError
 
     @abc.abstractmethod
-    def masked_fill(
-        self, mask: torch.Tensor, value: Union[float, bool]
-    ) -> TensorDictBase:
+    def masked_fill(self, mask: Tensor, value: Union[float, bool]) -> TensorDictBase:
         """Out-of-place version of masked_fill
 
         Args:
@@ -1077,7 +1080,7 @@ dtype=torch.float32)},
         """
         raise NotImplementedError
 
-    def masked_select(self, mask: torch.Tensor) -> TensorDictBase:
+    def masked_select(self, mask: Tensor) -> TensorDictBase:
         """Masks all tensors of the TensorDict and return a new TensorDict
         instance with similar keys pointing to masked values.
 
@@ -1543,8 +1546,6 @@ dtype=torch.float32)},
                 return out[idx[1:]]
             else:
                 return out
-        # elif isinstance(idx, torch.Tensor) and idx.dtype == torch.bool:
-        #     return self.masked_select(idx)
 
         if not self.batch_size:
             raise RuntimeError(
@@ -2236,16 +2237,14 @@ class TensorDict(TensorDictBase):
             )
 
     def masked_fill_(
-        self, mask: torch.Tensor, value: Union[float, int, bool]
+        self, mask: Tensor, value: Union[float, int, bool]
     ) -> TensorDictBase:
         for item in self.values():
             mask_expand = expand_as_right(mask, item)
             item.masked_fill_(mask_expand, value)
         return self
 
-    def masked_fill(
-        self, mask: torch.Tensor, value: Union[float, bool]
-    ) -> TensorDictBase:
+    def masked_fill(self, mask: Tensor, value: Union[float, bool]) -> TensorDictBase:
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
@@ -2638,7 +2637,7 @@ torch.Size([3])
         >>> print(type(td_index), td_index.shape)
         <class 'torchrl.data.tensordict.tensordict.TensorDict'> \
 torch.Size([3, 4])
-        >>> td_index = td[:, torch.Tensor([0, 2]).to(torch.long)]
+        >>> td_index = td[:, Tensor([0, 2]).to(torch.long)]
         >>> print(type(td_index), td_index.shape)
         <class 'torchrl.data.tensordict.tensordict.SubTensorDict'> \
 torch.Size([3, 2])
@@ -2843,7 +2842,7 @@ torch.Size([3, 2])
     def get(
         self,
         key: str,
-        default: Optional[Union[torch.Tensor, str]] = "_no_default_",
+        default: Optional[Union[Tensor, str]] = "_no_default_",
     ) -> COMPATIBLE_TYPES:
         return self._source.get_at(key, self.idx, default=default)
 
@@ -2873,7 +2872,7 @@ torch.Size([3, 2])
         key: str,
         idx: INDEX_TYPING,
         discard_idx_attr: bool = False,
-        default: Optional[Union[torch.Tensor, str]] = "_no_default_",
+        default: Optional[Union[Tensor, str]] = "_no_default_",
     ) -> COMPATIBLE_TYPES:
         if not isinstance(idx, tuple):
             idx = (idx,)
@@ -2983,16 +2982,12 @@ torch.Size([3, 2])
     def detach_(self) -> TensorDictBase:
         raise RuntimeError("Detaching a sub-tensordict in-place cannot be done.")
 
-    def masked_fill_(
-        self, mask: torch.Tensor, value: Union[float, bool]
-    ) -> TensorDictBase:
+    def masked_fill_(self, mask: Tensor, value: Union[float, bool]) -> TensorDictBase:
         for key, item in self.items():
             self.set_(key, torch.full_like(item, value))
         return self
 
-    def masked_fill(
-        self, mask: torch.Tensor, value: Union[float, bool]
-    ) -> TensorDictBase:
+    def masked_fill(self, mask: Tensor, value: Union[float, bool]) -> TensorDictBase:
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
@@ -3383,10 +3378,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 else sub_index
                 for sub_index in item
             )
-        if (isinstance(item, torch.Tensor) and item.dtype is torch.bool) or (
+        if (isinstance(item, Tensor) and item.dtype is torch.bool) or (
             isinstance(item, tuple)
             and any(
-                isinstance(_item, torch.Tensor) and _item.dtype is torch.bool
+                isinstance(_item, Tensor) and _item.dtype is torch.bool
                 for _item in item
             )
         ):
@@ -3394,7 +3389,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 "setting values to a LazyStackTensorDict using boolean values is not supported yet."
                 "If this feature is needed, feel free to raise an issue on github."
             )
-        if isinstance(item, torch.Tensor):
+        if isinstance(item, Tensor):
             # e.g. item.shape = [1, 2, 3] and stack_dim == 2
             if item.ndimension() >= self.stack_dim + 1:
                 items = item.unbind(self.stack_dim)
@@ -3436,20 +3431,20 @@ class LazyStackedTensorDict(TensorDictBase):
                 return out[item[1:]]
             else:
                 return out
-        elif isinstance(item, torch.Tensor) and item.dtype == torch.bool:
+        elif isinstance(item, Tensor) and item.dtype == torch.bool:
             return self.masked_select(item)
         elif (
             isinstance(item, (Number,))
-            or (isinstance(item, torch.Tensor) and item.ndimension() == 0)
+            or (isinstance(item, Tensor) and item.ndimension() == 0)
         ) and self.stack_dim == 0:
             return self.tensordicts[item]
-        elif isinstance(item, (torch.Tensor, list)) and self.stack_dim == 0:
+        elif isinstance(item, (Tensor, list)) and self.stack_dim == 0:
             out = LazyStackedTensorDict(
                 *[self.tensordicts[_item] for _item in item],
                 stack_dim=self.stack_dim,
             )
             return out
-        elif isinstance(item, (torch.Tensor, list)) and self.stack_dim != 0:
+        elif isinstance(item, (Tensor, list)) and self.stack_dim != 0:
             out = LazyStackedTensorDict(
                 *[tensordict[item] for tensordict in self.tensordicts],
                 stack_dim=self.stack_dim,
@@ -3577,17 +3572,13 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return self
 
-    def masked_fill_(
-        self, mask: torch.Tensor, value: Union[float, bool]
-    ) -> TensorDictBase:
+    def masked_fill_(self, mask: Tensor, value: Union[float, bool]) -> TensorDictBase:
         mask_unbind = mask.unbind(dim=self.stack_dim)
         for _mask, td in zip(mask_unbind, self.tensordicts):
             td.masked_fill_(_mask, value)
         return self
 
-    def masked_fill(
-        self, mask: torch.Tensor, value: Union[float, bool]
-    ) -> TensorDictBase:
+    def masked_fill(self, mask: Tensor, value: Union[float, bool]) -> TensorDictBase:
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
@@ -3949,7 +3940,7 @@ class SavedTensorDict(TensorDictBase):
                 return out
         elif isinstance(idx, Number):
             idx = (idx,)
-        elif isinstance(idx, torch.Tensor) and idx.dtype == torch.bool:
+        elif isinstance(idx, Tensor) and idx.dtype == torch.bool:
             return self.masked_select(idx)
         if not self.batch_size:
             raise IndexError(
@@ -3957,17 +3948,13 @@ class SavedTensorDict(TensorDictBase):
             )
         return self.get_sub_tensordict(idx)
 
-    def masked_fill_(
-        self, mask: torch.Tensor, value: Union[float, bool]
-    ) -> TensorDictBase:
+    def masked_fill_(self, mask: Tensor, value: Union[float, bool]) -> TensorDictBase:
         td = self._load()
         td.masked_fill_(mask, value)
         self._save(td)
         return self
 
-    def masked_fill(
-        self, mask: torch.Tensor, value: Union[float, bool]
-    ) -> TensorDictBase:
+    def masked_fill(self, mask: Tensor, value: Union[float, bool]) -> TensorDictBase:
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
@@ -4019,7 +4006,7 @@ class _CustomOpTensorDict(TensorDictBase):
         """
         return self.custom_op_kwargs
 
-    def _update_inv_op_kwargs(self, source_tensor: torch.Tensor) -> dict:
+    def _update_inv_op_kwargs(self, source_tensor: Tensor) -> dict:
         """Allows for an inverse transformation to be customized for a
         certain shape, device or dtype.
 
@@ -4231,9 +4218,7 @@ class _CustomOpTensorDict(TensorDictBase):
     def detach_(self):
         self._source.detach_()
 
-    def masked_fill_(
-        self, mask: torch.Tensor, value: Union[float, bool]
-    ) -> TensorDictBase:
+    def masked_fill_(self, mask: Tensor, value: Union[float, bool]) -> TensorDictBase:
         for key, item in self.items():
             # source_meta_tensor = self._get_meta(key)
             val = self._source.get(key)
@@ -4247,9 +4232,7 @@ class _CustomOpTensorDict(TensorDictBase):
             self._source.set(key, val)
         return self
 
-    def masked_fill(
-        self, mask: torch.Tensor, value: Union[float, bool]
-    ) -> TensorDictBase:
+    def masked_fill(self, mask: Tensor, value: Union[float, bool]) -> TensorDictBase:
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
@@ -4346,7 +4329,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         new_dict.update({"size": new_dim})
         return new_dict
 
-    def _update_inv_op_kwargs(self, tensor: torch.Tensor) -> Dict:
+    def _update_inv_op_kwargs(self, tensor: Tensor) -> Dict:
         size = list(self.inv_op_kwargs.get("size"))
         size += list(tensor.shape[self.batch_dims :])
         new_dim = torch.Size(size)
@@ -4428,7 +4411,7 @@ class PermutedTensorDict(_CustomOpTensorDict):
         kwargs.update({"dims": new_dims})
         return kwargs
 
-    def _update_inv_op_kwargs(self, tensor: torch.Tensor) -> dict:
+    def _update_inv_op_kwargs(self, tensor: Tensor) -> dict:
         new_dims = self.add_missing_dims(
             self._source.batch_dims + len(tensor.shape[self.batch_dims :]),
             self.custom_op_kwargs["dims"],
@@ -4491,7 +4474,7 @@ def _check_keys(
     return keys
 
 
-_accepted_classes = (torch.Tensor, MemmapTensor, TensorDictBase)
+_accepted_classes = (Tensor, MemmapTensor, TensorDictBase)
 
 
 def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_device):
