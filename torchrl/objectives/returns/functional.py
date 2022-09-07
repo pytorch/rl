@@ -233,14 +233,16 @@ def td_lambda_return_estimate(
     if rolling_gamma:
         for i in reversed(range(T)):
             g = returns[..., i, :] = reward[..., i, :] + gamma[..., i, :] * (
-                (1 - lmbda[..., i, :]) * next_state_value[..., i, :] + lmbda[..., i, :] * g
+                (1 - lmbda[..., i, :]) * next_state_value[..., i, :]
+                + lmbda[..., i, :] * g
             )
     else:
         for i in range(T):
             g = next_state_value[..., -1, :]
             for j in reversed(range(i, T)):
                 g = returns[..., i, :] = reward[..., j, :] + gamma[..., i, :] * (
-                    (1 - lmbda[..., i, :]) * next_state_value[..., j, :] +  lmbda[..., i, :] * g
+                    (1 - lmbda[..., i, :]) * next_state_value[..., j, :]
+                    + lmbda[..., i, :] * g
                 )
 
     return returns
@@ -291,13 +293,21 @@ def td_lambda_advantage_estimate(
     """
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
-    returns = td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done, rolling_gamma)
+    returns = td_lambda_return_estimate(
+        gamma, lmbda, next_state_value, reward, done, rolling_gamma
+    )
     advantage = returns - state_value
     return advantage
 
 
 def vec_td_lambda_advantage_estimate(
-    gamma, lmbda, state_value, next_state_value, reward, done,     rolling_gamma: bool = None,
+    gamma,
+    lmbda,
+    state_value,
+    next_state_value,
+    reward,
+    done,
+    rolling_gamma: bool = None,
 ):
     """Vectorized TD(lambda) advantage estimate.
 
@@ -335,7 +345,9 @@ def vec_td_lambda_advantage_estimate(
             Default is True.
     """
     return (
-        vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done, rolling_gamma)
+        vec_td_lambda_return_estimate(
+            gamma, lmbda, next_state_value, reward, done, rolling_gamma
+        )
         - state_value
     )
 
