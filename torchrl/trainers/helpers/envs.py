@@ -5,13 +5,15 @@
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import Callable, Optional, Union, Any
+from typing import Callable, Optional, Union, Any, Sequence
 
 import torch
 
-from torchrl.envs import DMControlEnv, GymEnv, ParallelEnv, RetroEnv
+from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
+from torchrl.envs.libs.dm_control import DMControlEnv
+from torchrl.envs.libs.gym import GymEnv, RetroEnv
 from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,
@@ -45,7 +47,7 @@ LIBS = {
 }
 
 
-def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":
+def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
     """
     Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the
     frame_skip.
@@ -154,7 +156,10 @@ def make_env_transforms(
         double_to_float_inv_list += ["action"]  # DMControl requires double-precision
     if not from_pixels:
         selected_keys = [
-            key for key in env.observation_spec.keys() if "pixels" not in key
+            key
+            for key in env.observation_spec.keys()
+            if ("pixels" not in key)
+            and (key.strip("next_") not in env.input_spec.keys())
         ]
 
         # even if there is a single tensor, it'll be renamed in "next_observation_vector"
@@ -206,12 +211,12 @@ def make_env_transforms(
 
 
 def transformed_env_constructor(
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     video_tag: str = "",
     logger: Optional[Logger] = None,
     stats: Optional[dict] = None,
     norm_obs_only: bool = False,
-    use_env_creator: bool = True,
+    use_env_creator: bool = False,
     custom_env_maker: Optional[Callable] = None,
     custom_env: Optional[EnvBase] = None,
     return_transformed_envs: bool = True,
@@ -258,9 +263,17 @@ def transformed_env_constructor(
         from_pixels = cfg.from_pixels
 
         if custom_env is None and custom_env_maker is None:
+            if isinstance(cfg.collector_devices, str):
+                device = cfg.collector_devices
+            elif isinstance(cfg.collector_devices, Sequence):
+                device = cfg.collector_devices[0]
+            else:
+                raise ValueError(
+                    "collector_devices must be either a string or a sequence of strings"
+                )
             env_kwargs = {
                 "env_name": env_name,
-                "device": "cpu",
+                "device": device,
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,
@@ -299,7 +312,7 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(
-    cfg: "DictConfig", **kwargs
+    cfg: "DictConfig", **kwargs  # noqa: F821
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
@@ -337,7 +350,9 @@ def parallel_env_constructor(
 
 
 def get_stats_random_rollout(
-    cfg: "DictConfig", proof_environment: EnvBase, key: Optional[str] = None
+    cfg: "DictConfig",  # noqa: F821
+    proof_environment: EnvBase,
+    key: Optional[str] = None,  # noqa: F821
 ):
     print("computing state stats")
     if not hasattr(cfg, "init_env_steps"):

@@ -48,7 +48,7 @@ class MockingOptim:
 class MockingCollector:
     called_update_policy_weights_ = False
 
-    def set_seed(self, seed):
+    def set_seed(self, seed, **kwargs):
         return seed
 
     def update_policy_weights_(self):
@@ -262,12 +262,12 @@ def test_recorder():
         )
 
         for _ in range(N):
-            out = recorder(None)
+            recorder(None)
 
-        for (dirpath, dirnames, filenames) in walk(folder):
+        for (_, _, filenames) in walk(folder):
+            filename = filenames[0]
             break
 
-        filename = filenames[0]
         ea = event_accumulator.EventAccumulator(
             path.join(folder, filename),
             size_guidance={

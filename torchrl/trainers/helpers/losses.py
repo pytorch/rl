@@ -38,7 +38,7 @@ from torchrl.objectives.returns.advantages import GAE
 
 
 def make_target_updater(
-    cfg: "DictConfig", loss_module: LossModule
+    cfg: "DictConfig", loss_module: LossModule  # noqa: F821
 ) -> Optional[_TargetNetUpdate]:
     """Builds a target network weight update object."""
     if cfg.loss == "double":

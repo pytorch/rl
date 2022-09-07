@@ -4,21 +4,29 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import warnings
+from typing import Optional
 
 from torch import Tensor
 
 from .common import Logger
 
+_has_wandb = False
 try:
     import wandb
+
+    _has_wandb = True
 except ImportError:
-    raise ImportError("wandb could not be imported")
+    warnings.warn("wandb could not be imported")
+_has_omgaconf = False
 try:
     from omegaconf import OmegaConf
 
-    _has_imported_omgaconf = True
+    _has_omgaconf = True
 except ImportError:
-    print("OmegaConf could not be imported. Cannot log hydra configs without OmegaConf")
+    warnings.warn(
+        "OmegaConf could not be imported. Cannot log hydra configs without OmegaConf"
+    )
 
 
 class WandbLogger(Logger):
@@ -30,6 +38,11 @@ class WandbLogger(Logger):
 
     """
 
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._prev_video_step = -1
+        return super().__new__(cls)
+
     def __init__(
         self,
         exp_name: str,
@@ -39,7 +52,14 @@ class WandbLogger(Logger):
         project: str = None,
         **kwargs,
     ) -> None:
+        log_dir = kwargs.pop("log_dir", None)
         self.offline = offline
+        if save_dir and log_dir:
+            raise ValueError(
+                "log_dir and save_dir point to the same value in "
+                "WandbLogger. Both cannot be specified."
+            )
+        save_dir = save_dir if save_dir and not log_dir else log_dir
         self.save_dir = save_dir
         self.id = id
         self.project = project
@@ -52,10 +72,9 @@ class WandbLogger(Logger):
             **kwargs,
         }
         self._has_imported_wandb = False
-        super().__init__(exp_name=exp_name)
+        super().__init__(exp_name=exp_name, log_dir=save_dir)
         if self.offline:
             os.environ["WANDB_MODE"] = "dryrun"
-        self.log_dir = save_dir
 
         self._has_imported_moviepy = False
 
@@ -76,30 +95,36 @@ class WandbLogger(Logger):
         if self.offline:
             os.environ["WANDB_MODE"] = "dryrun"
 
+        if not _has_wandb:
+            raise ImportError("Wandb is not installed")
         return wandb.init(**self._wandb_kwargs)
 
-    def log_scalar(self, name: str, value: float, step: int = None) -> None:
+    def log_scalar(self, name: str, value: float, step: Optional[int] = None) -> None:
         """
         Logs a scalar value to wandb.
 
         Args:
             name (str): The name of the scalar.
             value (float): The value of the scalar.
-            step (int, optional): The step at which the scalar is logged. Defaults to None.
+            step (int, optional): The step at which the scalar is logged.
+                Defaults to None.
         """
         if step is not None:
             self.experiment.log({name: value, "trainer/step": step})
         else:
             self.experiment.log({name: value})
 
-    def log_video(self, name: str, video: Tensor, step: int = None, **kwargs) -> None:
+    def log_video(self, name: str, video: Tensor, **kwargs) -> None:
         """
         Log videos inputs to wandb.
 
         Args:
             name (str): The name of the video.
             video (Tensor): The video to be logged.
-            step (int, optional): The step at which the video is logged. Defaults to None.
+            **kwargs: Other keyword arguments. By construction, log_video
+                supports 'step' (integer indicating the step index), 'format'
+                (default is 'mp4') and 'fps' (default: 6). Other kwargs are
+                passed as-is to the `experiment.log` method.
         """
         if not self._has_imported_moviepy:
             try:
@@ -111,14 +136,23 @@ class WandbLogger(Logger):
                     "moviepy not found, videos cannot be logged with TensorboardLogger"
                 )
         self.video_log_counter += 1
-        if step is not None:
-            self.experiment.log(
-                {name: wandb.Video(video, fps=6, format="mp4")}, step=step
+        fps = kwargs.pop("fps", 6)
+        step = kwargs.pop("step", None)
+        format = kwargs.pop("format", "mp4")
+        if step not in (None, self._prev_video_step, self._prev_video_step + 1):
+            warnings.warn(
+                "when using step with wandb_logger.log_video, it is expected "
+                "that the step is equal to the previous step or that value incremented "
+                f"by one. Got step={step} but previous value was {self._prev_video_step}. "
+                f"The step value will be set to {self._prev_video_step+1}. This warning will "
+                f"be silenced from now on but the values will keep being incremented."
             )
-        else:
-            self.experiment.log({name: wandb.Video(video, fps=6, format="mp4")})
+            step = self._prev_video_step + 1
+        self.experiment.log(
+            {name: wandb.Video(video, fps=fps, format=format)}, step=step, **kwargs
+        )
 
-    def log_hparams(self, cfg: "DictConfig") -> None:
+    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
         """
         Logs the hyperparameters of the experiment.
 
@@ -126,9 +160,9 @@ class WandbLogger(Logger):
             cfg (DictConfig): The configuration of the experiment.
         """
 
-        if type(cfg) is not dict and _has_imported_omgaconf:
+        if type(cfg) is not dict and _has_omgaconf:
             cfg = OmegaConf.to_container(cfg, resolve=True)
         self.experiment.config.update(cfg, allow_val_change=True)
 
     def __repr__(self) -> str:
-        return self.experiment.__repr__()
+        return f"WandbLogger(experiment={self.experiment.__repr__()})"

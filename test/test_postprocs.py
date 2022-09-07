@@ -100,7 +100,7 @@ class TestSplits:
         workers = torch.arange(num_workers)
 
         out = []
-        for i in range(traj_len):
+        for _ in range(traj_len):
             done = steps_count == traj_ids  # traj_id 0 has 0 steps, 1 has 1 step etc.
 
             td = TensorDict(
@@ -134,7 +134,7 @@ class TestSplits:
         assert split_trajs.shape[0] == split_trajs.get("traj_ids").max() + 1
         assert split_trajs.shape[1] == split_trajs.get("steps_count").max() + 1
 
-        split_trajs.get("mask").sum() == num_workers * traj_len
+        assert split_trajs.get("mask").sum() == num_workers * traj_len
 
         assert split_trajs.get("done").sum(1).max() == 1
         out_mask = split_trajs[split_trajs.get("mask")]

@@ -26,12 +26,12 @@ from torchrl.trainers.helpers.envs import (
     transformed_env_constructor,
     EnvConfig,
 )
+from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.losses import make_ppo_loss, PPOLossConfig
 from torchrl.trainers.helpers.models import (
     make_ppo_model,
     PPOModelConfig,
 )
-from torchrl.trainers.helpers.recorder import RecorderConfig
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
 
 config_fields = [
@@ -42,7 +42,7 @@ config_fields = [
         EnvConfig,
         PPOLossConfig,
         PPOModelConfig,
-        RecorderConfig,
+        LoggerConfig,
     )
     for config_field in dataclasses.fields(config_cls)
 ]
@@ -53,8 +53,7 @@ cs.store(name="config", node=Config)
 
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
-def main(cfg: "DictConfig"):
-    from torchrl.trainers.loggers.tensorboard import TensorboardLogger
+def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
 
@@ -75,7 +74,18 @@ def main(cfg: "DictConfig"):
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
-    logger = TensorboardLogger(f"ppo_logging/{exp_name}")
+    if cfg.logger == "tensorboard":
+        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
+
+        logger = TensorboardLogger(log_dir="ppo_logging", exp_name=exp_name)
+    elif cfg.logger == "csv":
+        from torchrl.trainers.loggers.csv import CSVLogger
+
+        logger = CSVLogger(log_dir="ppo_logging", exp_name=exp_name)
+    elif cfg.logger == "wandb":
+        from torchrl.trainers.loggers.wandb import WandbLogger
+
+        logger = WandbLogger(log_dir="ppo_logging", exp_name=exp_name)
     video_tag = exp_name if cfg.record_video else ""
 
     stats = None

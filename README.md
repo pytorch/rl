@@ -165,7 +165,7 @@ git repo location. Indeed the following code snippet should return an error if
 torchrl has not been installed in `develop` mode:
 ```
 cd ~/path/to/rl/repo
-python -c 'from torchrl.envs import GymEnv'
+python -c 'from torchrl.envs.libs.gym import GymEnv'
 ```
 If this is the case, consider executing torchrl from another location.
 
