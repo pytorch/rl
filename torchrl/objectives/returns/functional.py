@@ -129,10 +129,25 @@ def td_lambda_return_estimate(
     g = next_state_value[..., -1, :]
     T = returns.shape[-2]
 
-    for i in reversed(range(T)):
-        g = returns[..., i, :] = reward[..., i, :] + gamma * (
-            (1 - lmbda) * next_state_value[..., i, :] + lmbda * g
-        )
+    # for i in reversed(range(T)):
+    #     g = returns[..., i, :] = reward[..., i, :] + gamma * (
+    #         (1 - lmbda) * next_state_value[..., i, :] + lmbda * g
+    #     )
+
+    if not (isinstance(gamma, torch.Tensor) and gamma.shape == not_done.shape):
+        gamma = torch.full_like(next_state_value, gamma)
+
+    if not (isinstance(lmbda, torch.Tensor) and lmbda.shape == not_done.shape):
+        lmbda = torch.full_like(next_state_value, lmbda)
+
+    for i in range(T):
+        g = next_state_value[..., -1, :]
+        for j in reversed(range(i, T)):
+            g = returns[..., i, :] = reward[..., j, :] + gamma[..., i, :] * (
+                (1 - lmbda[..., i, :]) * next_state_value[..., j, :]
+                + lmbda[..., i, :] * g
+            )
+
     return returns
 
 
@@ -280,7 +295,7 @@ def vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done):
     first_below_thr_gamma = None
 
     if isinstance(gamma, torch.Tensor) and gamma.ndimension() > 0:
-        gamma = gamma.view(-1, T)
+        gamma = gamma.squeeze(-1).view(-1, T)
         gammas = torch.ones(*gamma.shape, T + 1, 1, device=device)
         gammas[..., 1:, :] = gamma[..., None, None]
     else:

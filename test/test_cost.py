@@ -1715,6 +1715,50 @@ def test_tdlambda(device, gamma, lmbda, N, T):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("lmbda", [0.99])
+@pytest.mark.parametrize("N", [(3,), (7, 3)])
+@pytest.mark.parametrize("T", [3, 5, 50])
+def test_vectdlambda_rand_gamma(
+    device,
+    lmbda,
+    N,
+    T,
+):
+    """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+    with gamma being a random tensor
+
+    """
+    torch.manual_seed(0)
+    torch.set_default_tensor_type(torch.DoubleTensor)
+
+    done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+    reward = torch.randn(*N, T, 1, device=device)
+    state_value = torch.randn(*N, T, 1, device=device)
+    next_state_value = torch.randn(*N, T, 1, device=device)
+
+    # avoid low values of gamma
+    gamma_tensor = 0.5 + torch.rand_like(next_state_value) / 2
+
+    v1 = td_lambda_advantage_estimate(
+        gamma_tensor,
+        lmbda,
+        state_value,
+        next_state_value,
+        reward,
+        done,
+    )
+    v2 = vec_td_lambda_advantage_estimate(
+        gamma_tensor,
+        lmbda,
+        state_value,
+        next_state_value,
+        reward,
+        done,
+    )
+    torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
 @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
 @pytest.mark.parametrize("N", [(3,), (7, 3)])
