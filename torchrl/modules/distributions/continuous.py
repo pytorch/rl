@@ -389,7 +389,7 @@ class TanhNormal(D.TransformedDistribution):
         return m
 
 
-def uniform_sample_tanhnormal(dist: TanhNormal, size=torch.Size([])) -> torch.Tensor:
+def uniform_sample_tanhnormal(dist: TanhNormal, size=None) -> torch.Tensor:
     """
     Defines what uniform sampling looks like for a TanhNormal distribution.
 
@@ -401,6 +401,8 @@ def uniform_sample_tanhnormal(dist: TanhNormal, size=torch.Size([])) -> torch.Te
          a tensor sampled uniformly in the boundaries defined by the input distribution.
 
     """
+    if size is None:
+        size = torch.Size([])
     return torch.rand_like(dist.sample(size)) * (dist.max - dist.min) + dist.min
 
 
@@ -426,9 +428,13 @@ class Delta(D.Distribution):
         param: torch.Tensor,
         atol: float = 1e-6,
         rtol: float = 1e-6,
-        batch_shape: Union[torch.Size, Sequence[int]] = torch.Size([]),
-        event_shape: Union[torch.Size, Sequence[int]] = torch.Size([]),
+        batch_shape: Union[torch.Size, Sequence[int]] = None,
+        event_shape: Union[torch.Size, Sequence[int]] = None,
     ):
+        if batch_shape is None:
+            batch_shape = torch.Size([])
+        if event_shape is None:
+            event_shape = torch.Size([])
         self.update(param)
         self.atol = atol
         self.rtol = rtol
@@ -455,10 +461,14 @@ class Delta(D.Distribution):
         return out
 
     @torch.no_grad()
-    def sample(self, size=torch.Size([])) -> torch.Tensor:
+    def sample(self, size=None) -> torch.Tensor:
+        if size is None:
+            size = torch.Size([])
         return self.param.expand(*size, *self.param.shape)
 
-    def rsample(self, size=torch.Size([])) -> torch.Tensor:
+    def rsample(self, size=None) -> torch.Tensor:
+        if size is None:
+            size = torch.Size([])
         return self.param.expand(*size, *self.param.shape)
 
     @property
@@ -573,5 +583,7 @@ class TanhDelta(D.TransformedDistribution):
         raise AttributeError("TanhDelta mean has not analytical form.")
 
 
-def uniform_sample_delta(dist: Delta, size=torch.Size([])) -> torch.Tensor:
+def uniform_sample_delta(dist: Delta, size=None) -> torch.Tensor:
+    if size is None:
+        size = torch.Size([])
     return torch.randn_like(dist.sample(size))

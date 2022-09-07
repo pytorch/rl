@@ -333,27 +333,27 @@ def test_permute_exceptions(device):
     }
     td1 = TensorDict(batch_size=(4, 5, 6), source=d)
 
-    with pytest.raises(RuntimeError) as e_info:
+    with pytest.raises(RuntimeError):
         td2 = td1.permute(1, 1, 0)
         _ = td2.shape
 
-    with pytest.raises(RuntimeError) as e_info:
+    with pytest.raises(RuntimeError):
         td2 = td1.permute(3, 2, 1, 0)
         _ = td2.shape
 
-    with pytest.raises(RuntimeError) as e_info:
+    with pytest.raises(RuntimeError):
         td2 = td1.permute(2, -1, 0)
         _ = td2.shape
 
-    with pytest.raises(IndexError) as e_info:
+    with pytest.raises(IndexError):
         td2 = td1.permute(2, 3, 0)
         _ = td2.shape
 
-    with pytest.raises(IndexError) as e_info:
+    with pytest.raises(IndexError):
         td2 = td1.permute(2, -4, 0)
         _ = td2.shape
 
-    with pytest.raises(RuntimeError) as e_info:
+    with pytest.raises(RuntimeError):
         td2 = td1.permute(2, 1)
         _ = td2.shape
 
@@ -790,7 +790,7 @@ class TestTensorDicts:
         mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
         new_td = td.masked_fill_(mask, -10.0)
         assert new_td is td
-        for k, item in td.items():
+        for item in td.values():
             assert (item[mask] == -10).all(), item[mask]
 
     def test_masked_fill(self, td_name, device):
@@ -799,7 +799,7 @@ class TestTensorDicts:
         mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
         new_td = td.masked_fill(mask, -10.0)
         assert new_td is not td
-        for k, item in new_td.items():
+        for item in new_td.values():
             assert (item[mask] == -10).all()
 
     def test_zero_(self, td_name, device):
@@ -872,7 +872,7 @@ class TestTensorDicts:
                 td[td_mask] = pseudo_td
         else:
             td[td_mask] = pseudo_td
-            for k, item in td.items():
+            for item in td.values():
                 assert (item[mask] == 0).all()
 
     @pytest.mark.skipif(
@@ -890,9 +890,9 @@ class TestTensorDicts:
             assert td_device.clone().device == _device_cast
             if device != _device_cast:
                 assert td_device is not td
-            for k, item in td_device.items():
+            for item in td_device.values():
                 assert item.device == _device_cast
-            for k, item in td_device.clone().items():
+            for item in td_device.clone().values():
                 assert item.device == _device_cast
             # assert type(td_device) is type(td)
             assert_allclose_td(td, td_device.to(device))
@@ -912,11 +912,11 @@ class TestTensorDicts:
         td = getattr(self, td_name)(device)
         td_device = td.to(device_cast)
 
-        for k, item in td_device.items_meta():
+        for item in td_device.values_meta():
             assert item.device == device_cast
-        for k, item in td_device.items():
+        for item in td_device.values():
             assert item.device == device_cast
-        for k, item in td_device.clone().items():
+        for item in td_device.clone().values():
             assert item.device == device_cast
 
         assert td_device.device == device_cast, (
@@ -1375,7 +1375,7 @@ class TestTensorDicts:
         td["nested_tensordict"] = nested_tensordict
 
         td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
-        for key, value in td_flatten.items():
+        for value in td_flatten.values():
             assert not isinstance(value, TensorDictBase)
         assert (
             separator.join(["nested_tensordict", "nested_nested_tensordict", "a"])
@@ -1476,6 +1476,7 @@ class TestTensorDictsRequiresGrad:
         batch_size = td.batch_size
         new_td = td.expand(3)
         assert new_td._get_meta("b").requires_grad
+        assert new_td.batch_size == torch.Size([3, *batch_size])
 
     def test_cast(self, td_name, device):
         torch.manual_seed(1)
@@ -1953,14 +1954,14 @@ def test_requires_grad(device):
     stacked_td = LazyStackedTensorDict(*tensordicts, stack_dim=0)
     # First stacked tensor has requires_grad == True
     assert list(stacked_td.values_meta())[0].requires_grad is True
-    td0 = SavedTensorDict(tensordicts[0])
+    SavedTensorDict(tensordicts[0])
     with pytest.raises(
         Exception,
         match=re.escape(
             "SavedTensorDicts is not compatible with gradients, one of Tensors has requires_grad equals True"
         ),
     ):
-        td5 = SavedTensorDict(tensordicts[5])
+        SavedTensorDict(tensordicts[5])
 
 
 @pytest.mark.parametrize("device", get_available_devices())

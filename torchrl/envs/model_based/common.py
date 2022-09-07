@@ -110,10 +110,11 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         self.world_model = world_model
         self.world_model_params = params
         self.world_model_buffers = buffers
-
+        
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._inplace_update = False
+        cls.is_stateful = False
         return nn.Module.__new__(cls)
 
     def set_specs_from_env(self, env: EnvBase):
