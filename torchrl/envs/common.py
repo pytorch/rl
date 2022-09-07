@@ -529,7 +529,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         else:
             raise Exception("reset env before calling rollout!")
 
-        out_td = torch.stack(tensordicts, len(self.batch_size))
+        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
+
+        out_td = torch.stack(tensordicts, len(batch_size))
         if return_contiguous:
             return out_td.contiguous()
         return out_td

@@ -8,6 +8,7 @@ from numbers import Number
 import pytest
 import torch
 from _utils_internal import get_available_devices
+from mocking_classes import MockBatchedEnv
 from torch import nn
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
@@ -21,7 +22,6 @@ from torchrl.modules import (
     CEMPlanner,
 )
 from torchrl.modules.models import NoisyLinear, MLP, NoisyLazyLinear
-from test.mocking_classes import MockSerialEnv
 
 
 @pytest.mark.parametrize("in_features", [3, 10, None])
@@ -303,27 +303,27 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
 
 class TestPlanner:
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_CEM_model_free_env(self, device, env_name, seed=0):
-        env = MockSerialEnv(device=device)
+    @pytest.mark.parametrize("batch_size", [3, 5])
+    def test_CEM_model_free_env(self, device, batch_size, seed=1):
+        env = MockBatchedEnv(device=device)
         env.set_seed(seed)
         planner = CEMPlanner(
             env,
             planning_horizon=10,
             optim_steps=2,
             num_candidates=100,
-            num_top_k_candidates=3,
+            num_top_k_candidates=2,
         ).to(device)
-        td = env.reset()
-        td = planner(td)
+        td = env.reset(TensorDict({}, batch_size=batch_size))
         td_copy = td.clone()
-        assert td.get("action").shape == env.action_spec.shape
+        td = planner(td)
+        assert td.get("action").shape[1:] == env.action_spec.shape
 
         assert env.action_spec.is_in(td.get("action"))
 
         for key in td.keys():
             if key != "action":
                 assert torch.allclose(td[key], td_copy[key])
-            
 
 
 if __name__ == "__main__":

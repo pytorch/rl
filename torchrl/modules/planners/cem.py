@@ -4,16 +4,18 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
+
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import EnvBase
 from torchrl.modules.planners import MPCPlannerBase
 
 __all__ = ["CEMPlanner"]
 
+
 class CEMPlanner(MPCPlannerBase):
     """
     CEMPlanner Module. This class inherits from TensorDictModule.
-    
+
     Provided a TensorDict, this module will perform a CEM planning step.
     The CEM planning step is performed by sampling actions from a Gaussian distribution with zero mean and unit variance.
     The actions are then used to perform a rollout in the environment.
@@ -54,9 +56,7 @@ class CEMPlanner(MPCPlannerBase):
 
     def planning(self, td: TensorDictBase) -> torch.Tensor:
         batch_size = td.batch_size
-        expanded_original_td = (
-            td.expand(*batch_size, self.num_candidates).view(-1)
-        )
+        expanded_original_td = td.expand(self.num_candidates).contiguous().view(-1)
         flatten_batch_size = batch_size.numel()
         actions_means = torch.zeros(
             flatten_batch_size,
@@ -74,6 +74,7 @@ class CEMPlanner(MPCPlannerBase):
             device=td.device,
             dtype=self.env.action_spec.dtype,
         )
+
         for _ in range(self.optim_steps):
             actions = actions_means + actions_stds * torch.randn(
                 flatten_batch_size,
@@ -83,11 +84,7 @@ class CEMPlanner(MPCPlannerBase):
                 device=td.device,
                 dtype=self.env.action_spec.dtype,
             )
-            actions = actions.view(
-                flatten_batch_size * self.num_candidates,
-                self.planning_horizon,
-                *self.action_spec.shape,
-            )
+            actions = actions.flatten(0, 1)
             actions = self.env.action_spec.project(actions)
             optim_td = expanded_original_td.to_tensordict()
             policy = PrecomputedActionsSequentialSetter(actions)
@@ -103,21 +100,16 @@ class CEMPlanner(MPCPlannerBase):
                 .reshape(flatten_batch_size, self.num_candidates)
             )
             _, top_k = rewards.topk(self.num_top_k_candidates, dim=1)
-            top_k += (
-                torch.arange(0, flatten_batch_size, device=td.device).unsqueeze(
-                    1
-                )
-                * self.num_candidates
+
+            best_actions = actions.unflatten(
+                0, (flatten_batch_size, self.num_candidates)
             )
-            best_actions = actions.view(
-                flatten_batch_size,
-                self.num_candidates,
-                self.planning_horizon,
-                *self.action_spec.shape,
-            )[torch.arange(flatten_batch_size), top_k]
+            best_actions = best_actions[
+                torch.arange(flatten_batch_size).unsqueeze(1), top_k
+            ]
             actions_means = best_actions.mean(dim=1, keepdim=True)
             actions_stds = best_actions.std(dim=1, keepdim=True)
-        return (actions_means[:, :, 0]).view(*batch_size, *self.action_spec.shape)
+        return (actions_means[:, :, 0]).reshape(*batch_size, *self.action_spec.shape)
 
 
 class PrecomputedActionsSequentialSetter:

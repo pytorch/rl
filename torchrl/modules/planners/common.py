@@ -6,11 +6,14 @@ import abc
 from typing import Optional
 
 import torch
+
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import EnvBase
 from torchrl.modules import TensorDictModule
 
 __all__ = ["MPCPlannerBase"]
+
+
 class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
     """
     MPCPlannerBase Module. This is an abstract class and must be implemented by the user.
@@ -31,6 +34,12 @@ class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
         env: EnvBase,
         action_key: str = "action",
     ):
+        # Check if env is stateless
+        try:
+            for key in env.observation_spec.keys():
+                assert key.replace("next_", "") in env.input_spec.keys()
+        except AssertionError:
+            raise ValueError("Environment is not stateless")
         out_keys = [action_key]
         in_keys = list(env.observation_spec.keys())
         super().__init__(env, in_keys=in_keys, out_keys=out_keys)
@@ -57,11 +66,10 @@ class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
         if "params" in kwargs or "vmap" in kwargs:
             raise ValueError("params not supported")
         action = self.planning(tensordict)
-        action  = self.action_spec.project(action)
-        tensors = (action,)
+        action = self.action_spec.project(action)
         tensordict_out = self._write_to_tensordict(
             tensordict,
-            tensors,
+            (action,),
             tensordict_out,
         )
         return tensordict_out

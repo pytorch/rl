@@ -159,7 +159,7 @@ def make_env_transforms(
             key
             for key in env.observation_spec.keys()
             if ("pixels" not in key)
-            and (key.strip("next_") not in env.input_spec.keys())
+            and (key.replace("next_", "") not in env.input_spec.keys())
         ]
 
         # even if there is a single tensor, it'll be renamed in "next_observation_vector"
