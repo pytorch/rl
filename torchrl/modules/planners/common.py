@@ -35,10 +35,7 @@ class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
         action_key: str = "action",
     ):
         # Check if env is stateless
-        try:
-            for key in env.observation_spec.keys():
-                assert key.replace("next_", "") in env.input_spec.keys()
-        except AssertionError:
+        if env.is_stateful:
             raise ValueError("Environment is not stateless")
         out_keys = [action_key]
         in_keys = list(env.observation_spec.keys())
