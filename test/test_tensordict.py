@@ -1073,9 +1073,9 @@ class TestTensorDicts:
             "permute_td",
         ):
             with pytest.raises(AssertionError):
-                assert td.clone(recursive=False).get("a") is td.get("a")
+                assert td.clone(recurse=False).get("a") is td.get("a")
         else:
-            assert td.clone(recursive=False).get("a") is td.get("a")
+            assert td.clone(recurse=False).get("a") is td.get("a")
 
     def test_rename_key(self, td_name, device) -> None:
         torch.manual_seed(1)
