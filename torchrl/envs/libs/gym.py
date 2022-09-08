@@ -43,7 +43,7 @@ if _has_gym:
         from torchrl.envs.libs.utils import (
             GymPixelObservationWrapper as PixelObservationWrapper,
         )
-
+    gym_version = version.parse(gym.__version__)
 try:
     import retro
 
@@ -161,6 +161,12 @@ class GymWrapper(GymLikeEnv):
                     "PixelObservationWrapper cannot be used to wrap an environment"
                     "that is already a PixelObservationWrapper instance."
                 )
+            if not env.render_mode and gym_version >= version.parse("0.26.0"):
+                raise RuntimeError(
+                    "environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
+                    "must be created with `gym.make(env_name, render_mode=mode)` where mode is either "
+                    '"rgb_array" or any other supported mode.'
+                )
             env = PixelObservationWrapper(env, pixels_only=pixels_only)
         return env
 
@@ -175,7 +181,7 @@ class GymWrapper(GymLikeEnv):
     def _set_seed(self, seed: int) -> int:
         skip = False
         if self._seed_calls_reset is None:
-            if version.parse(gym.__version__) < version.parse("0.19.0"):
+            if gym_version < version.parse("0.19.0"):
                 self._seed_calls_reset = False
                 self._env.seed(seed=seed)
             else:
@@ -266,6 +272,8 @@ class GymEnv(GymWrapper):
                 f" {self.git_url}"
             )
         from_pixels = kwargs.get("from_pixels", False)
+        if from_pixels and gym_version > version.parse("0.25.0"):
+            kwargs.setdefault("render_mode", "rgb_array")
         if "from_pixels" in kwargs:
             del kwargs["from_pixels"]
         pixels_only = kwargs.get("pixels_only", True)
