@@ -111,9 +111,9 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
     env1.close()
     del env1, base_env
 
-    assert_allclose_td(tdreset[0], tdreset2)
+    assert_allclose_td(tdreset[0], tdreset2, rtol=1e-4, atol=1e-4)
     assert final_seed0 == final_seed2
-    assert_allclose_td(tdrollout[0], rollout2)
+    assert_allclose_td(tdrollout[0], rollout2, rtol=1e-4, atol=1e-4)
 
 
 @pytest.mark.skipif(not _has_dmc, reason="no dm_control library found")
@@ -199,7 +199,10 @@ def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
     assert_allclose_td(rollout0, rollout2)
 
 
-# @pytest.mark.skipif(IS_OSX, reason="rendeing unstable on osx, skipping")
+@pytest.mark.skipif(
+    IS_OSX,
+    reason="rendering unstable on osx, skipping (mujoco.FatalError: gladLoadGL error)",
+)
 @pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
 @pytest.mark.parametrize(
     "env_lib,env_args,env_kwargs",
@@ -213,13 +216,16 @@ def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
 )
 def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
     env = env_lib(*env_args, **env_kwargs)
-    td = env.rollout(max_steps=5)[0]
+    td = env.rollout(max_steps=5)
+    td0 = td[0]
     fake_td = env.fake_tensordict()
     assert set(fake_td.keys()) == set(td.keys())
     for key in fake_td.keys():
-        assert fake_td.get(key).shape == td.get(key).shape
-        assert fake_td.get(key).dtype == td.get(key).dtype
-        assert fake_td.get(key).device == td.get(key).device
+        assert fake_td.get(key).shape == td.get(key)[0].shape
+    for key in fake_td.keys():
+        assert fake_td.get(key).shape == td0.get(key).shape
+        assert fake_td.get(key).dtype == td0.get(key).dtype
+        assert fake_td.get(key).device == td0.get(key).device
 
 
 @pytest.mark.skipif(IS_OSX, reason="rendeing unstable on osx, skipping")
