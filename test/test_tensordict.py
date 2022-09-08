@@ -257,7 +257,20 @@ def test_expand(device):
         "key2": torch.randn(4, 5, 10, device=device),
     }
     td1 = TensorDict(batch_size=(4, 5), source=d)
-    td2 = td1.expand(3, 7)
+    td2 = td1.expand(3, 7, 4, 5)
+    assert td2.batch_size == torch.Size([3, 7, 4, 5])
+    assert td2.get("key1").shape == torch.Size([3, 7, 4, 5, 6])
+    assert td2.get("key2").shape == torch.Size([3, 7, 4, 5, 10])
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_expand_with_singleton(device):
+    torch.manual_seed(1)
+    d = {
+        "key1": torch.randn(1, 5, 6, device=device),
+        "key2": torch.randn(1, 5, 10, device=device),
+    }
+    td1 = TensorDict(batch_size=(1, 5), source=d)
+    td2 = td1.expand(3, 7, 4, 5)
     assert td2.batch_size == torch.Size([3, 7, 4, 5])
     assert td2.get("key1").shape == torch.Size([3, 7, 4, 5, 6])
     assert td2.get("key2").shape == torch.Size([3, 7, 4, 5, 10])
@@ -746,7 +759,7 @@ class TestTensorDicts:
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         batch_size = td.batch_size
-        new_td = td.expand(3)
+        new_td = td.expand([3, *batch_size])
         assert new_td.batch_size == torch.Size([3, *batch_size])
         assert all((_new_td == td).all() for _new_td in new_td)
 
@@ -1211,7 +1224,7 @@ class TestTensorDicts:
     def test_stack_subclasses_on_td(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td = td.expand(3).to_tensordict().clone().zero_()
+        td = td.expand([3, *td.batch_size]).to_tensordict().clone().zero_()
         tds_list = [getattr(self, td_name)(device) for _ in range(3)]
         stacked_td = stack_td(tds_list, 0, out=td)
         assert stacked_td.batch_size == td.batch_size
@@ -1474,7 +1487,7 @@ class TestTensorDictsRequiresGrad:
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         batch_size = td.batch_size
-        new_td = td.expand(3)
+        new_td = td.expand([3, *batch_size])
         assert new_td._get_meta("b").requires_grad
         assert new_td.batch_size == torch.Size([3, *batch_size])
 
