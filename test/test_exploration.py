@@ -170,7 +170,7 @@ class TestAdditiveGaussian:
         )
         out_noexp = []
         out = []
-        for i in range(n_steps):
+        for _ in range(n_steps):
             tensordict_noexp = policy(tensordict.select("observation"))
             tensordict = exploratory_policy(tensordict)
             out.append(tensordict.clone())

@@ -350,7 +350,7 @@ def parallel_env_constructor(
 
 
 def get_stats_random_rollout(
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     proof_environment: EnvBase,
     key: Optional[str] = None,  # noqa: F821
 ):

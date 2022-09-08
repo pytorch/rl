@@ -9,7 +9,7 @@ import pathlib
 import warnings
 from collections import OrderedDict, defaultdict
 from textwrap import indent
-from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type, List
+from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type, List, Any
 
 import numpy as np
 import torch.nn
@@ -112,7 +112,7 @@ class Trainer:
     # trackers
     _optim_count: int = 0
     _collected_frames: int = 0
-    _last_log: dict = {}
+    _last_log: Dict[str, Any] = {}
     _last_save: int = 0
     _log_interval: int = 10000
 
@@ -356,7 +356,7 @@ class Trainer:
 
         self.collected_frames = 0
 
-        for i, batch in enumerate(self.collector):
+        for batch in self.collector:
             batch = self._process_batch_hook(batch)
             self._pre_steps_log_hook(batch)
             current_frames = (
