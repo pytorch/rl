@@ -1139,7 +1139,10 @@ dtype=torch.float32)},
             tensordict.
 
         """
-        return {key: value for key, value in self.items()}
+        return {
+            key: value.to_dict() if isinstance(value, TensorDictBase) else value
+            for key, value in self.items()
+        }
 
     def unsqueeze(self, dim: int) -> TensorDictBase:
         """Unsqueeze all tensors for a dimension comprised in between
@@ -1569,7 +1572,11 @@ dtype=torch.float32)},
             device=self._device_safe(),
         )
 
-    def __setitem__(self, index: INDEX_TYPING, value: TensorDictBase) -> None:
+    def __setitem__(
+        self, index: INDEX_TYPING, value: Union[TensorDictBase, dict]
+    ) -> None:
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if isinstance(index, list):
@@ -1837,6 +1844,18 @@ class TensorDict(TensorDictBase):
 
         if source is not None:
             for key, value in source.items():
+
+                if isinstance(value, dict):
+                    value = TensorDict(
+                        value,
+                        batch_size=self._batch_size,
+                        device=self._device,
+                        _meta_source=_meta_source,
+                        _run_checks=_run_checks,
+                        _is_shared=_is_shared,
+                        _is_memmap=_is_memmap,
+                    )
+
                 if map_item_to_device:
                     value = value.to(device)
                 _meta_val = (

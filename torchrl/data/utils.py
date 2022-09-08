@@ -32,7 +32,7 @@ if hasattr(typing, "get_args"):
 else:
     DEVICE_TYPING_ARGS = (torch.device, str, int)
 
-INDEX_TYPING = Union[None, int, slice, Tensor, List[Any], Tuple[Any, ...]]
+INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 
 
 class CloudpickleWrapper(object):
