@@ -89,6 +89,18 @@ class GymLikeEnv(_EnvWrapper):
             obs, _reward, done, *info = self._output_transform(
                 self._env.step(action_np)
             )
+            if len(info) == 2:
+                # gym 0.26
+                truncation, info = info
+            elif len(info) == 1:
+                info = info[0]
+            else:
+                raise ValueError(
+                    "the environment output is expected to be either"
+                    "obs, reward, done, truncation, info (gym >= 0.26) or "
+                    f"obs, reward, done, info. Got info with types = ({[type(x) for x in info]})"
+                )
+
             if _reward is None:
                 _reward = 0.0
             reward += _reward
@@ -112,7 +124,7 @@ class GymLikeEnv(_EnvWrapper):
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
         if self.info_dict_reader is not None:
-            self.info_dict_reader(*info, tensordict_out)
+            self.info_dict_reader(info, tensordict_out)
 
         return tensordict_out
 
