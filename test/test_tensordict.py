@@ -262,6 +262,7 @@ def test_expand(device):
     assert td2.get("key1").shape == torch.Size([3, 7, 4, 5, 6])
     assert td2.get("key2").shape == torch.Size([3, 7, 4, 5, 10])
 
+
 @pytest.mark.parametrize("device", get_available_devices())
 def test_expand_with_singleton(device):
     torch.manual_seed(1)
