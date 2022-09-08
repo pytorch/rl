@@ -119,7 +119,8 @@ class GymLikeEnv(_EnvWrapper):
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
-        obs, *_ = self._output_transform((self._env.reset(**kwargs),))
+        reset_data = self._env.reset(**kwargs)
+        obs, *_ = self._output_transform(reset_data)
         tensordict_out = TensorDict(
             source=self._read_obs(obs),
             batch_size=self.batch_size,
