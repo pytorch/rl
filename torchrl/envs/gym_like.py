@@ -94,6 +94,8 @@ class GymLikeEnv(_EnvWrapper):
                 truncation, info = info
             elif len(info) == 1:
                 info = info[0]
+            elif len(info) == 0:
+                info = None
             else:
                 raise ValueError(
                     "the environment output is expected to be either"
@@ -123,7 +125,7 @@ class GymLikeEnv(_EnvWrapper):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
-        if self.info_dict_reader is not None:
+        if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
 
         return tensordict_out
@@ -132,7 +134,7 @@ class GymLikeEnv(_EnvWrapper):
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
         reset_data = self._env.reset(**kwargs)
-        if isinstance(reset_data, np.ndarray):
+        if not isinstance(reset_data, tuple):
             reset_data = (reset_data,)
         obs, *_ = self._output_transform(reset_data)
         tensordict_out = TensorDict(

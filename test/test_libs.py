@@ -189,7 +189,7 @@ def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
     assert_allclose_td(rollout0, rollout2)
 
 
-@pytest.mark.skipif(IS_OSX, reason="rendeing unstable on osx, skipping")
+# @pytest.mark.skipif(IS_OSX, reason="rendeing unstable on osx, skipping")
 @pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
 @pytest.mark.parametrize(
     "env_lib,env_args,env_kwargs",
