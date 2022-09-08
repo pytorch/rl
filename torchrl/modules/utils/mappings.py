@@ -53,10 +53,9 @@ class minmax_softplus(nn.Module):
         self.max_logvar = max_logvar
 
     def forward(self, x):
-        logvar = 2 * torch.log(x)
-        logvar = self.max_logvar - F.softplus(self.max_logvar - logvar)
-        logvar = self.min_logvar + F.softplus(logvar - self.min_logvar)
-        x = torch.exp(logvar / 2)
+        logvar = self.max_logvar - F.softplus(self.max_logvar - x)
+        logvar = self.min_logvar + F.softplus(x - self.min_logvar)
+        x = torch.exp(logvar)
         return x
 
 

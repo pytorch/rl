@@ -86,4 +86,4 @@ class MBPOModelLoss(LossModule):
         ) + torch.log(sigma)
         log_likelihood = torch.mean(log_likelihood, dim=(1, 2))
 
-        return torch.mean(log_likelihood), log_likelihood
+        return torch.sum(log_likelihood), log_likelihood
