@@ -1830,12 +1830,11 @@ def test_vectdlambda_tensor_gamma(device, gamma, lmbda, N, T):
     torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
 
 
-TO BE FIXED
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
 @pytest.mark.parametrize("N", [(3,), (7, 3)])
 @pytest.mark.parametrize("T", [3, 5, 50])
-@pytest.mark.parametrize("rolling_gamma", [False, True, None])
+@pytest.mark.parametrize("rolling_gamma", [True, False, None])
 def test_vectdlambda_rand_gamma(device, lmbda, N, T, rolling_gamma):
     """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
     with gamma being a random tensor
