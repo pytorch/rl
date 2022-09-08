@@ -32,7 +32,7 @@ from torchrl.modules.tensordict_module.exploration import (
 @pytest.mark.parametrize("device", get_available_devices())
 def test_ou(device, seed=0):
     torch.manual_seed(seed)
-    td = TensorDict({"action": torch.randn(3, device=device) / 10}, batch_size=[])
+    td = TensorDict({"action": torch.randn(3) / 10}, batch_size=[], device=device)
     ou = _OrnsteinUhlenbeckProcess(10.0, mu=2.0, x0=-4, sigma=0.1, sigma_min=0.01)
 
     tds = []
@@ -232,9 +232,8 @@ def test_gsde(
 
     td = TensorDict(
         {"observation": torch.randn(batch, state_dim, device=device)},
-        [
-            batch,
-        ],
+        [batch],
+        device=device,
     )
     if gSDE:
         gSDENoise().reset(td)

@@ -292,6 +292,7 @@ class TestTransforms:
                 for key in keys
             },
             batch,
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         resize(td)
@@ -331,6 +332,7 @@ class TestTransforms:
                 for key in keys
             },
             batch,
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         cc(td)
@@ -369,6 +371,7 @@ class TestTransforms:
                 for key in keys
             },
             batch,
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         flatten(td)
@@ -410,6 +413,7 @@ class TestTransforms:
                 for key in keys
             },
             batch,
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         unsqueeze(td)
@@ -565,7 +569,9 @@ class TestTransforms:
         gs = GrayScale(keys_in=keys)
         dont_touch = torch.randn(1, nchannels, 16, 16, device=device)
         td = TensorDict(
-            {key: torch.randn(1, nchannels, 16, 16, device=device) for key in keys}, [1]
+            {key: torch.randn(1, nchannels, 16, 16, device=device) for key in keys},
+            [1],
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         gs(td)
@@ -601,6 +607,7 @@ class TestTransforms:
                 for key in keys
             },
             batch,
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         totensorimage(td)
@@ -646,6 +653,7 @@ class TestTransforms:
                 for key in keys
             },
             batch,
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         compose(td)
@@ -698,6 +706,7 @@ class TestTransforms:
                 for key in keys_total
             },
             [1],
+            device=device,
         )
 
         compose.inv(td)
@@ -822,7 +831,7 @@ class TestTransforms:
         key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
         key2_tensor = torch.ones(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(dict(zip(keys, key_tensors)), [1])
+        td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
         cat_frames = CatFrames(N=N, keys_in=keys)
 
         cat_frames(td)
@@ -842,7 +851,7 @@ class TestTransforms:
         key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
         key2_tensor = torch.ones(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(dict(zip(keys, key_tensors)), [1])
+        td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
         cat_frames = CatFrames(N=N, keys_in=keys)
 
         cat_frames(td)
@@ -892,6 +901,7 @@ class TestTransforms:
                 for key in keys_total
             },
             [1],
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         double2float(td)
@@ -952,6 +962,7 @@ class TestTransforms:
                 for value, key in enumerate(keys)
             },
             [1],
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
 
@@ -1003,11 +1014,9 @@ class TestTransforms:
         misc_copy = misc.clone()
 
         td = TensorDict(
-            {
-                "misc": misc,
-                "reward": reward,
-            },
+            {"misc": misc, "reward": reward},
             batch,
+            device=device,
         )
         br(td)
         assert td["reward"] is reward
@@ -1033,6 +1042,7 @@ class TestTransforms:
                 "reward": torch.randn(*batch, 1, device=device),
             },
             batch,
+            device=device,
         )
         td.set("dont touch", torch.randn(*batch, 1, device=device))
         td_copy = td.clone()
@@ -1053,7 +1063,9 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_pin_mem(self, device):
         pin_mem = PinMemoryTransform()
-        td = TensorDict({key: torch.randn(3) for key in ["a", "b", "c"]}, [])
+        td = TensorDict(
+            {key: torch.randn(3) for key in ["a", "b", "c"]}, [], device=device
+        )
         pin_mem(td)
         for item in td.values():
             assert item.is_pinned

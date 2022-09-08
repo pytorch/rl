@@ -551,7 +551,7 @@ dtype=torch.float32)},
         return self
 
     def _convert_to_tensor(self, array: np.ndarray) -> Union[Tensor, MemmapTensor]:
-        return torch.as_tensor(array, device=self.device)
+        return torch.as_tensor(array, device=self._device_safe())
 
     def _process_tensor(
         self,
@@ -2154,7 +2154,7 @@ class TensorDict(TensorDictBase):
                 "share_memory_ must be called when the TensorDict is ("
                 "partially) populated. Set a tensor first."
             )
-        if self._device_safe() != torch.device("cpu"):
+        if self._device_safe() is not None and self.device != torch.device("cpu"):
             # cuda tensors are shared by default
             return self
         for value in self.values():
@@ -2969,10 +2969,7 @@ torch.Size([3, 2])
     def clone(self, recursive: bool = True) -> SubTensorDict:
         if not recursive:
             return copy(self)
-        return SubTensorDict(
-            source=self._source,
-            idx=self.idx,
-        )
+        return SubTensorDict(source=self._source, idx=self.idx)
 
     def is_contiguous(self) -> bool:
         return all([value.is_contiguous() for _, value in self.items()])
