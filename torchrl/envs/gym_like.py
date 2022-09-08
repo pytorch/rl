@@ -120,6 +120,8 @@ class GymLikeEnv(_EnvWrapper):
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
         reset_data = self._env.reset(**kwargs)
+        if isinstance(reset_data, np.ndarray):
+            reset_data = (reset_data,)
         obs, *_ = self._output_transform(reset_data)
         tensordict_out = TensorDict(
             source=self._read_obs(obs),
