@@ -1036,7 +1036,6 @@ class UnsqueezeTransform(Transform):
 
     Args:
         unsqueeze_dim (int): dimension to unsqueeze.
-    SUMIT
     """
 
     invertible = True
