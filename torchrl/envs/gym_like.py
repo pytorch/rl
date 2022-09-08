@@ -77,7 +77,7 @@ class GymLikeEnv(_EnvWrapper):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls.is_stateful = True
+        cls.batch_locked = True
         cls._info_dict_reader = None
         return super().__new__(cls, *args, **kwargs)
 

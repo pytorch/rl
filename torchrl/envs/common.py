@@ -220,7 +220,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._inplace_update = True
-        cls.is_stateful = True
+        cls.batch_locked = True
         return super().__new__(cls)
 
     @property
@@ -412,7 +412,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def _assert_tensordict_shape(self, tensordict: TensorDictBase) -> None:
         if tensordict.batch_size != self.batch_size and (
-            self.is_stateful or self.batch_size != torch.Size([])
+            self.batch_locked or self.batch_size != torch.Size([])
         ):
             raise RuntimeError(
                 f"Expected a tensordict with shape==env.shape, "
