@@ -34,6 +34,7 @@ except ImportError:
 if _has_gym:
     try:
         from gym.wrappers.pixel_observation import PixelObservationWrapper
+
         from torchrl.envs.libs.utils import (
             GymPixelObservationWrapper as LegacyPixelObservationWrapper,
         )
@@ -168,7 +169,7 @@ class GymWrapper(GymLikeEnv):
                 warnings.warn(
                     "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
                     "should be created with `gym.make(env_name, render_mode=mode)` where possible,"
-                    "where mode is either \"rgb_array\" or any other supported mode."
+                    'where mode is either "rgb_array" or any other supported mode.'
                 )
                 # resetting as 0.26 comes with a very nice OrderEnforcing wrapper
                 env.reset()
@@ -249,10 +250,13 @@ class GymWrapper(GymLikeEnv):
     def info_dict_reader(self, value: callable):
         self._info_dict_reader = value
 
+
 ACCEPTED_TYPE_ERRORS = {
     "render_mode": "__init__() got an unexpected keyword argument 'render_mode'",
     "frame_skip": "unexpected keyword argument 'frameskip'",
 }
+
+
 class GymEnv(GymWrapper):
     """
     OpenAI Gym environment wrapper.
@@ -305,8 +309,12 @@ class GymEnv(GymWrapper):
                 made_env = True
             except TypeError as err:
                 if ACCEPTED_TYPE_ERRORS["frame_skip"] in str(err):
+                    print(
+                        "Discarding frameskip arg. This will be taken care of by TorchRL env wrapper."
+                    )
                     self.wrapper_frame_skip = kwargs.pop("frameskip")
                 elif ACCEPTED_TYPE_ERRORS["render_mode"] in str(err):
+                    print("Discarding render_mode from the env constructor.")
                     kwargs.pop("render_mode")
                 else:
                     raise err

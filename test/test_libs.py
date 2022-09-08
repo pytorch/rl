@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
+from packaging import version
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs.libs.dm_control import _has_dmc
@@ -15,6 +16,9 @@ from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
 
 if _has_gym:
     import gym
+
+    gym_version = version.parse(gym.__version__)
+
     from gym.wrappers.pixel_observation import PixelObservationWrapper
 if _has_dmc:
     from dm_control import suite
@@ -86,10 +90,16 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
         base_env = gym.make(env_name, frameskip=frame_skip)
         frame_skip = 1
     else:
-        base_env = gym.make(env_name)
+        if gym_version < version.parse("0.26.0"):
+            base_env = gym.make(env_name)
+        else:
+            base_env = gym.make(env_name, render_mode="rgb_array")
 
     if from_pixels and not _is_from_pixels(base_env):
-        base_env = PixelObservationWrapper(base_env, pixels_only=pixels_only)
+        if gym_version < version.parse("0.26.0"):
+            base_env = PixelObservationWrapper(base_env, pixels_only=pixels_only)
+        else:
+            base_env = PixelObservationWrapper(base_env, pixels_only=pixels_only)
     assert type(base_env) is env_type
     env1 = GymWrapper(base_env, frame_skip=frame_skip)
     torch.manual_seed(0)
