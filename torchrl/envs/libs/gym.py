@@ -48,6 +48,8 @@ if _has_gym:
             GymPixelObservationWrapper as PixelObservationWrapper,
         )
     gym_version = version.parse(gym.__version__)
+    if gym_version >= version.parse("0.26.0"):
+        from gym.wrappers.compatibility import EnvCompatibility
 try:
     import retro
 
@@ -171,7 +173,8 @@ class GymWrapper(GymLikeEnv):
                     "should be created with `gym.make(env_name, render_mode=mode)` where possible,"
                     'where mode is either "rgb_array" or any other supported mode.'
                 )
-                # resetting as 0.26 comes with a very nice OrderEnforcing wrapper
+                # resetting as 0.26 comes with a very 'nice' OrderEnforcing wrapper
+                env = EnvCompatibility(env)
                 env.reset()
                 env = LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
             else:
