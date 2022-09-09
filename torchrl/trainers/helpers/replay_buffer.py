@@ -19,7 +19,7 @@ __all__ = ["make_replay_buffer"]
 
 
 def make_replay_buffer(
-    device: DEVICE_TYPING, cfg: "DictConfig"
+    device: DEVICE_TYPING, cfg: "DictConfig"  # noqa: F821
 ) -> ReplayBuffer:  # noqa: F821
     """Builds a replay buffer using the config built from ReplayArgsConfig."""
     device = torch.device(device)

@@ -174,7 +174,7 @@ class BoxList(Box):
 
     """
 
-    boxes: list
+    boxes: List
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> BoxList:
         return BoxList([box.to(dest) for box in self.boxes])
