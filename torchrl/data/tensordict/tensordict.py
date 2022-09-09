@@ -1575,8 +1575,6 @@ dtype=torch.float32)},
     def __setitem__(
         self, index: INDEX_TYPING, value: Union[TensorDictBase, dict]
     ) -> None:
-        if isinstance(value, dict):
-            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if isinstance(index, list):
@@ -1850,7 +1848,6 @@ class TensorDict(TensorDictBase):
                         value,
                         batch_size=self._batch_size,
                         device=self._device,
-                        _meta_source=_meta_source,
                         _run_checks=_run_checks,
                         _is_shared=_is_shared,
                         _is_memmap=_is_memmap,
@@ -2000,7 +1997,7 @@ class TensorDict(TensorDictBase):
     def set(
         self,
         key: str,
-        value: COMPATIBLE_TYPES,
+        value: Union[dict, COMPATIBLE_TYPES],
         inplace: bool = False,
         _run_checks: bool = True,
         _meta_val: Optional[MetaTensor] = None,
@@ -2012,6 +2009,8 @@ class TensorDict(TensorDictBase):
             raise RuntimeError("Cannot modify immutable TensorDict")
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
 
         if self._is_shared is None:
             try:
@@ -2071,8 +2070,10 @@ class TensorDict(TensorDictBase):
         return self
 
     def set_(
-        self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
+        self, key: str, value: Union[dict, COMPATIBLE_TYPES], no_check: bool = False
     ) -> TensorDictBase:
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if not no_check:
             if self.is_locked:
                 raise RuntimeError("Cannot modify immutable TensorDict")
@@ -2134,8 +2135,10 @@ class TensorDict(TensorDictBase):
         return self
 
     def set_at_(
-        self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
+        self, key: str, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> TensorDictBase:
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         if not isinstance(key, str):
