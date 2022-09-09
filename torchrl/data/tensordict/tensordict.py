@@ -3004,12 +3004,62 @@ torch.Size([3, 2])
         return self._source.select(*keys)[self.idx]
 
     def expand(self, *shape: int, inplace: bool = False) -> TensorDictBase:
-        new_source = self._source.expand(*shape)
-        idx = tuple(slice(None) for _ in shape) + tuple(self.idx)
+        idx = self.idx
+        if isinstance(idx, torch.Tensor) and idx.dtype is torch.double:
+            # check that idx is not a mask, otherwise throw an error
+            raise ValueError("Cannot expand a TensorDict masked using SubTensorDict")
+        elif not isinstance(idx, tuple):
+            # create an tuple idx with length equal to this TensorDict's number of dims
+            idx = (idx,) + (slice(None),) * (self._source.ndimension() - 1)
+        elif isinstance(idx, tuple) and len(idx) < self._source.ndimension():
+            # create an tuple idx with length equal to this TensorDict's number of dims
+            idx = idx + (slice(None),) * (self._source.ndimension() - len(idx))
+        # now that idx has the same length as the source's number of dims, we can work with it
+
+        # print("shape", shape)
+        source_shape = self._source.shape
+        num_integer_types = 0
+        for i in idx:
+            if isinstance(i, (int, np.integer)) or (
+                isinstance(i, torch.Tensor) and i.ndimension() == 0
+            ):
+                num_integer_types += 1
+        number_of_extra_dim = len(source_shape) - len(shape) + num_integer_types
+        if number_of_extra_dim > 0:
+            new_source_shape = [shape[i] for i in range(number_of_extra_dim)]
+            shape = shape[len(new_source_shape) :]
+        else:
+            new_source_shape = []
+        new_idx = [slice(None) for _ in range(len(new_source_shape))]
+        for _idx, _s in zip(idx, source_shape):
+            # we're iterating through the source shape and the index
+            # we want to get the new index and the new source shape
+
+            if isinstance(_idx, (int, np.integer)) or (
+                isinstance(_idx, torch.Tensor) and _idx.ndimension() == 0
+            ):
+                # if the index is an integer, do nothing, i.e. keep the index and the shape
+                new_source_shape.append(_s)
+                new_idx.append(_idx)
+            elif _s == 1:
+                # if the source shape at this dim is 1, expand that source dim to the size that is required
+                new_idx.append(slice(None))
+                new_source_shape.append(shape[0])
+                shape = shape[1:]
+            else:
+                # in this case, the source shape must be different than 1. The index is going to be identical.
+                new_idx.append(_idx)
+                new_source_shape.append(shape[0])
+                shape = shape[1:]
+        # print("source shape", source_shape, "\nnew source shape", new_source_shape, "\nidx", idx, "\nnew_idx", new_idx)
+        assert not len(shape)
+        new_source = self._source.expand(*new_source_shape)
+        new_idx = tuple(new_idx)
         if inplace:
             self._source = new_source
-            self.idx = idx
-        return new_source[idx]
+            self.idx = new_idx
+            self.batch_size = _getitem_batch_size(new_source_shape, new_idx)
+        return new_source[new_idx]
 
     def is_shared(self, no_check: bool = True) -> bool:
         return self._source.is_shared(no_check=no_check)
@@ -3565,8 +3615,9 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     def expand(self, *shape: int, inplace: bool = False) -> TensorDictBase:
-        stack_dim = self.stack_dim + len(shape)
-        tensordicts = [td.expand(*shape) for td in self.tensordicts]
+        stack_dim = len(shape) + self.stack_dim - self.ndimension()
+        new_shape_tensordicts = [v for i, v in enumerate(shape) if i != stack_dim]
+        tensordicts = [td.expand(*new_shape_tensordicts) for td in self.tensordicts]
         if inplace:
             self.tensordicts = tensordicts
             self.stack_dim = stack_dim
