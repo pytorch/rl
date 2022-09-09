@@ -123,7 +123,9 @@ class TruncatedStandardNormal(Distribution):
             self._validate_sample(value)
         return CONST_LOG_INV_SQRT_2PI - self._log_Z - (value ** 2) * 0.5
 
-    def rsample(self, sample_shape=torch.Size()):
+    def rsample(self, sample_shape=None):
+        if sample_shape is None:
+            sample_shape = torch.Size([])
         shape = self._extended_shape(sample_shape)
         p = torch.empty(shape, device=self.a.device).uniform_(
             self._dtype_min_gt_0, self._dtype_max_lt_1

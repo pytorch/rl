@@ -11,7 +11,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from textwrap import indent
-from typing import Callable, Iterator, Optional, Sequence, Tuple, Union
+from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Dict
 
 import numpy as np
 import torch
@@ -231,7 +231,9 @@ class SyncDataCollector(_DataCollector):
 
     def __init__(
         self,
-        create_env_fn: Union[EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]],
+        create_env_fn: Union[
+            EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]  # noqa: F821
+        ],  # noqa: F821
         policy: Optional[
             Union[
                 ProbabilisticTensorDictModule,
@@ -458,7 +460,7 @@ class SyncDataCollector(_DataCollector):
 
         tensordict_out = []
         with set_exploration_mode(self.exploration_mode):
-            for t in range(self.frames_per_batch):
+            for _ in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
@@ -958,7 +960,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             i += 1
             max_traj_idx = None
-            for k in range(self.num_workers):
+            for _ in range(self.num_workers):
                 new_data, j = self.queue_out.get()
                 if j == 0:
                     data, idx = new_data
@@ -1228,8 +1230,8 @@ def _main_async_collector(
     pipe_parent: connection.Connection,
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
-    create_env_fn: Union[EnvBase, "EnvCreator", Callable[[], EnvBase]],
-    create_env_kwargs: dict,
+    create_env_fn: Union[EnvBase, "EnvCreator", Callable[[], EnvBase]],  # noqa: F821
+    create_env_kwargs: Dict[str, Any],
     policy: Callable[[TensorDictBase], TensorDictBase],
     frames_per_worker: int,
     max_frames_per_traj: int,
