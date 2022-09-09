@@ -83,7 +83,7 @@ def grad_norm(optimizer: torch.optim.Optimizer):
     for pg in optimizer.param_groups:
         for p in pg["params"]:
             sum_of_sq += p.grad.pow(2).sum()
-    return sum_of_sq.sqrt().item()
+    return sum_of_sq.sqrt().detach().item()
 
 
 def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
@@ -137,7 +137,7 @@ def call_record(
             if key in ["r_evaluation", "total_r_evaluation"]:
                 logger.log_scalar(
                     key,
-                    value.cpu().item(),
+                    value.detach().item(),
                     step=collected_frames,
                 )
     # Compute observation reco
@@ -313,7 +313,6 @@ def main(cfg: "DictConfig"):
     # Training loop
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.total_frames)
-    r0 = None
     path = Path("./log")
     path.mkdir(exist_ok=True)
 
@@ -323,8 +322,6 @@ def main(cfg: "DictConfig"):
     for i, tensordict in enumerate(collector):
         if reward_normalizer is not None:
             reward_normalizer.update_reward_stats(tensordict)
-        if r0 is None:
-            r0 = tensordict["reward"].mean().item()
         pbar.update(tensordict.numel())
         current_frames = tensordict.numel()
         collected_frames += current_frames
@@ -332,7 +329,7 @@ def main(cfg: "DictConfig"):
         replay_buffer.extend(tensordict.cpu())
         logger.log_scalar(
             "r_training",
-            tensordict["reward"].mean().detach().cpu().item(),
+            tensordict["reward"].mean().detach().item(),
             step=collected_frames,
         )
 
@@ -380,12 +377,12 @@ def main(cfg: "DictConfig"):
                 if j == cfg.optim_steps_per_batch - 1 and do_log:
                     logger.log_scalar(
                         "loss_world_model",
-                        model_loss_td["loss_world_model"].detach().cpu().item(),
+                        model_loss_td["loss_world_model"].detach().item(),
                         step=collected_frames,
                     )
                     logger.log_scalar(
                         "grad_world_model",
-                        grad_norm(world_model_opt).detach().cpu().item(),
+                        grad_norm(world_model_opt),
                         step=collected_frames,
                     )
                 world_model_opt.zero_grad()
@@ -400,12 +397,12 @@ def main(cfg: "DictConfig"):
                 if j == cfg.optim_steps_per_batch - 1 and do_log:
                     logger.log_scalar(
                         "loss_actor",
-                        actor_loss_td["loss_actor"].detach().cpu().item(),
+                        actor_loss_td["loss_actor"].detach().item(),
                         step=collected_frames,
                     )
                     logger.log_scalar(
                         "grad_actor",
-                        grad_norm(actor_opt).detach().cpu().item(),
+                        grad_norm(actor_opt),
                         step=collected_frames,
                     )
                 actor_opt.zero_grad()
@@ -420,12 +417,12 @@ def main(cfg: "DictConfig"):
                 if j == cfg.optim_steps_per_batch - 1 and do_log:
                     logger.log_scalar(
                         "loss_value",
-                        value_loss_td["loss_value"].detach().cpu().item(),
+                        value_loss_td["loss_value"].detach().item(),
                         step=collected_frames,
                     )
                     logger.log_scalar(
                         "grad_value",
-                        grad_norm(value_opt).detach().cpu().item(),
+                        grad_norm(value_opt),
                         step=collected_frames,
                     )
                 value_opt.zero_grad()
