@@ -195,6 +195,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def _device_safe(self) -> Union[None, torch.device]:
         raise NotImplementedError
 
+    def clear_device(self) -> None:
+        self._device = None
+
     def is_shared(self, no_check: bool = True) -> bool:
         """Checks if tensordict is in shared memory.
 
