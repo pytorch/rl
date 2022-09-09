@@ -1575,6 +1575,8 @@ dtype=torch.float32)},
     def __setitem__(
         self, index: INDEX_TYPING, value: Union[TensorDictBase, dict]
     ) -> None:
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if isinstance(index, list):
@@ -2005,12 +2007,12 @@ class TensorDict(TensorDictBase):
         """Sets a value in the TensorDict. If inplace=True (default is False),
         and if the key already exists, set will call set_ (in place setting).
         """
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
-        if isinstance(value, dict):
-            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
 
         if self._is_shared is None:
             try:
@@ -2746,10 +2748,12 @@ torch.Size([3, 2])
     def set(
         self,
         key: str,
-        tensor: COMPATIBLE_TYPES,
+        tensor: Union[dict, COMPATIBLE_TYPES],
         inplace: bool = False,
         _run_checks: bool = True,
     ) -> TensorDictBase:
+        if isinstance(tensor, dict):
+            tensor = TensorDict(tensor, batch_size=self.batch_size, device=self.device)
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         keys = set(self.keys())
@@ -2800,8 +2804,10 @@ torch.Size([3, 2])
         return self._source.keys()
 
     def set_(
-        self, key: str, tensor: COMPATIBLE_TYPES, no_check: bool = False
+        self, key: str, tensor: Union[dict, COMPATIBLE_TYPES], no_check: bool = False
     ) -> SubTensorDict:
+        if isinstance(tensor, dict):
+            tensor = TensorDict(tensor, batch_size=self.batch_size, device=self.device)
         if not no_check:
             if self.is_locked:
                 raise RuntimeError("Cannot modify immutable TensorDict")
@@ -2871,10 +2877,12 @@ torch.Size([3, 2])
     def set_at_(
         self,
         key: str,
-        value: COMPATIBLE_TYPES,
+        value: Union[dict, COMPATIBLE_TYPES],
         idx: INDEX_TYPING,
         discard_idx_attr: bool = False,
     ) -> SubTensorDict:
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         if not isinstance(idx, tuple):
@@ -3187,7 +3195,9 @@ class LazyStackedTensorDict(TensorDictBase):
         s.insert(stack_dim, N)
         return torch.Size(s)
 
-    def set(self, key: str, tensor: COMPATIBLE_TYPES, **kwargs) -> TensorDictBase:
+    def set(self, key: str, tensor: Union[dict, COMPATIBLE_TYPES], **kwargs) -> TensorDictBase:
+        if isinstance(tensor, dict):
+            tensor = TensorDict(tensor, batch_size=self.batch_size, device=self.device)
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         if isinstance(tensor, TensorDictBase):
@@ -3212,8 +3222,10 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     def set_(
-        self, key: str, tensor: COMPATIBLE_TYPES, no_check: bool = False
+        self, key: str, tensor: Union[dict, COMPATIBLE_TYPES], no_check: bool = False
     ) -> TensorDictBase:
+        if isinstance(tensor, dict):
+            tensor = TensorDict(tensor, batch_size=self.batch_size, device=self.device)
         if not no_check:
             if self.is_locked:
                 raise RuntimeError("Cannot modify immutable TensorDict")
@@ -3246,8 +3258,10 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     def set_at_(
-        self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
+        self, key: str, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> TensorDictBase:
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         sub_td = self[idx]
@@ -3713,7 +3727,9 @@ class SavedTensorDict(TensorDictBase):
         td = self._load()
         return td.get(key, default=default)
 
-    def set(self, key: str, value: COMPATIBLE_TYPES, **kwargs) -> TensorDictBase:
+    def set(self, key: str, value: Union[dict, COMPATIBLE_TYPES], **kwargs) -> TensorDictBase:
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         td = self._load()
@@ -3743,16 +3759,20 @@ class SavedTensorDict(TensorDictBase):
         return self
 
     def set_(
-        self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
+        self, key: str, value: Union[dict, COMPATIBLE_TYPES], no_check: bool = False
     ) -> TensorDictBase:
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if not no_check and self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         self.set(key, value)
         return self
 
     def set_at_(
-        self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
+        self, key: str, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> TensorDictBase:
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         td = self._load()
@@ -4104,7 +4124,9 @@ class _CustomOpTensorDict(TensorDictBase):
                 )
             return self._default_get(key, default)
 
-    def set(self, key: str, value: COMPATIBLE_TYPES, **kwargs) -> TensorDictBase:
+    def set(self, key: str, value: Union[dict, COMPATIBLE_TYPES], **kwargs) -> TensorDictBase:
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if self.inv_op is None:
             raise Exception(
                 f"{self.__class__.__name__} does not support setting values. "
@@ -4124,8 +4146,10 @@ class _CustomOpTensorDict(TensorDictBase):
         return self
 
     def set_(
-        self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
+        self, key: str, value: Union[dict, COMPATIBLE_TYPES], no_check: bool = False
     ) -> _CustomOpTensorDict:
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if not no_check:
             if self.is_locked:
                 raise RuntimeError("Cannot modify immutable TensorDict")
@@ -4139,8 +4163,10 @@ class _CustomOpTensorDict(TensorDictBase):
         return self
 
     def set_at_(
-        self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
+        self, key: str, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> _CustomOpTensorDict:
+        if isinstance(value, dict):
+            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if self.is_locked:
             raise RuntimeError("Cannot modify immutable TensorDict")
         transformed_tensor, original_tensor = self.get(
