@@ -813,8 +813,11 @@ dtype=torch.float32)},
         return value
 
     @abc.abstractmethod
-    def share_memory_(self) -> TensorDictBase:
+    def share_memory_(self, lock=True) -> TensorDictBase:
         """Places all the tensors in shared memory.
+
+        Args:
+            lock (bool): prevents changes to the dictionary except for inplace overwrites to existing keys
 
         Returns:
             self.
@@ -823,12 +826,13 @@ dtype=torch.float32)},
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
-    def memmap_(self, prefix=None) -> TensorDictBase:
+    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
         """Writes all tensors onto a MemmapTensor.
 
         Args:
             prefix (str): directory prefix where the memmap tensors will have to
                 be stored.
+            lock (bool): prevents changes to the dictionary except for inplace overwrites to existing keys
 
         Returns:
             self.
@@ -1973,7 +1977,8 @@ class TensorDict(TensorDictBase):
         and if the key already exists, set will call set_ (in place setting).
         """
         if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
+            if not inplace or key not in self.keys():
+                raise RuntimeError("Cannot modify locked TensorDict")
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
@@ -2038,8 +2043,6 @@ class TensorDict(TensorDictBase):
         self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
     ) -> TensorDictBase:
         if not no_check:
-            if self.is_locked:
-                raise RuntimeError("Cannot modify immutable TensorDict")
             if not isinstance(key, str):
                 raise TypeError(f"Expected key to be a string but found {type(key)}")
 
@@ -2138,7 +2141,7 @@ class TensorDict(TensorDictBase):
         else:
             return self._default_get(key, default)
 
-    def share_memory_(self) -> TensorDictBase:
+    def share_memory_(self, lock=True) -> TensorDictBase:
         if self.is_memmap():
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
@@ -2156,6 +2159,7 @@ class TensorDict(TensorDictBase):
         for key, value in self.items_meta():
             value.share_memory_()
         self._is_shared = True
+        self.is_locked = lock
         return self
 
     def detach_(self) -> TensorDictBase:
@@ -2163,7 +2167,7 @@ class TensorDict(TensorDictBase):
             value.detach_()
         return self
 
-    def memmap_(self, prefix=None) -> TensorDictBase:
+    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
         if self.is_shared() and self.device == torch.device("cpu"):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
@@ -2182,6 +2186,7 @@ class TensorDict(TensorDictBase):
         for key, value in self.items_meta():
             value.memmap_()
         self._is_memmap = True
+        self.is_locked = lock
         return self
 
     def to(
@@ -2766,8 +2771,6 @@ torch.Size([3, 2])
         self, key: str, tensor: COMPATIBLE_TYPES, no_check: bool = False
     ) -> SubTensorDict:
         if not no_check:
-            if self.is_locked:
-                raise RuntimeError("Cannot modify immutable TensorDict")
             if key not in self.keys():
                 raise KeyError(f"key {key} not found in {self.keys()}")
             if tensor.shape[: self.batch_dims] != self.batch_size:
@@ -2838,8 +2841,6 @@ torch.Size([3, 2])
         idx: INDEX_TYPING,
         discard_idx_attr: bool = False,
     ) -> SubTensorDict:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         if not isinstance(idx, tuple):
             idx = (idx,)
         if discard_idx_attr:
@@ -2980,12 +2981,12 @@ torch.Size([3, 2])
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self, prefix=None) -> TensorDictBase:
+    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
         raise RuntimeError(
             "Converting a sub-tensordict values to memmap cannot be done."
         )
 
-    def share_memory_(self) -> TensorDictBase:
+    def share_memory_(self, lock=True) -> TensorDictBase:
         raise RuntimeError(
             "Casting a sub-tensordict values to shared memory cannot be done."
         )
@@ -3182,8 +3183,6 @@ class LazyStackedTensorDict(TensorDictBase):
         self, key: str, tensor: COMPATIBLE_TYPES, no_check: bool = False
     ) -> TensorDictBase:
         if not no_check:
-            if self.is_locked:
-                raise RuntimeError("Cannot modify immutable TensorDict")
             if isinstance(tensor, TensorDictBase):
                 if tensor.batch_size[: self.batch_dims] != self.batch_size:
                     tensor.batch_size = self.clone(recursive=False).batch_size
@@ -3215,8 +3214,6 @@ class LazyStackedTensorDict(TensorDictBase):
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> TensorDictBase:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         sub_td = self[idx]
         sub_td.set_(key, value)
         return self
@@ -3488,10 +3485,11 @@ class LazyStackedTensorDict(TensorDictBase):
         self._valid_keys.remove(key)
         return self
 
-    def share_memory_(self) -> TensorDictBase:
+    def share_memory_(self, lock=True) -> TensorDictBase:
         for td in self.tensordicts:
             td.share_memory_()
         self._is_shared = True
+        self.is_locked = lock
         return self
 
     def detach_(self) -> TensorDictBase:
@@ -3499,10 +3497,11 @@ class LazyStackedTensorDict(TensorDictBase):
             td.detach_()
         return self
 
-    def memmap_(self, prefix=None) -> TensorDictBase:
+    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
         for td in self.tensordicts:
             td.memmap_(prefix=prefix)
         self._is_memmap = True
+        self.is_locked = lock
         return self
 
     def expand(self, *shape: int, inplace: bool = False) -> TensorDictBase:
@@ -3716,16 +3715,12 @@ class SavedTensorDict(TensorDictBase):
     def set_(
         self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
     ) -> TensorDictBase:
-        if not no_check and self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         self.set(key, value)
         return self
 
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> TensorDictBase:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         td = self._load()
         td.set_at_(key, value, idx)
         self._save(td)
@@ -3772,10 +3767,10 @@ class SavedTensorDict(TensorDictBase):
     def is_memmap(self, no_check: bool = False) -> bool:
         return False
 
-    def share_memory_(self) -> TensorDictBase:
+    def share_memory_(self, lock=True) -> TensorDictBase:
         raise RuntimeError("SavedTensorDict cannot be put in shared memory.")
 
-    def memmap_(self, prefix=None) -> TensorDictBase:
+    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
         raise RuntimeError(
             "SavedTensorDict and memmap are mutually exclusive features."
         )
@@ -4102,8 +4097,6 @@ class _CustomOpTensorDict(TensorDictBase):
         self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
     ) -> _CustomOpTensorDict:
         if not no_check:
-            if self.is_locked:
-                raise RuntimeError("Cannot modify immutable TensorDict")
             if self.inv_op is None:
                 raise Exception(
                     f"{self.__class__.__name__} does not support setting values. "
@@ -4116,8 +4109,6 @@ class _CustomOpTensorDict(TensorDictBase):
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> _CustomOpTensorDict:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         transformed_tensor, original_tensor = self.get(
             key, _return_original_tensor=True
         )
@@ -4237,14 +4228,16 @@ class _CustomOpTensorDict(TensorDictBase):
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self, prefix=None):
+    def memmap_(self, prefix=None, lock=True):
         self._source.memmap_(prefix=prefix)
         self._is_memmap = True
+        self.is_locked = lock
         return self
 
-    def share_memory_(self):
+    def share_memory_(self, lock=True):
         self._source.share_memory_()
         self._is_shared = True
+        self.is_locked = lock
 
 
 class UnsqueezedTensorDict(_CustomOpTensorDict):
