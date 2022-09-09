@@ -103,6 +103,20 @@ def test_tensordict_device(device):
     assert tensordict["a"].device == device
 
 
+@pytest.mark.skipif(torch.cuda.device_count() == 0, reason="No cuda device detected")
+@pytest.mark.parametrize("device", get_available_devices()[1:])
+def test_tensordict_error_messages(device):
+    sub1 = TensorDict({"a": torch.randn(2, 3)}, [2])
+    sub2 = TensorDict({"a": torch.randn(2, 3, device=device)}, [2])
+    td1 = TensorDict({"sub": sub1}, [2])
+    td2 = TensorDict({"sub": sub2}, [2])
+
+    with pytest.raises(
+        RuntimeError, match='tensors on different devices at key "sub" / "a"'
+    ):
+        torch.cat([td1, td2], 0)
+
+
 def test_pad():
     dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2]
     td = TensorDict(
