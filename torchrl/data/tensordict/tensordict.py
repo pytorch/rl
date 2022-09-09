@@ -2103,8 +2103,6 @@ class TensorDict(TensorDictBase):
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> TensorDictBase:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
@@ -2719,7 +2717,8 @@ torch.Size([3, 2])
         _run_checks: bool = True,
     ) -> TensorDictBase:
         if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
+            if not inplace or key not in self.keys():
+                raise RuntimeError("Cannot modify locked TensorDict")
         keys = set(self.keys())
         if isinstance(tensor, TensorDictBase) and tensor.batch_size != self.batch_size:
             tensor.batch_size = self.batch_size
@@ -3157,7 +3156,8 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def set(self, key: str, tensor: COMPATIBLE_TYPES, **kwargs) -> TensorDictBase:
         if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
+            if key not in self.keys():
+                raise RuntimeError("Cannot modify locked TensorDict")
         if isinstance(tensor, TensorDictBase):
             if tensor.batch_size[: self.batch_dims] != self.batch_size:
                 tensor.batch_size = self.clone(recursive=False).batch_size
@@ -3685,7 +3685,8 @@ class SavedTensorDict(TensorDictBase):
 
     def set(self, key: str, value: COMPATIBLE_TYPES, **kwargs) -> TensorDictBase:
         if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
+            if key not in self.keys():
+                raise RuntimeError("Cannot modify locked TensorDict")
         td = self._load()
         td.set(key, value, **kwargs)
         self._save(td)
@@ -3705,8 +3706,6 @@ class SavedTensorDict(TensorDictBase):
         list_item: List[COMPATIBLE_TYPES],
         dim: int,
     ) -> TensorDictBase:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         td = self._load()
         td._stack_onto_(key, list_item, dim)
         self._save(td)
@@ -4081,7 +4080,8 @@ class _CustomOpTensorDict(TensorDictBase):
                 f"Consider calling .contiguous() before calling this method."
             )
         if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
+            if key not in self.keys():
+                raise RuntimeError("Cannot modify locked TensorDict")
         proc_value = self._process_tensor(
             value,
             check_device=False,
