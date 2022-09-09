@@ -151,6 +151,9 @@ class GymLikeEnv(_EnvWrapper):
     ) -> Dict[str, Any]:
         if isinstance(observations, dict):
             observations = {"next_" + key: value for key, value in observations.items()}
+        if isinstance(observations, list) and len(observations) == 1:
+            # Until gym 0.25.2 we had rendered frames returned in lists of length 1
+            observations = observations[0]
         if not isinstance(observations, (TensorDict, dict)):
             key = list(self.observation_spec.keys())[0]
             observations = {key: observations}
