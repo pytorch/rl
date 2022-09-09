@@ -21,7 +21,7 @@ from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import step_tensordict
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.returns.functional import (
-    generalized_advantage_estimate,
+    vec_generalized_advantage_estimate,
     td_lambda_advantage_estimate,
     vec_td_lambda_advantage_estimate,
 )
@@ -347,7 +347,7 @@ class GAE(nn.Module):
             self.value_network(step_td, **kwargs)
             next_value = step_td.get("state_value")
             done = tensordict.get("done")
-            adv, value_target = generalized_advantage_estimate(
+            adv, value_target = vec_generalized_advantage_estimate(
                 gamma, lmbda, value, next_value, reward, done
             )
 

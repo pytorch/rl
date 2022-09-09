@@ -262,12 +262,12 @@ def test_recorder():
         )
 
         for _ in range(N):
-            out = recorder(None)
+            recorder(None)
 
-        for (dirpath, dirnames, filenames) in walk(folder):
+        for (_, _, filenames) in walk(folder):
+            filename = filenames[0]
             break
 
-        filename = filenames[0]
         ea = event_accumulator.EventAccumulator(
             path.join(folder, filename),
             size_guidance={

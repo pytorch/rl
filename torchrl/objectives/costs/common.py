@@ -248,7 +248,7 @@ class LossModule(nn.Module):
         return torch.device("cpu")
 
     def parameters(self, recurse: bool = True) -> Iterator[Parameter]:
-        for name, param in self.named_parameters(recurse=recurse):
+        for _, param in self.named_parameters(recurse=recurse):
             yield param
 
     def named_parameters(
@@ -270,7 +270,7 @@ class LossModule(nn.Module):
             for name, value in self.__dict__.items()
             if name.endswith("_params") and (type(value) is list)
         }
-        for attribute_name, list_of_params in lists_of_params.items():
+        for _, list_of_params in lists_of_params.items():
             for i, param in enumerate(list_of_params):
                 # we replace the param by the expanded form if needs be
                 if param in self._param_maps:

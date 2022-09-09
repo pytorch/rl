@@ -60,7 +60,7 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
     tdreset = []
     tdrollout = []
     final_seed = []
-    for i in range(2):
+    for _ in range(2):
         env0 = GymEnv(
             env_name,
             frame_skip=frame_skip,
@@ -124,7 +124,7 @@ def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
     tds = []
     tds_reset = []
     final_seed = []
-    for i in range(2):
+    for _ in range(2):
         env0 = DMControlEnv(
             env_name,
             task,
@@ -246,9 +246,9 @@ class TestCollectorLib:
         )
         for i, data in enumerate(collector):
             if i == 3:
+                assert data.shape[0] == 3
+                assert data.shape[1] == 7
                 break
-        assert data.shape[0] == 3
-        assert data.shape[1] == 7
         collector.shutdown()
         del env
 

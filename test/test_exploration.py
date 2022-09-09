@@ -78,7 +78,7 @@ def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
     )
     out_noexp = []
     out = []
-    for i in range(n_steps):
+    for _ in range(n_steps):
         tensordict_noexp = policy(tensordict.select("observation"))
         tensordict = exploratory_policy(tensordict)
         out.append(tensordict.clone())
@@ -170,7 +170,7 @@ class TestAdditiveGaussian:
         )
         out_noexp = []
         out = []
-        for i in range(n_steps):
+        for _ in range(n_steps):
             tensordict_noexp = policy(tensordict.select("observation"))
             tensordict = exploratory_policy(tensordict)
             out.append(tensordict.clone())

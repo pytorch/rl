@@ -152,7 +152,7 @@ class WandbLogger(Logger):
             {name: wandb.Video(video, fps=fps, format=format)}, step=step, **kwargs
         )
 
-    def log_hparams(self, cfg: "DictConfig") -> None:
+    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
         """
         Logs the hyperparameters of the experiment.
 
