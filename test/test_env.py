@@ -392,6 +392,67 @@ class TestModelBasedEnv:
 
         assert_allclose_td(rollout1, rollout2)
 
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_batch_lock_mb_env(self, device, seed=0):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        world_model = WorldModelWrapper(
+            TensorDictModule(
+                ActionObsMergeLinear(5, 4),
+                in_keys=["hidden_observation", "action"],
+                out_keys=["next_hidden_observation"],
+            ),
+            TensorDictModule(
+                nn.Linear(4, 1),
+                in_keys=["hidden_observation"],
+                out_keys=["reward"],
+            ),
+        )
+        mb_env = DummyModelBasedEnv(
+            world_model, device=device, batch_size=torch.Size([10])
+        )
+        assert not mb_env.batch_locked
+
+        try:
+            mb_env.batch_locked = False
+            raise AssertionError("Should not be able to change batch_locked")
+        except RuntimeError:
+            pass
+        td = mb_env.reset()
+        td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
+        td_expanded = td.expand(2)
+        td = mb_env.step(td)
+
+        try:
+            mb_env.step(td_expanded)
+            raise AssertionError(
+                "Should not be able to step with td.batch_size != env.batch_size if env.batch_size != []"
+            )
+        except RuntimeError:
+            pass
+
+        mb_env = DummyModelBasedEnv(
+            world_model, device=device, batch_size=torch.Size([])
+        )
+        assert not mb_env.batch_locked
+
+        try:
+            mb_env.batch_locked = False
+            raise AssertionError("Should not be able to change batch_locked")
+        except RuntimeError:
+            pass
+        td = mb_env.reset()
+        td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
+        td_expanded = td.expand(2)
+        td = mb_env.step(td)
+
+        try:
+            mb_env.step(td_expanded)
+        except RuntimeError:
+            raise AssertionError(
+                "When batch_locked = False, should be able to step with td.batch_size != env.batch_size if env.batch_size == []"
+            )
+
 
 class TestParallel:
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")

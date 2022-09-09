@@ -391,7 +391,13 @@ class DummyModelBasedEnv(ModelBasedEnv):
             batch_size=batch_size,
         )
         self.action_spec = NdUnboundedContinuousTensorSpec((1,))
-        self.observation_spec = NdUnboundedContinuousTensorSpec((4,))
+        self.observation_spec = CompositeSpec(
+            next_hidden_observation=NdUnboundedContinuousTensorSpec((4,))
+        )
+        self.input_spec = CompositeSpec(
+            hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
+            action=NdUnboundedContinuousTensorSpec((1,)),
+        )
         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
 
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
@@ -399,7 +405,6 @@ class DummyModelBasedEnv(ModelBasedEnv):
             {
                 "hidden_observation": torch.randn(*self.batch_size, 4),
                 "next_hidden_observation": torch.randn(*self.batch_size, 4),
-                "action": torch.randn(*self.batch_size, 1),
             },
             batch_size=self.batch_size,
         )
