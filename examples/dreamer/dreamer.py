@@ -324,7 +324,7 @@ def main(cfg: "DictConfig"):
         cmpt = 0
         # if reward_normalizer is not None:
         #     reward_normalizer.update_reward_stats(tensordict)
-        # pbar.update(tensordict.numel())
+        pbar.update(tensordict.numel())
         # current_frames = tensordict.numel()
         # collected_frames += current_frames
         # # tensordict = tensordict.reshape(-1, cfg.batch_length)
