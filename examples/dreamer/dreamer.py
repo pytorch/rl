@@ -320,7 +320,6 @@ def main(cfg: "DictConfig"):
     scaler2 = GradScaler()
     scaler3 = GradScaler()
 
-    sampled_tensordict = None
     for i, tensordict in enumerate(collector):
         cmpt = 0
         # if reward_normalizer is not None:
@@ -342,6 +341,8 @@ def main(cfg: "DictConfig"):
         #     do_log = False
 
         if collected_frames >= cfg.init_random_frames:
+            if i % cfg.record_interval == 0:
+                logger.log_scalar("cmpt", cmpt)
             for j in range(cfg.optim_steps_per_batch):
                 cmpt+=1
         #         # sample from replay buffer
