@@ -13,7 +13,7 @@ import torch
 
 try:
     from tensorboard.backend.event_processing import event_accumulator
-    from torchrl.trainers.loggers import TensorboardLogger
+    from torchrl.trainers.loggers.tensorboard import TensorboardLogger
 
     _has_tb = True
 except ImportError:
