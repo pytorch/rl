@@ -1995,7 +1995,7 @@ class TensorDict(TensorDictBase):
         and if the key already exists, set will call set_ (in place setting).
         """
         if self.is_locked:
-            if not inplace or key not in set(self.keys()):
+            if not inplace or key not in self.keys():
                 raise RuntimeError("Cannot modify locked TensorDict")
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
@@ -2064,7 +2064,7 @@ class TensorDict(TensorDictBase):
             if not isinstance(key, str):
                 raise TypeError(f"Expected key to be a string but found {type(key)}")
 
-        if no_check or key in set(self.keys()):
+        if no_check or key in self.keys():
             if not no_check:
                 proc_value = self._process_tensor(
                     value, check_device=False, check_shared=False
@@ -2786,7 +2786,7 @@ torch.Size([3, 2])
         self, key: str, tensor: COMPATIBLE_TYPES, no_check: bool = False
     ) -> SubTensorDict:
         if not no_check:
-            if key not in set(self.keys()):
+            if key not in self.keys():
                 raise KeyError(f"key {key} not found in {self.keys()}")
             if tensor.shape[: self.batch_dims] != self.batch_size:
                 raise RuntimeError(
@@ -3168,7 +3168,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def set(self, key: str, tensor: COMPATIBLE_TYPES, **kwargs) -> TensorDictBase:
         if self.is_locked:
-            if key not in set(self.keys()):
+            if key not in self.keys():
                 raise RuntimeError("Cannot modify locked TensorDict")
         if isinstance(tensor, TensorDictBase):
             if tensor.batch_size[: self.batch_dims] != self.batch_size:
@@ -3693,7 +3693,7 @@ class SavedTensorDict(TensorDictBase):
 
     def set(self, key: str, value: COMPATIBLE_TYPES, **kwargs) -> TensorDictBase:
         if self.is_locked:
-            if key not in set(self.keys()):
+            if key not in self.keys():
                 raise RuntimeError("Cannot modify locked TensorDict")
         td = self._load()
         td.set(key, value, **kwargs)
@@ -4086,7 +4086,7 @@ class _CustomOpTensorDict(TensorDictBase):
                 f"Consider calling .contiguous() before calling this method."
             )
         if self.is_locked:
-            if key not in set(self.keys()):
+            if key not in self.keys():
                 raise RuntimeError("Cannot modify locked TensorDict")
         proc_value = self._process_tensor(
             value,
