@@ -204,7 +204,7 @@ def main(cfg: "DictConfig"):
         logger = WandbLogger(
             f"dreamer/{exp_name}",
             project="torchrl",
-            group=f"Dreamer_{cfg.env_name}_only_model",
+            group=f"Dreamer_{cfg.env_name}_only_model_actor",
             offline=cfg.offline_logging,
         )
     elif cfg.logger == "csv":
