@@ -385,7 +385,7 @@ def main(cfg: "DictConfig"):
                     )
                     logger.log_scalar(
                         "grad_world_model",
-                        grad_norm(world_model_opt),
+                        grad_norm(world_model_opt).detach().cpu().item(),
                         step=collected_frames,
                     )
                 world_model_opt.zero_grad()
@@ -405,7 +405,7 @@ def main(cfg: "DictConfig"):
                     )
                     logger.log_scalar(
                         "grad_actor",
-                        grad_norm(actor_opt),
+                        grad_norm(actor_opt).detach().cpu().item(),
                         step=collected_frames,
                     )
                 actor_opt.zero_grad()
@@ -425,7 +425,7 @@ def main(cfg: "DictConfig"):
                     )
                     logger.log_scalar(
                         "grad_value",
-                        grad_norm(value_opt),
+                        grad_norm(value_opt).detach().cpu().item(),
                         step=collected_frames,
                     )
                 value_opt.zero_grad()
