@@ -991,6 +991,28 @@ def test_steptensordict(
     if has_out:
         assert out is next_tensordict
 
+@pytest.mark.skipif(not _has_gym, reason="no gym")
+@pytest.mark.parametrize("env_name", ["Pendulum-v1", "ALE/Pong-v5"])
+@pytest.mark.parametrize("frame_skip", [1, 4])
+def test_batch_lock_gym(env_name, frame_skip, seed=0):
+    env = GymEnv(env_name, frame_skip=frame_skip)
+    assert env.batch_locked == True
+
+    try:
+        env.batch_locked = False
+        raise AssertionError("Should not be able to set batch_locked to False")
+    except RuntimeError:
+        pass
+    td = env.reset()
+    td["action"] = env.action_spec.rand()
+    td_expanded = td.expand(2)
+    td = env.step(td)
+
+    try:
+        env.step(td_expanded)
+        raise AssertionError("Should not be able to step with td.batch_size != env.batch_size")
+    except RuntimeError:
+        pass
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
