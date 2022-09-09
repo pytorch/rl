@@ -204,7 +204,7 @@ def main(cfg: "DictConfig"):
         logger = WandbLogger(
             f"dreamer/{exp_name}",
             project="torchrl",
-            group=f"Dreamer_{cfg.env_name}_ref",
+            group=f"Dreamer_{cfg.env_name}_ref_no_buffer",
             offline=cfg.offline_logging,
         )
     elif cfg.logger == "csv":
@@ -319,6 +319,8 @@ def main(cfg: "DictConfig"):
     scaler1 = GradScaler()
     scaler2 = GradScaler()
     scaler3 = GradScaler()
+
+    sampled_tensordict = None
     for i, tensordict in enumerate(collector):
         if reward_normalizer is not None:
             reward_normalizer.update_reward_stats(tensordict)
@@ -326,7 +328,8 @@ def main(cfg: "DictConfig"):
         current_frames = tensordict.numel()
         collected_frames += current_frames
         # tensordict = tensordict.reshape(-1, cfg.batch_length)
-        replay_buffer.extend(tensordict.cpu())
+        if collected_frames <= cfg.init_random_frames:
+            replay_buffer.extend(tensordict.cpu())
         if (i % cfg.record_interval) == 0:
             do_log = True
         else:
@@ -337,14 +340,13 @@ def main(cfg: "DictConfig"):
             tensordict["reward"].mean().detach().item(),
             step=collected_frames,
         )
-
-
         if collected_frames >= cfg.init_random_frames:
             for j in range(cfg.optim_steps_per_batch):
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(
-                    device, non_blocking=True
-                )
+                if sampled_tensordict is None:
+                    sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(
+                        device, non_blocking=True
+                    )
                 if reward_normalizer is not None:
                     sampled_tensordict = reward_normalizer.normalize_reward(
                         sampled_tensordict
