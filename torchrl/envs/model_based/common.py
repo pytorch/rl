@@ -104,7 +104,6 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
     ):
-        self._batch_locked = False
         super(ModelBasedEnv, self).__init__(
             device=device, dtype=dtype, batch_size=batch_size
         )
@@ -115,7 +114,8 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._inplace_update = False
-        return nn.Module.__new__(cls)
+        cls._batch_locked = False
+        return super().__new__(cls, *args, **kwargs)
 
     def set_specs_from_env(self, env: EnvBase):
         """

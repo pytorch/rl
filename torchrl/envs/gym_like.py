@@ -7,7 +7,6 @@ import numpy as np
 import torch
 
 from torchrl.data import TensorDict
-from torchrl.data.tensor_specs import DEVICE_TYPING
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.common import _EnvWrapper
 
@@ -76,22 +75,10 @@ class GymLikeEnv(_EnvWrapper):
     It is also expected that env.reset() returns an observation similar to the one observed after a step is completed.
     """
 
-    def __init__(
-        self,
-        *args,
-        dtype: Optional[np.dtype] = None,
-        device: DEVICE_TYPING = "cpu",
-        batch_size: Optional[torch.Size] = None,
-        **kwargs,
-    ):
-        super().__init__(
-            *args, dtype=dtype, device=device, batch_size=batch_size, **kwargs
-        )
-        self._batch_locked = True
-
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._info_dict_reader = None
+        cls._batch_locked = True
         return super().__new__(cls, *args, **kwargs)
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
