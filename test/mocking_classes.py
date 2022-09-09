@@ -139,6 +139,7 @@ class MockBatchedEnv(EnvBase):
         )
         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
         self.is_closed = False
+
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._batch_locked = False
