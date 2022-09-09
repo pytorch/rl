@@ -391,7 +391,7 @@ class TransformedEnv(EnvBase):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # selected_keys = [key for key in tensordict.keys() if "action" in key]
         # tensordict_in = tensordict.select(*selected_keys).clone()
-        tensordict_in = self.transform.inv(tensordict.clone(recursive=False))
+        tensordict_in = self.transform.inv(tensordict.clone(recurse=False))
         tensordict_out = self.base_env.step(tensordict_in)
         # tensordict should already have been processed by the transforms
         # for logging purposes

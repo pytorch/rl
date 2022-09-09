@@ -600,7 +600,7 @@ dtype=torch.float32)},
                 isinstance(tensor, TensorDictBase)
                 and tensor.batch_size[: self.batch_dims] != self.batch_size
             ):
-                tensor = tensor.clone(recursive=False)
+                tensor = tensor.clone(recurse=False)
                 tensor.batch_size = self.batch_size
             else:
                 raise RuntimeError(
@@ -952,17 +952,16 @@ dtype=torch.float32)},
             dim = len(self.batch_size) + dim
         return tuple(self[(*[slice(None) for _ in range(dim)], idx)] for idx in indices)
 
-    def clone(self, recursive: bool = True) -> TensorDictBase:
+    def clone(self, recurse: bool = True) -> TensorDictBase:
         """Clones a TensorDictBase subclass instance onto a new TensorDict.
 
         Args:
-            recursive (bool, optional): if True, each tensor contained in the
+            recurse (bool, optional): if True, each tensor contained in the
                 TensorDict will be copied too. Default is `True`.
         """
         return TensorDict(
             source={
-                key: value.clone() if recursive else value
-                for key, value in self.items()
+                key: value.clone() if recurse else value for key, value in self.items()
             },
             batch_size=self.batch_size,
             device=self._device_safe(),
@@ -2930,8 +2929,8 @@ torch.Size([3, 2])
         self._source = self._source.del_(key)
         return self
 
-    def clone(self, recursive: bool = True) -> SubTensorDict:
-        if not recursive:
+    def clone(self, recurse: bool = True) -> SubTensorDict:
+        if not recurse:
             return copy(self)
         return SubTensorDict(
             source=self._source,
@@ -3171,7 +3170,7 @@ class LazyStackedTensorDict(TensorDictBase):
             raise RuntimeError("Cannot modify immutable TensorDict")
         if isinstance(tensor, TensorDictBase):
             if tensor.batch_size[: self.batch_dims] != self.batch_size:
-                tensor.batch_size = self.clone(recursive=False).batch_size
+                tensor.batch_size = self.clone(recurse=False).batch_size
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes "
@@ -3198,7 +3197,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 raise RuntimeError("Cannot modify immutable TensorDict")
             if isinstance(tensor, TensorDictBase):
                 if tensor.batch_size[: self.batch_dims] != self.batch_size:
-                    tensor.batch_size = self.clone(recursive=False).batch_size
+                    tensor.batch_size = self.clone(recurse=False).batch_size
             if self.batch_size != tensor.shape[: self.batch_dims]:
                 raise RuntimeError(
                     "Setting tensor to tensordict failed because the shapes "
@@ -3290,8 +3289,8 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return out
 
-    def clone(self, recursive: bool = True) -> TensorDictBase:
-        if recursive:
+    def clone(self, recurse: bool = True) -> TensorDictBase:
+        if recurse:
             # This could be optimized using copy but we must be careful with
             # metadata (_is_shared etc)
             return LazyStackedTensorDict(
@@ -3811,7 +3810,7 @@ class SavedTensorDict(TensorDictBase):
     def contiguous(self) -> TensorDictBase:
         return self._load().contiguous()
 
-    def clone(self, recursive: bool = True) -> TensorDictBase:
+    def clone(self, recurse: bool = True) -> TensorDictBase:
         return SavedTensorDict(self, device=self.device)
 
     def select(self, *keys: str, inplace: bool = False) -> TensorDictBase:
@@ -4169,8 +4168,8 @@ class _CustomOpTensorDict(TensorDictBase):
         self_copy._source = self_copy._source.select(*keys)
         return self_copy
 
-    def clone(self, recursive: bool = True) -> TensorDictBase:
-        if not recursive:
+    def clone(self, recurse: bool = True) -> TensorDictBase:
+        if not recurse:
             return copy(self)
         return TensorDict(
             source=self.to_dict(),
