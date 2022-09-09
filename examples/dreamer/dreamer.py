@@ -388,25 +388,25 @@ def main(cfg: "DictConfig"):
                 world_model_opt.zero_grad()
                 scaler1.update()
 
-                # with autocast(dtype=torch.float16):
-                #     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
-                # scaler2.scale(actor_loss_td["loss_actor"]).backward()
-                # scaler2.unscale_(actor_opt)
-                # clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
-                # scaler2.step(actor_opt)
-                # if j == cfg.optim_steps_per_batch - 1 and do_log:
-                #     logger.log_scalar(
-                #         "loss_actor",
-                #         actor_loss_td["loss_actor"].detach().item(),
-                #         step=collected_frames,
-                #     )
-                #     logger.log_scalar(
-                #         "grad_actor",
-                #         grad_norm(actor_opt),
-                #         step=collected_frames,
-                #     )
-                # actor_opt.zero_grad()
-                # scaler2.update()
+                with autocast(dtype=torch.float16):
+                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+                scaler2.scale(actor_loss_td["loss_actor"]).backward()
+                scaler2.unscale_(actor_opt)
+                clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
+                scaler2.step(actor_opt)
+                if j == cfg.optim_steps_per_batch - 1 and do_log:
+                    logger.log_scalar(
+                        "loss_actor",
+                        actor_loss_td["loss_actor"].detach().item(),
+                        step=collected_frames,
+                    )
+                    logger.log_scalar(
+                        "grad_actor",
+                        grad_norm(actor_opt),
+                        step=collected_frames,
+                    )
+                actor_opt.zero_grad()
+                scaler2.update()
 
                 # with autocast(dtype=torch.float16):
                 #     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
