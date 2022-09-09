@@ -327,16 +327,17 @@ def main(cfg: "DictConfig"):
         collected_frames += current_frames
         # tensordict = tensordict.reshape(-1, cfg.batch_length)
         replay_buffer.extend(tensordict.cpu())
-        logger.log_scalar(
+        if (i % cfg.record_interval) == 0:
+            do_log = True
+        else:
+            do_log = False
+        if do_log:
+            logger.log_scalar(
             "r_training",
             tensordict["reward"].mean().detach().item(),
             step=collected_frames,
         )
 
-        if (i % cfg.record_interval) == 0:
-            do_log = True
-        else:
-            do_log = False
 
         if collected_frames >= cfg.init_random_frames:
             for j in range(cfg.optim_steps_per_batch):
@@ -349,86 +350,86 @@ def main(cfg: "DictConfig"):
                         sampled_tensordict
                     )
 
-                with autocast(dtype=torch.float16):
-                    model_loss_td, sampled_tensordict = world_model_loss(
-                        sampled_tensordict
-                    )
-                    if (
-                        cfg.record_video
-                        and (record._count + 1) % cfg.record_interval == 0
-                    ):
-                        sampled_tensordict_save = (
-                            sampled_tensordict.select(
-                                "pixels",
-                                "reco_pixels",
-                                "posterior_states",
-                                "next_belief",
-                            )[:4]
-                            .detach()
-                            .to_tensordict()
-                        )
-                    else:
-                        sampled_tensordict_save = None
+                # with autocast(dtype=torch.float16):
+                #     model_loss_td, sampled_tensordict = world_model_loss(
+                #         sampled_tensordict
+                #     )
+                #     if (
+                #         cfg.record_video
+                #         and (record._count + 1) % cfg.record_interval == 0
+                #     ):
+                #         sampled_tensordict_save = (
+                #             sampled_tensordict.select(
+                #                 "pixels",
+                #                 "reco_pixels",
+                #                 "posterior_states",
+                #                 "next_belief",
+                #             )[:4]
+                #             .detach()
+                #             .to_tensordict()
+                #         )
+                #     else:
+                #         sampled_tensordict_save = None
 
-                scaler1.scale(model_loss_td["loss_world_model"]).backward()
-                scaler1.unscale_(world_model_opt)
-                clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
-                scaler1.step(world_model_opt)
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
-                    logger.log_scalar(
-                        "loss_world_model",
-                        model_loss_td["loss_world_model"].detach().item(),
-                        step=collected_frames,
-                    )
-                    logger.log_scalar(
-                        "grad_world_model",
-                        grad_norm(world_model_opt),
-                        step=collected_frames,
-                    )
-                world_model_opt.zero_grad()
-                scaler1.update()
+                # scaler1.scale(model_loss_td["loss_world_model"]).backward()
+                # scaler1.unscale_(world_model_opt)
+                # clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
+                # scaler1.step(world_model_opt)
+                # if j == cfg.optim_steps_per_batch - 1 and do_log:
+                #     logger.log_scalar(
+                #         "loss_world_model",
+                #         model_loss_td["loss_world_model"].detach().item(),
+                #         step=collected_frames,
+                #     )
+                #     logger.log_scalar(
+                #         "grad_world_model",
+                #         grad_norm(world_model_opt),
+                #         step=collected_frames,
+                #     )
+                # world_model_opt.zero_grad()
+                # scaler1.update()
 
-                with autocast(dtype=torch.float16):
-                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
-                scaler2.scale(actor_loss_td["loss_actor"]).backward()
-                scaler2.unscale_(actor_opt)
-                clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
-                scaler2.step(actor_opt)
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
-                    logger.log_scalar(
-                        "loss_actor",
-                        actor_loss_td["loss_actor"].detach().item(),
-                        step=collected_frames,
-                    )
-                    logger.log_scalar(
-                        "grad_actor",
-                        grad_norm(actor_opt),
-                        step=collected_frames,
-                    )
-                actor_opt.zero_grad()
-                scaler2.update()
+                # with autocast(dtype=torch.float16):
+                #     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+                # scaler2.scale(actor_loss_td["loss_actor"]).backward()
+                # scaler2.unscale_(actor_opt)
+                # clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
+                # scaler2.step(actor_opt)
+                # if j == cfg.optim_steps_per_batch - 1 and do_log:
+                #     logger.log_scalar(
+                #         "loss_actor",
+                #         actor_loss_td["loss_actor"].detach().item(),
+                #         step=collected_frames,
+                #     )
+                #     logger.log_scalar(
+                #         "grad_actor",
+                #         grad_norm(actor_opt),
+                #         step=collected_frames,
+                #     )
+                # actor_opt.zero_grad()
+                # scaler2.update()
 
-                with autocast(dtype=torch.float16):
-                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
-                scaler3.scale(value_loss_td["loss_value"]).backward()
-                scaler3.unscale_(value_opt)
-                clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
-                scaler3.step(value_opt)
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
-                    logger.log_scalar(
-                        "loss_value",
-                        value_loss_td["loss_value"].detach().item(),
-                        step=collected_frames,
-                    )
-                    logger.log_scalar(
-                        "grad_value",
-                        grad_norm(value_opt),
-                        step=collected_frames,
-                    )
-                value_opt.zero_grad()
-                scaler3.update()
-                if j == cfg.optim_steps_per_batch - 1:
-                    do_log = False
+                # with autocast(dtype=torch.float16):
+                #     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                # scaler3.scale(value_loss_td["loss_value"]).backward()
+                # scaler3.unscale_(value_opt)
+                # clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
+                # scaler3.step(value_opt)
+                # if j == cfg.optim_steps_per_batch - 1 and do_log:
+                #     logger.log_scalar(
+                #         "loss_value",
+                #         value_loss_td["loss_value"].detach().item(),
+                #         step=collected_frames,
+                #     )
+                #     logger.log_scalar(
+                #         "grad_value",
+                #         grad_norm(value_opt),
+                #         step=collected_frames,
+                #     )
+                # value_opt.zero_grad()
+                # scaler3.update()
+                # if j == cfg.optim_steps_per_batch - 1:
+                #     do_log = False
 
             call_record(
                 logger,
