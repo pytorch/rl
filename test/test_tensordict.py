@@ -1225,7 +1225,7 @@ class TestTensorDicts:
     def test_stack_subclasses_on_td(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td = td.expand([3, *td.batch_size]).to_tensordict().clone().zero_()
+        td = td.expand(3, *td.batch_size).to_tensordict().clone().zero_()
         tds_list = [getattr(self, td_name)(device) for _ in range(3)]
         stacked_td = stack_td(tds_list, 0, out=td)
         assert stacked_td.batch_size == td.batch_size
