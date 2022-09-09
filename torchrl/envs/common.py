@@ -198,6 +198,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.device = torch.device(device)
         self._is_done = None
         self.dtype = dtype_map.get(dtype, dtype)
+        if "_batch_locked" not in self.__dict__:
+            self._batch_locked = True
         if "is_closed" not in self.__dir__():
             self.is_closed = True
         if "_action_spec" not in self.__dir__():
@@ -220,8 +222,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._inplace_update = True
-        cls.batch_locked = True
         return super().__new__(cls)
+
+    @property
+    def batch_locked(self) -> bool:
+        return self._batch_locked
+
+    @batch_locked.setter
+    def batch_locked(self, value: bool) -> None:
+        raise RuntimeError("batch_locked is a read-only property")
 
     @property
     def action_spec(self) -> TensorSpec:
@@ -412,7 +421,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def _assert_tensordict_shape(self, tensordict: TensorDictBase) -> None:
         if tensordict.batch_size != self.batch_size and (
-            self.batch_locked or self.batch_size != torch.Size([])
+            self._batch_locked or self.batch_size != torch.Size([])
         ):
             raise RuntimeError(
                 f"Expected a tensordict with shape==env.shape, "
