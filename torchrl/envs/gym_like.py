@@ -89,6 +89,23 @@ class GymLikeEnv(_EnvWrapper):
             obs, _reward, done, *info = self._output_transform(
                 self._env.step(action_np)
             )
+            if isinstance(obs, list) and len(obs) == 1:
+                # Until gym 0.25.2 we had rendered frames returned in lists of length 1
+                obs = obs[0]
+            if len(info) == 2:
+                # gym 0.26
+                truncation, info = info
+            elif len(info) == 1:
+                info = info[0]
+            elif len(info) == 0:
+                info = None
+            else:
+                raise ValueError(
+                    "the environment output is expected to be either"
+                    "obs, reward, done, truncation, info (gym >= 0.26) or "
+                    f"obs, reward, done, info. Got info with types = ({[type(x) for x in info]})"
+                )
+
             if _reward is None:
                 _reward = 0.0
             reward += _reward
@@ -111,15 +128,18 @@ class GymLikeEnv(_EnvWrapper):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
-        if self.info_dict_reader is not None:
-            self.info_dict_reader(*info, tensordict_out)
+        if self.info_dict_reader is not None and info is not None:
+            self.info_dict_reader(info, tensordict_out)
 
         return tensordict_out
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
-        obs, *_ = self._output_transform((self._env.reset(**kwargs),))
+        reset_data = self._env.reset(**kwargs)
+        if not isinstance(reset_data, tuple):
+            reset_data = (reset_data,)
+        obs, *_ = self._output_transform(reset_data)
         tensordict_out = TensorDict(
             source=self._read_obs(obs),
             batch_size=self.batch_size,
