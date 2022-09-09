@@ -1842,7 +1842,11 @@ def test_mp(td_type):
         tensordict = tensordict.memmap_(lock=False)
     elif td_type == "memmap_stack":
         tensordict = stack_td(
-            [tensordict[0].clone().memmap_(lock=False), tensordict[1].clone().memmap_(lock=False)], 0
+            [
+                tensordict[0].clone().memmap_(lock=False),
+                tensordict[1].clone().memmap_(lock=False),
+            ],
+            0,
         )
     else:
         raise NotImplementedError
@@ -2049,17 +2053,15 @@ def test_setitem_nested():
     assert (tensordict["a", "b", "c"] == 1).all()
 
 
-@pytest.mark.parametrize(
-    "method", ["share_memory", "memmap"]
-)
+@pytest.mark.parametrize("method", ["share_memory", "memmap"])
 def test_memory_lock(method):
     torch.manual_seed(1)
     td = TensorDict({"a": torch.randn(4, 5)}, batch_size=(4, 5))
 
     # lock=True
-    if method == 'share_memory':
+    if method == "share_memory":
         td.share_memory_(lock=True)
-    elif method == 'memmap':
+    elif method == "memmap":
         td.memmap_(lock=True)
     else:
         raise NotImplementedError
@@ -2077,9 +2079,9 @@ def test_memory_lock(method):
         td.set("b", torch.randn(4, 5), inplace=True)
 
     # lock=False
-    if method == 'share_memory':
+    if method == "share_memory":
         td.share_memory_(lock=False)
-    elif method == 'memmap':
+    elif method == "memmap":
         td.memmap_(lock=False)
     else:
         raise NotImplementedError
