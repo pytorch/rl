@@ -312,7 +312,7 @@ class TransformedEnv(EnvBase):
         device = kwargs["device"]
         super().__init__(**kwargs)
         self._set_env(env, device)
-        self.is_stateful = env.is_stateful
+        self._batch_locked = env._batch_locked
         self._inplace_update = env._inplace_update
         if transform is None:
             transform = Compose()

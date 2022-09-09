@@ -8,7 +8,7 @@ dependencies:
     - hypothesis
     - future
     - cloudpickle
-    - gym
+    - gym==0.25.1
     - pygame
     - gym[accept-rom-license]
     - gym[atari]
