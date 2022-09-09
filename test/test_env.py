@@ -999,23 +999,15 @@ def test_batch_lock_gym(env_name, frame_skip, seed=0):
     env = GymEnv(env_name, frame_skip=frame_skip)
     assert env.batch_locked
 
-    try:
+    with pytest.raises(RuntimeError):
         env.batch_locked = False
-        raise AssertionError("Should not be able to set batch_locked to False")
-    except RuntimeError:
-        pass
     td = env.reset()
     td["action"] = env.action_spec.rand()
     td_expanded = td.expand(2)
     td = env.step(td)
 
-    try:
+    with pytest.raises(RuntimeError):
         env.step(td_expanded)
-        raise AssertionError(
-            "Should not be able to step with td.batch_size != env.batch_size"
-        )
-    except RuntimeError:
-        pass
 
 
 if __name__ == "__main__":

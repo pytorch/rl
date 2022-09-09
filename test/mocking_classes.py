@@ -138,8 +138,11 @@ class MockBatchedEnv(EnvBase):
             next_observation=NdUnboundedContinuousTensorSpec((1,))
         )
         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
-        self._batch_locked = False
         self.is_closed = False
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._batch_locked = False
+        return super().__new__(cls, *args, **kwargs)
 
     def set_seed(self, seed: int) -> int:
         assert seed >= 1
