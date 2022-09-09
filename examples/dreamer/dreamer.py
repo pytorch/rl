@@ -349,6 +349,7 @@ def main(cfg: "DictConfig"):
                     sampled_tensordict = reward_normalizer.normalize_reward(
                         sampled_tensordict
                     )
+                sampled_tensordict_save = None
 
                 # with autocast(dtype=torch.float16):
                 #     model_loss_td, sampled_tensordict = world_model_loss(
