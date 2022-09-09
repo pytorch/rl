@@ -760,7 +760,7 @@ class TestTensorDicts:
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         batch_size = td.batch_size
-        new_td = td.expand([3, *batch_size])
+        new_td = td.expand(3, *batch_size)
         assert new_td.batch_size == torch.Size([3, *batch_size])
         assert all((_new_td == td).all() for _new_td in new_td)
 
@@ -1488,7 +1488,7 @@ class TestTensorDictsRequiresGrad:
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         batch_size = td.batch_size
-        new_td = td.expand([3, *batch_size])
+        new_td = td.expand(3, *batch_size)
         assert new_td._get_meta("b").requires_grad
         assert new_td.batch_size == torch.Size([3, *batch_size])
 
