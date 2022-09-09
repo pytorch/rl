@@ -3195,7 +3195,9 @@ class LazyStackedTensorDict(TensorDictBase):
         s.insert(stack_dim, N)
         return torch.Size(s)
 
-    def set(self, key: str, tensor: Union[dict, COMPATIBLE_TYPES], **kwargs) -> TensorDictBase:
+    def set(
+        self, key: str, tensor: Union[dict, COMPATIBLE_TYPES], **kwargs
+    ) -> TensorDictBase:
         if isinstance(tensor, dict):
             tensor = TensorDict(tensor, batch_size=self.batch_size, device=self.device)
         if self.is_locked:
@@ -3727,7 +3729,9 @@ class SavedTensorDict(TensorDictBase):
         td = self._load()
         return td.get(key, default=default)
 
-    def set(self, key: str, value: Union[dict, COMPATIBLE_TYPES], **kwargs) -> TensorDictBase:
+    def set(
+        self, key: str, value: Union[dict, COMPATIBLE_TYPES], **kwargs
+    ) -> TensorDictBase:
         if isinstance(value, dict):
             value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if self.is_locked:
@@ -4124,7 +4128,9 @@ class _CustomOpTensorDict(TensorDictBase):
                 )
             return self._default_get(key, default)
 
-    def set(self, key: str, value: Union[dict, COMPATIBLE_TYPES], **kwargs) -> TensorDictBase:
+    def set(
+        self, key: str, value: Union[dict, COMPATIBLE_TYPES], **kwargs
+    ) -> TensorDictBase:
         if isinstance(value, dict):
             value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if self.inv_op is None:
