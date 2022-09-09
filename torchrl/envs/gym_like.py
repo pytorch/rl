@@ -7,9 +7,9 @@ import numpy as np
 import torch
 
 from torchrl.data import TensorDict
+from torchrl.data.tensor_specs import DEVICE_TYPING
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.common import _EnvWrapper
-from torchrl.data.tensor_specs import DEVICE_TYPING
 
 __all__ = ["GymLikeEnv", "default_info_dict_reader"]
 

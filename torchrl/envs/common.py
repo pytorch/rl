@@ -227,7 +227,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @property
     def batch_locked(self) -> bool:
         return self._batch_locked
-    
+
     @batch_locked.setter
     def batch_locked(self, value: bool) -> None:
         raise RuntimeError("batch_locked is a read-only property")
