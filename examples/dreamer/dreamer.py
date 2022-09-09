@@ -204,7 +204,7 @@ def main(cfg: "DictConfig"):
         logger = WandbLogger(
             f"dreamer/{exp_name}",
             project="torchrl",
-            group=f"Dreamer_{cfg.env_name}_only_model_actor",
+            group=f"Dreamer_{cfg.env_name}",
             offline=cfg.offline_logging,
         )
     elif cfg.logger == "csv":
@@ -408,27 +408,27 @@ def main(cfg: "DictConfig"):
                 actor_opt.zero_grad()
                 scaler2.update()
 
-                # with autocast(dtype=torch.float16):
-                #     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
-                # scaler3.scale(value_loss_td["loss_value"]).backward()
-                # scaler3.unscale_(value_opt)
-                # clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
-                # scaler3.step(value_opt)
-                # if j == cfg.optim_steps_per_batch - 1 and do_log:
-                #     logger.log_scalar(
-                #         "loss_value",
-                #         value_loss_td["loss_value"].detach().item(),
-                #         step=collected_frames,
-                #     )
-                #     logger.log_scalar(
-                #         "grad_value",
-                #         grad_norm(value_opt),
-                #         step=collected_frames,
-                #     )
-                # value_opt.zero_grad()
-                # scaler3.update()
-                # if j == cfg.optim_steps_per_batch - 1:
-                #     do_log = False
+                with autocast(dtype=torch.float16):
+                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                scaler3.scale(value_loss_td["loss_value"]).backward()
+                scaler3.unscale_(value_opt)
+                clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
+                scaler3.step(value_opt)
+                if j == cfg.optim_steps_per_batch - 1 and do_log:
+                    logger.log_scalar(
+                        "loss_value",
+                        value_loss_td["loss_value"].detach().item(),
+                        step=collected_frames,
+                    )
+                    logger.log_scalar(
+                        "grad_value",
+                        grad_norm(value_opt),
+                        step=collected_frames,
+                    )
+                value_opt.zero_grad()
+                scaler3.update()
+                if j == cfg.optim_steps_per_batch - 1:
+                    do_log = False
 
             call_record(
                 logger,
