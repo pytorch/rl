@@ -89,6 +89,9 @@ class GymLikeEnv(_EnvWrapper):
             obs, _reward, done, *info = self._output_transform(
                 self._env.step(action_np)
             )
+            if isinstance(obs, list) and len(obs) == 1:
+                # Until gym 0.25.2 we had rendered frames returned in lists of length 1
+                obs = obs[0]
             if len(info) == 2:
                 # gym 0.26
                 truncation, info = info
@@ -151,9 +154,6 @@ class GymLikeEnv(_EnvWrapper):
     ) -> Dict[str, Any]:
         if isinstance(observations, dict):
             observations = {"next_" + key: value for key, value in observations.items()}
-        if isinstance(observations, list) and len(observations) == 1:
-            # Until gym 0.25.2 we had rendered frames returned in lists of length 1
-            observations = observations[0]
         if not isinstance(observations, (TensorDict, dict)):
             key = list(self.observation_spec.keys())[0]
             observations = {key: observations}
