@@ -200,12 +200,17 @@ class REDQLoss(LossModule):
             [
                 tensordict_actor[0]
                 .select(*self.qvalue_network.in_keys)
-                .expand(self.num_qvalue_nets),  # for actor loss
+                .expand(
+                    self.num_qvalue_nets, *tensordict_actor[0].batch_size
+                ),  # for actor loss
                 tensordict_actor[1]
                 .select(*self.qvalue_network.in_keys)
-                .expand(self.sub_sample_len),  # for next value estimation
+                .expand(
+                    self.sub_sample_len, *tensordict_actor[1].batch_size
+                ),  # for next value estimation
                 tensordict_select.select(*self.qvalue_network.in_keys).expand(
-                    self.num_qvalue_nets, *tensordict_select.batch_size
+                    self.num_qvalue_nets,
+                    *tensordict_select.select(*self.qvalue_network.in_keys).batch_size,
                 ),  # for qvalue loss
             ],
             0,
