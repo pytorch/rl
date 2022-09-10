@@ -584,7 +584,7 @@ class TestTDModule:
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0)
-        td_repeat = td.expand(10).clone()
+        td_repeat = td.expand(10, *td.batch_size).clone()
         td_out = tdmodule(td_repeat, params=params, vmap=(0, 0))
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
@@ -673,7 +673,7 @@ class TestTDModule:
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0)
-        td_repeat = td.expand(10).clone()
+        td_repeat = td.expand(10, *td.batch_size).clone()
         td_out = tdmodule(td_repeat, params=params, vmap=(0, 0))
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
@@ -762,7 +762,7 @@ class TestTDModule:
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0, 0)
-        td_repeat = td.expand(10).clone()
+        td_repeat = td.expand(10, *td.batch_size).clone()
         td_out = tdmodule(td_repeat, params=params, buffers=buffers, vmap=(0, 0, 0))
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
@@ -1437,7 +1437,7 @@ class TestTDSequence:
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0)
-        td_repeat = td.expand(10).clone()
+        td_repeat = td.expand(10, *td.batch_size).clone()
         td_out = tdmodule(td_repeat, params=params, vmap=(0, 0))
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
@@ -1523,7 +1523,7 @@ class TestTDSequence:
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0)
-        td_repeat = td.expand(10).clone()
+        td_repeat = td.expand(10, *td.batch_size).clone()
         td_out = tdmodule(td_repeat, params=params, vmap=(0, 0))
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])

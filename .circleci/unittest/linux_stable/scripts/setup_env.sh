@@ -83,4 +83,6 @@ if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
   yum -y install freeglut
 fi
 
+pip install pip --upgrade
+
 conda env update --file "${this_dir}/environment.yml" --prune

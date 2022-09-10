@@ -5,7 +5,7 @@
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import Callable, Optional, Sequence, Union, Any
+from typing import Callable, Optional, Union, Any, Sequence
 
 import torch
 
@@ -47,7 +47,7 @@ LIBS = {
 }
 
 
-def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":
+def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
     """
     Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the
     frame_skip.
@@ -127,7 +127,7 @@ def make_env_transforms(
         env.append_transform(ToTensorImage())
         if cfg.center_crop:
             env.append_transform(CenterCrop(*cfg.center_crop))
-        env.append_transform(Resize(cfg.image_size, cfg.image_size))
+        env.append_transform(Resize(84, 84))
         if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(first_dim=batch_dims))
@@ -211,7 +211,7 @@ def make_env_transforms(
 
 
 def transformed_env_constructor(
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     video_tag: str = "",
     logger: Optional[Logger] = None,
     stats: Optional[dict] = None,
@@ -312,7 +312,7 @@ def transformed_env_constructor(
 
 
 def parallel_env_constructor(
-    cfg: "DictConfig", **kwargs
+    cfg: "DictConfig", **kwargs  # noqa: F821
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
@@ -349,29 +349,28 @@ def parallel_env_constructor(
     return parallel_env
 
 
-@torch.inference_mode()
 def get_stats_random_rollout(
-    cfg: "DictConfig", proof_environment: EnvBase = None, key: Optional[str] = None
+    cfg: "DictConfig",  # noqa: F821
+    proof_environment: EnvBase,
+    key: Optional[str] = None,  # noqa: F821
 ):
-    proof_env_is_none = proof_environment is None
-    if proof_env_is_none:
-        proof_environment = transformed_env_constructor(
-            cfg=cfg, use_env_creator=False
-        )()
-
     print("computing state stats")
     if not hasattr(cfg, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
     n = 0
-    val_stats = []
+    td_stats = []
     while n < cfg.init_env_steps:
         _td_stats = proof_environment.rollout(max_steps=cfg.init_env_steps)
         n += _td_stats.numel()
-        val = _td_stats.get(key).cpu()
-        val_stats.append(val)
-        del _td_stats, val
-    val_stats = torch.cat(val_stats, 0)
+        _td_stats_select = _td_stats.to_tensordict().select(key).cpu()
+        if not len(list(_td_stats_select.keys())):
+            raise RuntimeError(
+                f"key {key} not found in tensordict with keys {list(_td_stats.keys())}"
+            )
+        td_stats.append(_td_stats_select)
+        del _td_stats, _td_stats_select
+    td_stats = torch.cat(td_stats, 0)
 
     if key is None:
         keys = list(proof_environment.observation_spec.keys())
@@ -383,36 +382,25 @@ def get_stats_random_rollout(
             )
 
     if key == "next_pixels":
-        m = val_stats.mean()
-        s = val_stats.std()
+        m = td_stats.get(key).mean()
+        s = td_stats.get(key).std().clamp_min(1e-5)
     else:
-        m = val_stats.mean(dim=0)
-        s = val_stats.std(dim=0)
+        m = td_stats.get(key).mean(dim=0)
+        s = td_stats.get(key).std(dim=0)
     m[s == 0] = 0.0
     s[s == 0] = 1.0
 
     print(
-        f"stats computed for {val_stats.numel()} steps. Got: \n"
+        f"stats computed for {td_stats.numel()} steps. Got: \n"
         f"loc = {m}, \n"
-        f"scale = {s}"
+        f"scale: {s}"
     )
     if not torch.isfinite(m).all():
         raise RuntimeError("non-finite values found in mean")
     if not torch.isfinite(s).all():
         raise RuntimeError("non-finite values found in sd")
     stats = {"loc": m, "scale": s}
-    if proof_env_is_none:
-        proof_environment.close()
-        if (
-            proof_environment.device != torch.device("cpu")
-            and torch.cuda.device_count() > 0
-        ):
-            torch.cuda.empty_cache()
-        del proof_environment
-    with torch.inference_mode(False):
-        # inference mode will cause the state dict loading to fail
-        stats = {k: v.clone() for k, v in stats.items()}
-        return stats
+    return stats
 
 
 @dataclass
@@ -454,4 +442,3 @@ class EnvConfig:
     # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
     batch_transform: bool = False
     # if True, the transforms will be applied to the parallel env, and not to each individual env.
-    image_size: int = 84

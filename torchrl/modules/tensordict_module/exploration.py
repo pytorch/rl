@@ -126,7 +126,8 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             default: 1.0
         sigma_end (scalar, optional): final epsilon value.
             default: 0.1
-        annealing_num_steps (int, optional): number of steps it will take for sigma to reach the sigma_end value
+        annealing_num_steps (int, optional): number of steps it will take for
+            sigma to reach the `sigma_end` value.
         action_key (str, optional): if the policy module has more than one output key,
             its output spec will be of type CompositeSpec. One needs to know where to
             find the action spec.
@@ -168,17 +169,20 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
                 ).item(),
             )
 
+    def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
+        sigma = self.sigma.item()
+        noise = torch.randn(action.shape, device=action.device) * sigma
+        spec = self.td_module.spec
+        if isinstance(spec, CompositeSpec):
+            spec = spec[self.action_key]
+        action = action + noise
+        action = spec.project(action)
+        return action
+
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = self.td_module.forward(tensordict)
         if exploration_mode() == "random" or exploration_mode() is None:
             out = tensordict.get(self.action_key)
-            sigma = self.sigma.item()
-            noise = torch.randn(tensordict.shape, device=tensordict.device) * sigma
-            spec = self.td_module.spec
-            if isinstance(spec, CompositeSpec):
-                spec = spec[self.action_key]
-            out = out + noise
-            out = spec.project(out)
             tensordict.set(self.action_key, out)
         return tensordict
 

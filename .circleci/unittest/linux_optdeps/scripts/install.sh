@@ -11,7 +11,6 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    cudatoolkit="cpuonly"
     version="cpu"
 else
     if [[ ${#CU_VERSION} -eq 4 ]]; then
@@ -21,13 +20,7 @@ else
     fi
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
-    cudatoolkit="cudatoolkit=${version}"
 fi
-
-case "$(uname -s)" in
-    Darwin*) os=MacOSX;;
-    *) os=Linux
-esac
 
 # submodules
 git submodule sync && git submodule update --init --recursive
@@ -39,7 +32,6 @@ if [ "${CU_VERSION:-}" == cpu ] ; then
 #    conda install -y pytorch cpuonly -c pytorch-nightly
     pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 else
-#    conda install -y pytorch cudatoolkit=11.3 -c pytorch-nightly
     pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 fi
 

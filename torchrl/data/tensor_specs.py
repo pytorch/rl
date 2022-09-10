@@ -71,7 +71,9 @@ def _default_dtype_and_device(
 
 
 class invertible_dict(dict):
-    def __init__(self, *args, inv_dict=dict(), **kwargs):
+    def __init__(self, *args, inv_dict=None, **kwargs):
+        if inv_dict is None:
+            inv_dict = dict()
         super().__init__(*args, **kwargs)
         self.inv_dict = inv_dict
 
@@ -172,7 +174,7 @@ class BoxList(Box):
 
     """
 
-    boxes: list
+    boxes: List
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> BoxList:
         return BoxList([box.to(dest) for box in self.boxes])
@@ -234,6 +236,15 @@ class TensorSpec:
 
         """
         if not isinstance(val, torch.Tensor):
+            if isinstance(val, list):
+                if len(val) == 1:
+                    # gym used to return lists of images since 0.26.0
+                    # We convert these lists in np.array or take the first element
+                    # if there is just one.
+                    # See https://github.com/facebookresearch/rl/pull/403/commits/73d77d033152c61d96126ccd10a2817fecd285a1
+                    val = val[0]
+                else:
+                    val = np.array(val)
             if _CHECK_IMAGES and val.dtype is np.dtype("uint8"):
                 # images can become noisy during training. if the CHECK_IMAGES
                 # env variable is True, we check that no more than half of the
@@ -332,7 +343,8 @@ class TensorSpec:
         if not self.is_in(value):
             raise AssertionError(
                 f"Encoding failed because value is not in space. "
-                f"Consider calling project(val) first. value was = {value}"
+                f"Consider calling project(val) first. value was = {value} "
+                f"and spec was {self}."
             )
 
     def type_check(self, value: torch.Tensor, key: str = None) -> None:
@@ -352,7 +364,7 @@ class TensorSpec:
                 f" {self.__class__.__name__}.dtype={self.dtype}"
             )
 
-    def rand(self, shape=torch.Size([])) -> torch.Tensor:
+    def rand(self, shape=None) -> torch.Tensor:
         """Returns a random tensor in the box. The sampling will be uniform
         unless the box is unbounded.
 
@@ -438,7 +450,9 @@ class BoundedTensorSpec(TensorSpec):
             "continuous",
         )
 
-    def rand(self, shape=torch.Size([])) -> torch.Tensor:
+    def rand(self, shape=None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
         a, b = self.space
         safe_interval = 0.0001 * (b - a)
         a = a + safe_interval
@@ -534,7 +548,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         shape = torch.Size((space.n,))
         super().__init__(shape, space, device, dtype, "discrete")
 
-    def rand(self, shape=torch.Size([])) -> torch.Tensor:
+    def rand(self, shape=None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
         return torch.nn.functional.gumbel_softmax(
             torch.rand(*shape, self.space.n, device=self.device),
             hard=True,
@@ -628,7 +644,9 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         box = ContinuousBox(torch.tensor(-np.inf), torch.tensor(np.inf))
         super().__init__(torch.Size((1,)), box, device, dtype, "composite")
 
-    def rand(self, shape=torch.Size([])) -> torch.Tensor:
+    def rand(self, shape=None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
         shape = [*shape, *self.shape]
         return torch.randn(shape, device=self.device, dtype=self.dtype)
 
@@ -662,7 +680,9 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         )
         super().__init__(torch.Size((1,)), box, device, dtype, "composite")
 
-    def rand(self, shape=torch.Size([])) -> torch.Tensor:
+    def rand(self, shape=None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
         interval = self.space.maximum - self.space.minimum
         r = torch.rand(interval.shape, device=interval.device)
         r = r * interval
@@ -861,7 +881,9 @@ class BinaryDiscreteTensorSpec(TensorSpec):
         box = BinaryBox(n)
         super().__init__(shape, box, device, dtype, domain="discrete")
 
-    def rand(self, shape=torch.Size([])) -> torch.Tensor:
+    def rand(self, shape=None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
         shape = [*shape, *self.shape]
         return torch.zeros(shape, device=self.device, dtype=self.dtype).bernoulli_()
 
@@ -919,7 +941,9 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             shape, space, device, dtype, domain="discrete"
         )
 
-    def rand(self, shape: torch.Size = torch.Size([])) -> torch.Tensor:
+    def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
         x = torch.cat(
             [
                 torch.nn.functional.one_hot(
@@ -1147,7 +1171,9 @@ dtype=torch.float32)},
                 val.set(key, self._specs[key].project(_val))
         return val
 
-    def rand(self, shape=torch.Size([])):
+    def rand(self, shape=None) -> TensorDictBase:
+        if shape is None:
+            shape = torch.Size([])
         return TensorDict(
             {
                 key: value.rand(shape)

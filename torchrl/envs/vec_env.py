@@ -48,7 +48,7 @@ class _dispatch_caller_parallel:
     def __call__(self, *args, **kwargs):
         # remove self from args
         args = [_arg if _arg is not self.parallel_env else "_self" for _arg in args]
-        for i, channel in enumerate(self.parallel_env.parent_channels):
+        for channel in self.parallel_env.parent_channels:
             channel.send((self.attr, (args, kwargs)))
 
         results = []
@@ -592,9 +592,9 @@ class SerialEnv(_BatchedEnv):
             del self._envs
 
     @_check_start
-    def set_seed(self, seed: int) -> int:
-        for i, env in enumerate(self._envs):
-            new_seed = env.set_seed(seed)
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
+        for env in self._envs:
+            new_seed = env.set_seed(seed, static_seed=static_seed)
             seed = new_seed
         return seed
 
@@ -719,7 +719,7 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def state_dict(self) -> OrderedDict:
         state_dict = OrderedDict()
-        for idx, channel in enumerate(self.parent_channels):
+        for channel in self.parent_channels:
             channel.send(("state_dict", None))
         for idx, channel in enumerate(self.parent_channels):
             msg, _state_dict = channel.recv()
@@ -793,10 +793,10 @@ class ParallelEnv(_BatchedEnv):
         del self.parent_channels
 
     @_check_start
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         self._seeds = []
         for channel in self.parent_channels:
-            channel.send(("seed", seed))
+            channel.send(("seed", (seed, static_seed)))
             self._seeds.append(seed)
             msg, new_seed = channel.recv()
             if msg != "seeded":
@@ -908,9 +908,9 @@ def _run_worker_pipe_shared_mem(
     parent_pipe: connection.Connection,
     child_pipe: connection.Connection,
     env_fun: Union[EnvBase, Callable],
-    env_fun_kwargs: dict,
+    env_fun_kwargs: Dict[str, Any],
     pin_memory: bool,
-    env_input_keys: dict,
+    env_input_keys: Dict[str, Any],
     device: DEVICE_TYPING = "cpu",
     verbose: bool = False,
 ) -> None:
@@ -948,7 +948,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before closing")
             # torch.manual_seed(data)
             # np.random.seed(data)
-            new_seed = env.set_seed(data)
+            new_seed = env.set_seed(data[0], static_seed=data[1])
             child_pipe.send(("seeded", new_seed))
 
         elif cmd == "init":

@@ -355,7 +355,7 @@ class TestComposite:
     def test_device_cast(self, is_complete, device, dtype, dest):
         # Note: trivial test in case there is only one device available.
         ts = self._composite_spec(is_complete, device, dtype)
-        original_r = ts.rand()
+        ts.rand()
         ts.to(dest)
         cast_r = ts.rand()
 
@@ -630,7 +630,7 @@ class TestEquality:
         nd_same = NdBoundedTensorSpec(
             minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
         )
-        nd_other = NdBoundedTensorSpec(
+        _ = NdBoundedTensorSpec(
             minimum=minimum, maximum=maximum + 3, device=device, dtype=dtype
         )
 
