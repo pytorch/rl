@@ -260,7 +260,7 @@ class TensorDictModule(nn.Module):
         ):
             #
             dim = tensors[0].shape[0]
-            tensordict_out = tensordict.expand(dim).contiguous()
+            tensordict_out = tensordict.expand(dim, *tensordict.batch_size).contiguous()
         elif tensordict_out is None:
             tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):

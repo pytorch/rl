@@ -31,7 +31,7 @@ def test_vmap_patch(moduletype, batch_params):
         fmodule, params = FunctionalModule._create_from(module)
         x = torch.randn(10, 1, 3)
         if batch_params:
-            params = params.expand(10)
+            params = params.expand(10, *params.batch_size)
             y = vmap(fmodule, (0, 0))(params, x)
         else:
             y = vmap(fmodule, (None, 0))(params, x)
@@ -40,8 +40,8 @@ def test_vmap_patch(moduletype, batch_params):
         fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
         x = torch.randn(10, 2, 3)
         if batch_params:
-            params = params.expand(10).contiguous()
-            buffers = buffers.expand(10).contiguous()
+            params = params.expand(10, *params.batch_size).contiguous()
+            buffers = buffers.expand(10, *buffers.batch_size).contiguous()
             y = vmap(fmodule, (0, 0, 0))(params, buffers, x)
         else:
             raise NotImplementedError
@@ -69,7 +69,7 @@ def test_vmap_tdmodule(moduletype, batch_params):
         x = torch.randn(10, 1, 3)
         td = TensorDict({"x": x}, [10])
         if batch_params:
-            params = params.expand(10)
+            params = params.expand(10, *params.batch_size)
             tdmodule(td, params=params, vmap=(0, 0))
         else:
             tdmodule(td, params=params, vmap=(None, 0))
@@ -81,8 +81,8 @@ def test_vmap_tdmodule(moduletype, batch_params):
         x = torch.randn(10, 2, 3)
         td = TensorDict({"x": x}, [10])
         if batch_params:
-            params = params.expand(10).contiguous()
-            buffers = buffers.expand(10).contiguous()
+            params = params.expand(10, *params.batch_size).contiguous()
+            buffers = buffers.expand(10, *buffers.batch_size).contiguous()
             y = tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
         else:
             raise NotImplementedError
@@ -111,8 +111,8 @@ def test_vmap_tdmodule_nativebuilt(moduletype, batch_params):
         x = torch.randn(10, 1, 3)
         td = TensorDict({"x": x}, [10])
         if batch_params:
-            params = params.expand(10)
-            buffers = buffers.expand(10)
+            params = params.expand(10, *params.batch_size)
+            buffers = buffers.expand(10, *buffers.batch_size)
             tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
         else:
             tdmodule(td, params=params, buffers=buffers, vmap=(None, None, 0))
@@ -124,8 +124,8 @@ def test_vmap_tdmodule_nativebuilt(moduletype, batch_params):
         x = torch.randn(10, 2, 3)
         td = TensorDict({"x": x}, [10])
         if batch_params:
-            params = params.expand(10).contiguous()
-            buffers = buffers.expand(10).contiguous()
+            params = params.expand(10, *params.batch_size).contiguous()
+            buffers = buffers.expand(10, *buffers.batch_size).contiguous()
             y = tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
         else:
             raise NotImplementedError
@@ -163,7 +163,7 @@ def test_vmap_tdsequence(moduletype, batch_params):
         x = torch.randn(10, 1, 3)
         td = TensorDict({"x": x}, [10])
         if batch_params:
-            params = params.expand(10)
+            params = params.expand(10, *params.batch_size)
             tdmodule(td, params=params, vmap=(0, 0))
         else:
             tdmodule(td, params=params, vmap=(None, 0))
@@ -180,8 +180,8 @@ def test_vmap_tdsequence(moduletype, batch_params):
         x = torch.randn(10, 2, 3)
         td = TensorDict({"x": x}, [10])
         if batch_params:
-            params = params.expand(10).contiguous()
-            buffers = buffers.expand(10).contiguous()
+            params = params.expand(10, *params.batch_size).contiguous()
+            buffers = buffers.expand(10, *buffers.batch_size).contiguous()
             tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
         else:
             raise NotImplementedError
@@ -215,8 +215,8 @@ def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
         x = torch.randn(10, 1, 3)
         td = TensorDict({"x": x}, [10])
         if batch_params:
-            params = params.expand(10)
-            buffers = buffers.expand(10)
+            params = params.expand(10, *params.batch_size)
+            buffers = buffers.expand(10, *buffers.batch_size)
             tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
         else:
             tdmodule(td, params=params, buffers=buffers, vmap=(None, None, 0))
@@ -232,8 +232,8 @@ def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
         x = torch.randn(10, 2, 3)
         td = TensorDict({"x": x}, [10])
         if batch_params:
-            params = params.expand(10).contiguous()
-            buffers = buffers.expand(10).contiguous()
+            params = params.expand(10, *params.batch_size).contiguous()
+            buffers = buffers.expand(10, *buffers.batch_size).contiguous()
             tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
         else:
             raise NotImplementedError
