@@ -419,57 +419,71 @@ def vec_td_lambda_return_estimate(
         gammas = torch.ones(T + 1, 1, device=device)
         gammas[1:] = gamma
 
-    gammas = torch.cumprod(gammas, -2)
+    gammas_cp = torch.cumprod(gammas, -2)
 
     lambdas = torch.ones(T + 1, 1, device=device)
     lambdas[1:] = lmbda
-    lambdas = torch.cumprod(lambdas, -2)
+    lambdas_cp = torch.cumprod(lambdas, -2)
 
     if not isinstance(gamma, torch.Tensor) or gamma.numel() <= 0:
-        first_below_thr = gammas < 1e-7
+        first_below_thr = gammas_cp < 1e-7
         while first_below_thr.ndimension() > 2:
             # if we have multiple gammas, we only want to truncate if _all_ of
             # the geometric sequences fall below the threshold
             first_below_thr = first_below_thr.all(axis=0)
         if first_below_thr.any():
             first_below_thr_gamma = first_below_thr.nonzero()[0, 0]
-        first_below_thr = lambdas < 1e-7
+        first_below_thr = lambdas_cp < 1e-7
         if first_below_thr.any() and first_below_thr_gamma is not None:
             first_below_thr = max(
                 first_below_thr_gamma, first_below_thr.nonzero()[0, 0]
             )
-            gammas = gammas[..., :first_below_thr, :]
-            lambdas = lambdas[:first_below_thr]
+            gammas_cp = gammas_cp[..., :first_below_thr, :]
+            lambdas_cp = lambdas_cp[:first_below_thr]
 
-    gammas, gammas_prime = gammas[..., :-1, :], gammas[..., 1:, :]
-    lambdas, lambdas_prime = lambdas[:-1], lambdas[1:]
+    gammas = gammas[..., 1:, :]
+    lambdas = lambdas[1:]
+    # gammas_cp = gammas_cp[..., :-1, :]
+    # lambdas_cp = lambdas_cp[:-1]
 
-    rs = _custom_conv1d(reward, gammas * lambdas)
-    vs = _custom_conv1d(next_state_value, gammas_prime * lambdas)
-    gam_lam = gammas_prime * lambdas_prime
-    mask = gam_lam.flip(-2)
-    if mask.shape[-2] < next_state_value.shape[-1]:
-        mask = torch.cat(
-            # [torch.zeros_like(next_state_value[..., : -mask.shape[-2], :]), mask], -2
-            [
-                torch.zeros(
-                    *mask.shape[:-2],
-                    next_state_value.shape[-1] - mask.shape[-2],
-                    1,
-                    device=device,
-                ),
-                mask,
-            ],
-            -2,
-        )
-    if gammas.ndimension() > 2:
-        vs2 = (
-            _custom_conv1d(next_state_value, gam_lam)
-            - mask.squeeze(-1)[..., -1:, :] * next_state_value[..., -1:]
-        )
-    else:
-        vs2 = (
-            _custom_conv1d(next_state_value, gam_lam)
-            - mask.squeeze(-1) * next_state_value[..., -1:]
-        )
-    return (rs + vs - vs2).view(shape)
+    v1 = _custom_conv1d(reward, gammas_cp * lambdas_cp)
+    print(next_state_value.shape, gammas_cp.shape, lambdas_cp.shape)
+    if gammas.ndimension() == 4 and gammas.shape[1] > 1:
+        gammas = gammas[:, :1]#  if rolling_gamma else gamma.squeeze(-1).unsqueeze(-2)
+    if lambdas.ndimension() == 4 and lambdas.shape[1] > 1:
+        lambdas = lambdas[:, :1]# if rolling_gamma else lmbda.squeeze(-1).unsqueeze(-2)
+    print("gammas", gammas.shape)
+    print("lambdas", lambdas.shape)
+    v2 = _custom_conv1d(gammas.squeeze(-1) * (1-lambdas).squeeze(-1) * next_state_value, gammas_cp * lambdas_cp)
+    v3 = gammas.squeeze(-1) * lambdas.squeeze(-1) * next_state_value
+    v3[..., :-1] = 0
+    v3 = _custom_conv1d(v3, gammas_cp * lambdas_cp)
+
+    # vs = _custom_conv1d(next_state_value, gammas_prime * lambdas)
+    # gam_lam = gammas_prime * lambdas_prime
+    # mask = gam_lam.flip(-2)
+    # if mask.shape[-2] < next_state_value.shape[-1]:
+    #     mask = torch.cat(
+    #         # [torch.zeros_like(next_state_value[..., : -mask.shape[-2], :]), mask], -2
+    #         [
+    #             torch.zeros(
+    #                 *mask.shape[:-2],
+    #                 next_state_value.shape[-1] - mask.shape[-2],
+    #                 1,
+    #                 device=device,
+    #             ),
+    #             mask,
+    #         ],
+    #         -2,
+    #     )
+    # if gammas.ndimension() > 2:
+    #     vs2 = (
+    #         _custom_conv1d(next_state_value, gam_lam)
+    #         - mask.squeeze(-1)[..., -1:, :] * next_state_value[..., -1:]
+    #     )
+    # else:
+    #     vs2 = (
+    #         _custom_conv1d(next_state_value, gam_lam)
+    #         - mask.squeeze(-1) * next_state_value[..., -1:]
+    #     )
+    return (v1 + v2 + v3).view(shape)
