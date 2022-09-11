@@ -153,6 +153,10 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         spec (TensorSpec, optional): if provided, the sampled action will be
             projected onto the valid action space once explored. If not provided,
             the exploration wrapper will attempt to recover it from the policy.
+        safe (boolean, optional): if False, the TensorSpec can be None. If it
+            is set to False but the spec is passed, the projection will still
+            happen.
+            Default is True.
 
     """
 
@@ -164,6 +168,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         annealing_num_steps: int = 1000,
         action_key: str = "action",
         spec: Optional[TensorSpec] = None,
+        safe: Optional[bool] = True,
     ):
         super().__init__(policy)
         self.register_buffer("sigma_init", torch.tensor([sigma_init]))
@@ -180,6 +185,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             if hasattr(policy, "spec")
             else None
         )
+        self.safe = safe
 
     def step(self, frames: int = 1) -> None:
         """A step of sigma decay.
@@ -207,6 +213,11 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             if isinstance(spec, CompositeSpec):
                 spec = spec[self.action_key]
             action = spec.project(action)
+        elif self.safe:
+            raise RuntimeError(
+                "the action spec must be provided to AdditiveGaussianWrapper unless "
+                "the `safe` keyword argument is turned off at initialization."
+            )
         return action
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
