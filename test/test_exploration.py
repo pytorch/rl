@@ -92,9 +92,17 @@ def test_ou_wrapper(device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("spec_origin", ["spec", "policy", None])
 class TestAdditiveGaussian:
     def test_additivegaussian_sd(
-        self, device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0
+        self,
+        device,
+        spec_origin,
+        d_obs=4,
+        d_act=6,
+        batch=32,
+        n_steps=100,
+        seed=0,
     ):
         torch.manual_seed(seed)
         net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
@@ -108,29 +116,38 @@ class TestAdditiveGaussian:
             device=device,
         )
         policy = ProbabilisticActor(
-            spec=action_spec,
+            spec=action_spec if spec_origin is not None else None,
             module=module,
             dist_param_keys=["loc", "scale"],
             distribution_class=TanhNormal,
             default_interaction_mode="random",
         ).to(device)
-        exploratory_policy = AdditiveGaussianWrapper(policy).to(device)
-
-        sigma_init = (
-            action_spec.project(
-                torch.randn(1000000, action_spec.shape[-1], device=device)
-            ).std()
-            * exploratory_policy.sigma_init
-        )
-        sigma_end = (
-            action_spec.project(
-                torch.randn(1000000, action_spec.shape[-1], device=device)
-            ).std()
-            * exploratory_policy.sigma_end
-        )
+        given_spec = action_spec if spec_origin == "spec" else None
+        exploratory_policy = AdditiveGaussianWrapper(policy, spec=given_spec).to(device)
+        if spec_origin is not None:
+            sigma_init = (
+                action_spec.project(
+                    torch.randn(1000000, action_spec.shape[-1], device=device)
+                ).std()
+                * exploratory_policy.sigma_init
+            )
+            sigma_end = (
+                action_spec.project(
+                    torch.randn(1000000, action_spec.shape[-1], device=device)
+                ).std()
+                * exploratory_policy.sigma_end
+            )
+        else:
+            sigma_init = exploratory_policy.sigma_init
+            sigma_end = exploratory_policy.sigma_end
         noisy_action = exploratory_policy._add_noise(
             action_spec.rand((100000,)).zero_()
         )
+        if spec_origin is not None:
+            assert action_spec.is_in(noisy_action), (
+                noisy_action.min(),
+                noisy_action.max(),
+            )
         assert abs(noisy_action.std() - sigma_init) < 1e-1
 
         for _ in range(exploratory_policy.annealing_num_steps):
@@ -141,7 +158,7 @@ class TestAdditiveGaussian:
         assert abs(noisy_action.std() - sigma_end) < 1e-1
 
     def test_additivegaussian_wrapper(
-        self, device, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0
+        self, device, spec_origin, d_obs=4, d_act=6, batch=32, n_steps=100, seed=0
     ):
         torch.manual_seed(seed)
         net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
@@ -155,13 +172,14 @@ class TestAdditiveGaussian:
             device=device,
         )
         policy = ProbabilisticActor(
-            spec=action_spec,
+            spec=action_spec if spec_origin is not None else None,
             module=module,
             dist_param_keys=["loc", "scale"],
             distribution_class=TanhNormal,
             default_interaction_mode="random",
         ).to(device)
-        exploratory_policy = AdditiveGaussianWrapper(policy).to(device)
+        given_spec = action_spec if spec_origin == "spec" else None
+        exploratory_policy = AdditiveGaussianWrapper(policy, spec=given_spec).to(device)
 
         tensordict = TensorDict(
             batch_size=[batch],
@@ -179,8 +197,11 @@ class TestAdditiveGaussian:
         out = torch.stack(out, 0)
         out_noexp = torch.stack(out_noexp, 0)
         assert (out_noexp.get("action") != out.get("action")).all()
-        assert (out.get("action") <= 1.0).all(), out.get("action").min()
-        assert (out.get("action") >= -1.0).all(), out.get("action").max()
+        if spec_origin is not None:
+            assert (out.get("action") <= 1.0).all(), out.get("action").min()
+            assert (out.get("action") >= -1.0).all(), out.get("action").max()
+            if action_spec is not None:
+                assert action_spec.is_in(out.get("action"))
 
 
 @pytest.mark.parametrize("state_dim", [7])

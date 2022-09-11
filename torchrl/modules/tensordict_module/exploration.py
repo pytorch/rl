@@ -8,7 +8,7 @@ from typing import Optional, Union
 import numpy as np
 import torch
 
-from torchrl.data import CompositeSpec
+from torchrl.data import CompositeSpec, TensorSpec
 from torchrl.data.utils import expand_as_right
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.tensordict_module.common import (
@@ -41,6 +41,9 @@ class EGreedyWrapper(TensorDictModuleWrapper):
             its output spec will be of type CompositeSpec. One needs to know where to
             find the action spec.
             Default is "action".
+        spec (TensorSpec, optional): if provided, the sampled action will be
+            projected onto the valid action space once explored. If not provided,
+            the exploration wrapper will attempt to recover it from the policy.
 
     Examples:
         >>> from torchrl.modules import EGreedyWrapper, Actor
@@ -73,6 +76,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
         action_key: str = "action",
+        spec: Optional[TensorSpec] = None,
     ):
         super().__init__(policy)
         self.register_buffer("eps_init", torch.tensor([eps_init]))
@@ -82,6 +86,13 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
         self.action_key = action_key
+        self.spec = (
+            spec
+            if spec is not None
+            else policy.spec
+            if hasattr(policy, "spec")
+            else None
+        )
 
     def step(self, frames: int = 1) -> None:
         """A step of epsilon decay.
@@ -108,10 +119,17 @@ class EGreedyWrapper(TensorDictModuleWrapper):
                 out.dtype
             )
             cond = expand_as_right(cond, out)
-            spec = self.td_module.spec
-            if isinstance(spec, CompositeSpec):
-                spec = spec[self.action_key]
-            out = cond * spec.rand(tensordict.shape).to(out.device) + (1 - cond) * out
+            spec = self.spec
+            if spec is not None:
+                if isinstance(spec, CompositeSpec):
+                    spec = spec[self.action_key]
+                out = (
+                    cond * spec.rand(tensordict.shape).to(out.device) + (1 - cond) * out
+                )
+            else:
+                raise RuntimeError(
+                    "spec must be provided by the policy or directly to the exploration wrapper."
+                )
             tensordict.set(self.td_module.out_keys[0], out)
         return tensordict
 
@@ -132,6 +150,9 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             its output spec will be of type CompositeSpec. One needs to know where to
             find the action spec.
             Default is "action".
+        spec (TensorSpec, optional): if provided, the sampled action will be
+            projected onto the valid action space once explored. If not provided,
+            the exploration wrapper will attempt to recover it from the policy.
 
     """
 
@@ -142,6 +163,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         sigma_end: float = 0.1,
         annealing_num_steps: int = 1000,
         action_key: str = "action",
+        spec: Optional[TensorSpec] = None,
     ):
         super().__init__(policy)
         self.register_buffer("sigma_init", torch.tensor([sigma_init]))
@@ -151,6 +173,13 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("sigma", torch.tensor([sigma_init]))
         self.action_key = action_key
+        self.spec = (
+            spec
+            if spec is not None
+            else policy.spec
+            if hasattr(policy, "spec")
+            else None
+        )
 
     def step(self, frames: int = 1) -> None:
         """A step of sigma decay.
@@ -172,11 +201,12 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
     def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
         sigma = self.sigma.item()
         noise = torch.randn(action.shape, device=action.device) * sigma
-        spec = self.td_module.spec
-        if isinstance(spec, CompositeSpec):
-            spec = spec[self.action_key]
         action = action + noise
-        action = spec.project(action)
+        spec = self.spec
+        if spec is not None:
+            if isinstance(spec, CompositeSpec):
+                spec = spec[self.action_key]
+            action = spec.project(action)
         return action
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
