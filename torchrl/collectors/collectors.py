@@ -41,6 +41,7 @@ _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
 _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 1000))
 
+DEFAULT_EXPLORATION_MODE: str = "random"
 
 class RandomPolicy:
     def __init__(self, action_spec: TensorSpec):
@@ -253,7 +254,7 @@ class SyncDataCollector(_DataCollector):
         seed: Optional[int] = None,
         pin_memory: bool = False,
         return_in_place: bool = False,
-        exploration_mode: str = "random",
+        exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         init_with_lag: bool = False,
         return_same_td: bool = False,
     ):
@@ -298,7 +299,7 @@ class SyncDataCollector(_DataCollector):
         self.max_frames_per_traj = max_frames_per_traj
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.pin_memory = pin_memory
-        self.exploration_mode = exploration_mode
+        self.exploration_mode = exploration_mode if exploration_mode else DEFAULT_EXPLORATION_MODE
         self.init_with_lag = init_with_lag and max_frames_per_traj > 0
         self.return_same_td = return_same_td
 
@@ -573,7 +574,7 @@ class SyncDataCollector(_DataCollector):
         env_str = indent(f"env={self.env}", 4 * " ")
         policy_str = indent(f"policy={self.policy}", 4 * " ")
         td_out_str = indent(f"td_out={self._tensordict_out}", 4 * " ")
-        string = f"{self.__class__.__name__}(\n{env_str},\n{policy_str},\n{td_out_str})"
+        string = f"{self.__class__.__name__}(\n{env_str},\n{policy_str},\n{td_out_str},\nexploration={self.exploration_mode})"
         return string
 
 
@@ -652,7 +653,7 @@ class _MultiDataCollector(_DataCollector):
         passing_devices: Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]] = "cpu",
         update_at_each_batch: bool = False,
         init_with_lag: bool = False,
-        exploration_mode: str = "random",
+        exploration_mode: str = DEFAULT_EXPLORATION_MODE,
     ):
         self.closed = True
         self.create_env_fn = create_env_fn
@@ -1243,7 +1244,7 @@ def _main_async_collector(
     pin_memory: bool,
     idx: int = 0,
     init_with_lag: bool = False,
-    exploration_mode: str = "random",
+    exploration_mode: str = DEFAULT_EXPLORATION_MODE,
     verbose: bool = False,
 ) -> None:
     pipe_parent.close()
