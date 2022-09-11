@@ -33,13 +33,13 @@ from torchrl.objectives.costs.deprecated import REDQLoss_deprecated
 
 # from torchrl.objectives.costs.redq import REDQLoss
 
-from torchrl.objectives.costs.utils import _TargetNetUpdate
+from torchrl.objectives.costs.utils import TargetNetUpdater
 from torchrl.objectives.returns.advantages import GAE
 
 
 def make_target_updater(
     cfg: "DictConfig", loss_module: LossModule  # noqa: F821
-) -> Optional[_TargetNetUpdate]:
+) -> Optional[TargetNetUpdater]:
     """Builds a target network weight update object."""
     if cfg.loss == "double":
         if not cfg.hard_update:
@@ -62,7 +62,7 @@ def make_target_updater(
     return target_net_updater
 
 
-def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
+def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[TargetNetUpdater]]:
     """Builds the SAC loss module."""
     loss_kwargs = {}
     if hasattr(cfg, "distributional") and cfg.distributional:
@@ -114,7 +114,7 @@ def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
 
 def make_redq_loss(
     model, cfg
-) -> Tuple[REDQLoss_deprecated, Optional[_TargetNetUpdate]]:
+) -> Tuple[REDQLoss_deprecated, Optional[TargetNetUpdater]]:
     """Builds the REDQ loss module."""
     loss_kwargs = {}
     if hasattr(cfg, "distributional") and cfg.distributional:
@@ -148,7 +148,7 @@ def make_redq_loss(
     return loss_module, target_net_updater
 
 
-def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
+def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[TargetNetUpdater]]:
     """Builds the DDPG loss module."""
     actor, value_net = model
     loss_kwargs = {}
@@ -166,7 +166,7 @@ def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
     return loss_module, target_net_updater
 
 
-def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
+def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[TargetNetUpdater]]:
     """Builds the DQN loss module."""
     loss_kwargs = {}
     if cfg.distributional:
