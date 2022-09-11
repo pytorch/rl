@@ -43,6 +43,7 @@ _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 1000))
 
 DEFAULT_EXPLORATION_MODE: str = "random"
 
+
 class RandomPolicy:
     def __init__(self, action_spec: TensorSpec):
         """Random policy for a given action_spec.
@@ -299,7 +300,9 @@ class SyncDataCollector(_DataCollector):
         self.max_frames_per_traj = max_frames_per_traj
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.pin_memory = pin_memory
-        self.exploration_mode = exploration_mode if exploration_mode else DEFAULT_EXPLORATION_MODE
+        self.exploration_mode = (
+            exploration_mode if exploration_mode else DEFAULT_EXPLORATION_MODE
+        )
         self.init_with_lag = init_with_lag and max_frames_per_traj > 0
         self.return_same_td = return_same_td
 
@@ -574,7 +577,11 @@ class SyncDataCollector(_DataCollector):
         env_str = indent(f"env={self.env}", 4 * " ")
         policy_str = indent(f"policy={self.policy}", 4 * " ")
         td_out_str = indent(f"td_out={self._tensordict_out}", 4 * " ")
-        string = f"{self.__class__.__name__}(\n{env_str},\n{policy_str},\n{td_out_str},\nexploration={self.exploration_mode})"
+        string = f"{self.__class__.__name__}(" \
+                 f"\n{env_str}," \
+                 f"\n{policy_str}," \
+                 f"\n{td_out_str}," \
+                 f"\nexploration={self.exploration_mode})"
         return string
 
 
