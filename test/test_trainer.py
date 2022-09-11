@@ -7,6 +7,7 @@ import tempfile
 from argparse import Namespace
 from collections import OrderedDict
 from os import walk, path
+from time import sleep
 
 import pytest
 import torch
@@ -268,17 +269,21 @@ def test_recorder():
         for (_, _, filenames) in walk(folder):
             filename = filenames[0]
             break
-
-        ea = event_accumulator.EventAccumulator(
-            path.join(folder, filename),
-            size_guidance={
-                event_accumulator.IMAGES: 0,
-            },
-        )
-        ea.Reload()
-        print(ea.Tags())
-        img = ea.Images("tmp_ALE/Pong-v5_video")
-        assert len(img) == N // args.record_interval
+        for _ in range(3):
+            ea = event_accumulator.EventAccumulator(
+                path.join(folder, filename),
+                size_guidance={
+                    event_accumulator.IMAGES: 0,
+                },
+            )
+            ea.Reload()
+            print(ea.Tags())
+            img = ea.Images("tmp_ALE/Pong-v5_video")
+            try:
+                assert len(img) == N // args.record_interval
+                break
+            except AssertionError:
+                sleep(0.1)
 
 
 def test_updateweights():
