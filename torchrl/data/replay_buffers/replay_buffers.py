@@ -75,7 +75,7 @@ def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
 
 
 def _pin_memory(output: Any) -> Any:
-    if hasattr(output, "pin_memory") and output.device == torch.device("cpu"):
+    if hasattr(output, "pin_memory") and output.device_safe() == torch.device("cpu"):
         return output.pin_memory()
     else:
         return output
