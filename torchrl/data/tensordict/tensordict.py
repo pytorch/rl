@@ -1461,7 +1461,7 @@ dtype=torch.float32)},
             return self
         else:
             tensordict_out = TensorDict(
-                {}, batch_size=self.batch_size, device=self.device
+                {}, batch_size=self.batch_size, device=self.device_safe()
             )
             for key, value in self.items():
                 if key in to_flatten:
