@@ -367,8 +367,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         # x = first_field(data)
         # if isinstance(x, torch.Tensor):
         device = (
-            data._device_safe()
-            if hasattr(data, "_device_safe")
+            data.device_safe()
+            if hasattr(data, "device_safe")
             else (data.device if hasattr(data, "device") else torch.device("cpu"))
         )
         weight = to_torch(weight, device, self._pin_memory)
@@ -474,8 +474,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         # x = first_field(data)  # avoid calling tree.flatten
         # if isinstance(x, torch.Tensor):
         device = (
-            data._device_safe()
-            if hasattr(data, "_device_safe")
+            data.device_safe()
+            if hasattr(data, "device_safe")
             else (data.device if hasattr(data, "device") else torch.device("cpu"))
         )
         weight = to_torch(weight, device, self._pin_memory)
@@ -669,7 +669,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                 "index",
                 torch.zeros(
                     tensordicts.shape,
-                    device=tensordicts._device_safe(),
+                    device=tensordicts.device_safe(),
                     dtype=torch.int,
                 ),
             )
@@ -683,7 +683,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         idx = super().extend(tensordicts, priorities)
         stacked_td.set(
             "index",
-            torch.tensor(idx, dtype=torch.int, device=stacked_td._device_safe()),
+            torch.tensor(idx, dtype=torch.int, device=stacked_td.device_safe()),
             inplace=True,
         )
         return idx

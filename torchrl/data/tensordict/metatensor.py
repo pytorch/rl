@@ -83,8 +83,8 @@ class MetaTensor:
             # better here, but creates circular import without more refactoring
             device = (
                 (
-                    tensor._device_safe()
-                    if hasattr(tensor, "_device_safe")
+                    tensor.device_safe()
+                    if hasattr(tensor, "device_safe")
                     else tensor.device
                 )
                 if not tensor.is_meta

@@ -114,7 +114,7 @@ class DQNLoss(LossModule):
             )
         priority_tensor = (pred_val_index - target_value).pow(2)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)
-        if input_tensordict._device_safe() is not None:
+        if input_tensordict.device_safe() is not None:
             priority_tensor = priority_tensor.to(input_tensordict.device)
 
         input_tensordict.set(

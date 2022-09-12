@@ -41,7 +41,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
             "mask",
             torch.ones(
                 rollout_tensordict.shape,
-                device=rollout_tensordict._device_safe(),
+                device=rollout_tensordict.device_safe(),
                 dtype=torch.bool,
             ),
         )
@@ -66,7 +66,7 @@ def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
     }
     td = TensorDict(
         source=out_dict,
-        device=rollout_tensordict._device_safe(),
+        device=rollout_tensordict.device_safe(),
         batch_size=out_dict["mask"].shape[:-1],
     )
     if (out_dict["done"].sum(1) > 1).any():
