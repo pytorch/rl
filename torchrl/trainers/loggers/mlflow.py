@@ -4,12 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
-from tempfile import NamedTemporaryFile, TemporaryDirectory
 import warnings
+from tempfile import TemporaryDirectory
 from typing import Any, Dict, Optional
 
-from torch import Tensor
 import torchvision
+from torch import Tensor
+
 from .common import Logger
 
 _has_mlflow = False
@@ -36,13 +37,8 @@ class MLFlowLogger(Logger):
 
     Args:
         exp_name (str): The name of the experiment.
-
+        tracking_uri (str): A tracking URI to a datastore that supports MLFlow or a local directory.
     """
-
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._prev_video_step = -1
-        return super().__new__(cls)
 
     def __init__(
         self,
@@ -56,15 +52,13 @@ class MLFlowLogger(Logger):
             "artifact_location": tracking_uri,
             "tags": tags,
         }
-        self._has_imported_mlflow = False
         mlflow.set_tracking_uri(tracking_uri)
         super().__init__(exp_name=exp_name, log_dir=tracking_uri)
-        self._has_imported_omgaconf = False
         self.video_log_counter = 0
 
     def _create_experiment(self) -> "mlflow.ActiveRun":
         """
-        Creates a mlflow experiment.
+        Creates an mlflow experiment.
 
         Returns:
             mlflow.ActiveRun: The mlflow experiment object.
@@ -89,7 +83,7 @@ class MLFlowLogger(Logger):
 
     def log_video(self, name: str, video: Tensor, **kwargs) -> None:
         """
-        Log videos inputs to mlflow.
+        Log video inputs to mlflow.
 
         Args:
             name (str): The name of the video.

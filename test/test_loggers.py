@@ -1,4 +1,5 @@
 import argparse
+import os
 import os.path
 import pathlib
 import tempfile
@@ -7,11 +8,10 @@ from time import sleep
 import pytest
 import torch
 import torchvision
-import os
 from torchrl.trainers.loggers.csv import CSVLogger
+from torchrl.trainers.loggers.mlflow import MLFlowLogger, _has_mlflow
 from torchrl.trainers.loggers.tensorboard import TensorboardLogger, _has_tb
 from torchrl.trainers.loggers.wandb import WandbLogger, _has_wandb
-from torchrl.trainers.loggers.mlflow import MLFlowLogger, _has_mlflow
 
 
 @pytest.mark.skipif(not _has_tb, reason="TensorBoard not installed")
