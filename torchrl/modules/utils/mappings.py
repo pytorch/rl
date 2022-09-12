@@ -65,7 +65,11 @@ def mappings(key: str) -> Callable:
 
     Args:
         key (str): one of "softplus", "exp", "relu", "expln",
-        or "biased_softplus".
+        or "biased_softplus". If key beggins with "biased_softplus",
+        then the key needs to take the following form:
+        "biased_softplus_{bias}" where bias is a float and the bias term of the biased softplus.
+        or "biased_softplus_{bias}_{min_val}" where bias is a float and the bias term,
+        and min_val is the minimum value of the biased softplus.
 
     Returns:
          a Callable
@@ -85,10 +89,11 @@ def mappings(key: str) -> Callable:
         if len(stripped_key) == 1:
             return biased_softplus(float(stripped_key[-1]))
         elif len(stripped_key) == 2:
-            return biased_softplus(float(stripped_key[-2]), min_val=float(stripped_key[-1]))
+            return biased_softplus(
+                float(stripped_key[-2]), min_val=float(stripped_key[-1])
+            )
         else:
             raise ValueError(f"Invalid number of args in  {key}")
 
-        
     else:
         raise NotImplementedError(f"Unknown mapping {key}")
