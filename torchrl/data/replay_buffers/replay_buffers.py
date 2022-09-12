@@ -628,7 +628,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
     def _get_priority(self, tensordict: TensorDictBase) -> torch.Tensor:
         if self.priority_key in tensordict.keys():
             if tensordict.batch_dims:
-                tensordict = tensordict.clone(recursive=False)
+                tensordict = tensordict.clone(recurse=False)
                 tensordict.batch_size = []
             try:
                 priority = tensordict.get(self.priority_key).item()
@@ -661,7 +661,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                 # we want the tensordict to have one dimension only. The batch size
                 # of the sampled tensordicts can be changed thereafter
                 if not isinstance(tensordicts, LazyStackedTensorDict):
-                    tensordicts = tensordicts.clone(recursive=False)
+                    tensordicts = tensordicts.clone(recurse=False)
                 else:
                     tensordicts = tensordicts.contiguous()
                 tensordicts.batch_size = tensordicts.batch_size[:1]

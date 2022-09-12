@@ -60,7 +60,6 @@ try:
 except ImportError:
     _has_functorch = False
 
-
 __all__ = [
     "TensorDict",
     "SubTensorDict",
@@ -589,7 +588,7 @@ dtype=torch.float32)},
                 isinstance(tensor, TensorDictBase)
                 and tensor.batch_size[: self.batch_dims] != self.batch_size
             ):
-                tensor = tensor.clone(recursive=False)
+                tensor = tensor.clone(recurse=False)
                 tensor.batch_size = self.batch_size
             else:
                 raise RuntimeError(
@@ -667,19 +666,41 @@ dtype=torch.float32)},
         Examples:
             >>> td = TensorDict(source={'a': torch.zeros(3, 4, 5),
             ...     'b': torch.zeros(3, 4, 10)}, batch_size=[3, 4])
-            >>> td_expand = td.expand(10)
+            >>> td_expand = td.expand(10, 3, 4)
             >>> assert td_expand.shape == torch.Size([10, 3, 4])
             >>> assert td_expand.get("a").shape == torch.Size([10, 3, 4, 5])
         """
         d = dict()
+        tensordict_dims = self.batch_dims
+
+        # new shape dim check
+        if len(shape) < len(self.shape):
+            raise RuntimeError(
+                "the number of sizes provided ({shape_dim}) must be greater or equal to the number of "
+                "dimensions in the TensorDict ({tensordict_dim})".format(
+                    shape_dim=len(shape), tensordict_dim=tensordict_dims
+                )
+            )
+
+        # new shape compatability check
+        for old_dim, new_dim in zip(self.batch_size, shape[-tensordict_dims:]):
+            if old_dim != 1 and new_dim != old_dim:
+                raise RuntimeError(
+                    "Incompatible expanded shape: The expanded shape length at non-singleton dimension should be same "
+                    "as the original length. target_shape = {new_shape}, existing_shape = {old_shape}".format(
+                        new_shape=shape, old_shape=self.batch_size
+                    )
+                )
         for key, value in self.items():
             if isinstance(value, TensorDictBase):
                 d[key] = value.expand(*shape)
             else:
-                d[key] = value.expand(*shape, *value.shape)
+                tensor_dims = len(value.shape)
+                last_n_dims = tensor_dims - tensordict_dims
+                d[key] = value.expand(*shape, *value.shape[-last_n_dims:])
         return TensorDict(
             source=d,
-            batch_size=[*shape, *self.batch_size],
+            batch_size=[*shape],
             device=self.device_safe(),
         )
 
@@ -826,8 +847,11 @@ dtype=torch.float32)},
         return value
 
     @abc.abstractmethod
-    def share_memory_(self) -> TensorDictBase:
+    def share_memory_(self, lock=True) -> TensorDictBase:
         """Places all the tensors in shared memory.
+
+        Args:
+            lock (bool): prevents changes to the dictionary except for inplace overwrites to existing keys
 
         Returns:
             self.
@@ -836,12 +860,13 @@ dtype=torch.float32)},
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
-    def memmap_(self, prefix=None) -> TensorDictBase:
+    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
         """Writes all tensors onto a MemmapTensor.
 
         Args:
             prefix (str): directory prefix where the memmap tensors will have to
                 be stored.
+            lock (bool): prevents changes to the dictionary except for inplace overwrites to existing keys
 
         Returns:
             self.
@@ -941,17 +966,16 @@ dtype=torch.float32)},
             dim = len(self.batch_size) + dim
         return tuple(self[(*[slice(None) for _ in range(dim)], idx)] for idx in indices)
 
-    def clone(self, recursive: bool = True) -> TensorDictBase:
+    def clone(self, recurse: bool = True) -> TensorDictBase:
         """Clones a TensorDictBase subclass instance onto a new TensorDict.
 
         Args:
-            recursive (bool, optional): if True, each tensor contained in the
+            recurse (bool, optional): if True, each tensor contained in the
                 TensorDict will be copied too. Default is `True`.
         """
         return TensorDict(
             source={
-                key: value.clone() if recursive else value
-                for key, value in self.items()
+                key: value.clone() if recurse else value for key, value in self.items()
             },
             batch_size=self.batch_size,
             device=self.device_safe(),
@@ -1964,14 +1988,40 @@ class TensorDict(TensorDictBase):
         """Expands every tensor with `(*shape, *tensor.shape)` and returns the
         same tensordict with new tensors with expanded shapes.
         """
-        _batch_size = torch.Size([*shape, *self.batch_size])
         d = dict()
+        tensordict_dims = self.batch_dims
+
+        # new shape dim check
+        if len(shape) < len(self.shape):
+            raise RuntimeError(
+                "the number of sizes provided ({shape_dim}) must be greater or equal to the number of "
+                "dimensions in the TensorDict ({tensordict_dim})".format(
+                    shape_dim=len(shape), tensordict_dim=tensordict_dims
+                )
+            )
+
+        # new shape compatability check
+        for old_dim, new_dim in zip(self.batch_size, shape[-tensordict_dims:]):
+            if old_dim != 1 and new_dim != old_dim:
+                raise RuntimeError(
+                    "Incompatible expanded shape: The expanded shape length at non-singleton dimension should be same "
+                    "as the original length. target_shape = {new_shape}, existing_shape = {old_shape}".format(
+                        new_shape=shape, old_shape=self.batch_size
+                    )
+                )
+
         for key, value in self.items():
             if isinstance(value, TensorDictBase):
                 d[key] = value.expand(*shape)
             else:
-                d[key] = value.expand(*shape, *value.shape)
-        return TensorDict(source=d, batch_size=_batch_size, device=self.device_safe())
+                tensor_dims = len(value.shape)
+                last_n_dims = tensor_dims - tensordict_dims
+                d[key] = value.expand(*shape, *value.shape[-last_n_dims:])
+        return TensorDict(
+            source=d,
+            batch_size=[*shape],
+            device=self.device_safe(),
+        )
 
     def set(
         self,
@@ -1985,7 +2035,8 @@ class TensorDict(TensorDictBase):
         and if the key already exists, set will call set_ (in place setting).
         """
         if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
+            if not inplace or key not in self.keys():
+                raise RuntimeError("Cannot modify locked TensorDict")
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
@@ -2050,8 +2101,6 @@ class TensorDict(TensorDictBase):
         self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
     ) -> TensorDictBase:
         if not no_check:
-            if self.is_locked:
-                raise RuntimeError("Cannot modify immutable TensorDict")
             if not isinstance(key, str):
                 raise TypeError(f"Expected key to be a string but found {type(key)}")
 
@@ -2112,8 +2161,6 @@ class TensorDict(TensorDictBase):
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> TensorDictBase:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
@@ -2150,7 +2197,7 @@ class TensorDict(TensorDictBase):
         else:
             return self._default_get(key, default)
 
-    def share_memory_(self) -> TensorDictBase:
+    def share_memory_(self, lock=True) -> TensorDictBase:
         if self.is_memmap():
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
@@ -2168,6 +2215,7 @@ class TensorDict(TensorDictBase):
         for value in self.values_meta():
             value.share_memory_()
         self._is_shared = True
+        self.is_locked = lock
         return self
 
     def detach_(self) -> TensorDictBase:
@@ -2175,7 +2223,7 @@ class TensorDict(TensorDictBase):
             value.detach_()
         return self
 
-    def memmap_(self, prefix=None) -> TensorDictBase:
+    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
         if self.is_shared() and self.device == torch.device("cpu"):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
@@ -2194,6 +2242,7 @@ class TensorDict(TensorDictBase):
         for value in self.values_meta():
             value.memmap_()
         self._is_memmap = True
+        self.is_locked = lock
         return self
 
     def to(
@@ -2772,9 +2821,10 @@ torch.Size([3, 2])
         inplace: bool = False,
         _run_checks: bool = True,
     ) -> TensorDictBase:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         keys = set(self.keys())
+        if self.is_locked:
+            if not inplace or key not in keys:
+                raise RuntimeError("Cannot modify locked TensorDict")
         if isinstance(tensor, TensorDictBase) and tensor.batch_size != self.batch_size:
             tensor.batch_size = self.batch_size
         if inplace and key in keys:
@@ -2825,8 +2875,6 @@ torch.Size([3, 2])
         self, key: str, tensor: COMPATIBLE_TYPES, no_check: bool = False
     ) -> SubTensorDict:
         if not no_check:
-            if self.is_locked:
-                raise RuntimeError("Cannot modify immutable TensorDict")
             if key not in self.keys():
                 raise KeyError(f"key {key} not found in {self.keys()}")
             if tensor.shape[: self.batch_dims] != self.batch_size:
@@ -2897,8 +2945,6 @@ torch.Size([3, 2])
         idx: INDEX_TYPING,
         discard_idx_attr: bool = False,
     ) -> SubTensorDict:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         if not isinstance(idx, tuple):
             idx = (idx,)
         if discard_idx_attr:
@@ -2973,8 +3019,8 @@ torch.Size([3, 2])
         self._source = self._source.del_(key)
         return self
 
-    def clone(self, recursive: bool = True) -> SubTensorDict:
-        if not recursive:
+    def clone(self, recurse: bool = True) -> SubTensorDict:
+        if not recurse:
             return copy(self)
         return SubTensorDict(source=self._source, idx=self.idx)
 
@@ -2997,12 +3043,62 @@ torch.Size([3, 2])
         return self._source.select(*keys)[self.idx]
 
     def expand(self, *shape: int, inplace: bool = False) -> TensorDictBase:
-        new_source = self._source.expand(*shape)
-        idx = tuple(slice(None) for _ in shape) + tuple(self.idx)
+        idx = self.idx
+        if isinstance(idx, torch.Tensor) and idx.dtype is torch.double:
+            # check that idx is not a mask, otherwise throw an error
+            raise ValueError("Cannot expand a TensorDict masked using SubTensorDict")
+        elif not isinstance(idx, tuple):
+            # create an tuple idx with length equal to this TensorDict's number of dims
+            idx = (idx,) + (slice(None),) * (self._source.ndimension() - 1)
+        elif isinstance(idx, tuple) and len(idx) < self._source.ndimension():
+            # create an tuple idx with length equal to this TensorDict's number of dims
+            idx = idx + (slice(None),) * (self._source.ndimension() - len(idx))
+        # now that idx has the same length as the source's number of dims, we can work with it
+
+        # print("shape", shape)
+        source_shape = self._source.shape
+        num_integer_types = 0
+        for i in idx:
+            if isinstance(i, (int, np.integer)) or (
+                isinstance(i, torch.Tensor) and i.ndimension() == 0
+            ):
+                num_integer_types += 1
+        number_of_extra_dim = len(source_shape) - len(shape) + num_integer_types
+        if number_of_extra_dim > 0:
+            new_source_shape = [shape[i] for i in range(number_of_extra_dim)]
+            shape = shape[len(new_source_shape) :]
+        else:
+            new_source_shape = []
+        new_idx = [slice(None) for _ in range(len(new_source_shape))]
+        for _idx, _s in zip(idx, source_shape):
+            # we're iterating through the source shape and the index
+            # we want to get the new index and the new source shape
+
+            if isinstance(_idx, (int, np.integer)) or (
+                isinstance(_idx, torch.Tensor) and _idx.ndimension() == 0
+            ):
+                # if the index is an integer, do nothing, i.e. keep the index and the shape
+                new_source_shape.append(_s)
+                new_idx.append(_idx)
+            elif _s == 1:
+                # if the source shape at this dim is 1, expand that source dim to the size that is required
+                new_idx.append(slice(None))
+                new_source_shape.append(shape[0])
+                shape = shape[1:]
+            else:
+                # in this case, the source shape must be different than 1. The index is going to be identical.
+                new_idx.append(_idx)
+                new_source_shape.append(shape[0])
+                shape = shape[1:]
+        # print("source shape", source_shape, "\nnew source shape", new_source_shape, "\nidx", idx, "\nnew_idx", new_idx)
+        assert not len(shape)
+        new_source = self._source.expand(*new_source_shape)
+        new_idx = tuple(new_idx)
         if inplace:
             self._source = new_source
-            self.idx = idx
-        return new_source[idx]
+            self.idx = new_idx
+            self.batch_size = _getitem_batch_size(new_source_shape, new_idx)
+        return new_source[new_idx]
 
     def is_shared(self, no_check: bool = True) -> bool:
         return self._source.is_shared(no_check=no_check)
@@ -3032,12 +3128,12 @@ torch.Size([3, 2])
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self, prefix=None) -> TensorDictBase:
+    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
         raise RuntimeError(
             "Converting a sub-tensordict values to memmap cannot be done."
         )
 
-    def share_memory_(self) -> TensorDictBase:
+    def share_memory_(self, lock=True) -> TensorDictBase:
         raise RuntimeError(
             "Casting a sub-tensordict values to shared memory cannot be done."
         )
@@ -3218,10 +3314,11 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def set(self, key: str, tensor: COMPATIBLE_TYPES, **kwargs) -> TensorDictBase:
         if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
+            if key not in self.keys():
+                raise RuntimeError("Cannot modify locked TensorDict")
         if isinstance(tensor, TensorDictBase):
             if tensor.batch_size[: self.batch_dims] != self.batch_size:
-                tensor.batch_size = self.clone(recursive=False).batch_size
+                tensor.batch_size = self.clone(recurse=False).batch_size
         if self.batch_size != tensor.shape[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes "
@@ -3244,11 +3341,9 @@ class LazyStackedTensorDict(TensorDictBase):
         self, key: str, tensor: COMPATIBLE_TYPES, no_check: bool = False
     ) -> TensorDictBase:
         if not no_check:
-            if self.is_locked:
-                raise RuntimeError("Cannot modify immutable TensorDict")
             if isinstance(tensor, TensorDictBase):
                 if tensor.batch_size[: self.batch_dims] != self.batch_size:
-                    tensor.batch_size = self.clone(recursive=False).batch_size
+                    tensor.batch_size = self.clone(recurse=False).batch_size
             if self.batch_size != tensor.shape[: self.batch_dims]:
                 raise RuntimeError(
                     "Setting tensor to tensordict failed because the shapes "
@@ -3277,8 +3372,6 @@ class LazyStackedTensorDict(TensorDictBase):
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> TensorDictBase:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         sub_td = self[idx]
         sub_td.set_(key, value)
         return self
@@ -3340,8 +3433,8 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return out
 
-    def clone(self, recursive: bool = True) -> TensorDictBase:
-        if recursive:
+    def clone(self, recurse: bool = True) -> TensorDictBase:
+        if recurse:
             # This could be optimized using copy but we must be careful with
             # metadata (_is_shared etc)
             return LazyStackedTensorDict(
@@ -3550,10 +3643,11 @@ class LazyStackedTensorDict(TensorDictBase):
         self._valid_keys.remove(key)
         return self
 
-    def share_memory_(self) -> TensorDictBase:
+    def share_memory_(self, lock=True) -> TensorDictBase:
         for td in self.tensordicts:
             td.share_memory_()
         self._is_shared = True
+        self.is_locked = lock
         return self
 
     def detach_(self) -> TensorDictBase:
@@ -3561,15 +3655,17 @@ class LazyStackedTensorDict(TensorDictBase):
             td.detach_()
         return self
 
-    def memmap_(self, prefix=None) -> TensorDictBase:
+    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
         for td in self.tensordicts:
             td.memmap_(prefix=prefix)
         self._is_memmap = True
+        self.is_locked = lock
         return self
 
     def expand(self, *shape: int, inplace: bool = False) -> TensorDictBase:
-        stack_dim = self.stack_dim + len(shape)
-        tensordicts = [td.expand(*shape) for td in self.tensordicts]
+        stack_dim = len(shape) + self.stack_dim - self.ndimension()
+        new_shape_tensordicts = [v for i, v in enumerate(shape) if i != stack_dim]
+        tensordicts = [td.expand(*new_shape_tensordicts) for td in self.tensordicts]
         if inplace:
             self.tensordicts = tensordicts
             self.stack_dim = stack_dim
@@ -3743,7 +3839,8 @@ class SavedTensorDict(TensorDictBase):
 
     def set(self, key: str, value: COMPATIBLE_TYPES, **kwargs) -> TensorDictBase:
         if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
+            if key not in self.keys():
+                raise RuntimeError("Cannot modify locked TensorDict")
         td = self._load()
         td.set(key, value, **kwargs)
         self._save(td)
@@ -3763,8 +3860,6 @@ class SavedTensorDict(TensorDictBase):
         list_item: List[COMPATIBLE_TYPES],
         dim: int,
     ) -> TensorDictBase:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         td = self._load()
         td._stack_onto_(key, list_item, dim)
         self._save(td)
@@ -3773,16 +3868,12 @@ class SavedTensorDict(TensorDictBase):
     def set_(
         self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
     ) -> TensorDictBase:
-        if not no_check and self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         self.set(key, value)
         return self
 
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> TensorDictBase:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         td = self._load()
         td.set_at_(key, value, idx)
         self._save(td)
@@ -3829,10 +3920,10 @@ class SavedTensorDict(TensorDictBase):
     def is_memmap(self, no_check: bool = False) -> bool:
         return False
 
-    def share_memory_(self) -> TensorDictBase:
+    def share_memory_(self, lock=True) -> TensorDictBase:
         raise RuntimeError("SavedTensorDict cannot be put in shared memory.")
 
-    def memmap_(self, prefix=None) -> TensorDictBase:
+    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
         raise RuntimeError(
             "SavedTensorDict and memmap are mutually exclusive features."
         )
@@ -3860,7 +3951,7 @@ class SavedTensorDict(TensorDictBase):
     def contiguous(self) -> TensorDictBase:
         return self._load().contiguous()
 
-    def clone(self, recursive: bool = True) -> TensorDictBase:
+    def clone(self, recurse: bool = True) -> TensorDictBase:
         return SavedTensorDict(self, device=self.device_safe())
 
     def select(self, *keys: str, inplace: bool = False) -> TensorDictBase:
@@ -4142,7 +4233,8 @@ class _CustomOpTensorDict(TensorDictBase):
                 f"Consider calling .contiguous() before calling this method."
             )
         if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
+            if key not in self.keys():
+                raise RuntimeError("Cannot modify locked TensorDict")
         proc_value = self._process_tensor(
             value,
             check_device=False,
@@ -4158,8 +4250,6 @@ class _CustomOpTensorDict(TensorDictBase):
         self, key: str, value: COMPATIBLE_TYPES, no_check: bool = False
     ) -> _CustomOpTensorDict:
         if not no_check:
-            if self.is_locked:
-                raise RuntimeError("Cannot modify immutable TensorDict")
             if self.inv_op is None:
                 raise Exception(
                     f"{self.__class__.__name__} does not support setting values. "
@@ -4172,8 +4262,6 @@ class _CustomOpTensorDict(TensorDictBase):
     def set_at_(
         self, key: str, value: COMPATIBLE_TYPES, idx: INDEX_TYPING
     ) -> _CustomOpTensorDict:
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         transformed_tensor, original_tensor = self.get(
             key, _return_original_tensor=True
         )
@@ -4219,8 +4307,8 @@ class _CustomOpTensorDict(TensorDictBase):
         self_copy._source = self_copy._source.select(*keys)
         return self_copy
 
-    def clone(self, recursive: bool = True) -> TensorDictBase:
-        if not recursive:
+    def clone(self, recurse: bool = True) -> TensorDictBase:
+        if not recurse:
             return copy(self)
         return TensorDict(
             source=self.to_dict(),
@@ -4289,14 +4377,16 @@ class _CustomOpTensorDict(TensorDictBase):
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self, prefix=None):
+    def memmap_(self, prefix=None, lock=True):
         self._source.memmap_(prefix=prefix)
         self._is_memmap = True
+        self.is_locked = lock
         return self
 
-    def share_memory_(self):
+    def share_memory_(self, lock=True):
         self._source.share_memory_()
         self._is_shared = True
+        self.is_locked = lock
 
 
 class UnsqueezedTensorDict(_CustomOpTensorDict):

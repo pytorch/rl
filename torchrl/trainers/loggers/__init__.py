@@ -4,3 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 from .common import Logger
+from .csv import CSVLogger
+from .tensorboard import TensorboardLogger
+from .wandb import WandbLogger

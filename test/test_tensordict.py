@@ -308,7 +308,21 @@ def test_expand(device):
         "key2": torch.randn(4, 5, 10, device=device),
     }
     td1 = TensorDict(batch_size=(4, 5), source=d)
-    td2 = td1.expand(3, 7)
+    td2 = td1.expand(3, 7, 4, 5)
+    assert td2.batch_size == torch.Size([3, 7, 4, 5])
+    assert td2.get("key1").shape == torch.Size([3, 7, 4, 5, 6])
+    assert td2.get("key2").shape == torch.Size([3, 7, 4, 5, 10])
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_expand_with_singleton(device):
+    torch.manual_seed(1)
+    d = {
+        "key1": torch.randn(1, 5, 6, device=device),
+        "key2": torch.randn(1, 5, 10, device=device),
+    }
+    td1 = TensorDict(batch_size=(1, 5), source=d)
+    td2 = td1.expand(3, 7, 4, 5)
     assert td2.batch_size == torch.Size([3, 7, 4, 5])
     assert td2.get("key1").shape == torch.Size([3, 7, 4, 5, 6])
     assert td2.get("key2").shape == torch.Size([3, 7, 4, 5, 10])
@@ -692,7 +706,7 @@ class TestTensorDicts:
         return SavedTensorDict(source=self.td(device))
 
     def memmap_td(self, device):
-        return self.td(device).memmap_()
+        return self.td(device).memmap_(lock=False)
 
     def permute_td(self, device):
         return TensorDict(
@@ -808,7 +822,7 @@ class TestTensorDicts:
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         batch_size = td.batch_size
-        new_td = td.expand(3)
+        new_td = td.expand(3, *batch_size)
         assert new_td.batch_size == torch.Size([3, *batch_size])
         assert all((_new_td == td).all() for _new_td in new_td)
 
@@ -1135,9 +1149,9 @@ class TestTensorDicts:
             "permute_td",
         ):
             with pytest.raises(AssertionError):
-                assert td.clone(recursive=False).get("a") is td.get("a")
+                assert td.clone(recurse=False).get("a") is td.get("a")
         else:
-            assert td.clone(recursive=False).get("a") is td.get("a")
+            assert td.clone(recurse=False).get("a") is td.get("a")
 
     def test_rename_key(self, td_name, device) -> None:
         torch.manual_seed(1)
@@ -1273,7 +1287,7 @@ class TestTensorDicts:
     def test_stack_subclasses_on_td(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td = td.expand(3).to_tensordict().clone().zero_()
+        td = td.expand(3, *td.batch_size).to_tensordict().clone().zero_()
         tds_list = [getattr(self, td_name)(device) for _ in range(3)]
         stacked_td = stack_td(tds_list, 0, out=td)
         assert stacked_td.batch_size == td.batch_size
@@ -1536,7 +1550,7 @@ class TestTensorDictsRequiresGrad:
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         batch_size = td.batch_size
-        new_td = td.expand(3)
+        new_td = td.expand(3, *batch_size)
         assert new_td._get_meta("b").requires_grad
         assert new_td.batch_size == torch.Size([3, *batch_size])
 
@@ -1891,22 +1905,26 @@ def test_mp(td_type):
         batch_size=[2],
     )
     if td_type == "contiguous":
-        tensordict = tensordict.share_memory_()
+        tensordict = tensordict.share_memory_(lock=False)
     elif td_type == "stack":
         tensordict = stack_td(
             [
-                tensordict[0].clone().share_memory_(),
-                tensordict[1].clone().share_memory_(),
+                tensordict[0].clone().share_memory_(lock=False),
+                tensordict[1].clone().share_memory_(lock=False),
             ],
             0,
         )
     elif td_type == "saved":
         tensordict = tensordict.clone().to(SavedTensorDict)
     elif td_type == "memmap":
-        tensordict = tensordict.memmap_()
+        tensordict = tensordict.memmap_(lock=False)
     elif td_type == "memmap_stack":
         tensordict = stack_td(
-            [tensordict[0].clone().memmap_(), tensordict[1].clone().memmap_()], 0
+            [
+                tensordict[0].clone().memmap_(lock=False),
+                tensordict[1].clone().memmap_(lock=False),
+            ],
+            0,
         )
     else:
         raise NotImplementedError
@@ -2105,6 +2123,46 @@ def test_setitem_nested():
     tensordict["a", "b"] = sub_sub_tensordict2
     assert tensordict["a", "b"] is sub_sub_tensordict2
     assert (tensordict["a", "b", "c"] == 1).all()
+
+
+@pytest.mark.parametrize("method", ["share_memory", "memmap"])
+def test_memory_lock(method):
+    torch.manual_seed(1)
+    td = TensorDict({"a": torch.randn(4, 5)}, batch_size=(4, 5))
+
+    # lock=True
+    if method == "share_memory":
+        td.share_memory_(lock=True)
+    elif method == "memmap":
+        td.memmap_(lock=True)
+    else:
+        raise NotImplementedError
+
+    td.set("a", torch.randn(4, 5), inplace=True)
+    td.set_("a", torch.randn(4, 5))  # No exception because set_ ignores the lock
+
+    with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+        td.set("a", torch.randn(4, 5))
+
+    with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+        td.set("b", torch.randn(4, 5))
+
+    with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+        td.set("b", torch.randn(4, 5), inplace=True)
+
+    # lock=False
+    if method == "share_memory":
+        td.share_memory_(lock=False)
+    elif method == "memmap":
+        td.memmap_(lock=False)
+    else:
+        raise NotImplementedError
+
+    td.set_("a", torch.randn(4, 5))
+    td.set("a", torch.randn(4, 5))
+    td.set("b", torch.randn(4, 5))
+    td.set("a", torch.randn(4, 5), inplace=True)
+    td.set("b", torch.randn(4, 5), inplace=True)
 
 
 if __name__ == "__main__":
