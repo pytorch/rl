@@ -205,7 +205,7 @@ def extract_buffers(model):
 
 def _swap_state(model, tensordict, return_old_tensordict=False):
     #     if return_old_tensordict:
-    #         old_tensordict = tensordict.clone(recursive=False)
+    #         old_tensordict = tensordict.clone(recurse=False)
     #         old_tensordict.batch_size = []
 
     if return_old_tensordict:

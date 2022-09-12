@@ -51,6 +51,9 @@ conda activate "${env_dir}"
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
+
+pip install pip --upgrade
+
 conda env update --file "${this_dir}/environment.yml" --prune
 
 #yum makecache

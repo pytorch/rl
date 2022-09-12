@@ -8,7 +8,7 @@ from __future__ import annotations
 import abc
 from copy import deepcopy
 from numbers import Number
-from typing import Any, Callable, Iterator, Optional, Union, Dict
+from typing import Any, Callable, Iterator, Optional, Union, Dict, Sequence
 
 import numpy as np
 import torch
@@ -68,7 +68,7 @@ class EnvMetaData:
 
     def expand(self, *size: int) -> EnvMetaData:
         tensordict = self.tensordict.expand(*size).to_tensordict()
-        batch_size = torch.Size([*size, *self.batch_size])
+        batch_size = torch.Size([*size])
         return EnvMetaData(
             tensordict, self.specs, batch_size, self.env_str, self.device
         )
@@ -118,7 +118,7 @@ class Specs:
             raise KeyError(f"item must be one of {self._keys}")
         return getattr(self.env, item)
 
-    def keys(self) -> dict:
+    def keys(self) -> Sequence[str]:
         return self._keys
 
     def build_tensordict(
@@ -644,7 +644,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
     """
 
     git_url: str = ""
-    available_envs: dict = {}
+    available_envs: Dict[str, Any] = {}
     libname: str = ""
 
     def __init__(
@@ -772,9 +772,7 @@ def make_tensordict(
     with torch.no_grad():
         tensordict = env.reset()
         if policy is not None:
-            tensordict = tensordict.unsqueeze(0)
             tensordict = policy(tensordict)
-            tensordict = tensordict.squeeze(0)
         else:
             tensordict.set("action", env.action_spec.rand(), inplace=False)
         tensordict = env.step(tensordict)
