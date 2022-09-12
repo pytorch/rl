@@ -1193,8 +1193,8 @@ def make_dreamer(
 
     actor_module = DreamerActor(
         out_features=proof_environment.action_spec.shape[0],
-        depth=3,
-        num_cells=300,
+        depth=4,
+        num_cells=400,
         activation_class=nn.ELU,
         rnn_hidden_dim=cfg.rssm_hidden_dim,
     )
