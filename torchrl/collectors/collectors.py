@@ -577,11 +577,13 @@ class SyncDataCollector(_DataCollector):
         env_str = indent(f"env={self.env}", 4 * " ")
         policy_str = indent(f"policy={self.policy}", 4 * " ")
         td_out_str = indent(f"td_out={self._tensordict_out}", 4 * " ")
-        string = f"{self.__class__.__name__}(" \
-                 f"\n{env_str}," \
-                 f"\n{policy_str}," \
-                 f"\n{td_out_str}," \
-                 f"\nexploration={self.exploration_mode})"
+        string = (
+            f"{self.__class__.__name__}("
+            f"\n{env_str},"
+            f"\n{policy_str},"
+            f"\n{td_out_str},"
+            f"\nexploration={self.exploration_mode})"
+        )
         return string
 
 

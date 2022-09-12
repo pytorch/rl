@@ -16,7 +16,7 @@ from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.modules import TensorDictModule, TensorDictModuleWrapper, reset_noise
 from torchrl.objectives.costs.common import LossModule
-from torchrl.objectives.costs.utils import _TargetNetUpdate
+from torchrl.objectives.costs.utils import TargetNetUpdater
 from torchrl.trainers.loggers import Logger
 from torchrl.trainers.trainers import (
     Trainer,
@@ -80,7 +80,7 @@ def make_trainer(
     collector: _DataCollector,
     loss_module: LossModule,
     recorder: Optional[EnvBase] = None,
-    target_net_updater: Optional[_TargetNetUpdate] = None,
+    target_net_updater: Optional[TargetNetUpdater] = None,
     policy_exploration: Optional[
         Union[TensorDictModuleWrapper, TensorDictModule]
     ] = None,
@@ -95,7 +95,7 @@ def make_trainer(
         loss_module (LossModule): A TorchRL loss module
         recorder (EnvBase, optional): a recorder environment. If None, the trainer will train the policy without
             testing it.
-        target_net_updater (_TargetNetUpdate, optional): A target network update object.
+        target_net_updater (TargetNetUpdater, optional): A target network update object.
         policy_exploration (TDModule or TensorDictModuleWrapper, optional): a policy to be used for recording and exploration
             updates (should be synced with the learnt policy).
         replay_buffer (ReplayBuffer, optional): a replay buffer to be used to collect data.
@@ -117,7 +117,7 @@ def make_trainer(
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.modules import TensorDictModuleWrapper, TensorDictModule, ValueOperator, EGreedyWrapper
         >>> from torchrl.objectives.costs.common import LossModule
-        >>> from torchrl.objectives.costs.utils import _TargetNetUpdate
+        >>> from torchrl.objectives.costs.utils import TargetNetUpdater
         >>> from torchrl.objectives import DDPGLoss
         >>> env_maker = EnvCreator(lambda: GymEnv("Pendulum-v0"))
         >>> env_proof = env_maker()

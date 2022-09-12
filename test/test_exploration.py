@@ -10,7 +10,7 @@ import torch
 from _utils_internal import get_available_devices
 from scipy.stats import ttest_1samp
 from torch import nn
-from torchrl.data import NdBoundedTensorSpec
+from torchrl.data import NdBoundedTensorSpec, CompositeSpec
 from torchrl.data.tensordict.tensordict import TensorDict
 from torchrl.envs.transforms.transforms import gSDENoise
 from torchrl.envs.utils import set_exploration_mode
@@ -32,7 +32,7 @@ from torchrl.modules.tensordict_module.exploration import (
 @pytest.mark.parametrize("device", get_available_devices())
 def test_ou(device, seed=0):
     torch.manual_seed(seed)
-    td = TensorDict({"action": torch.randn(3, device=device) / 10}, batch_size=[])
+    td = TensorDict({"action": torch.randn(3) / 10}, batch_size=[], device=device)
     ou = _OrnsteinUhlenbeckProcess(10.0, mu=2.0, x0=-4, sigma=0.1, sigma_min=0.01)
 
     tds = []
@@ -106,14 +106,17 @@ class TestAdditiveGaussian:
     ):
         torch.manual_seed(seed)
         net = NormalParamWrapper(nn.Linear(d_obs, 2 * d_act)).to(device)
-        module = TensorDictModule(
-            net, in_keys=["observation"], out_keys=["loc", "scale"]
-        )
         action_spec = NdBoundedTensorSpec(
             -torch.ones(d_act, device=device),
             torch.ones(d_act, device=device),
             (d_act,),
             device=device,
+        )
+        module = TensorDictModule(
+            net,
+            in_keys=["observation"],
+            out_keys=["loc", "scale"],
+            spec=CompositeSpec(action=action_spec) if spec_origin == "policy" else None,
         )
         policy = ProbabilisticActor(
             spec=action_spec if spec_origin is not None else None,
@@ -140,6 +143,13 @@ class TestAdditiveGaussian:
         else:
             sigma_init = exploratory_policy.sigma_init
             sigma_end = exploratory_policy.sigma_end
+        if spec_origin is None:
+            with pytest.raises(
+                RuntimeError,
+                match="the action spec must be provided to AdditiveGaussianWrapper",
+            ):
+                exploratory_policy._add_noise(action_spec.rand((100000,)).zero_())
+            return
         noisy_action = exploratory_policy._add_noise(
             action_spec.rand((100000,)).zero_()
         )
@@ -253,9 +263,8 @@ def test_gsde(
 
     td = TensorDict(
         {"observation": torch.randn(batch, state_dim, device=device)},
-        [
-            batch,
-        ],
+        [batch],
+        device=device,
     )
     if gSDE:
         gSDENoise().reset(td)
