@@ -14,6 +14,8 @@ from warnings import warn
 import torch
 from torch import nn, Tensor
 
+from torchrl import timeit
+
 try:
     from torchvision.transforms.functional import center_crop
     from torchvision.transforms.functional_tensor import (
@@ -581,6 +583,7 @@ class Compose(Transform):
         for t in self.transforms:
             t.set_parent(self)
 
+    @timeit("Compose._call")
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms:
             tensordict = t(tensordict)

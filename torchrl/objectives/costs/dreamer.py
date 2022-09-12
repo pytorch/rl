@@ -46,7 +46,7 @@ class DreamerModelLoss(LossModule):
         self.free_nats = free_nats
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
-        tensordict = tensordict.clone(recursive=False)
+        tensordict = tensordict.clone(recurse=False)
         tensordict.batch_size = [tensordict.shape[0]]
         tensordict.set(
             "prior_state",

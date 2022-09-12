@@ -6,6 +6,7 @@ from typing import Optional, Union, Tuple, Any, Dict
 import numpy as np
 import torch
 
+from torchrl import timeit
 from torchrl.data import TensorDict
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.common import _EnvWrapper
@@ -80,6 +81,7 @@ class GymLikeEnv(_EnvWrapper):
         cls._info_dict_reader = None
         return super().__new__(cls, *args, **kwargs)
 
+    @timeit("gym_like._step")
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get("action")
         action_np = self.action_spec.to_numpy(action, safe=False)

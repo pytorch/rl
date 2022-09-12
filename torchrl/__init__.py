@@ -81,6 +81,10 @@ class timeit:
             )
             print(" -- ".join(strings))
 
+    @staticmethod
+    def erase():
+        for k in timeit._REG:
+            timeit._REG[k] = [0.0, 0.0, 0]
 
 def _check_for_faulty_process(processes):
     terminate = False

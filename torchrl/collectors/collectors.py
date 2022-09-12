@@ -19,7 +19,7 @@ from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
-from .. import _check_for_faulty_process, prod
+from .. import _check_for_faulty_process, prod, timeit
 from ..modules.tensordict_module import ProbabilisticTensorDictModule
 from .utils import split_trajectories
 
@@ -363,23 +363,28 @@ class SyncDataCollector(_DataCollector):
             i += 1
             self._iter = i
             tensordict_out = self.rollout()
-            self._frames += tensordict_out.numel()
+            with timeit("sync.frame count"):
+                self._frames += tensordict_out.numel()
             if self._frames >= total_frames:
                 self.env.close()
 
-            if self.split_trajs:
-                tensordict_out = split_trajectories(tensordict_out)
-            if self.postproc is not None:
-                tensordict_out = self.postproc(tensordict_out)
-            if self._exclude_private_keys:
-                excluded_keys = [
-                    key for key in tensordict_out.keys() if key.startswith("_")
-                ]
-                tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
-            if self.return_same_td:
-                yield tensordict_out
-            else:
-                yield tensordict_out.clone()
+            with timeit("sync.split trajs"):
+                if self.split_trajs:
+                    tensordict_out = split_trajectories(tensordict_out)
+            with timeit("sync.postproc"):
+                if self.postproc is not None:
+                    tensordict_out = self.postproc(tensordict_out)
+            with timeit("sync.exclude"):
+                if self._exclude_private_keys:
+                    excluded_keys = [
+                        key for key in tensordict_out.keys() if key.startswith("_")
+                    ]
+                    tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
+            with timeit("sync.clone"):
+                if self.return_same_td:
+                    yield tensordict_out
+                else:
+                    yield tensordict_out.clone()
 
             del tensordict_out
             if self._frames >= self.total_frames:
@@ -447,6 +452,7 @@ class SyncDataCollector(_DataCollector):
             self._tensordict.set("traj_ids", traj_ids)  # no ops if they already match
             self._tensordict.set("step_count", steps)
 
+    @timeit("sync.rollout")
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
@@ -466,24 +472,29 @@ class SyncDataCollector(_DataCollector):
         with set_exploration_mode(self.exploration_mode):
             for _ in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
-                    self.env.rand_step(self._tensordict)
+                    with timeit("sync.rollout.rand_step"):
+                        self.env.rand_step(self._tensordict)
                 else:
-                    td_cast = self._cast_to_policy(self._tensordict)
-                    td_cast = self.policy(td_cast)
-                    self._cast_to_env(td_cast, self._tensordict)
-                    self.env.step(self._tensordict)
+                    with timeit("sync.rollout.policy"):
+                        td_cast = self._cast_to_policy(self._tensordict)
+                        td_cast = self.policy(td_cast)
+                    with timeit("sync.rollout.step"):
+                        self._cast_to_env(td_cast, self._tensordict)
+                        self.env.step(self._tensordict)
 
                 step_count = self._tensordict.get("step_count")
                 step_count += 1
                 tensordict_out.append(self._tensordict.clone())
 
-                self._reset_if_necessary()
-                self._tensordict.update(
-                    step_tensordict(
-                        self._tensordict.exclude("reward", "done"), keep_other=True
-                    ),
-                    inplace=True,
-                )
+                with timeit("sync.rollout.reset"):
+                    self._reset_if_necessary()
+                with timeit("sync.rollout.update"):
+                    self._tensordict.update(
+                        step_tensordict(
+                            self._tensordict.exclude("reward", "done"), keep_other=True
+                        ),
+                        inplace=True,
+                    )
             if self.return_in_place and len(self._tensordict_out.keys()) > 0:
                 tensordict_out = torch.stack(tensordict_out, len(self.env.batch_size))
                 tensordict_out = tensordict_out.select(*self._tensordict_out.keys())
