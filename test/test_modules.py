@@ -8,7 +8,7 @@ from numbers import Number
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from mocking_classes import MockBatchedEnv
+from mocking_classes import MockBatchedUnLockedEnv
 from torch import nn
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
@@ -332,7 +332,7 @@ class TestPlanner:
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("batch_size", [3, 5])
     def test_CEM_model_free_env(self, device, batch_size, seed=1):
-        env = MockBatchedEnv(device=device)
+        env = MockBatchedUnLockedEnv(device=device)
         env.set_seed(seed)
         planner = CEMPlanner(
             env,
