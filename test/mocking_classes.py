@@ -125,6 +125,7 @@ class MockSerialEnv(EnvBase):
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
         return self.step(tensordict)
 
+
 class MockBatchedLockedEnv(EnvBase):
     def __init__(self, device):
         super(MockBatchedLockedEnv, self).__init__(device=device)
@@ -170,26 +171,32 @@ class MockBatchedLockedEnv(EnvBase):
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         self.max_val = max(self.counter + 100, self.counter * 2)
 
+        if tensordict is None:
+            batch_size = self.batch_size
+        else:
+            batch_size = tensordict.batch_size
+
         n = (
-            torch.full(self.batch_size, self.counter)
+            torch.full(batch_size, self.counter)
             .to(self.device)
             .to(torch.get_default_dtype())
         )
         done = self.counter >= self.max_val
-        done = torch.full(
-            self.batch_size, done, dtype=torch.bool, device=self.device
-        )
+        done = torch.full(batch_size, done, dtype=torch.bool, device=self.device)
 
         return TensorDict(
-            {"reward": n, "done": done, "next_observation": n}, self.batch_size
+            {"reward": n, "done": done, "next_observation": n}, batch_size
         )
 
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
         return self.step(tensordict)
 
+
 class MockBatchedUnLockedEnv(EnvBase):
-    def __init__(self, device, batch_size = None):
-        super(MockBatchedUnLockedEnv, self).__init__(batch_size=batch_size, device=device)
+    def __init__(self, device, batch_size=None):
+        super(MockBatchedUnLockedEnv, self).__init__(
+            batch_size=batch_size, device=device
+        )
         self.action_spec = NdUnboundedContinuousTensorSpec((1,))
         self.input_spec = CompositeSpec(
             action=NdUnboundedContinuousTensorSpec((1,)),
@@ -231,23 +238,26 @@ class MockBatchedUnLockedEnv(EnvBase):
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         self.max_val = max(self.counter + 100, self.counter * 2)
+        if tensordict is None:
+            batch_size = self.batch_size
+        else:
+            batch_size = tensordict.batch_size
 
         n = (
-            torch.full(self.batch_size, self.counter)
+            torch.full(batch_size, self.counter)
             .to(self.device)
             .to(torch.get_default_dtype())
         )
         done = self.counter >= self.max_val
-        done = torch.full(
-            self.batch_size, done, dtype=torch.bool, device=self.device
-        )
+        done = torch.full(batch_size, done, dtype=torch.bool, device=self.device)
 
         return TensorDict(
-            {"reward": n, "done": done, "next_observation": n}, self.batch_size
+            {"reward": n, "done": done, "next_observation": n}, batch_size
         )
 
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
         return self.step(tensordict)
+
 
 class DiscreteActionVecMockEnv(_MockEnv):
     size = 7
