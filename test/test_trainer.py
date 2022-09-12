@@ -243,6 +243,7 @@ def test_recorder():
         args.record_frames = 24 // args.frame_skip
         args.record_interval = 2
         args.catframes = 4
+        args.image_size = 84
         args.collector_devices = ["cpu"]
 
         N = 8
