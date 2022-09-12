@@ -29,7 +29,7 @@ image_size : 64
 buffer_size: 20000
 init_env_steps: 1000
 init_random_frames: 5000
-logger: wandb
+logger: csv
 offline_logging: False
 normalize_rewards_online: False
 normalize_rewards_online_scale: 1.0
