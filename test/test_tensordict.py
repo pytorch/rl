@@ -6,6 +6,7 @@
 import argparse
 import os.path
 import re
+from textwrap import indent
 
 import pytest
 import torch
@@ -1555,6 +1556,90 @@ class TestTensorDicts:
     def test_repr(self, td_name, device):
         td = getattr(self, td_name)(device)
         _ = str(td)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+class TestTensorDictRepr:
+    def td(self, device):
+        return TensorDict(
+            source={
+                "a": torch.randn(4, 3, 2, 1, 5)
+            },
+            batch_size=[4, 3, 2, 1],
+            device=device,
+        )
+
+    def nested_td(self, device):
+        return TensorDict(
+            source={
+                "a": torch.randn(4, 3, 2, 1, 5),
+                "my_nested_td": self.td(device)
+            },
+            batch_size=[4, 3, 2, 1],
+            device=device
+        )
+
+    def stacked_td(self, device):
+        td1 = TensorDict(
+            source={
+                "a": torch.randn(4, 3, 1, 5),
+            },
+            batch_size=[4, 3, 1],
+            device=device,
+        )
+        td2 = TensorDict(
+            source={
+                "b": torch.randn(4, 3, 1, 10),
+            },
+            batch_size=[4, 3, 1],
+            device=device,
+        )
+        return stack_td([td1, td2], 2)
+
+    def test_plain(self, device):
+        td = self.td(device)
+        expected = """TensorDict(
+    fields={
+        a: Tensor(torch.Size([4, 3, 2, 1, 5]), dtype=torch.float32)},
+    batch_size=torch.Size([4, 3, 2, 1]),
+    device=cpu,
+    is_shared=False)"""
+        assert (repr(td) == expected)
+
+    def test_nested(self, device):
+        nested_td = self.nested_td(device)
+        expected = '''TensorDict(
+    fields={
+        a: Tensor(torch.Size([4, 3, 2, 1, 5]), dtype=torch.float32),
+        my_nested_td: TensorDict(
+            fields={
+                a: Tensor(torch.Size([4, 3, 2, 1, 5]), dtype=torch.float32)},
+            batch_size=torch.Size([4, 3, 2, 1]),
+            device=cpu,
+            is_shared=False)},
+    batch_size=torch.Size([4, 3, 2, 1]),
+    device=cpu,
+    is_shared=False)'''
+        assert(repr(nested_td) == expected)
+
+    def test_stacked(self, device):
+        stacked_td = self.stacked_td(device)
+        expected = '''LazyStackedTensorDict(
+    fields={
+    },
+    batch_size=torch.Size([4, 3, 2, 1]),
+    device=cpu,
+    is_shared=False)'''
+        assert(repr(stacked_td) == expected)
+
+    @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
+    def test_device_to_device(self, device):
+        dev2 = torch.device(0)
+        td = self.td(device)
+        td2 = td.to(dev2)
+        assert(repr(td) == repr(td2))
+
+
 
 
 @pytest.mark.parametrize(
