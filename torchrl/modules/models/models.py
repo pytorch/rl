@@ -1058,7 +1058,7 @@ class DreamerActor(nn.Module):
                 depth=depth,
                 num_cells=num_cells,
                 activation_class=activation_class,
-            )
+            ), scale_mapping="biased_softplus_5.0_1e-4"
         )
         self.rnn_hidden_dim = rnn_hidden_dim
 
