@@ -1209,8 +1209,8 @@ class TestTensorDicts:
         nested_tensordict_value = TensorDict(
             nested_dict_value, batch_size=td.batch_size, device=device
         )
-        td_clone1 = td.clone(recursive=True)
-        td_clone2 = td.clone(recursive=True)
+        td_clone1 = td.clone(recurse=True)
+        td_clone2 = td.clone(recurse=True)
 
         td_clone1["d"] = nested_dict_value
         td_clone2["d"] = nested_tensordict_value
@@ -1384,7 +1384,7 @@ class TestTensorDicts:
         td = getattr(self, td_name)(device)
 
         # Create TensorDict and dict equivalent values, and populate each with according nested value
-        td_clone = td.clone(recursive=True)
+        td_clone = td.clone(recurse=True)
         td_dict = td.to_dict()
         nested_dict_value = {"e": torch.randn(4, 3, 2, 1, 10)}
         nested_tensordict_value = TensorDict(
