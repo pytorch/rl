@@ -786,9 +786,7 @@ class BatchSubSampler:
             )
         else:
             traj_len = (
-                torch.ones(
-                    batch.shape[0], device=batch.device_safe(), dtype=torch.bool
-                )
+                torch.ones(batch.shape[0], device=batch.device_safe(), dtype=torch.bool)
                 * batch.shape[1]
             )
         len_mask = traj_len >= sub_traj_len
