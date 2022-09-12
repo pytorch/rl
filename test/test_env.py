@@ -999,7 +999,7 @@ def test_batch_lock_gym(env_name, frame_skip, seed=0):
     env = GymEnv(env_name, frame_skip=frame_skip)
     assert env.batch_locked
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
         env.batch_locked = False
     td = env.reset()
     td["action"] = env.action_spec.rand()

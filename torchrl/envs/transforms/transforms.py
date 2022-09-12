@@ -336,6 +336,10 @@ class TransformedEnv(EnvBase):
         self.base_env._inplace_update = False
 
     @property
+    def batch_locked(self) -> bool:
+        return self.base_env.batch_locked
+
+    @property
     def observation_spec(self) -> TensorSpec:
         """Observation spec of the transformed_in environment"""
         if self._observation_spec is None or not self.cache_specs:

@@ -280,6 +280,7 @@ class _BatchedEnv(EnvBase):
             self._dummy_env_str = self.meta_data.env_str
             self._device = self.meta_data.device
             self._env_tensordict = self.meta_data.tensordict
+            self._batch_locked = self.meta_data.batch_locked
         else:
             self._batch_size = torch.Size(
                 [self.num_workers, *self.meta_data[0].batch_size]
@@ -300,6 +301,7 @@ class _BatchedEnv(EnvBase):
             self._env_tensordict = torch.stack(
                 [meta_data.tensordict for meta_data in self.meta_data], 0
             )
+            self._batch_locked = self.meta_data[0].batch_locked
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
