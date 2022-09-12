@@ -81,6 +81,14 @@ def mappings(key: str) -> Callable:
     if key in _mappings:
         return _mappings[key]
     elif key.startswith("biased_softplus"):
-        return biased_softplus(float(key.split("_")[-1]))
+        stripped_key = key.replace("biased_softplus_", "").split("_")
+        if len(stripped_key) == 1:
+            return biased_softplus(float(stripped_key[-1]))
+        elif len(stripped_key) == 2:
+            return biased_softplus(float(stripped_key[-2]), min_val=float(stripped_key[-1]))
+        else:
+            raise ValueError(f"Invalid number of args in  {key}")
+
+        
     else:
         raise NotImplementedError(f"Unknown mapping {key}")

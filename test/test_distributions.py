@@ -158,6 +158,7 @@ def test_truncnormal(min, max, vecs, upscale, shape, device):
         "exp",
         "biased_softplus_1.0",
         "biased_softplus_0.11",
+         "biased_softplus_1.0_1e-6",
         "expln",
         "relu",
         "softplus",
