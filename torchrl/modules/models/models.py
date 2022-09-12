@@ -1058,7 +1058,7 @@ class DreamerActor(nn.Module):
                 depth=depth,
                 num_cells=num_cells,
                 activation_class=activation_class,
-            )
+            ), scale_mapping="biased_softplus_5.0_1e-4"
         )
         self.rnn_hidden_dim = rnn_hidden_dim
 
@@ -1156,7 +1156,7 @@ class RSSMPriorRollout(nn.Module):
 
 
 class RSSMPrior(nn.Module):
-    def __init__(self, hidden_dim=200, rnn_hidden_dim=200, state_dim=20):
+    def __init__(self, hidden_dim=200, rnn_hidden_dim=200, state_dim=30):
         super().__init__()
 
         # Prior
@@ -1192,7 +1192,7 @@ class RSSMPrior(nn.Module):
 
 
 class RSSMPosterior(nn.Module):
-    def __init__(self, hidden_dim=200, state_dim=20):
+    def __init__(self, hidden_dim=200, state_dim=30):
         super().__init__()
         self.obs_rnn_to_post_projector = NormalParamWrapper(
             nn.Sequential(
