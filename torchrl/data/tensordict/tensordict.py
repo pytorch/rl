@@ -2183,8 +2183,6 @@ class TensorDict(TensorDictBase):
     ) -> TensorDictBase:
         if isinstance(value, dict):
             value = TensorDict(value, batch_size=self.batch_size, device=self.device)
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
@@ -2847,8 +2845,6 @@ torch.Size([3, 2])
     ) -> TensorDictBase:
         if isinstance(tensor, dict):
             tensor = TensorDict(tensor, batch_size=self.batch_size, device=self.device)
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         keys = set(self.keys())
         if self.is_locked:
             if not inplace or key not in keys:
@@ -2977,9 +2973,6 @@ torch.Size([3, 2])
     ) -> SubTensorDict:
         if isinstance(value, dict):
             value = TensorDict(value, batch_size=self.batch_size, device=self.device)
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
-
         if not isinstance(idx, tuple):
             idx = (idx,)
         if discard_idx_attr:
@@ -3415,8 +3408,6 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> TensorDictBase:
         if isinstance(value, dict):
             value = TensorDict(value, batch_size=self.batch_size, device=self.device)
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         sub_td = self[idx]
         sub_td.set_(key, value)
         return self
@@ -3919,8 +3910,6 @@ class SavedTensorDict(TensorDictBase):
     ) -> TensorDictBase:
         if isinstance(value, dict):
             value = TensorDict(value, batch_size=self.batch_size, device=self.device)
-        if not no_check and self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         self.set(key, value)
         return self
 
@@ -3929,8 +3918,6 @@ class SavedTensorDict(TensorDictBase):
     ) -> TensorDictBase:
         if isinstance(value, dict):
             value = TensorDict(value, batch_size=self.batch_size, device=self.device)
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         td = self._load()
         td.set_at_(key, value, idx)
         self._save(td)
@@ -4327,8 +4314,6 @@ class _CustomOpTensorDict(TensorDictBase):
     ) -> _CustomOpTensorDict:
         if isinstance(value, dict):
             value = TensorDict(value, batch_size=self.batch_size, device=self.device)
-        if self.is_locked:
-            raise RuntimeError("Cannot modify immutable TensorDict")
         transformed_tensor, original_tensor = self.get(
             key, _return_original_tensor=True
         )
