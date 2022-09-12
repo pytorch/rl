@@ -1575,8 +1575,6 @@ dtype=torch.float32)},
     def __setitem__(
         self, index: INDEX_TYPING, value: Union[TensorDictBase, dict]
     ) -> None:
-        if isinstance(value, dict):
-            value = TensorDict(value, batch_size=self.batch_size, device=self.device)
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if isinstance(index, list):
@@ -1617,6 +1615,8 @@ dtype=torch.float32)},
                 raise err
         else:
             indexed_bs = _getitem_batch_size(self.batch_size, index)
+            if isinstance(value, dict):
+                value = TensorDict(value, batch_size=indexed_bs, device=self.device)
             if value.batch_size != indexed_bs:
                 raise RuntimeError(
                     f"indexed destination TensorDict batch size is {indexed_bs} "

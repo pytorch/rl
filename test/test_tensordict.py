@@ -760,6 +760,15 @@ class TestTensorDicts:
         td_saved = td.to(SavedTensorDict)
         assert (td == td_saved).all()
 
+    def test_broadcast(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        sub_td = td[:, :2].to_tensordict()
+        sub_td.zero_()
+        sub_dict = sub_td.to_dict()
+        td[:, :2] = sub_dict
+        assert (td[:, :2] == 0).all()
+
     @pytest.mark.parametrize("call_del", [True, False])
     def test_remove(self, td_name, device, call_del):
         torch.manual_seed(1)
