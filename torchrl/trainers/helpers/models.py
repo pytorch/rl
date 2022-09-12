@@ -1189,12 +1189,12 @@ def make_dreamer(
     rssm_posterior = RSSMPosterior(
         hidden_dim=cfg.rssm_hidden_dim, state_dim=cfg.state_dim
     )
-    reward_module = MLP(out_features=1, depth=3, num_cells=300, activation_class=nn.ELU)
+    reward_module = MLP(out_features=1, depth=2, num_cells=cfg.mlp_num_units, activation_class=nn.ELU)
 
     actor_module = DreamerActor(
         out_features=proof_environment.action_spec.shape[0],
         depth=4,
-        num_cells=400,
+        num_cells=cfg.mlp_num_units,
         activation_class=nn.ELU,
         rnn_hidden_dim=cfg.rssm_hidden_dim,
     )
@@ -1248,7 +1248,7 @@ def make_dreamer(
         distribution_class=TanhNormal,
     )
     value_model = TensorDictModule(
-        MLP(out_features=1, depth=3, num_cells=300, activation_class=nn.ELU),
+        MLP(out_features=1, depth=3, num_cells=cfg.mlp_num_units, activation_class=nn.ELU),
         in_keys=["prior_state", "belief"],
         out_keys=[value_key],
     )
@@ -1355,8 +1355,9 @@ def make_dreamer(
 
 @dataclass
 class DreamerConfig:
-    state_dim: int = 20
+    state_dim: int = 30
     rssm_hidden_dim: int = 200
+    mlp_num_units: int = 400
     grad_clip: int = 100
     world_model_lr: float = 6e-4
     actor_value_lr: float = 8e-5
