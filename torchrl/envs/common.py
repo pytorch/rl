@@ -49,12 +49,14 @@ class EnvMetaData:
         batch_size: torch.Size,
         env_str: str,
         device: torch.device,
+        batch_locked: bool = True,
     ):
         self.tensordict = tensordict
         self.specs = specs
         self.batch_size = batch_size
         self.env_str = env_str
         self.device = device
+        self.batch_locked = batch_locked
 
     @staticmethod
     def build_metadata_from_env(env) -> EnvMetaData:
@@ -64,19 +66,27 @@ class EnvMetaData:
         batch_size = env.batch_size
         env_str = str(env)
         device = env.device
-        return EnvMetaData(tensordict, specs, batch_size, env_str, device)
+        batch_locked = env.batch_locked
+        return EnvMetaData(tensordict, specs, batch_size, env_str, device, batch_locked)
 
     def expand(self, *size: int) -> EnvMetaData:
         tensordict = self.tensordict.expand(*size).to_tensordict()
         batch_size = torch.Size([*size, *self.batch_size])
         return EnvMetaData(
-            tensordict, self.specs, batch_size, self.env_str, self.device
+            tensordict,
+            self.specs,
+            batch_size,
+            self.env_str,
+            self.device,
+            self.batch_locked,
         )
 
     def to(self, device: DEVICE_TYPING) -> EnvMetaData:
         tensordict = self.tensordict.to(device)
         specs = self.specs.to(device)
-        return EnvMetaData(tensordict, specs, self.batch_size, self.env_str, device)
+        return EnvMetaData(
+            tensordict, specs, self.batch_size, self.env_str, device, self.batch_locked
+        )
 
     def __setstate__(self, state):
         state["tensordict"] = state["tensordict"].to_tensordict().to(state["device"])
@@ -218,10 +228,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.batch_size = torch.Size([])
 
     @classmethod
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args, _batch_locked=True, **kwargs):
         cls._inplace_update = True
-        if not hasattr(cls, "_batch_locked"):
-            cls._batch_locked = True
+        cls._batch_locked = _batch_locked
         return super().__new__(cls)
 
     @property
@@ -421,7 +430,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def _assert_tensordict_shape(self, tensordict: TensorDictBase) -> None:
         if tensordict.batch_size != self.batch_size and (
-            self._batch_locked or self.batch_size != torch.Size([])
+            self.batch_locked or self.batch_size != torch.Size([])
         ):
             raise RuntimeError(
                 f"Expected a tensordict with shape==env.shape, "
