@@ -1,5 +1,7 @@
+import argparse
 import tempfile
 
+import pytest
 from torch.utils.tensorboard import SummaryWriter
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
@@ -42,3 +44,8 @@ def test_tb():
             # OS error could be raised randomly
             # depending on the test machine
             test_rounds -= 1
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
