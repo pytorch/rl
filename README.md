@@ -82,14 +82,16 @@ pip3 install --pre torch torchvision --extra-index-url https://download.pytorch.
 
 and functorch
 ```
-pip install "git+https://github.com/pytorch/functorch.git"
+PYTORCH_VERSION=`python -c "import torch.version; print(torch.version.git_version)"`
+pip install "git+https://github.com/pytorch/pytorch.git@$PYTORCH_VERSION#subdirectory=functorch"
 ```
 
 If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message 
 `(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
 
 ```
-ARCHFLAGS="-arch arm64" pip install "git+https://github.com/pytorch/functorch.git"
+PYTORCH_VERSION=`python -c "import torch.version; print(torch.version.git_version)"`
+ARCHFLAGS="-arch arm64" pip install "git+https://github.com/pytorch/pytorch.git@$PYTORCH_VERSION#subdirectory=functorch"
 ```
 
 **Torchrl**
@@ -154,6 +156,12 @@ pip install gym "gym[accept-rom-license]" pygame gym_retro
 
 # tests
 pip install pytest pyyaml pytest-instafail
+
+# tensorboard
+pip install tensorboard
+
+# wandb
+pip install wandb
 ```
 
 **Troubleshooting**
