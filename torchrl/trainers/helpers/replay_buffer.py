@@ -13,7 +13,11 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data.replay_buffers.rb_prototype import (
+    TensorDictReplayBuffer as rb_proto_TensorDictReplayBuffer,
+)
+from torchrl.data.replay_buffers.samplers import WithoutReplacementRandomSampler
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage, CappedStorage
 
 __all__ = ["make_replay_buffer"]
 
@@ -52,9 +56,54 @@ def make_replay_buffer(
     return buffer
 
 
+def make_mbpo_replay_buffers(device: DEVICE_TYPING, cfg: "DictConfig") -> ReplayBuffer:
+    """Builds a replay buffer using the config built from ReplayArgsConfig."""
+    device = torch.device(device)
+    data_storage = LazyMemmapStorage(
+        cfg.buffer_size,
+        scratch_dir=cfg.buffer_scratch_dir,
+        # device=device,  # when using prefetch, this can overload the GPU memory
+    )
+    with_replacement_data_buffer = rb_proto_TensorDictReplayBuffer(
+        collate_fn=lambda x: x,
+        pin_memory=device != torch.device("cpu"),
+        prefetch=cfg.buffer_prefetch,
+        storage=data_storage,
+    )
+    without_replacement_data_buffer = rb_proto_TensorDictReplayBuffer(
+        collate_fn=lambda x: x,
+        sampler=WithoutReplacementRandomSampler(),
+        pin_memory=device != torch.device("cpu"),
+        prefetch=cfg.buffer_prefetch,
+        storage=data_storage,
+    )
+    base_model_buffer_size = (
+        cfg.num_model_rollouts
+        * cfg.optim_steps_per_batch
+        * cfg.keep_model_samples_n_collect_steps
+    )
+    max_model_buffer_size = base_model_buffer_size * cfg.end_imagination_horizon
+    model_buffer = rb_proto_TensorDictReplayBuffer(
+        collate_fn=lambda x: x,
+        pin_memory=device != torch.device("cpu"),
+        prefetch=cfg.buffer_prefetch,
+        storage=CappedStorage(
+            LazyMemmapStorage(
+                max_model_buffer_size,
+                scratch_dir=cfg.buffer_scratch_dir,
+                # device=device,  # when using prefetch, this can overload the GPU memory
+            ),
+            max_size=base_model_buffer_size,
+        ),
+    )
+    return with_replacement_data_buffer, without_replacement_data_buffer, model_buffer
+
+
 @dataclass
 class ReplayArgsConfig:
     buffer_size: int = 1000000
+
+    model_buffer_size: int = 1000000
     # buffer size, in number of frames stored. Default=1e6
     prb: bool = False
     # whether a Prioritized replay buffer should be used instead of a more basic circular one.

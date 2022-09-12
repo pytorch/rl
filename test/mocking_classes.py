@@ -5,6 +5,7 @@
 from typing import Optional
 
 import torch
+import torch.nn as nn
 from torchrl import seed_generator
 from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
@@ -18,6 +19,7 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase
+from torchrl.envs.model_based.common import ModelBasedEnv
 
 spec_dict = {
     "bounded": BoundedTensorSpec,
@@ -361,3 +363,56 @@ class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
     def _get_in_obs(self, tensordict):
         obs = tensordict.get(*self.in_keys).diagonal(0, -1, -2).squeeze()
         return obs
+
+
+class DummyModelBasedEnv(ModelBasedEnv):
+    """
+    Dummy environnement for Model Based RL algorithms.
+    This class is meant to be used to test the model based environnement.
+
+    Args:
+        world_model (WorldModel): the world model to use for the environnement.
+        device (str): the device to use for the environnement.
+        dtype (torch.dtype): the dtype to use for the environnement.
+        batch_size (int): the batch size to use for the environnement.
+    """
+
+    def __init__(
+        self,
+        world_model,
+        device="cpu",
+        dtype=None,
+        batch_size=None,
+    ):
+        super(DummyModelBasedEnv, self).__init__(
+            world_model,
+            device=device,
+            dtype=dtype,
+            batch_size=batch_size,
+        )
+        self.action_spec = NdUnboundedContinuousTensorSpec((1,))
+        self.observation_spec = NdUnboundedContinuousTensorSpec((4,))
+        self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+
+    def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
+        td = TensorDict(
+            {
+                "hidden_observation": torch.randn(*self.batch_size, 4),
+                "next_hidden_observation": torch.randn(*self.batch_size, 4),
+                "action": torch.randn(*self.batch_size, 1),
+            },
+            batch_size=self.batch_size,
+        )
+        return td
+
+    def _set_seed(self, seed: int) -> int:
+        return seed + 1
+
+
+class ActionObsMergeLinear(nn.Module):
+    def __init__(self, in_size, out_size):
+        super().__init__()
+        self.linear = nn.Linear(in_size, out_size)
+
+    def forward(self, observation, action):
+        return self.linear(torch.cat([observation, action], dim=-1))

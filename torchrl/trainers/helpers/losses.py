@@ -5,6 +5,9 @@
 
 from dataclasses import dataclass
 
+from torchrl.envs.model_based.mbpo import MBPOEnv
+from torchrl.objectives.costs.mbpo import MBPOModelLoss
+
 __all__ = [
     "make_sac_loss",
     "make_dqn_loss",
@@ -12,6 +15,7 @@ __all__ = [
     "make_target_updater",
     "make_ppo_loss",
     "make_redq_loss",
+    "make_mbpo_model_loss",
 ]
 
 from typing import Optional, Tuple, Any
@@ -211,6 +215,35 @@ def make_ppo_loss(model, cfg) -> PPOLoss:
         entropy_coef=cfg.entropy_coef,
     )
     return loss_module
+
+
+def make_mbpo_model_loss(
+    single_world_model,
+    proof_env,
+    cfg,
+    observation_key="observation_vector",
+    device="cpu",
+    dtype=None,
+    batch_size=None,
+) -> Tuple[MBPOModelLoss, MBPOEnv]:
+    """Builds the MBPO model loss module."""
+    model_loss_module = MBPOModelLoss(
+        single_world_model, cfg, observation_key=observation_key
+    ).to(device)
+    world_model = model_loss_module.world_model
+    world_model_params = model_loss_module.world_model_params
+    world_model_buffers = model_loss_module.world_model_buffers
+    model_based_env = MBPOEnv(
+        world_model,
+        params=world_model_params,
+        buffers=world_model_buffers,
+        num_networks=cfg.num_world_models_ensemble,
+        device=device,
+        dtype=dtype,
+        batch_size=batch_size,
+    ).to(device)
+    model_based_env.set_specs_from_env(proof_env)
+    return model_loss_module, model_based_env
 
 
 @dataclass

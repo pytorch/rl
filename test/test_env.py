@@ -16,6 +16,8 @@ from mocking_classes import (
     DiscreteActionVecMockEnv,
     MockSerialEnv,
     DiscreteActionConvMockEnv,
+    DummyModelBasedEnv,
+    ActionObsMergeLinear,
 )
 from scipy.stats import chisquare
 from torch import nn
@@ -44,6 +46,7 @@ from torchrl.modules import (
     Actor,
     MLP,
 )
+from torchrl.modules.tensordict_module import WorldModelWrapper
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -188,6 +191,71 @@ def test_rollout_predictability(device):
     ).all()
 
 
+def _make_model_based_envs(
+    transformed_in,
+    transformed_out,
+    N,
+    selected_keys=None,
+    device="cpu",
+    kwargs=None,
+):
+    torch.manual_seed(0)
+    if transformed_in:
+
+        def create_env_fn():
+            env = DummyModelBasedEnv(device=device)
+            return env
+
+    else:
+
+        def create_env_fn():
+            env = DummyModelBasedEnv(device=device)
+            env = TransformedEnv(
+                env,
+                Compose(
+                    ObservationNorm(
+                        keys_in=["next_hidden_observation"], loc=0.5, scale=1.1
+                    ),
+                    RewardClipping(0, 0.1),
+                ),
+            )
+            return env
+
+    env0 = create_env_fn()
+    env_parallel = ParallelEnv(
+        N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
+    )
+    env_serial = SerialEnv(
+        N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
+    )
+    if transformed_out:
+        t_out = lambda: (
+            Compose(
+                ObservationNorm(
+                    keys_in=["next_hidden_observation"], loc=0.5, scale=1.1
+                ),
+                RewardClipping(0, 0.1),
+            )
+            if not transformed_in
+            else Compose(
+                ObservationNorm(keys_in=["next_hidden_observation"], loc=1.0, scale=1.0)
+            )
+        )
+        env0 = TransformedEnv(
+            env0,
+            t_out(),
+        )
+        env_parallel = TransformedEnv(
+            env_parallel,
+            t_out(),
+        )
+        env_serial = TransformedEnv(
+            env_serial,
+            t_out(),
+        )
+    return env_parallel, env_serial, env0
+
+
 def _make_envs(
     env_name,
     frame_skip,
@@ -289,6 +357,40 @@ def _make_envs(
             )
 
     return env_parallel, env_serial, env0
+
+
+class TestModelBasedEnv:
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_mb_rollout(self, device, seed=0):
+
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        world_model = WorldModelWrapper(
+            TensorDictModule(
+                ActionObsMergeLinear(5, 4),
+                in_keys=["hidden_observation", "action"],
+                out_keys=["next_hidden_observation"],
+            ),
+            TensorDictModule(
+                nn.Linear(4, 1),
+                in_keys=["hidden_observation"],
+                out_keys=["reward"],
+            ),
+        )
+        mb_env = DummyModelBasedEnv(
+            world_model, device=device, batch_size=torch.Size([10])
+        )
+        mb_env.set_seed(seed)
+        mb_env.reset()
+        rollout1 = mb_env.rollout(max_steps=100)
+
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        mb_env.set_seed(seed)
+        mb_env.reset()
+        rollout2 = mb_env.rollout(max_steps=100)
+
+        assert_allclose_td(rollout1, rollout2)
 
 
 class TestParallel:

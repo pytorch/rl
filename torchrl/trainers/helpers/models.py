@@ -18,6 +18,7 @@ from torchrl.modules import (
     TensorDictModule,
     NormalParamWrapper,
     TensorDictSequence,
+    ProbabilisticTensorDictModule,
 )
 from torchrl.modules.distributions import (
     Delta,
@@ -51,6 +52,7 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
     ProbabilisticActor,
 )
+from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 
 DISTRIBUTIONS = {
     "delta": Delta,
@@ -1146,6 +1148,101 @@ def make_redq_model(
             net(td)
     del td
     return model
+
+
+def make_mbpo_model(
+    proof_environment: EnvBase,
+    cfg: "DictConfig",
+    device: DEVICE_TYPING = "cpu",
+    observation_key="observation_vector",
+    action_key="action",
+) -> nn.ModuleList:
+    if cfg.from_pixels:
+        raise NotImplementedError("from_pixels not implemented")
+    else:
+        single_world_model_backbone = TensorDictModule(
+            MLP(
+                out_features=cfg.hidden_world_model,
+                depth=cfg.num_layers_world_model - 1,
+                num_cells=cfg.hidden_world_model,
+                activation_class=nn.SiLU,
+                activate_last_layer=True,
+            ),
+            in_keys=[observation_key, action_key],
+            out_keys=["hidden"],
+        )
+        single_world_model_state_pred = TensorDictModule(
+            NormalParamWrapper(
+                nn.Linear(
+                    cfg.hidden_world_model,
+                    2
+                    * proof_environment.observation_spec[
+                        f"next_{observation_key}"
+                    ].shape[-1],
+                ),
+                scale_mapping="minmax_softplus",
+                scale_lb=1e-10,
+            ),
+            in_keys=["hidden"],
+            out_keys=[f"next_{observation_key}_loc", f"next_{observation_key}_scale"],
+        )
+        single_world_modeler = ProbabilisticTensorDictModule(
+            TensorDictSequence(
+                single_world_model_backbone, single_world_model_state_pred
+            ),
+            distribution_class=d.Normal,
+            dist_param_keys={
+                "loc": f"next_{observation_key}_loc",
+                "scale": f"next_{observation_key}_scale",
+            },
+            out_key_sample=f"next_{observation_key}",
+        )
+        single_world_model_reward_pred = ProbabilisticTensorDictModule(
+            TensorDictModule(
+                NormalParamWrapper(
+                    nn.Linear(cfg.hidden_world_model, 2),
+                    scale_mapping="minmax_softplus",
+                    scale_lb=1e-10,
+                ),
+                in_keys=["hidden"],
+                out_keys=["reward_loc", "reward_scale"],
+            ),
+            distribution_class=d.Normal,
+            dist_param_keys={"loc": "reward_loc", "scale": "reward_scale"},
+            out_key_sample="reward",
+        )
+
+        single_world_model = WorldModelWrapper(
+            single_world_modeler, single_world_model_reward_pred
+        ).to(device)
+        with torch.no_grad(), set_exploration_mode("random"):
+            td = proof_environment.rollout(1000)
+            td = td.to(device)
+            single_world_model(td)
+        del td
+        return single_world_model
+
+
+@dataclass
+class MBPOConfig:
+    model_holdout_ratio: float = 0.2
+    world_model_lr: float = 1e-3
+    hidden_world_model: int = 256
+    num_layers_world_model: int = 4
+    start_imagination_horizon: int = 1
+    start_imagination_horizon_epoch: int = 20
+    end_imagination_horizon: int = 1
+    end_imagination_horizon_epoch: int = 100
+    sac_lr: float = 0.0003
+    model_batch_size: int = 256
+    sac_batch_size: int = 256
+    real_data_ratio: float = 0.1
+    num_world_models_ensemble: int = 7
+    num_elites: int = 5
+    num_model_rollouts: int = 400
+    train_model_every_k_optim_step: int = 250
+    keep_model_samples_n_collect_steps: int = 1
+    num_sac_training_steps_per_optim_step: int = 20
 
 
 @dataclass
