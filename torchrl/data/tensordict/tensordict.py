@@ -558,8 +558,8 @@ dtype=torch.float32)},
 
     def _convert_to_tensordict(self, dict_value: dict) -> TensorDictBase:
         return TensorDict(
-                    dict_value, batch_size=self.batch_size, device=self.device_safe()
-                )
+            dict_value, batch_size=self.batch_size, device=self.device_safe()
+        )
 
     def _process_input(
         self,
@@ -2915,7 +2915,10 @@ torch.Size([3, 2])
             )
             if key not in self.keys():
                 raise KeyError(f"key {key} not found in {self.keys()}")
-            if not isinstance(tensor, dict) and tensor.shape[: self.batch_dims] != self.batch_size:
+            if (
+                not isinstance(tensor, dict)
+                and tensor.shape[: self.batch_dims] != self.batch_size
+            ):
                 raise RuntimeError(
                     f"tensor.shape={tensor.shape[:self.batch_dims]} and "
                     f"self.batch_size={self.batch_size} mismatch"
