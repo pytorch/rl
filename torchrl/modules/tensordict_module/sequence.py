@@ -439,7 +439,6 @@ class TensorDictSequence(TensorDictModule):
         **kwargs,
     ) -> Tuple[torch.distributions.Distribution, ...]:
         L = len(self.module)
-        print("get_dist", kwargs)
         if isinstance(self.module[-1], ProbabilisticTensorDictModule):
             if "params" in kwargs and "buffers" in kwargs:
                 params = kwargs["params"]
