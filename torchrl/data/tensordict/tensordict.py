@@ -2073,12 +2073,14 @@ class TensorDict(TensorDictBase):
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
-        # TODO Handle ._is_shared
         if self._is_shared is None:
             try:
                 self._is_shared = value.is_shared()
             except NotImplementedError:
                 # when running functorch, a NotImplementedError may be raised
+                pass
+            except AttributeError:
+                # when setting a value of type dict
                 pass
         if self._is_memmap is None:
             self._is_memmap = isinstance(value, MemmapTensor)
@@ -2199,7 +2201,7 @@ class TensorDict(TensorDictBase):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
         # do we need this?
-        if isinstance(value, dict):
+        if not isinstance(value, _accepted_classes):
             value = self._process_input(
                 value, check_tensor_shape=False, check_device=False
             )
@@ -2986,13 +2988,16 @@ torch.Size([3, 2])
     ) -> SubTensorDict:
         if not isinstance(idx, tuple):
             idx = (idx,)
+        if not isinstance(value, _accepted_classes):
+            value = self._process_input(
+                value, check_tensor_shape=False, check_device=False
+            )
         if discard_idx_attr:
             self._source.set_at_(key, value, idx)
         else:
             tensor = self._source.get_at(key, self.idx)
             tensor[idx] = value
             self._source.set_at_(key, tensor, self.idx)
-        # TODO Handle value.requires_grad
         if key in self._dict_meta:
             self._dict_meta[key].requires_grad = value.requires_grad
         return self
@@ -3919,6 +3924,8 @@ class SavedTensorDict(TensorDictBase):
     def set_(
         self, key: str, value: Union[dict, COMPATIBLE_TYPES], no_check: bool = False
     ) -> TensorDictBase:
+        if key not in self.keys():
+            raise KeyError(f"key {key} not found in {self.keys()}")
         self.set(key, value)
         return self
 
@@ -4308,6 +4315,12 @@ class _CustomOpTensorDict(TensorDictBase):
                     f"{self.__class__.__name__} does not support setting values. "
                     f"Consider calling .contiguous() before calling this method."
                 )
+            value = self._process_input(
+                value,
+                check_device=False,
+                check_tensor_shape=True,
+            )
+
         value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(value))
         self._source.set_(key, value)
         return self
@@ -4324,6 +4337,10 @@ class _CustomOpTensorDict(TensorDictBase):
                 f"same storage. Setting values in place is not currently "
                 f"supported in this setting, consider calling "
                 f"`td.clone()` before `td.set_at_(...)`"
+            )
+        if not isinstance(value, _accepted_classes):
+            value = self._process_input(
+                value, check_tensor_shape=False, check_device=False
             )
         transformed_tensor[idx] = value
         return self
