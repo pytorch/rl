@@ -196,8 +196,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
     def _call_module(
         self,
         tensordict: TensorDictBase,
-        params: Optional[List[Tensor]] = None,
-        buffers: Optional[List[Tensor]] = None,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> TensorDictBase:
         return self.module(tensordict, params=params, buffers=buffers, **kwargs)
@@ -224,8 +224,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
-        params: Optional[List[Tensor]] = None,
-        buffers: Optional[List[Tensor]] = None,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> Tuple[d.Distribution, TensorDictBase]:
         interaction_mode = exploration_mode()
@@ -268,8 +268,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
-        params: Optional[List[Tensor]] = None,
-        buffers: Optional[List[Tensor]] = None,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> TensorDictBase:
 

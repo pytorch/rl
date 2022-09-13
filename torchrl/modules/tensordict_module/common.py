@@ -314,8 +314,8 @@ class TensorDictModule(nn.Module):
     def _call_module(
         self,
         tensors: Sequence[Tensor],
-        params: Optional[List[Tensor]] = None,
-        buffers: Optional[List[Tensor]] = None,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> Union[Tensor, Sequence[Tensor]]:
         err_msg = "Did not find the {0} keyword argument to be used with the functional module. Check it was passed to the TensorDictModule method."
@@ -364,8 +364,8 @@ class TensorDictModule(nn.Module):
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
-        params: Optional[List[Tensor]] = None,
-        buffers: Optional[List[Tensor]] = None,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> TensorDictBase:
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)

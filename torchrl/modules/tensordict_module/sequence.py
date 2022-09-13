@@ -266,8 +266,8 @@ class TensorDictSequence(TensorDictModule):
         self,
         module,
         tensordict,
-        params: Optional[List[Tensor]] = None,
-        buffers: Optional[List[Tensor]] = None,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ):
         tensordict_keys = set(tensordict.keys())
@@ -287,8 +287,8 @@ class TensorDictSequence(TensorDictModule):
         self,
         tensordict: TensorDictBase,
         tensordict_out=None,
-        params: Optional[List[Tensor]] = None,
-        buffers: Optional[List[Tensor]] = None,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> TensorDictBase:
         if params is not None and buffers is not None:
