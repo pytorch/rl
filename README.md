@@ -130,6 +130,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     transformer.select_subsequence(in_keys=["tgt", "memory"])  # returns the decoder
     ```
     </details>
+
     The corresponding [tutorial](tutorials/tensordictmodule.ipynb) provides more context about its features.
  
 - a generic [trainer class](torchrl/trainers/trainers.py)<sup>(1)</sup> that 
@@ -308,7 +309,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     <details>
       <summary>Code</summary>
     
-    ### loss modules
+    ### Loss modules
     ```python
     from torchrl.objectives.costs import DQNLoss
     loss_module = DQNLoss(value_network=value_network, gamma=0.99)
@@ -325,7 +326,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     </details>
 
 - various [recipes](torchrl/trainers/helpers/models.py) to build models that 
-    correspond to the environment being deployed;
+    correspond to the environment being deployed.
 
 ## Examples, tutorials and demos
 
@@ -343,12 +344,10 @@ library can do.
 
 ## Installation
 Create a conda environment where the packages will be installed. 
-Before installing anything, make sure you have the latest version of the `ninja` library:
 
 ```
 conda create --name torch_rl python=3.9
 conda activate torch_rl
-pip3 install ninja
 ```
 
 Depending on the use of functorch that you want to make, you may want to install the latest (nightly) pytorch release or the latest stable version of pytorch:
@@ -391,7 +390,9 @@ pip3 install "git+https://github.com/pytorch/pytorch.git@$PYTORCH_VERSION#subdir
 ```
 
 If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message 
-`(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
+`(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, 
+try erasing the previously created build artifacts (`torchrl.egg-info/`, `build/`, `torchrl/_torchsl.so`)
+or re-clone the library from GitHub, then try
 
 ```
 PYTORCH_VERSION=`python -c "import torch.version; print(torch.version.git_version)"`
@@ -527,6 +528,9 @@ In the near future, we plan to:
 - provide tutorials on how to design new actors or environment wrappers;
 - implement IMPALA (as a distributed RL example) and Meta-RL algorithms;
 - improve the tests, documentation and nomenclature.
+
+We welcome any contribution, should you want to contribute to these new features
+or any other, lister or not, in the issues section of this repository.
 
 # License
 TorchRL is licensed under the MIT License. See [LICENSE](LICENSE) for details.
