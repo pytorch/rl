@@ -330,9 +330,7 @@ class TensorDictSequence(TensorDictModule):
 
         elif not len(kwargs):
             for module in self.module:
-                tensordict = self._run_module(
-                    module, tensordict, **kwargs
-                )
+                tensordict = self._run_module(module, tensordict, **kwargs)
         else:
             raise RuntimeError(
                 "TensorDictSequence does not support keyword arguments other than 'tensordict_out', 'in_keys', 'out_keys' 'params', 'buffers' and 'vmap'"
