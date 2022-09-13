@@ -29,7 +29,7 @@ class DreamerModelLoss(LossModule):
         world_model: TensorDictModule,
         cfg: "DictConfig",
         lambda_kl: float = 1.0,
-        lambda_reco: float = 0.1,
+        lambda_reco: float = 1.0,
         lambda_reward: float = 1.0,
         reco_loss: Optional[str] = None,
         reward_loss: Optional[str] = None,
@@ -38,8 +38,8 @@ class DreamerModelLoss(LossModule):
         super().__init__()
         self.world_model = world_model
         self.cfg = cfg
-        self.reco_loss = reco_loss if reco_loss is not None else "smooth_l1"
-        self.reward_loss = reward_loss if reward_loss is not None else "smooth_l1"
+        self.reco_loss = reco_loss if reco_loss is not None else "l2"
+        self.reward_loss = reward_loss if reward_loss is not None else "l2"
         self.lambda_kl = lambda_kl
         self.lambda_reco = lambda_reco
         self.lambda_reward = lambda_reward
@@ -74,8 +74,7 @@ class DreamerModelLoss(LossModule):
                 tensordict.get("reco_pixels"),
                 self.reco_loss,
             )
-            .mean((0, 1))
-            .sum()
+            .mean()
         )
         reward_loss = distance_loss(
             tensordict.get("reward"),
@@ -107,7 +106,7 @@ class DreamerModelLoss(LossModule):
             / (2 * prior_std ** 2)
             - 0.5
         )
-        kl = kl.clamp_min(self.free_nats).mean()
+        kl = kl.mean().clamp_min(self.free_nats)
         return kl
 
 
