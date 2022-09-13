@@ -267,13 +267,12 @@ class TensorDictModule(nn.Module):
             tensordict_out.set(_out_key, _tensor)
         return tensordict_out
 
-    def _make_vmap(self, kwargs, n_input):
+    def _make_vmap(self, buffers, kwargs, n_input):
         if "vmap" in kwargs and kwargs["vmap"]:
             if not isinstance(kwargs["vmap"], (tuple, bool)):
                 raise RuntimeError(
                     "vmap argument must be a boolean or a tuple of dim expensions."
                 )
-            _buffers = "buffers" in kwargs
             # if vmap is a tuple, we make sure the number of inputs after params and buffers match
             if isinstance(kwargs["vmap"], (tuple, list)):
                 err_msg = f"the vmap argument had {len(kwargs['vmap'])} elements, but the module has {len(self.in_keys)} inputs"
@@ -306,12 +305,14 @@ class TensorDictModule(nn.Module):
                     )
             else:
                 _vmap = (
-                    (0, 0, *(None,) * n_input) if _buffers else (0, *(None,) * n_input)
+                    (0, 0, *(None,) * n_input)
+                    if buffers is not None
+                    else (0, *(None,) * n_input)
                 )
             return _vmap
 
     def _call_module(
-        self, tensors: Sequence[Tensor], **kwargs
+        self, tensors: Sequence[Tensor], params=None, buffers=None, **kwargs
     ) -> Union[Tensor, Sequence[Tensor]]:
         err_msg = "Did not find the {0} keyword argument to be used with the functional module. Check it was passed to the TensorDictModule method."
         if isinstance(
@@ -323,37 +324,33 @@ class TensorDictModule(nn.Module):
                 rlFunctionalModuleWithBuffers,
             ),
         ):
-            _vmap = self._make_vmap(kwargs, len(tensors))
+            _vmap = self._make_vmap(buffers, kwargs, len(tensors))
             if _vmap:
                 module = vmap(self.module, _vmap)
             else:
                 module = self.module
 
         if isinstance(self.module, (FunctionalModule, rlFunctionalModule)):
-            if "params" not in kwargs:
+            if params is None:
                 raise KeyError(err_msg.format("params"))
             kwargs_pruned = {
-                key: item
-                for key, item in kwargs.items()
-                if key not in ("params", "vmap")
+                key: item for key, item in kwargs.items() if key not in ("vmap")
             }
-            out = module(kwargs["params"], *tensors, **kwargs_pruned)
+            out = module(params, *tensors, **kwargs_pruned)
             return out
 
         elif isinstance(
             self.module, (FunctionalModuleWithBuffers, rlFunctionalModuleWithBuffers)
         ):
-            if "params" not in kwargs:
+            if params is None:
                 raise KeyError(err_msg.format("params"))
-            if "buffers" not in kwargs:
+            if buffers is None:
                 raise KeyError(err_msg.format("buffers"))
 
             kwargs_pruned = {
-                key: item
-                for key, item in kwargs.items()
-                if key not in ("params", "buffers", "vmap")
+                key: item for key, item in kwargs.items() if key not in ("vmap")
             }
-            out = module(kwargs["params"], kwargs["buffers"], *tensors, **kwargs_pruned)
+            out = module(params, buffers, *tensors, **kwargs_pruned)
             return out
         else:
             out = self.module(*tensors, **kwargs)
@@ -363,10 +360,12 @@ class TensorDictModule(nn.Module):
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
+        params=None,
+        buffers=None,
         **kwargs,
     ) -> TensorDictBase:
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
-        tensors = self._call_module(tensors, **kwargs)
+        tensors = self._call_module(tensors, params=params, buffers=buffers, **kwargs)
         if not isinstance(tensors, tuple):
             tensors = (tensors,)
         tensordict_out = self._write_to_tensordict(
