@@ -43,6 +43,7 @@ from torchrl.envs.transforms.transforms import (
     PinMemoryTransform,
     CenterCrop,
     UnsqueezeTransform,
+    SqueezeTransform,
 )
 
 TIMEOUT = 10.0
@@ -291,6 +292,7 @@ class TestTransforms:
                 for key in keys
             },
             batch,
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         resize(td)
@@ -330,6 +332,7 @@ class TestTransforms:
                 for key in keys
             },
             batch,
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         cc(td)
@@ -368,6 +371,7 @@ class TestTransforms:
                 for key in keys
             },
             batch,
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         flatten(td)
@@ -409,6 +413,7 @@ class TestTransforms:
                 for key in keys
             },
             batch,
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         unsqueeze(td)
@@ -443,6 +448,116 @@ class TestTransforms:
             for key in keys:
                 assert observation_spec[key].shape == expected_size
 
+    @pytest.mark.parametrize("unsqueeze_dim", [1, -2])
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("size", [[], [4]])
+    @pytest.mark.parametrize(
+        "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "keys_inv", [[], ["action", "some_other_key"], ["next_observation_pixels"]]
+    )
+    def test_unsqueeze_inv(
+        self, keys, keys_inv, size, nchannels, batch, device, unsqueeze_dim
+    ):
+        torch.manual_seed(0)
+        keys_total = set(keys + keys_inv)
+        unsqueeze = UnsqueezeTransform(
+            unsqueeze_dim, keys_in=keys, keys_inv_in=keys_inv
+        )
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
+                for key in keys_total
+            },
+            batch,
+        )
+
+        unsqueeze.inv(td)
+
+        expected_size = [*size, nchannels, 16, 16]
+        for key in keys_total.difference(keys_inv):
+            assert td.get(key).shape[len(batch) :] == torch.Size(expected_size)
+
+        if expected_size[unsqueeze_dim] == 1:
+            del expected_size[unsqueeze_dim]
+        for key in keys_inv:
+            assert td.get(key).shape[len(batch) :] == torch.Size(expected_size)
+
+    @pytest.mark.parametrize("squeeze_dim", [1, -2])
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("size", [[], [4]])
+    @pytest.mark.parametrize(
+        "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "keys_inv", [[], ["action", "some_other_key"], ["next_observation_pixels"]]
+    )
+    def test_squeeze(self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim):
+        torch.manual_seed(0)
+        keys_total = set(keys + keys_inv)
+        squeeze = SqueezeTransform(squeeze_dim, keys_in=keys, keys_inv_in=keys_inv)
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
+                for key in keys_total
+            },
+            batch,
+        )
+        squeeze(td)
+
+        expected_size = [*size, nchannels, 16, 16]
+        for key in keys_total.difference(keys):
+            assert td.get(key).shape[len(batch) :] == torch.Size(expected_size)
+
+        if expected_size[squeeze_dim] == 1:
+            del expected_size[squeeze_dim]
+        for key in keys:
+            assert td.get(key).shape[len(batch) :] == torch.Size(expected_size)
+
+    @pytest.mark.parametrize("squeeze_dim", [1, -2])
+    @pytest.mark.parametrize("nchannels", [1, 3])
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    @pytest.mark.parametrize("size", [[], [4]])
+    @pytest.mark.parametrize(
+        "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "keys_inv", [[], ["action", "some_other_key"], ["next_observation_pixels"]]
+    )
+    def test_squeeze_inv(
+        self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim
+    ):
+        torch.manual_seed(0)
+        keys_total = set(keys + keys_inv)
+        squeeze = SqueezeTransform(squeeze_dim, keys_in=keys, keys_inv_in=keys_inv)
+        td = TensorDict(
+            {
+                key: torch.randn(*batch, *size, nchannels, 16, 16, device=device)
+                for key in keys_total
+            },
+            batch,
+        )
+        squeeze.inv(td)
+
+        expected_size = [*size, nchannels, 16, 16]
+        for key in keys_total.difference(keys_inv):
+            assert td.get(key).shape[len(batch) :] == torch.Size(expected_size)
+
+        if squeeze_dim < 0:
+            expected_size.insert(len(expected_size) + squeeze_dim + 1, 1)
+        else:
+            expected_size.insert(squeeze_dim, 1)
+        expected_size = torch.Size(expected_size)
+
+        for key in keys_inv:
+            assert td.get(key).shape[len(batch) :] == torch.Size(expected_size)
+
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize(
         "keys", [["next_observation", "some_other_key"], ["next_observation_pixels"]]
@@ -454,7 +569,9 @@ class TestTransforms:
         gs = GrayScale(keys_in=keys)
         dont_touch = torch.randn(1, nchannels, 16, 16, device=device)
         td = TensorDict(
-            {key: torch.randn(1, nchannels, 16, 16, device=device) for key in keys}, [1]
+            {key: torch.randn(1, nchannels, 16, 16, device=device) for key in keys},
+            [1],
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         gs(td)
@@ -490,6 +607,7 @@ class TestTransforms:
                 for key in keys
             },
             batch,
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         totensorimage(td)
@@ -535,6 +653,7 @@ class TestTransforms:
                 for key in keys
             },
             batch,
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         compose(td)
@@ -587,6 +706,7 @@ class TestTransforms:
                 for key in keys_total
             },
             [1],
+            device=device,
         )
 
         compose.inv(td)
@@ -711,7 +831,7 @@ class TestTransforms:
         key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
         key2_tensor = torch.ones(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(dict(zip(keys, key_tensors)), [1])
+        td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
         cat_frames = CatFrames(N=N, keys_in=keys)
 
         cat_frames(td)
@@ -731,7 +851,7 @@ class TestTransforms:
         key1_tensor = torch.zeros(1, 1, 3, 3, device=device)
         key2_tensor = torch.ones(1, 1, 3, 3, device=device)
         key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(dict(zip(keys, key_tensors)), [1])
+        td = TensorDict(dict(zip(keys, key_tensors)), [1], device=device)
         cat_frames = CatFrames(N=N, keys_in=keys)
 
         cat_frames(td)
@@ -781,6 +901,7 @@ class TestTransforms:
                 for key in keys_total
             },
             [1],
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
         double2float(td)
@@ -841,6 +962,7 @@ class TestTransforms:
                 for value, key in enumerate(keys)
             },
             [1],
+            device=device,
         )
         td.set("dont touch", dont_touch.clone())
 
@@ -892,11 +1014,9 @@ class TestTransforms:
         misc_copy = misc.clone()
 
         td = TensorDict(
-            {
-                "misc": misc,
-                "reward": reward,
-            },
+            {"misc": misc, "reward": reward},
             batch,
+            device=device,
         )
         br(td)
         assert td["reward"] is reward
@@ -922,6 +1042,7 @@ class TestTransforms:
                 "reward": torch.randn(*batch, 1, device=device),
             },
             batch,
+            device=device,
         )
         td.set("dont touch", torch.randn(*batch, 1, device=device))
         td_copy = td.clone()
@@ -942,7 +1063,9 @@ class TestTransforms:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_pin_mem(self, device):
         pin_mem = PinMemoryTransform()
-        td = TensorDict({key: torch.randn(3) for key in ["a", "b", "c"]}, [])
+        td = TensorDict(
+            {key: torch.randn(3) for key in ["a", "b", "c"]}, [], device=device
+        )
         pin_mem(td)
         for item in td.values():
             assert item.is_pinned
@@ -1105,10 +1228,12 @@ class TestR3M:
             stack_images=stack_images,
         )
 
-        base_env_constructor = lambda: TransformedEnv(
-            DiscreteActionConvMockEnvNumpy().to(device),
-            CatTensors(["next_pixels"], "next_pixels2", del_keys=False),
-        )
+        def base_env_constructor():
+            return TransformedEnv(
+                DiscreteActionConvMockEnvNumpy().to(device),
+                CatTensors(["next_pixels"], "next_pixels2", del_keys=False),
+            )
+
         assert base_env_constructor().device == device
         if parallel:
             base_env = ParallelEnv(3, base_env_constructor)

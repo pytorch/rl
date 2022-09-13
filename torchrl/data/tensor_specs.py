@@ -174,7 +174,7 @@ class BoxList(Box):
 
     """
 
-    boxes: list
+    boxes: List
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> BoxList:
         return BoxList([box.to(dest) for box in self.boxes])
@@ -236,6 +236,15 @@ class TensorSpec:
 
         """
         if not isinstance(val, torch.Tensor):
+            if isinstance(val, list):
+                if len(val) == 1:
+                    # gym used to return lists of images since 0.26.0
+                    # We convert these lists in np.array or take the first element
+                    # if there is just one.
+                    # See https://github.com/facebookresearch/rl/pull/403/commits/73d77d033152c61d96126ccd10a2817fecd285a1
+                    val = val[0]
+                else:
+                    val = np.array(val)
             if _CHECK_IMAGES and val.dtype is np.dtype("uint8"):
                 # images can become noisy during training. if the CHECK_IMAGES
                 # env variable is True, we check that no more than half of the

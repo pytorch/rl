@@ -364,7 +364,8 @@ If the generation of this artifact in MacOs M1 doesn't work correctly or in the 
 `(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
 
 ```
-ARCHFLAGS="-arch arm64" pip3 install "git+https://github.com/pytorch/functorch.git"
+PYTORCH_VERSION=`python -c "import torch.version; print(torch.version.git_version)"`
+ARCHFLAGS="-arch arm64" pip3 install "git+https://github.com/pytorch/pytorch.git@$PYTORCH_VERSION#subdirectory=functorch"
 ```
 
 **Torchrl**
@@ -425,10 +426,16 @@ pip3 install moviepy
 pip3 install dm_control 
 
 # gym, atari games
-pip3 install gym "gym[accept-rom-license]" pygame gym_retro
+pip3 install gym[atari] "gym[accept-rom-license]" pygame gym_retro
 
 # tests
 pip3 install pytest pyyaml pytest-instafail
+
+# tensorboard
+pip3 install tensorboard
+
+# wandb
+pip3 install wandb
 ```
 
 **Troubleshooting**

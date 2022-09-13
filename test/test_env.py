@@ -523,8 +523,8 @@ class TestParallel:
     @pytest.mark.parametrize(
         "env_name",
         [
-            "Pendulum-v1",
             "ALE/Pong-v5",
+            "Pendulum-v1",
         ],
     )
     @pytest.mark.parametrize("frame_skip", [4, 1])

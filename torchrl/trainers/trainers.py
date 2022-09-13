@@ -9,7 +9,7 @@ import pathlib
 import warnings
 from collections import OrderedDict, defaultdict
 from textwrap import indent
-from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type, List
+from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type, List, Any
 
 import numpy as np
 import torch.nn
@@ -112,7 +112,7 @@ class Trainer:
     # trackers
     _optim_count: int = 0
     _collected_frames: int = 0
-    _last_log: dict = {}
+    _last_log: Dict[str, Any] = {}
     _last_save: int = 0
     _log_interval: int = 10000
 
@@ -356,7 +356,7 @@ class Trainer:
 
         self.collected_frames = 0
 
-        for i, batch in enumerate(self.collector):
+        for batch in self.collector:
             batch = self._process_batch_hook(batch)
             self._pre_steps_log_hook(batch)
             current_frames = (
@@ -684,8 +684,17 @@ class RewardNormalizer:
     def normalize_reward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.to_tensordict()  # make sure it is not a SubTensorDict
         reward = tensordict.get("reward")
-        reward = reward - self._reward_stats["mean"].to(tensordict.device)
-        reward = reward / self._reward_stats["std"].to(tensordict.device)
+
+        reward_device = (
+            reward.device_safe() if hasattr(reward, "device_safe") else reward.device
+        )
+        if reward_device is not None:
+            reward = reward - self._reward_stats["mean"].to(reward_device)
+            reward = reward / self._reward_stats["std"].to(reward_device)
+        else:
+            reward = reward - self._reward_stats["mean"]
+            reward = reward / self._reward_stats["std"]
+
         tensordict.set("reward", reward * self.scale)
         self._normalize_has_been_called = True
         return tensordict
@@ -777,7 +786,7 @@ class BatchSubSampler:
             )
         else:
             traj_len = (
-                torch.ones(batch.shape[0], device=batch.device, dtype=torch.bool)
+                torch.ones(batch.shape[0], device=batch.device_safe(), dtype=torch.bool)
                 * batch.shape[1]
             )
         len_mask = traj_len >= sub_traj_len
@@ -792,7 +801,7 @@ class BatchSubSampler:
             )
         traj_idx = valid_trajectories[
             torch.randint(
-                valid_trajectories.numel(), (batch_size,), device=batch.device
+                valid_trajectories.numel(), (batch_size,), device=batch.device_safe()
             )
         ]
 

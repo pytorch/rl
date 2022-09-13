@@ -78,7 +78,7 @@ def _dmcontrol_to_torchrl_spec_transform(
         raise NotImplementedError
 
 
-def _get_envs(to_dict: bool = True) -> dict:
+def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
     if not _has_dmc:
         return dict()
     if not to_dict:

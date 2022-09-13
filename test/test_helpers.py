@@ -506,7 +506,7 @@ def test_seed_generator(initial_seed):
 
     # Check unique seed generation
     if initial_seed == 0:
-        with pytest.raises(ValueError) as e:
+        with pytest.raises(ValueError):
             generate_seeds(initial_seed - 1, num_seeds)
         return
     else:
