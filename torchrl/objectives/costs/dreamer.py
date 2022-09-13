@@ -151,7 +151,7 @@ class DreamerActorLoss(LossModule):
         
         lambda_target  = self.lambda_target(
                 tensordict.get("reward"), tensordict.get("predicted_value")
-            ),
+            )
         tensordict = tensordict[:, :-1]
         tensordict.set(
             "lambda_target", lambda_target
@@ -174,8 +174,6 @@ class DreamerActorLoss(LossModule):
         return vec_td_lambda_return_estimate(
             self.gamma, self.lmbda, value[:, 1:], reward[:, :-1], done[:, :-1]
         )
-
-
 class DreamerValueLoss(LossModule):
     def __init__(
         self,
