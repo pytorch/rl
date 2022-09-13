@@ -1036,7 +1036,7 @@ def test_batch_locked(device):
 
     td = env.reset()
     td["action"] = env.action_spec.rand(env.batch_size)
-    td_expanded = td.expand(2).clone()
+    td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
     td = env.step(td)
 
     with pytest.raises(
@@ -1105,7 +1105,7 @@ def test_batch_locked_transformed(device):
 
     td = env.reset()
     td["action"] = env.action_spec.rand(env.batch_size)
-    td_expanded = td.expand(2).clone()
+    td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
     td = env.step(td)
 
     with pytest.raises(
