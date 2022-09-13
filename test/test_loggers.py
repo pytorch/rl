@@ -53,7 +53,7 @@ class TestTensorboard:
             # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
             # the first 64 frames are black and the next 64 are white
             video = torch.cat(
-                (torch.zeros(64, 1, 32, 32), torch.mul(torch.ones(64, 1, 32, 32), 255))
+                (torch.zeros(64, 1, 32, 32), torch.full((64, 1, 32, 32), 255))
             )
             video = video[None, :]
             for i in range(3):
@@ -121,7 +121,7 @@ class TestCSVLogger:
             # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
             # the first 64 frames are black and the next 64 are white
             video = torch.cat(
-                (torch.zeros(64, 1, 32, 32), torch.mul(torch.ones(64, 1, 32, 32), 255))
+                (torch.zeros(64, 1, 32, 32), torch.full((64, 1, 32, 32), 255))
             )
             video = video[None, :]
             for i in range(3):
@@ -185,7 +185,7 @@ class TestWandbLogger:
             # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
             # the first 64 frames are black and the next 64 are white
             video = torch.cat(
-                (torch.zeros(64, 1, 32, 32), torch.mul(torch.ones(64, 1, 32, 32), 255))
+                (torch.zeros(64, 1, 32, 32), torch.full((64, 1, 32, 32), 255))
             )
             video = video[None, :]
             logger.log_video(
