@@ -65,12 +65,12 @@ def mappings(key: str) -> Callable:
 
     Args:
         key (str): one of "softplus", "exp", "relu", "expln",
-        or "biased_softplus". If key beggins with "biased_softplus",
-        then the key needs to take the following form:
-        "biased_softplus_{bias}" where bias is a float and the bias term of the biased softplus.
-        or "biased_softplus_{bias}_{min_val}" where bias is a float and the bias term,
-        and min_val is the minimum value of the biased softplus.
-
+            or "biased_softplus". If the key beggins with "biased_softplus",
+            then it needs to take the following form:
+            ```"biased_softplus_{bias}"``` where ```bias``` can be converted to a floating point number that will be used to bias the softplus function.
+            Alternatively, the ```"biased_softplus_{bias}_{min_val}"``` syntax can be used. In that case, the additional ```min_val``` term is a floating point
+            number that will be used to encode the minimum value of the softplus transform.
+            In practice, the equation used is softplus(x + bias) + min_val, where bias and min_val are values computed such that the conditions above are met.
     Returns:
          a Callable
 
@@ -85,10 +85,10 @@ def mappings(key: str) -> Callable:
     if key in _mappings:
         return _mappings[key]
     elif key.startswith("biased_softplus"):
-        stripped_key = key.replace("biased_softplus_", "").split("_")
-        if len(stripped_key) == 1:
+        stripped_key = key.split("_")
+        if len(stripped_key) == 3:
             return biased_softplus(float(stripped_key[-1]))
-        elif len(stripped_key) == 2:
+        elif len(stripped_key) == 4:
             return biased_softplus(
                 float(stripped_key[-2]), min_val=float(stripped_key[-1])
             )
