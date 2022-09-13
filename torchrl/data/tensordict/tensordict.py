@@ -659,9 +659,10 @@ dtype=torch.float32)},
 
         raise NotImplementedError(f"{self.__class__.__name__}")
 
-    def expand(self, *shape: int) -> TensorDictBase:
+    def expand(self, *shape) -> TensorDictBase:
         """Expands each tensors of the tensordict according to
         `tensor.expand(*shape, *tensor.shape)`
+        Supports iterables to specify the shape
 
         Examples:
             >>> td = TensorDict(source={'a': torch.zeros(3, 4, 5),
@@ -672,6 +673,9 @@ dtype=torch.float32)},
         """
         d = dict()
         tensordict_dims = self.batch_dims
+
+        if len(shape) == 1 and isinstance(shape[0], Sequence):
+            shape = tuple(shape[0])
 
         # new shape dim check
         if len(shape) < len(self.shape):
@@ -1464,7 +1468,7 @@ dtype=torch.float32)},
             return self
         else:
             tensordict_out = TensorDict(
-                {}, batch_size=self.batch_size, device=self.device
+                {}, batch_size=self.batch_size, device=self.device_safe()
             )
             for key, value in self.items():
                 if key in to_flatten:
@@ -2002,12 +2006,16 @@ class TensorDict(TensorDictBase):
                     self.set(key, value.pin_memory(), inplace=False)
         return self
 
-    def expand(self, *shape: int) -> TensorDictBase:
+    def expand(self, *shape) -> TensorDictBase:
         """Expands every tensor with `(*shape, *tensor.shape)` and returns the
         same tensordict with new tensors with expanded shapes.
+        Supports iterables to specify the shape.
         """
         d = dict()
         tensordict_dims = self.batch_dims
+
+        if len(shape) == 1 and isinstance(shape[0], Sequence):
+            shape = tuple(shape[0])
 
         # new shape dim check
         if len(shape) < len(self.shape):
@@ -3084,7 +3092,10 @@ torch.Size([3, 2])
             return self
         return self._source.select(*keys)[self.idx]
 
-    def expand(self, *shape: int, inplace: bool = False) -> TensorDictBase:
+    def expand(self, *shape, inplace: bool = False) -> TensorDictBase:
+        if len(shape) == 1 and isinstance(shape[0], Sequence):
+            shape = tuple(shape[0])
+
         idx = self.idx
         if isinstance(idx, torch.Tensor) and idx.dtype is torch.double:
             # check that idx is not a mask, otherwise throw an error
@@ -3097,7 +3108,6 @@ torch.Size([3, 2])
             idx = idx + (slice(None),) * (self._source.ndimension() - len(idx))
         # now that idx has the same length as the source's number of dims, we can work with it
 
-        # print("shape", shape)
         source_shape = self._source.shape
         num_integer_types = 0
         for i in idx:
@@ -3132,7 +3142,6 @@ torch.Size([3, 2])
                 new_idx.append(_idx)
                 new_source_shape.append(shape[0])
                 shape = shape[1:]
-        # print("source shape", source_shape, "\nnew source shape", new_source_shape, "\nidx", idx, "\nnew_idx", new_idx)
         assert not len(shape)
         new_source = self._source.expand(*new_source_shape)
         new_idx = tuple(new_idx)
@@ -3718,7 +3727,9 @@ class LazyStackedTensorDict(TensorDictBase):
         self.is_locked = lock
         return self
 
-    def expand(self, *shape: int, inplace: bool = False) -> TensorDictBase:
+    def expand(self, *shape, inplace: bool = False) -> TensorDictBase:
+        if len(shape) == 1 and isinstance(shape[0], Sequence):
+            shape = tuple(shape[0])
         stack_dim = len(shape) + self.stack_dim - self.ndimension()
         new_shape_tensordicts = [v for i, v in enumerate(shape) if i != stack_dim]
         tensordicts = [td.expand(*new_shape_tensordicts) for td in self.tensordicts]
@@ -3908,7 +3919,9 @@ class SavedTensorDict(TensorDictBase):
         self._save(td)
         return self
 
-    def expand(self, *shape: int, inplace: bool = False) -> TensorDictBase:
+    def expand(self, *shape, inplace: bool = False) -> TensorDictBase:
+        if len(shape) == 1 and isinstance(shape[0], Sequence):
+            shape = tuple(shape[0])
         td = self._load()
         td = td.expand(*shape)
         if inplace:
