@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from copy import copy, deepcopy
-from typing import List, Iterable, Union, Tuple
+from typing import List, Iterable, Optional, Union, Tuple
 
 _has_functorch = False
 try:
@@ -262,7 +262,14 @@ class TensorDictSequence(TensorDictModule):
 
         return TensorDictSequence(*modules)
 
-    def _run_module(self, module, tensordict, params=None, buffers=None, **kwargs):
+    def _run_module(
+        self,
+        module,
+        tensordict,
+        params: Optional[List[Tensor]] = None,
+        buffers: Optional[List[Tensor]] = None,
+        **kwargs,
+    ):
         tensordict_keys = set(tensordict.keys())
         if not self.partial_tolerant or all(
             key in tensordict_keys for key in module.in_keys
@@ -280,8 +287,8 @@ class TensorDictSequence(TensorDictModule):
         self,
         tensordict: TensorDictBase,
         tensordict_out=None,
-        params=None,
-        buffers=None,
+        params: Optional[List[Tensor]] = None,
+        buffers: Optional[List[Tensor]] = None,
         **kwargs,
     ) -> TensorDictBase:
         if params is not None and buffers is not None:
