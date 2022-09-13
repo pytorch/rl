@@ -158,7 +158,10 @@ class DreamerActorLoss(LossModule):
             
         )
 
-        actor_loss = -tensordict.get("lambda_target").mean()
+        discount = self.gamma * torch.ones_like(lambda_target, device=tensordict.device)
+        discount[:,0] = 1
+        discount = discount.cumprod(dim=1)
+        actor_loss = -(lambda_target * discount).mean()
         return (
             TensorDict(
                 {
@@ -179,18 +182,23 @@ class DreamerValueLoss(LossModule):
         self,
         value_model,
         value_loss: Optional[str] = None,
+        gamma=0.99,
     ):
         super().__init__()
         self.value_model = value_model
         self.value_loss = value_loss if value_loss is not None else "l2"
+        self.gamma = gamma
 
     def forward(self, tensordict) -> torch.Tensor:
         tensordict = self.value_model(tensordict)
-        value_loss = distance_loss(
+        discount = self.gamma * torch.ones_like(tensordict.get("lambda_target"), device=tensordict.device)
+        discount[:,0] = 1
+        discount = discount.cumprod(dim=1).detach()
+        value_loss = (discount * distance_loss(
             tensordict.get("predicted_value"),
             tensordict.get("lambda_target"),
             self.value_loss,
-        ).mean()
+        )).mean()
 
         return (
             TensorDict(
