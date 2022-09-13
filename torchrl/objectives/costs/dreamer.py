@@ -148,11 +148,14 @@ class DreamerActorLoss(LossModule):
             )
             with hold_out_net(self.value_model):
                 tensordict = self.value_model(tensordict)
-        tensordict.set(
-            "lambda_target",
-            self.lambda_target(
+        
+        lambda_target  = self.lambda_target(
                 tensordict.get("reward"), tensordict.get("predicted_value")
             ),
+        tensordict = tensordict[:, :-1]
+        tensordict.set(
+            "lambda_target", lambda_target
+            
         )
 
         actor_loss = -tensordict.get("lambda_target").mean()
@@ -169,7 +172,7 @@ class DreamerActorLoss(LossModule):
     def lambda_target(self, reward, value):
         done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
         return vec_td_lambda_return_estimate(
-            self.gamma, self.lmbda, value, reward, done
+            self.gamma, self.lmbda, value[:, 1:], reward[:, :-1], done[:, :-1]
         )
 
 
@@ -181,7 +184,7 @@ class DreamerValueLoss(LossModule):
     ):
         super().__init__()
         self.value_model = value_model
-        self.value_loss = value_loss if value_loss is not None else "smooth_l1"
+        self.value_loss = value_loss if value_loss is not None else "l2"
 
     def forward(self, tensordict) -> torch.Tensor:
         tensordict = self.value_model(tensordict)
