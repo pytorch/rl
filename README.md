@@ -132,6 +132,11 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     </details>
     The corresponding [tutorial](tutorials/tensordictmodule.ipynb) provides more context about its features.
  
+- a generic [trainer class](torchrl/trainers/trainers.py)<sup>(1)</sup> that 
+    executes the aforementioned training loop. Through a hooking mechanism, 
+    it also supports any logging or data transformation operation at any given
+    time.
+
 - A common [interface for environments](torchrl/envs)
     which supports common libraries (OpenAI gym, deepmind control lab, etc.)<sup>(1)</sup> and state-less execution (e.g. Model-based environments). 
     The [batched environments](torchrl/envs/vec_env.py) containers allow parallel execution<sup>(2)</sup>.
@@ -281,7 +286,8 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     ```
     </details>
 
-- exploration [wrappers](torchrl/modules/tensordict_module/exploration.py) and [modules](torchrl/modules/models/exploration.py) to easily swap between exploration and exploitation<sup>(1)</sup>:
+- exploration [wrappers](torchrl/modules/tensordict_module/exploration.py) and 
+    [modules](torchrl/modules/models/exploration.py) to easily swap between exploration and exploitation<sup>(1)</sup>:
     <details>
       <summary>Code</summary>
     
@@ -294,8 +300,32 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     ```
     </details>
 
-- various [recipes](torchrl/trainers/helpers/models.py) to build models that correspond to the environment being deployed;
-- a generic [trainer class](torchrl/trainers/trainers.py)<sup>(1)</sup>.
+- A series of efficient [loss modules](https://github.com/facebookresearch/rl/blob/main/torchrl/objectives/costs) 
+    and highly vectorized 
+    [functional return and advantage](https://github.com/facebookresearch/rl/blob/main/torchrl/objectives/returns/functional.py) 
+    computation. 
+
+    <details>
+      <summary>Code</summary>
+    
+    ### loss modules
+    ```python
+    from torchrl.objectives.costs import DQNLoss
+    loss_module = DQNLoss(value_network=value_network, gamma=0.99)
+    tensordict = replay_buffer.sample(batch_size)
+    loss = loss_module(tensordict)
+    ```
+  
+    ### Advantage computation
+    ```python
+    from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
+    advantage = vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done)
+    ```
+
+    </details>
+
+- various [recipes](torchrl/trainers/helpers/models.py) to build models that 
+    correspond to the environment being deployed;
 
 ## Examples, tutorials and demos
 
