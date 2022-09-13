@@ -331,7 +331,7 @@ class TensorDictSequence(TensorDictModule):
         elif not len(kwargs):
             for module in self.module:
                 tensordict = self._run_module(
-                    module, tensordict, params=(), buffers=(), **kwargs
+                    module, tensordict, **kwargs
                 )
         else:
             raise RuntimeError(

@@ -335,7 +335,7 @@ class TensorDictModule(nn.Module):
             kwargs_pruned = {
                 key: item
                 for key, item in kwargs.items()
-                if key not in ("params", "buffers", "vmap")
+                if key not in ("params", "vmap")
             }
             out = module(kwargs["params"], *tensors, **kwargs_pruned)
             return out
@@ -353,18 +353,10 @@ class TensorDictModule(nn.Module):
                 for key, item in kwargs.items()
                 if key not in ("params", "buffers", "vmap")
             }
-            print('kwargs["params"]', kwargs["params"])
-            print('kwargs["buffers"]', kwargs["buffers"])
-            print("tensors", tensors)
             out = module(kwargs["params"], kwargs["buffers"], *tensors, **kwargs_pruned)
             return out
         else:
-            kwargs_pruned = {
-                key: item
-                for key, item in kwargs.items()
-                if key not in ("params", "buffers")
-            }
-            out = self.module(*tensors, **kwargs_pruned)
+            out = self.module(*tensors, **kwargs)
         return out
 
     def forward(
@@ -373,11 +365,8 @@ class TensorDictModule(nn.Module):
         tensordict_out: Optional[TensorDictBase] = None,
         **kwargs,
     ) -> TensorDictBase:
-        # print("kwargs", kwargs)
-        print("Calling forward", tensordict)
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
         tensors = self._call_module(tensors, **kwargs)
-        print("Called _call_module")
         if not isinstance(tensors, tuple):
             tensors = (tensors,)
         tensordict_out = self._write_to_tensordict(
