@@ -262,17 +262,17 @@ class TensorDictSequence(TensorDictModule):
 
         return TensorDictSequence(*modules)
 
-    def _run_module(self, module, tensordict, **kwargs):
+    def _run_module(self, module, tensordict, params=None, buffers=None, **kwargs):
         tensordict_keys = set(tensordict.keys())
         if not self.partial_tolerant or all(
             key in tensordict_keys for key in module.in_keys
         ):
-            tensordict = module(tensordict, **kwargs)
+            tensordict = module(tensordict, params=params, buffers=buffers, **kwargs)
         elif self.partial_tolerant and isinstance(tensordict, LazyStackedTensorDict):
             for sub_td in tensordict.tensordicts:
                 tensordict_keys = set(sub_td.keys())
                 if all(key in tensordict_keys for key in module.in_keys):
-                    module(sub_td, **kwargs)
+                    module(sub_td, params=params, buffers=buffers, **kwargs)
             tensordict._update_valid_keys()
         return tensordict
 
