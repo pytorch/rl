@@ -71,7 +71,7 @@ class EnvMetaData:
 
     def expand(self, *size: int) -> EnvMetaData:
         tensordict = self.tensordict.expand(*size).to_tensordict()
-        batch_size = torch.Size([*size, *self.batch_size])
+        batch_size = torch.Size([*size])
         return EnvMetaData(
             tensordict,
             self.specs,
@@ -797,9 +797,7 @@ def make_tensordict(
     with torch.no_grad():
         tensordict = env.reset()
         if policy is not None:
-            tensordict = tensordict.unsqueeze(0)
             tensordict = policy(tensordict)
-            tensordict = tensordict.squeeze(0)
         else:
             tensordict.set("action", env.action_spec.rand(), inplace=False)
         tensordict = env.step(tensordict)

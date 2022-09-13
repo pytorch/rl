@@ -1,6 +1,0 @@
-[submodule "third_party/vision"]
-	path = third_party/vision
-	url = https://github.com/pytorch/vision
-[submodule "third_party/functorch"]
-	path = third_party/functorch
-	url = https://github.com/pytorch/functorch
