@@ -280,67 +280,59 @@ class TensorDictSequence(TensorDictModule):
         self,
         tensordict: TensorDictBase,
         tensordict_out=None,
+        params=None,
+        buffers=None,
         **kwargs,
     ) -> TensorDictBase:
-
-        if "params" in kwargs and "buffers" in kwargs:
-            params = kwargs["params"]
-            buffers = kwargs["buffers"]
+        if params is not None and buffers is not None:
             if isinstance(params, TensorDictBase):
                 # TODO: implement sorted values and items
                 param_splits = list(zip(*sorted(list(params.items()))))[1]
                 buffer_splits = list(zip(*sorted(list(buffers.items()))))[1]
             else:
-                param_splits = self._split_param(kwargs["params"], "params")
-                buffer_splits = self._split_param(kwargs["buffers"], "buffers")
-            kwargs_pruned = {
-                key: item
-                for key, item in kwargs.items()
-                if key not in ("params", "buffers")
-            }
+                param_splits = self._split_param(params, "params")
+                buffer_splits = self._split_param(buffers, "buffers")
             for i, (module, param, buffer) in enumerate(
                 zip(self.module, param_splits, buffer_splits)
             ):
-                if "vmap" in kwargs_pruned and i > 0:
+                if "vmap" in kwargs and i > 0:
                     # the tensordict is already expended
-                    if not isinstance(kwargs_pruned["vmap"], tuple):
-                        kwargs_pruned["vmap"] = (0, 0, *(0,) * len(module.in_keys))
+                    if not isinstance(kwargs["vmap"], tuple):
+                        kwargs["vmap"] = (0, 0, *(0,) * len(module.in_keys))
                     else:
-                        kwargs_pruned["vmap"] = (
-                            *kwargs_pruned["vmap"][:2],
+                        kwargs["vmap"] = (
+                            *kwargs["vmap"][:2],
                             *(0,) * len(module.in_keys),
                         )
                 tensordict = self._run_module(
-                    module, tensordict, params=param, buffers=buffer, **kwargs_pruned
+                    module, tensordict, params=param, buffers=buffer, **kwargs
                 )
 
-        elif "params" in kwargs:
-            params = kwargs["params"]
+        elif params is not None:
             if isinstance(params, TensorDictBase):
                 # TODO: implement sorted values and items
                 param_splits = list(zip(*sorted(list(params.items()))))[1]
             else:
-                param_splits = self._split_param(kwargs["params"], "params")
-            kwargs_pruned = {
-                key: item for key, item in kwargs.items() if key not in ("params",)
-            }
+                param_splits = self._split_param(params, "params")
             for i, (module, param) in enumerate(zip(self.module, param_splits)):
-                if "vmap" in kwargs_pruned and i > 0:
+                if "vmap" in kwargs and i > 0:
                     # the tensordict is already expended
-                    if not isinstance(kwargs_pruned["vmap"], tuple):
-                        kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
+                    if not isinstance(kwargs["vmap"], tuple):
+                        kwargs["vmap"] = (0, *(0,) * len(module.in_keys))
                     else:
-                        kwargs_pruned["vmap"] = (
-                            *kwargs_pruned["vmap"][:1],
+                        kwargs["vmap"] = (
+                            *kwargs["vmap"][:1],
                             *(0,) * len(module.in_keys),
                         )
                 tensordict = self._run_module(
-                    module, tensordict, params=param, **kwargs_pruned
+                    module, tensordict, params=param, **kwargs
                 )
 
         elif not len(kwargs):
             for module in self.module:
-                tensordict = self._run_module(module, tensordict, **kwargs)
+                tensordict = self._run_module(
+                    module, tensordict, params=(), buffers=(), **kwargs
+                )
         else:
             raise RuntimeError(
                 "TensorDictSequence does not support keyword arguments other than 'tensordict_out', 'in_keys', 'out_keys' 'params', 'buffers' and 'vmap'"
@@ -447,7 +439,7 @@ class TensorDictSequence(TensorDictModule):
         **kwargs,
     ) -> Tuple[torch.distributions.Distribution, ...]:
         L = len(self.module)
-
+        print("get_dist", kwargs)
         if isinstance(self.module[-1], ProbabilisticTensorDictModule):
             if "params" in kwargs and "buffers" in kwargs:
                 params = kwargs["params"]
