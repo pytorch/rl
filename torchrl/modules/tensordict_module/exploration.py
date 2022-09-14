@@ -224,6 +224,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         tensordict = self.td_module.forward(tensordict)
         if exploration_mode() == "random" or exploration_mode() is None:
             out = tensordict.get(self.action_key)
+            out = self._add_noise(out)
             tensordict.set(self.action_key, out)
         return tensordict
 
