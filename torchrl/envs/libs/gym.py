@@ -50,14 +50,8 @@ if _has_gym:
     gym_version = version.parse(gym.__version__)
     if gym_version >= version.parse("0.26.0"):
         from gym.wrappers.compatibility import EnvCompatibility
-try:
-    import retro
 
-    _has_retro = True
-except ImportError:
-    _has_retro = False
-
-__all__ = ["GymWrapper", "GymEnv", "RetroEnv"]
+__all__ = ["GymWrapper", "GymEnv"]
 
 
 def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec:
@@ -343,23 +337,3 @@ class GymEnv(GymWrapper):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(env={self.env_name}, batch_size={self.batch_size}, device={self.device})"
-
-
-def _get_retro_envs() -> Sequence:
-    if not _has_retro:
-        return tuple()
-    else:
-        return retro.data.list_games()
-
-
-def _get_retro() -> Optional[ModuleType]:
-    if _has_retro:
-        return retro
-    else:
-        return None
-
-
-class RetroEnv(GymEnv):
-    available_envs = _get_retro_envs()
-    lib = "retro"
-    lib = _get_retro()

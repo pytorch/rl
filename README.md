@@ -457,7 +457,7 @@ pip3 install moviepy
 pip3 install dm_control 
 
 # gym, atari games
-pip3 install gym[atari] "gym[accept-rom-license]" pygame gym_retro
+pip3 install gym[atari] "gym[accept-rom-license]" pygame
 
 # tests
 pip3 install pytest pyyaml pytest-instafail
