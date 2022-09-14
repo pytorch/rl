@@ -330,7 +330,9 @@ class TransformedEnv(EnvBase):
         self.batch_size = self.base_env.batch_size
 
     def __new__(cls, env, *args, **kwargs):
-        return super().__new__(cls, env, *args, batch_locked=env.batch_locked, **kwargs)
+        return super().__new__(
+            cls, env, *args, _batch_locked=env.batch_locked, **kwargs
+        )
 
     def _set_env(self, env: EnvBase, device) -> None:
         self.base_env = env.to(device)
