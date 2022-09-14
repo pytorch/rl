@@ -7,6 +7,7 @@ import argparse
 import os.path
 import re
 
+import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
@@ -1287,6 +1288,50 @@ class TestTensorDicts:
         td_clone1["d"] = nested_dict_value
         td_clone2["d"] = nested_tensordict_value
         assert (td_clone1 == td_clone2).all()
+
+    def test_tensordict_set(self, td_name, device):
+        torch.manual_seed(1)
+        np.random.seed(1)
+        td = getattr(self, td_name)(device)
+
+        # test set
+        val1 = np.ones(shape=(4, 3, 2, 1, 10))
+        td.set("key1", val1)
+        assert (td.get("key1") == 1).all()
+        with pytest.raises(RuntimeError):
+            td.set("key1", np.ones(shape=(5, 10)))
+
+        # test set_
+        val2 = np.zeros(shape=(4, 3, 2, 1, 10))
+        td.set_("key1", val2)
+        assert (td.get("key1") == 0).all()
+        with pytest.raises((KeyError, AttributeError)):
+            td.set_("smartypants", np.ones(shape=(4, 3, 2, 1, 5)))
+
+        # test set_at_
+        td.set("key2", np.random.randn(4, 3, 2, 1, 5))
+        x = np.ones(shape=(2, 1, 5)) * 42
+        td.set_at_("key2", x, (2, 2))
+        assert (td.get("key2")[2, 2] == 42).all()
+
+    def test_tensordict_set_dict_value(self, td_name, device):
+        torch.manual_seed(1)
+        np.random.seed(1)
+        td = getattr(self, td_name)(device)
+
+        # test set
+        val1 = {"subkey1": torch.ones(4, 3, 2, 1, 10)}
+        td.set("key1", val1)
+        assert (td.get("key1").get("subkey1") == 1).all()
+        with pytest.raises(RuntimeError):
+            td.set("key1", torch.ones(5, 10))
+
+        # test set_
+        val2 = {"subkey1": torch.zeros(4, 3, 2, 1, 10)}
+        td.set_("key1", val2)
+        assert (td.get("key1").get("subkey1") == 0).all()
+        with pytest.raises((KeyError, AttributeError)):
+            td.set_("smartypants", torch.ones(4, 3, 2, 1, 5))
 
     def test_delitem(self, td_name, device):
         torch.manual_seed(1)
