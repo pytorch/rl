@@ -138,14 +138,16 @@ class TestMLFlowLogger:
             log_dir_uri = pathlib.Path(log_dir).as_uri()
             logger = MLFlowLogger(exp_name=exp_name, tracking_uri=log_dir_uri)
 
-            test_frames = torch.rand((3, 60, 64, 64, 3)) * 255  # (N, T, W, H, C)
-            test_frames = test_frames.int()
+            videos = torch.cat(
+                (torch.zeros(3, 64, 3, 32, 32), torch.full((3, 64, 3, 32, 32), 255)),
+                dim=1,
+            )
 
             fps = 6
             for i in range(3):
                 logger.log_video(
                     name="test_video",
-                    video=test_frames[i],
+                    video=videos[i],
                     fps=fps,
                     step=steps[i] if steps else None,
                 )
@@ -156,13 +158,13 @@ class TestMLFlowLogger:
                 videos_dir = client.download_artifacts(run_id, "videos", artifacts_dir)
                 for i, video_name in enumerate(os.listdir(videos_dir)):
                     video_path = os.path.join(videos_dir, video_name)
-                    loaded_frames, _, _ = torchvision.io.read_video(
-                        video_path, pts_unit="sec"
+                    loaded_video, _, _ = torchvision.io.read_video(
+                        video_path, pts_unit="sec", output_format="TCHW"
                     )
                     if steps:
-                        assert torch.equal(loaded_frames.int(), test_frames[i])
+                        assert torch.equal(loaded_video.int(), videos[i].int())
                     else:
-                        assert torch.equal(loaded_frames.int(), test_frames[-1])
+                        assert torch.equal(loaded_video.int(), videos[-1].int())
 
 
 if __name__ == "__main__":

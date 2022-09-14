@@ -87,24 +87,26 @@ class MLFlowLogger(Logger):
 
         Args:
             name (str): The name of the video.
-            video (Tensor): The video to be logged.
+            video (Tensor): The video to be logged, expected to be in (T, C, H, W) format
+                for consistency with other loggers.
             **kwargs: Other keyword arguments. By construction, log_video
                 supports 'step' (integer indicating the step index) and 'fps' (default: 6).
         """
         mlflow.set_experiment(experiment_id=self.id)
+        if video.ndim == 5:
+            video = video[-1]  # N T C H W -> T C H W
+        video = video.permute(0, 2, 3, 1)  # T C H W -> T H W C
+        if video.size(dim=-1) != 3:
+            raise ValueError(
+                "The MLFlow logger only supports videos with 3 color channels."
+            )
         self.video_log_counter += 1
         fps = kwargs.pop("fps", 6)
         step = kwargs.pop("step", None)
         with TemporaryDirectory() as temp_dir:
             video_name = f"{name}_step_{step:04}.mp4" if step else f"{name}.mp4"
             with open(os.path.join(temp_dir, video_name), "wb") as f:
-                torchvision.io.write_video(
-                    filename=f.name,
-                    video_array=video,
-                    fps=fps,
-                    video_codec="libx264rgb",
-                    options={"crf": "0"},
-                )
+                torchvision.io.write_video(filename=f.name, video_array=video, fps=fps)
                 mlflow.log_artifact(f.name, "videos")
 
     def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
