@@ -198,7 +198,7 @@ class TestAdditiveGaussian:
         )
         out_noexp = []
         out = []
-        if exploratory_policy.spec is not None: 
+        if exploratory_policy.spec is not None:
             for _ in range(n_steps):
                 tensordict_noexp = policy(tensordict.select("observation"))
                 tensordict = exploratory_policy(tensordict)
