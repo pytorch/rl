@@ -79,12 +79,15 @@ def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec
             dtype=dtype,
             device=device,
         )
-    elif isinstance(spec, (dict, gym.spaces.dict.Dict)):
-        spec = {
-            "next_" + k: _gym_to_torchrl_spec_transform(spec[k], device=device)
-            for k in spec
-        }
-        return CompositeSpec(**spec)
+    elif isinstance(spec, (Dict,)):
+        spec_out = {}
+        for k in spec.keys():
+            spec_out["next_" + k] = _gym_to_torchrl_spec_transform(
+                spec[k], device=device
+            )
+        return CompositeSpec(**spec_out)
+    elif isinstance(spec, gym.spaces.dict.Dict):
+        return _gym_to_torchrl_spec_transform(spec.spaces, device=device)
     else:
         raise NotImplementedError(
             f"spec of type {type(spec).__name__} is currently unaccounted for"
@@ -111,8 +114,11 @@ def _get_gym():
 
 def _is_from_pixels(env):
     observation_spec = env.observation_space
-    if isinstance(observation_spec, (Dict, gym.spaces.dict.Dict)):
+    if isinstance(observation_spec, (Dict,)):
         if "pixels" in set(observation_spec.keys()):
+            return True
+    if isinstance(observation_spec, (gym.spaces.dict.Dict,)):
+        if "pixels" in set(observation_spec.spaces.keys()):
             return True
     elif (
         isinstance(observation_spec, gym.spaces.Box)
