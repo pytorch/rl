@@ -17,14 +17,15 @@ from typing import (
     Union,
 )
 
-from torchrl.modules.tensordict_module.common import TensorDictModule
-
 from torch import nn, Tensor
 
 from torchrl.data.tensordict.tensordict import TensorDict, TensorDictBase
+from torchrl.modules.tensordict_module.common import TensorDictModule
+
+__init__ = ["TensorDictDefaultInitializer"]
+
 
 class _DefaultInitializer(nn.Module):
-
     def __init__(self):
         super().__init__()
 
@@ -32,20 +33,27 @@ class _DefaultInitializer(nn.Module):
         outputs = {}
         for key, value in initializer_dict.items():
             if "args" in value and "kwargs" in value:
-                outputs[key] = value["initializer"]( *batch_size, *value["shape"],
-                        *value["args"], **value["kwargs"], device=device
+                outputs[key] = value["initializer"](
+                    *batch_size,
+                    *value["shape"],
+                    *value["args"],
+                    **value["kwargs"],
+                    device=device,
                 )
             elif "args" in value:
-                outputs[key] = value["initializer"]( *batch_size, *value["shape"],
-                        *value["args"], device=device
+                outputs[key] = value["initializer"](
+                    *batch_size, *value["shape"], *value["args"], device=device
                 )
             elif "kwargs" in value:
-                outputs[key] = value["initializer"]( *batch_size, *value["shape"],
-                        **value["kwargs"], device=device
+                outputs[key] = value["initializer"](
+                    *batch_size, *value["shape"], **value["kwargs"], device=device
                 )
             else:
-                outputs[key] = value["initializer"]( *batch_size, *value["shape"], device=device)
+                outputs[key] = value["initializer"](
+                    *batch_size, *value["shape"], device=device
+                )
         return outputs
+
 
 class TensorDictDefaultInitializer(TensorDictModule):
     """
@@ -61,22 +69,23 @@ class TensorDictDefaultInitializer(TensorDictModule):
             and kwargs the keyword arguments to pass to the initializer function.
             the initializer function must be of the following form initializer (*batch_size, *args, **kwargs, device=device)
         reinit (bool): Whether to reinitialize already initialized tensors.
-    
+
     Returns:
         TensorDictBase: The TensorDict to whom we added the initialized tensors.
 
 
     """
+
     def __init__(
         self,
         defaults_init: Dict[Dict],
-        reinit = False,
+        reinit=False,
     ):
 
         module = _DefaultInitializer()
 
-        in_keys = []
-        out_keys = defaults_init.keys()
+        in_keys = list(defaults_init.keys())
+        out_keys = list(defaults_init.keys())
         self.reinit = reinit
 
         self.defaults_init = defaults_init
