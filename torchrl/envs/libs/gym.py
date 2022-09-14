@@ -92,7 +92,11 @@ def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec
 
 
 def _get_envs(to_dict=False) -> List:
-    envs = gym.envs.registration.registry.env_specs.keys()
+    if gym_version < version.parse("0.26.0"):
+        envs = gym.envs.registration.registry.env_specs.keys()
+    else:
+        envs = gym.envs.registration.registry.keys()
+
     envs = list(envs)
     envs = sorted(envs)
     return envs

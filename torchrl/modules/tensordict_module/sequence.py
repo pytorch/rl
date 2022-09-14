@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from copy import copy, deepcopy
-from typing import List, Iterable, Union, Tuple
+from typing import List, Iterable, Optional, Union, Tuple
 
 _has_functorch = False
 try:
@@ -262,17 +262,24 @@ class TensorDictSequence(TensorDictModule):
 
         return TensorDictSequence(*modules)
 
-    def _run_module(self, module, tensordict, **kwargs):
+    def _run_module(
+        self,
+        module,
+        tensordict,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        **kwargs,
+    ):
         tensordict_keys = set(tensordict.keys())
         if not self.partial_tolerant or all(
             key in tensordict_keys for key in module.in_keys
         ):
-            tensordict = module(tensordict, **kwargs)
+            tensordict = module(tensordict, params=params, buffers=buffers, **kwargs)
         elif self.partial_tolerant and isinstance(tensordict, LazyStackedTensorDict):
             for sub_td in tensordict.tensordicts:
                 tensordict_keys = set(sub_td.keys())
                 if all(key in tensordict_keys for key in module.in_keys):
-                    module(sub_td, **kwargs)
+                    module(sub_td, params=params, buffers=buffers, **kwargs)
             tensordict._update_valid_keys()
         return tensordict
 
@@ -280,62 +287,52 @@ class TensorDictSequence(TensorDictModule):
         self,
         tensordict: TensorDictBase,
         tensordict_out=None,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> TensorDictBase:
-
-        if "params" in kwargs and "buffers" in kwargs:
-            params = kwargs["params"]
-            buffers = kwargs["buffers"]
+        if params is not None and buffers is not None:
             if isinstance(params, TensorDictBase):
                 # TODO: implement sorted values and items
                 param_splits = list(zip(*sorted(list(params.items()))))[1]
                 buffer_splits = list(zip(*sorted(list(buffers.items()))))[1]
             else:
-                param_splits = self._split_param(kwargs["params"], "params")
-                buffer_splits = self._split_param(kwargs["buffers"], "buffers")
-            kwargs_pruned = {
-                key: item
-                for key, item in kwargs.items()
-                if key not in ("params", "buffers")
-            }
+                param_splits = self._split_param(params, "params")
+                buffer_splits = self._split_param(buffers, "buffers")
             for i, (module, param, buffer) in enumerate(
                 zip(self.module, param_splits, buffer_splits)
             ):
-                if "vmap" in kwargs_pruned and i > 0:
+                if "vmap" in kwargs and i > 0:
                     # the tensordict is already expended
-                    if not isinstance(kwargs_pruned["vmap"], tuple):
-                        kwargs_pruned["vmap"] = (0, 0, *(0,) * len(module.in_keys))
+                    if not isinstance(kwargs["vmap"], tuple):
+                        kwargs["vmap"] = (0, 0, *(0,) * len(module.in_keys))
                     else:
-                        kwargs_pruned["vmap"] = (
-                            *kwargs_pruned["vmap"][:2],
+                        kwargs["vmap"] = (
+                            *kwargs["vmap"][:2],
                             *(0,) * len(module.in_keys),
                         )
                 tensordict = self._run_module(
-                    module, tensordict, params=param, buffers=buffer, **kwargs_pruned
+                    module, tensordict, params=param, buffers=buffer, **kwargs
                 )
 
-        elif "params" in kwargs:
-            params = kwargs["params"]
+        elif params is not None:
             if isinstance(params, TensorDictBase):
                 # TODO: implement sorted values and items
                 param_splits = list(zip(*sorted(list(params.items()))))[1]
             else:
-                param_splits = self._split_param(kwargs["params"], "params")
-            kwargs_pruned = {
-                key: item for key, item in kwargs.items() if key not in ("params",)
-            }
+                param_splits = self._split_param(params, "params")
             for i, (module, param) in enumerate(zip(self.module, param_splits)):
-                if "vmap" in kwargs_pruned and i > 0:
+                if "vmap" in kwargs and i > 0:
                     # the tensordict is already expended
-                    if not isinstance(kwargs_pruned["vmap"], tuple):
-                        kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
+                    if not isinstance(kwargs["vmap"], tuple):
+                        kwargs["vmap"] = (0, *(0,) * len(module.in_keys))
                     else:
-                        kwargs_pruned["vmap"] = (
-                            *kwargs_pruned["vmap"][:1],
+                        kwargs["vmap"] = (
+                            *kwargs["vmap"][:1],
                             *(0,) * len(module.in_keys),
                         )
                 tensordict = self._run_module(
-                    module, tensordict, params=param, **kwargs_pruned
+                    module, tensordict, params=param, **kwargs
                 )
 
         elif not len(kwargs):

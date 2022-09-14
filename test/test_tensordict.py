@@ -822,9 +822,19 @@ class TestTensorDicts:
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         batch_size = td.batch_size
+        expected_size = torch.Size([3, *batch_size])
+
         new_td = td.expand(3, *batch_size)
-        assert new_td.batch_size == torch.Size([3, *batch_size])
+        assert new_td.batch_size == expected_size
         assert all((_new_td == td).all() for _new_td in new_td)
+
+        new_td_torch_size = td.expand(expected_size)
+        assert new_td_torch_size.batch_size == expected_size
+        assert all((_new_td == td).all() for _new_td in new_td_torch_size)
+
+        new_td_iterable = td.expand([3, *batch_size])
+        assert new_td_iterable.batch_size == expected_size
+        assert all((_new_td == td).all() for _new_td in new_td_iterable)
 
     def test_cast(self, td_name, device):
         torch.manual_seed(1)
@@ -835,6 +845,15 @@ class TestTensorDicts:
         td = getattr(self, td_name)(device)
         td_saved = td.to(SavedTensorDict)
         assert (td == td_saved).all()
+
+    def test_broadcast(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        sub_td = td[:, :2].to_tensordict()
+        sub_td.zero_()
+        sub_dict = sub_td.to_dict()
+        td[:, :2] = sub_dict
+        assert (td[:, :2] == 0).all()
 
     @pytest.mark.parametrize("call_del", [True, False])
     def test_remove(self, td_name, device, call_del):
@@ -1253,11 +1272,48 @@ class TestTensorDicts:
         td = getattr(self, td_name)(device)
         assert isinstance(td["a"], (MemmapTensor, torch.Tensor))
 
+    def test_setitem_nested_dict_value(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+
+        # Create equivalent TensorDict and dict nested values for setitem
+        nested_dict_value = {"e": torch.randn(4, 3, 2, 1, 10)}
+        nested_tensordict_value = TensorDict(
+            nested_dict_value, batch_size=td.batch_size, device=device
+        )
+        td_clone1 = td.clone(recurse=True)
+        td_clone2 = td.clone(recurse=True)
+
+        td_clone1["d"] = nested_dict_value
+        td_clone2["d"] = nested_tensordict_value
+        assert (td_clone1 == td_clone2).all()
+
     def test_delitem(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         del td["a"]
         assert "a" not in td.keys()
+
+    def test_to_dict_nested(self, td_name, device):
+        def recursive_checker(cur_dict):
+            for key, value in cur_dict.items():
+                if isinstance(value, TensorDict):
+                    return False
+                elif isinstance(value, dict) and not recursive_checker(value):
+                    return False
+            return True
+
+        td = getattr(self, td_name)(device)
+
+        # Create nested TensorDict
+        nested_tensordict_value = TensorDict(
+            {"e": torch.randn(4, 3, 2, 1, 10)}, batch_size=td.batch_size, device=device
+        )
+        td["d"] = nested_tensordict_value
+
+        # Convert into dictionary and recursively check if the values are TensorDicts
+        td_dict = td.to_dict()
+        assert recursive_checker(td_dict)
 
     @pytest.mark.filterwarnings("error")
     def test_stack_tds_on_subclass(self, td_name, device):
@@ -1394,6 +1450,25 @@ class TestTensorDicts:
         tdin = TensorDict({"inner": torch.randn(td.shape)}, td.shape, device=device)
         td.set("inner_td", tdin)
         assert (td["inner_td"] == tdin).all()
+
+    def test_nested_dict_init(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+
+        # Create TensorDict and dict equivalent values, and populate each with according nested value
+        td_clone = td.clone(recurse=True)
+        td_dict = td.to_dict()
+        nested_dict_value = {"e": torch.randn(4, 3, 2, 1, 10)}
+        nested_tensordict_value = TensorDict(
+            nested_dict_value, batch_size=td.batch_size, device=device
+        )
+        td_dict["d"] = nested_dict_value
+        td_clone["d"] = nested_tensordict_value
+
+        # Re-init new TensorDict from dict, and check if they're equal
+        td_dict_init = TensorDict(td_dict, batch_size=td.batch_size, device=device)
+
+        assert (td_clone == td_dict_init).all()
 
     def test_nested_td_index(self, td_name, device):
         td = getattr(self, td_name)(device)
