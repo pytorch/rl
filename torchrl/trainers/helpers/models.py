@@ -1244,7 +1244,7 @@ def make_dreamer(
         ),
         dist_param_keys=["loc", "scale"],
         out_key_sample=[action_key],
-        default_interaction_mode="random",
+        default_interaction_mode="mode",
         distribution_class=TanhNormal,
     )
     value_model = TensorDictModule(

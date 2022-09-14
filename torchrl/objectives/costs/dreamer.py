@@ -7,6 +7,7 @@ from typing import Optional
 import torch
 
 from torchrl.data import TensorDict
+from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import hold_out_net, distance_loss
@@ -139,7 +140,7 @@ class DreamerActorLoss(LossModule):
             tensordict.rename_key("posterior_states", "prior_state")
             tensordict.rename_key("next_belief", "belief")
             tensordict = tensordict.view(-1).detach()
-        with hold_out_net(self.model_based_env):
+        with hold_out_net(self.model_based_env), set_exploration_mode("random"):
             tensordict = self.model_based_env.rollout(
                 max_steps=self.cfg.imagination_horizon,
                 policy=self.actor_model,
