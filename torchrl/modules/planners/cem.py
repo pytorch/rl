@@ -56,7 +56,12 @@ class CEMPlanner(MPCPlannerBase):
 
     def planning(self, td: TensorDictBase) -> torch.Tensor:
         batch_size = td.batch_size
-        expanded_original_td = td.expand(self.num_candidates).contiguous().view(-1)
+        expanded_original_td = (
+            td.unsqueeze(-1)
+            .expand(*batch_size, self.num_candidates)
+            .contiguous()
+            .view(-1)
+        )
         flatten_batch_size = batch_size.numel()
         actions_means = torch.zeros(
             flatten_batch_size,
