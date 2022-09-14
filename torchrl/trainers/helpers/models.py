@@ -1184,6 +1184,7 @@ def make_dreamer(
         hidden_dim=cfg.rssm_hidden_dim,
         rnn_hidden_dim=cfg.rssm_hidden_dim,
         state_dim=cfg.state_dim,
+        action_spec=proof_environment.action_spec,
     )
     rssm_prior_rollout = RSSMPriorRollout(rssm_prior)
     rssm_posterior = RSSMPosterior(
@@ -1263,6 +1264,16 @@ def make_dreamer(
             in_keys=["belief", "encoded_latents"],
             out_keys=["posterior_means", "posterior_stds", "posterior_state"],
         ),
+        TensorDictModule(
+            rssm_prior,
+            in_keys=["posterior_state", "belief", action_key],
+            out_keys=[
+                "prior_means",
+                "prior_stds",
+                "prior_state",
+                "belief",
+            ],
+        ),
         ProbabilisticTensorDictModule(
             TensorDictModule(
                 actor_module,
@@ -1273,16 +1284,6 @@ def make_dreamer(
             out_key_sample=[action_key],
             default_interaction_mode="mode",
             distribution_class=TanhNormal,
-        ),
-        TensorDictModule(
-            rssm_prior,
-            in_keys=["posterior_state", "belief", action_key],
-            out_keys=[
-                "prior_means",
-                "prior_stds",
-                "prior_state",
-                "next_belief",
-            ],
         ),
     )
 

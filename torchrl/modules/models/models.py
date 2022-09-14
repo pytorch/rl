@@ -1156,7 +1156,7 @@ class RSSMPriorRollout(nn.Module):
 
 
 class RSSMPrior(nn.Module):
-    def __init__(self, hidden_dim=200, rnn_hidden_dim=200, state_dim=30):
+    def __init__(self, hidden_dim=200, rnn_hidden_dim=200, state_dim=30, action_spec=None):
         super().__init__()
 
         # Prior
@@ -1168,11 +1168,16 @@ class RSSMPrior(nn.Module):
                 nn.ELU(),
                 nn.Linear(hidden_dim, 2 * state_dim),
             ),
-            scale_lb=0.1,
+            scale_lb=0,
+            scale_mapping="softplus"
         )
 
         self.state_dim = state_dim
         self.rnn_hidden_dim = rnn_hidden_dim
+
+        if action_spec is None:
+            raise ValueError("action_spec must be provided")
+        self.action_shape = action_spec.shape
 
     def forward(self, state, rnn_hidden, action):
         *batch_size, _ = action.shape
@@ -1182,11 +1187,14 @@ class RSSMPrior(nn.Module):
             rnn_hidden = torch.zeros(
                 *batch_size, self.rnn_hidden_dim, device=action.device
             )
+        if action is None:
+            action = torch.zeros(*batch_size, self.action_shape, device=action.device)
 
         action_state = self.action_state_projector(torch.cat([state, action], dim=-1))
         rnn_hidden = self.rnn(action_state, rnn_hidden)
         belief = rnn_hidden
         prior_mean, prior_std = self.rnn_to_prior_projector(belief)
+        prior_std = prior_std + 0.1
         prior_state = prior_mean + torch.randn_like(prior_std) * prior_std
         return prior_mean, prior_std, prior_state, belief
 
@@ -1200,7 +1208,8 @@ class RSSMPosterior(nn.Module):
                 nn.ELU(),
                 nn.Linear(hidden_dim, 2 * state_dim),
             ),
-            scale_lb=0.1,
+            scale_lb=0,
+            scale_mapping="softplus"
         )
         self.hidden_dim = hidden_dim
 
@@ -1213,5 +1222,6 @@ class RSSMPosterior(nn.Module):
         post_mean, post_std = self.obs_rnn_to_post_projector(
             torch.cat([belief, obs_embedding], dim=-1)
         )
+        post_std = post_std + 0.1
         post_state = post_mean + torch.randn_like(post_std) * post_std
         return post_mean, post_std, post_state
