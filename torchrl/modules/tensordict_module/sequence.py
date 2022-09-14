@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from copy import copy, deepcopy
-from typing import List, Iterable, Optional, Union, Tuple
+from typing import Iterable, List, Optional, Tuple, Union
 
 _has_functorch = False
 try:
@@ -22,26 +22,23 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 import torch
-from torch import nn, Tensor
+from torch import Tensor, nn
 
-from torchrl.data import (
-    TensorSpec,
-    CompositeSpec,
-)
+from torchrl.data import CompositeSpec, TensorSpec
 from torchrl.data.tensordict.tensordict import (
-    TensorDictBase,
     LazyStackedTensorDict,
     TensorDict,
+    TensorDictBase,
 )
 from torchrl.modules.tensordict_module.common import TensorDictModule
 from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,
 )
 
-__all__ = ["TensorDictSequence"]
+__all__ = ["TensorDictSequential"]
 
 
-class TensorDictSequence(TensorDictModule):
+class TensorDictSequential(TensorDictModule):
     """
     A sequence of TDModules.
     Similarly to `nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
@@ -55,14 +52,14 @@ class TensorDictSequence(TensorDictModule):
             If so, the only module that will be executed are those who can be executed given the keys that
             are present.
             Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is `True` AND if the
-            stack does not have the required keys, then TensorDictSequence will scan through the sub-tensordicts
+            stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
             looking for those that have the required keys, if any.
 
     TDSequence supports functional, modular and vmap coding:
     Examples:
         >>> from torchrl.modules.tensordict_module import ProbabilisticTensorDictModule
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import  TanhNormal, TensorDictSequence, NormalParamWrapper
+        >>> from torchrl.modules import  TanhNormal, TensorDictSequential, NormalParamWrapper
         >>> import torch, functorch
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
         >>> spec1 = NdUnboundedContinuousTensorSpec(4)
@@ -86,7 +83,7 @@ class TensorDictSequence(TensorDictModule):
         ...    in_keys=["hidden"],
         ...    out_keys=["output"],
         ...    )
-        >>> td_module = TensorDictSequence(td_module1, td_module2)
+        >>> td_module = TensorDictSequential(td_module1, td_module2)
         >>> params = params1 + params2
         >>> buffers = buffers1 + buffers2
         >>> _ = td_module(td, params=params, buffers=buffers)
@@ -223,9 +220,9 @@ class TensorDictSequence(TensorDictModule):
 
     def select_subsequence(
         self, in_keys: Iterable[str] = None, out_keys: Iterable[str] = None
-    ) -> "TensorDictSequence":
+    ) -> "TensorDictSequential":
         """
-        Returns a new TensorDictSequence with only the modules that are necessary to compute
+        Returns a new TensorDictSequential with only the modules that are necessary to compute
         the given output keys with the given input keys.
 
         Args:
@@ -233,7 +230,7 @@ class TensorDictSequence(TensorDictModule):
             out_keys: output keys of the subsequence we want to select
 
         Returns:
-            A new TensorDictSequence with only the modules that are necessary acording to the given input and output keys.
+            A new TensorDictSequential with only the modules that are necessary acording to the given input and output keys.
         """
         if in_keys is None:
             in_keys = deepcopy(self.in_keys)
@@ -260,7 +257,7 @@ class TensorDictSequence(TensorDictModule):
                 "No modules left after selection. Make sure that in_keys and out_keys are coherent."
             )
 
-        return TensorDictSequence(*modules)
+        return TensorDictSequential(*modules)
 
     def _run_module(
         self,
@@ -340,7 +337,7 @@ class TensorDictSequence(TensorDictModule):
                 tensordict = self._run_module(module, tensordict, **kwargs)
         else:
             raise RuntimeError(
-                "TensorDictSequence does not support keyword arguments other than 'tensordict_out', 'in_keys', 'out_keys' 'params', 'buffers' and 'vmap'"
+                "TensorDictSequential does not support keyword arguments other than 'tensordict_out', 'in_keys', 'out_keys' 'params', 'buffers' and 'vmap'"
             )
         if tensordict_out is not None:
             tensordict_out.update(tensordict, inplace=True)
@@ -367,7 +364,7 @@ class TensorDictSequence(TensorDictModule):
             spec = layer.spec
             if spec is not None and not isinstance(spec, TensorSpec):
                 raise RuntimeError(
-                    f"TensorDictSequence.spec requires all specs to be valid TensorSpec objects. Got "
+                    f"TensorDictSequential.spec requires all specs to be valid TensorSpec objects. Got "
                     f"{type(layer.spec)}"
                 )
             if isinstance(spec, CompositeSpec):
@@ -400,7 +397,7 @@ class TensorDictSequence(TensorDictModule):
             >>> spec2 = NdUnboundedContinuousTensorSpec(4)
             >>> td_module1 = TensorDictModule(spec=spec1, module=lazy_module1, in_keys=["some_input"], out_keys=["hidden"])
             >>> td_module2 = TensorDictModule(spec=spec2, module=lazy_module2, in_keys=["hidden"], out_keys=["some_output"])
-            >>> td_module = TensorDictSequence(td_module1, td_module2)
+            >>> td_module = TensorDictSequential(td_module1, td_module2)
             >>> _, (params, buffers) = td_module.make_functional_with_buffers()
             >>> print(params[0].shape) # the lazy module has been initialized
             torch.Size([4, 18])
@@ -501,7 +498,7 @@ class TensorDictSequence(TensorDictModule):
                         out = module.get_dist(tensordict)
             else:
                 raise RuntimeError(
-                    "TensorDictSequence does not support keyword arguments other than 'params', 'buffers' and 'vmap'"
+                    "TensorDictSequential does not support keyword arguments other than 'params', 'buffers' and 'vmap'"
                 )
 
             return out

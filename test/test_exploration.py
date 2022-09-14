@@ -14,7 +14,7 @@ from torchrl.data import NdBoundedTensorSpec, CompositeSpec
 from torchrl.data.tensordict.tensordict import TensorDict
 from torchrl.envs.transforms.transforms import gSDENoise
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import TensorDictModule, TensorDictSequence
+from torchrl.modules import TensorDictModule, TensorDictSequential
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import (
     IndependentNormal,
@@ -227,7 +227,7 @@ def test_gsde(
     if gSDE:
         model = torch.nn.LazyLinear(action_dim)
         in_keys = ["observation"]
-        module = TensorDictSequence(
+        module = TensorDictSequential(
             TensorDictModule(model, in_keys=in_keys, out_keys=["action"]),
             TensorDictModule(
                 LazygSDEModule(),
