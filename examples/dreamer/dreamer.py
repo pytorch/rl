@@ -13,7 +13,6 @@ from hydra.core.config_store import ConfigStore
 # float16
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
-
 from torchrl import timeit
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
@@ -232,7 +231,7 @@ def main(cfg: "DictConfig"):
     if not cfg.vecnorm and cfg.norm_stats:
         stats = get_stats_random_rollout(
             cfg,
-            proof_environment = transformed_env_constructor(cfg)(),
+            proof_environment=transformed_env_constructor(cfg)(),
             key="next_pixels" if cfg.from_pixels else "next_observation_vector",
         )
         stats = {k: v.clone() for k, v in stats.items()}
@@ -274,11 +273,15 @@ def main(cfg: "DictConfig"):
     if cfg.exploration == "additive_gaussian":
         action_spec = transformed_env_constructor(cfg)().action_spec
         exploration_policy = AdditiveGaussianWrapper(
-            policy, sigma_init=0.3, sigma_end=0.3, spec=action_spec,
+            policy,
+            sigma_init=0.3,
+            sigma_end=0.3,
+            spec=action_spec,
         ).to(device)
     elif cfg.exploration == "ou_exploration":
         exploration_policy = OrnsteinUhlenbeckProcessWrapper(
-            policy, annealing_num_steps=cfg.total_frames,
+            policy,
+            annealing_num_steps=cfg.total_frames,
         ).to(device)
     elif cfg.exploration == "":
         exploration_policy = policy.to(device)
@@ -353,7 +356,7 @@ def main(cfg: "DictConfig"):
                 logger.log_scalar("cmpt", cmpt)
             with timeit("loop.optims"):
                 for j in range(cfg.optim_steps_per_batch):
-                    cmpt+=1
+                    cmpt += 1
                     with timeit("loop.optim.rb.sample"):
                         # sample from replay buffer
                         sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(
@@ -408,7 +411,9 @@ def main(cfg: "DictConfig"):
 
                     with timeit("loop.optims.2"):
                         with autocast(dtype=torch.float16):
-                            actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+                            actor_loss_td, sampled_tensordict = actor_loss(
+                                sampled_tensordict
+                            )
                         scaler2.scale(actor_loss_td["loss_actor"]).backward()
                         scaler2.unscale_(actor_opt)
                         clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
@@ -429,7 +434,9 @@ def main(cfg: "DictConfig"):
 
                     with timeit("loop.optims.3"):
                         with autocast(dtype=torch.float16):
-                            value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                            value_loss_td, sampled_tensordict = value_loss(
+                                sampled_tensordict
+                            )
                         scaler3.scale(value_loss_td["loss_value"]).backward()
                         scaler3.unscale_(value_opt)
                         clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
@@ -471,6 +478,7 @@ def main(cfg: "DictConfig"):
         if i % 100 == 0:
             timeit.print()
             timeit.erase()
+
 
 def recover_pixels(pixels, stats):
     return (

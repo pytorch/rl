@@ -1058,7 +1058,8 @@ class DreamerActor(nn.Module):
                 depth=depth,
                 num_cells=num_cells,
                 activation_class=activation_class,
-            ), scale_mapping="biased_softplus_5.0_1e-4"
+            ),
+            scale_mapping="biased_softplus_5.0_1e-4",
         )
         self.rnn_hidden_dim = rnn_hidden_dim
 
@@ -1134,12 +1135,11 @@ class RSSMPriorRollout(nn.Module):
         self.rssm_prior = rssm_prior
         self.rnn_hidden_dim = rssm_prior.rnn_hidden_dim
 
-    def forward(self, action):
+    def forward(self, prior_state, belief, action):
         prior_means = []
         prior_stds = []
         prior_states = []
         beliefs = []
-        prior_state, belief = None, None
         for i in range(action.shape[1]):
             prior_mean, prior_std, prior_state, belief = self.rssm_prior(
                 prior_state, belief, action[:, i]
@@ -1156,7 +1156,9 @@ class RSSMPriorRollout(nn.Module):
 
 
 class RSSMPrior(nn.Module):
-    def __init__(self, hidden_dim=200, rnn_hidden_dim=200, state_dim=30, action_spec=None):
+    def __init__(
+        self, hidden_dim=200, rnn_hidden_dim=200, state_dim=30, action_spec=None
+    ):
         super().__init__()
 
         # Prior
@@ -1169,7 +1171,7 @@ class RSSMPrior(nn.Module):
                 nn.Linear(hidden_dim, 2 * state_dim),
             ),
             scale_lb=0,
-            scale_mapping="softplus"
+            scale_mapping="softplus",
         )
 
         self.state_dim = state_dim
@@ -1180,16 +1182,6 @@ class RSSMPrior(nn.Module):
         self.action_shape = action_spec.shape
 
     def forward(self, state, rnn_hidden, action):
-        *batch_size, _ = action.shape
-        if state is None:
-            state = torch.zeros(*batch_size, self.state_dim, device=action.device)
-        if rnn_hidden is None:
-            rnn_hidden = torch.zeros(
-                *batch_size, self.rnn_hidden_dim, device=action.device
-            )
-        if action is None:
-            action = torch.zeros(*batch_size, self.action_shape, device=action.device)
-
         action_state = self.action_state_projector(torch.cat([state, action], dim=-1))
         rnn_hidden = self.rnn(action_state, rnn_hidden)
         belief = rnn_hidden
@@ -1209,16 +1201,11 @@ class RSSMPosterior(nn.Module):
                 nn.Linear(hidden_dim, 2 * state_dim),
             ),
             scale_lb=0,
-            scale_mapping="softplus"
+            scale_mapping="softplus",
         )
         self.hidden_dim = hidden_dim
 
     def forward(self, belief, obs_embedding):
-        if belief is None:
-            *batch_sizes, _ = obs_embedding.shape
-            belief = torch.zeros(
-                *batch_sizes, self.hidden_dim, device=obs_embedding.device
-            )
         post_mean, post_std = self.obs_rnn_to_post_projector(
             torch.cat([belief, obs_embedding], dim=-1)
         )

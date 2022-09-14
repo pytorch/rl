@@ -86,6 +86,7 @@ class timeit:
         for k in timeit._REG:
             timeit._REG[k] = [0.0, 0.0, 0]
 
+
 def _check_for_faulty_process(processes):
     terminate = False
     for p in processes:

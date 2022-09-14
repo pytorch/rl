@@ -379,7 +379,9 @@ class SyncDataCollector(_DataCollector):
                     excluded_keys = [
                         key for key in tensordict_out.keys() if key.startswith("_")
                     ]
-                    tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
+                    tensordict_out = tensordict_out.exclude(
+                        *excluded_keys, inplace=True
+                    )
             with timeit("sync.clone"):
                 if self.return_same_td:
                     yield tensordict_out

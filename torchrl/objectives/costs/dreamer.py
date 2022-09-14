@@ -49,18 +49,6 @@ class DreamerModelLoss(LossModule):
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
         tensordict.batch_size = [tensordict.shape[0]]
-        tensordict.set(
-            "prior_state",
-            torch.zeros(
-                (tensordict.batch_size[0], self.cfg.state_dim), device=self.device
-            ),
-        )
-        tensordict.set(
-            "belief",
-            torch.zeros(
-                (tensordict.batch_size[0], self.cfg.rssm_hidden_dim), device=self.device
-            ),
-        )
         tensordict = self.world_model(tensordict)
         # compute model loss
         kl_loss = self.kl_loss(
@@ -69,14 +57,11 @@ class DreamerModelLoss(LossModule):
             tensordict.get("posterior_means"),
             tensordict.get("posterior_stds"),
         )
-        reco_loss = (
-            distance_loss(
-                tensordict.get("pixels"),
-                tensordict.get("reco_pixels"),
-                self.reco_loss,
-            )
-            .mean()
-        )
+        reco_loss = distance_loss(
+            tensordict.get("pixels"),
+            tensordict.get("reco_pixels"),
+            self.reco_loss,
+        ).mean()
         reward_loss = distance_loss(
             tensordict.get("reward"),
             tensordict.get("predicted_reward"),
@@ -149,18 +134,15 @@ class DreamerActorLoss(LossModule):
             )
             with hold_out_net(self.value_model):
                 tensordict = self.value_model(tensordict)
-        
-        lambda_target  = self.lambda_target(
-                tensordict.get("reward"), tensordict.get("predicted_value")
-            )
-        tensordict = tensordict[:, :-1]
-        tensordict.set(
-            "lambda_target", lambda_target
-            
+
+        lambda_target = self.lambda_target(
+            tensordict.get("reward"), tensordict.get("predicted_value")
         )
+        tensordict = tensordict[:, :-1]
+        tensordict.set("lambda_target", lambda_target)
 
         discount = self.gamma * torch.ones_like(lambda_target, device=tensordict.device)
-        discount[:,0] = 1
+        discount[:, 0] = 1
         discount = discount.cumprod(dim=1)
         actor_loss = -(lambda_target * discount).mean()
         return (
@@ -178,6 +160,8 @@ class DreamerActorLoss(LossModule):
         return vec_td_lambda_return_estimate(
             self.gamma, self.lmbda, value[:, 1:], reward[:, :-1], done[:, :-1]
         )
+
+
 class DreamerValueLoss(LossModule):
     def __init__(
         self,
@@ -192,14 +176,19 @@ class DreamerValueLoss(LossModule):
 
     def forward(self, tensordict) -> torch.Tensor:
         tensordict = self.value_model(tensordict)
-        discount = self.gamma * torch.ones_like(tensordict.get("lambda_target"), device=tensordict.device)
-        discount[:,0] = 1
+        discount = self.gamma * torch.ones_like(
+            tensordict.get("lambda_target"), device=tensordict.device
+        )
+        discount[:, 0] = 1
         discount = discount.cumprod(dim=1).detach()
-        value_loss = (discount * distance_loss(
-            tensordict.get("predicted_value"),
-            tensordict.get("lambda_target"),
-            self.value_loss,
-        )).mean()
+        value_loss = (
+            discount
+            * distance_loss(
+                tensordict.get("predicted_value"),
+                tensordict.get("lambda_target"),
+                self.value_loss,
+            )
+        ).mean()
 
         return (
             TensorDict(

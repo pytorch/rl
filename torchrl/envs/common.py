@@ -295,7 +295,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             obs = tensordict_out.get(key)
             self.observation_spec.type_check(obs, key)
 
-        if self._run_checks and (tensordict_out._get_meta("reward").dtype is not self.reward_spec.dtype):
+        if self._run_checks and (
+            tensordict_out._get_meta("reward").dtype is not self.reward_spec.dtype
+        ):
             raise TypeError(
                 f"expected reward.dtype to be {self.reward_spec.dtype} "
                 f"but got {tensordict_out.get('reward').dtype}"

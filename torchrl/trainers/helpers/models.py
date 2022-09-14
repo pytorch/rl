@@ -59,6 +59,7 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
     ProbabilisticActor,
 )
+from torchrl.modules.tensordict_module.initializer import TensorDictDefaultInitializer
 from torchrl.modules.tensordict_module.world_models import (
     WorldModelWrapper,
 )
@@ -1180,6 +1181,15 @@ def make_dreamer(
     # Modules
     obs_encoder = ObsEncoder()
     obs_decoder = ObsDecoder()
+    rssm_prior_default = {
+        "prior_state": {"initializer": torch.zeros, "shape": [cfg.state_dim]},
+        "belief": {"initializer": torch.zeros, "shape": [cfg.rssm_hidden_dim]},
+        "action": {
+            "initializer": torch.zeros,
+            "shape": proof_environment.action_spec.shape,
+        },
+    }
+    rssm_prior_init = TensorDictDefaultInitializer(rssm_prior_default)
     rssm_prior = RSSMPrior(
         hidden_dim=cfg.rssm_hidden_dim,
         rnn_hidden_dim=cfg.rssm_hidden_dim,
@@ -1190,7 +1200,9 @@ def make_dreamer(
     rssm_posterior = RSSMPosterior(
         hidden_dim=cfg.rssm_hidden_dim, state_dim=cfg.state_dim
     )
-    reward_module = MLP(out_features=1, depth=2, num_cells=cfg.mlp_num_units, activation_class=nn.ELU)
+    reward_module = MLP(
+        out_features=1, depth=2, num_cells=cfg.mlp_num_units, activation_class=nn.ELU
+    )
 
     actor_module = DreamerActor(
         out_features=proof_environment.action_spec.shape[0],
@@ -1207,9 +1219,10 @@ def make_dreamer(
             in_keys=["pixels"],
             out_keys=["encoded_latents"],
         ),
+        rssm_prior_init,
         TensorDictModule(
             rssm_prior_rollout,
-            in_keys=["action"],
+            in_keys=["prior_state", "belief", "action"],
             out_keys=[
                 "prior_means",
                 "prior_stds",
@@ -1249,7 +1262,12 @@ def make_dreamer(
         distribution_class=TanhNormal,
     )
     value_model = TensorDictModule(
-        MLP(out_features=1, depth=3, num_cells=cfg.mlp_num_units, activation_class=nn.ELU),
+        MLP(
+            out_features=1,
+            depth=3,
+            num_cells=cfg.mlp_num_units,
+            activation_class=nn.ELU,
+        ),
         in_keys=["prior_state", "belief"],
         out_keys=[value_key],
     )
@@ -1259,6 +1277,7 @@ def make_dreamer(
             in_keys=["pixels"],
             out_keys=["encoded_latents"],
         ),
+        rssm_prior_init,
         TensorDictModule(
             rssm_posterior,
             in_keys=["belief", "encoded_latents"],
@@ -1299,15 +1318,18 @@ def make_dreamer(
 
     model_based_env = DreamerEnv(
         world_model=WorldModelWrapper(
-            TensorDictModule(
-                rssm_prior,
-                in_keys=["prior_state", "belief", "action"],
-                out_keys=[
-                    "prior_means",
-                    "prior_stds",
-                    "next_prior_state",
-                    "next_belief",
-                ],
+            TensorDictSequence(
+                rssm_prior_init,
+                TensorDictModule(
+                    rssm_prior,
+                    in_keys=["prior_state", "belief", "action"],
+                    out_keys=[
+                        "prior_means",
+                        "prior_stds",
+                        "next_prior_state",
+                        "next_belief",
+                    ],
+                ),
             ),
             TensorDictModule(
                 reward_module,
