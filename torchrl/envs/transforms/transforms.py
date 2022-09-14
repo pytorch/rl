@@ -338,10 +338,6 @@ class TransformedEnv(EnvBase):
         # updates need not be inplace, as transforms may modify values out-place
         self.base_env._inplace_update = False
 
-    # @property
-    # def batch_locked(self) -> bool:
-    #     return self.base_env.batch_locked
-
     @property
     def observation_spec(self) -> TensorSpec:
         """Observation spec of the transformed_in environment"""
