@@ -92,7 +92,7 @@ class DreamerModelLoss(LossModule):
             / (2 * prior_std ** 2)
             - 0.5
         )
-        kl = kl.clamp_min(self.free_nats).sum(-1).mean()
+        kl = kl.sum(-1).mean().clamp_min(self.free_nats)
         return kl
 
 
