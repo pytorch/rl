@@ -34,6 +34,7 @@ from torchrl.envs import (
     RewardScaling,
     BinarizeReward,
     R3MTransform,
+    ForceTensorReset
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm, TransformedEnv
@@ -1002,6 +1003,30 @@ class TestTransforms:
             assert transformed_env.step_count > 0
         else:
             assert transformed_env.step_count == 30
+
+    @pytest.mark.parametrize("num_defaults", [1, 2, 3])
+    @pytest.mark.parametrize("compose", [True, False])
+    @pytest.mark.parametrize("initializer", [torch.zeros, torch.ones, torch.randn])
+    @pytest.mark.parametrize("default_shape", [[2], [2, 3]])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_force_tensor_reset(self, num_defaults, default_shape, initializer, compose, device):
+        torch.manual_seed(0)
+        env = ContinuousActionVecMockEnv()
+        env.set_seed(100)
+        default_dict = {f"a_{i}": {"initializer": initializer, "shape": default_shape} for i in range(num_defaults)}
+        reset_transform = ForceTensorReset(default_dict)
+        if compose:
+            transformed_env = TransformedEnv(env)
+            transformed_env.append_transform(reset_transform)
+        else:
+            transformed_env = TransformedEnv(env, reset_transform)
+        transformed_env = transformed_env.to(device)
+        tensordict = transformed_env.reset()
+        for i in range(num_defaults):
+            assert tensordict.get(f"a_{i}").shape == torch.Size(default_shape)
+            if initializer != torch.randn:
+                assert torch.allclose(tensordict.get(f"a_{i}"), default_dict[f"a_{i}"]["initializer"](*default_dict[f"a_{i}"]["shape"], device = device))
+            assert tensordict.get(f"a_{i}").device == device
 
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
