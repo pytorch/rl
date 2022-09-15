@@ -76,9 +76,9 @@ class DreamerModelLoss(LossModule):
             TensorDict(
                 {
                     "loss_world_model": loss,
-                    # "loss_kl": kl_loss,
-                    # "loss_reco": reco_loss,
-                    # "loss_reward": reward_loss,
+                    "kl_model_loss": kl_loss,
+                    "reco_model_loss": reco_loss,
+                    "reward_model_loss": reward_loss,
                 },
                 [],
             ),

@@ -406,6 +406,21 @@ def main(cfg: "DictConfig"):
                                 grad_norm(world_model_opt),
                                 step=collected_frames,
                             )
+                            logger.log_scalar(
+                               "kl_model_loss",
+                                model_loss_td["kl_model_loss"].detach().item(),
+                                step=collected_frames,
+                            )
+                            logger.log_scalar(
+                                "reco_model_loss",
+                                model_loss_td["reco_model_loss"].detach().item(),
+                                step=collected_frames,
+                            )
+                            logger.log_scalar(
+                                "reward_model_loss",
+                                model_loss_td["reward_model_loss"].detach().item(),
+                                step=collected_frames,
+                            )
                         world_model_opt.zero_grad()
                         scaler1.update()
 
