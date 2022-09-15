@@ -1189,7 +1189,12 @@ def make_dreamer(
             "shape": proof_environment.action_spec.shape,
         },
     }
-    rssm_prior_init = TensorDictDefaultInitializer(rssm_prior_default)
+    world_modeler_default = {
+        "prior_state": {"initializer": torch.zeros, "shape": [cfg.state_dim]},
+        "belief": {"initializer": torch.zeros, "shape": [cfg.rssm_hidden_dim]},
+    }
+    world_modeler_default = TensorDictDefaultInitializer(world_modeler_default, reinit=True)
+    rssm_prior_init = TensorDictDefaultInitializer(rssm_prior_default, reinit=False)
     rssm_prior = RSSMPrior(
         hidden_dim=cfg.rssm_hidden_dim,
         rnn_hidden_dim=cfg.rssm_hidden_dim,
@@ -1219,7 +1224,7 @@ def make_dreamer(
             in_keys=["pixels"],
             out_keys=["encoded_latents"],
         ),
-        rssm_prior_init,
+        world_modeler_default,
         TensorDictModule(
             rssm_prior_rollout,
             in_keys=["prior_state", "belief", "action"],
@@ -1351,8 +1356,6 @@ def make_dreamer(
         td = proof_environment.rollout(1000)
         td = td.unsqueeze(0).to_tensordict().to(device)
         td.batch_size = [1]
-        td["prior_state"] = torch.zeros((td.batch_size[0], cfg.state_dim))
-        td["belief"] = torch.zeros((td.batch_size[0], cfg.rssm_hidden_dim))
         td = td.to(device)
         world_model(td)
     model_based_env = model_based_env.to(device)

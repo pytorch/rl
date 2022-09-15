@@ -61,7 +61,7 @@ class DreamerModelLoss(LossModule):
             tensordict.get("pixels"),
             tensordict.get("reco_pixels"),
             self.reco_loss,
-        ).sum(-1,-2,-3).mean()
+        ).sum((-1,-2,-3)).mean().mean()
         reward_loss = distance_loss(
             tensordict.get("reward"),
             tensordict.get("predicted_reward"),
