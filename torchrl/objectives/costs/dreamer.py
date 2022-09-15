@@ -61,7 +61,7 @@ class DreamerModelLoss(LossModule):
             tensordict.get("pixels"),
             tensordict.get("reco_pixels"),
             self.reco_loss,
-        ).mean()
+        ).sum(-1,-2,-3).mean()
         reward_loss = distance_loss(
             tensordict.get("reward"),
             tensordict.get("predicted_reward"),
@@ -92,7 +92,7 @@ class DreamerModelLoss(LossModule):
             / (2 * prior_std ** 2)
             - 0.5
         )
-        kl = kl.mean().clamp_min(self.free_nats)
+        kl = kl.clamp_min(self.free_nats).sum(-1).mean()
         return kl
 
 
