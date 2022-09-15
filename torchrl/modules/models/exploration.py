@@ -262,7 +262,7 @@ class gSDEModule(nn.Module):
             to the sampled action.
 
     Examples:
-        >>> from torchrl.modules import TensorDictModule, TensorDictSequence, ProbabilisticActor, TanhNormal
+        >>> from torchrl.modules import TensorDictModule, TensorDictSequential, ProbabilisticActor, TanhNormal
         >>> from torchrl.data import TensorDict
         >>> batch, state_dim, action_dim = 3, 7, 5
         >>> model = nn.Linear(state_dim, action_dim)
@@ -274,7 +274,7 @@ class gSDEModule(nn.Module):
         >>> stochatstic_part = ProbabilisticActor(stochatstic_part,
         ...      dist_param_keys=["loc", "scale"],
         ...      distribution_class=TanhNormal)
-        >>> stochatstic_policy = TensorDictSequence(deterministic_policy, stochatstic_part)
+        >>> stochatstic_policy = TensorDictSequential(deterministic_policy, stochatstic_part)
         >>> tensordict = TensorDict({'obs': torch.randn(state_dim), '_epx_gSDE': torch.zeros(1)}, [])
         >>> _ = stochatstic_policy(tensordict)
         >>> print(tensordict)

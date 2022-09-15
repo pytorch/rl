@@ -5,7 +5,7 @@ import torch
 from functorch import vmap
 from torch import nn
 from torchrl.data import TensorDict
-from torchrl.modules import TensorDictModule, TensorDictSequence
+from torchrl.modules import TensorDictModule, TensorDictSequential
 from torchrl.modules.functional_modules import (
     FunctionalModuleWithBuffers,
     FunctionalModule,
@@ -158,7 +158,7 @@ def test_vmap_tdsequence(moduletype, batch_params):
         tdmodule1 = TensorDictModule(fmodule1, in_keys=["x"], out_keys=["y"])
         tdmodule2 = TensorDictModule(fmodule2, in_keys=["y"], out_keys=["z"])
         params = TensorDict({"0": params1, "1": params2}, [])
-        tdmodule = TensorDictSequence(tdmodule1, tdmodule2)
+        tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
         assert {"0", "1"} == set(params.keys())
         x = torch.randn(10, 1, 3)
         td = TensorDict({"x": x}, [10])
@@ -174,7 +174,7 @@ def test_vmap_tdsequence(moduletype, batch_params):
         tdmodule2 = TensorDictModule(fmodule2, in_keys=["y"], out_keys=["z"])
         params = TensorDict({"0": params1, "1": params2}, [])
         buffers = TensorDict({"0": buffers1, "1": buffers2}, [])
-        tdmodule = TensorDictSequence(tdmodule1, tdmodule2)
+        tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
         assert {"0", "1"} == set(params.keys())
         assert {"0", "1"} == set(buffers.keys())
         x = torch.randn(10, 2, 3)
@@ -209,7 +209,7 @@ def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
     if moduletype == "linear":
         tdmodule1 = TensorDictModule(module1, in_keys=["x"], out_keys=["y"])
         tdmodule2 = TensorDictModule(module2, in_keys=["y"], out_keys=["z"])
-        tdmodule = TensorDictSequence(tdmodule1, tdmodule2)
+        tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
         tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers(native=True)
         assert {"0", "1"} == set(params.keys())
         x = torch.randn(10, 1, 3)
@@ -225,7 +225,7 @@ def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
     elif moduletype == "bn1":
         tdmodule1 = TensorDictModule(module1, in_keys=["x"], out_keys=["y"])
         tdmodule2 = TensorDictModule(module2, in_keys=["y"], out_keys=["z"])
-        tdmodule = TensorDictSequence(tdmodule1, tdmodule2)
+        tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
         tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers(native=True)
         assert {"0", "1"} == set(params.keys())
         assert {"0", "1"} == set(buffers.keys())
