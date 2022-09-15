@@ -40,3 +40,4 @@ they still provide good examples of RL solutions with and without PyTorch:
 - [MBRL-lib: Library for Model Based RL in pytorch](https://github.com/facebookresearch/mbrl-lib)
 - [RLMeta: light-weight flexible framework for Distributed Reinforcement Learning Research.](https://github.com/facebookresearch/rlmeta)
 - [ElegantRL: Cloud-native Deep Reinforcement Learning](https://github.com/AI4Finance-Foundation/ElegantRL)
+- [MTRL: Multi Task RL Baselines](https://github.com/facebookresearch/mtrl)
