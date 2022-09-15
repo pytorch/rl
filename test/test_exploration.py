@@ -189,7 +189,9 @@ class TestAdditiveGaussian:
             default_interaction_mode="random",
         ).to(device)
         given_spec = action_spec if spec_origin == "spec" else None
-        exploratory_policy = AdditiveGaussianWrapper(policy, spec=given_spec).to(device)
+        exploratory_policy = AdditiveGaussianWrapper(
+            policy, spec=given_spec, safe=False
+        ).to(device)
 
         tensordict = TensorDict(
             batch_size=[batch],
@@ -198,21 +200,20 @@ class TestAdditiveGaussian:
         )
         out_noexp = []
         out = []
-        if exploratory_policy.spec is not None:
-            for _ in range(n_steps):
-                tensordict_noexp = policy(tensordict.select("observation"))
-                tensordict = exploratory_policy(tensordict)
-                out.append(tensordict.clone())
-                out_noexp.append(tensordict_noexp.clone())
-                tensordict.set_("observation", torch.randn(batch, d_obs, device=device))
-            out = torch.stack(out, 0)
-            out_noexp = torch.stack(out_noexp, 0)
-            assert (out_noexp.get("action") != out.get("action")).all()
-            if spec_origin is not None:
-                assert (out.get("action") <= 1.0).all(), out.get("action").min()
-                assert (out.get("action") >= -1.0).all(), out.get("action").max()
-                if action_spec is not None:
-                    assert action_spec.is_in(out.get("action"))
+        for _ in range(n_steps):
+            tensordict_noexp = policy(tensordict.select("observation"))
+            tensordict = exploratory_policy(tensordict)
+            out.append(tensordict.clone())
+            out_noexp.append(tensordict_noexp.clone())
+            tensordict.set_("observation", torch.randn(batch, d_obs, device=device))
+        out = torch.stack(out, 0)
+        out_noexp = torch.stack(out_noexp, 0)
+        assert (out_noexp.get("action") != out.get("action")).all()
+        if spec_origin is not None:
+            assert (out.get("action") <= 1.0).all(), out.get("action").min()
+            assert (out.get("action") >= -1.0).all(), out.get("action").max()
+            if action_spec is not None:
+                assert action_spec.is_in(out.get("action"))
 
 
 @pytest.mark.parametrize("state_dim", [7])
