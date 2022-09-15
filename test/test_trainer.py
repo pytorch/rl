@@ -7,13 +7,14 @@ import tempfile
 from argparse import Namespace
 from collections import OrderedDict
 from os import walk, path
+from time import sleep
 
 import pytest
 import torch
 
 try:
     from tensorboard.backend.event_processing import event_accumulator
-    from torchrl.trainers.loggers import TensorboardLogger
+    from torchrl.trainers.loggers.tensorboard import TensorboardLogger
 
     _has_tb = True
 except ImportError:
@@ -48,7 +49,7 @@ class MockingOptim:
 class MockingCollector:
     called_update_policy_weights_ = False
 
-    def set_seed(self, seed):
+    def set_seed(self, seed, **kwargs):
         return seed
 
     def update_policy_weights_(self):
@@ -242,6 +243,8 @@ def test_recorder():
         args.record_frames = 24 // args.frame_skip
         args.record_interval = 2
         args.catframes = 4
+        args.image_size = 84
+        args.collector_devices = ["cpu"]
 
         N = 8
 
@@ -262,22 +265,26 @@ def test_recorder():
         )
 
         for _ in range(N):
-            out = recorder(None)
+            recorder(None)
 
-        for (dirpath, dirnames, filenames) in walk(folder):
+        for (_, _, filenames) in walk(folder):
+            filename = filenames[0]
             break
-
-        filename = filenames[0]
-        ea = event_accumulator.EventAccumulator(
-            path.join(folder, filename),
-            size_guidance={
-                event_accumulator.IMAGES: 0,
-            },
-        )
-        ea.Reload()
-        print(ea.Tags())
-        img = ea.Images("tmp_ALE/Pong-v5_video")
-        assert len(img) == N // args.record_interval
+        for _ in range(3):
+            ea = event_accumulator.EventAccumulator(
+                path.join(folder, filename),
+                size_guidance={
+                    event_accumulator.IMAGES: 0,
+                },
+            )
+            ea.Reload()
+            print(ea.Tags())
+            img = ea.Images("tmp_ALE/Pong-v5_video")
+            try:
+                assert len(img) == N // args.record_interval
+                break
+            except AssertionError:
+                sleep(0.1)
 
 
 def test_updateweights():

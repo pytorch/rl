@@ -2,15 +2,20 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import os
+from warnings import warn
 
 from torch import Tensor
 
 from .common import Logger
 
+_has_tb = False
 try:
     from torch.utils.tensorboard import SummaryWriter
+
+    _has_tb = True
 except ImportError:
-    raise ImportError("torch.utils.tensorboard could not be imported")
+    warn("torch.utils.tensorboard could not be imported")
 
 
 class TensorboardLogger(Logger):
@@ -19,11 +24,13 @@ class TensorboardLogger(Logger):
 
     Args:
         exp_name (str): The name of the experiment.
+        log_dir (str): the tensorboard log_dir.
 
     """
 
-    def __init__(self, exp_name: str) -> None:
-        super().__init__(exp_name=exp_name)
+    def __init__(self, exp_name: str, log_dir: str = "tb_logs") -> None:
+        super().__init__(exp_name=exp_name, log_dir=log_dir)
+        # re-write log_dir
         self.log_dir = self.experiment.log_dir
 
         self._has_imported_moviepy = False
@@ -39,7 +46,8 @@ class TensorboardLogger(Logger):
 
         """
 
-        return SummaryWriter(log_dir=self.exp_name)
+        log_dir = str(os.path.join(self.log_dir, self.exp_name))
+        return SummaryWriter(log_dir=log_dir)
 
     def log_scalar(self, name: str, value: float, step: int = None) -> None:
         """
@@ -61,6 +69,12 @@ class TensorboardLogger(Logger):
             video (Tensor): The video to be logged.
             step (int, optional): The step at which the video is logged. Defaults to None.
         """
+        # check for correct format of the video tensor ((N), T, C, H, W)
+        # check that the color channel (C) is either 1 or 3
+        if video.dim() != 5 or video.size(dim=2) not in {1, 3}:
+            raise Exception(
+                "Wrong format of the video tensor. Should be ((N), T, C, H, W)"
+            )
         if not self._has_imported_moviepy:
             try:
                 import moviepy  # noqa
@@ -77,7 +91,7 @@ class TensorboardLogger(Logger):
             **kwargs,
         )
 
-    def log_hparams(self, cfg: "DictConfig") -> None:
+    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
         """
         Logs the hyperparameters of the experiment.
 
@@ -88,4 +102,4 @@ class TensorboardLogger(Logger):
         self.experiment.add_text("hparams", txt)
 
     def __repr__(self) -> str:
-        return self.experiment.__repr__()
+        return f"TensorboardLogger(experiment={self.experiment.__repr__()})"

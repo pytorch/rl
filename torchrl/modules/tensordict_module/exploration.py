@@ -8,7 +8,7 @@ from typing import Optional, Union
 import numpy as np
 import torch
 
-from torchrl.data import CompositeSpec
+from torchrl.data import CompositeSpec, TensorSpec
 from torchrl.data.utils import expand_as_right
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.tensordict_module.common import (
@@ -17,7 +17,11 @@ from torchrl.modules.tensordict_module.common import (
     TensorDictModuleWrapper,
 )
 
-__all__ = ["EGreedyWrapper", "OrnsteinUhlenbeckProcessWrapper"]
+__all__ = [
+    "EGreedyWrapper",
+    "AdditiveGaussianWrapper",
+    "OrnsteinUhlenbeckProcessWrapper",
+]
 
 from torchrl.data.tensordict.tensordict import TensorDictBase
 
@@ -37,6 +41,9 @@ class EGreedyWrapper(TensorDictModuleWrapper):
             its output spec will be of type CompositeSpec. One needs to know where to
             find the action spec.
             Default is "action".
+        spec (TensorSpec, optional): if provided, the sampled action will be
+            projected onto the valid action space once explored. If not provided,
+            the exploration wrapper will attempt to recover it from the policy.
 
     Examples:
         >>> from torchrl.modules import EGreedyWrapper, Actor
@@ -69,6 +76,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
         action_key: str = "action",
+        spec: Optional[TensorSpec] = None,
     ):
         super().__init__(policy)
         self.register_buffer("eps_init", torch.tensor([eps_init]))
@@ -78,6 +86,13 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
         self.action_key = action_key
+        self.spec = (
+            spec
+            if spec is not None
+            else policy.spec
+            if hasattr(policy, "spec")
+            else None
+        )
 
     def step(self, frames: int = 1) -> None:
         """A step of epsilon decay.
@@ -104,11 +119,113 @@ class EGreedyWrapper(TensorDictModuleWrapper):
                 out.dtype
             )
             cond = expand_as_right(cond, out)
-            spec = self.td_module.spec
+            spec = self.spec
+            if spec is not None:
+                if isinstance(spec, CompositeSpec):
+                    spec = spec[self.action_key]
+                out = (
+                    cond * spec.rand(tensordict.shape).to(out.device) + (1 - cond) * out
+                )
+            else:
+                raise RuntimeError(
+                    "spec must be provided by the policy or directly to the exploration wrapper."
+                )
+            tensordict.set(self.td_module.out_keys[0], out)
+        return tensordict
+
+
+class AdditiveGaussianWrapper(TensorDictModuleWrapper):
+    """
+    Additive Gaussian PO wrapper.
+
+    Args:
+        policy (TensorDictModule): a policy.
+        sigma_init (scalar, optional): initial epsilon value.
+            default: 1.0
+        sigma_end (scalar, optional): final epsilon value.
+            default: 0.1
+        annealing_num_steps (int, optional): number of steps it will take for
+            sigma to reach the `sigma_end` value.
+        action_key (str, optional): if the policy module has more than one output key,
+            its output spec will be of type CompositeSpec. One needs to know where to
+            find the action spec.
+            Default is "action".
+        spec (TensorSpec, optional): if provided, the sampled action will be
+            projected onto the valid action space once explored. If not provided,
+            the exploration wrapper will attempt to recover it from the policy.
+        safe (boolean, optional): if False, the TensorSpec can be None. If it
+            is set to False but the spec is passed, the projection will still
+            happen.
+            Default is True.
+
+    """
+
+    def __init__(
+        self,
+        policy: TensorDictModule,
+        sigma_init: float = 1.0,
+        sigma_end: float = 0.1,
+        annealing_num_steps: int = 1000,
+        action_key: str = "action",
+        spec: Optional[TensorSpec] = None,
+        safe: Optional[bool] = True,
+    ):
+        super().__init__(policy)
+        self.register_buffer("sigma_init", torch.tensor([sigma_init]))
+        self.register_buffer("sigma_end", torch.tensor([sigma_end]))
+        if self.sigma_end > self.sigma_init:
+            raise RuntimeError("sigma should decrease over time or be constant")
+        self.annealing_num_steps = annealing_num_steps
+        self.register_buffer("sigma", torch.tensor([sigma_init]))
+        self.action_key = action_key
+        self.spec = (
+            spec
+            if spec is not None
+            else policy.spec
+            if hasattr(policy, "spec")
+            else None
+        )
+        self.safe = safe
+
+    def step(self, frames: int = 1) -> None:
+        """A step of sigma decay.
+        After self.annealing_num_steps, this function is a no-op.
+
+        Args:
+            frames (int): number of frames since last step.
+
+        """
+        for _ in range(frames):
+            self.sigma.data[0] = max(
+                self.sigma_end.item(),
+                (
+                    self.sigma
+                    - (self.sigma_init - self.sigma_end) / self.annealing_num_steps
+                ).item(),
+            )
+
+    def _add_noise(self, action: torch.Tensor) -> torch.Tensor:
+        sigma = self.sigma.item()
+        noise = torch.randn(action.shape, device=action.device) * sigma
+        action = action + noise
+        spec = self.spec
+        if spec is not None:
             if isinstance(spec, CompositeSpec):
                 spec = spec[self.action_key]
-            out = cond * spec.rand(tensordict.shape).to(out.device) + (1 - cond) * out
-            tensordict.set(self.td_module.out_keys[0], out)
+            action = spec.project(action)
+        elif self.safe:
+            raise RuntimeError(
+                "the action spec must be provided to AdditiveGaussianWrapper unless "
+                "the `safe` keyword argument is turned off at initialization."
+            )
+        return action
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        tensordict = self.td_module.forward(tensordict)
+        if exploration_mode() == "random" or exploration_mode() is None:
+            out = tensordict.get(self.action_key)
+            out = self._add_noise(out)
+            tensordict.set(self.action_key, out)
         return tensordict
 
 

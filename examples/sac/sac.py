@@ -26,12 +26,12 @@ from torchrl.trainers.helpers.envs import (
     transformed_env_constructor,
     EnvConfig,
 )
+from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.losses import make_sac_loss, LossConfig
 from torchrl.trainers.helpers.models import (
     make_sac_model,
     SACModelConfig,
 )
-from torchrl.trainers.helpers.recorder import RecorderConfig
 from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
     ReplayArgsConfig,
@@ -46,7 +46,7 @@ config_fields = [
         EnvConfig,
         LossConfig,
         SACModelConfig,
-        RecorderConfig,
+        LoggerConfig,
         ReplayArgsConfig,
     )
     for config_field in dataclasses.fields(config_cls)
@@ -68,8 +68,7 @@ DEFAULT_REWARD_SCALING = {
 
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
-def main(cfg: "DictConfig"):
-    from torchrl.trainers.loggers.tensorboard import TensorboardLogger
+def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
 
@@ -90,7 +89,18 @@ def main(cfg: "DictConfig"):
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
-    logger = TensorboardLogger(f"sac_logging/{exp_name}")
+    if cfg.logger == "tensorboard":
+        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
+
+        logger = TensorboardLogger(log_dir="sac_logging", exp_name=exp_name)
+    elif cfg.logger == "csv":
+        from torchrl.trainers.loggers.csv import CSVLogger
+
+        logger = CSVLogger(log_dir="sac_logging", exp_name=exp_name)
+    elif cfg.logger == "wandb":
+        from torchrl.trainers.loggers.wandb import WandbLogger
+
+        logger = WandbLogger(log_dir="sac_logging", exp_name=exp_name)
     video_tag = exp_name if cfg.record_video else ""
 
     stats = None

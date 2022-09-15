@@ -88,7 +88,7 @@ class ValueLoss:
     target_value_network: nn.Module
 
 
-class _TargetNetUpdate:
+class TargetNetUpdater:
     """
     An abstract class for target network update in Double DQN/DDPG.
 
@@ -99,7 +99,7 @@ class _TargetNetUpdate:
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],  # noqa: F821
     ):
 
         _target_names = []
@@ -194,7 +194,7 @@ class _TargetNetUpdate:
         return string
 
 
-class SoftUpdate(_TargetNetUpdate):
+class SoftUpdate(TargetNetUpdater):
     """
     A soft-update class for target network update in Double DQN/DDPG.
     This was proposed in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf
@@ -208,7 +208,7 @@ class SoftUpdate(_TargetNetUpdate):
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "REDQLoss"],
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "REDQLoss"],  # noqa: F821
         eps: float = 0.999,
     ):
         if not (eps < 1.0 and eps > 0.0):
@@ -222,7 +222,7 @@ class SoftUpdate(_TargetNetUpdate):
         p_target.data.copy_(p_target.data * self.eps + p_source.data * (1 - self.eps))
 
 
-class HardUpdate(_TargetNetUpdate):
+class HardUpdate(TargetNetUpdater):
     """
     A hard-update class for target network update in Double DQN/DDPG (by contrast with soft updates).
     This was proposed in the original Double DQN paper: "Deep Reinforcement Learning with Double Q-learning",
@@ -236,7 +236,7 @@ class HardUpdate(_TargetNetUpdate):
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],
+        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss"],  # noqa: F821
         value_network_update_interval: float = 1000,
     ):
         super(HardUpdate, self).__init__(loss_module)

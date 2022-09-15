@@ -11,7 +11,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from textwrap import indent
-from typing import Callable, Iterator, Optional, Sequence, Tuple, Union
+from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Dict
 
 import numpy as np
 import torch
@@ -40,6 +40,8 @@ from ..envs.vec_env import _BatchedEnv
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
 _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 1000))
+
+DEFAULT_EXPLORATION_MODE: str = "random"
 
 
 class RandomPolicy:
@@ -156,7 +158,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -231,7 +233,9 @@ class SyncDataCollector(_DataCollector):
 
     def __init__(
         self,
-        create_env_fn: Union[EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]],
+        create_env_fn: Union[
+            EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]  # noqa: F821
+        ],  # noqa: F821
         policy: Optional[
             Union[
                 ProbabilisticTensorDictModule,
@@ -251,7 +255,7 @@ class SyncDataCollector(_DataCollector):
         seed: Optional[int] = None,
         pin_memory: bool = False,
         return_in_place: bool = False,
-        exploration_mode: str = "random",
+        exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         init_with_lag: bool = False,
         return_same_td: bool = False,
     ):
@@ -296,7 +300,9 @@ class SyncDataCollector(_DataCollector):
         self.max_frames_per_traj = max_frames_per_traj
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.pin_memory = pin_memory
-        self.exploration_mode = exploration_mode
+        self.exploration_mode = (
+            exploration_mode if exploration_mode else DEFAULT_EXPLORATION_MODE
+        )
         self.init_with_lag = init_with_lag and max_frames_per_traj > 0
         self.return_same_td = return_same_td
 
@@ -323,11 +329,13 @@ class SyncDataCollector(_DataCollector):
         self._has_been_done = None
         self._exclude_private_keys = True
 
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
 
         Args:
             seed (int): integer representing the seed to be used for the environment.
+            static_seed(bool, optional): if True, the seed is not incremented.
+                Defaults to False
 
         Returns:
             Output seed. This is useful when more than one environment is contained in the DataCollector, as the
@@ -340,7 +348,7 @@ class SyncDataCollector(_DataCollector):
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
-        return self.env.set_seed(seed)
+        return self.env.set_seed(seed, static_seed=static_seed)
 
     def iterator(self) -> Iterator[TensorDictBase]:
         """Iterates through the DataCollector.
@@ -456,7 +464,7 @@ class SyncDataCollector(_DataCollector):
 
         tensordict_out = []
         with set_exploration_mode(self.exploration_mode):
-            for t in range(self.frames_per_batch):
+            for _ in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
@@ -569,7 +577,13 @@ class SyncDataCollector(_DataCollector):
         env_str = indent(f"env={self.env}", 4 * " ")
         policy_str = indent(f"policy={self.policy}", 4 * " ")
         td_out_str = indent(f"td_out={self._tensordict_out}", 4 * " ")
-        string = f"{self.__class__.__name__}(\n{env_str},\n{policy_str},\n{td_out_str})"
+        string = (
+            f"{self.__class__.__name__}("
+            f"\n{env_str},"
+            f"\n{policy_str},"
+            f"\n{td_out_str},"
+            f"\nexploration={self.exploration_mode})"
+        )
         return string
 
 
@@ -648,7 +662,7 @@ class _MultiDataCollector(_DataCollector):
         passing_devices: Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]] = "cpu",
         update_at_each_batch: bool = False,
         init_with_lag: bool = False,
-        exploration_mode: str = "random",
+        exploration_mode: str = DEFAULT_EXPLORATION_MODE,
     ):
         self.closed = True
         self.create_env_fn = create_env_fn
@@ -695,6 +709,9 @@ class _MultiDataCollector(_DataCollector):
         self._policy_dict = {}
         self._get_weights_fn_dict = {}
         for i, _device in enumerate(devices):
+            if _device in self._policy_dict:
+                devices[i] = _device
+                continue
             _policy, _device, _get_weight_fn = self._get_policy_and_device(
                 policy=policy,
                 device=_device,
@@ -792,6 +809,9 @@ class _MultiDataCollector(_DataCollector):
             pipe_child.close()
             self.procs.append(proc)
             self.pipes.append(pipe_parent)
+            msg = pipe_parent.recv()
+            if msg != "instantiated":
+                raise RuntimeError(msg)
         self.queue_out = queue_out
         self.closed = False
 
@@ -822,11 +842,13 @@ class _MultiDataCollector(_DataCollector):
         for pipe in self.pipes:
             pipe.close()
 
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
 
         Args:
             seed: integer representing the seed to be used for the environment.
+            static_seed (bool, optional): if True, the seed is not incremented.
+                Defaults to False
 
         Returns:
             Output seed. This is useful when more than one environment is
@@ -843,7 +865,7 @@ class _MultiDataCollector(_DataCollector):
         """
         _check_for_faulty_process(self.procs)
         for idx in range(self.num_workers):
-            self.pipes[idx].send((seed, "seed"))
+            self.pipes[idx].send(((seed, static_seed), "seed"))
             new_seed, msg = self.pipes[idx].recv()
             if msg != "seeded":
                 raise RuntimeError(f"Expected msg='seeded', got {msg}")
@@ -948,7 +970,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             i += 1
             max_traj_idx = None
-            for k in range(self.num_workers):
+            for _ in range(self.num_workers):
                 new_data, j = self.queue_out.get()
                 if j == 0:
                     data, idx = new_data
@@ -1218,8 +1240,8 @@ def _main_async_collector(
     pipe_parent: connection.Connection,
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
-    create_env_fn: Union[EnvBase, "EnvCreator", Callable[[], EnvBase]],
-    create_env_kwargs: dict,
+    create_env_fn: Union[EnvBase, "EnvCreator", Callable[[], EnvBase]],  # noqa: F821
+    create_env_kwargs: Dict[str, Any],
     policy: Callable[[TensorDictBase], TensorDictBase],
     frames_per_worker: int,
     max_frames_per_traj: int,
@@ -1231,7 +1253,7 @@ def _main_async_collector(
     pin_memory: bool,
     idx: int = 0,
     init_with_lag: bool = False,
-    exploration_mode: str = "random",
+    exploration_mode: str = DEFAULT_EXPLORATION_MODE,
     verbose: bool = False,
 ) -> None:
     pipe_parent.close()
@@ -1261,6 +1283,7 @@ def _main_async_collector(
         print("Sync data collector created")
     dc_iter = iter(dc)
     j = 0
+    pipe_child.send("instantiated")
 
     has_timed_out = False
     counter = 0
@@ -1348,7 +1371,8 @@ def _main_async_collector(
             continue
 
         elif msg == "seed":
-            new_seed = dc.set_seed(data_in)
+            data_in, static_seed = data_in
+            new_seed = dc.set_seed(data_in, static_seed=static_seed)
             torch.manual_seed(data_in)
             np.random.seed(data_in)
             pipe_child.send((new_seed, "seeded"))
