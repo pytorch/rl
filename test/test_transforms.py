@@ -1295,10 +1295,6 @@ class TestR3M:
         transformed_env.close()
         del transformed_env
 
-
-@pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("model", ["resnet18", "resnet34", "resnet50"])
-class TestR3MNet:
     @pytest.mark.parametrize("del_keys", [True, False])
     @pytest.mark.parametrize(
         "in_keys",
@@ -1311,9 +1307,6 @@ class TestR3MNet:
     def test_r3mnet_transform_observation_spec(
         self, in_keys, out_keys, del_keys, device, model
     ):
-        in_keys = ["next_pixels"]
-        out_keys = ["next_r3m_vec"]
-
         r3m_net = _R3MNet(in_keys, out_keys, model, del_keys)
 
         observation_spec = CompositeSpec(
@@ -1328,6 +1321,9 @@ class TestR3MNet:
             )
 
             observation_spec_out = r3m_net.transform_observation_spec(observation_spec)
+
+            for key in in_keys:
+                assert key not in observation_spec_out
             for key in out_keys:
                 assert observation_spec_out[key].shape == exp_ts[key].shape
                 assert observation_spec_out[key].device == exp_ts[key].device
@@ -1341,10 +1337,32 @@ class TestR3MNet:
             exp_ts = CompositeSpec(**ts_dict)
 
             observation_spec_out = r3m_net.transform_observation_spec(observation_spec)
-            for key in out_keys:
+
+            for key in in_keys + out_keys:
                 assert observation_spec_out[key].shape == exp_ts[key].shape
                 assert observation_spec_out[key].dtype == exp_ts[key].dtype
                 assert observation_spec_out[key].device == exp_ts[key].device
+
+    @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
+    def test_r3m_spec_against_real(self, model, tensor_pixels_key, device):
+        keys_in = ["next_pixels"]
+        keys_out = ["next_vec"]
+        r3m = R3MTransform(
+            model,
+            keys_in=keys_in,
+            keys_out=keys_out,
+            tensor_pixels_keys=tensor_pixels_key,
+        )
+        base_env = DiscreteActionConvMockEnvNumpy().to(device)
+        transformed_env = TransformedEnv(base_env, r3m)
+        expected_keys = (
+            list(transformed_env.input_spec.keys())
+            + list(transformed_env.observation_spec.keys())
+            + [key.strip("next_") for key in transformed_env.observation_spec.keys()]
+            + ["reward"]
+            + ["done"]
+        )
+        assert set(expected_keys) == set(transformed_env.rollout(3).keys())
 
 
 if __name__ == "__main__":
