@@ -145,6 +145,7 @@ class Transform(nn.Module):
 
     def _apply_transform(self, obs: torch.Tensor) -> None:
         """Applies the transform to a tensor.
+
         This operation can be called multiple times (if multiples keys of the
         tensordict match the keys of the transform).
 
@@ -152,10 +153,7 @@ class Transform(nn.Module):
         raise NotImplementedError
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Reads the input tensordict, and for the selected keys, applies the
-        transform.
-
-        """
+        """Reads the input tensordict, and for the selected keys, applies the transform."""
         self._check_inplace()
         for key_in, key_out in zip(self.keys_in, self.keys_out):
             if key_in in tensordict.keys():
@@ -186,8 +184,7 @@ class Transform(nn.Module):
         return tensordict
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
-        """Transforms the action spec such that the resulting spec matches
-        transform mapping.
+        """Transforms the action spec such that the resulting spec matches transform mapping.
 
         Args:
             action_spec (TensorSpec): spec before the transform
@@ -199,8 +196,7 @@ class Transform(nn.Module):
         return action_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        """Transforms the input spec such that the resulting spec matches
-        transform mapping.
+        """Transforms the input spec such that the resulting spec matches transform mapping.
 
         Args:
             input_spec (TensorSpec): spec before the transform
@@ -212,8 +208,7 @@ class Transform(nn.Module):
         return input_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        """Transforms the observation spec such that the resulting spec
-        matches transform mapping.
+        """Transforms the observation spec such that the resulting spec matches transform mapping.
 
         Args:
             observation_spec (TensorSpec): spec before the transform
@@ -225,8 +220,7 @@ class Transform(nn.Module):
         return observation_spec
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        """Transforms the reward spec such that the resulting spec matches
-        transform mapping.
+        """Transforms the reward spec such that the resulting spec matches transform mapping.
 
         Args:
             reward_spec (TensorSpec): spec before the transform
@@ -235,7 +229,6 @@ class Transform(nn.Module):
             expected spec after the transform
 
         """
-
         return reward_spec
 
     def dump(self, **kwargs) -> None:
@@ -277,8 +270,7 @@ class Transform(nn.Module):
 
 
 class TransformedEnv(EnvBase):
-    """
-    A transformed_in environment.
+    """A transformed_in environment.
 
     Args:
         env (EnvBase): original environment to be transformed_in.
@@ -335,7 +327,7 @@ class TransformedEnv(EnvBase):
 
     @property
     def observation_spec(self) -> TensorSpec:
-        """Observation spec of the transformed_in environment"""
+        """Observation spec of the transformed_in environment."""
         if self._observation_spec is None or not self.cache_specs:
             observation_spec = self.transform.transform_observation_spec(
                 deepcopy(self.base_env.observation_spec)
@@ -348,8 +340,7 @@ class TransformedEnv(EnvBase):
 
     @property
     def action_spec(self) -> TensorSpec:
-        """Action spec of the transformed_in environment"""
-
+        """Action spec of the transformed_in environment."""
         if self._action_spec is None or not self.cache_specs:
             action_spec = self.transform.transform_action_spec(
                 deepcopy(self.base_env.action_spec)
@@ -362,8 +353,7 @@ class TransformedEnv(EnvBase):
 
     @property
     def input_spec(self) -> TensorSpec:
-        """Action spec of the transformed_in environment"""
-
+        """Action spec of the transformed_in environment."""
         if self._input_spec is None or not self.cache_specs:
             input_spec = self.transform.transform_input_spec(
                 deepcopy(self.base_env.input_spec)
@@ -376,8 +366,7 @@ class TransformedEnv(EnvBase):
 
     @property
     def reward_spec(self) -> TensorSpec:
-        """Reward spec of the transformed_in environment"""
-
+        """Reward spec of the transformed_in environment."""
         if self._reward_spec is None or not self.cache_specs:
             reward_spec = self.transform.transform_reward_spec(
                 deepcopy(self.base_env.reward_spec)
@@ -399,7 +388,7 @@ class TransformedEnv(EnvBase):
         return tensordict_out
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
-        """Set the seeds of the environment"""
+        """Set the seeds of the environment."""
         return self.base_env.set_seed(seed, static_seed=static_seed)
 
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
@@ -540,10 +529,7 @@ class TransformedEnv(EnvBase):
 
 
 class ObservationTransform(Transform):
-    """
-    Abstract class for transformations of the observations.
-
-    """
+    """Abstract class for transformations of the observations."""
 
     inplace = False
 
@@ -562,8 +548,7 @@ class ObservationTransform(Transform):
 
 
 class Compose(Transform):
-    """
-    Composes a chain of transforms.
+    """Composes a chain of transforms.
 
     Examples:
         >>> env = GymEnv("Pendulum-v0")
@@ -680,8 +665,7 @@ class Compose(Transform):
 
 
 class ToTensorImage(ObservationTransform):
-    """Transforms a numpy-like image (3 x W x H) to a pytorch image
-    (3 x W x H).
+    """Transforms a numpy-like image (3 x W x H) to a pytorch image (3 x W x H).
 
     Transforms an observation image from a (... x W x H x 3) 0..255 uint8
     tensor to a single/double precision floating point (3 x W x H) tensor
@@ -751,8 +735,7 @@ class ToTensorImage(ObservationTransform):
 
 
 class RewardClipping(Transform):
-    """
-    Clips the reward between `clamp_min` and `clamp_max`.
+    """Clips the reward between `clamp_min` and `clamp_max`.
 
     Args:
         clip_min (scalar): minimum value of the resulting reward.
@@ -814,11 +797,7 @@ class RewardClipping(Transform):
 
 
 class BinarizeReward(Transform):
-    """
-    Maps the reward to a binary value (0 or 1) if the reward is null or
-    non-null, respectively.
-
-    """
+    """Maps the reward to a binary value (0 or 1) if the reward is null or non-null, respectively."""
 
     inplace = True
 
@@ -843,8 +822,7 @@ class BinarizeReward(Transform):
 
 
 class Resize(ObservationTransform):
-    """
-    Resizes an pixel observation.
+    """Resizes an pixel observation.
 
     Args:
         w (int): resulting width
@@ -914,7 +892,7 @@ class Resize(ObservationTransform):
 
 
 class CenterCrop(ObservationTransform):
-    """Crops the center of an image
+    """Crops the center of an image.
 
     Args:
         w (int): resulting width
@@ -1183,10 +1161,7 @@ class SqueezeTransform(UnsqueezeTransform):
 
 
 class GrayScale(ObservationTransform):
-    """
-    Turns a pixel observation to grayscale.
-
-    """
+    """Turns a pixel observation to grayscale."""
 
     inplace = False
 
@@ -1214,7 +1189,8 @@ class GrayScale(ObservationTransform):
 
 
 class ObservationNorm(ObservationTransform):
-    """
+    """Observation affine transformation layer.
+
     Normalizes an observation according to
 
     .. math::
@@ -1377,8 +1353,9 @@ class CatFrames(ObservationTransform):
 
 
 class RewardScaling(Transform):
-    """
-    Affine transform of the reward according to
+    """Affine transform of the reward.
+
+     The reward is transformed according to:
 
     .. math::
         reward = reward * scale + loc
@@ -1430,11 +1407,7 @@ class RewardScaling(Transform):
 
 
 class FiniteTensorDictCheck(Transform):
-    """
-    This transform will check that all the items of the tensordict are
-    finite, and raise an exception if they are not.
-
-    """
+    """This transform will check that all the items of the tensordict are finite, and raise an exception if they are not."""
 
     inplace = False
 
@@ -1457,8 +1430,7 @@ class FiniteTensorDictCheck(Transform):
 
 
 class DoubleToFloat(Transform):
-    """
-    Maps actions float to double before they are called on the environment.
+    """Maps actions float to double before they are called on the environment.
 
     Examples:
         >>> td = TensorDict(
@@ -1535,8 +1507,8 @@ class DoubleToFloat(Transform):
 
 
 class CatTensors(Transform):
-    """
-    Concatenates several keys in a single tensor.
+    """Concatenates several keys in a single tensor.
+
     This is especially useful if multiple keys describe a single state (e.g.
     "observation_position" and
     "observation_velocity")
@@ -1689,8 +1661,7 @@ class CatTensors(Transform):
 
 
 class DiscreteActionProjection(Transform):
-    """Projects discrete actions from a high dimensional space to a low
-    dimensional space.
+    """Projects discrete actions from a high dimensional space to a low dimensional space.
 
     Given a discrete action (from 1 to N) encoded as a one-hot vector and a
     maximum action index M (with M < N), transforms the action such that
@@ -1758,8 +1729,7 @@ class DiscreteActionProjection(Transform):
 
 
 class NoopResetEnv(Transform):
-    """
-    Runs a series of random actions when an environment is reset.
+    """Runs a series of random actions when an environment is reset.
 
     Args:
         env (EnvBase): env on which the random actions have to be
@@ -1778,6 +1748,7 @@ class NoopResetEnv(Transform):
 
     def __init__(self, noops: int = 30, random: bool = True):
         """Sample initial states by taking random number of no-ops on reset.
+
         No-op is assumed to be action 0.
         """
         super().__init__([])
@@ -1834,10 +1805,7 @@ class NoopResetEnv(Transform):
 
 
 class PinMemoryTransform(Transform):
-    """
-    Calls pin_memory on the tensordict to facilitate writing on CUDA devices.
-
-    """
+    """Calls pin_memory on the tensordict to facilitate writing on CUDA devices."""
 
     def __init__(self):
         super().__init__([])
@@ -1853,6 +1821,11 @@ def _sum_left(val, dest):
 
 
 class gSDENoise(Transform):
+    """A gSDE noise initializer.
+
+    See the :func:`~torchrl.modules.models.exploration.gSDEModule' for more info.
+    """
+
     inplace = False
 
     def __init__(
@@ -1890,8 +1863,8 @@ class gSDENoise(Transform):
 
 
 class VecNorm(Transform):
-    """
-    Moving average normalization layer for torchrl environments.
+    """Moving average normalization layer for torchrl environments.
+
     VecNorm keeps track of the summary statistics of a dataset to standardize
     it on-the-fly. If the transform is in 'eval' mode, the running
     statistics are not updated.
@@ -2039,10 +2012,7 @@ class VecNorm(Transform):
         return (value - mean) / std.clamp_min(self.eps)
 
     def to_observation_norm(self) -> Union[Compose, ObservationNorm]:
-        """Converts VecNorm into an ObservationNorm class that can be used
-        at inference time.
-
-        """
+        """Converts VecNorm into an ObservationNorm class that can be used at inference time."""
         out = []
         for key in self.keys_in:
             _sum = self._td.get(key + "_sum")
@@ -2069,8 +2039,7 @@ class VecNorm(Transform):
         keys_prefix: Optional[Sequence[str]] = None,
         memmap: bool = False,
     ) -> TensorDictBase:
-        """Creates a shared tensordict that can be sent to different processes
-        for normalization across processes.
+        """Creates a shared tensordict for normalization across processes.
 
         Args:
             env (EnvBase): example environment to be used to create the

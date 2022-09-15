@@ -22,8 +22,8 @@ __all__ = [
 
 
 class SqueezeLayer(nn.Module):
-    """
-    Squeezing layer.
+    """Squeezing layer.
+
     Squeezes some given singleton dimensions of an input tensor.
 
     Args:
@@ -39,7 +39,7 @@ class SqueezeLayer(nn.Module):
                 raise RuntimeError("dims must all be < 0")
         self.dims = dims
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
+    def forward(self, input: torch.Tensor) -> torch.Tensor:  # noqa: D102
         for dim in self.dims:
             if input.shape[dim] != 1:
                 raise RuntimeError(
@@ -50,8 +50,8 @@ class SqueezeLayer(nn.Module):
 
 
 class Squeeze2dLayer(SqueezeLayer):
-    """
-    Squeezing layer for convolutional neural networks.
+    """Squeezing layer for convolutional neural networks.
+
     Squeezes the last two singleton dimensions of an input tensor.
 
     """
@@ -61,8 +61,8 @@ class Squeeze2dLayer(SqueezeLayer):
 
 
 class SquashDims(nn.Module):
-    """
-    A squashing layer.
+    """A squashing layer.
+
     Flattens the N last dimensions of an input tensor.
 
     Args:
@@ -80,8 +80,8 @@ class SquashDims(nn.Module):
 
 
 def _find_depth(depth: Optional[int], *list_or_ints: Sequence):
-    """
-    Find depth based on a sequence of inputs and a depth indicator.
+    """Find depth based on a sequence of inputs and a depth indicator.
+
     If the depth is None, it is inferred by the length of one (or more) matching
     lists of integers.
     Raises an exception if depth does not match the list lengths or if lists lengths

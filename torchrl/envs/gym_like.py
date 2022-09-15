@@ -14,8 +14,7 @@ __all__ = ["GymLikeEnv", "default_info_dict_reader"]
 
 
 class default_info_dict_reader:
-    """
-    Default info-key reader.
+    """Default info-key reader.
 
     In cases where keys can be directly written to a tensordict (mostly if they abide to the
     tensordict shape), one simply needs to indicate the keys to be registered during
@@ -161,7 +160,7 @@ class GymLikeEnv(_EnvWrapper):
         return observations
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
-        """To be overwritten when step_outputs differ from Tuple[Observation: Union[np.ndarray, dict], reward: Number, done:Bool]"""
+        """To be overwritten when step_outputs differ from Tuple[Observation: Union[np.ndarray, dict], reward: Number, done:Bool]."""
         if not isinstance(step_outputs_tuple, tuple):
             raise TypeError(
                 f"Expected step_outputs_tuple type to be Tuple but got {type(step_outputs_tuple)}"
@@ -169,8 +168,9 @@ class GymLikeEnv(_EnvWrapper):
         return step_outputs_tuple
 
     def set_info_dict_reader(self, info_dict_reader: callable) -> GymLikeEnv:
-        """
-        Sets an info_dict_reader function. This function should take as input an
+        """Sets an info_dict_reader function.
+
+        This function should take as input an
         info_dict dictionary and the tensordict returned by the step function, and
         write values in an ad-hoc manner from one to the other.
 
@@ -182,7 +182,9 @@ class GymLikeEnv(_EnvWrapper):
         Returns: the same environment with the dict_reader registered.
 
         Examples:
-            >>> from torchrl.envs import GymWrapper, default_info_dict_reader
+            >>> from torchrl.envs import default_info_dict_reader
+            >>> from torchrl.envs.libs.gym import GymWrapper
+            >>> import gym
             >>> reader = default_info_dict_reader(["my_info_key"])
             >>> # assuming "some_env-v0" returns a dict with a key "my_info_key"
             >>> env = GymWrapper(gym.make("some_env-v0")).set_info_dict_reader(info_dict_reader=reader)

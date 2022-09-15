@@ -90,6 +90,8 @@ def test_multistep(n, key, device, T=11):
 
 
 class TestSplits:
+    """Tests the splitting of collected tensordicts in trajectories."""
+
     @staticmethod
     def create_fake_trajs(
         num_workers=32,
