@@ -1709,15 +1709,24 @@ class TestTensorDictRepr:
     is_shared=False)"""
         assert repr(stacked_td) == expected
 
-    def test_repr_indexed_tensor(self, device, dtype):
-        tensordict = TensorDict({}, [5], device=device)
-        tensordict.set("a", torch.randn(5, 4, 3))
-        expected = """TensorDict(
-    fields={
-        a: Tensor(torch.Size([5, 4, 3]), dtype={dtype})},
-    batch_size=torch.Size([5]),
-    device=cpu,
+    @pytest.mark.parametrize("index", [None, (slice(None), 0)])
+    def test_repr_indexed_tensordict(self, device, dtype, index):
+        tensordict = self.td(device, dtype)[index]
+        if index is None:
+            expected = f"""TensorDict(
+    fields={{
+        a: Tensor(torch.Size([1, 4, 3, 2, 1, 5]), dtype={dtype})}},
+    batch_size=torch.Size([1, 4, 3, 2, 1]),
+    device={str(device)},
     is_shared=False)"""
+        else:
+            expected = f"""TensorDict(
+    fields={{
+        a: Tensor(torch.Size([4, 2, 1, 5]), dtype={dtype})}},
+    batch_size=torch.Size([4, 2, 1]),
+    device={str(device)},
+    is_shared=False)"""
+
         assert repr(tensordict) == expected
 
     def test_repr_indexed_nested(self, device, dtype):
