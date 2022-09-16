@@ -14,7 +14,7 @@ from torchrl.data import NdBoundedTensorSpec, CompositeSpec
 from torchrl.data.tensordict.tensordict import TensorDict
 from torchrl.envs.transforms.transforms import gSDENoise
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import TensorDictModule, TensorDictSequence
+from torchrl.modules import TensorDictModule, TensorDictSequential
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.distributions.continuous import (
     IndependentNormal,
@@ -189,7 +189,9 @@ class TestAdditiveGaussian:
             default_interaction_mode="random",
         ).to(device)
         given_spec = action_spec if spec_origin == "spec" else None
-        exploratory_policy = AdditiveGaussianWrapper(policy, spec=given_spec).to(device)
+        exploratory_policy = AdditiveGaussianWrapper(
+            policy, spec=given_spec, safe=False
+        ).to(device)
 
         tensordict = TensorDict(
             batch_size=[batch],
@@ -227,7 +229,7 @@ def test_gsde(
     if gSDE:
         model = torch.nn.LazyLinear(action_dim)
         in_keys = ["observation"]
-        module = TensorDictSequence(
+        module = TensorDictSequential(
             TensorDictModule(model, in_keys=in_keys, out_keys=["action"]),
             TensorDictModule(
                 LazygSDEModule(),

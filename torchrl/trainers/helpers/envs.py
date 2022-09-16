@@ -13,7 +13,7 @@ from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
 from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.envs.libs.gym import GymEnv, RetroEnv
+from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,
@@ -42,7 +42,6 @@ __all__ = [
 
 LIBS = {
     "gym": GymEnv,
-    "retro": RetroEnv,
     "dm_control": DMControlEnv,
 }
 

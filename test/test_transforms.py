@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
-from copy import copy
+from copy import copy, deepcopy
 
 import pytest
 import torch
@@ -16,6 +16,7 @@ from torchrl.data import (
     NdBoundedTensorSpec,
     CompositeSpec,
     UnboundedContinuousTensorSpec,
+    NdUnboundedContinuousTensorSpec,
 )
 from torchrl.data import TensorDict
 from torchrl.envs import EnvCreator, SerialEnv
@@ -34,10 +35,10 @@ from torchrl.envs import (
     RewardScaling,
     BinarizeReward,
     R3MTransform,
-    ForceTensorReset
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm, TransformedEnv
+from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.transforms import (
     _has_tv,
     NoopResetEnv,
@@ -45,6 +46,7 @@ from torchrl.envs.transforms.transforms import (
     CenterCrop,
     UnsqueezeTransform,
     SqueezeTransform,
+    TensorDictPrimer,
 )
 
 TIMEOUT = 10.0
@@ -1004,29 +1006,71 @@ class TestTransforms:
         else:
             assert transformed_env.step_count == 30
 
-    @pytest.mark.parametrize("num_defaults", [1, 2, 3])
-    @pytest.mark.parametrize("compose", [True, False])
-    @pytest.mark.parametrize("initializer", [torch.zeros, torch.ones, torch.randn])
-    @pytest.mark.parametrize("default_shape", [[2], [2, 3]])
+    @pytest.mark.parametrize(
+        "default_keys", [["action"], ["action", "monkeys jumping on the bed"]]
+    )
+    @pytest.mark.parametrize(
+        "spec",
+        [
+            CompositeSpec(b=NdBoundedTensorSpec(-3, 3, [4])),
+            NdBoundedTensorSpec(-3, 3, [4]),
+        ],
+    )
+    @pytest.mark.parametrize("random", [True, False])
+    @pytest.mark.parametrize("value", [0.0, 1.0])
+    @pytest.mark.parametrize("serial", [True, False])
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_force_tensor_reset(self, num_defaults, default_shape, initializer, compose, device):
+    def test_tensordict_primer(
+        self,
+        default_keys,
+        spec,
+        random,
+        value,
+        serial,
+        device,
+    ):
+        if random and value != 0.0:
+            return pytest.skip("no need to check random=True with more than one value")
         torch.manual_seed(0)
-        env = ContinuousActionVecMockEnv()
-        env.set_seed(100)
-        default_dict = {f"a_{i}": {"initializer": initializer, "shape": default_shape} for i in range(num_defaults)}
-        reset_transform = ForceTensorReset(default_dict)
-        if compose:
-            transformed_env = TransformedEnv(env)
-            transformed_env.append_transform(reset_transform)
-        else:
+        num_defaults = len(default_keys)
+
+        def make_env():
+            env = ContinuousActionVecMockEnv().to(device)
+            env.set_seed(100)
+            kwargs = {
+                key: deepcopy(spec) if key != "action" else deepcopy(env.action_spec)
+                # copy to avoid having the same spec for all keys
+                for key in default_keys
+            }
+            reset_transform = TensorDictPrimer(
+                random=random, default_value=value, **kwargs
+            )
             transformed_env = TransformedEnv(env, reset_transform)
-        transformed_env = transformed_env.to(device)
-        tensordict = transformed_env.reset()
-        for i in range(num_defaults):
-            assert tensordict.get(f"a_{i}").shape == torch.Size(default_shape)
-            if initializer != torch.randn:
-                assert torch.allclose(tensordict.get(f"a_{i}"), default_dict[f"a_{i}"]["initializer"](*default_dict[f"a_{i}"]["shape"], device = device))
-            assert tensordict.get(f"a_{i}").device == device
+            return transformed_env
+
+        if serial:
+            env = SerialEnv(3, make_env)
+        else:
+            env = make_env()
+
+        tensordict = env.reset()
+        tensordict_select = tensordict.select(
+            *[key for key in tensordict.keys() if key in default_keys]
+        )
+        assert len(list(tensordict_select.keys())) == num_defaults
+        if random:
+            assert (tensordict_select != value).any()
+        else:
+            assert (tensordict_select == value).all()
+
+        if isinstance(spec, CompositeSpec) and any(
+            key != "action" for key in default_keys
+        ):
+            for key in default_keys:
+                if key in ("action",):
+                    continue
+                assert key in tensordict.keys()
+                assert tensordict[key, "b"] is not None
 
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
@@ -1317,6 +1361,75 @@ class TestR3M:
         assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
         transformed_env.close()
         del transformed_env
+
+    @pytest.mark.parametrize("del_keys", [True, False])
+    @pytest.mark.parametrize(
+        "in_keys",
+        [["next_pixels"], ["next_pixels_1", "next_pixels_2", "next_pixels_3"]],
+    )
+    @pytest.mark.parametrize(
+        "out_keys",
+        [["next_r3m_vec"], ["next_r3m_vec_1", "next_r3m_vec_2", "next_r3m_vec_3"]],
+    )
+    def test_r3mnet_transform_observation_spec(
+        self, in_keys, out_keys, del_keys, device, model
+    ):
+        r3m_net = _R3MNet(in_keys, out_keys, model, del_keys)
+
+        observation_spec = CompositeSpec(
+            **{key: NdBoundedTensorSpec(-1, 1, (3, 16, 16), device) for key in in_keys}
+        )
+        if del_keys:
+            exp_ts = CompositeSpec(
+                **{
+                    key: NdUnboundedContinuousTensorSpec(r3m_net.outdim, device)
+                    for key in out_keys
+                }
+            )
+
+            observation_spec_out = r3m_net.transform_observation_spec(observation_spec)
+
+            for key in in_keys:
+                assert key not in observation_spec_out
+            for key in out_keys:
+                assert observation_spec_out[key].shape == exp_ts[key].shape
+                assert observation_spec_out[key].device == exp_ts[key].device
+                assert observation_spec_out[key].dtype == exp_ts[key].dtype
+        else:
+            ts_dict = {}
+            for key in in_keys:
+                ts_dict[key] = observation_spec[key]
+            for key in out_keys:
+                ts_dict[key] = NdUnboundedContinuousTensorSpec(r3m_net.outdim, device)
+            exp_ts = CompositeSpec(**ts_dict)
+
+            observation_spec_out = r3m_net.transform_observation_spec(observation_spec)
+
+            for key in in_keys + out_keys:
+                assert observation_spec_out[key].shape == exp_ts[key].shape
+                assert observation_spec_out[key].dtype == exp_ts[key].dtype
+                assert observation_spec_out[key].device == exp_ts[key].device
+
+    @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
+    def test_r3m_spec_against_real(self, model, tensor_pixels_key, device):
+        keys_in = ["next_pixels"]
+        keys_out = ["next_vec"]
+        r3m = R3MTransform(
+            model,
+            keys_in=keys_in,
+            keys_out=keys_out,
+            tensor_pixels_keys=tensor_pixels_key,
+        )
+        base_env = DiscreteActionConvMockEnvNumpy().to(device)
+        transformed_env = TransformedEnv(base_env, r3m)
+        expected_keys = (
+            list(transformed_env.input_spec.keys())
+            + list(transformed_env.observation_spec.keys())
+            + [key.strip("next_") for key in transformed_env.observation_spec.keys()]
+            + ["reward"]
+            + ["done"]
+        )
+        assert set(expected_keys) == set(transformed_env.rollout(3).keys())
 
 
 if __name__ == "__main__":

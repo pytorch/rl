@@ -26,7 +26,7 @@ from torchrl.modules.tensordict_module.initializer import TensorDictDefaultIniti
 from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,
 )
-from torchrl.modules.tensordict_module.sequence import TensorDictSequence
+from torchrl.modules.tensordict_module.sequence import TensorDictSequential
 
 
 class TestTDModule:
@@ -787,7 +787,7 @@ class TestTDSequence:
         module3 = TensorDictModule(
             nn.Linear(3, 4), in_keys=["foo1", "key3"], out_keys=["key2"]
         )
-        seq = TensorDictSequence(module1, module2, module3)
+        seq = TensorDictSequential(module1, module2, module3)
         assert set(seq.in_keys) == {"key1", "key2", "key3"}
         assert set(seq.out_keys) == {"foo1", "key1", "key2"}
 
@@ -840,7 +840,7 @@ class TestTDSequence:
                 safe=False,
                 **kwargs,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -928,7 +928,7 @@ class TestTDSequence:
                 safe=False,
                 **kwargs,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1000,7 +1000,7 @@ class TestTDSequence:
                 out_keys=["out"],
                 safe=safe,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1084,7 +1084,7 @@ class TestTDSequence:
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1164,7 +1164,7 @@ class TestTDSequence:
                 out_keys=["out"],
                 safe=safe,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1257,7 +1257,7 @@ class TestTDSequence:
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1333,7 +1333,7 @@ class TestTDSequence:
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = TensorDictSequence(tdmodule1, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
 
         tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers()
 
@@ -1398,7 +1398,7 @@ class TestTDSequence:
                 out_keys=["out"],
                 safe=safe,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1498,7 +1498,7 @@ class TestTDSequence:
                 safe=safe,
                 **kwargs,
             )
-            tdmodule = TensorDictSequence(tdmodule1, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
 
         # vmap = True
         params = [p.repeat(10, *[1 for _ in p.shape]) for p in params]
@@ -1548,7 +1548,7 @@ class TestTDSequence:
             in_keys=["hidden"],
             out_keys=["out"],
         )
-        td_module = TensorDictSequence(td_module_1, td_module_2)
+        td_module = TensorDictSequential(td_module_1, td_module_2)
 
         if functional:
             td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
@@ -1642,7 +1642,7 @@ class TestTDSequence:
             safe=True,
             **kwargs,
         )
-        tdmodule = TensorDictSequence(
+        tdmodule = TensorDictSequential(
             tdmodule1, tdmodule2, tdmodule3, partial_tolerant=True
         )
 
@@ -1688,7 +1688,7 @@ class TestTDSequence:
             in_keys=["hidden"],
             out_keys=["out"],
         )
-        td_module = TensorDictSequence(td_module_1, td_module_2)
+        td_module = TensorDictSequential(td_module_1, td_module_2)
 
         td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
         sub_seq_1 = td_module.select_subsequence(out_keys=["hidden"])
