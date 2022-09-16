@@ -16,6 +16,8 @@ from mocking_classes import (
     DiscreteActionVecMockEnv,
     MockSerialEnv,
     DiscreteActionConvMockEnv,
+    MockBatchedLockedEnv,
+    MockBatchedUnLockedEnv,
     DummyModelBasedEnv,
     ActionObsMergeLinear,
 )
@@ -391,6 +393,67 @@ class TestModelBasedEnv:
         rollout2 = mb_env.rollout(max_steps=100)
 
         assert_allclose_td(rollout1, rollout2)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_batch_lock_mb_env(self, device, seed=0):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        world_model = WorldModelWrapper(
+            TensorDictModule(
+                ActionObsMergeLinear(5, 4),
+                in_keys=["hidden_observation", "action"],
+                out_keys=["next_hidden_observation"],
+            ),
+            TensorDictModule(
+                nn.Linear(4, 1),
+                in_keys=["hidden_observation"],
+                out_keys=["reward"],
+            ),
+        )
+        mb_env = DummyModelBasedEnv(
+            world_model, device=device, batch_size=torch.Size([10])
+        )
+        assert not mb_env.batch_locked
+
+        try:
+            mb_env.batch_locked = False
+            raise AssertionError("Should not be able to change batch_locked")
+        except RuntimeError:
+            pass
+        td = mb_env.reset()
+        td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
+        td_expanded = td.unsqueeze(-1).expand(10, 2).reshape(-1).to_tensordict()
+        td = mb_env.step(td)
+
+        try:
+            mb_env.step(td_expanded)
+            raise AssertionError(
+                "Should not be able to step with td.batch_size != env.batch_size if env.batch_size != []"
+            )
+        except RuntimeError:
+            pass
+
+        mb_env = DummyModelBasedEnv(
+            world_model, device=device, batch_size=torch.Size([])
+        )
+        assert not mb_env.batch_locked
+
+        try:
+            mb_env.batch_locked = False
+            raise AssertionError("Should not be able to change batch_locked")
+        except RuntimeError:
+            pass
+        td = mb_env.reset()
+        td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
+        td_expanded = td.expand(2)
+        td = mb_env.step(td)
+
+        try:
+            mb_env.step(td_expanded)
+        except RuntimeError:
+            raise AssertionError(
+                "When batch_locked = False, should be able to step with td.batch_size != env.batch_size if env.batch_size == []"
+            )
 
 
 class TestParallel:
@@ -1092,6 +1155,58 @@ def test_steptensordict(
         assert "done" not in out.keys()
     if has_out:
         assert out is next_tensordict
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_locked(device):
+    env = MockBatchedLockedEnv(device)
+    assert env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2).clone()
+    td = env.step(td)
+
+    with pytest.raises(
+        RuntimeError, match="Expected a tensordict with shape==env.shape, "
+    ):
+        env.step(td_expanded)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked(device):
+    env = MockBatchedUnLockedEnv(device)
+    assert not env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2).clone()
+    td = env.step(td)
+
+    env.step(td_expanded)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked_with_batch_size(device):
+    env = MockBatchedUnLockedEnv(device, batch_size=torch.Size([2]))
+    assert not env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
+    td = env.step(td)
+
+    with pytest.raises(
+        RuntimeError, match="Expected a tensordict with shape==env.shape, "
+    ):
+        env.step(td_expanded)
 
 
 if __name__ == "__main__":

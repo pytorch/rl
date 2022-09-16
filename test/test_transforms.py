@@ -8,7 +8,12 @@ from copy import copy, deepcopy
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from mocking_classes import ContinuousActionVecMockEnv, DiscreteActionConvMockEnvNumpy
+from mocking_classes import (
+    ContinuousActionVecMockEnv,
+    DiscreteActionConvMockEnvNumpy,
+    MockBatchedLockedEnv,
+    MockBatchedUnLockedEnv,
+)
 from torch import Tensor
 from torch import multiprocessing as mp
 from torchrl import prod
@@ -35,6 +40,7 @@ from torchrl.envs import (
     RewardScaling,
     BinarizeReward,
     R3MTransform,
+    RewardClipping,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm, TransformedEnv
@@ -1430,6 +1436,75 @@ class TestR3M:
             + ["done"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys())
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_locked_transformed(device):
+    env = TransformedEnv(
+        MockBatchedLockedEnv(device),
+        Compose(
+            ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
+            RewardClipping(0, 0.1),
+        ),
+    )
+    assert env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2).clone()
+    td = env.step(td)
+
+    with pytest.raises(
+        RuntimeError, match="Expected a tensordict with shape==env.shape, "
+    ):
+        env.step(td_expanded)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked_transformed(device):
+    env = TransformedEnv(
+        MockBatchedUnLockedEnv(device),
+        Compose(
+            ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
+            RewardClipping(0, 0.1),
+        ),
+    )
+    assert not env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2).clone()
+    td = env.step(td)
+    env.step(td_expanded)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked_with_batch_size_transformed(device):
+    env = TransformedEnv(
+        MockBatchedUnLockedEnv(device, batch_size=torch.Size([2])),
+        Compose(
+            ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
+            RewardClipping(0, 0.1),
+        ),
+    )
+    assert not env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
+    td = env.step(td)
+
+    with pytest.raises(
+        RuntimeError, match="Expected a tensordict with shape==env.shape, "
+    ):
+        env.step(td_expanded)
 
 
 if __name__ == "__main__":
