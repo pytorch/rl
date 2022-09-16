@@ -9,7 +9,6 @@ from typing import Optional, Union, List
 
 import numpy as np
 import torch
-import torch.nn as nn
 
 from torchrl.data import TensorDict
 from torchrl.data.utils import DEVICE_TYPING
@@ -114,7 +113,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._inplace_update = False
-        return super().__new__(cls, *args,_batch_locked=False, **kwargs)
+        return super().__new__(cls, *args, _batch_locked=False, **kwargs)
 
     def set_specs_from_env(self, env: EnvBase):
         """
