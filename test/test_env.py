@@ -1021,83 +1021,9 @@ def test_batch_locked(device):
     td_expanded = td.expand(2).clone()
     td = env.step(td)
 
-    try:
-        env.step(td_expanded)
-    except RuntimeError:
-        raise RuntimeError(
-            "Expected no error when batch_locked is False when running env.step on a different batch size than env.batch_size"
-        )
+    env.step(td_expanded)
 
     env = MockBatchedUnLockedEnv(device, batch_size=torch.Size([2]))
-    assert not env.batch_locked
-
-    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
-        env.batch_locked = False
-
-    td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
-    td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
-    td = env.step(td)
-
-    with pytest.raises(
-        RuntimeError, match="Expected a tensordict with shape==env.shape, "
-    ):
-        env.step(td_expanded)
-
-
-@pytest.mark.parametrize("device", get_available_devices())
-def test_batch_locked_transformed(device):
-    env = TransformedEnv(
-        MockBatchedLockedEnv(device),
-        Compose(
-            ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
-            RewardClipping(0, 0.1),
-        ),
-    )
-    assert env.batch_locked
-
-    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
-        env.batch_locked = False
-    td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
-    td_expanded = td.expand(2).clone()
-    td = env.step(td)
-
-    with pytest.raises(
-        RuntimeError, match="Expected a tensordict with shape==env.shape, "
-    ):
-        env.step(td_expanded)
-
-    env = TransformedEnv(
-        MockBatchedUnLockedEnv(device),
-        Compose(
-            ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
-            RewardClipping(0, 0.1),
-        ),
-    )
-    assert not env.batch_locked
-
-    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
-        env.batch_locked = False
-    td = env.reset()
-    td["action"] = env.action_spec.rand(env.batch_size)
-    td_expanded = td.expand(2).clone()
-    td = env.step(td)
-
-    try:
-        env.step(td_expanded)
-    except RuntimeError:
-        raise RuntimeError(
-            "Expected no error when batch_locked is False when running env.step on a different batch size than env.batch_size"
-        )
-
-    env = TransformedEnv(
-        MockBatchedUnLockedEnv(device, batch_size=torch.Size([2])),
-        Compose(
-            ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
-            RewardClipping(0, 0.1),
-        ),
-    )
     assert not env.batch_locked
 
     with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):

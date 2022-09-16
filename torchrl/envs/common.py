@@ -235,6 +235,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def batch_locked(self) -> bool:
+        """
+        Whether the environnement can be used with a batch size different from the one it was initialized with or not.
+        """
         return self._batch_locked
 
     @batch_locked.setter

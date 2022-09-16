@@ -127,8 +127,8 @@ class MockSerialEnv(EnvBase):
 
 
 class MockBatchedLockedEnv(EnvBase):
-    def __init__(self, device):
-        super(MockBatchedLockedEnv, self).__init__(device=device)
+    def __init__(self, device, batch_size=None):
+        super(MockBatchedLockedEnv, self).__init__(device=device, batch_size=batch_size)
         self.action_spec = NdUnboundedContinuousTensorSpec((1,))
         self.input_spec = CompositeSpec(
             action=NdUnboundedContinuousTensorSpec((1,)),
@@ -138,12 +138,7 @@ class MockBatchedLockedEnv(EnvBase):
             next_observation=NdUnboundedContinuousTensorSpec((1,))
         )
         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
-        self.is_closed = False
         self.counter = 0
-
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        return super().__new__(cls, *args, _batch_locked=True, **kwargs)
 
     def set_seed(self, seed: int) -> int:
         assert seed >= 1
@@ -170,7 +165,6 @@ class MockBatchedLockedEnv(EnvBase):
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         self.max_val = max(self.counter + 100, self.counter * 2)
-
         if tensordict is None:
             batch_size = self.batch_size
         else:
@@ -192,71 +186,15 @@ class MockBatchedLockedEnv(EnvBase):
         return self.step(tensordict)
 
 
-class MockBatchedUnLockedEnv(EnvBase):
+class MockBatchedUnLockedEnv(MockBatchedLockedEnv):
     def __init__(self, device, batch_size=None):
         super(MockBatchedUnLockedEnv, self).__init__(
             batch_size=batch_size, device=device
         )
-        self.action_spec = NdUnboundedContinuousTensorSpec((1,))
-        self.input_spec = CompositeSpec(
-            action=NdUnboundedContinuousTensorSpec((1,)),
-            observation=NdUnboundedContinuousTensorSpec((1,)),
-        )
-        self.observation_spec = CompositeSpec(
-            next_observation=NdUnboundedContinuousTensorSpec((1,))
-        )
-        self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
-        self.is_closed = False
-        self.counter = 0
 
     @classmethod
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls, *args, _batch_locked=False, **kwargs)
-
-    def set_seed(self, seed: int) -> int:
-        assert seed >= 1
-        self.seed = seed
-        self.counter = seed % 17  # make counter a small number
-        self.max_val = max(self.counter + 100, self.counter * 2)
-        return seed_generator(seed)
-
-    def _step(self, tensordict):
-        self.counter += 1
-        n = (
-            torch.full(tensordict.batch_size, self.counter)
-            .to(self.device)
-            .to(torch.get_default_dtype())
-        )
-        done = self.counter >= self.max_val
-        done = torch.full(
-            tensordict.batch_size, done, dtype=torch.bool, device=self.device
-        )
-
-        return TensorDict(
-            {"reward": n, "done": done, "next_observation": n}, tensordict.batch_size
-        )
-
-    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        self.max_val = max(self.counter + 100, self.counter * 2)
-        if tensordict is None:
-            batch_size = self.batch_size
-        else:
-            batch_size = tensordict.batch_size
-
-        n = (
-            torch.full(batch_size, self.counter)
-            .to(self.device)
-            .to(torch.get_default_dtype())
-        )
-        done = self.counter >= self.max_val
-        done = torch.full(batch_size, done, dtype=torch.bool, device=self.device)
-
-        return TensorDict(
-            {"reward": n, "done": done, "next_observation": n}, batch_size
-        )
-
-    def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
-        return self.step(tensordict)
 
 
 class DiscreteActionVecMockEnv(_MockEnv):
