@@ -1035,7 +1035,7 @@ class TestTransforms:
         num_defaults = len(default_keys)
 
         def make_env():
-            env = ContinuousActionVecMockEnv().to(device)
+            env = ContinuousActionVecMockEnv()
             env.set_seed(100)
             kwargs = {
                 key: deepcopy(spec) if key != "action" else deepcopy(env.action_spec)
@@ -1045,7 +1045,7 @@ class TestTransforms:
             reset_transform = TensorDictPrimer(
                 random=random, default_value=value, **kwargs
             )
-            transformed_env = TransformedEnv(env, reset_transform)
+            transformed_env = TransformedEnv(env, reset_transform).to(device)
             return transformed_env
 
         if serial:
