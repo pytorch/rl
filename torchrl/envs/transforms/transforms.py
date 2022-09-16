@@ -1550,7 +1550,7 @@ class CatTensors(Transform):
     Args:
         keys_in (Sequence of str): keys to be concatenated
         out_key: key of the resulting tensor.
-        dim (int, optional): dimension along which the contenation will occur.
+        dim (int, optional): dimension along which the concatenation will occur.
             Default is -1.
         del_keys (bool, optional): if True, the input values will be deleted after
             concatenation. Default is True.
@@ -1581,13 +1581,15 @@ class CatTensors(Transform):
     def __init__(
         self,
         keys_in: Optional[Sequence[str]] = None,
-        out_key: str = "observation_vector",
+        out_key: str = "next_observation_vector",
         dim: int = -1,
         del_keys: bool = True,
         unsqueeze_if_oor: bool = False,
     ):
         if keys_in is None:
             raise Exception("CatTensors requires keys to be non-empty")
+        if type(out_key) != str:
+            raise Exception("CatTensors requires out_key to be of type string")
         super().__init__(keys_in=keys_in)
         if not out_key.startswith("next_") and all(
             key.startswith("next_") for key in keys_in

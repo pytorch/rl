@@ -235,6 +235,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def batch_locked(self) -> bool:
+        """
+        Whether the environnement can be used with a batch size different from the one it was initialized with or not.
+        If True, the env needs to be used with a tensordict having the same batch size as the env.
+        batch_locked is an immutable property.
+        """
         return self._batch_locked
 
     @batch_locked.setter
@@ -388,8 +393,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict_reset = step_tensordict(
                 tensordict_reset,
                 exclude_done=False,
-                exclude_reward=True,
-                exclude_action=True,
+                exclude_reward=False,  # some policies may need reward and action at reset time
+                exclude_action=False,
             )
         if tensordict is not None:
             tensordict.update(tensordict_reset)

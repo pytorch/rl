@@ -556,15 +556,22 @@ dtype=torch.float32)},
     def _convert_to_tensor(self, array: np.ndarray) -> Union[Tensor, MemmapTensor]:
         return torch.as_tensor(array, device=self.device_safe())
 
-    def _process_tensor(
+    def _convert_to_tensordict(self, dict_value: dict) -> TensorDictBase:
+        return TensorDict(
+            dict_value, batch_size=self.batch_size, device=self.device_safe()
+        )
+
+    def _process_input(
         self,
-        input: Union[COMPATIBLE_TYPES, np.ndarray],
+        input: Union[COMPATIBLE_TYPES, dict, np.ndarray],
         check_device: bool = True,
         check_tensor_shape: bool = True,
         check_shared: bool = False,
     ) -> Union[Tensor, MemmapTensor]:
 
-        if not isinstance(input, _accepted_classes):
+        if isinstance(input, dict):
+            tensor = self._convert_to_tensordict(input)
+        elif not isinstance(input, _accepted_classes):
             tensor = self._convert_to_tensor(input)
         else:
             tensor = input
@@ -2060,10 +2067,6 @@ class TensorDict(TensorDictBase):
         """Sets a value in the TensorDict. If inplace=True (default is False),
         and if the key already exists, set will call set_ (in place setting).
         """
-        if isinstance(value, dict):
-            value = TensorDict(
-                value, batch_size=self.batch_size, device=self.device_safe()
-            )
         if self.is_locked:
             if not inplace or key not in self.keys():
                 raise RuntimeError("Cannot modify locked TensorDict")
@@ -2076,6 +2079,9 @@ class TensorDict(TensorDictBase):
             except NotImplementedError:
                 # when running functorch, a NotImplementedError may be raised
                 pass
+            except AttributeError:
+                # when setting a value of type dict
+                pass
         if self._is_memmap is None:
             self._is_memmap = isinstance(value, MemmapTensor)
 
@@ -2085,7 +2091,7 @@ class TensorDict(TensorDictBase):
 
         if present and inplace:
             return self.set_(key, value)
-        proc_value = self._process_tensor(
+        proc_value = self._process_input(
             value,
             check_tensor_shape=_run_checks,
             check_shared=False,
@@ -2130,17 +2136,13 @@ class TensorDict(TensorDictBase):
     def set_(
         self, key: str, value: Union[dict, COMPATIBLE_TYPES], no_check: bool = False
     ) -> TensorDictBase:
-        if isinstance(value, dict):
-            value = TensorDict(
-                value, batch_size=self.batch_size, device=self.device_safe()
-            )
         if not no_check:
             if not isinstance(key, str):
                 raise TypeError(f"Expected key to be a string but found {type(key)}")
 
         if no_check or key in self.keys():
             if not no_check:
-                proc_value = self._process_tensor(
+                proc_value = self._process_input(
                     value, check_device=False, check_shared=False
                 )
                 # copy_ will broadcast one tensor onto another's shape, which we don't want
@@ -2195,17 +2197,14 @@ class TensorDict(TensorDictBase):
     def set_at_(
         self, key: str, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> TensorDictBase:
-        if isinstance(value, dict):
-            value = TensorDict(
-                value, batch_size=self.batch_size, device=self.device_safe()
-            )
         if not isinstance(key, str):
             raise TypeError(f"Expected key to be a string but found {type(key)}")
 
         # do we need this?
-        # value = self._process_tensor(
-        #     value, check_tensor_shape=False, check_device=False
-        # )
+        if not isinstance(value, _accepted_classes):
+            value = self._process_input(
+                value, check_tensor_shape=False, check_device=False
+            )
         if key not in self.keys():
             raise KeyError(f"did not find key {key} in {self.__class__.__name__}")
         tensor_in = self._tensordict[key]
@@ -2859,16 +2858,10 @@ torch.Size([3, 2])
         inplace: bool = False,
         _run_checks: bool = True,
     ) -> TensorDictBase:
-        if isinstance(tensor, dict):
-            tensor = TensorDict(
-                tensor, batch_size=self.batch_size, device=self.device_safe()
-            )
         keys = set(self.keys())
         if self.is_locked:
             if not inplace or key not in keys:
                 raise RuntimeError("Cannot modify locked TensorDict")
-        if isinstance(tensor, TensorDictBase) and tensor.batch_size != self.batch_size:
-            tensor.batch_size = self.batch_size
         if inplace and key in keys:
             return self.set_(key, tensor)
         elif key in keys:
@@ -2877,9 +2870,11 @@ torch.Size([3, 2])
                 "Consider calling `SubTensorDict.set_(...)` or cloning your tensordict first."
             )
 
-        tensor = self._process_tensor(
+        tensor = self._process_input(
             tensor, check_device=False, check_tensor_shape=False
         )
+        if isinstance(tensor, TensorDictBase) and tensor.batch_size != self.batch_size:
+            tensor.batch_size = self.batch_size
         parent = self.get_parent_tensordict()
 
         if isinstance(tensor, TensorDictBase):
@@ -2916,21 +2911,21 @@ torch.Size([3, 2])
     def set_(
         self, key: str, tensor: Union[dict, COMPATIBLE_TYPES], no_check: bool = False
     ) -> SubTensorDict:
-        if isinstance(tensor, dict):
-            tensor = TensorDict(
-                tensor, batch_size=self.batch_size, device=self.device_safe()
-            )
         if not no_check:
+            tensor = self._process_input(
+                tensor, check_device=False, check_tensor_shape=False
+            )
             if key not in self.keys():
                 raise KeyError(f"key {key} not found in {self.keys()}")
-            if tensor.shape[: self.batch_dims] != self.batch_size:
+            if (
+                not isinstance(tensor, dict)
+                and tensor.shape[: self.batch_dims] != self.batch_size
+            ):
                 raise RuntimeError(
                     f"tensor.shape={tensor.shape[:self.batch_dims]} and "
                     f"self.batch_size={self.batch_size} mismatch"
                 )
-        tensor = self._process_tensor(
-            tensor, check_device=False, check_tensor_shape=False
-        )
+
         self._source.set_at_(key, tensor, self.idx)
         if key in self._dict_meta:
             self._dict_meta[key].requires_grad = tensor.requires_grad
@@ -2991,12 +2986,12 @@ torch.Size([3, 2])
         idx: INDEX_TYPING,
         discard_idx_attr: bool = False,
     ) -> SubTensorDict:
-        if isinstance(value, dict):
-            value = TensorDict(
-                value, batch_size=self.batch_size, device=self.device_safe()
-            )
         if not isinstance(idx, tuple):
             idx = (idx,)
+        if not isinstance(value, _accepted_classes):
+            value = self._process_input(
+                value, check_tensor_shape=False, check_device=False
+            )
         if discard_idx_attr:
             self._source.set_at_(key, value, idx)
         else:
@@ -3366,13 +3361,13 @@ class LazyStackedTensorDict(TensorDictBase):
     def set(
         self, key: str, tensor: Union[dict, COMPATIBLE_TYPES], **kwargs
     ) -> TensorDictBase:
-        if isinstance(tensor, dict):
-            tensor = TensorDict(
-                tensor, batch_size=self.batch_size, device=self.device_safe()
-            )
         if self.is_locked:
             if key not in self.keys():
                 raise RuntimeError("Cannot modify locked TensorDict")
+
+        tensor = self._process_input(
+            tensor, check_device=False, check_tensor_shape=False
+        )
         if isinstance(tensor, TensorDictBase):
             if tensor.batch_size[: self.batch_dims] != self.batch_size:
                 tensor.batch_size = self.clone(recurse=False).batch_size
@@ -3382,10 +3377,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 f"mismatch: got tensor.shape = {tensor.shape} and "
                 f"tensordict.batch_size={self.batch_size}"
             )
-        proc_tensor = self._process_tensor(
-            tensor, check_device=False, check_tensor_shape=False
-        )
-        proc_tensor = proc_tensor.unbind(self.stack_dim)
+
+        proc_tensor = tensor.unbind(self.stack_dim)
         for td, _item in zip(self.tensordicts, proc_tensor):
             td.set(key, _item, **kwargs)
         if key not in self._valid_keys:
@@ -3397,11 +3390,13 @@ class LazyStackedTensorDict(TensorDictBase):
     def set_(
         self, key: str, tensor: Union[dict, COMPATIBLE_TYPES], no_check: bool = False
     ) -> TensorDictBase:
-        if isinstance(tensor, dict):
-            tensor = TensorDict(
-                tensor, batch_size=self.batch_size, device=self.device_safe()
-            )
         if not no_check:
+            tensor = self._process_input(
+                tensor,
+                check_device=False,
+                check_tensor_shape=False,
+                check_shared=False,
+            )
             if isinstance(tensor, TensorDictBase):
                 if tensor.batch_size[: self.batch_dims] != self.batch_size:
                     tensor.batch_size = self.clone(recurse=False).batch_size
@@ -3417,12 +3412,6 @@ class LazyStackedTensorDict(TensorDictBase):
                     "permitted if all members of the stack have this key in "
                     "their register."
                 )
-            tensor = self._process_tensor(
-                tensor,
-                check_device=False,
-                check_tensor_shape=False,
-                check_shared=False,
-            )
         if key in self._dict_meta:
             self._dict_meta[key].requires_grad = tensor.requires_grad
         tensors = tensor.unbind(self.stack_dim)
@@ -3433,10 +3422,6 @@ class LazyStackedTensorDict(TensorDictBase):
     def set_at_(
         self, key: str, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> TensorDictBase:
-        if isinstance(value, dict):
-            value = TensorDict(
-                value, batch_size=self.batch_size, device=self.device_safe()
-            )
         sub_td = self[idx]
         sub_td.set_(key, value)
         return self
@@ -3907,10 +3892,6 @@ class SavedTensorDict(TensorDictBase):
     def set(
         self, key: str, value: Union[dict, COMPATIBLE_TYPES], **kwargs
     ) -> TensorDictBase:
-        if isinstance(value, dict):
-            value = TensorDict(
-                value, batch_size=self.batch_size, device=self.device_safe()
-            )
         if self.is_locked:
             if key not in self.keys():
                 raise RuntimeError("Cannot modify locked TensorDict")
@@ -3943,20 +3924,14 @@ class SavedTensorDict(TensorDictBase):
     def set_(
         self, key: str, value: Union[dict, COMPATIBLE_TYPES], no_check: bool = False
     ) -> TensorDictBase:
-        if isinstance(value, dict):
-            value = TensorDict(
-                value, batch_size=self.batch_size, device=self.device_safe()
-            )
+        if key not in self.keys():
+            raise KeyError(f"key {key} not found in {self.keys()}")
         self.set(key, value)
         return self
 
     def set_at_(
         self, key: str, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> TensorDictBase:
-        if isinstance(value, dict):
-            value = TensorDict(
-                value, batch_size=self.batch_size, device=self.device_safe()
-            )
         td = self._load()
         td.set_at_(key, value, idx)
         self._save(td)
@@ -4312,10 +4287,6 @@ class _CustomOpTensorDict(TensorDictBase):
     def set(
         self, key: str, value: Union[dict, COMPATIBLE_TYPES], **kwargs
     ) -> TensorDictBase:
-        if isinstance(value, dict):
-            value = TensorDict(
-                value, batch_size=self.batch_size, device=self.device_safe()
-            )
         if self.inv_op is None:
             raise Exception(
                 f"{self.__class__.__name__} does not support setting values. "
@@ -4324,7 +4295,7 @@ class _CustomOpTensorDict(TensorDictBase):
         if self.is_locked:
             if key not in self.keys():
                 raise RuntimeError("Cannot modify locked TensorDict")
-        proc_value = self._process_tensor(
+        proc_value = self._process_input(
             value,
             check_device=False,
             check_tensor_shape=True,
@@ -4338,16 +4309,18 @@ class _CustomOpTensorDict(TensorDictBase):
     def set_(
         self, key: str, value: Union[dict, COMPATIBLE_TYPES], no_check: bool = False
     ) -> _CustomOpTensorDict:
-        if isinstance(value, dict):
-            value = TensorDict(
-                value, batch_size=self.batch_size, device=self.device_safe()
-            )
         if not no_check:
             if self.inv_op is None:
                 raise Exception(
                     f"{self.__class__.__name__} does not support setting values. "
                     f"Consider calling .contiguous() before calling this method."
                 )
+            value = self._process_input(
+                value,
+                check_device=False,
+                check_tensor_shape=True,
+            )
+
         value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(value))
         self._source.set_(key, value)
         return self
@@ -4355,10 +4328,6 @@ class _CustomOpTensorDict(TensorDictBase):
     def set_at_(
         self, key: str, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> _CustomOpTensorDict:
-        if isinstance(value, dict):
-            value = TensorDict(
-                value, batch_size=self.batch_size, device=self.device_safe()
-            )
         transformed_tensor, original_tensor = self.get(
             key, _return_original_tensor=True
         )
@@ -4368,6 +4337,10 @@ class _CustomOpTensorDict(TensorDictBase):
                 f"same storage. Setting values in place is not currently "
                 f"supported in this setting, consider calling "
                 f"`td.clone()` before `td.set_at_(...)`"
+            )
+        if not isinstance(value, _accepted_classes):
+            value = self._process_input(
+                value, check_tensor_shape=False, check_device=False
             )
         transformed_tensor[idx] = value
         return self
