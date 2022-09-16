@@ -127,6 +127,8 @@ class MockSerialEnv(EnvBase):
 
 
 class MockBatchedLockedEnv(EnvBase):
+    """Mocks an env whose batch_size defines the size of the output tensordict"""
+
     def __init__(self, device, batch_size=None):
         super(MockBatchedLockedEnv, self).__init__(device=device, batch_size=batch_size)
         self.action_spec = NdUnboundedContinuousTensorSpec((1,))
@@ -140,10 +142,13 @@ class MockBatchedLockedEnv(EnvBase):
         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
         self.counter = 0
 
-        self.set_seed = MockSerialEnv.set_seed
+    set_seed = MockSerialEnv.set_seed
+    rand_step = MockSerialEnv.rand_step
 
     def _step(self, tensordict):
         self.counter += 1
+        if self.batch_locked:
+            assert tensordict.batch_size == self.batch_size
         # We use tensordict.batch_size instead of self.batch_size since this method will also be used by MockBatchedUnLockedEnv
         n = (
             torch.full(tensordict.batch_size, self.counter)
@@ -178,11 +183,14 @@ class MockBatchedLockedEnv(EnvBase):
             {"reward": n, "done": done, "next_observation": n}, batch_size
         )
 
-    def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
-        return self.step(tensordict)
-
 
 class MockBatchedUnLockedEnv(MockBatchedLockedEnv):
+    """Mocks an env whose batch_size does not define the size of the output tensordict.
+
+    The size of the output tensordict is defined by the input tensordict itself.
+
+    """
+
     def __init__(self, device, batch_size=None):
         super(MockBatchedUnLockedEnv, self).__init__(
             batch_size=batch_size, device=device
