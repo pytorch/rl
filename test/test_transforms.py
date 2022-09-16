@@ -1034,10 +1034,11 @@ class TestTransforms:
         num_defaults = len(default_keys)
 
         def make_env():
-            env = ContinuousActionVecMockEnv()
+            env = ContinuousActionVecMockEnv().to(device)
             env.set_seed(100)
             kwargs = {
-                key: deepcopy(spec)  # copy to avoid having the same spec for all keys
+                key: deepcopy(spec) if key != "action" else deepcopy(env.action_spec)
+                # copy to avoid having the same spec for all keys
                 for key in default_keys
             }
             reset_transform = TensorDictPrimer(
@@ -1051,10 +1052,9 @@ class TestTransforms:
         else:
             env = make_env()
 
-        env = env.to(device)
         tensordict = env.reset()
         tensordict_select = tensordict.select(
-            *[key for key in tensordict.keys() if key.startswith("a_")]
+            *[key for key in tensordict.keys() if key in default_keys]
         )
         assert len(list(tensordict_select.keys())) == num_defaults
         if random:
@@ -1062,7 +1062,7 @@ class TestTransforms:
         else:
             assert (tensordict_select == value).all()
 
-        if isinstance(spec, CompositeSpec):
+        if isinstance(spec, CompositeSpec) and any(key != "action" for key in default_keys):
             for key in default_keys:
                 assert key in tensordict
                 assert tensordict[key, "b"] is not None
