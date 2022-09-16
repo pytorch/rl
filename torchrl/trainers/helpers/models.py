@@ -1339,9 +1339,9 @@ def make_dreamer(
         td = proof_environment.rollout(1000)
         td = td.unsqueeze(0).to_tensordict().to(device)
         td.batch_size = [1]
-        td = td.to(device)
         td["prior_state"] = torch.zeros((td.batch_size[0], cfg.state_dim))
         td["belief"] = torch.zeros((td.batch_size[0], cfg.rssm_hidden_dim))
+        td = td.to(device)
         world_model(td)
     model_based_env = model_based_env.to(device)
 
