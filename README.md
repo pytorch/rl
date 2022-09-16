@@ -10,12 +10,12 @@ The features are available before an official release so that users and collabor
 
 ---
 
-**TorchRL** is an open-source Reinforcement Learning (RL) library for PyTorch. 
+**TorchRL** is an open-source Reinforcement Learning (RL) library for PyTorch.
 
-It provides pytorch and **python-first**, low and high level abstractions for RL that are intended to be **efficient**, **modular**, **documented** and properly **tested**. 
+It provides pytorch and **python-first**, low and high level abstractions for RL that are intended to be **efficient**, **modular**, **documented** and properly **tested**.
 The code is aimed at supporting research in RL. Most of it is written in python in a highly modular way, such that researchers can easily swap components, transform them or write new ones with little effort.
 
-This repo attempts to align with the existing pytorch ecosystem libraries in that it has a dataset pillar ([torchrl/envs](torchrl/envs)), [transforms](torchrl/envs/transforms), [models](torchrl/modules), data utilities (e.g. collectors and containers), etc. 
+This repo attempts to align with the existing pytorch ecosystem libraries in that it has a dataset pillar ([torchrl/envs](torchrl/envs)), [transforms](torchrl/envs/transforms), [models](torchrl/modules), data utilities (e.g. collectors and containers), etc.
 TorchRL aims at having as few dependencies as possible (python standard library, numpy and pytorch). Common environment libraries (e.g. OpenAI gym) are only optional.
 
 On the low-level end, torchrl comes with a set of highly re-usable functionals for [cost functions](torchrl/objectives/costs), [returns](torchrl/objectives/returns) and data processing.
@@ -25,19 +25,19 @@ TorchRL aims at (1) a high modularity and (2) good runtime performance.
 ## Features
 
 On the high-level end, TorchRL provides:
-- [`TensorDict`](torchrl/data/tensordict/tensordict.py), 
-a convenient data structure<sup>(1)</sup> to pass data from 
+- [`TensorDict`](torchrl/data/tensordict/tensordict.py),
+a convenient data structure<sup>(1)</sup> to pass data from
 one object to another without friction.
 `TensorDict` makes it easy to re-use pieces of code across environments, models and
 algorithms. For instance, here's how to code a rollout in TorchRL:
     <details>
       <summary>Code</summary>
-    
+   
     ```diff
     - obs, done = env.reset()
     + tensordict = env.reset()
     policy = TensorDictModule(
-        model, 
+        model,
         in_keys=["observation_pixels", "observation_vector"],
         out_keys=["action"],
     )
@@ -57,7 +57,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     TensorDict abstracts away the input / output signatures of the modules, env, collectors, replay buffers and losses of the library, allowing its primitives
     to be easily recycled across settings.
     Here's another example of an off-policy training loop in TorchRL (assuming that a data collector, a replay buffer, a loss and an optimizer have been instantiated):
-    
+   
     ```diff
     - for i, (obs, next_obs, action, hidden_state, reward, done) in enumerate(collector):
     + for i, tensordict in enumerate(collector):
@@ -73,7 +73,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
             optim.zero_grad()
     ```
     Again, this training loop can be re-used across algorithms as it makes a minimal number of assumptions about the structure of the data.
-    
+   
     TensorDict supports multiple tensor operations on its device and shape
     (the shape of TensorDict, or its batch size, is the common arbitrary N first dimensions of all its contained tensors):
     ```python
@@ -96,11 +96,11 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     </details>
 
     Check our [TensorDict tutorial](tutorials/tensordict.ipynb) for more information.
-    
-- An associated [`TensorDictModule` class](torchrl/modules/tensordict_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible! 
+   
+- An associated [`TensorDictModule` class](torchrl/modules/tensordict_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible!
     <details>
       <summary>Code</summary>
-    
+   
     ```diff
     transformer_model = nn.Transformer(nhead=16, num_encoder_layers=12)
     + td_module = TensorDictModule(transformer_model, in_keys=["src", "tgt"], out_keys=["out"])
@@ -111,20 +111,20 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     + td_module(tensordict)
     + out = tensordict["out"]
     ```
-  
-    The `TensorDictSequence` class allows to branch sequences of `nn.Module` instances in a highly modular way.
+ 
+    The `TensorDictSequential` class allows to branch sequences of `nn.Module` instances in a highly modular way.
     For instance, here is an implementation of a transformer using the encoder and decoder blocks:
     ```python
     encoder_module = TransformerEncoder(...)
     encoder = TensorDictModule(encoder_module, in_keys=["src", "src_mask"], out_keys=["memory"])
     decoder_module = TransformerDecoder(...)
     decoder = TensorDictModule(decoder_module, in_keys=["tgt", "memory"], out_keys=["output"])
-    transformer = TensorDictSequence(encoder, decoder)
+    transformer = TensorDictSequential(encoder, decoder)
     assert transformer.in_keys == ["src", "src_mask", "tgt"]
     assert transformer.out_keys == ["memory", "output"]
     ```
-    
-    `TensorDictSequence` allows to isolate subgraphs by querying a set of desired input / output keys:
+   
+    `TensorDictSequential` allows to isolate subgraphs by querying a set of desired input / output keys:
     ```python
     transformer.select_subsequence(out_keys=["memory"])  # returns the encoder
     transformer.select_subsequence(in_keys=["tgt", "memory"])  # returns the decoder
@@ -132,19 +132,19 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     </details>
 
     The corresponding [tutorial](tutorials/tensordictmodule.ipynb) provides more context about its features.
- 
-- a generic [trainer class](torchrl/trainers/trainers.py)<sup>(1)</sup> that 
-    executes the aforementioned training loop. Through a hooking mechanism, 
+
+- a generic [trainer class](torchrl/trainers/trainers.py)<sup>(1)</sup> that
+    executes the aforementioned training loop. Through a hooking mechanism,
     it also supports any logging or data transformation operation at any given
     time.
 
 - A common [interface for environments](torchrl/envs)
-    which supports common libraries (OpenAI gym, deepmind control lab, etc.)<sup>(1)</sup> and state-less execution (e.g. Model-based environments). 
+    which supports common libraries (OpenAI gym, deepmind control lab, etc.)<sup>(1)</sup> and state-less execution (e.g. Model-based environments).
     The [batched environments](torchrl/envs/vec_env.py) containers allow parallel execution<sup>(2)</sup>.
     A common pytorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py) is also provided.
     <details>
       <summary>Code</summary>
-    
+   
     ```python
     env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
     env_parallel = ParallelEnv(4, env_make)  # creates 4 envs in parallel
@@ -154,17 +154,17 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     ```
     </details>
 
-- multiprocess [data collectors](torchrl/collectors/collectors.py)<sup>(2)</sup> that work synchronously or asynchronously. 
-    Through the use of TensorDict, TorchRL's training loops are made very similar to regular training loops in supervised 
+- multiprocess [data collectors](torchrl/collectors/collectors.py)<sup>(2)</sup> that work synchronously or asynchronously.
+    Through the use of TensorDict, TorchRL's training loops are made very similar to regular training loops in supervised
     learning (although the "dataloader" -- read data collector -- is modified on-the-fly):
     <details>
       <summary>Code</summary>
-    
+   
     ```python
     env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
     collector = MultiaSyncDataCollector(
-        [env_make, env_make], 
-        policy=policy, 
+        [env_make, env_make],
+        policy=policy,
         devices=["cuda:0", "cuda:0"],
         total_frames=10000,
         frames_per_batch=50,
@@ -182,7 +182,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
 - efficient<sup>(2)</sup> and generic<sup>(1)</sup> [replay buffers](torchrl/data/replay_buffers/replay_buffers.py) with modularized storage:
     <details>
       <summary>Code</summary>
-    
+   
     ```python
     storage = LazyMemmapStorage(  # memory-mapped (physical) storage
         cfg.buffer_size,
@@ -200,19 +200,19 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     ```
     </details>
 
-- cross-library [environment transforms](torchrl/envs/transforms/transforms.py)<sup>(1)</sup>, 
-    executed on device and in a vectorized fashion<sup>(2)</sup>, 
+- cross-library [environment transforms](torchrl/envs/transforms/transforms.py)<sup>(1)</sup>,
+    executed on device and in a vectorized fashion<sup>(2)</sup>,
     which process and prepare the data coming out of the environments to be used by the agent:
     <details>
       <summary>Code</summary>
-    
+   
     ```python
     env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
     env_base = ParallelEnv(4, env_make, device="cuda:0")  # creates 4 envs in parallel
     env = TransformedEnv(
-        env_base, 
+        env_base,
         Compose(
-            ToTensorImage(), 
+            ToTensorImage(),
             ObservationNorm(loc=0.5, scale=1.0)),  # executes the transforms once and on device
     )
     tensordict = env.reset()
@@ -237,7 +237,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
 - various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py))<sup>(1)</sup>:
     <details>
       <summary>Code</summary>
-    
+   
     ```python
     # create an nn.Module
     common_module = ConvNet(
@@ -255,7 +255,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
         out_keys=["hidden"],
     )
     # Wrap the policy module in NormalParamsWrapper, such that the output
-    # tensor is split in loc and scale, and scale is mapped onto a positive space 
+    # tensor is split in loc and scale, and scale is mapped onto a positive space
     policy_module = NormalParamsWrapper(
         MLP(
             num_cells=[64, 64],
@@ -287,11 +287,11 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     ```
     </details>
 
-- exploration [wrappers](torchrl/modules/tensordict_module/exploration.py) and 
+- exploration [wrappers](torchrl/modules/tensordict_module/exploration.py) and
     [modules](torchrl/modules/models/exploration.py) to easily swap between exploration and exploitation<sup>(1)</sup>:
     <details>
       <summary>Code</summary>
-    
+   
     ```python
     policy_explore = EGreedyWrapper(policy)
     with set_exploration_mode("random"):
@@ -301,14 +301,14 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     ```
     </details>
 
-- A series of efficient [loss modules](https://github.com/facebookresearch/rl/blob/main/torchrl/objectives/costs) 
-    and highly vectorized 
-    [functional return and advantage](https://github.com/facebookresearch/rl/blob/main/torchrl/objectives/returns/functional.py) 
-    computation. 
+- A series of efficient [loss modules](https://github.com/facebookresearch/rl/blob/main/torchrl/objectives/costs)
+    and highly vectorized
+    [functional return and advantage](https://github.com/facebookresearch/rl/blob/main/torchrl/objectives/returns/functional.py)
+    computation.
 
     <details>
       <summary>Code</summary>
-    
+   
     ### Loss modules
     ```python
     from torchrl.objectives.costs import DQNLoss
@@ -316,7 +316,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     tensordict = replay_buffer.sample(batch_size)
     loss = loss_module(tensordict)
     ```
-  
+ 
     ### Advantage computation
     ```python
     from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
@@ -325,7 +325,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
 
     </details>
 
-- various [recipes](torchrl/trainers/helpers/models.py) to build models that 
+- various [recipes](torchrl/trainers/helpers/models.py) to build models that
     correspond to the environment being deployed.
 
 ## Examples, tutorials and demos
@@ -339,11 +339,11 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 
 and many more to come!
 
-We also provide [tutorials and demos](tutorials) that give a sense of what the 
+We also provide [tutorials and demos](tutorials) that give a sense of what the
 library can do.
 
 ## Installation
-Create a conda environment where the packages will be installed. 
+Create a conda environment where the packages will be installed.
 
 ```
 conda create --name torch_rl python=3.9
@@ -381,7 +381,7 @@ pip3 install ninja  # Makes the build go faster
 pip3 install "git+https://github.com/pytorch/functorch.git"
 ```
 
-If this fails, you can get the latest version of functorch that was marked to be 
+If this fails, you can get the latest version of functorch that was marked to be
 compatible with the current torch version:
 ```bash
 pip3 install ninja  # Makes the build go faster
@@ -389,8 +389,8 @@ PYTORCH_VERSION=`python -c "import torch.version; print(torch.version.git_versio
 pip3 install "git+https://github.com/pytorch/pytorch.git@$PYTORCH_VERSION#subdirectory=functorch"
 ```
 
-If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message 
-`(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, 
+If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message
+`(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears,
 try erasing the previously created build artifacts (`torchrl.egg-info/`, `build/`, `torchrl/_torchsl.so`)
 or re-clone the library from GitHub, then try
 
@@ -405,7 +405,7 @@ You can install the latest release by using
 ```
 pip3 install torchrl
 ```
-This should work on linux and MacOs (not M1). For Windows and M1/M2 machines, one 
+This should work on linux and MacOs (not M1). For Windows and M1/M2 machines, one
 should install the library locally (see below).
 
 To install extra dependencies, call
@@ -414,9 +414,9 @@ pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils]"
 ```
 or a subset of these.
 
-Alternatively, as the library is at an early stage, it may be wise to install 
-it in develop mode as this will make it possible to pull the latest changes and 
-benefit from them immediately. 
+Alternatively, as the library is at an early stage, it may be wise to install
+it in develop mode as this will make it possible to pull the latest changes and
+benefit from them immediately.
 Start by cloning the repo:
 ```
 git clone https://github.com/facebookresearch/rl
@@ -428,14 +428,14 @@ cd /path/to/torchrl/
 python setup.py develop
 ```
 
-If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message 
+If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message
 `(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
 
 ```
 ARCHFLAGS="-arch arm64" python setup.py develop
 ```
 
-To run a quick sanity check, leave that directory (e.g. by executing `cd ~/`) 
+To run a quick sanity check, leave that directory (e.g. by executing `cd ~/`)
 and try to import the library.
 ```
 python -c "import torchrl"
@@ -444,7 +444,7 @@ This should not return any warning or error.
 
 **Optional dependencies**
 
-The following libraries can be installed depending on the usage one wants to 
+The following libraries can be installed depending on the usage one wants to
 make of torchrl:
 ```
 # diverse
@@ -454,10 +454,10 @@ pip3 install tqdm tensorboard "hydra-core>=1.1" hydra-submitit-launcher
 pip3 install moviepy
 
 # deepmind control suite
-pip3 install dm_control 
+pip3 install dm_control
 
 # gym, atari games
-pip3 install gym[atari] "gym[accept-rom-license]" pygame gym_retro
+pip3 install gym[atari] "gym[accept-rom-license]" pygame
 
 # tests
 pip3 install pytest pyyaml pytest-instafail
@@ -471,10 +471,10 @@ pip3 install wandb
 
 **Troubleshooting**
 
-If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs, 
-it means that the C++ extensions were not installed or not found. 
-One common reason might be that you are trying to import torchrl from within the 
-git repo location. Indeed the following code snippet should return an error if 
+If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs,
+it means that the C++ extensions were not installed or not found.
+One common reason might be that you are trying to import torchrl from within the
+git repo location. Indeed the following code snippet should return an error if
 torchrl has not been installed in `develop` mode:
 ```
 cd ~/path/to/rl/repo
@@ -482,8 +482,8 @@ python -c 'from torchrl.envs.libs.gym import GymEnv'
 ```
 If this is the case, consider executing torchrl from another location.
 
-On **MacOs**, we recommend installing XCode first. 
-With Apple Silicon M1 chips, make sure you are using the arm64-built python 
+On **MacOs**, we recommend installing XCode first.
+With Apple Silicon M1 chips, make sure you are using the arm64-built python
 (e.g. [here](https://betterprogramming.pub/how-to-install-pytorch-on-apple-m1-series-512b3ad9bc6)). Running the following lines of code
 
 ```
@@ -505,7 +505,7 @@ To train an algorithm it is therefore advised to use the predefined configuratio
 ```
 python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt
 ```
-Note that using the config files requires the [configargparse](https://pypi.org/project/ConfigArgParse/) library. 
+Note that using the config files requires the [configargparse](https://pypi.org/project/ConfigArgParse/) library.
 
 One can also overwrite the config parameters using flags, e.g.
 ```
