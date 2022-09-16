@@ -351,28 +351,19 @@ class TransformedEnv(EnvBase):
 
         if self._input_spec is None or "action" not in self._input_spec or self._input_spec["action"] is None \
             or not self.cache_specs:
-            action_spec = self.transform.transform_action_spec(
-                deepcopy(self.base_env.action_spec)
-            )
             if self.cache_specs:
                 if self._input_spec is None:
+                    print(self.base_env)
+                    try:
+                        print(self.base_env.base_env.input_spec)
+                    except:
+                        pass
+                    print(self.base_env.input_spec)
                     self._input_spec = self.transform.transform_input_spec(
                         deepcopy(self.base_env.input_spec)
                     )
-                self._input_spec["action"] = action_spec
-        else:
-            action_spec = self._input_spec["action"]
+        action_spec = self._input_spec["action"]
         return action_spec
-
-        # if self._action_spec is None or not self.cache_specs:
-        #     action_spec = self.transform.transform_action_spec(
-        #         deepcopy(self.base_env.action_spec)
-        #     )
-        #     if self.cache_specs:
-        #         self._action_spec = action_spec
-        # else:
-        #     action_spec = self._action_spec
-        # return action_spec
 
     @property
     def input_spec(self) -> TensorSpec:
@@ -518,7 +509,7 @@ class TransformedEnv(EnvBase):
 
     def _erase_metadata(self):
         if self.cache_specs:
-            self.action_spec = None
+            self._input_spec = None
             self._observation_spec = None
             self._reward_spec = None
 

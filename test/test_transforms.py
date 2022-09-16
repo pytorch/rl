@@ -1090,17 +1090,21 @@ class TestTransforms:
         key = list(obs_spec.keys())[0]
         env = TransformedEnv(env)
 
+        # we start by asking the spec. That will create the private attributes
         _ = env.action_spec
         _ = env.observation_spec
         _ = env.reward_spec
 
-        assert (env._input_spec is not None) and ("action" in env._input_spec) and (env._input_spec["action"] is not None)
+        assert (env._input_spec is not None)
+        assert ("action" in env._input_spec)
+        assert (env._input_spec["action"] is not None)
         assert env._observation_spec is not None
         assert env._reward_spec is not None
 
         env.insert_transform(0, CatFrames(N=4, cat_dim=-1, keys_in=[key]))
 
-        assert (env._input_spec is not None) and ("action" in env._input_spec) and (env._input_spec["action"] is not None)
+        # transformed envs do not have spec after insert -- they need to be computed
+        assert (env._input_spec is None)
         assert env._observation_spec is None
         assert env._reward_spec is None
 
@@ -1139,7 +1143,7 @@ class TestTransforms:
         assert isinstance(env.transform[2], CatFrames)
         assert isinstance(env.transform[3], NoopResetEnv)
         assert isinstance(env.transform[4], FiniteTensorDictCheck)
-        assert (env._input_spec is not None) and ("action" in env._input_spec) and (env._input_spec["action"] is not None)
+        assert env._input_spec is None
         assert env._observation_spec is None
         assert env._reward_spec is None
 
@@ -1153,7 +1157,7 @@ class TestTransforms:
         assert isinstance(env.transform[3], CatFrames)
         assert isinstance(env.transform[4], NoopResetEnv)
         assert isinstance(env.transform[5], FiniteTensorDictCheck)
-        assert (env._input_spec is not None) and ("action" in env._input_spec) and (env._input_spec["action"] is not None)
+        assert env._input_spec is None
         assert env._observation_spec is None
         assert env._reward_spec is None
 
