@@ -192,7 +192,7 @@ class TensorDictModule(nn.Module):
         elif spec is not None and not isinstance(spec, CompositeSpec):
             if len(self.out_keys) > 1:
                 raise RuntimeError(
-                    f"got mode than one out_key for the TensorDictModule: {self.out_keys},\nbut only one spec. "
+                    f"got more than one out_key for the TensorDictModule: {self.out_keys},\nbut only one spec. "
                     "Consider using a CompositeSpec object or no spec at all."
                 )
             spec = CompositeSpec(**{self.out_keys[0]: spec})
@@ -260,7 +260,7 @@ class TensorDictModule(nn.Module):
         ):
             #
             dim = tensors[0].shape[0]
-            tensordict_out = tensordict.expand(dim).contiguous()
+            tensordict_out = tensordict.expand(dim, *tensordict.batch_size).contiguous()
         elif tensordict_out is None:
             tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):

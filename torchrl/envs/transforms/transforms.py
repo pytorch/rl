@@ -312,7 +312,6 @@ class TransformedEnv(EnvBase):
         device = kwargs["device"]
         super().__init__(**kwargs)
         self._set_env(env, device)
-        self._batch_locked = env._batch_locked
         self._inplace_update = env._inplace_update
         if transform is None:
             transform = Compose()
@@ -331,16 +330,14 @@ class TransformedEnv(EnvBase):
         self.batch_size = self.base_env.batch_size
 
     def __new__(cls, env, *args, **kwargs):
-        return super().__new__(cls, env, *args, batch_locked=env.batch_locked, **kwargs)
+        return super().__new__(
+            cls, env, *args, _batch_locked=env.batch_locked, **kwargs
+        )
 
     def _set_env(self, env: EnvBase, device) -> None:
         self.base_env = env.to(device)
         # updates need not be inplace, as transforms may modify values out-place
         self.base_env._inplace_update = False
-
-    # @property
-    # def batch_locked(self) -> bool:
-    #     return self.base_env.batch_locked
 
     @property
     def observation_spec(self) -> TensorSpec:
@@ -400,7 +397,7 @@ class TransformedEnv(EnvBase):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # selected_keys = [key for key in tensordict.keys() if "action" in key]
         # tensordict_in = tensordict.select(*selected_keys).clone()
-        tensordict_in = self.transform.inv(tensordict.clone(recursive=False))
+        tensordict_in = self.transform.inv(tensordict.clone(recurse=False))
         tensordict_out = self.base_env.step(tensordict_in)
         # tensordict should already have been processed by the transforms
         # for logging purposes
@@ -1041,12 +1038,13 @@ class FlattenObservation(ObservationTransform):
 
 
 class UnsqueezeTransform(Transform):
-    """Flatten adjacent dimensions of a tensor.
+    """Inserts a dimension of size one at the specified position.
 
     Args:
         unsqueeze_dim (int): dimension to unsqueeze.
     """
 
+    invertible = True
     inplace = False
 
     @classmethod
@@ -1059,6 +1057,8 @@ class UnsqueezeTransform(Transform):
         unsqueeze_dim: int,
         keys_in: Optional[Sequence[str]] = None,
         keys_out: Optional[Sequence[str]] = None,
+        keys_inv_in: Optional[Sequence[str]] = None,
+        keys_inv_out: Optional[Sequence[str]] = None,
     ):
         if not _has_tv:
             raise ImportError(
@@ -1068,7 +1068,12 @@ class UnsqueezeTransform(Transform):
             )
         if keys_in is None:
             keys_in = IMAGE_KEYS  # default
-        super().__init__(keys_in=keys_in, keys_out=keys_out)
+        super().__init__(
+            keys_in=keys_in,
+            keys_out=keys_out,
+            keys_inv_in=keys_inv_in,
+            keys_inv_out=keys_inv_out,
+        )
         self._unsqueeze_dim_orig = unsqueeze_dim
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
@@ -1095,22 +1100,92 @@ class UnsqueezeTransform(Transform):
         observation = observation.unsqueeze(self.unsqueeze_dim)
         return observation
 
+    def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._unsqueeze_dim_orig >= 0:
+            self._unsqueeze_dim = self._unsqueeze_dim_orig + tensordict.ndimension()
+        return super().inv(tensordict)
+
+    def _inv_apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        observation = observation.squeeze(self.unsqueeze_dim)
+        return observation
+
+    def _transform_spec(self, spec: TensorSpec) -> None:
+        if isinstance(spec, CompositeSpec):
+            for key in spec:
+                self._transform_spec(spec[key])
+        else:
+            self._unsqueeze_dim = self._unsqueeze_dim_orig
+            space = spec.space
+            if isinstance(space, ContinuousBox):
+                space.minimum = self._apply_transform(space.minimum)
+                space.maximum = self._apply_transform(space.maximum)
+                spec.shape = space.minimum.shape
+            else:
+                spec.shape = self._apply_transform(torch.zeros(spec.shape)).shape
+
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        if "action" in self.keys_inv_in:
+            self._transform_spec(action_spec)
+        return action_spec
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        for key in self.keys_inv_in:
+            self._transform_spec(input_spec[key])
+        return input_spec
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        if "reward" in self.keys_in:
+            self._transform_spec(reward_spec)
+        return reward_spec
+
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        self._unsqueeze_dim = self._unsqueeze_dim_orig
-        space = observation_spec.space
-        if isinstance(space, ContinuousBox):
-            space.minimum = self._apply_transform(space.minimum)
-            space.maximum = self._apply_transform(space.maximum)
-            observation_spec.shape = space.minimum.shape
-        else:
-            observation_spec.shape = self._apply_transform(
-                torch.zeros(observation_spec.shape)
-            ).shape
+        self._transform_spec(observation_spec)
         return observation_spec
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(unsqueeze_dim={int(self.unsqueeze_dim)})"
+        s = (
+            f"{self.__class__.__name__}(keys_in={self.keys_in}, keys_out={self.keys_out},"
+            f" keys_inv_in={self.keys_inv_in}, keys_inv_out={self.keys_inv_out})"
+        )
+        return s
+
+
+class SqueezeTransform(UnsqueezeTransform):
+    """Removes a dimension of size one at the specified position.
+
+    Args:
+        squeeze_dim (int): dimension to squeeze.
+    """
+
+    invertible = True
+    inplace = False
+
+    def __init__(
+        self,
+        squeeze_dim: int,
+        keys_in: Optional[Sequence[str]] = None,
+        keys_out: Optional[Sequence[str]] = None,
+        keys_inv_in: Optional[Sequence[str]] = None,
+        keys_inv_out: Optional[Sequence[str]] = None,
+    ):
+        super().__init__(
+            unsqueeze_dim=squeeze_dim,
+            keys_in=keys_inv_in,
+            keys_out=keys_out,
+            keys_inv_in=keys_in,
+            keys_inv_out=keys_inv_out,
+        )
+
+    @property
+    def squeeze_dim(self):
+        return super().unsqueeze_dim
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return super().inv(tensordict)
+
+    def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return super().forward(tensordict)
 
 
 class GrayScale(ObservationTransform):
