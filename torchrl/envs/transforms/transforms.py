@@ -500,7 +500,9 @@ class TransformedEnv(EnvBase):
         )
 
     def __repr__(self) -> str:
-        return f"TransformedEnv(env={self.base_env}, transform={self.transform})"
+        env_str = indent(f"env={self.base_env}", 4 * " ")
+        t_str = indent(f"transform={self.transform}", 4 * " ")
+        return f"TransformedEnv(\n{env_str},\n{t_str})"
 
     def _erase_metadata(self):
         if self.cache_specs:
