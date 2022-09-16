@@ -129,7 +129,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         tensordict: TensorDict,
     ) -> TensorDict:
         # step method requires to be immutable
-        tensordict_out = tensordict.clone(recursive=False)
+        tensordict_out = tensordict.clone(recurse=False)
         # Compute world state
         if self.world_model_params is not None:
             tensordict_out = self.world_model(
@@ -142,7 +142,9 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         # Step requires a done flag. No sense for MBRL so we set it to False
         if "done" not in self.world_model.out_keys:
             tensordict_out["done"] = torch.zeros(
-                tensordict_out.shape, dtype=torch.bool, device=tensordict_out.device
+                tensordict_out.shape,
+                dtype=torch.bool,
+                device=tensordict_out.device_safe(),
             )
         return tensordict_out
 

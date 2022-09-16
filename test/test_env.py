@@ -422,7 +422,7 @@ class TestModelBasedEnv:
             pass
         td = mb_env.reset()
         td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
-        td_expanded = td.expand(2)
+        td_expanded = td.unsqueeze(-1).expand(10, 2).reshape(-1).to_tensordict()
         td = mb_env.step(td)
 
         try:
