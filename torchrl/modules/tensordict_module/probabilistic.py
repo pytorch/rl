@@ -6,7 +6,7 @@
 import re
 from copy import deepcopy
 from textwrap import indent
-from typing import Sequence, Union, Type, Optional, Tuple
+from typing import List, Sequence, Union, Type, Optional, Tuple
 
 from torch import Tensor
 from torch import distributions as d
@@ -50,11 +50,12 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         module (nn.Module): a nn.Module used to map the input to the output parameter space. Can be a functional
             module (FunctionalModule or FunctionalModuleWithBuffers), in which case the `forward` method will expect
             the params (and possibly) buffers keyword arguments.
-        dist_param_keys (str or iterable of str): key(s) that will be produced
+        dist_param_keys (str or iterable of str or dict): key(s) that will be produced
             by the inner TDModule and that will be used to build the distribution.
-            Importantly, those keys must match the keywords used by the distribution
+            Importantly, if it's an iterable of string or a string, those keys must match the keywords used by the distribution
             class of interest, e.g. `"loc"` and `"scale"` for the Normal distribution
-            and similar.
+            and similar. If dist_param_keys is a dictionary,, the keys are the keys of the distribution and the values are the
+            keys in the tensordict that will get match to the corresponding distribution keys.
         out_key_sample (str or iterable of str): keys where the sampled values will be
             written. Importantly, if this key is part of the `out_keys` of the inner model,
             the sampling step will be skipped.
@@ -141,7 +142,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
     def __init__(
         self,
         module: TensorDictModule,
-        dist_param_keys: Union[str, Sequence[str]],
+        dist_param_keys: Union[str, Sequence[str], dict],
         out_key_sample: Union[str, Sequence[str]],
         spec: Optional[TensorSpec] = None,
         safe: bool = False,
@@ -160,7 +161,9 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             dist_param_keys = [dist_param_keys]
         if isinstance(out_key_sample, str):
             out_key_sample = [out_key_sample]
-        for key in dist_param_keys:
+        if not isinstance(dist_param_keys, dict):
+            dist_param_keys = {param_key: param_key for param_key in dist_param_keys}
+        for key in dist_param_keys.values():
             if key not in module.out_keys:
                 raise RuntimeError(
                     f"The key {key} could not be found in the wrapped module `{type(module)}.out_keys`."
@@ -175,7 +178,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             module=module, spec=spec, in_keys=in_keys, out_keys=out_keys, safe=safe
         )
         self.dist_param_keys = dist_param_keys
-        _check_all_str(self.dist_param_keys)
+        _check_all_str(self.dist_param_keys.keys())
+        _check_all_str(self.dist_param_keys.values())
 
         self.default_interaction_mode = default_interaction_mode
         if isinstance(distribution_class, str):
@@ -189,10 +193,16 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
 
-    def _call_module(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        return self.module(tensordict, **kwargs)
+    def _call_module(
+        self,
+        tensordict: TensorDictBase,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        **kwargs,
+    ) -> TensorDictBase:
+        return self.module(tensordict, params=params, buffers=buffers, **kwargs)
 
-    def make_functional_with_buffers(self, clone: bool = True):
+    def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
         module_params = self.parameters(recurse=False)
         if len(list(module_params)):
             raise RuntimeError(
@@ -205,7 +215,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             self_copy = self
 
         self_copy.module, other = self_copy.module.make_functional_with_buffers(
-            clone=True
+            clone=True,
+            native=native,
         )
         return self_copy, other
 
@@ -213,6 +224,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> Tuple[d.Distribution, TensorDictBase]:
         interaction_mode = exploration_mode()
@@ -220,16 +233,23 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             interaction_mode = self.default_interaction_mode
         with set_exploration_mode(interaction_mode):
             tensordict_out = self._call_module(
-                tensordict, tensordict_out=tensordict_out, **kwargs
+                tensordict,
+                tensordict_out=tensordict_out,
+                params=params,
+                buffers=buffers,
+                **kwargs,
             )
         dist = self.build_dist_from_params(tensordict_out)
         return dist, tensordict_out
 
     def build_dist_from_params(self, tensordict_out: TensorDictBase) -> d.Distribution:
         try:
-            dist = self.distribution_class(
-                **tensordict_out.select(*self.dist_param_keys)
-            )
+            selected_td_out = tensordict_out.select(*self.dist_param_keys.values())
+            dist_kwargs = {
+                dist_key: selected_td_out[td_key]
+                for dist_key, td_key in self.dist_param_keys.items()
+            }
+            dist = self.distribution_class(**dist_kwargs)
         except TypeError as err:
             if "an unexpected keyword argument" in str(err):
                 raise TypeError(
@@ -248,11 +268,17 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> TensorDictBase:
 
         dist, tensordict_out = self.get_dist(
-            tensordict, tensordict_out=tensordict_out, **kwargs
+            tensordict,
+            tensordict_out=tensordict_out,
+            params=params,
+            buffers=buffers,
+            **kwargs,
         )
         if self._requires_sample:
             out_tensors = self._dist_sample(dist, interaction_mode=exploration_mode())

@@ -7,26 +7,39 @@ import argparse
 import numpy as np
 import pytest
 import torch
+from _utils_internal import get_available_devices
+from packaging import version
+from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs.libs.dm_control import _has_dmc
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
 
 if _has_gym:
     import gym
+
+    gym_version = version.parse(gym.__version__)
+
     from gym.wrappers.pixel_observation import PixelObservationWrapper
 if _has_dmc:
     from dm_control import suite
     from dm_control.suite.wrappers import pixels
 
+from sys import platform
+
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.envs import GymEnv, GymWrapper, DMControlEnv, DMControlWrapper
+from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
+from torchrl.envs.libs.gym import GymEnv, GymWrapper
+
+IS_OSX = platform == "darwin"
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
 @pytest.mark.parametrize(
     "env_name",
     [
-        "ALE/Pong-v5",
         "Pendulum-v1",
+        "ALE/Pong-v5",
     ],
 )
 @pytest.mark.parametrize("frame_skip", [1, 3])
@@ -51,7 +64,7 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
     tdreset = []
     tdrollout = []
     final_seed = []
-    for i in range(2):
+    for _ in range(2):
         env0 = GymEnv(
             env_name,
             frame_skip=frame_skip,
@@ -77,7 +90,10 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
         base_env = gym.make(env_name, frameskip=frame_skip)
         frame_skip = 1
     else:
-        base_env = gym.make(env_name)
+        if gym_version < version.parse("0.26.0"):
+            base_env = gym.make(env_name)
+        else:
+            base_env = gym.make(env_name, render_mode="rgb_array")
 
     if from_pixels and not _is_from_pixels(base_env):
         base_env = PixelObservationWrapper(base_env, pixels_only=pixels_only)
@@ -92,9 +108,9 @@ def test_gym(env_name, frame_skip, from_pixels, pixels_only):
     env1.close()
     del env1, base_env
 
-    assert_allclose_td(tdreset[0], tdreset2)
+    assert_allclose_td(tdreset[0], tdreset2, rtol=1e-4, atol=1e-4)
     assert final_seed0 == final_seed2
-    assert_allclose_td(tdrollout[0], rollout2)
+    assert_allclose_td(tdrollout[0], rollout2, rtol=1e-4, atol=1e-4)
 
 
 @pytest.mark.skipif(not _has_dmc, reason="no dm_control library found")
@@ -115,7 +131,7 @@ def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
     tds = []
     tds_reset = []
     final_seed = []
-    for i in range(2):
+    for _ in range(2):
         env0 = DMControlEnv(
             env_name,
             task,
@@ -178,6 +194,76 @@ def test_dmcontrol(env_name, task, frame_skip, from_pixels, pixels_only):
     assert_allclose_td(tdreset0, tdreset2)
     assert final_seed0 == final_seed2
     assert_allclose_td(rollout0, rollout2)
+
+
+@pytest.mark.skipif(
+    IS_OSX,
+    reason="rendering unstable on osx, skipping (mujoco.FatalError: gladLoadGL error)",
+)
+@pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
+@pytest.mark.parametrize(
+    "env_lib,env_args,env_kwargs",
+    [
+        [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
+        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": True}],
+        [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
+        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": False}],
+        [GymEnv, ("ALE/Pong-v5",), {}],
+    ],
+)
+def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
+    env = env_lib(*env_args, **env_kwargs)
+    td = env.rollout(max_steps=5)
+    td0 = td[0]
+    fake_td = env.fake_tensordict()
+    assert set(fake_td.keys()) == set(td.keys())
+    for key in fake_td.keys():
+        assert fake_td.get(key).shape == td.get(key)[0].shape
+    for key in fake_td.keys():
+        assert fake_td.get(key).shape == td0.get(key).shape
+        assert fake_td.get(key).dtype == td0.get(key).dtype
+        assert fake_td.get(key).device == td0.get(key).device
+
+
+@pytest.mark.skipif(IS_OSX, reason="rendeing unstable on osx, skipping")
+@pytest.mark.skipif(not (_has_dmc and _has_gym), reason="gym or dm_control not present")
+@pytest.mark.parametrize(
+    "env_lib,env_args,env_kwargs",
+    [
+        [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
+        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": True}],
+        [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
+        [GymEnv, ("HalfCheetah-v4",), {"from_pixels": False}],
+        [GymEnv, ("ALE/Pong-v5",), {}],
+    ],
+)
+@pytest.mark.parametrize("device", get_available_devices())
+class TestCollectorLib:
+    def test_collector_run(self, env_lib, env_args, env_kwargs, device):
+        env_fn = EnvCreator(lambda: env_lib(*env_args, **env_kwargs, device=device))
+        env = ParallelEnv(3, env_fn)
+        collector = MultiaSyncDataCollector(
+            create_env_fn=[env, env],
+            policy=RandomPolicy(env.action_spec),
+            total_frames=-1,
+            max_frames_per_traj=100,
+            frames_per_batch=21,
+            init_random_frames=-1,
+            reset_at_each_iter=False,
+            split_trajs=True,
+            devices=[device, device],
+            passing_devices=[device, device],
+            update_at_each_batch=False,
+            init_with_lag=False,
+            exploration_mode="random",
+        )
+        for i, data in enumerate(collector):
+            if i == 3:
+                assert data.shape[0] == 3
+                assert data.shape[1] == 7
+                break
+        collector.shutdown()
+        del env
 
 
 if __name__ == "__main__":

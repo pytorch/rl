@@ -75,7 +75,10 @@ def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
 
 
 def _pin_memory(output: Any) -> Any:
-    if hasattr(output, "pin_memory") and output.device == torch.device("cpu"):
+    output_device = (
+        output.device_safe() if hasattr(output, "device_safe") else output.device
+    )
+    if hasattr(output, "pin_memory") and output_device == torch.device("cpu"):
         return output.pin_memory()
     else:
         return output
@@ -366,7 +369,11 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         weight = np.power(weight / p_min, -self._beta)
         # x = first_field(data)
         # if isinstance(x, torch.Tensor):
-        device = data.device if hasattr(data, "device") else torch.device("cpu")
+        device = (
+            data.device_safe()
+            if hasattr(data, "device_safe")
+            else (data.device if hasattr(data, "device") else torch.device("cpu"))
+        )
         weight = to_torch(weight, device, self._pin_memory)
         return data, weight
 
@@ -469,7 +476,11 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
         # x = first_field(data)  # avoid calling tree.flatten
         # if isinstance(x, torch.Tensor):
-        device = data.device if hasattr(data, "device") else torch.device("cpu")
+        device = (
+            data.device_safe()
+            if hasattr(data, "device_safe")
+            else (data.device if hasattr(data, "device") else torch.device("cpu"))
+        )
         weight = to_torch(weight, device, self._pin_memory)
         return data, weight, index
 
@@ -620,7 +631,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
     def _get_priority(self, tensordict: TensorDictBase) -> torch.Tensor:
         if self.priority_key in tensordict.keys():
             if tensordict.batch_dims:
-                tensordict = tensordict.clone(recursive=False)
+                tensordict = tensordict.clone(recurse=False)
                 tensordict.batch_size = []
             try:
                 priority = tensordict.get(self.priority_key).item()
@@ -653,14 +664,16 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
                 # we want the tensordict to have one dimension only. The batch size
                 # of the sampled tensordicts can be changed thereafter
                 if not isinstance(tensordicts, LazyStackedTensorDict):
-                    tensordicts = tensordicts.clone(recursive=False)
+                    tensordicts = tensordicts.clone(recurse=False)
                 else:
                     tensordicts = tensordicts.contiguous()
                 tensordicts.batch_size = tensordicts.batch_size[:1]
             tensordicts.set(
                 "index",
                 torch.zeros(
-                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
+                    tensordicts.shape,
+                    device=tensordicts.device_safe(),
+                    dtype=torch.int,
                 ),
             )
         else:
@@ -673,7 +686,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         idx = super().extend(tensordicts, priorities)
         stacked_td.set(
             "index",
-            torch.tensor(idx, dtype=torch.int, device=stacked_td.device),
+            torch.tensor(idx, dtype=torch.int, device=stacked_td.device_safe()),
             inplace=True,
         )
         return idx

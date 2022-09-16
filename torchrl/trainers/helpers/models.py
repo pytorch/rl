@@ -17,7 +17,7 @@ from torchrl.modules import (
     NoisyLinear,
     TensorDictModule,
     NormalParamWrapper,
-    TensorDictSequence,
+    TensorDictSequential,
 )
 from torchrl.modules.distributions import (
     Delta,
@@ -75,7 +75,7 @@ __all__ = [
 
 
 def make_dqn_actor(
-    proof_environment: EnvBase, cfg: "DictConfig", device: torch.device
+    proof_environment: EnvBase, cfg: "DictConfig", device: torch.device  # noqa: F821
 ) -> Actor:
     """
     DQN constructor helper function.
@@ -91,7 +91,7 @@ def make_dqn_actor(
     Examples:
         >>> from torchrl.trainers.helpers.models import make_dqn_actor, DiscreteModelConfig
         >>> from torchrl.trainers.helpers.envs import EnvConfig
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import ToTensorImage, TransformedEnv
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
@@ -199,7 +199,7 @@ def make_dqn_actor(
 
 def make_ddpg_actor(
     proof_environment: EnvBase,
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     actor_net_kwargs: Optional[dict] = None,
     value_net_kwargs: Optional[dict] = None,
     device: DEVICE_TYPING = "cpu",
@@ -225,7 +225,7 @@ def make_ddpg_actor(
     Examples:
         >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.trainers.helpers.models import make_ddpg_actor, parser_model_args_continuous
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
@@ -313,7 +313,7 @@ def make_ddpg_actor(
             transform = d.ComposeTransform(
                 transform, d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)
             )
-        actor_module = TensorDictSequence(
+        actor_module = TensorDictSequential(
             actor_module,
             TensorDictModule(
                 LazygSDEModule(transform=transform, learn_sigma=False),
@@ -401,7 +401,7 @@ def make_ddpg_actor(
 
 def make_ppo_model(
     proof_environment: EnvBase,
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     device: DEVICE_TYPING,
     in_keys_actor: Optional[Sequence[str]] = None,
     observation_key=None,
@@ -427,7 +427,7 @@ def make_ppo_model(
     Examples:
         >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.trainers.helpers.models import make_ppo_model, parser_model_args_continuous
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
@@ -479,21 +479,6 @@ def make_ppo_model(
     # proof_environment.set_seed(cfg.seed)
     specs = proof_environment.specs  # TODO: use env.sepcs
     action_spec = specs["action_spec"]
-    obs_spec = specs["observation_spec"]
-
-    if observation_key is not None:
-        obs_spec = obs_spec[observation_key]
-    else:
-        obs_spec_values = list(obs_spec.values())
-        if len(obs_spec_values) > 1:
-            raise RuntimeError(
-                "There is more than one observation in the spec, PPO helper "
-                "cannot infer automatically which to pick. "
-                "Please indicate which key to read via the `observation_key` "
-                "keyword in this helper."
-            )
-        else:
-            obs_spec = obs_spec_values[0]
 
     if in_keys_actor is None and proof_environment.from_pixels:
         in_keys_actor = ["pixels"]
@@ -592,7 +577,7 @@ def make_ppo_model(
             else:
                 raise RuntimeError("cannot use gSDE with discrete actions")
 
-            actor_module = TensorDictSequence(
+            actor_module = TensorDictSequential(
                 actor_module,
                 TensorDictModule(
                     LazygSDEModule(transform=transform),
@@ -667,7 +652,7 @@ def make_ppo_model(
             else:
                 raise RuntimeError("cannot use gSDE with discrete actions")
 
-            actor_module = TensorDictSequence(
+            actor_module = TensorDictSequential(
                 actor_module,
                 TensorDictModule(
                     LazygSDEModule(transform=transform),
@@ -705,7 +690,7 @@ def make_ppo_model(
 
 def make_sac_model(
     proof_environment: EnvBase,
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -737,7 +722,7 @@ def make_sac_model(
     Examples:
         >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.trainers.helpers.models import make_sac_model, parser_model_args_continuous
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
@@ -803,21 +788,6 @@ def make_sac_model(
 
     proof_environment.reset()
     action_spec = proof_environment.action_spec
-    obs_spec = proof_environment.observation_spec
-
-    if observation_key is not None:
-        obs_spec = obs_spec[observation_key]
-    else:
-        obs_spec_values = list(obs_spec.values())
-        if len(obs_spec_values) > 1:
-            raise RuntimeError(
-                "There is more than one observation in the spec, SAC helper "
-                "cannot infer automatically which to pick. "
-                "Please indicate which key to read via the `observation_key` "
-                "keyword in this helper."
-            )
-        else:
-            obs_spec = obs_spec_values[0]
 
     if actor_net_kwargs is None:
         actor_net_kwargs = {}
@@ -900,7 +870,7 @@ def make_sac_model(
         else:
             raise RuntimeError("cannot use gSDE with discrete actions")
 
-        actor_module = TensorDictSequence(
+        actor_module = TensorDictSequential(
             actor_module,
             TensorDictModule(
                 LazygSDEModule(transform=transform),
@@ -942,7 +912,7 @@ def make_sac_model(
 
 def make_redq_model(
     proof_environment: EnvBase,
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -972,7 +942,7 @@ def make_redq_model(
     Examples:
         >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.trainers.helpers.models import make_redq_model, parser_model_args_continuous
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
         >>> from hydra.core.config_store import ConfigStore
@@ -1144,7 +1114,7 @@ def make_redq_model(
         else:
             raise RuntimeError("cannot use gSDE with discrete actions")
 
-        actor_module = TensorDictSequence(
+        actor_module = TensorDictSequential(
             actor_module,
             TensorDictModule(
                 LazygSDEModule(transform=transform),

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, Any, Dict
 
 import numpy as np
 import torch
@@ -38,7 +38,9 @@ class default_info_dict_reader:
             keys = []
         self.keys = keys
 
-    def __call__(self, info_dict: dict, tensordict: TensorDictBase) -> TensorDictBase:
+    def __call__(
+        self, info_dict: Dict[str, Any], tensordict: TensorDictBase
+    ) -> TensorDictBase:
         if not isinstance(info_dict, dict) and len(self.keys):
             warnings.warn(
                 f"Found an info_dict of type {type(info_dict)} "
@@ -76,7 +78,7 @@ class GymLikeEnv(_EnvWrapper):
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._info_dict_reader = None
-        return super().__new__(cls, *args, **kwargs)
+        return super().__new__(cls, *args, _batch_locked=True, **kwargs)
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get("action")
@@ -87,6 +89,23 @@ class GymLikeEnv(_EnvWrapper):
             obs, _reward, done, *info = self._output_transform(
                 self._env.step(action_np)
             )
+            if isinstance(obs, list) and len(obs) == 1:
+                # Until gym 0.25.2 we had rendered frames returned in lists of length 1
+                obs = obs[0]
+            if len(info) == 2:
+                # gym 0.26
+                truncation, info = info
+            elif len(info) == 1:
+                info = info[0]
+            elif len(info) == 0:
+                info = None
+            else:
+                raise ValueError(
+                    "the environment output is expected to be either"
+                    "obs, reward, done, truncation, info (gym >= 0.26) or "
+                    f"obs, reward, done, info. Got info with types = ({[type(x) for x in info]})"
+                )
+
             if _reward is None:
                 _reward = 0.0
             reward += _reward
@@ -109,15 +128,18 @@ class GymLikeEnv(_EnvWrapper):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
-        if self.info_dict_reader is not None:
-            self.info_dict_reader(*info, tensordict_out)
+        if self.info_dict_reader is not None and info is not None:
+            self.info_dict_reader(info, tensordict_out)
 
         return tensordict_out
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
-        obs, *_ = self._output_transform((self._env.reset(**kwargs),))
+        reset_data = self._env.reset(**kwargs)
+        if not isinstance(reset_data, tuple):
+            reset_data = (reset_data,)
+        obs, *_ = self._output_transform(reset_data)
         tensordict_out = TensorDict(
             source=self._read_obs(obs),
             batch_size=self.batch_size,
@@ -127,7 +149,9 @@ class GymLikeEnv(_EnvWrapper):
         tensordict_out.set("done", self._is_done)
         return tensordict_out
 
-    def _read_obs(self, observations: Union[dict, torch.Tensor, np.ndarray]) -> dict:
+    def _read_obs(
+        self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
+    ) -> Dict[str, Any]:
         if isinstance(observations, dict):
             observations = {"next_" + key: value for key, value in observations.items()}
         if not isinstance(observations, (TensorDict, dict)):

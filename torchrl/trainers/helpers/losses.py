@@ -33,13 +33,13 @@ from torchrl.objectives.costs.deprecated import REDQLoss_deprecated
 
 # from torchrl.objectives.costs.redq import REDQLoss
 
-from torchrl.objectives.costs.utils import _TargetNetUpdate
+from torchrl.objectives.costs.utils import TargetNetUpdater
 from torchrl.objectives.returns.advantages import GAE
 
 
 def make_target_updater(
-    cfg: "DictConfig", loss_module: LossModule
-) -> Optional[_TargetNetUpdate]:
+    cfg: "DictConfig", loss_module: LossModule  # noqa: F821
+) -> Optional[TargetNetUpdater]:
     """Builds a target network weight update object."""
     if cfg.loss == "double":
         if not cfg.hard_update:
@@ -62,7 +62,7 @@ def make_target_updater(
     return target_net_updater
 
 
-def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
+def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[TargetNetUpdater]]:
     """Builds the SAC loss module."""
     loss_kwargs = {}
     if hasattr(cfg, "distributional") and cfg.distributional:
@@ -114,7 +114,7 @@ def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[_TargetNetUpdate]]:
 
 def make_redq_loss(
     model, cfg
-) -> Tuple[REDQLoss_deprecated, Optional[_TargetNetUpdate]]:
+) -> Tuple[REDQLoss_deprecated, Optional[TargetNetUpdater]]:
     """Builds the REDQ loss module."""
     loss_kwargs = {}
     if hasattr(cfg, "distributional") and cfg.distributional:
@@ -148,7 +148,7 @@ def make_redq_loss(
     return loss_module, target_net_updater
 
 
-def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
+def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[TargetNetUpdater]]:
     """Builds the DDPG loss module."""
     actor, value_net = model
     loss_kwargs = {}
@@ -166,7 +166,7 @@ def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[_TargetNetUpdate]]:
     return loss_module, target_net_updater
 
 
-def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[_TargetNetUpdate]]:
+def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[TargetNetUpdater]]:
     """Builds the DQN loss module."""
     loss_kwargs = {}
     if cfg.distributional:
@@ -193,13 +193,16 @@ def make_ppo_loss(model, cfg) -> PPOLoss:
     actor_model = model.get_policy_operator()
     critic_model = model.get_value_operator()
 
-    advantage = GAE(
-        cfg.gamma,
-        cfg.lmbda,
-        value_network=critic_model,
-        average_rewards=True,
-        gradient_mode=False,
-    )
+    if cfg.advantage_in_loss:
+        advantage = GAE(
+            cfg.gamma,
+            cfg.lmbda,
+            value_network=critic_model,
+            average_rewards=True,
+            gradient_mode=False,
+        )
+    else:
+        advantage = None
     loss_module = loss_dict[cfg.loss](
         actor=actor_model,
         critic=critic_model,
@@ -245,3 +248,5 @@ class PPOLossConfig:
     # Entropy factor for the PPO loss
     loss_function: str = "smooth_l1"
     # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
+    advantage_in_loss: bool = False
+    # if True, the advantage is computed on the sub-batch.

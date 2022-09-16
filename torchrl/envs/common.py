@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import abc
+from copy import deepcopy
 from numbers import Number
-from typing import Any, Callable, Iterator, Optional, Union, Dict
+from typing import Any, Callable, Iterator, Optional, Union, Dict, Sequence
 
 import numpy as np
 import torch
@@ -32,7 +33,71 @@ dtype_map = {
     torch.bool: bool,
 }
 
-__all__ = ["Specs", "make_tensordict"]
+__all__ = [
+    "Specs",
+    "make_tensordict",
+    "EnvBase",
+    "EnvMetaData",
+]
+
+
+class EnvMetaData:
+    def __init__(
+        self,
+        tensordict: TensorDictBase,
+        specs: CompositeSpec,
+        batch_size: torch.Size,
+        env_str: str,
+        device: torch.device,
+        batch_locked: bool = True,
+    ):
+        self.tensordict = tensordict
+        self.specs = specs
+        self.batch_size = batch_size
+        self.env_str = env_str
+        self.device = device
+        self.batch_locked = batch_locked
+
+    @staticmethod
+    def build_metadata_from_env(env) -> EnvMetaData:
+        tensordict = env.fake_tensordict()
+        specs = {key: getattr(env, key) for key in Specs._keys if key.endswith("_spec")}
+        specs = CompositeSpec(**specs)
+        batch_size = env.batch_size
+        env_str = str(env)
+        device = env.device
+        batch_locked = env.batch_locked
+        return EnvMetaData(tensordict, specs, batch_size, env_str, device, batch_locked)
+
+    def expand(self, *size: int) -> EnvMetaData:
+        tensordict = self.tensordict.expand(*size).to_tensordict()
+        batch_size = torch.Size([*size])
+        return EnvMetaData(
+            tensordict,
+            self.specs,
+            batch_size,
+            self.env_str,
+            self.device,
+            self.batch_locked,
+        )
+
+    def to(self, device: DEVICE_TYPING) -> EnvMetaData:
+        tensordict = self.tensordict.to(device)
+        specs = self.specs.to(device)
+        return EnvMetaData(
+            tensordict, specs, self.batch_size, self.env_str, device, self.batch_locked
+        )
+
+    def __setstate__(self, state):
+        state["tensordict"] = state["tensordict"].to_tensordict().to(state["device"])
+        state["specs"] = deepcopy(state["specs"]).to(state["device"])
+        self.__dict__.update(state)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["tensordict"] = state["tensordict"].to("cpu")
+        state["specs"] = state["specs"].to("cpu")
+        return state
 
 
 class Specs:
@@ -63,7 +128,7 @@ class Specs:
             raise KeyError(f"item must be one of {self._keys}")
         return getattr(self.env, item)
 
-    def keys(self) -> dict:
+    def keys(self) -> Sequence[str]:
         return self._keys
 
     def build_tensordict(
@@ -78,7 +143,7 @@ class Specs:
         if not isinstance(self["observation_spec"], CompositeSpec):
             raise RuntimeError("observation_spec is expected to be of Composite type.")
         else:
-            for i, (key, item) in enumerate(self["observation_spec"].items()):
+            for (key, item) in self["observation_spec"].items():
                 if not key.startswith("next_"):
                     raise RuntimeError(
                         f"All observation keys must start with the `'next_'` prefix. Found {key}"
@@ -148,7 +213,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if "_action_spec" not in self.__dir__():
             self._action_spec = None
         if "_input_spec" not in self.__dir__():
-            self._input_spec = CompositeSpec(action=self._action_spec)
+            self._input_spec = None
         if "_reward_spec" not in self.__dir__():
             self._reward_spec = None
         if "_observation_spec" not in self.__dir__():
@@ -163,9 +228,23 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.batch_size = torch.Size([])
 
     @classmethod
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args, _batch_locked=True, **kwargs):
         cls._inplace_update = True
+        cls._batch_locked = _batch_locked
         return super().__new__(cls)
+
+    @property
+    def batch_locked(self) -> bool:
+        """
+        Whether the environnement can be used with a batch size different from the one it was initialized with or not.
+        If True, the env needs to be used with a tensordict having the same batch size as the env.
+        batch_locked is an immutable property.
+        """
+        return self._batch_locked
+
+    @batch_locked.setter
+    def batch_locked(self, value: bool) -> None:
+        raise RuntimeError("batch_locked is a read-only property")
 
     @property
     def action_spec(self) -> TensorSpec:
@@ -217,6 +296,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
 
         # sanity check
+        self._assert_tensordict_shape(tensordict)
+
         if tensordict.get("action").dtype is not self.action_spec.dtype:
             raise TypeError(
                 f"expected action.dtype to be {self.action_spec.dtype} "
@@ -312,8 +393,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict_reset = step_tensordict(
                 tensordict_reset,
                 exclude_done=False,
-                exclude_reward=True,
-                exclude_action=True,
+                exclude_reward=False,  # some policies may need reward and action at reset time
+                exclude_action=False,
             )
         if tensordict is not None:
             tensordict.update(tensordict_reset)
@@ -324,12 +405,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def numel(self) -> int:
         return prod(self.batch_size)
 
-    def set_seed(self, seed: int) -> int:
+    def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seed of the environment and returns the next seed to be used (
         which is the input seed if a single environment is present)
 
         Args:
-            seed: integer
+            seed (int): seed to be set
+            static_seed (bool, optional): if True, the seed is not incremented.
+                Defaults to False
 
         Returns:
             integer representing the "next seed": i.e. the seed that should be
@@ -339,7 +422,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if seed is not None:
             torch.manual_seed(seed)
         self._set_seed(seed)
-        if seed is not None:
+        if seed is not None and not static_seed:
             new_seed = seed_generator(seed)
             seed = new_seed
         return seed
@@ -351,7 +434,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def _assert_tensordict_shape(self, tensordict: TensorDictBase) -> None:
-        if tensordict.batch_size != self.batch_size:
+        if tensordict.batch_size != self.batch_size and (
+            self.batch_locked or self.batch_size != torch.Size([])
+        ):
             raise RuntimeError(
                 f"Expected a tensordict with shape==env.shape, "
                 f"got {tensordict.batch_size} and {self.batch_size}"
@@ -474,7 +559,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         else:
             raise Exception("reset env before calling rollout!")
 
-        out_td = torch.stack(tensordicts, len(self.batch_size))
+        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
+
+        out_td = torch.stack(tensordicts, len(batch_size))
         if return_contiguous:
             return out_td.contiguous()
         return out_td
@@ -527,7 +614,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.is_closed = True
 
     def __del__(self):
-        if not self.is_closed:
+        # if del occurs before env has been set up, we don't want a recursion
+        # error
+        if "is_closed" in self.__dict__ and not self.is_closed:
             self.close()
 
     def to(self, device: DEVICE_TYPING) -> EnvBase:
@@ -542,6 +631,31 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.is_done = self.is_done.to(device)
         self.device = device
         return self
+
+    def fake_tensordict(self) -> TensorDictBase:
+        """
+        Returns a fake tensordict with key-value pairs that match in shape, device
+        and dtype what can be expected during an environment rollout.
+
+        """
+        input_spec = self.input_spec
+        fake_input = input_spec.rand()
+        observation_spec = self.observation_spec
+        fake_obs = observation_spec.rand()
+        fake_obs_step = step_tensordict(fake_obs)
+        reward_spec = self.reward_spec
+        fake_reward = reward_spec.rand()
+        fake_td = TensorDict(
+            {
+                **fake_obs_step,
+                **fake_obs,
+                **fake_input,
+                "reward": fake_reward,
+                "done": fake_reward.to(torch.bool),
+            },
+            batch_size=self.batch_size,
+        )
+        return fake_td
 
 
 class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
@@ -560,7 +674,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
     """
 
     git_url: str = ""
-    available_envs: dict = {}
+    available_envs: Dict[str, Any] = {}
     libname: str = ""
 
     def __init__(
@@ -636,7 +750,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _build_env(self, **kwargs) -> "gym.Env":
+    def _build_env(self, **kwargs) -> "gym.Env":  # noqa: F821
         """Creates an environment from the target library and stores it with the `_env` attribute.
 
         When overwritten, this function should pass all the required kwargs to the env instantiation method.
@@ -645,7 +759,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _make_specs(self, env: "gym.Env") -> None:
+    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         raise NotImplementedError
 
     def close(self) -> None:
@@ -656,11 +770,13 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         except AttributeError:
             pass
 
-    def set_seed(self, seed: Optional[int] = None) -> Optional[int]:
+    def set_seed(
+        self, seed: Optional[int] = None, static_seed: bool = False
+    ) -> Optional[int]:
         if seed is not None:
             torch.manual_seed(seed)
         self._set_seed(seed)
-        if seed is not None:
+        if seed is not None and not static_seed:
             new_seed = seed_generator(seed)
             seed = new_seed
         return seed
@@ -686,9 +802,7 @@ def make_tensordict(
     with torch.no_grad():
         tensordict = env.reset()
         if policy is not None:
-            tensordict = tensordict.unsqueeze(0)
             tensordict = policy(tensordict)
-            tensordict = tensordict.squeeze(0)
         else:
             tensordict.set("action", env.action_spec.rand(), inplace=False)
         tensordict = env.step(tensordict)

@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import warnings
 from types import ModuleType
-from typing import List, Optional, Sequence, Dict
+from typing import List, Dict
 
 import torch
 from packaging import version
@@ -34,6 +34,10 @@ except ImportError:
 if _has_gym:
     try:
         from gym.wrappers.pixel_observation import PixelObservationWrapper
+
+        from torchrl.envs.libs.utils import (
+            GymPixelObservationWrapper as LegacyPixelObservationWrapper,
+        )
     except ModuleNotFoundError:
         warnings.warn(
             f"gym {gym.__version__} does not provide the PixelObservationWrapper"
@@ -43,15 +47,11 @@ if _has_gym:
         from torchrl.envs.libs.utils import (
             GymPixelObservationWrapper as PixelObservationWrapper,
         )
+    gym_version = version.parse(gym.__version__)
+    if gym_version >= version.parse("0.26.0"):
+        from gym.wrappers.compatibility import EnvCompatibility
 
-try:
-    import retro
-
-    _has_retro = True
-except ImportError:
-    _has_retro = False
-
-__all__ = ["GymWrapper", "GymEnv", "RetroEnv"]
+__all__ = ["GymWrapper", "GymEnv"]
 
 
 def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec:
@@ -73,12 +73,15 @@ def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec
             dtype=dtype,
             device=device,
         )
-    elif isinstance(spec, (dict, gym.spaces.dict.Dict)):
-        spec = {
-            "next_" + k: _gym_to_torchrl_spec_transform(spec[k], device=device)
-            for k in spec
-        }
-        return CompositeSpec(**spec)
+    elif isinstance(spec, (Dict,)):
+        spec_out = {}
+        for k in spec.keys():
+            spec_out["next_" + k] = _gym_to_torchrl_spec_transform(
+                spec[k], device=device
+            )
+        return CompositeSpec(**spec_out)
+    elif isinstance(spec, gym.spaces.dict.Dict):
+        return _gym_to_torchrl_spec_transform(spec.spaces, device=device)
     else:
         raise NotImplementedError(
             f"spec of type {type(spec).__name__} is currently unaccounted for"
@@ -86,7 +89,11 @@ def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec
 
 
 def _get_envs(to_dict=False) -> List:
-    envs = gym.envs.registration.registry.env_specs.keys()
+    if gym_version < version.parse("0.26.0"):
+        envs = gym.envs.registration.registry.env_specs.keys()
+    else:
+        envs = gym.envs.registration.registry.keys()
+
     envs = list(envs)
     envs = sorted(envs)
     return envs
@@ -101,8 +108,11 @@ def _get_gym():
 
 def _is_from_pixels(env):
     observation_spec = env.observation_space
-    if isinstance(observation_spec, (Dict, gym.spaces.dict.Dict)):
+    if isinstance(observation_spec, (Dict,)):
         if "pixels" in set(observation_spec.keys()):
+            return True
+    if isinstance(observation_spec, (gym.spaces.dict.Dict,)):
+        if "pixels" in set(observation_spec.spaces.keys()):
             return True
     elif (
         isinstance(observation_spec, gym.spaces.Box)
@@ -161,7 +171,18 @@ class GymWrapper(GymLikeEnv):
                     "PixelObservationWrapper cannot be used to wrap an environment"
                     "that is already a PixelObservationWrapper instance."
                 )
-            env = PixelObservationWrapper(env, pixels_only=pixels_only)
+            if not env.render_mode and gym_version >= version.parse("0.26.0"):
+                warnings.warn(
+                    "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
+                    "should be created with `gym.make(env_name, render_mode=mode)` where possible,"
+                    'where mode is either "rgb_array" or any other supported mode.'
+                )
+                # resetting as 0.26 comes with a very 'nice' OrderEnforcing wrapper
+                env = EnvCompatibility(env)
+                env.reset()
+                env = LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
+            else:
+                env = PixelObservationWrapper(env, pixels_only=pixels_only)
         return env
 
     @classproperty
@@ -175,7 +196,7 @@ class GymWrapper(GymLikeEnv):
     def _set_seed(self, seed: int) -> int:
         skip = False
         if self._seed_calls_reset is None:
-            if version.parse(gym.__version__) < version.parse("0.19.0"):
+            if gym_version < version.parse("0.19.0"):
                 self._seed_calls_reset = False
                 self._env.seed(seed=seed)
             else:
@@ -237,6 +258,12 @@ class GymWrapper(GymLikeEnv):
         self._info_dict_reader = value
 
 
+ACCEPTED_TYPE_ERRORS = {
+    "render_mode": "__init__() got an unexpected keyword argument 'render_mode'",
+    "frame_skip": "unexpected keyword argument 'frameskip'",
+}
+
+
 class GymEnv(GymWrapper):
     """
     OpenAI Gym environment wrapper.
@@ -266,22 +293,38 @@ class GymEnv(GymWrapper):
                 f" {self.git_url}"
             )
         from_pixels = kwargs.get("from_pixels", False)
+        if from_pixels and gym_version > version.parse("0.25.0"):
+            kwargs.setdefault("render_mode", "rgb_array")
         if "from_pixels" in kwargs:
             del kwargs["from_pixels"]
         pixels_only = kwargs.get("pixels_only", True)
         if "pixels_only" in kwargs:
             del kwargs["pixels_only"]
-        try:
-            with warnings.catch_warnings(record=True) as w:
-                env = self.lib.make(env_name, frameskip=self.frame_skip, **kwargs)
-                if len(w) and "frameskip" in str(w[-1].message):
-                    raise TypeError("unexpected keyword argument 'frameskip'")
-            self.wrapper_frame_skip = 1
-        except TypeError as err:
-            if "unexpected keyword argument 'frameskip'" not in str(err):
-                raise TypeError(err)
-            env = self.lib.make(env_name, **kwargs)
-            self.wrapper_frame_skip = self.frame_skip
+        made_env = False
+        kwargs["frameskip"] = self.frame_skip
+        self.wrapper_frame_skip = 1
+        while not made_env:
+            # env.__init__ may not be compatible with all the kwargs that
+            # have been preset. We iterate through the various solutions
+            # to find the config that works.
+            try:
+                with warnings.catch_warnings(record=True) as w:
+                    # we catch warnings as they may cause silent bugs
+                    env = self.lib.make(env_name, **kwargs)
+                    if len(w) and "frameskip" in str(w[-1].message):
+                        raise TypeError("unexpected keyword argument 'frameskip'")
+                made_env = True
+            except TypeError as err:
+                if ACCEPTED_TYPE_ERRORS["frame_skip"] in str(err):
+                    print(
+                        "Discarding frameskip arg. This will be taken care of by TorchRL env wrapper."
+                    )
+                    self.wrapper_frame_skip = kwargs.pop("frameskip")
+                elif ACCEPTED_TYPE_ERRORS["render_mode"] in str(err):
+                    print("Discarding render_mode from the env constructor.")
+                    kwargs.pop("render_mode")
+                else:
+                    raise err
         return super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
 
     @property
@@ -294,23 +337,3 @@ class GymEnv(GymWrapper):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(env={self.env_name}, batch_size={self.batch_size}, device={self.device})"
-
-
-def _get_retro_envs() -> Sequence:
-    if not _has_retro:
-        return tuple()
-    else:
-        return retro.data.list_games()
-
-
-def _get_retro() -> Optional[ModuleType]:
-    if _has_retro:
-        return retro
-    else:
-        return None
-
-
-class RetroEnv(GymEnv):
-    available_envs = _get_retro_envs()
-    lib = "retro"
-    lib = _get_retro()
