@@ -393,8 +393,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict_reset = step_tensordict(
                 tensordict_reset,
                 exclude_done=False,
-                exclude_reward=True,
-                exclude_action=True,
+                exclude_reward=False,  # some policies may need reward and action at reset time
+                exclude_action=False,
             )
         if tensordict is not None:
             tensordict.update(tensordict_reset)

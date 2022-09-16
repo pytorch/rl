@@ -17,7 +17,7 @@ from torchrl.modules import (
     NoisyLinear,
     TensorDictModule,
     NormalParamWrapper,
-    TensorDictSequence,
+    TensorDictSequential,
 )
 from torchrl.modules.distributions import (
     Delta,
@@ -313,7 +313,7 @@ def make_ddpg_actor(
             transform = d.ComposeTransform(
                 transform, d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)
             )
-        actor_module = TensorDictSequence(
+        actor_module = TensorDictSequential(
             actor_module,
             TensorDictModule(
                 LazygSDEModule(transform=transform, learn_sigma=False),
@@ -577,7 +577,7 @@ def make_ppo_model(
             else:
                 raise RuntimeError("cannot use gSDE with discrete actions")
 
-            actor_module = TensorDictSequence(
+            actor_module = TensorDictSequential(
                 actor_module,
                 TensorDictModule(
                     LazygSDEModule(transform=transform),
@@ -652,7 +652,7 @@ def make_ppo_model(
             else:
                 raise RuntimeError("cannot use gSDE with discrete actions")
 
-            actor_module = TensorDictSequence(
+            actor_module = TensorDictSequential(
                 actor_module,
                 TensorDictModule(
                     LazygSDEModule(transform=transform),
@@ -870,7 +870,7 @@ def make_sac_model(
         else:
             raise RuntimeError("cannot use gSDE with discrete actions")
 
-        actor_module = TensorDictSequence(
+        actor_module = TensorDictSequential(
             actor_module,
             TensorDictModule(
                 LazygSDEModule(transform=transform),
@@ -1114,7 +1114,7 @@ def make_redq_model(
         else:
             raise RuntimeError("cannot use gSDE with discrete actions")
 
-        actor_module = TensorDictSequence(
+        actor_module = TensorDictSequential(
             actor_module,
             TensorDictModule(
                 LazygSDEModule(transform=transform),
