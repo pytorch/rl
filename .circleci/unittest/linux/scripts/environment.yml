@@ -25,3 +25,4 @@ dependencies:
     - tensorboard
     - wandb
     - dm_control
+    - mlflow
