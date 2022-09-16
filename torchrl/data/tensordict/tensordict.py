@@ -721,10 +721,16 @@ dtype=torch.float32)},
 
         """
 
-        if not isinstance(other, TensorDictBase):
+        if not isinstance(other, (TensorDictBase, float, int)):
             raise TypeError(
                 f"TensorDict comparision requires both objects to be "
-                f"TensorDictBase subclass, got {type(other)}"
+                f"TensorDictBase subclass, int or float, got {type(other)}"
+            )
+        if not isinstance(other, TensorDictBase):
+            return TensorDict(
+                {key: value != other for key, value in self.items()},
+                self.batch_size,
+                device=self.device_safe(),
             )
         keys1 = set(self.keys())
         keys2 = set(other.keys())
@@ -755,7 +761,9 @@ dtype=torch.float32)},
             )
         if not isinstance(other, TensorDictBase):
             return TensorDict(
-                {key: value == other for key, value in self.items()}, self.batch_size
+                {key: value == other for key, value in self.items()},
+                self.batch_size,
+                device=self.device_safe(),
             )
         keys1 = set(self.keys())
         keys2 = set(other.keys())
@@ -2456,6 +2464,55 @@ def assert_allclose_td(
 @implements_for_td(torch.unbind)
 def unbind(td: TensorDictBase, *args, **kwargs) -> Tuple[TensorDictBase, ...]:
     return td.unbind(*args, **kwargs)
+
+
+@implements_for_td(torch.full_like)
+def full_like(td: TensorDictBase, fill_value, **kwargs) -> TensorDictBase:
+    td_clone = td.clone()
+    for key in td_clone.keys():
+        td_clone.fill_(key, fill_value)
+    if "dtype" in kwargs:
+        raise ValueError("Cannot pass dtype to full_like with TensorDict")
+    if "device" in kwargs:
+        td_clone = td_clone.to(kwargs.pop("device"))
+    if len(kwargs):
+        raise RuntimeError(
+            f"keyword arguments {list(kwargs.keys())} are not "
+            f"supported with full_like with TensorDict"
+        )
+    return td_clone
+
+
+@implements_for_td(torch.zeros_like)
+def zeros_like(td: TensorDictBase, **kwargs) -> TensorDictBase:
+    td_clone = td.clone()
+    for key in td_clone.keys():
+        td_clone.fill_(key, 0.0)
+    if "dtype" in kwargs:
+        raise ValueError("Cannot pass dtype to full_like with TensorDict")
+    if "device" in kwargs:
+        td_clone = td_clone.to(kwargs.pop("device"))
+    if len(kwargs):
+        raise RuntimeError(
+            f"keyword arguments {list(kwargs.keys())} are not "
+            f"supported with full_like with TensorDict"
+        )
+    return td_clone
+
+
+@implements_for_td(torch.ones_like)
+def ones_like(td: TensorDictBase, **kwargs) -> TensorDictBase:
+    td_clone = td.clone()
+    for key in td_clone.keys():
+        td_clone.fill_(key, 1.0)
+    if "device" in kwargs:
+        td_clone = td_clone.to(kwargs.pop("device"))
+    if len(kwargs):
+        raise RuntimeError(
+            f"keyword arguments {list(kwargs.keys())} are not "
+            f"supported with full_like with TensorDict"
+        )
+    return td_clone
 
 
 @implements_for_td(torch.clone)

@@ -64,6 +64,7 @@ __all__ = [
     "PinMemoryTransform",
     "VecNorm",
     "gSDENoise",
+    "TensorDictPrimer",
 ]
 
 IMAGE_KEYS = ["next_pixels"]
@@ -1832,12 +1833,103 @@ class NoopResetEnv(Transform):
         return f"{class_name}(noops={noops}, random={random})"
 
 
-class ForceTensorReset(Transform):
-    """
-    Forces the reset of certain tensors in the TensorDict.
+class TensorDictPrimer(Transform):
+    """A primer for TensorDict initialization at reset time.
+
+    This transform will populate the tensordict at reset with values drawn from
+    the relative tensorspecs provided at initialization.
 
     Args:
-        default_dict: Dictionary of default parameters to initialize the TensorDict with.
+        random (bool, optional): if True, the values will be drawn randomly from
+            the TensorSpec domain. Otherwise a fixed value will be assumed.
+            Defaults to `False`.
+        default_value (float, optional): if non-random filling is chosen, this
+            value will be used to populate the tensors. Defaults to `0.0`.
+        **kwargs: each keyword argument corresponds to a key in the tensordict.
+            The corresponding value has to be a TensorSpec instance indicating
+            what the value must be.
+
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> base_env = GymEnv("Pendulum-v1")
+        >>> env = TransformedEnv(base_env)
+        >>> env.append_transform(TensorDictPrimer(mykey=NdUnboundedContinuousTensorSpec([3])))
+        >>> print(env.reset())
+        TensorDict(
+            fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
+                mykey: Tensor(torch.Size([3]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3]), dtype=torch.float32)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
+    """
+
+    inplace = False
+
+    def __init__(self, random=False, default_value=0.0, **kwargs):
+        self.primers = kwargs
+        self.random = random
+        self.default_value = default_value
+        self._batch_size = []
+        self._device = torch.device("cpu")
+        # sanity check
+        for spec in self.primers.values():
+            if not isinstance(spec, TensorSpec):
+                raise ValueError(
+                    "The values of the primers must be a subtype of the TensorSpec class. "
+                    f"Got {type(spec)} instead."
+                )
+        super().__init__([])
+
+    def transform_observation_spec(
+        self, observation_spec: CompositeSpec
+    ) -> CompositeSpec:
+        if not isinstance(observation_spec, CompositeSpec):
+            raise ValueError(
+                f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
+            )
+        for key, spec in self.primers.items():
+            if key in observation_spec:
+                raise RuntimeError(
+                    f"The key {key} is already in the observation_spec. This means "
+                    f"that the value reset by TensorDictPrimer will confict with the "
+                    f"value obtained through the call to `env.reset()`. Consider renaming "
+                    f"the {key} key."
+                )
+            observation_spec[key] = spec
+        return observation_spec
+
+    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
+        parent_env = parent
+        while not isinstance(parent_env, EnvBase):
+            parent_env = parent_env.parent
+        self._batch_size = parent_env.batch_size
+        self._device = parent_env.device
+        return super().set_parent(parent)
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for key, spec in self.primers.items():
+            if self.random:
+                value = spec.rand(self._batch_size)
+            else:
+                value = torch.full_like(
+                    spec.rand(self._batch_size),
+                    self.default_value,
+                )
+            tensordict.set(key, value)
+        return tensordict
+
+    def __repr__(self) -> str:
+        class_name = self.__class__.__name__
+        return f"{class_name}(primers={self.primers}, default_value={self.default_value}, random={self.random})"
+
+
+class ForceTensorReset(Transform):
+    """Forces the reset of certain tensors in the TensorDict.
+
+    Args:
+        default_dict (dict): Dictionary of default parameters to initialize the TensorDict with.
             Takes the form of {key: {"initializer": initializer, "shape": shape, "args": args, "kwargs": kwargs}}
             with key key associated with the tensor to be initialized, initializer the initializer function,
             shape the shape of the tensor, args the positional arguments to pass to the initializer function,
