@@ -16,6 +16,7 @@ from torchrl.data import (
     NdBoundedTensorSpec,
     CompositeSpec,
     UnboundedContinuousTensorSpec,
+    NdUnboundedContinuousTensorSpec,
 )
 from torchrl.data import TensorDict
 from torchrl.envs import EnvCreator, SerialEnv
@@ -38,6 +39,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm, TransformedEnv
+from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.transforms import (
     _has_tv,
     NoopResetEnv,
@@ -1390,6 +1392,75 @@ class TestR3M:
         assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
         transformed_env.close()
         del transformed_env
+
+    @pytest.mark.parametrize("del_keys", [True, False])
+    @pytest.mark.parametrize(
+        "in_keys",
+        [["next_pixels"], ["next_pixels_1", "next_pixels_2", "next_pixels_3"]],
+    )
+    @pytest.mark.parametrize(
+        "out_keys",
+        [["next_r3m_vec"], ["next_r3m_vec_1", "next_r3m_vec_2", "next_r3m_vec_3"]],
+    )
+    def test_r3mnet_transform_observation_spec(
+        self, in_keys, out_keys, del_keys, device, model
+    ):
+        r3m_net = _R3MNet(in_keys, out_keys, model, del_keys)
+
+        observation_spec = CompositeSpec(
+            **{key: NdBoundedTensorSpec(-1, 1, (3, 16, 16), device) for key in in_keys}
+        )
+        if del_keys:
+            exp_ts = CompositeSpec(
+                **{
+                    key: NdUnboundedContinuousTensorSpec(r3m_net.outdim, device)
+                    for key in out_keys
+                }
+            )
+
+            observation_spec_out = r3m_net.transform_observation_spec(observation_spec)
+
+            for key in in_keys:
+                assert key not in observation_spec_out
+            for key in out_keys:
+                assert observation_spec_out[key].shape == exp_ts[key].shape
+                assert observation_spec_out[key].device == exp_ts[key].device
+                assert observation_spec_out[key].dtype == exp_ts[key].dtype
+        else:
+            ts_dict = {}
+            for key in in_keys:
+                ts_dict[key] = observation_spec[key]
+            for key in out_keys:
+                ts_dict[key] = NdUnboundedContinuousTensorSpec(r3m_net.outdim, device)
+            exp_ts = CompositeSpec(**ts_dict)
+
+            observation_spec_out = r3m_net.transform_observation_spec(observation_spec)
+
+            for key in in_keys + out_keys:
+                assert observation_spec_out[key].shape == exp_ts[key].shape
+                assert observation_spec_out[key].dtype == exp_ts[key].dtype
+                assert observation_spec_out[key].device == exp_ts[key].device
+
+    @pytest.mark.parametrize("tensor_pixels_key", [None, ["funny_key"]])
+    def test_r3m_spec_against_real(self, model, tensor_pixels_key, device):
+        keys_in = ["next_pixels"]
+        keys_out = ["next_vec"]
+        r3m = R3MTransform(
+            model,
+            keys_in=keys_in,
+            keys_out=keys_out,
+            tensor_pixels_keys=tensor_pixels_key,
+        )
+        base_env = DiscreteActionConvMockEnvNumpy().to(device)
+        transformed_env = TransformedEnv(base_env, r3m)
+        expected_keys = (
+            list(transformed_env.input_spec.keys())
+            + list(transformed_env.observation_spec.keys())
+            + [key.strip("next_") for key in transformed_env.observation_spec.keys()]
+            + ["reward"]
+            + ["done"]
+        )
+        assert set(expected_keys) == set(transformed_env.rollout(3).keys())
 
 
 if __name__ == "__main__":

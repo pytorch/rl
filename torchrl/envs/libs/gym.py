@@ -6,6 +6,7 @@ import warnings
 from types import ModuleType
 from typing import List, Optional, Sequence, Dict
 from warnings import warn
+from typing import List, Dict
 
 import torch
 from packaging import version
@@ -51,14 +52,8 @@ if _has_gym:
     gym_version = version.parse(gym.__version__)
     if gym_version >= version.parse("0.26.0"):
         from gym.wrappers.compatibility import EnvCompatibility
-try:
-    import retro
 
-    _has_retro = True
-except ImportError:
-    _has_retro = False
-
-__all__ = ["GymWrapper", "GymEnv", "RetroEnv"]
+__all__ = ["GymWrapper", "GymEnv"]
 
 
 def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec:
@@ -80,12 +75,15 @@ def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec
             dtype=dtype,
             device=device,
         )
-    elif isinstance(spec, (dict, gym.spaces.dict.Dict)):
-        spec = {
-            "next_" + k: _gym_to_torchrl_spec_transform(spec[k], device=device)
-            for k in spec
-        }
-        return CompositeSpec(**spec)
+    elif isinstance(spec, (Dict,)):
+        spec_out = {}
+        for k in spec.keys():
+            spec_out["next_" + k] = _gym_to_torchrl_spec_transform(
+                spec[k], device=device
+            )
+        return CompositeSpec(**spec_out)
+    elif isinstance(spec, gym.spaces.dict.Dict):
+        return _gym_to_torchrl_spec_transform(spec.spaces, device=device)
     else:
         raise NotImplementedError(
             f"spec of type {type(spec).__name__} is currently unaccounted for"
@@ -112,8 +110,11 @@ def _get_gym():
 
 def _is_from_pixels(env):
     observation_spec = env.observation_space
-    if isinstance(observation_spec, (Dict, gym.spaces.dict.Dict)):
+    if isinstance(observation_spec, (Dict,)):
         if "pixels" in set(observation_spec.keys()):
+            return True
+    if isinstance(observation_spec, (gym.spaces.dict.Dict,)):
+        if "pixels" in set(observation_spec.spaces.keys()):
             return True
     elif (
         isinstance(observation_spec, gym.spaces.Box)
@@ -338,23 +339,3 @@ class GymEnv(GymWrapper):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(env={self.env_name}, batch_size={self.batch_size}, device={self.device})"
-
-
-def _get_retro_envs() -> Sequence:
-    if not _has_retro:
-        return tuple()
-    else:
-        return retro.data.list_games()
-
-
-def _get_retro() -> Optional[ModuleType]:
-    if _has_retro:
-        return retro
-    else:
-        return None
-
-
-class RetroEnv(GymEnv):
-    available_envs = _get_retro_envs()
-    lib = "retro"
-    lib = _get_retro()

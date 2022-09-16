@@ -16,7 +16,7 @@ from torchrl.modules.tensordict_module.common import (
 from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,
 )
-from torchrl.modules.tensordict_module.sequence import TensorDictSequence
+from torchrl.modules.tensordict_module.sequence import TensorDictSequential
 
 __all__ = [
     "Actor",
@@ -498,7 +498,7 @@ class DistributionalQValueActor(QValueActor):
         )
 
 
-class ActorValueOperator(TensorDictSequence):
+class ActorValueOperator(TensorDictSequential):
     """
     Actor-value operator.
 
@@ -615,21 +615,21 @@ class ActorValueOperator(TensorDictSequence):
             value_operator,
         )
 
-    def get_policy_operator(self) -> TensorDictSequence:
+    def get_policy_operator(self) -> TensorDictSequential:
         """
 
         Returns a stand-alone policy operator that maps an observation to an action.
 
         """
-        return TensorDictSequence(self.module[0], self.module[1])
+        return TensorDictSequential(self.module[0], self.module[1])
 
-    def get_value_operator(self) -> TensorDictSequence:
+    def get_value_operator(self) -> TensorDictSequential:
         """
 
         Returns a stand-alone value network operator that maps an observation to a value estimate.
 
         """
-        return TensorDictSequence(self.module[0], self.module[2])
+        return TensorDictSequential(self.module[0], self.module[2])
 
 
 class ActorCriticOperator(ActorValueOperator):
@@ -772,7 +772,7 @@ class ActorCriticOperator(ActorValueOperator):
         )
 
 
-class ActorCriticWrapper(TensorDictSequence):
+class ActorCriticWrapper(TensorDictSequential):
     """
     Actor-value operator without common module.
 
@@ -863,7 +863,7 @@ class ActorCriticWrapper(TensorDictSequence):
             value_operator,
         )
 
-    def get_policy_operator(self) -> TensorDictSequence:
+    def get_policy_operator(self) -> TensorDictSequential:
         """
 
         Returns a stand-alone policy operator that maps an observation to an action.
@@ -871,7 +871,7 @@ class ActorCriticWrapper(TensorDictSequence):
         """
         return self.module[0]
 
-    def get_value_operator(self) -> TensorDictSequence:
+    def get_value_operator(self) -> TensorDictSequential:
         """
 
         Returns a stand-alone value network operator that maps an observation to a value estimate.
