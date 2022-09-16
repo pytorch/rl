@@ -22,7 +22,6 @@ from torchrl.modules import (
     TanhNormal,
     NormalParamWrapper,
 )
-from torchrl.modules.tensordict_module.initializer import TensorDictDefaultInitializer
 from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,
 )
@@ -1702,100 +1701,6 @@ class TestTDSequence:
 
         assert not torch.allclose(copy, sub_seq_1[0].module.weight)
         assert torch.allclose(td_module[0].module.weight, sub_seq_1[0].module.weight)
-
-
-class TestTensorDictDefaultInitializer:
-    @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("batch_size", [[], [3], [5], [2, 3]])
-    @pytest.mark.parametrize("initializer", [torch.zeros, torch.ones, torch.randn])
-    @pytest.mark.parametrize("num_new_tensors", [1, 2, 3])
-    def test_td_initializer(self, device, batch_size, initializer, num_new_tensors):
-        td = TensorDict(
-            {"a": torch.randn(*batch_size, 3), "b": torch.randn(*batch_size, 4)},
-            batch_size,
-        ).to(device)
-        td_ref = td.clone()
-        default_td = {
-            f"c_{i}": {"initializer": initializer, "shape": [2]}
-            for i in range(num_new_tensors)
-        }
-        initializer = TensorDictDefaultInitializer(default_td).to(device)
-        td = initializer(td)
-
-        assert torch.allclose(td["a"], td_ref["a"])
-        assert torch.allclose(td["b"], td_ref["b"])
-        for i in range(num_new_tensors):
-            assert f"c_{i}" in td.keys()
-            assert td[f"c_{i}"].shape == torch.Size([*batch_size, 2])
-            assert td[f"c_{i}"].device == device
-
-    @pytest.mark.parametrize("batch_size", [[], [3], [5], [2, 3]])
-    @pytest.mark.parametrize("initializer", [torch.zeros, torch.ones, torch.randn])
-    @pytest.mark.parametrize("num_new_tensors", [1, 2, 3])
-    def test_td_initializer_no_device(self, batch_size, initializer, num_new_tensors):
-        td = TensorDict(
-            {"a": torch.randn(*batch_size, 3), "b": torch.randn(*batch_size, 4)},
-            batch_size,
-        )
-        td_ref = td.clone()
-        default_td = {
-            f"c_{i}": {"initializer": initializer, "shape": [2]}
-            for i in range(num_new_tensors)
-        }
-        initializer = TensorDictDefaultInitializer(default_td)
-        td = initializer(td)
-
-        assert torch.allclose(td["a"], td_ref["a"])
-        assert torch.allclose(td["b"], td_ref["b"])
-        for i in range(num_new_tensors):
-            assert f"c_{i}" in td.keys()
-            assert td[f"c_{i}"].shape == torch.Size([*batch_size, 2])
-
-    @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("initializer", [torch.zeros, torch.ones, torch.randn])
-    def test_td_initializer_reinit(self, device, initializer):
-        td = TensorDict({"a": torch.randn(5, 3), "b": torch.randn(5, 4)}, [5]).to(
-            device
-        )
-        td_ref = td.clone()
-        default_td = {
-            "b": {"initializer": initializer, "shape": [4]},
-            "c": {"initializer": initializer, "shape": [2]},
-        }
-        initializer = TensorDictDefaultInitializer(default_td, reinit=True).to(device)
-        td = initializer(td)
-
-        assert torch.allclose(td["a"], td_ref["a"])
-        assert not torch.allclose(td["b"], td_ref["b"])
-        assert "c" in td.keys()
-        assert td["b"].shape == torch.Size([5, 4])
-        assert td["c"].shape == torch.Size([5, 2])
-
-    @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("batch_size", [[], [3], [5], [2, 3]])
-    @pytest.mark.parametrize("initializer", [torch.zeros, torch.ones, torch.randn])
-    def test_td_initializer_in_tdsequence(self, device, batch_size, initializer):
-        td = TensorDict(
-            {"a": torch.randn(*batch_size, 3), "b": torch.randn(*batch_size, 4)},
-            batch_size,
-        ).to(device)
-        td_ref = td.clone()
-        default_td = {"c": {"initializer": initializer, "shape": [2]}}
-        initializer = TensorDictDefaultInitializer(default_td)
-        td_seq = TensorDictSequential(
-            initializer,
-            TensorDictModule(nn.Linear(2, 10), in_keys=["c"], out_keys=["d"]),
-        ).to(device)
-        td = td_seq(td)
-
-        assert torch.allclose(td["a"], td_ref["a"])
-        assert torch.allclose(td["b"], td_ref["b"])
-        assert "c" in td.keys()
-        assert td["c"].shape == torch.Size([*batch_size, 2])
-        assert td["c"].device == device
-        assert "d" in td.keys()
-        assert td["d"].shape == torch.Size([*batch_size, 10])
-        assert td["d"].device == device
 
     if __name__ == "__main__":
         args, unknown = argparse.ArgumentParser().parse_known_args()

@@ -49,6 +49,18 @@ class DreamerModelLoss(LossModule):
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
         tensordict.batch_size = [tensordict.shape[0]]
+        tensordict.set(
+            "prior_state",
+            torch.zeros(
+                (tensordict.batch_size[0], self.cfg.state_dim), device=self.device
+            ),
+        )
+        tensordict.set(
+            "belief",
+            torch.zeros(
+                (tensordict.batch_size[0], self.cfg.rssm_hidden_dim), device=self.device
+            ),
+        )
         tensordict = self.world_model(tensordict)
         # compute model loss
         kl_loss = self.kl_loss(

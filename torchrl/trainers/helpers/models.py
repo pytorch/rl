@@ -59,7 +59,6 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
     ProbabilisticActor,
 )
-from torchrl.modules.tensordict_module.initializer import TensorDictDefaultInitializer
 from torchrl.modules.tensordict_module.world_models import (
     WorldModelWrapper,
 )
@@ -1181,11 +1180,7 @@ def make_dreamer(
     # Modules
     obs_encoder = ObsEncoder()
     obs_decoder = ObsDecoder()
-    world_modeler_default = {
-        "prior_state": {"initializer": torch.zeros, "shape": [cfg.state_dim]},
-        "belief": {"initializer": torch.zeros, "shape": [cfg.rssm_hidden_dim]},
-    }
-    world_modeler_default = TensorDictDefaultInitializer(world_modeler_default, reinit=True)
+
     rssm_prior = RSSMPrior(
         hidden_dim=cfg.rssm_hidden_dim,
         rnn_hidden_dim=cfg.rssm_hidden_dim,
@@ -1215,7 +1210,6 @@ def make_dreamer(
             in_keys=["pixels"],
             out_keys=["encoded_latents"],
         ),
-        world_modeler_default,
         TensorDictModule(
             rssm_prior_rollout,
             in_keys=["prior_state", "belief", "action"],
@@ -1346,6 +1340,8 @@ def make_dreamer(
         td = td.unsqueeze(0).to_tensordict().to(device)
         td.batch_size = [1]
         td = td.to(device)
+        td["prior_state"] = torch.zeros((td.batch_size[0], cfg.state_dim))
+        td["belief"] = torch.zeros((td.batch_size[0], cfg.rssm_hidden_dim))
         world_model(td)
     model_based_env = model_based_env.to(device)
 
