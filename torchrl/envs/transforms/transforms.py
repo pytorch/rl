@@ -1915,10 +1915,10 @@ class TensorDictPrimer(Transform):
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         for key, spec in self.primers.items():
             if self.random:
-                value = spec.rand(self._batch_size)
+                value = spec.rand(tensordict.batch_size)
             else:
                 value = torch.full_like(
-                    spec.rand(self._batch_size),
+                    spec.rand(tensordict.batch_size),
                     self.default_value,
                 )
             tensordict.set(key, value)

@@ -1782,7 +1782,7 @@ class TestTensorDictDefaultInitializer:
         td_ref = td.clone()
         default_td = {"c": {"initializer": initializer, "shape": [2]}}
         initializer = TensorDictDefaultInitializer(default_td)
-        td_seq = TensorDictSequence(
+        td_seq = TensorDictSequential(
             initializer,
             TensorDictModule(nn.Linear(2, 10), in_keys=["c"], out_keys=["d"]),
         ).to(device)

@@ -15,11 +15,12 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl import timeit
 from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.transforms import RewardScaling, TransformedEnv, ForceTensorReset
+from torchrl.envs.transforms import RewardScaling, TransformedEnv, TensorDictPrimer
 from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
+from torchrl.data import NdUnboundedContinuousTensorSpec
 from torchrl.objectives.costs.dreamer import (
     DreamerActorLoss,
     DreamerModelLoss,
@@ -95,7 +96,7 @@ def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn, default_tens
         stats=stats,
         logger=logger,
         use_env_creator=False,
-    )(), ForceTensorReset(default_tensor_dicts))
+    )(), TensorDictPrimer(random=False, default_value=0, **default_tensor_dicts))
 
     # remove video recorder from recorder to have matching state_dict keys
     if cfg.record_video:
@@ -295,14 +296,11 @@ def main(cfg: "DictConfig"):
         state_dim_gsde=state_dim_gsde,
     )
     default_dict  =  {
-        "prior_state": {"initializer": torch.zeros, "shape": [cfg.state_dim]},
-        "belief": {"initializer": torch.zeros, "shape": [cfg.rssm_hidden_dim]},
-        "action": {
-            "initializer": torch.zeros,
-            "shape": action_spec.shape,
-        },
+        "prior_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
+        "belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
+        "action": action_spec
     }
-    create_env_fn = TransformedEnv(create_env_fn, ForceTensorReset(default_dict))
+    create_env_fn = TransformedEnv(create_env_fn, TensorDictPrimer(random=False, default_value=0, **default_dict))
 
 
     collector = make_collector_offpolicy(

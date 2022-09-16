@@ -1209,7 +1209,7 @@ def make_dreamer(
     )
 
     # World Model and reward model
-    world_modeler = TensorDictSequence(
+    world_modeler = TensorDictSequential(
         TensorDictModule(
             obs_encoder,
             in_keys=["pixels"],
@@ -1267,7 +1267,7 @@ def make_dreamer(
         in_keys=["prior_state", "belief"],
         out_keys=[value_key],
     )
-    policy = TensorDictSequence(
+    policy = TensorDictSequential(
         TensorDictModule(
             obs_encoder,
             in_keys=["pixels"],
@@ -1313,7 +1313,7 @@ def make_dreamer(
 
     model_based_env = DreamerEnv(
         world_model=WorldModelWrapper(
-            TensorDictSequence(
+            TensorDictSequential(
                 TensorDictModule(
                     rssm_prior,
                     in_keys=["prior_state", "belief", "action"],
