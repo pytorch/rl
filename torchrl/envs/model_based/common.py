@@ -94,10 +94,6 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
 
     """
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        return super().__new__(cls, _run_checks=False)
-
     def __init__(
         self,
         world_model: TensorDictModule,
@@ -117,7 +113,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._inplace_update = False
-        return super().__new__(cls, *args, _batch_locked=False, **kwargs)
+        return super().__new__(cls, *args, _batch_locked=False, _run_checks=False, **kwargs)
 
     def set_specs_from_env(self, env: EnvBase):
         """
