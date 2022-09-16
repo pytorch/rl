@@ -1831,6 +1831,7 @@ class NoopResetEnv(Transform):
         class_name = self.__class__.__name__
         return f"{class_name}(noops={noops}, random={random})"
 
+
 class ForceTensorReset(Transform):
     """
     Forces the reset of certain tensors in the TensorDict.
@@ -1841,10 +1842,10 @@ class ForceTensorReset(Transform):
             with key key associated with the tensor to be initialized, initializer the initializer function,
             shape the shape of the tensor, args the positional arguments to pass to the initializer function,
             and kwargs the keyword arguments to pass to the initializer function.
-            the initializer function must be of the following form initializer (*batch_size, *args, **kwargs, device=device)
-"""
+            the initializer function must be of the following form initializer (*batch_size, *args, **kwargs, device=device)"""
 
     inplace = True
+
     def __init__(self, default_dict: Dict[Dict]):
         super().__init__([])
         self.default_dict = default_dict
