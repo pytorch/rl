@@ -1899,7 +1899,7 @@ class TensorDictPrimer(Transform):
                     f"value obtained through the call to `env.reset()`. Consider renaming "
                     f"the {key} key."
                 )
-            observation_spec[key] = spec
+            observation_spec[key] = spec.to(self._device)
         return observation_spec
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
