@@ -1064,9 +1064,13 @@ class TestTransforms:
         else:
             assert (tensordict_select == value).all()
 
-        if isinstance(spec, CompositeSpec) and any(key != "action" for key in default_keys):
+        if isinstance(spec, CompositeSpec) and any(
+            key != "action" for key in default_keys
+        ):
             for key in default_keys:
-                assert key in tensordict
+                if key in ("action",):
+                    continue
+                assert key in tensordict.keys()
                 assert tensordict[key, "b"] is not None
 
     @pytest.mark.parametrize("num_defaults", [1, 2, 3])
