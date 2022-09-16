@@ -4,12 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from torchrl.modules.tensordict_module import TensorDictModule, TensorDictSequence
+from torchrl.modules.tensordict_module import TensorDictModule, TensorDictSequential
 
 __all__ = ["WorldModelWrapper"]
 
 
-class WorldModelWrapper(TensorDictSequence):
+class WorldModelWrapper(TensorDictSequential):
     """
     World model wrapper.
     This module wraps together a world model and a reward model.
@@ -32,7 +32,7 @@ class WorldModelWrapper(TensorDictSequence):
             reward_model,
         )
 
-    def get_world_state_model_operator(self) -> TensorDictSequence:
+    def get_world_state_model_operator(self) -> TensorDictSequential:
         """
 
         Returns a world state operator that maps either an observation to a world state or a world state to the next world state.
@@ -40,7 +40,7 @@ class WorldModelWrapper(TensorDictSequence):
         """
         return self.module[0]
 
-    def get_reward_operator(self) -> TensorDictSequence:
+    def get_reward_operator(self) -> TensorDictSequential:
         """
 
         Returns a reward operator that maps a world state to a reward.
