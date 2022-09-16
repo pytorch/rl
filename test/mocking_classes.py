@@ -147,8 +147,6 @@ class MockBatchedLockedEnv(EnvBase):
 
     def _step(self, tensordict):
         self.counter += 1
-        if self.batch_locked:
-            assert tensordict.batch_size == self.batch_size
         # We use tensordict.batch_size instead of self.batch_size since this method will also be used by MockBatchedUnLockedEnv
         n = (
             torch.full(tensordict.batch_size, self.counter)
