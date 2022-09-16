@@ -109,7 +109,7 @@ class MockSerialEnv(EnvBase):
 
     def _step(self, tensordict):
         self.counter += 1
-        n = torch.tensor([self.counter]).to(self.device).to(torch.get_default_dtype())
+        n = torch.tensor([self.counter], device=self.device, dtype=torch.get_default_dtype())
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict({"reward": n, "done": done, "next_observation": n}, [])
@@ -117,7 +117,7 @@ class MockSerialEnv(EnvBase):
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         self.max_val = max(self.counter + 100, self.counter * 2)
 
-        n = torch.tensor([self.counter]).to(self.device).to(torch.get_default_dtype())
+        n = torch.tensor([self.counter], device=self.device, dtype=torch.get_default_dtype())
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict({"done": done, "next_observation": n}, [])

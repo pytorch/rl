@@ -219,7 +219,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._inplace_update = True
+        # inplace update will write tensors in-place on the provided tensordict.
+        # This is risky, especially if gradients need to be passed (in-place copy
+        # for tensors that are part of computational graphs will result in an error).
+        # It can also lead to inconsistencies when calling rollout.
+        cls._inplace_update = False
         return super().__new__(cls)
 
     @property
