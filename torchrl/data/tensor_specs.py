@@ -336,12 +336,16 @@ class TensorSpec:
                 f"and spec was {self}."
             )
 
-    def type_check(self, value: torch.Tensor, key: str = None) -> None:
+    def type_check(
+        self, value: Union[TensorDictBase, torch.Tensor], key: Optional[str] = None
+    ) -> None:
         """Checks the input value dtype against the TensorSpec dtype and
         raises an exception if they don't match.
 
         Args:
-            value (torch.Tensor): tensor whose dtype has to be checked
+            value (torch.Tensor or TensorDict): tensor whose dtype has to be checked
+                If a tensordict is provided, its keys will be matched against the
+                CompositeSpec keys.
             key (str, optional): if the TensorSpec has keys, the value
                 dtype will be checked against the spec pointed by the
                 indicated key.
@@ -1127,7 +1131,7 @@ dtype=torch.float32)},
     def type_check(
         self,
         value: Union[torch.Tensor, TensorDictBase],
-        selected_keys: Union[str, Optional[Sequence[str]]] = None,
+        selected_keys: Optional[Union[str, Optional[Sequence[str]]]] = None,
     ):
         if isinstance(value, torch.Tensor) and isinstance(selected_keys, str):
             value = {selected_keys: value}

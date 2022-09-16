@@ -8,7 +8,7 @@ from __future__ import annotations
 import abc
 from copy import deepcopy
 from numbers import Number
-from typing import Any, Callable, Iterator, Optional, Union, Dict, Sequence
+from typing import Any, Callable, Optional, Union, Dict, Sequence
 
 import numpy as np
 import torch
@@ -316,9 +316,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
         self.is_done = tensordict_out.get("done")
 
-        for key in self._select_observation_keys(tensordict_out):
-            obs = tensordict_out.get(key)
-            self.observation_spec.type_check(obs, key)
+        self.observation_spec.type_check(tensordict_out)
 
         if tensordict_out._get_meta("reward").dtype is not self.reward_spec.dtype:
             raise TypeError(
@@ -565,11 +563,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if return_contiguous:
             return out_td.contiguous()
         return out_td
-
-    def _select_observation_keys(self, tensordict: TensorDictBase) -> Iterator[str]:
-        for key in tensordict.keys():
-            if key.rfind("observation") >= 0:
-                yield key
 
     def _to_tensor(
         self,
