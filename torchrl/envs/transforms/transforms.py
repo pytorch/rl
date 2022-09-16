@@ -8,7 +8,7 @@ from __future__ import annotations
 import multiprocessing as mp
 from copy import deepcopy, copy
 from textwrap import indent
-from typing import Any, Dict, List, Optional, OrderedDict, Sequence, Union
+from typing import Any, List, Optional, OrderedDict, Sequence, Union
 from warnings import warn
 
 import torch
@@ -59,7 +59,6 @@ __all__ = [
     "DoubleToFloat",
     "CatTensors",
     "NoopResetEnv",
-    "ForceTensorReset",
     "BinarizeReward",
     "PinMemoryTransform",
     "VecNorm",
@@ -1925,66 +1924,6 @@ class TensorDictPrimer(Transform):
     def __repr__(self) -> str:
         class_name = self.__class__.__name__
         return f"{class_name}(primers={self.primers}, default_value={self.default_value}, random={self.random})"
-
-
-class ForceTensorReset(Transform):
-    """Forces the reset of certain tensors in the TensorDict.
-
-    Args:
-        default_dict (dict): Dictionary of default parameters to initialize the TensorDict with.
-            Takes the form of {key: {"initializer": initializer, "shape": shape, "args": args, "kwargs": kwargs}}
-            with key key associated with the tensor to be initialized, initializer the initializer function,
-            shape the shape of the tensor, args the positional arguments to pass to the initializer function,
-            and kwargs the keyword arguments to pass to the initializer function.
-            the initializer function must be of the following form initializer (*batch_size, *args, **kwargs, device=device)"""
-
-    inplace = True
-
-    def __init__(self, default_dict: Dict[Dict]):
-        super().__init__([])
-        self.default_dict = default_dict
-
-    @property
-    def base_env(self):
-        return self.parent
-
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        parent = self.parent
-        tensordict = parent.reset(tensordict)
-
-        batch_size = tensordict.batch_size
-        device = tensordict.device_safe()
-        defaults_outputs = {}
-
-        for key, value in self.default_dict.items():
-            if "args" in value and "kwargs" in value:
-                defaults_outputs[key] = value["initializer"](
-                    *batch_size,
-                    *value["shape"],
-                    *value["args"],
-                    **value["kwargs"],
-                    device=device,
-                )
-            elif "args" in value:
-                defaults_outputs[key] = value["initializer"](
-                    *batch_size, *value["shape"], *value["args"], device=device
-                )
-            elif "kwargs" in value:
-                defaults_outputs[key] = value["initializer"](
-                    *batch_size, *value["shape"], **value["kwargs"], device=device
-                )
-            else:
-                defaults_outputs[key] = value["initializer"](
-                    *batch_size, *value["shape"], device=device
-                )
-        new_tensors_td = TensorDict(defaults_outputs, batch_size=batch_size)
-        tensordict.update(new_tensors_td)
-
-        return tensordict
-
-    def __repr__(self) -> str:
-        class_name = self.__class__.__name__
-        return f"{class_name}(reseted_tensors={self.default_dict.keys()})"
 
 
 class PinMemoryTransform(Transform):
