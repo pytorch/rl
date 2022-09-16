@@ -93,7 +93,6 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
             steps if no policy is provided)
 
     """
-
     def __init__(
         self,
         world_model: TensorDictModule,
