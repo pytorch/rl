@@ -229,6 +229,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
+        # inplace update will write tensors in-place on the provided tensordict.
+        # This is risky, especially if gradients need to be passed (in-place copy
+        # for tensors that are part of computational graphs will result in an error).
+        # It can also lead to inconsistencies when calling rollout.
         cls._inplace_update = _inplace_update
         cls._batch_locked = _batch_locked
         return super().__new__(cls)
@@ -552,7 +556,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     break_when_any_done and tensordict.get("done").any()
                 ) or i == max_steps - 1:
                     break
-                tensordict = step_tensordict(tensordict, keep_other=True)
+                tensordict = step_tensordict(
+                    tensordict,
+                    keep_other=True,
+                    exclude_reward=False,
+                    exclude_action=False,
+                )
 
                 if callback is not None:
                     callback(self, tensordict)
