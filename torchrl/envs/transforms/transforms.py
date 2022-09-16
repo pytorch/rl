@@ -72,7 +72,7 @@ _MAX_NOOPS_TRIALS = 10
 def _apply_to_composite(function):
     def new_fun(self, observation_spec):
         if isinstance(observation_spec, CompositeSpec):
-            d = copy(observation_spec._specs)
+            d = observation_spec._specs
             for key_in, key_out in zip(self.keys_in, self.keys_out):
                 if key_in in observation_spec.keys():
                     d[key_out] = function(self, observation_spec[key_in])
@@ -615,7 +615,9 @@ class Compose(Transform):
         transform = self.transforms
         transform = transform[item]
         if not isinstance(transform, Transform):
-            return Compose(*self.transforms[item])
+            out = Compose(*self.transforms[item])
+            out.set_parent(self.parent)
+            return out
         return transform
 
     def dump(self, **kwargs) -> None:
@@ -731,7 +733,7 @@ class ToTensorImage(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        self._pixel_observation(observation_spec)
+        observation_spec = self._pixel_observation(deepcopy(observation_spec))
         observation_spec.shape = torch.Size(
             [
                 *observation_spec.shape[:-3],
@@ -741,13 +743,20 @@ class ToTensorImage(ObservationTransform):
             ]
         )
         observation_spec.dtype = self.dtype
-        observation_spec = observation_spec
+        if isinstance(observation_spec.space, ContinuousBox):
+            observation_spec.space.minimum = self._apply_transform(
+                observation_spec.space.minimum
+            )
+            observation_spec.space.maximum = self._apply_transform(
+                observation_spec.space.maximum
+            )
         return observation_spec
 
     def _pixel_observation(self, spec: TensorSpec) -> None:
         if isinstance(spec, BoundedTensorSpec):
             spec.space.maximum = self._apply_transform(spec.space.maximum)
             spec.space.minimum = self._apply_transform(spec.space.minimum)
+        return spec
 
 
 class RewardClipping(Transform):
@@ -893,6 +902,7 @@ class Resize(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -956,7 +966,8 @@ class CenterCrop(ObservationTransform):
                 }
             )
         else:
-            _observation_spec = observation_spec
+            _observation_spec = deepcopy(observation_spec)
+
         space = _observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1013,6 +1024,7 @@ class FlattenObservation(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1116,25 +1128,26 @@ class UnsqueezeTransform(Transform):
                 spec.shape = space.minimum.shape
             else:
                 spec.shape = self._apply_transform(torch.zeros(spec.shape)).shape
+        return spec
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
         if "action" in self.keys_inv_in:
-            self._transform_spec(action_spec)
+            action_spec = self._transform_spec(deepcopy(action_spec))
         return action_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         for key in self.keys_inv_in:
-            self._transform_spec(input_spec[key])
+            input_spec = self._transform_spec(deepcopy(input_spec[key]))
         return input_spec
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if "reward" in self.keys_in:
-            self._transform_spec(reward_spec)
+            reward_spec = self._transform_spec(deepcopy(reward_spec))
         return reward_spec
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        self._transform_spec(observation_spec)
+        observation_spec = self._transform_spec(deepcopy(observation_spec))
         return observation_spec
 
     def __repr__(self) -> str:
@@ -1201,6 +1214,7 @@ class GrayScale(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1289,6 +1303,7 @@ class ObservationNorm(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
