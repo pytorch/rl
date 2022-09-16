@@ -228,8 +228,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.batch_size = torch.Size([])
 
     @classmethod
-    def __new__(cls, *args, _batch_locked=True, **kwargs):
-        cls._inplace_update = True
+    def __new__(cls, *args, _inplace_update=True, _batch_locked=True, **kwargs):
+        cls._inplace_update = _inplace_update
         cls._batch_locked = _batch_locked
         return super().__new__(cls)
 
