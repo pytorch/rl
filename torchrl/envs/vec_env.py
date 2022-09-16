@@ -192,7 +192,6 @@ class _BatchedEnv(EnvBase):
                 "memmap and shared memory are mutually exclusive features."
             )
         self._batch_size = None
-        self._action_spec = None
         self._observation_spec = None
         self._reward_spec = None
         self._device = None
@@ -273,10 +272,23 @@ class _BatchedEnv(EnvBase):
     def _set_properties(self):
         if self._single_task:
             self._batch_size = self.meta_data.batch_size
-            self._action_spec = self.meta_data.specs["action_spec"]
+            # TODO create input_spec if it does not exist and set ["action"].
+            # do it further down, after checking there is not value conflicts between
+            # action_spec and inpout_spec["action"]
             self._observation_spec = self.meta_data.specs["observation_spec"]
             self._reward_spec = self.meta_data.specs["reward_spec"]
             self._input_spec = self.meta_data.specs["input_spec"]
+            if (
+                "action" in self.meta_data.specs["input_spec"]
+                and "action_spec" in self.meta_data.specs
+                and self.meta_data.specs["input_spec"]["action"]
+                != self.meta_data.specs["action_spec"]
+            ):
+                raise ValueError(
+                    'meta_data.specs["input_spec"]["action_spec"] and meta_data.specs["action_spec"] '
+                    "have different values"
+                )
+            self._input_spec["action"] = self.meta_data.specs["action_spec"]
             self._dummy_env_str = self.meta_data.env_str
             self._device = self.meta_data.device
             self._env_tensordict = self.meta_data.tensordict
@@ -286,7 +298,6 @@ class _BatchedEnv(EnvBase):
             )
             self._device = self.meta_data[0].device
             # TODO: check that all action_spec and reward spec match (issue #351)
-            self._action_spec = self.meta_data[0].specs["action_spec"]
             self._reward_spec = self.meta_data[0].specs["reward_spec"]
             self._observation_spec = {}
             for md in self.meta_data:
@@ -317,13 +328,17 @@ class _BatchedEnv(EnvBase):
 
     @property
     def action_spec(self) -> TensorSpec:
-        if self._action_spec is None:
+        if (
+            (self._input_spec is None)
+            or ("action" not in self._input_spec)
+            or (self._input_spec["action"] is None)
+        ):
             self._set_properties()
-        return self._action_spec
+        return self._input_spec["action"]
 
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
-        self._action_spec = value
+        self._input_spec["action"] = value
 
     @property
     def device(self) -> torch.device:

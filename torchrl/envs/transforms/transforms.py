@@ -323,7 +323,6 @@ class TransformedEnv(EnvBase):
         self._last_obs = None
         self.cache_specs = cache_specs
 
-        self._action_spec = None
         self._reward_spec = None
         self._observation_spec = None
         self.batch_size = self.base_env.batch_size
@@ -350,14 +349,23 @@ class TransformedEnv(EnvBase):
     def action_spec(self) -> TensorSpec:
         """Action spec of the transformed_in environment"""
 
-        if self._action_spec is None or not self.cache_specs:
+        if (
+            self._input_spec is None
+            or "action" not in self._input_spec
+            or self._input_spec["action"] is None
+            or not self.cache_specs
+        ):
             action_spec = self.transform.transform_action_spec(
                 deepcopy(self.base_env.action_spec)
             )
             if self.cache_specs:
-                self._action_spec = action_spec
+                if self._input_spec is None:
+                    self._input_spec = self.transform.transform_input_spec(
+                        deepcopy(self.base_env.input_spec)
+                    )
+                self._input_spec["action"] = action_spec
         else:
-            action_spec = self._action_spec
+            action_spec = self._input_spec["action"]
         return action_spec
 
     @property
@@ -450,7 +458,7 @@ class TransformedEnv(EnvBase):
 
     def empty_cache(self):
         self._observation_spec = None
-        self._action_spec = None
+        self.action_spec = None
         self._reward_spec = None
 
     def append_transform(self, transform: Transform) -> None:
@@ -504,7 +512,7 @@ class TransformedEnv(EnvBase):
 
     def _erase_metadata(self):
         if self.cache_specs:
-            self._action_spec = None
+            self.action_spec = None
             self._observation_spec = None
             self._reward_spec = None
 
@@ -516,7 +524,7 @@ class TransformedEnv(EnvBase):
         self.is_done = self.is_done.to(device)
 
         if self.cache_specs:
-            self._action_spec = None
+            self.action_spec = None
             self._observation_spec = None
             self._reward_spec = None
         return self
@@ -527,9 +535,22 @@ class TransformedEnv(EnvBase):
         if isinstance(value, Transform):
             value.set_parent(self)
         if isinstance(propobj, property):
-            if propobj.fset is None:
+            ancestors = list(__class__.__mro__)[::-1]
+            while isinstance(propobj, property):
+                if propobj.fset is not None:
+                    return propobj.fset(self, value)
+                propobj = getattr(ancestors.pop(), key, None)
+            else:
                 raise AttributeError(f"can't set attribute {key}")
-            return propobj.fset(self, value)
+
+        # if isinstance(propobj, property):
+        #     propobj = None
+        #     for cls in self.__class__.__mro__:
+        #         propobj = getattr(cls, key, None)
+        #         if
+        #     if propobj.fset is None:
+        #         raise AttributeError(f"can't set attribute {key}")
+        #     return propobj.fset(self, value)
         else:
             return super().__setattr__(key, value)
 
