@@ -1181,20 +1181,11 @@ def make_dreamer(
     # Modules
     obs_encoder = ObsEncoder()
     obs_decoder = ObsDecoder()
-    rssm_prior_default = {
-        "prior_state": {"initializer": torch.zeros, "shape": [cfg.state_dim]},
-        "belief": {"initializer": torch.zeros, "shape": [cfg.rssm_hidden_dim]},
-        "action": {
-            "initializer": torch.zeros,
-            "shape": proof_environment.action_spec.shape,
-        },
-    }
     world_modeler_default = {
         "prior_state": {"initializer": torch.zeros, "shape": [cfg.state_dim]},
         "belief": {"initializer": torch.zeros, "shape": [cfg.rssm_hidden_dim]},
     }
     world_modeler_default = TensorDictDefaultInitializer(world_modeler_default, reinit=True)
-    rssm_prior_init = TensorDictDefaultInitializer(rssm_prior_default, reinit=False)
     rssm_prior = RSSMPrior(
         hidden_dim=cfg.rssm_hidden_dim,
         rnn_hidden_dim=cfg.rssm_hidden_dim,
@@ -1282,7 +1273,6 @@ def make_dreamer(
             in_keys=["pixels"],
             out_keys=["encoded_latents"],
         ),
-        rssm_prior_init,
         TensorDictModule(
             rssm_posterior,
             in_keys=["belief", "encoded_latents"],
@@ -1324,7 +1314,6 @@ def make_dreamer(
     model_based_env = DreamerEnv(
         world_model=WorldModelWrapper(
             TensorDictSequence(
-                rssm_prior_init,
                 TensorDictModule(
                     rssm_prior,
                     in_keys=["prior_state", "belief", "action"],

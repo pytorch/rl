@@ -15,7 +15,7 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl import timeit
 from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
+from torchrl.envs.transforms import RewardScaling, TransformedEnv, ForceTensorReset
 from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
@@ -87,19 +87,19 @@ def grad_norm(optimizer: torch.optim.Optimizer):
     return sum_of_sq.sqrt().detach().item()
 
 
-def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
-    recorder = transformed_env_constructor(
+def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn, default_tensor_dicts):
+    recorder = TransformedEnv(transformed_env_constructor(
         cfg,
         video_tag=video_tag,
         norm_obs_only=True,
         stats=stats,
         logger=logger,
         use_env_creator=False,
-    )()
+    )(), ForceTensorReset(default_tensor_dicts))
 
     # remove video recorder from recorder to have matching state_dict keys
     if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.base_env)
+        recorder_rm = TransformedEnv(recorder.base_env.base_env)
         for transform in recorder.transform:
             if not isinstance(transform, VideoRecorder):
                 recorder_rm.append_transform(transform)
@@ -114,7 +114,7 @@ def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
     else:
         recorder_rm.load_state_dict(create_env_fn.state_dict())
     # reset reward scaling
-    for t in recorder.transform:
+    for t in recorder.base_env.transform:
         if isinstance(t, RewardScaling):
             t.scale.fill_(1.0)
             t.loc.fill_(0.0)
@@ -269,9 +269,10 @@ def main(cfg: "DictConfig"):
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
 
+    action_spec = transformed_env_constructor(cfg)().action_spec
     # Actor and value network
     if cfg.exploration == "additive_gaussian":
-        action_spec = transformed_env_constructor(cfg)().action_spec
+       
         exploration_policy = AdditiveGaussianWrapper(
             policy,
             sigma_init=0.3,
@@ -293,6 +294,16 @@ def main(cfg: "DictConfig"):
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
+    default_dict  =  {
+        "prior_state": {"initializer": torch.zeros, "shape": [cfg.state_dim]},
+        "belief": {"initializer": torch.zeros, "shape": [cfg.rssm_hidden_dim]},
+        "action": {
+            "initializer": torch.zeros,
+            "shape": action_spec.shape,
+        },
+    }
+    create_env_fn = TransformedEnv(create_env_fn, ForceTensorReset(default_dict))
+
 
     collector = make_collector_offpolicy(
         make_env=create_env_fn,
@@ -311,7 +322,7 @@ def main(cfg: "DictConfig"):
         record_frames=cfg.record_frames,
         frame_skip=cfg.frame_skip,
         policy_exploration=policy,
-        recorder=make_recorder_env(cfg, video_tag, stats, logger, create_env_fn),
+        recorder=make_recorder_env(cfg, video_tag, stats, logger, create_env_fn, default_tensor_dicts=default_dict),
         record_interval=cfg.record_interval,
         log_keys=cfg.recorder_log_keys,
     )
