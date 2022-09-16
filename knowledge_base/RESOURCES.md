@@ -14,6 +14,8 @@ See [here](https://pytorch.org/functorch/stable/)
 - [Spinning Up in Deep RL](https://spinningup.openai.com/en/latest/)
 - [Hugging face syllabus](https://github.com/huggingface/deep-rl-class)
 - [RL lectures from Deepmind](https://www.deepmind.com/learning-resources/reinforcement-learning-lecture-series-2021)
+- [Best benchmarks](https://neptune.ai/blog/best-benchmarks-for-reinforcement-learning)
+- [Awesome RL: Reinforcement learning resources curated](https://github.com/aikorea/awesome-rl)
 
 ### Forums
 
