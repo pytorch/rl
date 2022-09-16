@@ -743,17 +743,10 @@ class ToTensorImage(ObservationTransform):
             ]
         )
         observation_spec.dtype = self.dtype
-        if isinstance(observation_spec.space, ContinuousBox):
-            observation_spec.space.minimum = self._apply_transform(
-                observation_spec.space.minimum
-            )
-            observation_spec.space.maximum = self._apply_transform(
-                observation_spec.space.maximum
-            )
         return observation_spec
 
     def _pixel_observation(self, spec: TensorSpec) -> None:
-        if isinstance(spec, BoundedTensorSpec):
+        if isinstance(spec.space, ContinuousBox):
             spec.space.maximum = self._apply_transform(spec.space.maximum)
             spec.space.minimum = self._apply_transform(spec.space.minimum)
         return spec
