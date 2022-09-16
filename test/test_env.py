@@ -1011,6 +1011,9 @@ def test_batch_locked(device):
     ):
         env.step(td_expanded)
 
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked(device):
     env = MockBatchedUnLockedEnv(device)
     assert not env.batch_locked
 
@@ -1023,6 +1026,9 @@ def test_batch_locked(device):
 
     env.step(td_expanded)
 
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked_with_batch_size(device):
     env = MockBatchedUnLockedEnv(device, batch_size=torch.Size([2]))
     assert not env.batch_locked
 

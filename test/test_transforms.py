@@ -1323,6 +1323,9 @@ def test_batch_locked_transformed(device):
     ):
         env.step(td_expanded)
 
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked_transformed(device):
     env = TransformedEnv(
         MockBatchedUnLockedEnv(device),
         Compose(
@@ -1339,6 +1342,10 @@ def test_batch_locked_transformed(device):
     td_expanded = td.expand(2).clone()
     td = env.step(td)
     env.step(td_expanded)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked_with_batch_size_transformed(device):
     env = TransformedEnv(
         MockBatchedUnLockedEnv(device, batch_size=torch.Size([2])),
         Compose(

@@ -140,15 +140,11 @@ class MockBatchedLockedEnv(EnvBase):
         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
         self.counter = 0
 
-    def set_seed(self, seed: int) -> int:
-        assert seed >= 1
-        self.seed = seed
-        self.counter = seed % 17  # make counter a small number
-        self.max_val = max(self.counter + 100, self.counter * 2)
-        return seed_generator(seed)
+        self.set_seed = MockSerialEnv.set_seed
 
     def _step(self, tensordict):
         self.counter += 1
+        # We use tensordict.batch_size instead of self.batch_size since this method will also be used by MockBatchedUnLockedEnv
         n = (
             torch.full(tensordict.batch_size, self.counter)
             .to(self.device)

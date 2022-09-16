@@ -237,6 +237,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def batch_locked(self) -> bool:
         """
         Whether the environnement can be used with a batch size different from the one it was initialized with or not.
+        If True, the env needs to be used with a tensordict having the same batch size as the env.
+        batch_locked is an immutable property.
         """
         return self._batch_locked
 
