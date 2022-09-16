@@ -1673,18 +1673,57 @@ class TestTensorDictRepr:
 
         return stack_td([td1, td2], 2)
 
+    def memmap_td(self, device, dtype):
+        return self.td(device, dtype).memmap_(lock=False)
+
+    def share_memory_td(self, device, dtype):
+        return self.td(device, dtype).share_memory_(lock=False)
+
     def test_repr_plain(self, device, dtype):
         tensordict = self.td(device, dtype)
+        if device is not None and device.type == "cuda":
+            is_shared = True
+        else:
+            is_shared = False
         expected = f"""TensorDict(
     fields={{
         a: Tensor(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
     batch_size=torch.Size([4, 3, 2, 1]),
     device={str(device)},
-    is_shared=False)"""
+    is_shared={is_shared})"""
+        assert repr(tensordict) == expected
+
+    def test_repr_memmap(self, device, dtype):
+        tensordict = self.memmap_td(device, dtype)
+        if device is not None and device.type == "cuda":
+            is_shared = True
+        else:
+            is_shared = False
+        expected = f"""TensorDict(
+    fields={{
+        a: MemmapTensor(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
+    batch_size=torch.Size([4, 3, 2, 1]),
+    device={str(device)},
+    is_shared={is_shared})"""
+        assert repr(tensordict) == expected
+
+    def test_repr_share_memory(self, device, dtype):
+        tensordict = self.share_memory_td(device, dtype)
+        is_shared = True
+        expected = f"""TensorDict(
+    fields={{
+        a: SharedTensor(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
+    batch_size=torch.Size([4, 3, 2, 1]),
+    device={str(device)},
+    is_shared={is_shared})"""
         assert repr(tensordict) == expected
 
     def test_repr_nested(self, device, dtype):
         nested_td = self.nested_td(device, dtype)
+        if device is not None and device.type == "cuda":
+            is_shared = True
+        else:
+            is_shared = False
         expected = f"""TensorDict(
     fields={{
         b: Tensor(torch.Size([4, 3, 2, 1, 5]), dtype={dtype}),
@@ -1693,120 +1732,142 @@ class TestTensorDictRepr:
                 a: Tensor(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
             batch_size=torch.Size([4, 3, 2, 1]),
             device={str(device)},
-            is_shared=False)}},
+            is_shared={is_shared})}},
     batch_size=torch.Size([4, 3, 2, 1]),
     device={str(device)},
-    is_shared=False)"""
+    is_shared={is_shared})"""
         assert repr(nested_td) == expected
 
     def test_repr_stacked(self, device, dtype):
         stacked_td = self.stacked_td(device, dtype)
+        if device is not None and device.type == "cuda":
+            is_shared = True
+        else:
+            is_shared = False
         expected = f"""LazyStackedTensorDict(
     fields={{
         a: Tensor(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
     batch_size=torch.Size([4, 3, 2, 1]),
     device={str(device)},
-    is_shared=False)"""
+    is_shared={is_shared})"""
         assert repr(stacked_td) == expected
 
     @pytest.mark.parametrize("index", [None, (slice(None), 0)])
     def test_repr_indexed_tensordict(self, device, dtype, index):
         tensordict = self.td(device, dtype)[index]
+        if device is not None and device.type == "cuda":
+            is_shared = True
+        else:
+            is_shared = False
         if index is None:
             expected = f"""TensorDict(
     fields={{
         a: Tensor(torch.Size([1, 4, 3, 2, 1, 5]), dtype={dtype})}},
     batch_size=torch.Size([1, 4, 3, 2, 1]),
     device={str(device)},
-    is_shared=False)"""
+    is_shared={is_shared})"""
         else:
             expected = f"""TensorDict(
     fields={{
         a: Tensor(torch.Size([4, 2, 1, 5]), dtype={dtype})}},
     batch_size=torch.Size([4, 2, 1]),
     device={str(device)},
-    is_shared=False)"""
+    is_shared={is_shared})"""
 
         assert repr(tensordict) == expected
 
-    def test_repr_indexed_nested(self, device, dtype):
-        tensordict = TensorDict({}, [4, 3, 2, 1], device=device)
-        tensordict.set("nested_td", self.nested_td(device))
+    @pytest.mark.parametrize("index", [None, (slice(None), 0)])
+    def test_repr_indexed_nested_tensordict(self, device, dtype, index):
+        nested_tensordict = self.nested_td(device, dtype)[index]
+        if device is not None and device.type == "cuda":
+            is_shared = True
+        else:
+            is_shared = False
+        if index is None:
+            expected = f"""TensorDict(
+    fields={{
+        b: Tensor(torch.Size([1, 4, 3, 2, 1, 5]), dtype={dtype}),
+        my_nested_td: TensorDict(
+            fields={{
+                a: Tensor(torch.Size([1, 4, 3, 2, 1, 5]), dtype={dtype})}},
+            batch_size=torch.Size([1, 4, 3, 2, 1]),
+            device={str(device)},
+            is_shared={is_shared})}},
+    batch_size=torch.Size([1, 4, 3, 2, 1]),
+    device={str(device)},
+    is_shared={is_shared})"""
+        else:
+            expected = f"""TensorDict(
+    fields={{
+        b: Tensor(torch.Size([4, 2, 1, 5]), dtype={dtype}),
+        my_nested_td: TensorDict(
+            fields={{
+                a: Tensor(torch.Size([4, 2, 1, 5]), dtype={dtype})}},
+            batch_size=torch.Size([4, 2, 1]),
+            device={str(device)},
+            is_shared={is_shared})}},
+    batch_size=torch.Size([4, 2, 1]),
+    device={str(device)},
+    is_shared={is_shared})"""
+        assert repr(nested_tensordict) == expected
 
-        expected = """TensorDict(
-    fields={
-        nested_td: TensorDict(
-            fields={
-                b: Tensor(torch.Size([4, 3, 2, 1, 5]), dtype=torch.float32),
-                my_nested_td: TensorDict(
-                    fields={
-                        a: Tensor(torch.Size([4, 3, 2, 1, 5]), dtype=torch.float32)},
-                    batch_size=torch.Size([4, 3, 2, 1]),
-                    device=cpu,
-                    is_shared=False)},
-            batch_size=torch.Size([4, 3, 2, 1]),
-            device=cpu,
-            is_shared=False)},
+    @pytest.mark.parametrize("index", [None, (slice(None), 0)])
+    def test_repr_indexed_stacked_tensordict(self, device, dtype, index):
+        stacked_tensordict = self.stacked_td(device, dtype)
+        if device is not None and device.type == "cuda":
+            is_shared = True
+        else:
+            is_shared = False
+        if index is None:
+            expected = f"""LazyStackedTensorDict(
+    fields={{
+        a: Tensor(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
     batch_size=torch.Size([4, 3, 2, 1]),
-    device=cpu,
-    is_shared=False)"""
-        assert repr(tensordict) == expected
-
-    def test_repr_indexed_integer(self, device, dtype):
-        tensordict = TensorDict({}, [5], device=device)
-        tensordict.set("k_int", torch.randint(10, (5, 4, 3)))
-
-        expected = """TensorDict(
-    fields={
-        a: Tensor(torch.Size([5, 4, 3]), dtype=torch.float32),
-        k_int: Tensor(torch.Size([5, 4, 3]), dtype=torch.int64)},
-    batch_size=torch.Size([5]),
-    device=cpu,
-    is_shared=False)"""
-        assert repr(tensordict), expected
-
-    def test_repr_indexed_mask(self, device, dtype):
-        tensordict = TensorDict({}, [2], device=device)
-        tensordict.set("a", torch.randn(2, 3))
-        mask = torch.BoolTensor([[1, 0, 1], [1, 0, 1]])
-        masked_td = tensordict[mask]
-        expected = """TensorDict(
-    fields={
-        a: Tensor(torch.Size([4, 1]), dtype=torch.float32)},
-    batch_size=torch.Size([4]),
-    device=cpu,
-    is_shared=False)"""
-        assert repr(masked_td) == expected
-
-    def test_repr_indexed_stack(self, device, dtype):
-        tensordict = TensorDict({}, [5], device=device)
-        td3 = TensorDict({"d": torch.randn(5, 4, 3)}, [5], device=device)
-        stacked_td = stack_td([tensordict, td3], 2)
-
-        expected = """LazyStackedTensorDict(
-    fields={
-    },
-    batch_size=torch.Size([5, 2]),
-    device=cpu,
-    is_shared=False)"""
-        assert repr(stacked_td), expected
+    device={str(device)},
+    is_shared={is_shared})"""
+        else:
+            expected = f"""LazyStackedTensorDict(
+    fields={{
+        a: Tensor(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
+    batch_size=torch.Size([4, 3, 2, 1]),
+    device={str(device)},
+    is_shared={is_shared})"""
+        assert repr(stacked_tensordict) == expected
 
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
-    def test_repr_device_to_device(self, device, dtype):
-        dev2 = torch.device(0)
-        td = self.td(device)
-        td2 = td.to(dev2)
-        assert repr(td) == repr(td2)
+    @pytest.mark.parametrize("device_cast", get_available_devices())
+    def test_repr_device_to_device(self, device, dtype, device_cast):
+        td = self.td(device, dtype)
+        if device_cast.type == "cuda":
+            is_shared = True
+            tensor_klass = "SharedTensor"
+        else:
+            is_shared = False
+            tensor_klass = "Tensor"
+        td2 = td.to(device_cast)
+        expected = f"""TensorDict(
+    fields={{
+        a: {tensor_klass}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
+    batch_size=torch.Size([4, 3, 2, 1]),
+    device={str(device_cast)},
+    is_shared={is_shared})"""
+        assert repr(td2) == expected
 
+    @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
     def test_repr_batch_size_update(self, device, dtype):
-        td = self.td(device)
+        td = self.td(device, dtype)
         td.batch_size = torch.Size([4, 3, 2])
-        expected = """TensorDict(
-    fields={
-        a: Tensor(torch.Size([4, 3, 2, 1, 5]), dtype=torch.float32)},
+        is_shared = False
+        tensor_class = "Tensor"
+        if device is None or device.type == "cuda":
+            is_shared = True
+            tensor_class = "SharedTensor"
+        expected = f"""TensorDict(
+    fields={{
+        a: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
     batch_size=torch.Size([4, 3, 2]),
-    device=cpu,
-    is_shared=False)"""
+    device={device},
+    is_shared={is_shared})"""
         assert repr(td) == expected
 
 
