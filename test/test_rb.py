@@ -75,7 +75,7 @@ class TestPrototypeBuffers:
 
     def _get_data(self, rbtype, size):
         if rbtype is rb_prototype.ReplayBuffer:
-            data = [torch.randint(100, (1,)) for _ in range(size)]
+            data = torch.randint(100, (size, 1))
         elif rbtype is rb_prototype.TensorDictReplayBuffer:
             data = TensorDict(
                 {

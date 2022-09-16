@@ -1,7 +1,7 @@
 import collections
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Optional, Sequence, Union, Tuple
+from typing import Any, Callable, Optional, Sequence, Union, Tuple, List
 
 import torch
 
@@ -41,9 +41,9 @@ class ReplayBuffer:
         pin_memory: bool = False,
         prefetch: Optional[int] = None,
     ) -> None:
-        self._storage = storage or ListStorage(max_size=1_000)
-        self._sampler = sampler or RandomSampler()
-        self._writer = writer or RoundRobinWriter()
+        self._storage = storage if storage is not None else ListStorage(max_size=1_000)
+        self._sampler = sampler if sampler is not None else RandomSampler()
+        self._writer = writer if writer is not None else RoundRobinWriter()
         self._writer.register_storage(self._storage)
 
         self._collate_fn = collate_fn or stack_tensors
@@ -143,7 +143,7 @@ class ReplayBuffer:
         if not self._prefetch:
             return self._sample(batch_size)
 
-        if len(self._prefetch_fut) == 0:
+        if len(self._prefetch_queue) == 0:
             ret = self._sample(batch_size)
         else:
             with self._futures_lock:
@@ -180,7 +180,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         if self.priority_key not in tensordict.keys():
             return self._sampler.default_priority
         if tensordict.batch_dims:
-            tensordict = tensordict.clone(recursive=False)
+            tensordict = tensordict.clone(recurse=False)
             tensordict.batch_size = []
         try:
             priority = tensordict.get(self.priority_key).item()
@@ -201,32 +201,32 @@ class TensorDictReplayBuffer(ReplayBuffer):
             self.update_priority(index, priority)
         return index
 
-    def extend(self, tensordicts: TensorDictBase) -> torch.Tensor:
+    def extend(self, tensordicts: Union[List, TensorDictBase]) -> torch.Tensor:
         if isinstance(tensordicts, TensorDictBase):
             if tensordicts.batch_dims > 1:
                 # we want the tensordict to have one dimension only. The batch size
                 # of the sampled tensordicts can be changed thereafter
                 if not isinstance(tensordicts, LazyStackedTensorDict):
-                    tensordicts = tensordicts.clone(recursive=False)
+                    tensordicts = tensordicts.clone(recurse=False)
                 else:
                     tensordicts = tensordicts.contiguous()
                 tensordicts.batch_size = tensordicts.batch_size[:1]
             tensordicts.set(
                 "index",
                 torch.zeros(
-                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
+                    tensordicts.shape, device=tensordicts.device_safe(), dtype=torch.int
                 ),
             )
 
         if not isinstance(tensordicts, TensorDictBase):
-            stacked_td = torch.stack(data, 0)
+            stacked_td = torch.stack(tensordicts, 0)
         else:
             stacked_td = tensordicts
 
         index = super().extend(tensordicts)
         stacked_td.set(
             "index",
-            torch.tensor(index, dtype=torch.int, device=stacked_td.device),
+            torch.tensor(index, dtype=torch.int, device=stacked_td.device_safe()),
             inplace=True,
         )
         self.update_tensordict_priority(tensordicts)
@@ -236,7 +236,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         priority = torch.tensor(
             [self._get_priority(td) for td in data],
             dtype=torch.float,
-            device=data.device,
+            device=data.device_safe(),
         )
         self.update_priority(data.get("index"), priority)
 
@@ -244,5 +244,5 @@ class TensorDictReplayBuffer(ReplayBuffer):
         data, info = super().sample(batch_size)
         if include_info:
             for k, v in info.items():
-                data.set(k, torch.tensor(v, device=data.device), inplace=True)
+                data.set(k, torch.tensor(v, device=data.device_safe()), inplace=True)
         return data, info
