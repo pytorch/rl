@@ -524,7 +524,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     break_when_any_done and tensordict.get("done").any()
                 ) or i == max_steps - 1:
                     break
-                tensordict = step_tensordict(tensordict, keep_other=True)
+                tensordict = step_tensordict(
+                    tensordict,
+                    keep_other=True,
+                    exclude_reward=False,
+                    exclude_action=False,
+                )
 
                 if callback is not None:
                     callback(self, tensordict)
