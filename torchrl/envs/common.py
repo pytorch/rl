@@ -228,7 +228,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.batch_size = torch.Size([])
 
     @classmethod
-    def __new__(cls, *args, _inplace_update=True, _batch_locked=True, **kwargs):
+    def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
+        # inplace update will write tensors in-place on the provided tensordict.
+        # This is risky, especially if gradients need to be passed (in-place copy
+        # for tensors that are part of computational graphs will result in an error).
+        # It can also lead to inconsistencies when calling rollout.
         cls._inplace_update = _inplace_update
         cls._batch_locked = _batch_locked
         cls._run_checks = kwargs.get("_run_checks", True)
@@ -520,7 +524,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             TensorDict object containing the resulting trajectory.
 
         """
-
         try:
             policy_device = next(policy.parameters()).device
         except AttributeError:
@@ -638,7 +641,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.input_spec = self.input_spec.to(device)
 
         self.is_done = self.is_done.to(device)
-        self.device = device
         super().to(device)
         return self
 
