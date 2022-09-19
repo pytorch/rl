@@ -1729,10 +1729,9 @@ class TestTensorDictRepr:
             device is not None and device.type == "cuda"
         ):
             is_shared = True
-            tensor_class = "SharedTensor"
         else:
             is_shared = False
-            tensor_class = "Tensor"
+        tensor_class = "Tensor"
         expected = f"""TensorDict(
     fields={{
         b: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype}),
@@ -1753,10 +1752,9 @@ class TestTensorDictRepr:
             device is not None and device.type == "cuda"
         ):
             is_shared = True
-            tensor_class = "SharedTensor"
         else:
             is_shared = False
-            tensor_class = "Tensor"
+        tensor_class = "Tensor"
         expected = f"""LazyStackedTensorDict(
     fields={{
         a: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
@@ -1772,10 +1770,9 @@ class TestTensorDictRepr:
             device is not None and device.type == "cuda"
         ):
             is_shared = True
-            tensor_class = "SharedTensor"
         else:
             is_shared = False
-            tensor_class = "Tensor"
+        tensor_class = "Tensor"
         if index is None:
             expected = f"""TensorDict(
     fields={{
@@ -1800,10 +1797,9 @@ class TestTensorDictRepr:
             device is not None and device.type == "cuda"
         ):
             is_shared = True
-            tensor_class = "SharedTensor"
         else:
             is_shared = False
-            tensor_class = "Tensor"
+        tensor_class = "Tensor"
         if index is None:
             expected = f"""TensorDict(
     fields={{
@@ -1839,10 +1835,9 @@ class TestTensorDictRepr:
             device is not None and device.type == "cuda"
         ):
             is_shared = True
-            tensor_class = "SharedTensor"
         else:
             is_shared = False
-            tensor_class = "Tensor"
+        tensor_class = "Tensor"
         if index is None:
             expected = f"""LazyStackedTensorDict(
     fields={{
@@ -1863,14 +1858,13 @@ class TestTensorDictRepr:
     @pytest.mark.parametrize("device_cast", get_available_devices())
     def test_repr_device_to_device(self, device, dtype, device_cast):
         td = self.td(device, dtype)
-        if (device is None and (torch.cuda.device_count() > 0)) or (
-            device is not None and device.type == "cuda"
+        if (device_cast is None and (torch.cuda.device_count() > 0)) or (
+            device_cast is not None and device_cast.type == "cuda"
         ):
             is_shared = True
-            tensor_class = "SharedTensor"
         else:
             is_shared = False
-            tensor_class = "Tensor"
+        tensor_class = "Tensor"
         td2 = td.to(device_cast)
         expected = f"""TensorDict(
     fields={{
@@ -1890,7 +1884,6 @@ class TestTensorDictRepr:
             device is not None and device.type == "cuda"
         ):
             is_shared = True
-            tensor_class = "SharedTensor"
         expected = f"""TensorDict(
     fields={{
         a: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},

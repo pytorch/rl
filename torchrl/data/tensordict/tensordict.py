@@ -2261,7 +2261,7 @@ class TensorDict(TensorDictBase):
         return self
 
     def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
-        if self.is_shared() and self.device == torch.device("cpu"):
+        if self.is_shared() and self.device_safe() == torch.device("cpu"):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
