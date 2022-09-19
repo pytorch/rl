@@ -272,23 +272,9 @@ class _BatchedEnv(EnvBase):
     def _set_properties(self):
         if self._single_task:
             self._batch_size = self.meta_data.batch_size
-            # TODO create input_spec if it does not exist and set ["action"].
-            # do it further down, after checking there is not value conflicts between
-            # action_spec and inpout_spec["action"]
             self._observation_spec = self.meta_data.specs["observation_spec"]
             self._reward_spec = self.meta_data.specs["reward_spec"]
             self._input_spec = self.meta_data.specs["input_spec"]
-            if (
-                "action" in self.meta_data.specs["input_spec"]
-                and "action_spec" in self.meta_data.specs
-                and self.meta_data.specs["input_spec"]["action"]
-                != self.meta_data.specs["action_spec"]
-            ):
-                raise ValueError(
-                    'meta_data.specs["input_spec"]["action_spec"] and meta_data.specs["action_spec"] '
-                    "have different values"
-                )
-            self._input_spec["action"] = self.meta_data.specs["action_spec"]
             self._dummy_env_str = self.meta_data.env_str
             self._device = self.meta_data.device
             self._env_tensordict = self.meta_data.tensordict
