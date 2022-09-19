@@ -1681,7 +1681,9 @@ class TestTensorDictRepr:
 
     def test_repr_plain(self, device, dtype):
         tensordict = self.td(device, dtype)
-        if device.type == "cuda" or (device is None and torch.cuda.device_count() > 0):
+        if (device is None and (torch.cuda.device_count() > 0)) or (
+            device is not None and device.type == "cuda"
+        ):
             is_shared = True
         else:
             is_shared = False
@@ -1695,7 +1697,9 @@ class TestTensorDictRepr:
 
     def test_repr_memmap(self, device, dtype):
         tensordict = self.memmap_td(device, dtype)
-        if device.type == "cuda" or (device is None and torch.cuda.device_count() > 0):
+        if (device is None and (torch.cuda.device_count() > 0)) or (
+            device is not None and device.type == "cuda"
+        ):
             is_shared = True
         else:
             is_shared = False
@@ -1721,7 +1725,9 @@ class TestTensorDictRepr:
 
     def test_repr_nested(self, device, dtype):
         nested_td = self.nested_td(device, dtype)
-        if device.type == "cuda" or (device is None and torch.cuda.device_count() > 0):
+        if (device is None and (torch.cuda.device_count() > 0)) or (
+            device is not None and device.type == "cuda"
+        ):
             is_shared = True
             tensor_class = "SharedTensor"
         else:
@@ -1743,7 +1749,9 @@ class TestTensorDictRepr:
 
     def test_repr_stacked(self, device, dtype):
         stacked_td = self.stacked_td(device, dtype)
-        if device.type == "cuda" or (device is None and torch.cuda.device_count() > 0):
+        if (device is None and (torch.cuda.device_count() > 0)) or (
+            device is not None and device.type == "cuda"
+        ):
             is_shared = True
             tensor_class = "SharedTensor"
         else:
@@ -1760,7 +1768,9 @@ class TestTensorDictRepr:
     @pytest.mark.parametrize("index", [None, (slice(None), 0)])
     def test_repr_indexed_tensordict(self, device, dtype, index):
         tensordict = self.td(device, dtype)[index]
-        if device.type == "cuda" or (device is None and torch.cuda.device_count() > 0):
+        if (device is None and (torch.cuda.device_count() > 0)) or (
+            device is not None and device.type == "cuda"
+        ):
             is_shared = True
             tensor_class = "SharedTensor"
         else:
@@ -1786,7 +1796,9 @@ class TestTensorDictRepr:
     @pytest.mark.parametrize("index", [None, (slice(None), 0)])
     def test_repr_indexed_nested_tensordict(self, device, dtype, index):
         nested_tensordict = self.nested_td(device, dtype)[index]
-        if device.type == "cuda" or (device is None and torch.cuda.device_count() > 0):
+        if (device is None and (torch.cuda.device_count() > 0)) or (
+            device is not None and device.type == "cuda"
+        ):
             is_shared = True
             tensor_class = "SharedTensor"
         else:
@@ -1823,7 +1835,9 @@ class TestTensorDictRepr:
     @pytest.mark.parametrize("index", [None, (slice(None), 0)])
     def test_repr_indexed_stacked_tensordict(self, device, dtype, index):
         stacked_tensordict = self.stacked_td(device, dtype)
-        if device.type == "cuda" or (device is None and torch.cuda.device_count() > 0):
+        if (device is None and (torch.cuda.device_count() > 0)) or (
+            device is not None and device.type == "cuda"
+        ):
             is_shared = True
             tensor_class = "SharedTensor"
         else:
@@ -1849,7 +1863,9 @@ class TestTensorDictRepr:
     @pytest.mark.parametrize("device_cast", get_available_devices())
     def test_repr_device_to_device(self, device, dtype, device_cast):
         td = self.td(device, dtype)
-        if device.type == "cuda" or (device is None and torch.cuda.device_count() > 0):
+        if (device is None and (torch.cuda.device_count() > 0)) or (
+            device is not None and device.type == "cuda"
+        ):
             is_shared = True
             tensor_class = "SharedTensor"
         else:
@@ -1870,7 +1886,9 @@ class TestTensorDictRepr:
         td.batch_size = torch.Size([4, 3, 2])
         is_shared = False
         tensor_class = "Tensor"
-        if device.type == "cuda" or (device is None and torch.cuda.device_count() > 0):
+        if (device is None and (torch.cuda.device_count() > 0)) or (
+            device is not None and device.type == "cuda"
+        ):
             is_shared = True
             tensor_class = "SharedTensor"
         expected = f"""TensorDict(
