@@ -14,13 +14,13 @@ from hydra.core.config_store import ConfigStore
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl import timeit
-from torchrl.envs import ParallelEnv, EnvCreator
+from torchrl.data import NdUnboundedContinuousTensorSpec
+from torchrl.envs import ParallelEnv, EnvCreator, Compose, CatTensors
 from torchrl.envs.transforms import RewardScaling, TransformedEnv, TensorDictPrimer
 from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
-from torchrl.data import NdUnboundedContinuousTensorSpec
 from torchrl.objectives.costs.dreamer import (
     DreamerActorLoss,
     DreamerModelLoss,
@@ -88,15 +88,20 @@ def grad_norm(optimizer: torch.optim.Optimizer):
     return sum_of_sq.sqrt().detach().item()
 
 
-def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn, default_tensor_dicts):
-    recorder = TransformedEnv(transformed_env_constructor(
-        cfg,
-        video_tag=video_tag,
-        norm_obs_only=True,
-        stats=stats,
-        logger=logger,
-        use_env_creator=False,
-    )(), TensorDictPrimer(random=False, default_value=0, **default_tensor_dicts))
+def make_recorder_env(
+    cfg, video_tag, stats, logger, create_env_fn, default_tensor_dicts
+):
+    recorder = TransformedEnv(
+        transformed_env_constructor(
+            cfg,
+            video_tag=video_tag,
+            norm_obs_only=True,
+            stats=stats,
+            logger=logger,
+            use_env_creator=False,
+        )(),
+        TensorDictPrimer(random=False, default_value=0, **default_tensor_dicts),
+    )
 
     # remove video recorder from recorder to have matching state_dict keys
     if cfg.record_video:
@@ -273,7 +278,7 @@ def main(cfg: "DictConfig"):
     action_spec = transformed_env_constructor(cfg)().action_spec
     # Actor and value network
     if cfg.exploration == "additive_gaussian":
-       
+
         exploration_policy = AdditiveGaussianWrapper(
             policy,
             sigma_init=0.3,
@@ -295,13 +300,16 @@ def main(cfg: "DictConfig"):
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
-    default_dict  =  {
+    default_dict = {
         "prior_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
         "belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
-        "action": action_spec
+        "action": action_spec,
     }
-    create_env_fn = TransformedEnv(create_env_fn, TensorDictPrimer(random=False, default_value=0, **default_dict))
-
+    create_env_fn = TransformedEnv(create_env_fn, Compose())
+    create_env_fn.append_transform(TensorDictPrimer(random=False, default_value=0, **default_dict))
+    create_env_fn.append_transform(CatTensors(keys_in=["belief"], out_key="prev_belief", del_keys=False))
+    create_env_fn.append_transform(CatTensors(keys_in=["action"], out_key="prev_action", del_keys=False))
+    create_env_fn.append_transform(CatTensors(keys_in=["prior_state"], out_key="prev_prior_state", del_keys=False))
 
     collector = make_collector_offpolicy(
         make_env=create_env_fn,
@@ -320,7 +328,14 @@ def main(cfg: "DictConfig"):
         record_frames=cfg.record_frames,
         frame_skip=cfg.frame_skip,
         policy_exploration=policy,
-        recorder=make_recorder_env(cfg, video_tag, stats, logger, create_env_fn, default_tensor_dicts=default_dict),
+        recorder=make_recorder_env(
+            cfg,
+            video_tag,
+            stats,
+            logger,
+            create_env_fn,
+            default_tensor_dicts=default_dict,
+        ),
         record_interval=cfg.record_interval,
         log_keys=cfg.recorder_log_keys,
     )
@@ -416,7 +431,7 @@ def main(cfg: "DictConfig"):
                                 step=collected_frames,
                             )
                             logger.log_scalar(
-                               "kl_model_loss",
+                                "kl_model_loss",
                                 model_loss_td["kl_model_loss"].detach().item(),
                                 step=collected_frames,
                             )

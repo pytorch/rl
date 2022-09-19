@@ -25,7 +25,7 @@ class DreamerEnv(ModelBasedEnv):
         obs_decoder: TensorDictModule = None,
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
-        batch_size: Optional[torch.Size] = None
+        batch_size: Optional[torch.Size] = None,
     ):
         super(DreamerEnv, self).__init__(
             world_model, device=device, dtype=dtype, batch_size=batch_size
