@@ -72,7 +72,7 @@ _MAX_NOOPS_TRIALS = 10
 def _apply_to_composite(function):
     def new_fun(self, observation_spec):
         if isinstance(observation_spec, CompositeSpec):
-            d = copy(observation_spec._specs)
+            d = observation_spec._specs
             for key_in, key_out in zip(self.keys_in, self.keys_out):
                 if key_in in observation_spec.keys():
                     d[key_out] = function(self, observation_spec[key_in])
@@ -312,6 +312,7 @@ class TransformedEnv(EnvBase):
         device = kwargs["device"]
         super().__init__(**kwargs)
         self._set_env(env, device)
+        self._inplace_update = env._inplace_update
         if transform is None:
             transform = Compose()
             transform.set_parent(self)
@@ -326,6 +327,11 @@ class TransformedEnv(EnvBase):
         self._reward_spec = None
         self._observation_spec = None
         self.batch_size = self.base_env.batch_size
+
+    def __new__(cls, env, *args, **kwargs):
+        return super().__new__(
+            cls, env, *args, _batch_locked=env.batch_locked, **kwargs
+        )
 
     def _set_env(self, env: EnvBase, device) -> None:
         self.base_env = env.to(device)
@@ -508,7 +514,9 @@ class TransformedEnv(EnvBase):
         )
 
     def __repr__(self) -> str:
-        return f"TransformedEnv(env={self.base_env}, transform={self.transform})"
+        env_str = indent(f"env={self.base_env}", 4 * " ")
+        t_str = indent(f"transform={self.transform}", 4 * " ")
+        return f"TransformedEnv(\n{env_str},\n{t_str})"
 
     def _erase_metadata(self):
         if self.cache_specs:
@@ -636,7 +644,9 @@ class Compose(Transform):
         transform = self.transforms
         transform = transform[item]
         if not isinstance(transform, Transform):
-            return Compose(*self.transforms[item])
+            out = Compose(*self.transforms[item])
+            out.set_parent(self.parent)
+            return out
         return transform
 
     def dump(self, **kwargs) -> None:
@@ -752,7 +762,7 @@ class ToTensorImage(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        self._pixel_observation(observation_spec)
+        observation_spec = self._pixel_observation(deepcopy(observation_spec))
         observation_spec.shape = torch.Size(
             [
                 *observation_spec.shape[:-3],
@@ -762,13 +772,13 @@ class ToTensorImage(ObservationTransform):
             ]
         )
         observation_spec.dtype = self.dtype
-        observation_spec = observation_spec
         return observation_spec
 
     def _pixel_observation(self, spec: TensorSpec) -> None:
-        if isinstance(spec, BoundedTensorSpec):
+        if isinstance(spec.space, ContinuousBox):
             spec.space.maximum = self._apply_transform(spec.space.maximum)
             spec.space.minimum = self._apply_transform(spec.space.minimum)
+        return spec
 
 
 class RewardClipping(Transform):
@@ -914,6 +924,7 @@ class Resize(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -977,7 +988,8 @@ class CenterCrop(ObservationTransform):
                 }
             )
         else:
-            _observation_spec = observation_spec
+            _observation_spec = deepcopy(observation_spec)
+
         space = _observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1034,6 +1046,7 @@ class FlattenObservation(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1137,25 +1150,26 @@ class UnsqueezeTransform(Transform):
                 spec.shape = space.minimum.shape
             else:
                 spec.shape = self._apply_transform(torch.zeros(spec.shape)).shape
+        return spec
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
         if "action" in self.keys_inv_in:
-            self._transform_spec(action_spec)
+            action_spec = self._transform_spec(deepcopy(action_spec))
         return action_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         for key in self.keys_inv_in:
-            self._transform_spec(input_spec[key])
+            input_spec = self._transform_spec(deepcopy(input_spec[key]))
         return input_spec
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if "reward" in self.keys_in:
-            self._transform_spec(reward_spec)
+            reward_spec = self._transform_spec(deepcopy(reward_spec))
         return reward_spec
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        self._transform_spec(observation_spec)
+        observation_spec = self._transform_spec(deepcopy(observation_spec))
         return observation_spec
 
     def __repr__(self) -> str:
@@ -1222,6 +1236,7 @@ class GrayScale(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1310,6 +1325,7 @@ class ObservationNorm(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1565,7 +1581,7 @@ class CatTensors(Transform):
     Args:
         keys_in (Sequence of str): keys to be concatenated
         out_key: key of the resulting tensor.
-        dim (int, optional): dimension along which the contenation will occur.
+        dim (int, optional): dimension along which the concatenation will occur.
             Default is -1.
         del_keys (bool, optional): if True, the input values will be deleted after
             concatenation. Default is True.
@@ -1596,13 +1612,15 @@ class CatTensors(Transform):
     def __init__(
         self,
         keys_in: Optional[Sequence[str]] = None,
-        out_key: str = "observation_vector",
+        out_key: str = "next_observation_vector",
         dim: int = -1,
         del_keys: bool = True,
         unsqueeze_if_oor: bool = False,
     ):
         if keys_in is None:
             raise Exception("CatTensors requires keys to be non-empty")
+        if type(out_key) != str:
+            raise Exception("CatTensors requires out_key to be of type string")
         super().__init__(keys_in=keys_in)
         if not out_key.startswith("next_") and all(
             key.startswith("next_") for key in keys_in
