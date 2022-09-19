@@ -113,7 +113,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     @classmethod
     def __new__(cls, *args, **kwargs):
         return super().__new__(
-            cls, *args, _inplace_update=False, _batch_locked=False, **kwargs
+            cls, *args, _inplace_update=False, _batch_locked=False, _run_checks=False, **kwargs
         )
 
     def set_specs_from_env(self, env: EnvBase):
