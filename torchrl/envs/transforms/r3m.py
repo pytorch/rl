@@ -5,6 +5,11 @@ from torch.hub import load_state_dict_from_url
 from torch.nn import Identity
 
 from torchrl.data import TensorDict, DEVICE_TYPING
+from torchrl.data.tensor_specs import (
+    TensorSpec,
+    CompositeSpec,
+    NdUnboundedContinuousTensorSpec,
+)
 from torchrl.envs.transforms import (
     ToTensorImage,
     Compose,
@@ -74,6 +79,25 @@ class _R3MNet(Transform):
         if shape is not None:
             out = out.view(*shape, *out.shape[1:])
         return out
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if not isinstance(observation_spec, CompositeSpec):
+            raise ValueError("_R3MNet can only infer CompositeSpec")
+
+        keys = [key for key in observation_spec._specs.keys() if key in self.keys_in]
+        device = observation_spec[keys[0]].device
+
+        observation_spec = CompositeSpec(**observation_spec)
+        if self.del_keys:
+            for key_in in keys:
+                del observation_spec[key_in]
+
+        for key_out in self.keys_out:
+            observation_spec[key_out] = NdUnboundedContinuousTensorSpec(
+                shape=torch.Size([self.outdim]), device=device
+            )
+
+        return observation_spec
 
     @staticmethod
     def _load_weights(model_name, r3m_instance, dir_prefix):
@@ -249,7 +273,7 @@ class R3MTransform(Compose):
                 model_name=model_name,
                 del_keys=True,
             )
-            transforms = [*transforms, normalize, network]
+            transforms = [*transforms, network]
 
         for transform in transforms:
             self.append(transform)
