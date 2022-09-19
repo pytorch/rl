@@ -1135,14 +1135,29 @@ class RSSMPriorRollout(nn.Module):
         self.rssm_prior = rssm_prior
         self.rnn_hidden_dim = rssm_prior.rnn_hidden_dim
 
-    def forward(self, prior_state, belief, action):
+    def forward(self, prior_state, belief, actions):
+        """Runs a rollout of simulated transitions in the latent space given
+        a defined sequence of actions, an initial prior state and an initial belief.
+
+        Args:
+            prior_state: a batch x latent_size tensor containing the initial prior state
+            belief: a batch x belief_size tensor containing the initial belief state
+            actions: a batch x time_steps x action_size tensor containing the sequence of actions
+
+        Returns:
+            prior_means: a batch x time_steps x latent_size containing the mean of the state distributions
+            prior_stds: a batch x time_steps x latent_size containing the standard deviation of the state distributions
+            prior_states: a batch x time_steps x latent_size containing the sampled states
+            beliefs: a batch x time_steps x belief_size containing the sequence of beliefs (from 1 to T)
+            prev_beliefs: a batch x time_steps x belief_size containing the sequence of beliefs (from 0 to T-1)
+        """
         prior_means = []
         prior_stds = []
         prior_states = []
         beliefs = [belief]
-        for i in range(action.shape[1]):
+        for i in range(actions.shape[1]):
             prior_mean, prior_std, prior_state, belief = self.rssm_prior(
-                prior_state, belief, action[:, i]
+                prior_state, belief, actions[:, i]
             )
             prior_means.append(prior_mean)
             prior_stds.append(prior_std)

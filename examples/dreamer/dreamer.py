@@ -8,15 +8,19 @@ import hydra
 import torch
 import torch.cuda
 import tqdm
+from dreamer_utils import (
+    parallel_env_constructor,
+    transformed_env_constructor,
+    EnvConfig,
+)
 from hydra.core.config_store import ConfigStore
 
 # float16
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl import timeit
-from torchrl.data import NdUnboundedContinuousTensorSpec
-from torchrl.envs import ParallelEnv, EnvCreator, Compose, CatTensors
-from torchrl.envs.transforms import RewardScaling, TransformedEnv, TensorDictPrimer
+from torchrl.envs import ParallelEnv, EnvCreator
+from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
@@ -34,9 +38,6 @@ from torchrl.trainers.helpers.collectors import (
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     get_stats_random_rollout,
-    parallel_env_constructor,
-    transformed_env_constructor,
-    EnvConfig,
 )
 from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.models import (
@@ -88,24 +89,19 @@ def grad_norm(optimizer: torch.optim.Optimizer):
     return sum_of_sq.sqrt().detach().item()
 
 
-def make_recorder_env(
-    cfg, video_tag, stats, logger, create_env_fn, default_tensor_dicts
-):
-    recorder = TransformedEnv(
-        transformed_env_constructor(
-            cfg,
-            video_tag=video_tag,
-            norm_obs_only=True,
-            stats=stats,
-            logger=logger,
-            use_env_creator=False,
-        )(),
-        TensorDictPrimer(random=False, default_value=0, **default_tensor_dicts),
-    )
+def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
+    recorder = transformed_env_constructor(
+        cfg,
+        video_tag=video_tag,
+        norm_obs_only=True,
+        stats=stats,
+        logger=logger,
+        use_env_creator=False,
+    )()
 
     # remove video recorder from recorder to have matching state_dict keys
     if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.base_env.base_env)
+        recorder_rm = TransformedEnv(recorder.base_env)
         for transform in recorder.transform:
             if not isinstance(transform, VideoRecorder):
                 recorder_rm.append_transform(transform)
@@ -120,7 +116,7 @@ def make_recorder_env(
     else:
         recorder_rm.load_state_dict(create_env_fn.state_dict())
     # reset reward scaling
-    for t in recorder.base_env.transform:
+    for t in recorder.transform:
         if isinstance(t, RewardScaling):
             t.scale.fill_(1.0)
             t.loc.fill_(0.0)
@@ -300,16 +296,6 @@ def main(cfg: "DictConfig"):
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
-    default_dict = {
-        "prior_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
-        "belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
-        "action": action_spec,
-    }
-    create_env_fn = TransformedEnv(create_env_fn, Compose())
-    create_env_fn.append_transform(TensorDictPrimer(random=False, default_value=0, **default_dict))
-    create_env_fn.append_transform(CatTensors(keys_in=["belief"], out_key="prev_belief", del_keys=False))
-    create_env_fn.append_transform(CatTensors(keys_in=["action"], out_key="prev_action", del_keys=False))
-    create_env_fn.append_transform(CatTensors(keys_in=["prior_state"], out_key="prev_prior_state", del_keys=False))
 
     collector = make_collector_offpolicy(
         make_env=create_env_fn,
@@ -334,7 +320,6 @@ def main(cfg: "DictConfig"):
             stats,
             logger,
             create_env_fn,
-            default_tensor_dicts=default_dict,
         ),
         record_interval=cfg.record_interval,
         log_keys=cfg.recorder_log_keys,
