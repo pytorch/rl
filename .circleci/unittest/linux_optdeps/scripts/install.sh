@@ -35,12 +35,6 @@ else
     pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 fi
 
-printf "Installing functorch\n"
-python -m pip install ninja  # Makes the build go faster
-#python -m pip install "git+https://github.com/pytorch/functorch.git"
-PYTORCH_VERSION=`python -c "import torch.version; print(torch.version.git_version)"`
-pip install "git+https://github.com/pytorch/pytorch.git@$PYTORCH_VERSION#subdirectory=functorch"
-
 # smoke test
 python -c "import functorch"
 
