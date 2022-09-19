@@ -185,19 +185,6 @@ class Transform(nn.Module):
         self._inv_call(tensordict)
         return tensordict
 
-    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
-        """Transforms the action spec such that the resulting spec matches
-        transform mapping.
-
-        Args:
-            action_spec (TensorSpec): spec before the transform
-
-        Returns:
-            expected spec after the transform
-
-        """
-        return action_spec
-
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         """Transforms the input spec such that the resulting spec matches
         transform mapping.
@@ -446,7 +433,7 @@ class TransformedEnv(EnvBase):
 
     def empty_cache(self):
         self._observation_spec = None
-        self.action_spec = None
+        self._input_spec = None
         self._reward_spec = None
 
     def append_transform(self, transform: Transform) -> None:
@@ -514,7 +501,7 @@ class TransformedEnv(EnvBase):
         self.is_done = self.is_done.to(device)
 
         if self.cache_specs:
-            self.action_spec = None
+            self._input_spec = None
             self._observation_spec = None
             self._reward_spec = None
         return self
@@ -537,7 +524,7 @@ class TransformedEnv(EnvBase):
         #     propobj = None
         #     for cls in self.__class__.__mro__:
         #         propobj = getattr(cls, key, None)
-        #         if 
+        #         if
         #     if propobj.fset is None:
         #         raise AttributeError(f"can't set attribute {key}")
         #     return propobj.fset(self, value)
@@ -601,11 +588,6 @@ class Compose(Transform):
         for t in self.transforms[::-1]:
             tensordict = t.inv(tensordict)
         return tensordict
-
-    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
-        for t in self.transforms[::-1]:
-            action_spec = t.transform_action_spec(action_spec)
-        return action_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms[::-1]:
@@ -1134,11 +1116,6 @@ class UnsqueezeTransform(Transform):
                 spec.shape = self._apply_transform(torch.zeros(spec.shape)).shape
         return spec
 
-    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
-        if "action" in self.keys_inv_in:
-            action_spec = self._transform_spec(deepcopy(action_spec))
-        return action_spec
-
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         for key in self.keys_inv_in:
             input_spec = self._transform_spec(deepcopy(input_spec[key]))
@@ -1516,13 +1493,6 @@ class DoubleToFloat(Transform):
                 space.minimum = space.minimum.to(torch.float)
                 space.maximum = space.maximum.to(torch.float)
 
-    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
-        if "action" in self.keys_inv_in:
-            if action_spec.dtype is not torch.double:
-                raise TypeError(f"action_spec.dtype is not double: {action_spec.dtype}")
-            self._transform_spec(action_spec)
-        return action_spec
-
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         for key in self.keys_inv_in:
             if input_spec[key].dtype is not torch.double:
@@ -1756,13 +1726,6 @@ class DiscreteActionProjection(Transform):
             action[idx] = torch.randint(self.m, (idx.sum(),))
         action = nn.functional.one_hot(action, self.m)
         return action
-
-    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
-        shape = action_spec.shape
-        shape = torch.Size([*shape[:-1], self.max_n])
-        action_spec.shape = shape
-        action_spec.space.n = self.max_n
-        return action_spec
 
     def tranform_input_spec(self, input_spec: CompositeSpec):
         input_spec_out = deepcopy(input_spec)

@@ -924,7 +924,8 @@ class TestTransforms:
 
         if len(keys_total) == 1 and len(keys_inv) and keys[0] == "action":
             action_spec = NdBoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
-            action_spec = double2float.transform_action_spec(action_spec)
+            input_spec = CompositeSpec(action=action_spec)
+            action_spec = double2float.transform_input_spec(input_spec)
             assert action_spec.dtype == torch.float
 
         elif len(keys) == 1:
@@ -1103,16 +1104,16 @@ class TestTransforms:
         _ = env.observation_spec
         _ = env.reward_spec
 
-        assert (env._input_spec is not None)
-        assert ("action" in env._input_spec)
-        assert (env._input_spec["action"] is not None)
+        assert env._input_spec is not None
+        assert "action" in env._input_spec
+        assert env._input_spec["action"] is not None
         assert env._observation_spec is not None
         assert env._reward_spec is not None
 
         env.insert_transform(0, CatFrames(N=4, cat_dim=-1, keys_in=[key]))
 
         # transformed envs do not have spec after insert -- they need to be computed
-        assert (env._input_spec is None)
+        assert env._input_spec is None
         assert env._observation_spec is None
         assert env._reward_spec is None
 
@@ -1178,7 +1179,11 @@ class TestTransforms:
             assert 1 == 6
         except ValueError:
             assert len(env.transform) == 6
-            assert (env._input_spec is not None) and ("action" in env._input_spec) and (env._input_spec["action"] is not None)
+            assert (
+                (env._input_spec is not None)
+                and ("action" in env._input_spec)
+                and (env._input_spec["action"] is not None)
+            )
             assert env._observation_spec is not None
             assert env._reward_spec is not None
 
@@ -1187,7 +1192,11 @@ class TestTransforms:
             assert 1 == 6
         except ValueError:
             assert len(env.transform) == 6
-            assert (env._input_spec is not None) and ("action" in env._input_spec) and (env._input_spec["action"] is not None)
+            assert (
+                (env._input_spec is not None)
+                and ("action" in env._input_spec)
+                and (env._input_spec["action"] is not None)
+            )
             assert env._observation_spec is not None
             assert env._reward_spec is not None
 
@@ -1196,7 +1205,11 @@ class TestTransforms:
             assert 1 == 6
         except ValueError:
             assert len(env.transform) == 6
-            assert (env._input_spec is not None) and ("action" in env._input_spec) and (env._input_spec["action"] is not None)
+            assert (
+                (env._input_spec is not None)
+                and ("action" in env._input_spec)
+                and (env._input_spec["action"] is not None)
+            )
             assert env._observation_spec is not None
             assert env._reward_spec is not None
 

@@ -278,13 +278,16 @@ class _BatchedEnv(EnvBase):
             self._observation_spec = self.meta_data.specs["observation_spec"]
             self._reward_spec = self.meta_data.specs["reward_spec"]
             self._input_spec = self.meta_data.specs["input_spec"]
-            if "action" in self.meta_data.specs["input_spec"] \
-                and "action_spec" in self.meta_data.specs\
-                and self.meta_data.specs["input_spec"]["action"] != self.meta_data.specs["action_spec"]:
+            if (
+                "action" in self.meta_data.specs["input_spec"]
+                and "action_spec" in self.meta_data.specs
+                and self.meta_data.specs["input_spec"]["action"]
+                != self.meta_data.specs["action_spec"]
+            ):
                 raise ValueError(
-                    "meta_data.specs[\"input_spec\"][\"action_spec\"] and meta_data.specs[\"action_spec\"] "
+                    'meta_data.specs["input_spec"]["action_spec"] and meta_data.specs["action_spec"] '
                     "have different values"
-                    )
+                )
             self._input_spec["action"] = self.meta_data.specs["action_spec"]
             self._dummy_env_str = self.meta_data.env_str
             self._device = self.meta_data.device
@@ -327,7 +330,11 @@ class _BatchedEnv(EnvBase):
 
     @property
     def action_spec(self) -> TensorSpec:
-        if (self._input_spec is None) or ("action" not in self._input_spec) or (self._input_spec["action"] is None):
+        if (
+            (self._input_spec is None)
+            or ("action" not in self._input_spec)
+            or (self._input_spec["action"] is None)
+        ):
             self._set_properties()
         return self._input_spec["action"]
 
