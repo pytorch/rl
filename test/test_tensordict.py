@@ -1714,7 +1714,9 @@ class TestTensorDictRepr:
     def test_repr_share_memory(self, device, dtype):
         tensordict = self.share_memory_td(device, dtype)
         is_shared = True
-        tensor_class = "SharedTensor"
+        tensor_class = (
+            "SharedTensor" if device is not None and device.type == "cpu" else "Tensor"
+        )
         expected = f"""TensorDict(
     fields={{
         a: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
