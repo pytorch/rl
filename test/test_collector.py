@@ -86,8 +86,6 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
             )
             return env
 
-    env = env_fn(seed)
-
     policy = make_policy(env_name)
 
     collector = SyncDataCollector(
