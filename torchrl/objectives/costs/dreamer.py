@@ -48,19 +48,13 @@ class DreamerModelLoss(LossModule):
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
-        tensordict.batch_size = [tensordict.shape[0]]
-        tensordict.set(
-            "prior_state",
-            torch.zeros(
-                (tensordict.batch_size[0], self.cfg.state_dim), device=self.device
-            ),
-        )
-        tensordict.set(
-            "belief",
-            torch.zeros(
-                (tensordict.batch_size[0], self.cfg.rssm_hidden_dim), device=self.device
-            ),
-        )
+
+        # prepare tensordict: remove time in batch dimensions
+        tensordict.batch_size = tensordict.batch_size[:1]
+        # take the first tensor for prev_prior_state and prev_belief
+        tensordict["prev_prior_state"] = tensordict["prev_prior_state"][:, 0]
+        tensordict["prev_belief"] = tensordict["prev_belief"][:, 0]
+
         tensordict = self.world_model(tensordict)
         # compute model loss
         kl_loss = self.kl_loss(
@@ -69,11 +63,15 @@ class DreamerModelLoss(LossModule):
             tensordict.get("posterior_means"),
             tensordict.get("posterior_stds"),
         )
-        reco_loss = distance_loss(
-            tensordict.get("pixels"),
-            tensordict.get("reco_pixels"),
-            self.reco_loss,
-        ).sum((-1,-2,-3)).mean()
+        reco_loss = (
+            distance_loss(
+                tensordict.get("pixels"),
+                tensordict.get("reco_pixels"),
+                self.reco_loss,
+            )
+            .sum((-1, -2, -3))
+            .mean()
+        )
         reward_loss = distance_loss(
             tensordict.get("reward"),
             tensordict.get("predicted_reward"),
@@ -128,14 +126,13 @@ class DreamerActorLoss(LossModule):
 
     def forward(self, tensordict) -> torch.Tensor:
         with torch.no_grad():
-            tensordict = tensordict.select("posterior_states", "next_belief")
+            tensordict = tensordict.select("posterior_states", "belief")
 
             tensordict.batch_size = [
                 tensordict.shape[0],
-                tensordict.get("next_belief").shape[1],
+                tensordict.get("belief").shape[1],
             ]
             tensordict.rename_key("posterior_states", "prior_state")
-            tensordict.rename_key("next_belief", "belief")
             tensordict = tensordict.view(-1).detach()
         with hold_out_net(self.model_based_env), set_exploration_mode("random"):
             tensordict = self.model_based_env.rollout(

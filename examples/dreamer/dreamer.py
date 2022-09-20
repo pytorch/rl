@@ -8,6 +8,11 @@ import hydra
 import torch
 import torch.cuda
 import tqdm
+from dreamer_utils import (
+    parallel_env_constructor,
+    transformed_env_constructor,
+    EnvConfig,
+)
 from hydra.core.config_store import ConfigStore
 
 # float16
@@ -15,12 +20,11 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
 from torchrl import timeit
 from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.transforms import RewardScaling, TransformedEnv, TensorDictPrimer
+from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
-from torchrl.data import NdUnboundedContinuousTensorSpec
 from torchrl.objectives.costs.dreamer import (
     DreamerActorLoss,
     DreamerModelLoss,
@@ -34,9 +38,6 @@ from torchrl.trainers.helpers.collectors import (
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     get_stats_random_rollout,
-    parallel_env_constructor,
-    transformed_env_constructor,
-    EnvConfig,
 )
 from torchrl.trainers.helpers.logger import LoggerConfig
 from torchrl.trainers.helpers.models import (
@@ -88,19 +89,19 @@ def grad_norm(optimizer: torch.optim.Optimizer):
     return sum_of_sq.sqrt().detach().item()
 
 
-def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn, default_tensor_dicts):
-    recorder = TransformedEnv(transformed_env_constructor(
+def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
+    recorder = transformed_env_constructor(
         cfg,
         video_tag=video_tag,
         norm_obs_only=True,
         stats=stats,
         logger=logger,
         use_env_creator=False,
-    )(), TensorDictPrimer(random=False, default_value=0, **default_tensor_dicts))
+    )()
 
     # remove video recorder from recorder to have matching state_dict keys
     if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.base_env.base_env)
+        recorder_rm = TransformedEnv(recorder.base_env)
         for transform in recorder.transform:
             if not isinstance(transform, VideoRecorder):
                 recorder_rm.append_transform(transform)
@@ -115,7 +116,7 @@ def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn, default_tens
     else:
         recorder_rm.load_state_dict(create_env_fn.state_dict())
     # reset reward scaling
-    for t in recorder.base_env.transform:
+    for t in recorder.transform:
         if isinstance(t, RewardScaling):
             t.scale.fill_(1.0)
             t.loc.fill_(0.0)
@@ -273,7 +274,7 @@ def main(cfg: "DictConfig"):
     action_spec = transformed_env_constructor(cfg)().action_spec
     # Actor and value network
     if cfg.exploration == "additive_gaussian":
-       
+
         exploration_policy = AdditiveGaussianWrapper(
             policy,
             sigma_init=0.3,
@@ -295,13 +296,6 @@ def main(cfg: "DictConfig"):
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
-    default_dict  =  {
-        "prior_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
-        "belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
-        "action": action_spec
-    }
-    create_env_fn = TransformedEnv(create_env_fn, TensorDictPrimer(random=False, default_value=0, **default_dict))
-
 
     collector = make_collector_offpolicy(
         make_env=create_env_fn,
@@ -320,7 +314,13 @@ def main(cfg: "DictConfig"):
         record_frames=cfg.record_frames,
         frame_skip=cfg.frame_skip,
         policy_exploration=policy,
-        recorder=make_recorder_env(cfg, video_tag, stats, logger, create_env_fn, default_tensor_dicts=default_dict),
+        recorder=make_recorder_env(
+            cfg,
+            video_tag,
+            stats,
+            logger,
+            create_env_fn,
+        ),
         record_interval=cfg.record_interval,
         log_keys=cfg.recorder_log_keys,
     )
@@ -416,7 +416,7 @@ def main(cfg: "DictConfig"):
                                 step=collected_frames,
                             )
                             logger.log_scalar(
-                               "kl_model_loss",
+                                "kl_model_loss",
                                 model_loss_td["kl_model_loss"].detach().item(),
                                 step=collected_frames,
                             )

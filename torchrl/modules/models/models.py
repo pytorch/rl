@@ -1135,14 +1135,29 @@ class RSSMPriorRollout(nn.Module):
         self.rssm_prior = rssm_prior
         self.rnn_hidden_dim = rssm_prior.rnn_hidden_dim
 
-    def forward(self, prior_state, belief, action):
+    def forward(self, prior_state, belief, actions):
+        """Runs a rollout of simulated transitions in the latent space given
+        a defined sequence of actions, an initial prior state and an initial belief.
+
+        Args:
+            prior_state: a batch x latent_size tensor containing the initial prior state
+            belief: a batch x belief_size tensor containing the initial belief state
+            actions: a batch x time_steps x action_size tensor containing the sequence of actions
+
+        Returns:
+            prior_means: a batch x time_steps x latent_size containing the mean of the state distributions
+            prior_stds: a batch x time_steps x latent_size containing the standard deviation of the state distributions
+            prior_states: a batch x time_steps x latent_size containing the sampled states
+            beliefs: a batch x time_steps x belief_size containing the sequence of beliefs (from 1 to T)
+            prev_beliefs: a batch x time_steps x belief_size containing the sequence of beliefs (from 0 to T-1)
+        """
         prior_means = []
         prior_stds = []
         prior_states = []
-        beliefs = []
-        for i in range(action.shape[1]):
+        beliefs = [belief]
+        for i in range(actions.shape[1]):
             prior_mean, prior_std, prior_state, belief = self.rssm_prior(
-                prior_state, belief, action[:, i]
+                prior_state, belief, actions[:, i]
             )
             prior_means.append(prior_mean)
             prior_stds.append(prior_std)
@@ -1151,8 +1166,9 @@ class RSSMPriorRollout(nn.Module):
         prior_means = torch.stack(prior_means, dim=1)
         prior_stds = torch.stack(prior_stds, dim=1)
         prior_states = torch.stack(prior_states, dim=1)
-        beliefs = torch.stack(beliefs, dim=1)
-        return prior_means, prior_stds, prior_states, beliefs
+        prev_beliefs = torch.stack(beliefs[:-1], dim=1)
+        beliefs = torch.stack(beliefs[1:], dim=1)
+        return prior_means, prior_stds, prior_states, beliefs, prev_beliefs
 
 
 class RSSMPrior(nn.Module):
@@ -1200,7 +1216,7 @@ class RSSMPosterior(nn.Module):
                 nn.ELU(),
                 nn.Linear(hidden_dim, 2 * state_dim),
             ),
-            scale_lb=0,
+            scale_lb=0.1,
             scale_mapping="softplus",
         )
         self.hidden_dim = hidden_dim
@@ -1209,6 +1225,6 @@ class RSSMPosterior(nn.Module):
         post_mean, post_std = self.obs_rnn_to_post_projector(
             torch.cat([belief, obs_embedding], dim=-1)
         )
-        post_std = post_std + 0.1
+        # post_std = post_std + 0.1
         post_state = post_mean + torch.randn_like(post_std) * post_std
         return post_mean, post_std, post_state

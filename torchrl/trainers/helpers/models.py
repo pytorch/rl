@@ -1210,24 +1210,27 @@ def make_dreamer(
             in_keys=["pixels"],
             out_keys=["encoded_latents"],
         ),
+        # rssm_prior_rollout = transition
         TensorDictModule(
             rssm_prior_rollout,
-            in_keys=["prior_state", "belief", "action"],
+            in_keys=["prev_prior_state", "prev_belief", "prev_" + action_key],
             out_keys=[
                 "prior_means",
                 "prior_stds",
-                "next_prior_state",
-                "next_belief",
+                "prior_state",
+                "belief",
+                "prev_belief",
             ],
         ),
+        # rssm_prior_rollout + rssm_posterior = representation
         TensorDictModule(
             rssm_posterior,
-            in_keys=["next_belief", "encoded_latents"],
+            in_keys=["prev_belief", "encoded_latents"],
             out_keys=["posterior_means", "posterior_stds", "posterior_states"],
         ),
         TensorDictModule(
             obs_decoder,
-            in_keys=["posterior_states", "next_belief"],
+            in_keys=["posterior_states", "belief"],
             out_keys=["reco_pixels"],
         ),
     )
@@ -1235,7 +1238,7 @@ def make_dreamer(
         world_modeler,
         TensorDictModule(
             reward_module,
-            in_keys=["posterior_states", "next_belief"],
+            in_keys=["posterior_states", "belief"],
             out_keys=["predicted_reward"],
         ),
     )
@@ -1269,12 +1272,12 @@ def make_dreamer(
         ),
         TensorDictModule(
             rssm_posterior,
-            in_keys=["belief", "encoded_latents"],
+            in_keys=["prev_belief", "encoded_latents"],
             out_keys=["posterior_means", "posterior_stds", "posterior_state"],
         ),
         TensorDictModule(
             rssm_prior,
-            in_keys=["posterior_state", "belief", action_key],
+            in_keys=["posterior_state", "prev_belief", "prev_" + action_key],
             out_keys=[
                 "prior_means",
                 "prior_stds",
@@ -1338,9 +1341,10 @@ def make_dreamer(
     with torch.no_grad(), set_exploration_mode("random"):
         td = proof_environment.rollout(1000)
         td = td.unsqueeze(0).to_tensordict().to(device)
-        td.batch_size = [1]
-        td["prior_state"] = torch.zeros((td.batch_size[0], cfg.state_dim))
-        td["belief"] = torch.zeros((td.batch_size[0], cfg.rssm_hidden_dim))
+        td.batch_size = [1]  # removes the time batch size, keeps only the batch
+        td["prev_prior_state"] = torch.zeros((1, cfg.state_dim))
+        td["prev_belief"] = torch.zeros((1, cfg.rssm_hidden_dim))
+        td["prev_action"] = torch.zeros_like(td["action"])
         td = td.to(device)
         world_model(td)
     model_based_env = model_based_env.to(device)

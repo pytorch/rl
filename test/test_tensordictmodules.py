@@ -7,7 +7,6 @@ import argparse
 
 import pytest
 import torch
-from _utils_internal import get_available_devices
 from functorch import make_functional, make_functional_with_buffers
 from torch import nn
 from torchrl.data import TensorDict
