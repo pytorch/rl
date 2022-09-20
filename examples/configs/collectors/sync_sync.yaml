@@ -1,11 +1,10 @@
 num_workers: 2
 
-collector_partial:
+collector:
   _target_: torchrl.collectors.MultiSyncDataCollector
-  # the instantiation must be partial as we don't provide policy and environment here
-  _partial_: True
 
-  collector_devices: ["cuda:1","cuda:1"]
+  devices: ["cpu","cpu"]
+  passing_devices: ["cpu","cpu"]
   # device on which the data collector should store the trajectories to be passed to this script.
   # If the collector device differs from the policy device (cuda:0 if available), then the
   # weights of the collector policy are synchronized with collector.update_policy_weights_().

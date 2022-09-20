@@ -1,9 +1,10 @@
-collector_partial:
-  _target_: torchrl.collectors.SyncDataCollector
-  # the instantiation must be partial as we don't provide policy and environment here
-  _partial_: True
+num_workers: 0
 
-  collector_device: "cuda:1"
+collector:
+  _target_: torchrl.collectors.SyncDataCollector
+
+  device: "cpu"
+  passing_device: "cpu"
   # device on which the data collector should store the trajectories to be passed to this script.
   # If the collector device differs from the policy device (cuda:0 if available), then the
   # weights of the collector policy are synchronized with collector.update_policy_weights_().
@@ -30,8 +31,3 @@ collector_partial:
   # seed used for the environment, pytorch and numpy.
   exploration_mode: "random"
   # exploration mode of the data collector.
-  async_collection: True
-  # whether data collection should be done asynchrously. Asynchrounous data collection means
-  # that the data collector will keep on running the environment with the previous weights
-  # configuration while the optimization loop is being done. If the algorithm is trained
-  # synchronously, data collection and optimization will occur iteratively, not concurrently.
