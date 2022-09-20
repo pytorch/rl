@@ -625,7 +625,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         device = torch.device(device)
         if device == self.device:
             return self
-        self.action_spec = self.action_spec.to(device)
         self.reward_spec = self.reward_spec.to(device)
         self.observation_spec = self.observation_spec.to(device)
         self.input_spec = self.input_spec.to(device)
