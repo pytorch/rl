@@ -382,7 +382,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         cls._observation_spec = observation_spec
         cls._input_spec = input_spec
         cls._action_spec = action_spec
-        super().__new__(*args, **kwargs)
+        return super().__new__(*args, **kwargs)
 
     def _get_in_obs(self, obs):
         return obs
@@ -531,7 +531,7 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
             )
 
         cls.from_pixels = True
-        super().__new__(
+        return super().__new__(
             *args,
             observation_spec=observation_spec,
             action_spec=action_spec,
@@ -584,7 +584,7 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
             input_spec = CompositeSpec(
                 **{cls._out_key: observation_spec["next_pixels"], "action": action_spec}
             )
-        super().__new__(
+        return super().__new__(
             *args,
             observation_spec=observation_spec,
             action_spec=action_spec,
