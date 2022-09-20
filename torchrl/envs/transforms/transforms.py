@@ -335,6 +335,10 @@ class TransformedEnv(EnvBase):
     def batch_locked(self) -> bool:
         return self.base_env.batch_locked
 
+    @batch_locked.setter
+    def batch_locked(self, value):
+        raise RuntimeError("batch_locked is a read-only property")
+
     @property
     def _inplace_update(self):
         return self.base_env._inplace_update
