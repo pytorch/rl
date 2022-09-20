@@ -2001,7 +2001,7 @@ def test_batchsize_reset():
     td.set("c", torch.randn(3))
 
     # test index
-    subtd = td[torch.tensor([1, 2])]
+    td[torch.tensor([1, 2])]
     with pytest.raises(
         RuntimeError,
         match=re.escape(
