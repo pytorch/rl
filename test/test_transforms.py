@@ -1400,7 +1400,7 @@ def test_batch_locked_transformed(device):
     td = env.reset()
     td["action"] = env.action_spec.rand(env.batch_size)
     td_expanded = td.expand(2).clone()
-    td = env.step(td)
+    env.step(td)
 
     with pytest.raises(
         RuntimeError, match="Expected a tensordict with shape==env.shape, "
@@ -1424,7 +1424,7 @@ def test_batch_unlocked_transformed(device):
     td = env.reset()
     td["action"] = env.action_spec.rand(env.batch_size)
     td_expanded = td.expand(2).clone()
-    td = env.step(td)
+    env.step(td)
     env.step(td_expanded)
 
 
@@ -1445,7 +1445,7 @@ def test_batch_unlocked_with_batch_size_transformed(device):
     td = env.reset()
     td["action"] = env.action_spec.rand(env.batch_size)
     td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
-    td = env.step(td)
+    env.step(td)
 
     with pytest.raises(
         RuntimeError, match="Expected a tensordict with shape==env.shape, "

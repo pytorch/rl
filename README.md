@@ -375,29 +375,7 @@ pip3 install --pre torch torchvision --extra-index-url https://download.pytorch.
 pip3 install --pre torch torchvision --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 ```
 
-and functorch
-```
-pip3 install ninja  # Makes the build go faster
-pip3 install "git+https://github.com/pytorch/functorch.git"
-```
-
-If this fails, you can get the latest version of functorch that was marked to be
-compatible with the current torch version:
-```bash
-pip3 install ninja  # Makes the build go faster
-PYTORCH_VERSION=`python -c "import torch.version; print(torch.version.git_version)"`
-pip3 install "git+https://github.com/pytorch/pytorch.git@$PYTORCH_VERSION#subdirectory=functorch"
-```
-
-If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message
-`(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears,
-try erasing the previously created build artifacts (`torchrl.egg-info/`, `build/`, `torchrl/_torchsl.so`)
-or re-clone the library from GitHub, then try
-
-```
-PYTORCH_VERSION=`python -c "import torch.version; print(torch.version.git_version)"`
-ARCHFLAGS="-arch arm64" pip3 install "git+https://github.com/pytorch/pytorch.git@$PYTORCH_VERSION#subdirectory=functorch"
-```
+functorch is included in the nightly PyTorch package, so no need to install it separately.
 
 **Torchrl**
 
