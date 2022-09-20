@@ -42,6 +42,8 @@ from torchrl.modules.models.models import (
     LSTMNet,
     MLP,
     DuelingMlpDQNet,
+)
+from torchrl.modules.models.model_based_models import (
     DreamerActor,
     ObsEncoder,
     ObsDecoder,
@@ -1225,7 +1227,7 @@ def make_dreamer(
         # rssm_prior_rollout + rssm_posterior = representation
         TensorDictModule(
             rssm_posterior,
-            in_keys=["prev_belief", "encoded_latents"],
+            in_keys=["belief", "encoded_latents"],
             out_keys=["posterior_means", "posterior_stds", "posterior_states"],
         ),
         TensorDictModule(
@@ -1272,12 +1274,12 @@ def make_dreamer(
         ),
         TensorDictModule(
             rssm_posterior,
-            in_keys=["prev_belief", "encoded_latents"],
+            in_keys=["belief", "encoded_latents"],
             out_keys=["posterior_means", "posterior_stds", "posterior_state"],
         ),
         TensorDictModule(
             rssm_prior,
-            in_keys=["posterior_state", "prev_belief", "prev_" + action_key],
+            in_keys=["posterior_state", "belief", "prev_" + action_key],
             out_keys=[
                 "prior_means",
                 "prior_stds",
