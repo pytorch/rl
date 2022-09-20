@@ -261,8 +261,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def input_spec(self) -> TensorSpec:
-        if self._input_spec is None:
-            self._input_spec = CompositeSpec(action=self.action_spec)
         return self._input_spec
 
     @input_spec.setter
