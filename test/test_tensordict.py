@@ -1714,8 +1714,10 @@ class TestTensorDictRepr:
     def test_repr_share_memory(self, device, dtype):
         tensordict = self.share_memory_td(device, dtype)
         is_shared = True
+        is_device_cpu = device is not None and device.type == "cpu"
+        is_none_device_cpu = device is None and torch.cuda.device_count() == 0
         tensor_class = (
-            "SharedTensor" if device is not None and device.type == "cpu" else "Tensor"
+            "SharedTensor" if is_none_device_cpu and is_device_cpu else "Tensor"
         )
         expected = f"""TensorDict(
     fields={{
