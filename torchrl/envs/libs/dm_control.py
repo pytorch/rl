@@ -207,18 +207,17 @@ class DMControlWrapper(GymLikeEnv):
         observation = timestep_tuple[0].observation
         return observation, reward, done
 
-    # TODO: how to change _action_spec to _input_spec here?
     @property
     def action_spec(self) -> TensorSpec:
-        if self._action_spec is None:
-            self._action_spec = _dmcontrol_to_torchrl_spec_transform(
-                self._env.action_spec(), device=self.device
+        if self.input_spec["action"] is None:
+            self.input_spec["action"] = _dmcontrol_to_torchrl_spec_transform(
+                self._env.action_spec, device=self.device
             )
-        return self._action_spec
+        return self.input_spec["action"]
 
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
-        self._action_spec = value
+        self.input_spec["action"] = value
 
     @property
     def observation_spec(self) -> TensorSpec:
