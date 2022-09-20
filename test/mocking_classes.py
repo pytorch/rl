@@ -58,7 +58,7 @@ class _MockEnv(EnvBase):
         *args,
         **kwargs,
     ):
-        for key, item in list(cls.observation_spec.items()):
+        for key, item in list(cls._observation_spec.items()):
             cls._observation_spec[key] = item.to(torch.get_default_dtype())
         # cls._action_spec = cls.action_spec.to(torch.get_default_dtype())
         cls._reward_spec = cls.reward_spec.to(torch.get_default_dtype())
