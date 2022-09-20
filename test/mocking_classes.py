@@ -109,13 +109,13 @@ class MockSerialEnv(EnvBase):
         **kwargs,
     ):
         if action_spec is None:
-            cls._action_spec = NdUnboundedContinuousTensorSpec((1,))
+            _action_spec = NdUnboundedContinuousTensorSpec((1,))
         if observation_spec is None:
-            cls._observation_spec = NdUnboundedContinuousTensorSpec((1,))
+            _observation_spec = NdUnboundedContinuousTensorSpec((1,))
         if reward_spec is None:
-            cls._reward_spec = NdUnboundedContinuousTensorSpec((1,))
+            _reward_spec = NdUnboundedContinuousTensorSpec((1,))
         if input_spec is None:
-            cls._input_spec = CompositeSpec(action=cls.action_spec)
+            _input_spec = CompositeSpec(action=cls.action_spec)
         cls._reward_spec = reward_spec
         cls._observation_spec = observation_spec
         cls._input_spec = input_spec
