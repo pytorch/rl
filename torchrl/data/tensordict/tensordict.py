@@ -2246,6 +2246,7 @@ class TensorDict(TensorDictBase):
             )
         if self.device_safe() is not None and self.device != torch.device("cpu"):
             # cuda tensors are shared by default
+            self._is_shared = True
             return self
         for value in self.values():
             value.share_memory_()
