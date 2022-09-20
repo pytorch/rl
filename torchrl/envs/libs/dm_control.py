@@ -219,7 +219,7 @@ class DMControlWrapper(GymLikeEnv):
 
     @input_spec.setter
     def input_spec(self, value: TensorSpec) -> None:
-        self._observation_spec = value
+        self._input_spec = value
 
     @property
     def observation_spec(self) -> TensorSpec:
