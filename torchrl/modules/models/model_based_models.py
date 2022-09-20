@@ -101,13 +101,14 @@ class ObsDecoder(nn.Module):
         return obs_decoded
 
 
-class RSSMPriorRollout(nn.Module):
+class RSSMPriorRollout(torch.jit.ScriptModule):
     def __init__(self, rssm_prior, rssm_posterior):
         super().__init__()
         self.rssm_prior = rssm_prior
         self.rssm_posterior = rssm_posterior
         self.rnn_hidden_dim = rssm_prior.rnn_hidden_dim
 
+    @torch.jit.script_method
     def forward(self, posterior_state, belief, actions, obs_embedding):
         """Runs a rollout of simulated transitions in the latent space given
         a defined sequence of actions, an initial prior state and an initial belief.
@@ -156,7 +157,7 @@ class RSSMPriorRollout(nn.Module):
         return prior_means, prior_stds, prior_states, beliefs, posterior_means, posterior_stds, posterior_states
 
 
-class RSSMPrior(nn.Module):
+class RSSMPrior(torch.jit.ScriptModule):
     def __init__(
         self, hidden_dim=200, rnn_hidden_dim=200, state_dim=30, action_spec=None
     ):
@@ -182,6 +183,7 @@ class RSSMPrior(nn.Module):
             raise ValueError("action_spec must be provided")
         self.action_shape = action_spec.shape
 
+    @torch.jit.script_method
     def forward(self, state, rnn_hidden, action):
         action_state = self.action_state_projector(torch.cat([state, action], dim=-1))
         rnn_hidden = self.rnn(action_state, rnn_hidden)
@@ -192,7 +194,7 @@ class RSSMPrior(nn.Module):
         return prior_mean, prior_std, prior_state, belief
 
 
-class RSSMPosterior(nn.Module):
+class RSSMPosterior(torch.jit.ScriptModule):
     def __init__(self, hidden_dim=200, state_dim=30):
         super().__init__()
         self.obs_rnn_to_post_projector = NormalParamWrapper(
@@ -206,6 +208,7 @@ class RSSMPosterior(nn.Module):
         )
         self.hidden_dim = hidden_dim
 
+    @torch.jit.script_method
     def forward(self, belief, obs_embedding):
         post_mean, post_std = self.obs_rnn_to_post_projector(
             torch.cat([belief, obs_embedding], dim=-1)
