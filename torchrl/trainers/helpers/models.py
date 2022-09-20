@@ -1189,10 +1189,10 @@ def make_dreamer(
         state_dim=cfg.state_dim,
         action_spec=proof_environment.action_spec,
     )
-    rssm_prior_rollout = RSSMPriorRollout(rssm_prior)
     rssm_posterior = RSSMPosterior(
         hidden_dim=cfg.rssm_hidden_dim, state_dim=cfg.state_dim
     )
+    rssm_prior_rollout = RSSMPriorRollout(rssm_prior, rssm_posterior)
     reward_module = MLP(
         out_features=1, depth=2, num_cells=cfg.mlp_num_units, activation_class=nn.ELU
     )
@@ -1215,24 +1215,21 @@ def make_dreamer(
         # rssm_prior_rollout = transition
         TensorDictModule(
             rssm_prior_rollout,
-            in_keys=["prev_prior_state", "prev_belief", "prev_" + action_key],
+            in_keys=["prev_posterior_state", "prev_belief", "prev_" + action_key, "encoded_latents"],
             out_keys=[
                 "prior_means",
                 "prior_stds",
                 "prior_state",
                 "belief",
-                "prev_belief",
+                "posterior_means",
+                "posterior_stds",
+                "posterior_state",
             ],
         ),
         # rssm_prior_rollout + rssm_posterior = representation
         TensorDictModule(
-            rssm_posterior,
-            in_keys=["belief", "encoded_latents"],
-            out_keys=["posterior_means", "posterior_stds", "posterior_states"],
-        ),
-        TensorDictModule(
             obs_decoder,
-            in_keys=["posterior_states", "belief"],
+            in_keys=["posterior_state", "belief"],
             out_keys=["reco_pixels"],
         ),
     )
@@ -1240,7 +1237,7 @@ def make_dreamer(
         world_modeler,
         TensorDictModule(
             reward_module,
-            in_keys=["posterior_states", "belief"],
+            in_keys=["posterior_state", "belief"],
             out_keys=["predicted_reward"],
         ),
     )
@@ -1273,19 +1270,19 @@ def make_dreamer(
             out_keys=["encoded_latents"],
         ),
         TensorDictModule(
-            rssm_posterior,
-            in_keys=["belief", "encoded_latents"],
-            out_keys=["posterior_means", "posterior_stds", "posterior_state"],
-        ),
-        TensorDictModule(
             rssm_prior,
-            in_keys=["posterior_state", "belief", "prev_" + action_key],
+            in_keys=["prev_posterior_state", "prev_belief", "prev_" + action_key],
             out_keys=[
                 "prior_means",
                 "prior_stds",
                 "prior_state",
                 "belief",
             ],
+        ),
+        TensorDictModule(
+            rssm_posterior,
+            in_keys=["belief", "encoded_latents"],
+            out_keys=["posterior_means", "posterior_stds", "posterior_state"],
         ),
         ProbabilisticTensorDictModule(
             TensorDictModule(
@@ -1304,7 +1301,7 @@ def make_dreamer(
     if use_decoder_in_env:
         mb_env_obs_decoder = TensorDictModule(
             obs_decoder,
-            in_keys=["prior_state", "belief"],
+            in_keys=["next_prior_state", "next_belief"],
             out_keys=["reco_pixels"],
         )
     else:
@@ -1344,7 +1341,7 @@ def make_dreamer(
         td = proof_environment.rollout(1000)
         td = td.unsqueeze(0).to_tensordict().to(device)
         td.batch_size = [1]  # removes the time batch size, keeps only the batch
-        td["prev_prior_state"] = torch.zeros((1, cfg.state_dim))
+        td["prev_posterior_state"] = torch.zeros((1, cfg.state_dim))
         td["prev_belief"] = torch.zeros((1, cfg.rssm_hidden_dim))
         td["prev_action"] = torch.zeros_like(td["action"])
         td = td.to(device)

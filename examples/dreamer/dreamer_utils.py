@@ -122,7 +122,8 @@ def make_env_transforms(
     )
 
     default_dict = {
-        "prior_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
+        # "prior_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
+        "posterior_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
         "belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
         "action": deepcopy(env.action_spec),
     }
@@ -136,7 +137,7 @@ def make_env_transforms(
         CatTensors(keys_in=["action"], out_key="prev_action", del_keys=False)
     )
     env.append_transform(
-        CatTensors(keys_in=["prior_state"], out_key="prev_prior_state", del_keys=False)
+        CatTensors(keys_in=["posterior_state"], out_key="prev_posterior_state", del_keys=False)
     )
 
     return env

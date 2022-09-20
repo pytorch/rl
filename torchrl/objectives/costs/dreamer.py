@@ -51,8 +51,8 @@ class DreamerModelLoss(LossModule):
 
         # prepare tensordict: remove time in batch dimensions
         tensordict.batch_size = tensordict.batch_size[:1]
-        # take the first tensor for prev_prior_state and prev_belief
-        tensordict["prev_prior_state"] = tensordict["prev_prior_state"][:, 0]
+        # take the first tensor for prev_posterior_state and prev_belief
+        tensordict["prev_posterior_state"] = tensordict["prev_posterior_state"][:, 0]
         tensordict["prev_belief"] = tensordict["prev_belief"][:, 0]
 
         tensordict = self.world_model(tensordict)
@@ -126,13 +126,13 @@ class DreamerActorLoss(LossModule):
 
     def forward(self, tensordict) -> torch.Tensor:
         with torch.no_grad():
-            tensordict = tensordict.select("posterior_states", "belief")
+            tensordict = tensordict.select("posterior_state", "belief")
 
             tensordict.batch_size = [
                 tensordict.shape[0],
                 tensordict.get("belief").shape[1],
             ]
-            tensordict.rename_key("posterior_states", "prior_state")
+            tensordict.rename_key("posterior_state", "prior_state")
             tensordict = tensordict.view(-1).detach()
         with hold_out_net(self.model_based_env), set_exploration_mode("random"):
             tensordict = self.model_based_env.rollout(
