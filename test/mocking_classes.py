@@ -115,7 +115,7 @@ class MockSerialEnv(EnvBase):
         if reward_spec is None:
             reward_spec = NdUnboundedContinuousTensorSpec((1,))
         if input_spec is None:
-            input_spec = CompositeSpec(action=cls.action_spec)
+            input_spec = CompositeSpec(action=action_spec)
         cls._reward_spec = reward_spec
         cls._observation_spec = observation_spec
         cls._input_spec = input_spec
@@ -266,6 +266,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         action_spec=None,
         input_spec=None,
         reward_spec=None,
+        from_pixels=False,
         **kwargs,
     ):
         size = cls.size = 7
@@ -284,8 +285,6 @@ class DiscreteActionVecMockEnv(_MockEnv):
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec()
 
-        cls.from_pixels = False
-
         if input_spec is None:
             cls._out_key = "observation_orig"
             input_spec = CompositeSpec(
@@ -298,6 +297,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         cls._observation_spec = observation_spec
         cls._input_spec = input_spec
         cls._action_spec = action_spec
+        cls.from_pixels = from_pixels
         return super().__new__(*args, **kwargs)
 
     def _get_in_obs(self, obs):
@@ -351,6 +351,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         action_spec=None,
         input_spec=None,
         reward_spec=None,
+        from_pixels=False,
         **kwargs,
     ):
         size = cls.size = 7
@@ -368,7 +369,6 @@ class ContinuousActionVecMockEnv(_MockEnv):
             action_spec = NdBoundedTensorSpec(-1, 1, (7,))
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec()
-        cls.from_pixels = False
 
         if input_spec is None:
             cls._out_key = "observation_orig"
@@ -382,6 +382,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         cls._observation_spec = observation_spec
         cls._input_spec = input_spec
         cls._action_spec = action_spec
+        cls.from_pixels = from_pixels
         return super().__new__(*args, **kwargs)
 
     def _get_in_obs(self, obs):
@@ -455,6 +456,7 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
         action_spec=None,
         input_spec=None,
         reward_spec=None,
+        from_pixels=True,
         **kwargs,
     ):
         if observation_spec is None:
@@ -471,7 +473,6 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
             action_spec = OneHotDiscreteTensorSpec(7)
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec()
-        cls.from_pixels = True
 
         if input_spec is None:
             cls._out_key = "pixels_orig"
@@ -487,6 +488,7 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
             action_spec=action_spec,
             reward_spec=reward_spec,
             input_spec=input_spec,
+            from_pixels=from_pixels,
             **kwargs,
         )
 
@@ -507,6 +509,7 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
         action_spec=None,
         input_spec=None,
         reward_spec=None,
+        from_pixels=True,
         **kwargs,
     ):
         if observation_spec is None:
@@ -530,13 +533,13 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
                 }
             )
 
-        cls.from_pixels = True
         return super().__new__(
             *args,
             observation_spec=observation_spec,
             action_spec=action_spec,
             reward_spec=reward_spec,
             input_spec=input_spec,
+            from_pixels=from_pixels,
             **kwargs,
         )
 
@@ -553,6 +556,7 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
 
 
 class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
+    @classmethod
     def __new__(
         cls,
         *args,
@@ -560,6 +564,7 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
         action_spec=None,
         input_spec=None,
         reward_spec=None,
+        from_pixels=True,
         **kwargs,
     ):
         if observation_spec is None:
@@ -578,7 +583,6 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
 
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec()
-        cls.from_pixels = True
         if input_spec is None:
             cls._out_key = "pixels_orig"
             input_spec = CompositeSpec(
@@ -590,6 +594,7 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
             action_spec=action_spec,
             reward_spec=reward_spec,
             input_spec=input_spec,
+            from_pixels=from_pixels,
             **kwargs,
         )
 
@@ -602,11 +607,36 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
 
 
 class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
-    observation_spec = CompositeSpec(
-        next_pixels=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3])),
-        next_pixels_orig=NdUnboundedContinuousTensorSpec(shape=torch.Size([7, 7, 3])),
-    )
-    from_pixels = True
+    @classmethod
+    def __new__(
+        cls,
+        *args,
+        observation_spec=None,
+        action_spec=None,
+        input_spec=None,
+        reward_spec=None,
+        from_pixels=True,
+        **kwargs,
+    ):
+        if observation_spec is None:
+            cls.out_key = "pixels"
+            observation_spec = CompositeSpec(
+                next_pixels=NdUnboundedContinuousTensorSpec(
+                    shape=torch.Size([7, 7, 3])
+                ),
+                next_pixels_orig=NdUnboundedContinuousTensorSpec(
+                    shape=torch.Size([7, 7, 3])
+                ),
+            )
+        return super().__new__(
+            *args,
+            observation_spec=observation_spec,
+            action_spec=action_spec,
+            reward_spec=reward_spec,
+            input_spec=input_spec,
+            from_pixels=from_pixels,
+            **kwargs,
+        )
 
     def _get_out_obs(self, obs):
         obs = torch.diag_embed(obs, 0, -2, -1).unsqueeze(-1)
