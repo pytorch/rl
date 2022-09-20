@@ -66,8 +66,8 @@ def make_policy(env):
         raise NotImplementedError
 
 
-@pytest.mark.parametrize("num_env", [3, 1])
-@pytest.mark.parametrize("env_name", ["vec", "conv"])
+@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     if num_env == 1:
 
@@ -85,6 +85,8 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
                 create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
             )
             return env
+
+    env = env_fn(seed)
 
     policy = make_policy(env_name)
 
