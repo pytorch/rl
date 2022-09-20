@@ -1717,7 +1717,7 @@ class TestTensorDictRepr:
         is_device_cpu = device is not None and device.type == "cpu"
         is_none_device_cpu = device is None and torch.cuda.device_count() == 0
         tensor_class = (
-            "SharedTensor" if is_none_device_cpu and is_device_cpu else "Tensor"
+            "SharedTensor" if is_none_device_cpu or is_device_cpu else "Tensor"
         )
         expected = f"""TensorDict(
     fields={{
