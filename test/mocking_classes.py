@@ -60,8 +60,8 @@ class _MockEnv(EnvBase):
     ):
         for key, item in list(cls.observation_spec.items()):
             cls.observation_spec[key] = item.to(torch.get_default_dtype())
-        # cls.action_spec = cls.action_spec.to(torch.get_default_dtype())
-        cls.reward_spec = cls.reward_spec.to(torch.get_default_dtype())
+        # cls._action_spec = cls.action_spec.to(torch.get_default_dtype())
+        cls._reward_spec = cls.reward_spec.to(torch.get_default_dtype())
         return super().__new__(*args, **kwargs)
 
     def __init__(self, seed: int = 100):
@@ -109,17 +109,17 @@ class MockSerialEnv(EnvBase):
         **kwargs,
     ):
         if action_spec is None:
-            cls.action_spec = NdUnboundedContinuousTensorSpec((1,))
+            cls._action_spec = NdUnboundedContinuousTensorSpec((1,))
         if observation_spec is None:
-            cls.observation_spec = NdUnboundedContinuousTensorSpec((1,))
+            cls._observation_spec = NdUnboundedContinuousTensorSpec((1,))
         if reward_spec is None:
-            cls.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+            cls._reward_spec = NdUnboundedContinuousTensorSpec((1,))
         if input_spec is None:
-            cls.input_spec = CompositeSpec(action=cls.action_spec)
-        cls.reward_spec = reward_spec
-        cls.observation_spec = observation_spec
-        cls.input_spec = input_spec
-        cls.action_spec = action_spec
+            cls._input_spec = CompositeSpec(action=cls.action_spec)
+        cls._reward_spec = reward_spec
+        cls._observation_spec = observation_spec
+        cls._input_spec = input_spec
+        cls._action_spec = action_spec
         return super().__new__(*args, **kwargs)
 
     def __init__(self, device):
@@ -186,10 +186,10 @@ class MockBatchedLockedEnv(EnvBase):
             )
         if reward_spec is None:
             reward_spec = NdUnboundedContinuousTensorSpec((1,))
-        cls.reward_spec = reward_spec
-        cls.observation_spec = observation_spec
-        cls.input_spec = input_spec
-        cls.action_spec = action_spec
+        cls._reward_spec = reward_spec
+        cls._observation_spec = observation_spec
+        cls._input_spec = input_spec
+        cls._action_spec = action_spec
         return super().__new__(
             cls,
             *args,
@@ -294,10 +294,10 @@ class DiscreteActionVecMockEnv(_MockEnv):
                     "action": action_spec,
                 }
             )
-        cls.reward_spec = reward_spec
-        cls.observation_spec = observation_spec
-        cls.input_spec = input_spec
-        cls.action_spec = action_spec
+        cls._reward_spec = reward_spec
+        cls._observation_spec = observation_spec
+        cls._input_spec = input_spec
+        cls._action_spec = action_spec
         return super().__new__(*args, **kwargs)
 
     def _get_in_obs(self, obs):
@@ -378,10 +378,10 @@ class ContinuousActionVecMockEnv(_MockEnv):
                     "action": action_spec,
                 }
             )
-        cls.reward_spec = reward_spec
-        cls.observation_spec = observation_spec
-        cls.input_spec = input_spec
-        cls.action_spec = action_spec
+        cls._reward_spec = reward_spec
+        cls._observation_spec = observation_spec
+        cls._input_spec = input_spec
+        cls._action_spec = action_spec
         super().__new__(*args, **kwargs)
 
     def _get_in_obs(self, obs):
