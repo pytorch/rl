@@ -175,9 +175,9 @@ class MockBatchedLockedEnv(EnvBase):
     ):
         if action_spec is None:
             action_spec = NdUnboundedContinuousTensorSpec((1,))
-        if action_spec is None:
+        if input_spec is None:
             input_spec = CompositeSpec(
-                action=NdUnboundedContinuousTensorSpec((1,)),
+                action=action_spec,
                 observation=NdUnboundedContinuousTensorSpec((1,)),
             )
         if observation_spec is None:
@@ -189,7 +189,6 @@ class MockBatchedLockedEnv(EnvBase):
         cls._reward_spec = reward_spec
         cls._observation_spec = observation_spec
         cls._input_spec = input_spec
-        cls._action_spec = action_spec
         return super().__new__(
             cls,
             *args,
