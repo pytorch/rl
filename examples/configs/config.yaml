@@ -1,0 +1,3 @@
+defaults:
+  - collector: sync_single
+num_workers: 0
