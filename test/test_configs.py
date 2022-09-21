@@ -30,25 +30,22 @@ def init_hydra(request):
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 @pytest.mark.parametrize(
-    "file",
+    "file,num_workers",
     [
-        "async_sync",
-        "sync_single",
-        "sync_sync",
+        ("async_sync", 2),
+        ("sync_single", 0),
+        ("sync_sync", 2),
     ],
 )
-def test_collector_configs(file):
+def test_collector_configs(file, num_workers):
     create_env = make_env()
     policy = TensorDictModule(
         nn.Linear(7, 7), in_keys=["observation"], out_keys=["action"]
     )
 
     cfg = hydra.compose(
-        "config",
-    )  # overrides=[f"collector={file}"])
-    # yaml_read = OmegaConf.load("examples/configs/config.yaml")
-    # cfg = OmegaConf.create(yaml_read, flags={"collector": file})
-    print(cfg)
+        "config", overrides=[f"collector={file}", f"num_workers={num_workers}"]
+    )
 
     if cfg.num_workers == 0:
         create_env_fn = create_env
