@@ -659,7 +659,7 @@ class _MultiDataCollector(_DataCollector):
         devices: DEVICE_TYPING = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
-        passing_devices: Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]] = "cpu", None, [None, None]
+        passing_devices: Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]] = "cpu",
         update_at_each_batch: bool = False,
         init_with_lag: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
@@ -722,8 +722,6 @@ class _MultiDataCollector(_DataCollector):
             devices[i] = _device
         self.devices = devices
 
-        if passing_devices is None:
-            passing_device = self.devices
         if isinstance(passing_devices, (str, int, torch.device)):
             self.passing_devices = [
                 torch.device(passing_devices) for _ in range(self.num_workers)
