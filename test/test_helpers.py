@@ -9,10 +9,12 @@ import dataclasses
 import pytest
 import torch
 from _utils_internal import get_available_devices, generate_seeds
+
 try:
     from hydra import initialize, compose
     from hydra.core.config_store import ConfigStore
     from hydra.core.global_hydra import GlobalHydra
+
     _has_hydra = True
 except ImportError:
     _has_hydra = False
@@ -299,6 +301,7 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
             raise
         proof_environment.close()
         del proof_environment
+
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
