@@ -152,6 +152,9 @@ def make_env_transforms(
         double_to_float_list += [
             "reward",
         ]
+        double_to_float_list += [
+            "action",
+        ]
         double_to_float_inv_list += ["action"]  # DMControl requires double-precision
     if not from_pixels:
         selected_keys = [
