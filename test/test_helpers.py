@@ -55,6 +55,7 @@ def _assert_keys_match(td, expeceted_keys):
 
 @pytest.fixture(scope="session", autouse=True)
 def init_hydra(request):
+    GlobalHydra.instance().clear()
     request.addfinalizer(GlobalHydra.instance().clear)
 
 

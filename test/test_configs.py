@@ -24,6 +24,7 @@ def make_env():
 
 @pytest.fixture(scope="session", autouse=True)
 def init_hydra(request):
+    GlobalHydra.instance().clear()
     hydra.initialize("../examples/configs/")
     request.addfinalizer(GlobalHydra.instance().clear)
 
