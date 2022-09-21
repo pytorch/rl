@@ -99,72 +99,73 @@ class TestWandbLogger:
             del logger
 
 
+@pytest.fixture
+def mlflow_fixture():
+    torch.manual_seed(0)
+    import mlflow
+
+    with tempfile.TemporaryDirectory() as log_dir:
+        exp_name = "ramala"
+        log_dir_uri = pathlib.Path(log_dir).as_uri()
+        logger = MLFlowLogger(exp_name=exp_name, tracking_uri=log_dir_uri)
+        client = mlflow.MlflowClient()
+        yield logger, client
+        mlflow.end_run()
+
+
 @pytest.mark.skipif(not _has_mlflow, reason="MLFlow not installed")
 class TestMLFlowLogger:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
-    def test_log_scalar(self, steps):
-        torch.manual_seed(0)
+    def test_log_scalar(self, steps, mlflow_fixture):
         import mlflow
 
-        with tempfile.TemporaryDirectory() as log_dir:
-            exp_name = "ramala"
-            log_dir_uri = pathlib.Path(log_dir).as_uri()
-            logger = MLFlowLogger(exp_name=exp_name, tracking_uri=log_dir_uri)
-
-            values = torch.rand(3)
-            for i in range(3):
-                scalar_name = "foo"
-                scalar_value = values[i].item()
-                logger.log_scalar(
-                    value=scalar_value,
-                    name=scalar_name,
-                    step=steps[i] if steps else None,
-                )
-            run_id = mlflow.active_run().info.run_id
-            mlflow.end_run()
-            client = mlflow.MlflowClient()
-            for i, metric in enumerate(client.get_metric_history(run_id, "foo")):
-                assert metric.key == "foo"
-                assert metric.step == (steps[i] if steps else 0)
-                assert metric.value == values[i].item()
+        logger, client = mlflow_fixture
+        values = torch.rand(3)
+        for i in range(3):
+            scalar_name = "foo"
+            scalar_value = values[i].item()
+            logger.log_scalar(
+                value=scalar_value,
+                name=scalar_name,
+                step=steps[i] if steps else None,
+            )
+        run_id = mlflow.active_run().info.run_id
+        for i, metric in enumerate(client.get_metric_history(run_id, "foo")):
+            assert metric.key == "foo"
+            assert metric.step == (steps[i] if steps else 0)
+            assert metric.value == values[i].item()
 
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
-    def test_log_video(self, steps):
-        torch.manual_seed(0)
+    def test_log_video(self, steps, mlflow_fixture):
         import mlflow
 
-        with tempfile.TemporaryDirectory() as log_dir:
-            exp_name = "ramala"
-            log_dir_uri = pathlib.Path(log_dir).as_uri()
-            logger = MLFlowLogger(exp_name=exp_name, tracking_uri=log_dir_uri)
-
-            videos = torch.cat(
-                (torch.zeros(3, 64, 3, 32, 32), torch.full((3, 64, 3, 32, 32), 255)),
-                dim=1,
+        logger, client = mlflow_fixture
+        videos = torch.cat(
+            (torch.full((3, 64, 3, 32, 32), 255), torch.zeros(3, 64, 3, 32, 32)),
+            dim=1,
+        )
+        fps = 6
+        for i in range(3):
+            logger.log_video(
+                name="test_video",
+                video=videos[i],
+                fps=fps,
+                step=steps[i] if steps else None,
             )
-
-            fps = 6
-            for i in range(3):
-                logger.log_video(
-                    name="test_video",
-                    video=videos[i],
-                    fps=fps,
-                    step=steps[i] if steps else None,
+        run_id = mlflow.active_run().info.run_id
+        with tempfile.TemporaryDirectory() as artifacts_dir:
+            videos_dir = client.download_artifacts(run_id, "videos", artifacts_dir)
+            for i, video_name in enumerate(os.listdir(videos_dir)):
+                video_path = os.path.join(videos_dir, video_name)
+                loaded_video, _, _ = torchvision.io.read_video(
+                    video_path, pts_unit="sec", output_format="TCHW"
                 )
-            run_id = mlflow.active_run().info.run_id
-            mlflow.end_run()
-            client = mlflow.MlflowClient()
-            with tempfile.TemporaryDirectory() as artifacts_dir:
-                videos_dir = client.download_artifacts(run_id, "videos", artifacts_dir)
-                for i, video_name in enumerate(os.listdir(videos_dir)):
-                    video_path = os.path.join(videos_dir, video_name)
-                    loaded_video, _, _ = torchvision.io.read_video(
-                        video_path, pts_unit="sec", output_format="TCHW"
+                if steps:
+                    assert torch.allclose(loaded_video.int(), videos[i].int(), rtol=0.1)
+                else:
+                    assert torch.allclose(
+                        loaded_video.int(), videos[-1].int(), rtol=0.1
                     )
-                    if steps:
-                        assert torch.equal(loaded_video.int(), videos[i].int())
-                    else:
-                        assert torch.equal(loaded_video.int(), videos[-1].int())
 
 
 if __name__ == "__main__":

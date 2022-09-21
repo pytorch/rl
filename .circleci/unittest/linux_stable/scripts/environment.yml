@@ -27,3 +27,4 @@ dependencies:
     - wandb
     - dm_control
     - mlflow
+    - av
