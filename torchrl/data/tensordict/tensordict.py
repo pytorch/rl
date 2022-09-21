@@ -2244,11 +2244,18 @@ class TensorDict(TensorDictBase):
                 "share_memory_ must be called when the TensorDict is ("
                 "partially) populated. Set a tensor first."
             )
-        if self.device_safe() is not None and self.device != torch.device("cpu"):
+        if self.device_safe() is not None and self.device.type == "cuda":
             # cuda tensors are shared by default
+            self._is_shared = True
             return self
         for value in self.values():
-            value.share_memory_()
+            # no need to consider MemmapTensors here as we have checked that this is not a memmap-tensordict
+            if (
+                isinstance(value, torch.Tensor)
+                and value.device.type == "cpu"
+                or isinstance(value, TensorDictBase)
+            ):
+                value.share_memory_()
         for value in self.values_meta():
             value.share_memory_()
         self._is_shared = True
@@ -2261,7 +2268,7 @@ class TensorDict(TensorDictBase):
         return self
 
     def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
-        if self.is_shared() and self.device == torch.device("cpu"):
+        if self.is_shared() and self.device_safe() == torch.device("cpu"):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
