@@ -120,7 +120,7 @@ class MetaTensor:
             name = "TensorDict"
         elif _is_memmap:
             name = "MemmapTensor"
-        elif _is_shared:
+        elif _is_shared and device.type != "cuda":
             name = "SharedTensor"
         else:
             name = "Tensor"
@@ -152,7 +152,7 @@ class MetaTensor:
         """
 
         self._is_shared = True
-        self.class_name = "SharedTensor"
+        self.class_name = "SharedTensor" if self.device.type != "cuda" else "Tensor"
         return self
 
     def is_shared(self) -> bool:

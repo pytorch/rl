@@ -210,8 +210,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.dtype = dtype_map.get(dtype, dtype)
         if "is_closed" not in self.__dir__():
             self.is_closed = True
-        if "_action_spec" not in self.__dir__():
-            self._action_spec = None
         if "_input_spec" not in self.__dir__():
             self._input_spec = None
         if "_reward_spec" not in self.__dir__():
@@ -228,7 +226,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.batch_size = torch.Size([])
 
     @classmethod
-    def __new__(cls, *args, _inplace_update=True, _batch_locked=True, **kwargs):
+    def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
+         # inplace update will write tensors in-place on the provided tensordict.
+        # This is risky, especially if gradients need to be passed (in-place copy
+        # for tensors that are part of computational graphs will result in an error).
+        # It can also lead to inconsistencies when calling rollout.
         cls._inplace_update = _inplace_update
         cls._batch_locked = _batch_locked
         return super().__new__(cls)
@@ -248,16 +250,17 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def action_spec(self) -> TensorSpec:
-        return self._action_spec
+        return self.input_spec["action"]
 
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
-        self._action_spec = value
+        if self._input_spec is None:
+            self._input_spec = CompositeSpec(action=value)
+        else:
+            self._input_spec["action"] = value
 
     @property
     def input_spec(self) -> TensorSpec:
-        if self._input_spec is None:
-            self._input_spec = CompositeSpec(action=self.action_spec)
         return self._input_spec
 
     @input_spec.setter
@@ -297,12 +300,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         # sanity check
         self._assert_tensordict_shape(tensordict)
-
-        if tensordict.get("action").dtype is not self.action_spec.dtype:
-            raise TypeError(
-                f"expected action.dtype to be {self.action_spec.dtype} "
-                f"but got {tensordict.get('action').dtype}"
-            )
 
         tensordict.is_locked = True  # make sure _step does not modify the tensordict
         tensordict_out = self._step(tensordict)
@@ -552,7 +549,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     break_when_any_done and tensordict.get("done").any()
                 ) or i == max_steps - 1:
                     break
-                tensordict = step_tensordict(tensordict, keep_other=True)
+                tensordict = step_tensordict(
+                    tensordict,
+                    keep_other=True,
+                    exclude_reward=False,
+                    exclude_action=False,
+                )
 
                 if callback is not None:
                     callback(self, tensordict)
@@ -623,7 +625,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         device = torch.device(device)
         if device == self.device:
             return self
-        self.action_spec = self.action_spec.to(device)
         self.reward_spec = self.reward_spec.to(device)
         self.observation_spec = self.observation_spec.to(device)
         self.input_spec = self.input_spec.to(device)
