@@ -110,10 +110,9 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         super(ModelBasedEnvBase, self).__init__(
             device=device, dtype=dtype, batch_size=batch_size
         )
-        self.world_model = world_model
+        self.world_model = world_model.to(self.device)
         self.world_model_params = params
         self.world_model_buffers = buffers
-        self.to(self.device)
 
     @classmethod
     def __new__(cls, *args, **kwargs):
@@ -125,10 +124,10 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         """
         Sets the specs of the environment from the specs of the given environment.
         """
-        self.observation_spec = deepcopy(env.observation_spec)
-        self.action_spec = deepcopy(env.action_spec)
-        self.reward_spec = deepcopy(env.reward_spec)
-        self.input_spec = deepcopy(env.input_spec)
+        self.observation_spec = deepcopy(env.observation_spec).to(self.device)
+        self.action_spec = deepcopy(env.action_spec).to(self.device)
+        self.reward_spec = deepcopy(env.reward_spec).to(self.device)
+        self.input_spec = deepcopy(env.input_spec).to(self.device)
 
     def _step(
         self,
