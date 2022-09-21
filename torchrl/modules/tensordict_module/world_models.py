@@ -10,15 +10,14 @@ __all__ = ["WorldModelWrapper"]
 
 
 class WorldModelWrapper(TensorDictSequential):
-    """
-    World model wrapper.
+    """World model wrapper.
     This module wraps together a world model and a reward model.
     The world state model is used to predict an imaginary world state.
-    The reward model is used to predict the reward of the imaginary world state.
+    The reward model is used to predict the reward of the imagined transition.
 
     Args:
-        world_state_model (TensorDictModule): a world state model that generates a new world state.
-        reward_model (TensorDictModule): a reward model, that reads the world state and returns a reward
+        world_state_model (TensorDictModule): a world state model that generates a new world states.
+        reward_model (TensorDictModule): a reward model, that reads the world state and returns a reward.
 
     """
 

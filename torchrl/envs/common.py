@@ -629,7 +629,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.observation_spec = self.observation_spec.to(device)
         self.input_spec = self.input_spec.to(device)
         self.is_done = self.is_done.to(device)
-        self.device = device
         super().to(device)
         return self
 

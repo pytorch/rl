@@ -18,7 +18,7 @@ from mocking_classes import (
     DiscreteActionConvMockEnv,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
-    DummyModelBasedEnv,
+    DummyModelBasedEnvBase,
     ActionObsMergeLinear,
 )
 from scipy.stats import chisquare
@@ -205,13 +205,13 @@ def _make_model_based_envs(
     if transformed_in:
 
         def create_env_fn():
-            env = DummyModelBasedEnv(device=device)
+            env = DummyModelBasedEnvBase(device=device)
             return env
 
     else:
 
         def create_env_fn():
-            env = DummyModelBasedEnv(device=device)
+            env = DummyModelBasedEnvBase(device=device)
             env = TransformedEnv(
                 env,
                 Compose(
@@ -361,7 +361,7 @@ def _make_envs(
     return env_parallel, env_serial, env0
 
 
-class TestModelBasedEnv:
+class TestModelBasedEnvBase:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_mb_rollout(self, device, seed=0):
 
@@ -379,7 +379,7 @@ class TestModelBasedEnv:
                 out_keys=["reward"],
             ),
         )
-        mb_env = DummyModelBasedEnv(
+        mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([10])
         )
         mb_env.set_seed(seed)
@@ -410,7 +410,7 @@ class TestModelBasedEnv:
                 out_keys=["reward"],
             ),
         )
-        mb_env = DummyModelBasedEnv(
+        mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([10])
         )
         assert not mb_env.batch_locked
@@ -433,7 +433,7 @@ class TestModelBasedEnv:
         except RuntimeError:
             pass
 
-        mb_env = DummyModelBasedEnv(
+        mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([])
         )
         assert not mb_env.batch_locked

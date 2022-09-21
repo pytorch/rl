@@ -15,34 +15,35 @@ from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.modules.tensordict_module import TensorDictModule
 
-__all__ = ["ModelBasedEnv"]
+__all__ = ["ModelBasedEnvBase"]
 
 
-class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
-    """
-    Basic environnement for Model Based RL algorithms.
+class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
+    """Basic environnement for Model Based RL algorithms.
 
-    This class is a wrapper around the model of the MBRL algorithm.
-    This class is meant to give an env framework to a world model (including but not limited to observations, reward, done state and safety constraints models).
-    It is meant to behave as a classical environment.
+    Wrapper around the model of the MBRL algorithm.
+    It is meant to give an env framework to a world model (including but not limited to observations, reward, done state and safety constraints models).
+    and to behave as a classical environment.
 
-    This class is meant to be used as a base class for other environments. It is not meant to be used directly.
+    Meant to be used as a base class for other environments. It is not meant to be used directly.
 
     Example:
     >>> import torch
-    >>> class MyMBEnv(ModelBasedEnv):
+    >>> class MyMBEnv(ModelBasedEnvBase):
     >>>     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
     >>>         super(MyEnv, self).__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
+    >>>
     >>>     def _reset(self):
     >>>         td = TensorDict(
-    >>>             {
-    >>>                 "hidden_observation": torch.randn(*self.batch_size, 4),
-    >>>                 "next_hidden_observation": torch.randn(*self.batch_size, 4),
-    >>>                 "action": torch.randn(*self.batch_size, 1),
-    >>>             },
-    >>>             batch_size=self.batch_size,
-    >>>         )
+    ...            {
+    ...                 "hidden_observation": torch.randn(*self.batch_size, 4),
+    ...                 "next_hidden_observation": torch.randn(*self.batch_size, 4),
+    ...                 "action": torch.randn(*self.batch_size, 1),
+    ...             },
+    ...             batch_size=self.batch_size,
+    ...         )
     >>>         return td
+    >>>
     >>>     def _set_seed(self, seed: int) -> int:
     >>>         return seed + 1
 
@@ -51,17 +52,17 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
     >>> from torchrl.modules import MLP, WorldModelWrapper
     >>> import torch.nn as nn
     >>> world_model = WorldModelWrapper(
-    >>>     TensorDictModule(
-    >>>         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
-    >>>         in_keys=["hidden_observation", "action"],
-    >>>         out_keys=["next_hidden_observation"],
-    >>>     ),
-    >>>     TensorDictModule(
-    >>>         nn.Linear(4, 1),
-    >>>         in_keys=["hidden_observation"],
-    >>>         out_keys=["reward"],
-    >>>     ),
-    >>> )
+    ...     TensorDictModule(
+    ...         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
+    ...         in_keys=["hidden_observation", "action"],
+    ...         out_keys=["next_hidden_observation"],
+    ...     ),
+    ...     TensorDictModule(
+    ...         nn.Linear(4, 1),
+    ...         in_keys=["hidden_observation"],
+    ...         out_keys=["reward"],
+    ...     ),
+    ... )
     >>> world_model = MyWorldModel()
     >>> env = MyMBEnv(world_model)
     >>> td = env.reset()
@@ -73,16 +74,19 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         - observation_spec (CompositeSpec): sampling spec of the observations;
         - action_spec (TensorSpec): sampling spec of the actions;
         - reward_spec (TensorSpec): sampling spec of the rewards;
-        - batch_size (torch.Size): number of environments contained in the instance;
+        - input_spec (CompositeSpec): sampling spec of the inputs;
+        - batch_size (torch.Size): batch_size to be used by the env. If not set, the env accept tensordicts of all batch sizes.
         - device (torch.device): device where the env input and output are expected to live
         - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the
             last reset
 
     Args:
         world_model (nn.Module): model that generates world states and its corresponding rewards;
-        device (torch.device): device where the env input and output are expected to live
-        dtype (torch.dtype): dtype of the env input and output
-        batch_size (torch.Size): number of environments contained in the instance
+        params (List[torch.Tensor], optional): list of parameters of the world model;
+        buffers (List[torch.Tensor], optional): list of buffers of the world model;
+        device (torch.device, optional): device where the env input and output are expected to live
+        dtype (torch.dtype, optional): dtype of the env input and output
+        batch_size (torch.Size, optional): number of environments contained in the instance
 
     Methods:
         step (TensorDict -> TensorDict): step in the environment
@@ -103,7 +107,7 @@ class ModelBasedEnv(EnvBase, metaclass=abc.ABCMeta):
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
     ):
-        super(ModelBasedEnv, self).__init__(
+        super(ModelBasedEnvBase, self).__init__(
             device=device, dtype=dtype, batch_size=batch_size
         )
         self.world_model = world_model

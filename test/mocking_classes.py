@@ -19,7 +19,7 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase
-from torchrl.envs.model_based.common import ModelBasedEnv
+from torchrl.envs.model_based.common import ModelBasedEnvBase
 
 spec_dict = {
     "bounded": BoundedTensorSpec,
@@ -656,7 +656,7 @@ class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
         return obs
 
 
-class DummyModelBasedEnv(ModelBasedEnv):
+class DummyModelBasedEnvBase(ModelBasedEnvBase):
     """
     Dummy environnement for Model Based RL algorithms.
     This class is meant to be used to test the model based environnement.
@@ -675,7 +675,7 @@ class DummyModelBasedEnv(ModelBasedEnv):
         dtype=None,
         batch_size=None,
     ):
-        super(DummyModelBasedEnv, self).__init__(
+        super(DummyModelBasedEnvBase, self).__init__(
             world_model,
             device=device,
             dtype=dtype,
