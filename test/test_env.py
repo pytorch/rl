@@ -381,7 +381,7 @@ class TestModelBasedEnvBase:
         )
         mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([10])
-        )
+        ).to(device)
         mb_env.set_seed(seed)
         mb_env.reset()
         rollout1 = mb_env.rollout(max_steps=100)
@@ -412,7 +412,7 @@ class TestModelBasedEnvBase:
         )
         mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([10])
-        )
+        ).to(device)
         assert not mb_env.batch_locked
 
         try:
@@ -435,7 +435,7 @@ class TestModelBasedEnvBase:
 
         mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([])
-        )
+        ).to(device)
         assert not mb_env.batch_locked
 
         try:
