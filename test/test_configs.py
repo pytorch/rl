@@ -12,6 +12,8 @@ except ImportError:
     _has_hydra = False
 from mocking_classes import ContinuousActionVecMockEnv
 from torch import nn
+from torchrl.envs.libs.dm_control import _has_dmc
+from torchrl.envs.libs.gym import _has_gym
 from torchrl.modules import TensorDictModule
 
 
@@ -58,6 +60,26 @@ def test_collector_configs(file, num_workers):
         assert data.numel() == 200
         break
     collector.shutdown()
+
+
+@pytest.mark.skipif(not _has_hydra, reason="No hydra found")
+@pytest.mark.skipif(not _has_gym, reason="No gym found")
+@pytest.mark.skipif(not _has_dmc, reason="No gym found")
+@pytest.mark.parametrize(
+    "file",
+    [
+        "dmcontrol_pixels",
+        "dmcontrol_state",
+        "gym_pixels",
+        "gym_state",
+    ],
+)
+def test_env_configs(file):
+    cfg = hydra.compose("config", overrides=[f"env={file}"])
+
+    env = instantiate(cfg.env)
+    env.rollout(50)
+    env.close()
 
 
 if __name__ == "__main__":

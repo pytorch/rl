@@ -1,0 +1,5 @@
+_target_: torchrl.envs.libs.dm_control.DMControlEnv
+env_name: cheetah
+task_name: run
+frame_skip: 2
+from_pixels: True
