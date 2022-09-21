@@ -113,7 +113,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         self.world_model = world_model
         self.world_model_params = params
         self.world_model_buffers = buffers
-        super().to(self.device)
+        self.to(self.device)
 
     @classmethod
     def __new__(cls, *args, **kwargs):
