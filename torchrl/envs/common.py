@@ -49,12 +49,14 @@ class EnvMetaData:
         batch_size: torch.Size,
         env_str: str,
         device: torch.device,
+        batch_locked: bool = True,
     ):
         self.tensordict = tensordict
         self.specs = specs
         self.batch_size = batch_size
         self.env_str = env_str
         self.device = device
+        self.batch_locked = batch_locked
 
     @staticmethod
     def build_metadata_from_env(env) -> EnvMetaData:
@@ -64,19 +66,27 @@ class EnvMetaData:
         batch_size = env.batch_size
         env_str = str(env)
         device = env.device
-        return EnvMetaData(tensordict, specs, batch_size, env_str, device)
+        batch_locked = env.batch_locked
+        return EnvMetaData(tensordict, specs, batch_size, env_str, device, batch_locked)
 
     def expand(self, *size: int) -> EnvMetaData:
         tensordict = self.tensordict.expand(*size).to_tensordict()
         batch_size = torch.Size([*size])
         return EnvMetaData(
-            tensordict, self.specs, batch_size, self.env_str, self.device
+            tensordict,
+            self.specs,
+            batch_size,
+            self.env_str,
+            self.device,
+            self.batch_locked,
         )
 
     def to(self, device: DEVICE_TYPING) -> EnvMetaData:
         tensordict = self.tensordict.to(device)
         specs = self.specs.to(device)
-        return EnvMetaData(tensordict, specs, self.batch_size, self.env_str, device)
+        return EnvMetaData(
+            tensordict, specs, self.batch_size, self.env_str, device, self.batch_locked
+        )
 
     def __setstate__(self, state):
         state["tensordict"] = state["tensordict"].to_tensordict().to(state["device"])
@@ -200,8 +210,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.dtype = dtype_map.get(dtype, dtype)
         if "is_closed" not in self.__dir__():
             self.is_closed = True
-        if "_action_spec" not in self.__dir__():
-            self._action_spec = None
         if "_input_spec" not in self.__dir__():
             self._input_spec = None
         if "_reward_spec" not in self.__dir__():
@@ -218,22 +226,41 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.batch_size = torch.Size([])
 
     @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._inplace_update = True
+    def __new__(cls, *args, _batch_locked=True, **kwargs):
+        # inplace update will write tensors in-place on the provided tensordict.
+        # This is risky, especially if gradients need to be passed (in-place copy
+        # for tensors that are part of computational graphs will result in an error).
+        # It can also lead to inconsistencies when calling rollout.
+        cls._inplace_update = False
+        cls._batch_locked = _batch_locked
         return super().__new__(cls)
 
     @property
+    def batch_locked(self) -> bool:
+        """
+        Whether the environnement can be used with a batch size different from the one it was initialized with or not.
+        If True, the env needs to be used with a tensordict having the same batch size as the env.
+        batch_locked is an immutable property.
+        """
+        return self._batch_locked
+
+    @batch_locked.setter
+    def batch_locked(self, value: bool) -> None:
+        raise RuntimeError("batch_locked is a read-only property")
+
+    @property
     def action_spec(self) -> TensorSpec:
-        return self._action_spec
+        return self.input_spec["action"]
 
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
-        self._action_spec = value
+        if self._input_spec is None:
+            self._input_spec = CompositeSpec(action=value)
+        else:
+            self._input_spec["action"] = value
 
     @property
     def input_spec(self) -> TensorSpec:
-        if self._input_spec is None:
-            self._input_spec = CompositeSpec(action=self.action_spec)
         return self._input_spec
 
     @input_spec.setter
@@ -272,11 +299,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
 
         # sanity check
-        if tensordict.get("action").dtype is not self.action_spec.dtype:
-            raise TypeError(
-                f"expected action.dtype to be {self.action_spec.dtype} "
-                f"but got {tensordict.get('action').dtype}"
-            )
+        self._assert_tensordict_shape(tensordict)
 
         tensordict.is_locked = True  # make sure _step does not modify the tensordict
         tensordict_out = self._step(tensordict)
@@ -367,8 +390,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict_reset = step_tensordict(
                 tensordict_reset,
                 exclude_done=False,
-                exclude_reward=True,
-                exclude_action=True,
+                exclude_reward=False,  # some policies may need reward and action at reset time
+                exclude_action=False,
             )
         if tensordict is not None:
             tensordict.update(tensordict_reset)
@@ -408,7 +431,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def _assert_tensordict_shape(self, tensordict: TensorDictBase) -> None:
-        if tensordict.batch_size != self.batch_size:
+        if tensordict.batch_size != self.batch_size and (
+            self.batch_locked or self.batch_size != torch.Size([])
+        ):
             raise RuntimeError(
                 f"Expected a tensordict with shape==env.shape, "
                 f"got {tensordict.batch_size} and {self.batch_size}"
@@ -524,14 +549,21 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     break_when_any_done and tensordict.get("done").any()
                 ) or i == max_steps - 1:
                     break
-                tensordict = step_tensordict(tensordict, keep_other=True)
+                tensordict = step_tensordict(
+                    tensordict,
+                    keep_other=True,
+                    exclude_reward=False,
+                    exclude_action=False,
+                )
 
                 if callback is not None:
                     callback(self, tensordict)
         else:
             raise Exception("reset env before calling rollout!")
 
-        out_td = torch.stack(tensordicts, len(self.batch_size))
+        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
+
+        out_td = torch.stack(tensordicts, len(batch_size))
         if return_contiguous:
             return out_td.contiguous()
         return out_td
@@ -593,7 +625,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         device = torch.device(device)
         if device == self.device:
             return self
-        self.action_spec = self.action_spec.to(device)
         self.reward_spec = self.reward_spec.to(device)
         self.observation_spec = self.observation_spec.to(device)
         self.input_spec = self.input_spec.to(device)

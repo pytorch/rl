@@ -13,7 +13,7 @@ from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
 from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.envs.libs.gym import GymEnv, RetroEnv
+from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,
@@ -42,7 +42,6 @@ __all__ = [
 
 LIBS = {
     "gym": GymEnv,
-    "retro": RetroEnv,
     "dm_control": DMControlEnv,
 }
 
@@ -127,7 +126,7 @@ def make_env_transforms(
         env.append_transform(ToTensorImage())
         if cfg.center_crop:
             env.append_transform(CenterCrop(*cfg.center_crop))
-        env.append_transform(Resize(84, 84))
+        env.append_transform(Resize(cfg.image_size, cfg.image_size))
         if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(first_dim=batch_dims))
@@ -152,6 +151,9 @@ def make_env_transforms(
     if env_library is DMControlEnv:
         double_to_float_list += [
             "reward",
+        ]
+        double_to_float_list += [
+            "action",
         ]
         double_to_float_inv_list += ["action"]  # DMControl requires double-precision
     if not from_pixels:

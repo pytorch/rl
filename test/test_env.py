@@ -16,6 +16,8 @@ from mocking_classes import (
     DiscreteActionVecMockEnv,
     MockSerialEnv,
     DiscreteActionConvMockEnv,
+    MockBatchedLockedEnv,
+    MockBatchedUnLockedEnv,
 )
 from scipy.stats import chisquare
 from torch import nn
@@ -990,6 +992,58 @@ def test_steptensordict(
         assert "done" not in out.keys()
     if has_out:
         assert out is next_tensordict
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_locked(device):
+    env = MockBatchedLockedEnv(device)
+    assert env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2).clone()
+    td = env.step(td)
+
+    with pytest.raises(
+        RuntimeError, match="Expected a tensordict with shape==env.shape, "
+    ):
+        env.step(td_expanded)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked(device):
+    env = MockBatchedUnLockedEnv(device)
+    assert not env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2).clone()
+    td = env.step(td)
+
+    env.step(td_expanded)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked_with_batch_size(device):
+    env = MockBatchedUnLockedEnv(device, batch_size=torch.Size([2]))
+    assert not env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
+    td = env.step(td)
+
+    with pytest.raises(
+        RuntimeError, match="Expected a tensordict with shape==env.shape, "
+    ):
+        env.step(td_expanded)
 
 
 if __name__ == "__main__":

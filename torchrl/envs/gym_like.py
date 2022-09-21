@@ -78,7 +78,7 @@ class GymLikeEnv(_EnvWrapper):
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._info_dict_reader = None
-        return super().__new__(cls, *args, **kwargs)
+        return super().__new__(cls, *args, _batch_locked=True, **kwargs)
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get("action")
