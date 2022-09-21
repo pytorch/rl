@@ -286,14 +286,14 @@ class _BatchedEnv(EnvBase):
             self._device = self.meta_data[0].device
             # TODO: check that all action_spec and reward spec match (issue #351)
             self._reward_spec = self.meta_data[0].specs["reward_spec"]
-            self._observation_spec = {}
+            _observation_spec = {}
             for md in self.meta_data:
-                self._observation_spec.update(dict(**md.specs["observation_spec"]))
-            self._observation_spec = CompositeSpec(**self._observation_spec)
-            self._input_spec = {}
+                _observation_spec.update(dict(**md.specs["observation_spec"]))
+            self._observation_spec = CompositeSpec(**_observation_spec)
+            _input_spec = {}
             for md in self.meta_data:
-                self._input_spec.update(dict(**md.specs["input_spec"]))
-            self._input_spec = CompositeSpec(**self._input_spec)
+                _input_spec.update(dict(**md.specs["input_spec"]))
+            self._input_spec = CompositeSpec(**_input_spec)
             self._dummy_env_str = str(self.meta_data[0])
             self._env_tensordict = torch.stack(
                 [meta_data.tensordict for meta_data in self.meta_data], 0
@@ -315,20 +315,6 @@ class _BatchedEnv(EnvBase):
         return self._batch_size
 
     @property
-    def action_spec(self) -> TensorSpec:
-        if (
-            (self._input_spec is None)
-            or ("action" not in self._input_spec)
-            or (self._input_spec["action"] is None)
-        ):
-            self._set_properties()
-        return self._input_spec["action"]
-
-    @action_spec.setter
-    def action_spec(self, value: TensorSpec) -> None:
-        self._input_spec["action"] = value
-
-    @property
     def device(self) -> torch.device:
         if self._device is None:
             self._set_properties()
@@ -347,6 +333,16 @@ class _BatchedEnv(EnvBase):
     @observation_spec.setter
     def observation_spec(self, value: TensorSpec) -> None:
         self._observation_spec = value
+
+    @property
+    def input_spec(self) -> TensorSpec:
+        if self._input_spec is None:
+            self._set_properties()
+        return self._input_spec
+
+    @input_spec.setter
+    def input_spec(self, value: TensorSpec) -> None:
+        self._input_spec = value
 
     @property
     def reward_spec(self) -> TensorSpec:
@@ -493,7 +489,6 @@ class _BatchedEnv(EnvBase):
         if self._verbose:
             print(f"closing {self.__class__.__name__}")
 
-        self.action_spec = None
         self.observation_spec = None
         self.reward_spec = None
 
@@ -529,7 +524,7 @@ class _BatchedEnv(EnvBase):
             self.close()
             self.start()
         else:
-            self.action_spec = self.action_spec.to(device)
+            self.input_spec = self.input_spec.to(device)
             self.reward_spec = self.reward_spec.to(device)
             self.observation_spec = self.observation_spec.to(device)
         return self
