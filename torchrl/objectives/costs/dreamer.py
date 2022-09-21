@@ -157,7 +157,7 @@ class DreamerActorLoss(LossModule):
 
         discount = self.gamma * torch.ones_like(lambda_target, device=tensordict.device)
         discount[:, 0] = 1
-        discount = discount.cumprod(dim=1)
+        discount = discount.cumprod(dim=1).detach()
         actor_loss = -(lambda_target * discount).mean()
         return (
             TensorDict(
@@ -202,7 +202,7 @@ class DreamerValueLoss(LossModule):
                 tensordict.get("lambda_target"),
                 self.value_loss,
             )
-        ).mean()
+        ).sum(-1,-2).mean()
 
         return (
             TensorDict(
