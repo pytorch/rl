@@ -60,7 +60,6 @@ class _MockEnv(EnvBase):
     ):
         for key, item in list(cls._observation_spec.items()):
             cls._observation_spec[key] = item.to(torch.get_default_dtype())
-        # cls._action_spec = cls.action_spec.to(torch.get_default_dtype())
         cls._reward_spec = cls._reward_spec.to(torch.get_default_dtype())
         return super().__new__(*args, **kwargs)
 
@@ -119,7 +118,6 @@ class MockSerialEnv(EnvBase):
         cls._reward_spec = reward_spec
         cls._observation_spec = observation_spec
         cls._input_spec = input_spec
-        cls._action_spec = action_spec
         return super().__new__(*args, **kwargs)
 
     def __init__(self, device):
@@ -175,9 +173,9 @@ class MockBatchedLockedEnv(EnvBase):
     ):
         if action_spec is None:
             action_spec = NdUnboundedContinuousTensorSpec((1,))
-        if action_spec is None:
+        if input_spec is None:
             input_spec = CompositeSpec(
-                action=NdUnboundedContinuousTensorSpec((1,)),
+                action=action_spec,
                 observation=NdUnboundedContinuousTensorSpec((1,)),
             )
         if observation_spec is None:
@@ -189,7 +187,6 @@ class MockBatchedLockedEnv(EnvBase):
         cls._reward_spec = reward_spec
         cls._observation_spec = observation_spec
         cls._input_spec = input_spec
-        cls._action_spec = action_spec
         return super().__new__(
             cls,
             *args,
@@ -296,7 +293,6 @@ class DiscreteActionVecMockEnv(_MockEnv):
         cls._reward_spec = reward_spec
         cls._observation_spec = observation_spec
         cls._input_spec = input_spec
-        cls._action_spec = action_spec
         cls.from_pixels = from_pixels
         return super().__new__(*args, **kwargs)
 
@@ -381,7 +377,6 @@ class ContinuousActionVecMockEnv(_MockEnv):
         cls._reward_spec = reward_spec
         cls._observation_spec = observation_spec
         cls._input_spec = input_spec
-        cls._action_spec = action_spec
         cls.from_pixels = from_pixels
         return super().__new__(*args, **kwargs)
 
