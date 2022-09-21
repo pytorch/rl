@@ -45,7 +45,7 @@ def test_collector_configs(file):
 
     cfg = hydra.compose(
         "config",
-    )  # overrides=[f"collectors={file}"])
+    )  # overrides=[f"collector={file}"])
     # yaml_read = OmegaConf.load("examples/configs/config.yaml")
     # cfg = OmegaConf.create(yaml_read, flags={"collector": file})
     print(cfg)
@@ -56,7 +56,7 @@ def test_collector_configs(file):
         create_env_fn = [
             create_env,
         ] * cfg.num_workers
-    collector = instantiate(cfg.collectors, policy=policy, create_env_fn=create_env_fn)
+    collector = instantiate(cfg.collector, policy=policy, create_env_fn=create_env_fn)
     for data in collector:
         assert data.numel() == 200
         break
