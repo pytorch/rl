@@ -523,15 +523,6 @@ class TransformedEnv(EnvBase):
                 propobj = getattr(ancestors.pop(), key, None)
             else:
                 raise AttributeError(f"can't set attribute {key}")
-
-        # if isinstance(propobj, property):
-        #     propobj = None
-        #     for cls in self.__class__.__mro__:
-        #         propobj = getattr(cls, key, None)
-        #         if
-        #     if propobj.fset is None:
-        #         raise AttributeError(f"can't set attribute {key}")
-        #     return propobj.fset(self, value)
         else:
             return super().__setattr__(key, value)
 
