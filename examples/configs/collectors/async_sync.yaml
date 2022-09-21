@@ -1,33 +1,30 @@
-num_workers: 2
+_target_: torchrl.collectors.MultiaSyncDataCollector
 
-collector:
-  _target_: torchrl.collectors.MultiaSyncDataCollector
-
-  devices: ["cpu", "cpu"]
-  passing_devices: ["cpu", "cpu"]
-  # device on which the data collector should store the trajectories to be passed to this script.
-  # If the collector device differs from the policy device (cuda:0 if available), then the
-  # weights of the collector policy are synchronized with collector.update_policy_weights_().
-  pin_memory: False
-  # if True, the data collector will call pin_memory before dispatching tensordicts onto the passing device
-  init_with_lag: False
-  # if True, the first trajectory will be truncated earlier at a random step. This is helpful
-  # to desynchronize the environments, such that steps do no match in all collected
-  # rollouts. Especially useful for online training, to prevent cyclic sample indices.
-  frames_per_batch: 200
-  # number of steps executed in the environment per collection.
-  # This value represents how many steps will the data collector execute and return in *each*
-  # environment that has been created in between two rounds of optimization
-  # (see the optim_steps_per_batch above).
-  # On the one hand, a low value will enhance the data throughput between processes in async
-  # settings, which can make the accessing of data a computational bottleneck.
-  # High values will on the other hand lead to greater tensor sizes in memory and disk to be
-  # written and read at each global iteration. One should look at the number of frames per second
-  # in the log to assess the efficiency of the configuration.
-  total_frames: 5000000
-  # total number of frames collected for training. Does account for frame_skip (i.e. will be
-  # divided by the frame_skip). Default=5e6.
-  seed: 42
-  # seed used for the environment, pytorch and numpy.
-  exploration_mode: "random"
-  # exploration mode of the data collector.
+devices: ["cpu", "cpu"]
+passing_devices: ["cpu", "cpu"]
+# device on which the data collector should store the trajectories to be passed to this script.
+# If the collector device differs from the policy device (cuda:0 if available), then the
+# weights of the collector policy are synchronized with collector.update_policy_weights_().
+pin_memory: False
+# if True, the data collector will call pin_memory before dispatching tensordicts onto the passing device
+init_with_lag: False
+# if True, the first trajectory will be truncated earlier at a random step. This is helpful
+# to desynchronize the environments, such that steps do no match in all collected
+# rollouts. Especially useful for online training, to prevent cyclic sample indices.
+frames_per_batch: 200
+# number of steps executed in the environment per collection.
+# This value represents how many steps will the data collector execute and return in *each*
+# environment that has been created in between two rounds of optimization
+# (see the optim_steps_per_batch above).
+# On the one hand, a low value will enhance the data throughput between processes in async
+# settings, which can make the accessing of data a computational bottleneck.
+# High values will on the other hand lead to greater tensor sizes in memory and disk to be
+# written and read at each global iteration. One should look at the number of frames per second
+# in the log to assess the efficiency of the configuration.
+total_frames: 5000000
+# total number of frames collected for training. Does account for frame_skip (i.e. will be
+# divided by the frame_skip). Default=5e6.
+seed: 42
+# seed used for the environment, pytorch and numpy.
+exploration_mode: "random"
+# exploration mode of the data collector.
