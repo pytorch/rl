@@ -312,6 +312,16 @@ class TransformedEnv(EnvBase):
         self._observation_spec = None
         self.batch_size = self.base_env.batch_size
 
+    def __new__(cls, env, *args, **kwargs):
+        return super().__new__(
+            cls,
+            env,
+            *args,
+            _inplace_update=env._inplace_update,
+            _batch_locked=env.batch_locked,
+            **kwargs,
+        )
+
     def _set_env(self, env: EnvBase, device) -> None:
         self.base_env = env.to(device)
         # updates need not be inplace, as transforms may modify values out-place
