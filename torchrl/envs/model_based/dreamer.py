@@ -12,11 +12,11 @@ import torch
 from torchrl.data import TensorDict, CompositeSpec, NdUnboundedContinuousTensorSpec
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs import EnvBase
-from torchrl.envs.model_based import ModelBasedEnv
+from torchrl.envs.model_based import ModelBasedEnvBase
 from torchrl.modules.tensordict_module import TensorDictModule
 
 
-class DreamerEnv(ModelBasedEnv):
+class DreamerEnv(ModelBasedEnvBase):
     def __init__(
         self,
         world_model: TensorDictModule,
