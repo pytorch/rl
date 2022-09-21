@@ -76,7 +76,7 @@ def _dmcontrol_to_torchrl_spec_transform(
             )
 
     else:
-        raise NotImplementedError
+        raise NotImplementedError(type(spec))
 
 
 def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
@@ -209,16 +209,18 @@ class DMControlWrapper(GymLikeEnv):
         return observation, reward, done
 
     @property
-    def action_spec(self) -> TensorSpec:
-        if self._action_spec is None:
-            self._action_spec = _dmcontrol_to_torchrl_spec_transform(
-                self._env.action_spec(), device=self.device
+    def input_spec(self) -> TensorSpec:
+        if self._input_spec is None:
+            self._input_spec = CompositeSpec(
+                action=_dmcontrol_to_torchrl_spec_transform(
+                    self._env.action_spec(), device=self.device
+                )
             )
-        return self._action_spec
+        return self._input_spec
 
-    @action_spec.setter
-    def action_spec(self, value: TensorSpec) -> None:
-        self._action_spec = value
+    @input_spec.setter
+    def input_spec(self, value: TensorSpec) -> None:
+        self._input_spec = value
 
     @property
     def observation_spec(self) -> TensorSpec:

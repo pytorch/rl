@@ -311,7 +311,6 @@ class R3MTransform(Compose):
         return self._dtype
 
     forward = _init_first(Compose.forward)
-    transform_action_spec = _init_first(Compose.transform_action_spec)
     transform_observation_spec = _init_first(Compose.transform_observation_spec)
     transform_input_spec = _init_first(Compose.transform_input_spec)
     transform_reward_spec = _init_first(Compose.transform_reward_spec)
