@@ -3,9 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from dataclasses import dataclass
-from dataclasses import field as dataclass_field
-from typing import Callable, Optional, Union, Any, Sequence
+from typing import Callable, Optional, Union, Sequence
 
 import torch
 
