@@ -12,6 +12,7 @@ from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import hold_out_net, distance_loss
 from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
+from torchrl.envs.utils import step_tensordict
 
 
 class DreamerModelLoss(LossModule):
@@ -126,13 +127,14 @@ class DreamerActorLoss(LossModule):
 
     def forward(self, tensordict) -> torch.Tensor:
         with torch.no_grad():
-            tensordict = tensordict.select("posterior_state", "belief")
+            tensordict = tensordict.select("posterior_state", "belief", "predicted_reward")
 
             tensordict.batch_size = [
                 tensordict.shape[0],
                 tensordict.get("belief").shape[1],
             ]
             tensordict.rename_key("posterior_state", "prior_state")
+            tensordict.rename_key("predicted_reward", "reward")
             tensordict = tensordict.view(-1).detach()
         with hold_out_net(self.model_based_env), set_exploration_mode("random"):
             tensordict = self.model_based_env.rollout(
@@ -141,6 +143,9 @@ class DreamerActorLoss(LossModule):
                 auto_reset=False,
                 tensordict=tensordict,
             )
+            tensordict = step_tensordict(tensordict, keep_other=True,
+                    exclude_reward=False,
+                    exclude_action=False,)
             with hold_out_net(self.value_model):
                 tensordict = self.value_model(tensordict)
 

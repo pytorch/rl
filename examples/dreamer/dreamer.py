@@ -151,13 +151,14 @@ def call_record(
 
         reco_pixels = recover_pixels(world_model_td["reco_pixels"], stats)
         with autocast(dtype=torch.float16):
-            world_model_td = world_model_td.select("posterior_state", "next_belief")
+            world_model_td = world_model_td.select("posterior_state", "next_belief", "predicted_reward")
             world_model_td.batch_size = [
                 world_model_td.shape[0],
                 world_model_td.get("next_belief").shape[1],
             ]
             world_model_td.rename_key("posterior_state", "prior_state")
             world_model_td.rename_key("next_belief", "belief")
+            world_model_td.rename_key("predicted_reward", "reward")
             world_model_td = model_based_env.rollout(
                 max_steps=true_pixels.shape[1],
                 policy=actor_model,

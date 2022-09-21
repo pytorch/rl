@@ -1324,7 +1324,7 @@ def make_dreamer(
             TensorDictModule(
                 reward_module,
                 in_keys=["next_prior_state", "next_belief"],
-                out_keys=["reward"],
+                out_keys=["next_reward"],
             ),
         ),
         prior_shape=torch.Size([cfg.state_dim]),
