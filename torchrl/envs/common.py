@@ -632,8 +632,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.input_spec = self.input_spec.to(device)
         self.is_done = self.is_done.to(device)
         self.device = device
-        super().to(device)
-        return self
+        return super().to(device)
 
     def fake_tensordict(self) -> TensorDictBase:
         """
