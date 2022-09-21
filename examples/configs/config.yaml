@@ -1,3 +1,4 @@
 defaults:
   - collector: sync_single
+  - env: gym_state
 num_workers: 0
