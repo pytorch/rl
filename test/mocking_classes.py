@@ -698,6 +698,7 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
                 "next_hidden_observation": torch.randn(*self.batch_size, 4),
             },
             batch_size=self.batch_size,
+            device=self.device,
         )
         return td
 
