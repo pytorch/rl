@@ -1,0 +1,7 @@
+- _target_: torchrl.envs.transforms.ObservationNorm
+  keys_in: ["next_observation"]
+  loc: 0.0
+  scale: 1.0
+- _target_: torchrl.envs.transforms.RewardScaling
+  loc: 0.0
+  scale: 1.0

@@ -1,4 +1,5 @@
 defaults:
   - collector: sync_single
-  - env: gym_state
+  - env: gym_pixels
+  - transforms: pixels
 num_workers: 0
