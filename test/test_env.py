@@ -382,13 +382,11 @@ class TestModelBasedEnvBase:
         mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([10])
         )
-        mb_env.set_seed(seed)
         mb_env.reset()
         rollout1 = mb_env.rollout(max_steps=100)
 
         torch.manual_seed(seed)
         np.random.seed(seed)
-        mb_env.set_seed(seed)
         mb_env.reset()
         rollout2 = mb_env.rollout(max_steps=100)
 

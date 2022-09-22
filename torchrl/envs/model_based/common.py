@@ -33,8 +33,8 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
     >>>     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
     >>>         super(MyEnv, self).__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
     >>>
-    >>>     def _reset(self):
-    >>>         td = TensorDict(
+    >>>     def _reset(self, tensordict: TensorDict) -> TensorDict:
+    >>>         tensordict = TensorDict(
     ...            {
     ...                 "hidden_observation": torch.randn(*self.batch_size, 4),
     ...                 "next_hidden_observation": torch.randn(*self.batch_size, 4),
@@ -42,10 +42,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
     ...             },
     ...             batch_size=self.batch_size,
     ...         )
-    >>>         return td
-    >>>
-    >>>     def _set_seed(self, seed: int) -> int:
-    >>>         return seed + 1
+    >>>         return tensordict
 
     Then, you can use this environment as follows:
 
@@ -65,8 +62,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
     ... )
     >>> world_model = MyWorldModel()
     >>> env = MyMBEnv(world_model)
-    >>> td = env.reset()
-    >>> env.rollout(td, max_steps=10)
+    >>> tensordict = env.rollout(max_steps=10)
     ```
 
 
@@ -157,6 +153,5 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         raise NotImplementedError
 
-    @abc.abstractmethod
     def _set_seed(self, seed: Optional[int]) -> int:
-        raise NotImplementedError
+        raise Warning("Set seed isn't needed for model based environments")

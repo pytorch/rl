@@ -657,8 +657,8 @@ class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
 
 
 class DummyModelBasedEnvBase(ModelBasedEnvBase):
-    """
-    Dummy environnement for Model Based RL algorithms.
+    """Dummy environnement for Model Based RL algorithms.
+
     This class is meant to be used to test the model based environnement.
 
     Args:
@@ -701,9 +701,6 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
             device=self.device,
         )
         return td
-
-    def _set_seed(self, seed: int) -> int:
-        return seed + 1
 
 
 class ActionObsMergeLinear(nn.Module):
