@@ -70,13 +70,11 @@ def test_tensordict_set(device):
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensordict_device(device):
     tensordict = TensorDict({"a": torch.randn(3, 4)}, [])
-    with pytest.raises(RuntimeError):
-        tensordict.device
+    assert tensordict.device is None
 
     tensordict = TensorDict({"a": torch.randn(3, 4, device=device)}, [])
     assert tensordict["a"].device == device
-    with pytest.raises(RuntimeError):
-        tensordict.device
+    assert tensordict.device is None
 
     tensordict = TensorDict(
         {
