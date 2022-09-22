@@ -8,7 +8,12 @@ import warnings
 from tempfile import TemporaryDirectory
 from typing import Any, Dict, Optional
 
-import torchvision
+try:
+    import torchvision
+
+    _has_tv = True
+except ImportError:
+    _has_tv = False
 from torch import Tensor
 
 from .common import Logger
@@ -32,8 +37,7 @@ except ImportError:
 
 
 class MLFlowLogger(Logger):
-    """
-    Wrapper for the mlflow logger.
+    """Wrapper for the mlflow logger.
 
     Args:
         exp_name (str): The name of the experiment.
@@ -57,8 +61,7 @@ class MLFlowLogger(Logger):
         self.video_log_counter = 0
 
     def _create_experiment(self) -> "mlflow.ActiveRun":
-        """
-        Creates an mlflow experiment.
+        """Creates an mlflow experiment.
 
         Returns:
             mlflow.ActiveRun: The mlflow experiment object.
@@ -69,8 +72,7 @@ class MLFlowLogger(Logger):
         return mlflow.start_run(experiment_id=self.id)
 
     def log_scalar(self, name: str, value: float, step: Optional[int] = None) -> None:
-        """
-        Logs a scalar value to mlflow.
+        """Logs a scalar value to mlflow.
 
         Args:
             name (str): The name of the scalar.
@@ -82,8 +84,7 @@ class MLFlowLogger(Logger):
         mlflow.log_metric(key=name, value=value, step=step)
 
     def log_video(self, name: str, video: Tensor, **kwargs) -> None:
-        """
-        Log video inputs to mlflow.
+        """Log video inputs to mlflow.
 
         Args:
             name (str): The name of the video.
@@ -92,6 +93,10 @@ class MLFlowLogger(Logger):
             **kwargs: Other keyword arguments. By construction, log_video
                 supports 'step' (integer indicating the step index) and 'fps' (default: 6).
         """
+        if not _has_tv:
+            raise ImportError(
+                "Loggin a video with MLFlow requires torchvision to be installed."
+            )
         mlflow.set_experiment(experiment_id=self.id)
         if video.ndim == 5:
             video = video[-1]  # N T C H W -> T C H W
