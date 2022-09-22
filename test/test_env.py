@@ -4,13 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
-import os.path
-from collections import defaultdict
 
 import numpy as np
 import pytest
 import torch
-import yaml
 from _utils_internal import get_available_devices
 from mocking_classes import (
     DiscreteActionVecMockEnv,
@@ -46,60 +43,6 @@ from torchrl.modules import (
     Actor,
     MLP,
 )
-
-try:
-    this_dir = os.path.dirname(os.path.realpath(__file__))
-    with open(os.path.join(this_dir, "configs", "atari.yaml"), "r") as file:
-        atari_confs = yaml.load(file, Loader=yaml.FullLoader)
-    _atari_found = True
-except FileNotFoundError:
-    _atari_found = False
-    atari_confs = defaultdict(lambda: "")
-
-
-## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
-## the serial and parallel batched envs
-# def _make_atari_env(atari_env):
-#     action_spec = GymEnv(atari_env + "-ram-v0").action_spec
-#     n_act = action_spec.shape[-1]
-#     return lambda **kwargs: TransformedEnv(
-#         GymEnv(atari_env + "-ram-v0", **kwargs),
-#         DiscreteActionProjection(max_N=18, M=n_act),
-#     )
-#
-#
-# @pytest.mark.skipif(
-#     "ALE/Pong-v5" not in _get_gym_envs(), reason="no Atari OpenAI Gym env available"
-# )
-# def test_composite_env():
-#     num_workers = 10
-#     frameskip = 2
-#     create_env_fn = [
-#         _make_atari_env(atari_env)
-#         for atari_env in atari_confs["atari_envs"][:num_workers]
-#     ]
-#     kwargs = {"frame_skip": frameskip}
-#
-#     random_policy = lambda td: td.set(
-#         "action", torch.nn.functional.one_hot(torch.randint(18, (*td.batch_size,)), 18)
-#     )
-#     p = SerialEnv(num_workers, create_env_fn, create_env_kwargs=kwargs)
-#     seed = p.set_seed(0)
-#     p.reset()
-#     torch.manual_seed(seed)
-#     rollout1 = p.rollout(max_steps=100, policy=random_policy, auto_reset=False)
-#     p.close()
-#     del p
-#
-#     p = ParallelEnv(num_workers, create_env_fn, create_env_kwargs=kwargs)
-#     seed = p.set_seed(0)
-#     p.reset()
-#     torch.manual_seed(seed)
-#     rollout0 = p.rollout(max_steps=100, policy=random_policy, auto_reset=False)
-#     p.close()
-#     del p
-#
-#     assert_allclose_td(rollout1, rollout0)
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
