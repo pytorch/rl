@@ -299,7 +299,6 @@ def _make_envs(
 class TestModelBasedEnvBase:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_mb_rollout(self, device, seed=0):
-
         torch.manual_seed(seed)
         np.random.seed(seed)
         world_model = WorldModelWrapper(
@@ -317,13 +316,14 @@ class TestModelBasedEnvBase:
         mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([10])
         )
-        # mb_env.reset()
         rollout = mb_env.rollout(max_steps=100)
-
+        assert set(rollout.keys()) == set(mb_env.observation_spec.keys()).union(
+            set(mb_env.input_spec.keys())
+        ).union({"reward", "done"})
         assert rollout["next_hidden_observation"].shape == (10, 100, 4)
 
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_batch_lock_mb_env(self, device, seed=0):
+    def test_mb_env_batch_lock(self, device, seed=0):
         torch.manual_seed(seed)
         np.random.seed(seed)
         world_model = WorldModelWrapper(
@@ -343,45 +343,29 @@ class TestModelBasedEnvBase:
         )
         assert not mb_env.batch_locked
 
-        try:
+        with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
             mb_env.batch_locked = False
-            raise AssertionError("Should not be able to change batch_locked")
-        except RuntimeError:
-            pass
         td = mb_env.reset()
         td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
         td_expanded = td.unsqueeze(-1).expand(10, 2).reshape(-1).to_tensordict()
-        td = mb_env.step(td)
+        mb_env.step(td)
 
-        try:
+        with pytest.raises(RuntimeError, match="Expected a tensordict with shape"):
             mb_env.step(td_expanded)
-            raise AssertionError(
-                "Should not be able to step with td.batch_size != env.batch_size if env.batch_size != []"
-            )
-        except RuntimeError:
-            pass
 
         mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([])
         )
         assert not mb_env.batch_locked
 
-        try:
+        with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
             mb_env.batch_locked = False
-            raise AssertionError("Should not be able to change batch_locked")
-        except RuntimeError:
-            pass
         td = mb_env.reset()
         td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
         td_expanded = td.expand(2)
-        td = mb_env.step(td)
-
-        try:
-            mb_env.step(td_expanded)
-        except RuntimeError:
-            raise AssertionError(
-                "When batch_locked = False, should be able to step with td.batch_size != env.batch_size if env.batch_size == []"
-            )
+        mb_env.step(td)
+        # we should be able to do a step with a tensordict that has been expended
+        mb_env.step(td_expanded)
 
 
 class TestParallel:
