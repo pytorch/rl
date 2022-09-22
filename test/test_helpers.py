@@ -55,9 +55,10 @@ def _assert_keys_match(td, expeceted_keys):
     assert len(td_keys) == len(expeceted_keys)
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture
 def init_hydra(request):
     GlobalHydra.instance().clear()
+    yield
     request.addfinalizer(GlobalHydra.instance().clear)
 
 
@@ -82,6 +83,7 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
     Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
     cs = ConfigStore.instance()
     cs.store(name="config", node=Config)
+    _ = init_hydra
     with initialize(version_base=None, config_path=None):
         cfg = compose(config_name="config", overrides=flags)
 
@@ -137,6 +139,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
     Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
     cs = ConfigStore.instance()
     cs.store(name="config", node=Config)
+    _ = init_hydra
     with initialize(version_base=None, config_path=None):
         cfg = compose(config_name="config", overrides=flags)
 
@@ -211,6 +214,7 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
     Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
     cs = ConfigStore.instance()
     cs.store(name="config", node=Config)
+    _ = init_hydra
     with initialize(version_base=None, config_path=None):
         cfg = compose(config_name="config", overrides=flags)
         # if gsde and from_pixels:
@@ -329,6 +333,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
     Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
     cs = ConfigStore.instance()
     cs.store(name="config", node=Config)
+    _ = init_hydra
     with initialize(version_base=None, config_path=None):
         cfg = compose(config_name="config", overrides=flags)
 
@@ -444,6 +449,7 @@ def test_redq_make(device, from_pixels, gsde, exploration):
     Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
     cs = ConfigStore.instance()
     cs.store(name="config", node=Config)
+    _ = init_hydra
     with initialize(version_base=None, config_path=None):
         cfg = compose(config_name="config", overrides=flags)
 
