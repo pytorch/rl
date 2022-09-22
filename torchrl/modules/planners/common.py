@@ -15,18 +15,16 @@ __all__ = ["MPCPlannerBase"]
 
 
 class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
-    """
-    MPCPlannerBase Module. This is an abstract class and must be implemented by the user.
+    """MPCPlannerBase Module.
+    
+    This is an abstract class.
 
     This class inherits from TensorDictModule. Provided a TensorDict, this module will perform a Model Predictive Control (MPC) planning step.
-    At the end of the planning step, the MPCPlanner will return the action that should be taken.
+    At the end of the planning step, the MPCPlanner will return a proposed action
 
     Args:
-        env (Environment): The environment to perform the planning step on (Can be ModelBasedEnv or EnvBase).
-        action_key (str): The key in the TensorDict to use to store the action.
-
-    Returns:
-        TensorDict: The TensorDict with the action added.
+        env (EnvBase): The environment to perform the planning step on (Can be ModelBasedEnv or EnvBase).
+        action_key (str, optional): The key that will point to the computed action
     """
 
     def __init__(
@@ -36,21 +34,20 @@ class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
     ):
         # Check if env is stateless
         if env.batch_locked:
-            raise ValueError("Environment is not stateless")
+            raise ValueError("Environment is batch_locked. MPCPlanners need an environnement that accepts batched inputs with any batch size")
         out_keys = [action_key]
         in_keys = list(env.observation_spec.keys())
         super().__init__(env, in_keys=in_keys, out_keys=out_keys)
         self.env = env
         self.action_spec = env.action_spec
+        self.to(env.device)
 
     @abc.abstractmethod
     def planning(self, td: TensorDictBase) -> torch.Tensor:
-        """
-        Perform the MPC planning step.
+        """Perform the MPC planning step.
+
         Args:
             td (TensorDict): The TensorDict to perform the planning step on.
-        Returns:
-            TensorDict: The TensorDict with the action added.
         """
         raise NotImplementedError()
 
@@ -61,7 +58,7 @@ class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
         **kwargs,
     ) -> TensorDictBase:
         if "params" in kwargs or "vmap" in kwargs:
-            raise ValueError("params not supported")
+            raise ValueError("MPCPlannerBase does not support params or vmap for now.")
         action = self.planning(tensordict)
         action = self.action_spec.project(action)
         tensordict_out = self._write_to_tensordict(

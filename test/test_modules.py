@@ -333,15 +333,15 @@ class TestPlanner:
     @pytest.mark.parametrize("batch_size", [3, 5])
     def test_CEM_model_free_env(self, device, batch_size, seed=1):
         env = MockBatchedUnLockedEnv(device=device)
-        env.set_seed(seed)
+        torch.manual_seed(seed)
         planner = CEMPlanner(
             env,
             planning_horizon=10,
             optim_steps=2,
             num_candidates=100,
             num_top_k_candidates=2,
-        ).to(device)
-        td = env.reset(TensorDict({}, batch_size=batch_size)).to(device)
+        )
+        td = env.reset(TensorDict({}, batch_size=batch_size))
         td_copy = td.clone()
         td = planner(td)
         assert td.get("action").shape[1:] == env.action_spec.shape
