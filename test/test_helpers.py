@@ -57,7 +57,7 @@ def _assert_keys_match(td, expeceted_keys):
 
 class TestMakers:
     @pytest.fixture(scope="class")
-    def init_hydra(request):
+    def init_hydra(self, request):
         GlobalHydra.instance().clear()
         request.addfinalizer(GlobalHydra.instance().clear)
 
@@ -67,7 +67,7 @@ class TestMakers:
     @pytest.mark.parametrize("noisy", [tuple(), ("noisy=True",)])
     @pytest.mark.parametrize("distributional", [tuple(), ("distributional=True",)])
     @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
-    def test_dqn_maker(device, noisy, distributional, from_pixels):
+    def test_dqn_maker(self, device, noisy, distributional, from_pixels):
         flags = list(noisy + distributional + from_pixels) + ["env_name=CartPole-v1"]
 
         config_fields = [
@@ -119,7 +119,7 @@ class TestMakers:
     @pytest.mark.parametrize("from_pixels", [("from_pixels=True", "catframes=4"), tuple()])
     @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
     @pytest.mark.parametrize("exploration", ["random", "mode"])
-    def test_ddpg_maker(device, from_pixels, gsde, exploration):
+    def test_ddpg_maker(self, device, from_pixels, gsde, exploration):
         if not gsde and exploration != "random":
             pytest.skip("no need to test this setting")
         device = torch.device("cpu")
@@ -195,7 +195,7 @@ class TestMakers:
     @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
     @pytest.mark.parametrize("shared_mapping", [tuple(), ("shared_mapping=True",)])
     @pytest.mark.parametrize("exploration", ["random", "mode"])
-    def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
+    def test_ppo_maker(self, device, from_pixels, shared_mapping, gsde, exploration):
         if not gsde and exploration != "random":
             pytest.skip("no need to test this setting")
         flags = list(from_pixels + shared_mapping + gsde)
@@ -231,7 +231,7 @@ class TestMakers:
                     RuntimeError,
                     match="PPO learnt from pixels require the shared_mapping to be set to True",
                 ):
-                    actor_value = make_ppo_model(
+                    make_ppo_model(
                         proof_environment,
                         device=device,
                         cfg=cfg,
@@ -310,7 +310,7 @@ class TestMakers:
     @pytest.mark.parametrize("from_pixels", [tuple()])
     @pytest.mark.parametrize("tanh_loc", [tuple(), ("tanh_loc=True",)])
     @pytest.mark.parametrize("exploration", ["random", "mode"])
-    def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
+    def test_sac_make(self, device, gsde, tanh_loc, from_pixels, exploration):
         if not gsde and exploration != "random":
             pytest.skip("no need to test this setting")
         flags = list(gsde + tanh_loc + from_pixels)
@@ -425,7 +425,7 @@ class TestMakers:
     @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
     @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
     @pytest.mark.parametrize("exploration", ["random", "mode"])
-    def test_redq_make(device, from_pixels, gsde, exploration):
+    def test_redq_make(self, device, from_pixels, gsde, exploration):
         if not gsde and exploration != "random":
             pytest.skip("no need to test this setting")
         flags = list(from_pixels + gsde)
