@@ -202,7 +202,7 @@ class DreamerValueLoss(LossModule):
                 tensordict.get("lambda_target"),
                 self.value_loss,
             )
-        ).sum(-1,-2).mean()
+        ).sum((-1,-2)).mean()
 
         return (
             TensorDict(
