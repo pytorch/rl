@@ -306,8 +306,8 @@ class SyncDataCollector(_DataCollector):
                     policy_device = next(
                         policy.parameters()
                     ).device  # Get the first device from the policy parameter list
-                except:  # In case there is no parameter inside the policy
-                    policy_device = torch.device(
+                except:  # noqa
+                    policy_device = torch.device(  # In case there is no parameter inside the policy
                         "cpu"
                     )  # Assume passing_device to be cpu if both device and policy_device do not exist
                 passing_device = policy_device
@@ -706,7 +706,7 @@ class _MultiDataCollector(_DataCollector):
         self.create_env_kwargs = (
             create_env_kwargs
             if create_env_kwargs is not None
-            else [dict() for _ in range(self.num_workers)]
+            else [{} for _ in range(self.num_workers)]
         )
         # Preparing devices:
         # We want the user to be able to choose, for each worker, on which
@@ -1062,7 +1062,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     else:
                         same_device = same_device and (item.device == prev_device)
             if same_device:
-                out = torch.cat([item for item in out_tensordicts_shared.values()], 0)
+                out = torch.cat(list(out_tensordicts_shared.values()), 0)
             else:
                 out = torch.cat(
                     [item.cpu() for item in out_tensordicts_shared.values()], 0
@@ -1099,12 +1099,12 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.out_tensordicts = dict()
+        self.out_tensordicts = {}
         self.running = False
 
         if self.postprocs is not None:
             postproc = self.postprocs
-            self.postprocs = dict()
+            self.postprocs = {}
             for _device in self.passing_devices:
                 if _device not in self.postprocs:
                     self.postprocs[_device] = deepcopy(postproc).to(_device)
