@@ -17,22 +17,86 @@ class CEMPlanner(MPCPlannerBase):
 
     Reference: The cross-entropy method for optimization, Botev et al. 2013
 
-    This module will perform a CEM planning step when given a TensorDict containing initial states.
-    The CEM planning step is performed by sampling actions from a Gaussian distribution with zero mean and unit variance.
-    The sampled actions are then used to perform a rollout in the environment. The cumulative rewards obtained with the rollout is then
-    ranked. We select the top-k episodes and use their actions to update the mean and standard deviation of the actions distribution.
+    This module will perform a CEM planning step when given a TensorDict
+    containing initial states.
+    The CEM planning step is performed by sampling actions from a Gaussian
+    distribution with zero mean and unit variance.
+    The sampled actions are then used to perform a rollout in the environment.
+    The cumulative rewards obtained with the rollout is then
+    ranked. We select the top-k episodes and use their actions to update the
+    mean and standard deviation of the actions distribution.
     The CEM planning step is repeated for a specified number of steps.
 
-    A call to the module returns the actions that empirically maximised the returns given a planning horizon
+    A call to the module returns the actions that empirically maximised the
+    returns given a planning horizon
 
     Args:
-        env (EnvBase): The environment to perform the planning step on (can be `ModelBasedEnv` or `EnvBase`).
+        env (EnvBase): The environment to perform the planning step on (can be
+            `ModelBasedEnv` or `EnvBase`).
         planning_horizon (int): The length of the simulated trajectories
-        optim_steps (int): The number of optimization steps used by the MPC planner
-        num_candidates (int): The number of candidates to sample from the Gaussian distributions.
-        num_top_k_candidates (int): The number of top candidates to use to update the mean and standard deviation of the Gaussian distribution.
-        reward_key (str, optional): The key in the TensorDict to use to retrieve the reward.
-        action_key (str, optional): The key in the TensorDict to use to store the action.
+        optim_steps (int): The number of optimization steps used by the MPC
+            planner
+        num_candidates (int): The number of candidates to sample from the
+            Gaussian distributions.
+        num_top_k_candidates (int): The number of top candidates to use to
+            update the mean and standard deviation of the Gaussian distribution.
+        reward_key (str, optional): The key in the TensorDict to use to
+            retrieve the reward. Defaults to "reward".
+        action_key (str, optional): The key in the TensorDict to use to store
+            the action. Defaults to "action"
+
+    Examples:
+        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec, TensorDict
+        >>> from torchrl.envs.model_based import ModelBasedEnvBase
+        >>> from torchrl.modules import TensorDictModule
+        >>> class MyMBEnv(ModelBasedEnvBase):
+        ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
+        ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
+        ...         self.observation_spec = CompositeSpec(
+        ...             next_hidden_observation=NdUnboundedContinuousTensorSpec((4,))
+        ...         )
+        ...         self.input_spec = CompositeSpec(
+        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
+        ...             action=NdUnboundedContinuousTensorSpec((1,)),
+        ...         )
+        ...         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+        ...
+        ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
+        ...         tensordict = TensorDict({},
+        ...             batch_size=self.batch_size,
+        ...             device=self.device,
+        ...         )
+        ...         tensordict = tensordict.update(self.input_spec.rand(self.batch_size))
+        ...         tensordict = tensordict.update(self.observation_spec.rand(self.batch_size))
+        ...         return tensordict
+        >>> from torchrl.modules import MLP, WorldModelWrapper
+        >>> import torch.nn as nn
+        >>> world_model = WorldModelWrapper(
+        ...     TensorDictModule(
+        ...         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
+        ...         in_keys=["hidden_observation", "action"],
+        ...         out_keys=["next_hidden_observation"],
+        ...     ),
+        ...     TensorDictModule(
+        ...         nn.Linear(4, 1),
+        ...         in_keys=["hidden_observation"],
+        ...         out_keys=["reward"],
+        ...     ),
+        ... )
+        >>> env = MyMBEnv(world_model)
+        >>> # Build a planner and use it as actor
+        >>> planner = CEMPlanner(env, 10, 11, 7, 3)
+        >>> env.rollout(5, planner)
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([5, 1]), dtype=torch.float32),
+                done: Tensor(torch.Size([5, 1]), dtype=torch.bool),
+                hidden_observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
+                next_hidden_observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
+                reward: Tensor(torch.Size([5, 1]), dtype=torch.float32)},
+            batch_size=torch.Size([5]),
+            device=cpu,
+            is_shared=False)
     """
 
     def __init__(
