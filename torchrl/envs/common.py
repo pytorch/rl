@@ -367,7 +367,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         """
         tensordict_reset = self._reset(tensordict, **kwargs)
-        if tensordict_reset.device_safe() != self.device:
+        if tensordict_reset.device != self.device:
             tensordict_reset = tensordict_reset.to(self.device)
         if tensordict_reset is tensordict:
             raise RuntimeError(
