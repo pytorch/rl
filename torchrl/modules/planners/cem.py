@@ -107,7 +107,7 @@ class CEMPlanner(MPCPlannerBase):
                 0, (flatten_batch_size, self.num_candidates)
             )
             best_actions = best_actions[
-                torch.arange(flatten_batch_size).unsqueeze(1), top_k
+                torch.arange(flatten_batch_size, device=tensordict.device_safe()).unsqueeze(1), top_k
             ]
             actions_means = best_actions.mean(dim=1, keepdim=True)
             actions_stds = best_actions.std(dim=1, keepdim=True)
