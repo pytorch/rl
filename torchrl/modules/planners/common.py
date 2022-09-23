@@ -15,9 +15,7 @@ __all__ = ["MPCPlannerBase"]
 
 
 class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
-    """MPCPlannerBase Module.
-
-    This is an abstract class.
+    """MPCPlannerBase abstract Module.
 
     This class inherits from `TensorDictModule`. Provided a `TensorDict`, this module will perform a Model Predictive Control (MPC) planning step.
     At the end of the planning step, the `MPCPlanner` will return a proposed action.
