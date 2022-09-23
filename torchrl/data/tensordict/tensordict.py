@@ -731,7 +731,7 @@ dtype=torch.float32)},
             return TensorDict(
                 {key: value != other for key, value in self.items()},
                 self.batch_size,
-                device=self.device_safe(),
+                device=self.device,
             )
         keys1 = set(self.keys())
         keys2 = set(other.keys())
@@ -762,7 +762,7 @@ dtype=torch.float32)},
             return TensorDict(
                 {key: value == other for key, value in self.items()},
                 self.batch_size,
-                device=self.device_safe(),
+                device=self.device,
             )
         keys1 = set(self.keys())
         keys2 = set(other.keys())
