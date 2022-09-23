@@ -176,7 +176,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     @property
     @abc.abstractmethod
-    def device(self) -> torch.device:
+    def device(self) -> Union[None, torch.device]:
         """Device of a TensorDict. If the TensorDict has a specified device, all
         tensors of a tensordict must live on the same device. If the TensorDict device
         is None, then different values can be located on different devices.
@@ -191,11 +191,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     @device.setter
     @abc.abstractmethod
     def device(self, value: DEVICE_TYPING) -> None:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def device_safe(self) -> Union[None, torch.device]:
-        """Return the device of this tensordict if set, else `None`."""
         raise NotImplementedError
 
     def clear_device(self) -> None:
@@ -412,7 +407,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         out = (
             self
             if inplace
-            else TensorDict({}, batch_size=batch_size, device=self.device_safe())
+            else TensorDict({}, batch_size=batch_size, device=self.device)
             if batch_size is not None
             else copy(self)
         )
@@ -557,12 +552,10 @@ dtype=torch.float32)},
         return self
 
     def _convert_to_tensor(self, array: np.ndarray) -> Union[Tensor, MemmapTensor]:
-        return torch.as_tensor(array, device=self.device_safe())
+        return torch.as_tensor(array, device=self.device)
 
     def _convert_to_tensordict(self, dict_value: dict) -> TensorDictBase:
-        return TensorDict(
-            dict_value, batch_size=self.batch_size, device=self.device_safe()
-        )
+        return TensorDict(dict_value, batch_size=self.batch_size, device=self.device)
 
     def _process_input(
         self,
@@ -583,7 +576,7 @@ dtype=torch.float32)},
         ):  # TODO: find a proper way of doing that
             return tensor
 
-        if check_device and self.device_safe() is not None:
+        if check_device and self.device is not None:
             device = self.device
             tensor = tensor.to(device)
 
@@ -713,7 +706,7 @@ dtype=torch.float32)},
         return TensorDict(
             source=d,
             batch_size=[*shape],
-            device=self.device_safe(),
+            device=self.device,
         )
 
     def __bool__(self) -> bool:
@@ -743,9 +736,7 @@ dtype=torch.float32)},
         d = dict()
         for (key, item1) in self.items():
             d[key] = item1 != other.get(key)
-        return TensorDict(
-            batch_size=self.batch_size, source=d, device=self.device_safe()
-        )
+        return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
 
     def __eq__(self, other: object) -> TensorDictBase:
         """Compares two tensordicts against each other, for every key. The two
@@ -772,9 +763,7 @@ dtype=torch.float32)},
         d = dict()
         for (key, item1) in self.items():
             d[key] = item1 == other.get(key)
-        return TensorDict(
-            batch_size=self.batch_size, source=d, device=self.device_safe()
-        )
+        return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
 
     @abc.abstractmethod
     def del_(self, key: str) -> TensorDictBase:
@@ -908,7 +897,7 @@ dtype=torch.float32)},
         return TensorDict(
             {key: item.detach() for key, item in self.items()},
             batch_size=self.batch_size,
-            device=self.device_safe(),
+            device=self.device,
         )
 
     def to_tensordict(self):
@@ -925,7 +914,7 @@ dtype=torch.float32)},
                 else value.to_tensordict()
                 for key, value in self.items()
             },
-            device=self.device_safe(),
+            device=self.device,
             batch_size=self.batch_size,
         )
 
@@ -990,7 +979,7 @@ dtype=torch.float32)},
                 key: value.clone() if recurse else value for key, value in self.items()
             },
             batch_size=self.batch_size,
-            device=self.device_safe(),
+            device=self.device,
         )
 
     @classmethod
@@ -1132,9 +1121,7 @@ dtype=torch.float32)},
             value_select = value[mask_expand]
             d[key] = value_select
         dim = int(mask.sum().item())
-        return TensorDict(
-            device=self.device_safe(), source=d, batch_size=torch.Size([dim])
-        )
+        return TensorDict(device=self.device, source=d, batch_size=torch.Size([dim]))
 
     @abc.abstractmethod
     def is_contiguous(self) -> bool:
@@ -1258,7 +1245,7 @@ dtype=torch.float32)},
                     "Implicit reshaping is not permitted with empty " "tensordicts"
                 )
             batch_size = shape
-        return TensorDict(d, batch_size, device=self.device_safe())
+        return TensorDict(d, batch_size, device=self.device)
 
     def view(
         self,
@@ -1384,7 +1371,7 @@ dtype=torch.float32)},
         fields = _td_fields(self)
         field_str = indent(f"fields={{{fields}}}", 4 * " ")
         batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
-        device_str = indent(f"device={self.device_safe()}", 4 * " ")
+        device_str = indent(f"device={self.device}", 4 * " ")
         is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
         string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
         return f"{type(self).__name__}(\n{string})"
@@ -1411,7 +1398,7 @@ dtype=torch.float32)},
             return TensorDict(
                 source={key: value.all(dim=dim) for key, value in self.items()},
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
-                device=self.device_safe(),
+                device=self.device,
             )
         return all(value.all() for value in self.values())
 
@@ -1437,7 +1424,7 @@ dtype=torch.float32)},
             return TensorDict(
                 source={key: value.any(dim=dim) for key, value in self.items()},
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
-                device=self.device_safe(),
+                device=self.device,
             )
         return any([value.any() for key, value in self.items()])
 
@@ -1476,7 +1463,7 @@ dtype=torch.float32)},
             return self
         else:
             tensordict_out = TensorDict(
-                {}, batch_size=self.batch_size, device=self.device_safe()
+                {}, batch_size=self.batch_size, device=self.device
             )
             for key, value in self.items():
                 if key in to_flatten:
@@ -1506,15 +1493,13 @@ dtype=torch.float32)},
                     if separator not in key[1:-1]
                 },
                 batch_size=self.batch_size,
-                device=self.device_safe(),
+                device=self.device,
             )
         else:
             out = self
 
         for key, list_of_keys in to_unflatten.items():
-            tensordict = TensorDict(
-                {}, batch_size=self.batch_size, device=self.device_safe()
-            )
+            tensordict = TensorDict({}, batch_size=self.batch_size, device=self.device)
             for (old_key, new_key) in list_of_keys:
                 value = self[old_key]
                 tensordict[new_key] = value
@@ -1551,12 +1536,12 @@ dtype=torch.float32)},
 
         """
         if isinstance(idx, list):
-            idx = torch.tensor(idx, device=self.device_safe())
+            idx = torch.tensor(idx, device=self.device)
         if isinstance(idx, tuple) and any(
             isinstance(sub_index, list) for sub_index in idx
         ):
             idx = tuple(
-                torch.tensor(sub_index, device=self.device_safe())
+                torch.tensor(sub_index, device=self.device)
                 if isinstance(sub_index, list)
                 else sub_index
                 for sub_index in idx
@@ -1584,7 +1569,7 @@ dtype=torch.float32)},
             )
 
         if isinstance(idx, np.ndarray):
-            idx = torch.tensor(idx, device=self.device_safe())
+            idx = torch.tensor(idx, device=self.device)
         if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
 
@@ -1597,7 +1582,7 @@ dtype=torch.float32)},
                 if not item.is_tensordict()
             },
             batch_size=_getitem_batch_size(self.batch_size, idx),
-            device=self.device_safe(),
+            device=self.device,
         )
 
     def __setitem__(
@@ -1606,12 +1591,12 @@ dtype=torch.float32)},
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if isinstance(index, list):
-            index = torch.tensor(index, device=self.device_safe())
+            index = torch.tensor(index, device=self.device)
         if isinstance(index, tuple) and any(
             isinstance(sub_index, list) for sub_index in index
         ):
             index = tuple(
-                torch.tensor(sub_index, device=self.device_safe())
+                torch.tensor(sub_index, device=self.device)
                 if isinstance(sub_index, list)
                 else sub_index
                 for sub_index in index
@@ -1644,9 +1629,7 @@ dtype=torch.float32)},
         else:
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
-                value = TensorDict(
-                    value, batch_size=indexed_bs, device=self.device_safe()
-                )
+                value = TensorDict(value, batch_size=indexed_bs, device=self.device)
             if value.batch_size != indexed_bs:
                 raise RuntimeError(
                     f"indexed destination TensorDict batch size is {indexed_bs} "
@@ -1921,17 +1904,11 @@ class TensorDict(TensorDictBase):
         )
 
     @property
-    def device(self) -> torch.device:
-        device = self._device
-        if device is None:
-            raise RuntimeError(
-                "Querying a tensordict device when it has not been set is not "
-                "permitted. Use `tensordict.device_safe()` return the device "
-                "value or `None` if the device is not set.\n\nSet the device "
-                "upon creation using the `device=dest` keyword, or "
-                "subsequently using `tensordict.to(device)."
-            )
-        return device
+    def device(self) -> Union[None, torch.device]:
+        """Returns `None` if device hasn't been provided in the constructor
+        or set via `tensordict.to(device)`.
+        """
+        return self._device
 
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
@@ -1941,10 +1918,6 @@ class TensorDict(TensorDictBase):
             "tensordict.to(new_device), which will return a new tensordict "
             "on the new device."
         )
-
-    def device_safe(self) -> Union[None, torch.device]:
-        """Return the device of this tensordict if set, else `None`."""
-        return self._device
 
     @property
     def batch_size(self) -> torch.Size:
@@ -1989,16 +1962,8 @@ class TensorDict(TensorDictBase):
         return all(memmap_list) and len(memmap_list) > 0
 
     def _check_device(self) -> None:
-        devices = set(
-            # make sure we don't raise an exception if we have nested TensorDicts
-            value.device_safe() if isinstance(value, TensorDictBase) else value.device
-            for value in self.values_meta()
-        )
-        if (
-            self.device_safe() is not None
-            and len(devices) >= 1
-            and devices != {self.device_safe()}
-        ):
+        devices = set(value.device for value in self.values_meta())
+        if self.device is not None and len(devices) >= 1 and devices != {self.device}:
             raise RuntimeError(
                 f"TensorDict.device is {self._device}, but elements have "
                 f"device values {devices}. If TensorDict.device is set then "
@@ -2006,7 +1971,7 @@ class TensorDict(TensorDictBase):
             )
 
     def pin_memory(self) -> TensorDictBase:
-        if self.device_safe() == torch.device("cpu"):
+        if self.device == torch.device("cpu"):
             for key, value in self.items():
                 if isinstance(value, TensorDictBase) or (
                     value.dtype in (torch.half, torch.float, torch.double)
@@ -2054,7 +2019,7 @@ class TensorDict(TensorDictBase):
         return TensorDict(
             source=d,
             batch_size=[*shape],
-            device=self.device_safe(),
+            device=self.device,
         )
 
     def set(
@@ -2245,7 +2210,7 @@ class TensorDict(TensorDictBase):
                 "share_memory_ must be called when the TensorDict is ("
                 "partially) populated. Set a tensor first."
             )
-        if self.device_safe() is not None and self.device.type == "cuda":
+        if self.device is not None and self.device.type == "cuda":
             # cuda tensors are shared by default
             self._is_shared = True
             return self
@@ -2269,7 +2234,7 @@ class TensorDict(TensorDictBase):
         return self
 
     def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
-        if self.is_shared() and self.device_safe() == torch.device("cpu"):
+        if self.is_shared() and self.device == torch.device("cpu"):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
@@ -2304,7 +2269,7 @@ class TensorDict(TensorDictBase):
         elif isinstance(dest, (torch.device, str, int)):
             # must be device
             dest = torch.device(dest)
-            if self.device_safe() is not None and dest == self.device:
+            if self.device is not None and dest == self.device:
                 return self
 
             self_copy = copy(self)
@@ -2359,7 +2324,7 @@ class TensorDict(TensorDictBase):
                     del self._dict_meta[key]
             return self
         return TensorDict(
-            device=self.device_safe(),
+            device=self.device,
             batch_size=self.batch_size,
             source=d,
             _meta_source=d_meta,
@@ -2569,7 +2534,7 @@ def stack(
     keys = _check_keys(list_of_tensordicts)
 
     if out is None:
-        device = list_of_tensordicts[0].device_safe()
+        device = list_of_tensordicts[0].device
         if contiguous:
             out = {}
             for key in keys:
@@ -2699,7 +2664,7 @@ def pad(tensordict: TensorDictBase, pad_size: Sequence[int], value: float = 0.0)
     for i in range(0, len(reverse_pad), 2):
         reverse_pad[i], reverse_pad[i + 1] = reverse_pad[i + 1], reverse_pad[i]
 
-    out = TensorDict({}, new_batch_size, device=tensordict.device_safe())
+    out = TensorDict({}, new_batch_size, device=tensordict.device)
     for key, tensor in tensordict.items():
         cur_pad = reverse_pad
         if len(pad_size) < len(tensor.shape) * 2:
@@ -2845,16 +2810,12 @@ torch.Size([3, 2])
         return self._batch_size_setter(new_size)
 
     @property
-    def device(self) -> torch.device:
+    def device(self) -> Union[None, torch.device]:
         return self._source.device
 
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
         self._source.device = value
-
-    def device_safe(self) -> Union[None, torch.device]:
-        """Return the device of this tensordict if set, else `None`."""
-        return self._source.device_safe()
 
     def _preallocate(self, key: str, value: COMPATIBLE_TYPES) -> TensorDictBase:
         return self._source.set(key, value)
@@ -2889,7 +2850,7 @@ torch.Size([3, 2])
             tensor_expand = TensorDict(
                 {
                     key: _expand_to_match_shape(
-                        parent.batch_size, _tensor, self.batch_dims, self.device_safe()
+                        parent.batch_size, _tensor, self.batch_dims, self.device
                     )
                     for key, _tensor in tensor.items()
                 },
@@ -2901,9 +2862,9 @@ torch.Size([3, 2])
                 *parent.batch_size,
                 *tensor.shape[self.batch_dims :],
                 dtype=tensor.dtype,
-                device=self.device_safe(),
+                device=self.device,
             )
-            if self.is_shared() and self.device_safe() == torch.device("cpu"):
+            if self.is_shared() and self.device == torch.device("cpu"):
                 tensor_expand.share_memory_()
             elif self.is_memmap():
                 tensor_expand = MemmapTensor(tensor_expand)
@@ -2958,7 +2919,7 @@ torch.Size([3, 2])
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
             # try:
-            if self.device_safe() is not None and dest == self.device:
+            if self.device is not None and dest == self.device:
                 return self
             td = self.to_tensordict().to(dest, **kwargs)
             # must be device
@@ -3086,7 +3047,7 @@ torch.Size([3, 2])
         return TensorDict(
             batch_size=self.batch_size,
             source={key: value for key, value in self.items()},
-            device=self.device_safe(),
+            device=self.device,
         )
 
     def select(self, *keys: str, inplace: bool = False) -> TensorDictBase:
@@ -3201,7 +3162,7 @@ def merge_tensordicts(*tensordicts: TensorDictBase) -> TensorDictBase:
     d = tensordicts[0].to_dict()
     for td in tensordicts[1:]:
         d.update(td.to_dict())
-    return TensorDict({}, [], device=td.device_safe()).update(d)
+    return TensorDict({}, [], device=td.device).update(d)
 
 
 class LazyStackedTensorDict(TensorDictBase):
@@ -3263,7 +3224,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 f"stack_dim must be non negative, got stack_dim={stack_dim}"
             )
         _batch_size = tensordicts[0].batch_size
-        device = tensordicts[0].device_safe()
+        device = tensordicts[0].device
 
         for td in tensordicts[1:]:
             if not isinstance(td, TensorDictBase):
@@ -3272,7 +3233,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     f" but got {type(tensordicts[0])} instead."
                 )
             _bs = td.batch_size
-            _device = td.device_safe()
+            _device = td.device
             if device != _device:
                 raise RuntimeError(f"devices differ, got {device} and {_device}")
             if _bs != _batch_size:
@@ -3289,32 +3250,20 @@ class LazyStackedTensorDict(TensorDictBase):
             raise RuntimeError("batch_size does not match self.batch_size.")
 
     @property
-    def device(self) -> torch.device:
-        # devices might have changed so we check that they're all the same
-        device_set = {td.device_safe() for td in self.tensordicts}
+    def device(self) -> Union[None, torch.device]:
+        # devices might have changed, so we check that they're all the same
+        device_set = {td.device for td in self.tensordicts}
         if len(device_set) != 1:
             raise RuntimeError(
                 f"found multiple devices in {self.__class__.__name__}:" f" {device_set}"
             )
-        device = self.tensordicts[0].device_safe()
-        if device is None:
-            raise RuntimeError(
-                "Querying a tensordict device when it has not been set is not "
-                "permitted. Use `tensordict.device_safe()` return the device "
-                "value or `None` if the device is not set.\n\nSet the device "
-                "upon creation using the `device=dest` keyword, or "
-                "subsequently using `tensordict.to(device)."
-            )
+        device = self.tensordicts[0].device
         return device
 
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
         for t in self.tensordicts:
             t.device = value
-
-    def device_safe(self) -> Union[None, torch.device]:
-        """Return the device of this tensordict if set, else `None`."""
-        return self.tensordicts[0].device_safe()
 
     @property
     def batch_size(self) -> torch.Size:
@@ -3481,7 +3430,7 @@ class LazyStackedTensorDict(TensorDictBase):
     def contiguous(self) -> TensorDictBase:
         source = {key: value for key, value in self.items()}
         batch_size = self.batch_size
-        device = self.device_safe()
+        device = self.device
         out = TensorDict(
             source=source,
             batch_size=batch_size,
@@ -3516,7 +3465,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return dest(source=self, **kwargs)
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
-            if self.device_safe() is not None and dest == self.device:
+            if self.device is not None and dest == self.device:
                 return self
             td = self.to_tensordict().to(dest, **kwargs)
             return td
@@ -3570,12 +3519,12 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def __setitem__(self, item: INDEX_TYPING, value: TensorDictBase) -> TensorDictBase:
         if isinstance(item, list):
-            item = torch.tensor(item, device=self.device_safe())
+            item = torch.tensor(item, device=self.device)
         if isinstance(item, tuple) and any(
             isinstance(sub_index, list) for sub_index in item
         ):
             item = tuple(
-                torch.tensor(sub_index, device=self.device_safe())
+                torch.tensor(sub_index, device=self.device)
                 if isinstance(sub_index, list)
                 else sub_index
                 for sub_index in item
@@ -3613,12 +3562,12 @@ class LazyStackedTensorDict(TensorDictBase):
         ) not in [len(item), 0]:
             raise IndexError(_STR_MIXED_INDEX_ERROR)
         if isinstance(item, list):
-            item = torch.tensor(item, device=self.device_safe())
+            item = torch.tensor(item, device=self.device)
         if isinstance(item, tuple) and any(
             isinstance(sub_index, list) for sub_index in item
         ):
             item = tuple(
-                torch.tensor(sub_index, device=self.device_safe())
+                torch.tensor(sub_index, device=self.device)
                 if isinstance(sub_index, list)
                 else sub_index
                 for sub_index in item
@@ -3814,13 +3763,7 @@ class SavedTensorDict(TensorDictBase):
         self.filename = self.file.name
         # if source.is_memmap():
         #     source = source.clone()
-        self._device = (
-            torch.device(device)
-            if device is not None
-            else source.device_safe()
-            if hasattr(source, "device_safe")
-            else None
-        )
+        self._device = torch.device(device) if device is not None else source.device
         self._save(source)
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
@@ -3841,7 +3784,7 @@ class SavedTensorDict(TensorDictBase):
         return self._dict_meta["key"]
 
     def _load(self) -> TensorDictBase:
-        return torch.load(self.filename, map_location=self.device_safe())
+        return torch.load(self.filename, map_location=self.device)
 
     @property
     def batch_size(self) -> torch.Size:
@@ -3858,21 +3801,8 @@ class SavedTensorDict(TensorDictBase):
         return super()._batch_size_setter(new_size)
 
     @property
-    def device(self) -> torch.device:
-        device = self._device
-        if device is None and not self.is_empty():
-            for _, item in self.items_meta():
-                device = item.device
-                break
-        elif device is None:
-            raise RuntimeError(
-                "Querying a tensordict device when it has not been set is not "
-                "permitted. Use `tensordict.device_safe()` return the device "
-                "value or `None` if the device is not set.\n\nSet the device "
-                "upon creation using the `device=dest` keyword, or "
-                "subsequently using `tensordict.to(device)."
-            )
-        return device
+    def device(self) -> Union[None, torch.device]:
+        return self._device
 
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
@@ -3882,10 +3812,6 @@ class SavedTensorDict(TensorDictBase):
             "tensordict.to(new_device), which will return a new tensordict "
             "on the new device."
         )
-
-    def device_safe(self) -> Union[None, torch.device]:
-        """Return the device of this tensordict if set, else `None`."""
-        return self._device
 
     def keys(self) -> Sequence[str]:
         for k in self._keys:
@@ -4018,7 +3944,7 @@ class SavedTensorDict(TensorDictBase):
         return self._load().contiguous()
 
     def clone(self, recurse: bool = True) -> TensorDictBase:
-        return SavedTensorDict(self, device=self.device_safe())
+        return SavedTensorDict(self, device=self.device)
 
     def select(self, *keys: str, inplace: bool = False) -> TensorDictBase:
         _source = self.contiguous().select(*keys)
@@ -4054,7 +3980,7 @@ class SavedTensorDict(TensorDictBase):
         elif isinstance(dest, (torch.device, str, int)):
             # must be device
             dest = torch.device(dest)
-            if self.device_safe() is not None and dest == self.device:
+            if self.device is not None and dest == self.device:
                 return self
             self_copy = copy(self)
             self_copy._device = dest
@@ -4086,7 +4012,7 @@ class SavedTensorDict(TensorDictBase):
                 else value.to_tensordict()
                 for key, value in td.items()
             },
-            device=self.device_safe(),
+            device=self.device,
             batch_size=self.batch_size,
         )
 
@@ -4117,12 +4043,12 @@ class SavedTensorDict(TensorDictBase):
 
     def __getitem__(self, idx: INDEX_TYPING) -> TensorDictBase:
         if isinstance(idx, list):
-            idx = torch.tensor(idx, device=self.device_safe())
+            idx = torch.tensor(idx, device=self.device)
         if isinstance(idx, tuple) and any(
             isinstance(sub_index, list) for sub_index in idx
         ):
             idx = tuple(
-                torch.tensor(sub_index, device=self.device_safe())
+                torch.tensor(sub_index, device=self.device)
                 if isinstance(sub_index, list)
                 else sub_index
                 for sub_index in idx
@@ -4232,16 +4158,12 @@ class _CustomOpTensorDict(TensorDictBase):
         return self.inv_op_kwargs
 
     @property
-    def device(self) -> torch.device:
+    def device(self) -> Union[None, torch.device]:
         return self._source.device
 
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
         self._source.device = value
-
-    def device_safe(self) -> Union[None, torch.device]:
-        """Return the device of this tensordict if set, else `None`."""
-        return self._source.device_safe()
 
     def _make_meta(self, key: str) -> MetaTensor:
         item = self._source._get_meta(key)
@@ -4391,7 +4313,7 @@ class _CustomOpTensorDict(TensorDictBase):
         return TensorDict(
             source=self.to_dict(),
             batch_size=self.batch_size,
-            device=self.device_safe(),
+            device=self.device,
         )
 
     def is_contiguous(self) -> bool:
@@ -4418,7 +4340,7 @@ class _CustomOpTensorDict(TensorDictBase):
                 return self
             return dest(source=self)
         elif isinstance(dest, (torch.device, str, int)):
-            if self.device_safe() is not None and torch.device(dest) == self.device:
+            if self.device is not None and torch.device(dest) == self.device:
                 return self
             td = self._source.to(dest, **kwargs)
             self_copy = copy(self)

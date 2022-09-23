@@ -158,7 +158,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
             tensordict_out["done"] = torch.zeros(
                 tensordict_out.shape,
                 dtype=torch.bool,
-                device=tensordict_out.device_safe(),
+                device=tensordict_out.device,
             )
         return tensordict_out
 
