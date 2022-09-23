@@ -255,19 +255,8 @@ class TensorSpec:
             if isinstance(val, np.ndarray) and not all(
                 stride > 0 for stride in val.strides
             ):
-                if _CHECK_IMAGES:
-                    # images can become noisy during training. if the CHECK_IMAGES
-                    # env variable is True, we check that no more than half of the
-                    # pixels are black or white.
-                    # Because this only happens with mujoco, we'll always end up
-                    # with images with a negative stride: hence we can safely put
-                    # the check here.
-                    v = (val == 0) | (val == 255)
-                    v = v.sum() / v.size
-                    assert v < 0.5, f"numpy: {val.shape}"
                 val = val.copy()
-            # val = torch.tensor(val).to(self.dtype).to(self.device)
-            val = torch.tensor(val, dtype=self.dtype, device=self.device).clone()
+            val = torch.tensor(val, dtype=self.dtype, device=self.device)
         if not _NO_CHECK_SPEC_ENCODE:
             self.assert_is_in(val)
         return val
@@ -454,9 +443,6 @@ class BoundedTensorSpec(TensorSpec):
         if shape is None:
             shape = torch.Size([])
         a, b = self.space
-        safe_interval = 0.0001 * (b - a)
-        a = a + safe_interval
-        b = b - safe_interval
         shape = [*shape, *self.shape]
         if self.dtype in (torch.float, torch.double, torch.half):
             out = (
