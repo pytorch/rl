@@ -1905,6 +1905,9 @@ class TensorDict(TensorDictBase):
 
     @property
     def device(self) -> Union[None, torch.device]:
+        """Returns `None` if device hasn't been provided in the constructor
+        or set via `tensordict.to(device)`.
+        """
         return self._device
 
     @device.setter
