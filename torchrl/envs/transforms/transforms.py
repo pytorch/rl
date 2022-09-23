@@ -1850,7 +1850,7 @@ class TensorDictPrimer(Transform):
         self.random = random
         self.default_value = default_value
         self._batch_size = []
-        self._device = torch.device("cpu")
+        self.device = kwargs.get("device", torch.device("cpu"))
         # sanity check
         for spec in self.primers.values():
             if not isinstance(spec, TensorSpec):
@@ -1859,6 +1859,18 @@ class TensorDictPrimer(Transform):
                     f"Got {type(spec)} instead."
                 )
         super().__init__([])
+
+    @property
+    def device(self):
+        return self._device
+
+    @device.setter
+    def device(self, value):
+        self._device = value
+
+    def set_parent(self, parent):
+        self.device = parent.device
+        return super().set_parent(parent)
 
     def transform_observation_spec(
         self, observation_spec: CompositeSpec
@@ -1875,7 +1887,7 @@ class TensorDictPrimer(Transform):
                     f"value obtained through the call to `env.reset()`. Consider renaming "
                     f"the {key} key."
                 )
-            observation_spec[key] = spec.to(self._device)
+            observation_spec[key] = spec.to(self.device)
         return observation_spec
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
