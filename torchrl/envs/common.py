@@ -219,7 +219,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if batch_size is not None:
             # we want an error to be raised if we pass batch_size but
             # it's already been set
-            self.batch_size = batch_size
+            self.batch_size = torch.Size(batch_size)
         elif ("batch_size" not in self.__dir__()) and (
             "batch_size" not in self.__class__.__dict__
         ):
