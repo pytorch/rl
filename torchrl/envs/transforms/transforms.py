@@ -5,11 +5,11 @@
 
 from __future__ import annotations
 
+import collections
 import multiprocessing as mp
 from copy import deepcopy, copy
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Union
-import collections
 from warnings import warn
 
 import torch
@@ -1867,7 +1867,12 @@ class TensorDictPrimer(Transform):
 
     @device.setter
     def device(self, value):
-        self._device = value
+        self._device = torch.device(value)
+
+    def to(self, dtype_or_device):
+        if not isinstance(dtype_or_device, torch.dtype):
+            self.device = dtype_or_device
+        return super().to(dtype_or_device)
 
     def transform_observation_spec(
         self, observation_spec: CompositeSpec
