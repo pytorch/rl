@@ -233,7 +233,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # It can also lead to inconsistencies when calling rollout.
         cls._inplace_update = _inplace_update
         cls._batch_locked = _batch_locked
-        cls._run_checks = kwargs.get("_run_checks", True)
         return super().__new__(cls)
 
     @property
@@ -318,9 +317,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             obs = tensordict_out.get(key)
             self.observation_spec.type_check(obs, key)
 
-        if self._run_checks and (
-            tensordict_out._get_meta("reward").dtype is not self.reward_spec.dtype
-        ):
+        if tensordict_out._get_meta("reward").dtype is not self.reward_spec.dtype:
             raise TypeError(
                 f"expected reward.dtype to be {self.reward_spec.dtype} "
                 f"but got {tensordict_out.get('reward').dtype}"
