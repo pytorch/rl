@@ -2102,12 +2102,10 @@ def test_create_on_device():
 
     # TensorDict
     td = TensorDict({}, [5])
-    with pytest.raises(RuntimeError):
-        td.device
+    assert td.device is None
 
     td.set("a", torch.randn(5, device=device))
-    with pytest.raises(RuntimeError):
-        td.device
+    assert td.device is None
 
     td = TensorDict({}, [5], device="cuda:0")
     td.set("a", torch.randn(5, 1))
