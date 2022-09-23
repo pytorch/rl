@@ -9,6 +9,7 @@ import multiprocessing as mp
 from copy import deepcopy, copy
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Union
+import collections
 from warnings import warn
 
 import torch
@@ -1868,10 +1869,6 @@ class TensorDictPrimer(Transform):
     def device(self, value):
         self._device = value
 
-    def set_parent(self, parent):
-        self.device = parent.device
-        return super().set_parent(parent)
-
     def transform_observation_spec(
         self, observation_spec: CompositeSpec
     ) -> CompositeSpec:
@@ -1887,6 +1884,7 @@ class TensorDictPrimer(Transform):
                     f"value obtained through the call to `env.reset()`. Consider renaming "
                     f"the {key} key."
                 )
+            assert observation_spec.device == self.device
             observation_spec[key] = spec.to(self.device)
         return observation_spec
 
@@ -1895,7 +1893,7 @@ class TensorDictPrimer(Transform):
         while not isinstance(parent_env, EnvBase):
             parent_env = parent_env.parent
         self._batch_size = parent_env.batch_size
-        self._device = parent_env.device
+        self.device = parent_env.device
         return super().set_parent(parent)
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -2211,7 +2209,7 @@ class VecNorm(Transform):
         return td_select.share_memory_()
 
     def get_extra_state(self) -> OrderedDict:
-        return OrderedDict([("lock", self.lock), ("td", self._td)])
+        return collections.OrderedDict({"lock": self.lock, "td": self._td})
 
     def set_extra_state(self, state: OrderedDict) -> None:
         lock = state["lock"]
