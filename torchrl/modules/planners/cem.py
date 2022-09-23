@@ -26,7 +26,7 @@ class CEMPlanner(MPCPlannerBase):
     A call to the module returns the actions that empirically maximised the returns given a planning horizon
 
     Args:
-        env (EnvBase): The environment to perform the planning step on (can be ```ModelBasedEnv``` or ```EnvBase```).
+        env (EnvBase): The environment to perform the planning step on (can be `ModelBasedEnv` or `EnvBase`).
         planning_horizon (int): The length of the simulated trajectories
         optim_steps (int): The number of optimization steps used by the MPC planner
         num_candidates (int): The number of candidates to sample from the Gaussian distributions.

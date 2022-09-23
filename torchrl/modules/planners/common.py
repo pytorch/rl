@@ -19,12 +19,12 @@ class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
     
     This is an abstract class.
 
-    This class inherits from TensorDictModule. Provided a TensorDict, this module will perform a Model Predictive Control (MPC) planning step.
-    At the end of the planning step, the MPCPlanner will return a proposed action
+    This class inherits from `TensorDictModule`. Provided a `TensorDict`, this module will perform a Model Predictive Control (MPC) planning step.
+    At the end of the planning step, the `MPCPlanner` will return a proposed action.
 
     Args:
-        env (EnvBase): The environment to perform the planning step on (Can be ModelBasedEnv or EnvBase).
-        action_key (str, optional): The key that will point to the computed action
+        env (EnvBase): The environment to perform the planning step on (Can be `ModelBasedEnvBase` or `EnvBase`).
+        action_key (str, optional): The key that will point to the computed action.
     """
 
     def __init__(
@@ -44,7 +44,7 @@ class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def planning(self, td: TensorDictBase) -> torch.Tensor:
-        """Perform the MPC planning step.
+        """Performs the MPC planning step.
 
         Args:
             td (TensorDict): The TensorDict to perform the planning step on.
@@ -58,7 +58,7 @@ class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
         **kwargs,
     ) -> TensorDictBase:
         if "params" in kwargs or "vmap" in kwargs:
-            raise ValueError("MPCPlannerBase does not support params or vmap for now.")
+            raise ValueError("MPCPlannerBase does not currently support functional programming.")
         action = self.planning(tensordict)
         action = self.action_spec.project(action)
         tensordict_out = self._write_to_tensordict(
