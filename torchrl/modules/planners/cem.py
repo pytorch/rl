@@ -13,13 +13,13 @@ __all__ = ["CEMPlanner"]
 
 
 class CEMPlanner(MPCPlannerBase):
-    """CEMPlanner Module. 
+    """CEMPlanner Module.
 
     Reference: The cross-entropy method for optimization, Botev et al. 2013
 
     This module will perform a CEM planning step when given a TensorDict containing initial states.
     The CEM planning step is performed by sampling actions from a Gaussian distribution with zero mean and unit variance.
-    The sampled actions are then used to perform a rollout in the environment. The cumulative rewards obtained with the rollout is then 
+    The sampled actions are then used to perform a rollout in the environment. The cumulative rewards obtained with the rollout is then
     ranked. We select the top-k episodes and use their actions to update the mean and standard deviation of the actions distribution.
     The CEM planning step is repeated for a specified number of steps.
 
@@ -65,7 +65,7 @@ class CEMPlanner(MPCPlannerBase):
             1,
             self.planning_horizon,
             *self.action_spec.shape,
-            device=tensordict.device,
+            device=tensordict.device_safe(),
             dtype=self.env.action_spec.dtype,
         )
         actions_stds = torch.ones(
@@ -73,7 +73,7 @@ class CEMPlanner(MPCPlannerBase):
             1,
             self.planning_horizon,
             *self.action_spec.shape,
-            device=tensordict.device,
+            device=tensordict.device_safe(),
             dtype=self.env.action_spec.dtype,
         )
 
@@ -83,7 +83,7 @@ class CEMPlanner(MPCPlannerBase):
                 self.num_candidates,
                 self.planning_horizon,
                 *self.action_spec.shape,
-                device=tensordict.device,
+                device=tensordict.device_safe(),
                 dtype=self.env.action_spec.dtype,
             )
             actions = actions.flatten(0, 1)

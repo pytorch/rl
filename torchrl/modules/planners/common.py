@@ -16,7 +16,7 @@ __all__ = ["MPCPlannerBase"]
 
 class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
     """MPCPlannerBase Module.
-    
+
     This is an abstract class.
 
     This class inherits from `TensorDictModule`. Provided a `TensorDict`, this module will perform a Model Predictive Control (MPC) planning step.
@@ -34,7 +34,9 @@ class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
     ):
         # Check if env is stateless
         if env.batch_locked:
-            raise ValueError("Environment is batch_locked. MPCPlanners need an environnement that accepts batched inputs with any batch size")
+            raise ValueError(
+                "Environment is batch_locked. MPCPlanners need an environnement that accepts batched inputs with any batch size"
+            )
         out_keys = [action_key]
         in_keys = list(env.observation_spec.keys())
         super().__init__(env, in_keys=in_keys, out_keys=out_keys)
@@ -58,7 +60,9 @@ class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
         **kwargs,
     ) -> TensorDictBase:
         if "params" in kwargs or "vmap" in kwargs:
-            raise ValueError("MPCPlannerBase does not currently support functional programming.")
+            raise ValueError(
+                "MPCPlannerBase does not currently support functional programming."
+            )
         action = self.planning(tensordict)
         action = self.action_spec.project(action)
         tensordict_out = self._write_to_tensordict(
