@@ -380,6 +380,8 @@ class TensorSpec:
             a zero-filled tensor sampled in the TensorSpec box.
 
         """
+        if shape is None:
+            shape = torch.Size([])
         return torch.zeros((*shape, *self.shape), dtype=self.dtype, device=self.device)
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> "TensorSpec":
@@ -1214,9 +1216,11 @@ dtype=torch.float32)},
         return {key: self[key].to_numpy(val) for key, val in val.items()}
 
     def zero(self, shape=None) -> TensorDictBase:
+        if shape is None:
+            shape = torch.Size([])
         return TensorDict(
             {key: self[key].zero(shape) for key in self.keys()},
-            [shape],
+            shape,
             device=self.device,
         )
 
