@@ -129,7 +129,7 @@ class CEMPlanner(MPCPlannerBase):
             1,
             self.planning_horizon,
             *self.action_spec.shape,
-            device=tensordict.device_safe(),
+            device=tensordict.device,
             dtype=self.env.action_spec.dtype,
         )
         actions_stds = torch.ones(
@@ -137,7 +137,7 @@ class CEMPlanner(MPCPlannerBase):
             1,
             self.planning_horizon,
             *self.action_spec.shape,
-            device=tensordict.device_safe(),
+            device=tensordict.device,
             dtype=self.env.action_spec.dtype,
         )
 
@@ -147,7 +147,7 @@ class CEMPlanner(MPCPlannerBase):
                 self.num_candidates,
                 self.planning_horizon,
                 *self.action_spec.shape,
-                device=tensordict.device_safe(),
+                device=tensordict.device,
                 dtype=self.env.action_spec.dtype,
             )
             actions = actions.flatten(0, 1)
@@ -171,9 +171,7 @@ class CEMPlanner(MPCPlannerBase):
                 0, (flatten_batch_size, self.num_candidates)
             )
             best_actions = best_actions[
-                torch.arange(
-                    flatten_batch_size, device=tensordict.device_safe()
-                ).unsqueeze(1),
+                torch.arange(flatten_batch_size, device=tensordict.device).unsqueeze(1),
                 top_k,
             ]
             actions_means = best_actions.mean(dim=1, keepdim=True)

@@ -344,7 +344,6 @@ class TestPlanner:
         td = env.reset(TensorDict({}, batch_size=batch_size).to(device))
         td_copy = td.clone()
         td = planner(td)
-        print(td.device_safe())
         assert td.get("action").shape[1:] == env.action_spec.shape
 
         assert env.action_spec.is_in(td.get("action"))
