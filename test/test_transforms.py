@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
-from copy import copy, deepcopy
+from copy import copy
 
 import pytest
 import torch
@@ -52,7 +52,6 @@ from torchrl.envs.transforms.transforms import (
     CenterCrop,
     UnsqueezeTransform,
     SqueezeTransform,
-    TensorDictPrimer,
 )
 
 TIMEOUT = 10.0
@@ -1012,72 +1011,6 @@ class TestTransforms:
             assert transformed_env.step_count > 0
         else:
             assert transformed_env.step_count == 30
-
-    @pytest.mark.parametrize(
-        "default_keys", [["action"], ["action", "monkeys jumping on the bed"]]
-    )
-    @pytest.mark.parametrize(
-        "spec",
-        [
-            CompositeSpec(b=NdBoundedTensorSpec(-3, 3, [4])),
-            NdBoundedTensorSpec(-3, 3, [4]),
-        ],
-    )
-    @pytest.mark.parametrize("random", [True, False])
-    @pytest.mark.parametrize("value", [0.0, 1.0])
-    @pytest.mark.parametrize("serial", [True, False])
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_tensordict_primer(
-        self,
-        default_keys,
-        spec,
-        random,
-        value,
-        serial,
-        device,
-    ):
-        if random and value != 0.0:
-            return pytest.skip("no need to check random=True with more than one value")
-        torch.manual_seed(0)
-        num_defaults = len(default_keys)
-
-        def make_env():
-            env = ContinuousActionVecMockEnv().to(device)
-            env.set_seed(100)
-            kwargs = {
-                key: deepcopy(spec) if key != "action" else deepcopy(env.action_spec)
-                # copy to avoid having the same spec for all keys
-                for key in default_keys
-            }
-            reset_transform = TensorDictPrimer(
-                random=random, default_value=value, **kwargs
-            )
-            transformed_env = TransformedEnv(env, reset_transform)
-            return transformed_env
-
-        if serial:
-            env = SerialEnv(3, make_env)
-        else:
-            env = make_env()
-
-        tensordict = env.reset()
-        tensordict_select = tensordict.select(
-            *[key for key in tensordict.keys() if key in default_keys]
-        )
-        assert len(list(tensordict_select.keys())) == num_defaults
-        if random:
-            assert (tensordict_select != value).any()
-        else:
-            assert (tensordict_select == value).all()
-
-        if isinstance(spec, CompositeSpec) and any(
-            key != "action" for key in default_keys
-        ):
-            for key in default_keys:
-                if key in ("action",):
-                    continue
-                assert key in tensordict.keys()
-                assert tensordict[key, "b"] is not None
 
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
