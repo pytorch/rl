@@ -54,7 +54,10 @@ from torchrl.data.utils import (
 
 _has_functorch = False
 try:
-    from functorch import _C
+    try:
+        from functorch._C import is_batchedtensor
+    except ImportError:
+        from torch._C._functorch import is_batchedtensor
 
     _has_functorch = True
 except ImportError:
@@ -576,9 +579,7 @@ dtype=torch.float32)},
         else:
             tensor = input
         if (
-            _has_functorch
-            and isinstance(tensor, Tensor)
-            and _C.is_batchedtensor(tensor)
+            _has_functorch and isinstance(tensor, Tensor) and is_batchedtensor(tensor)
         ):  # TODO: find a proper way of doing that
             return tensor
 
