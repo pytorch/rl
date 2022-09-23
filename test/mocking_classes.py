@@ -216,7 +216,7 @@ class MockBatchedLockedEnv(EnvBase):
         )
 
         return TensorDict(
-            {"reward": n, "done": done, "next_observation": n}, tensordict.batch_size
+            {"reward": n, "done": done, "next_observation": n}, tensordict.batch_size, device=self.device
         )
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
@@ -235,7 +235,7 @@ class MockBatchedLockedEnv(EnvBase):
         done = torch.full(batch_size, done, dtype=torch.bool, device=self.device)
 
         return TensorDict(
-            {"reward": n, "done": done, "next_observation": n}, batch_size
+            {"reward": n, "done": done, "next_observation": n}, batch_size, device=self.device
         )
 
 
