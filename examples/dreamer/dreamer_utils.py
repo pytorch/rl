@@ -137,7 +137,9 @@ def make_env_transforms(
         CatTensors(keys_in=["action"], out_key="prev_action", del_keys=False)
     )
     env.append_transform(
-        CatTensors(keys_in=["posterior_state"], out_key="prev_posterior_state", del_keys=False)
+        CatTensors(
+            keys_in=["posterior_state"], out_key="prev_posterior_state", del_keys=False
+        )
     )
 
     return env

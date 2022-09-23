@@ -6,6 +6,7 @@
 
 import torch
 from torch import nn
+
 from torchrl.modules.distributions import NormalParamWrapper
 from torchrl.modules.models import MLP
 
@@ -153,7 +154,15 @@ class RSSMPriorRollout(nn.Module):
         posterior_means = torch.stack(posterior_means, dim=1)
         posterior_stds = torch.stack(posterior_stds, dim=1)
         posterior_states = torch.stack(posterior_states, dim=1)
-        return prior_means, prior_stds, prior_states, beliefs, posterior_means, posterior_stds, posterior_states
+        return (
+            prior_means,
+            prior_stds,
+            prior_states,
+            beliefs,
+            posterior_means,
+            posterior_stds,
+            posterior_states,
+        )
 
 
 class RSSMPrior(nn.Module):

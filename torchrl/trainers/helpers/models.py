@@ -32,6 +32,14 @@ from torchrl.modules.distributions.continuous import (
     SafeTanhTransform,
 )
 from torchrl.modules.models.exploration import LazygSDEModule
+from torchrl.modules.models.model_based_models import (
+    DreamerActor,
+    ObsEncoder,
+    ObsDecoder,
+    RSSMPrior,
+    RSSMPosterior,
+    RSSMPriorRollout,
+)
 from torchrl.modules.models.models import (
     ConvNet,
     DdpgCnnActor,
@@ -42,14 +50,6 @@ from torchrl.modules.models.models import (
     LSTMNet,
     MLP,
     DuelingMlpDQNet,
-)
-from torchrl.modules.models.model_based_models import (
-    DreamerActor,
-    ObsEncoder,
-    ObsDecoder,
-    RSSMPrior,
-    RSSMPosterior,
-    RSSMPriorRollout,
 )
 from torchrl.modules.tensordict_module import (
     Actor,
@@ -1215,7 +1215,12 @@ def make_dreamer(
         # rssm_prior_rollout = transition
         TensorDictModule(
             rssm_prior_rollout,
-            in_keys=["prev_posterior_state", "prev_belief", "prev_" + action_key, "encoded_latents"],
+            in_keys=[
+                "prev_posterior_state",
+                "prev_belief",
+                "prev_" + action_key,
+                "encoded_latents",
+            ],
             out_keys=[
                 "prior_means",
                 "prior_stds",

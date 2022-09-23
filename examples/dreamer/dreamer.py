@@ -151,7 +151,9 @@ def call_record(
 
         reco_pixels = recover_pixels(world_model_td["reco_pixels"], stats)
         with autocast(dtype=torch.float16):
-            world_model_td = world_model_td.select("posterior_state", "next_belief", "predicted_reward")
+            world_model_td = world_model_td.select(
+                "posterior_state", "next_belief", "predicted_reward"
+            )
             world_model_td.batch_size = [
                 world_model_td.shape[0],
                 world_model_td.get("next_belief").shape[1],

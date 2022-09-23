@@ -30,7 +30,7 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from torchrl.data.tensordict.tensordict import TensorDictBase, pad
 from torchrl.data.utils import expand_right, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
@@ -531,6 +531,17 @@ class ReplayBufferTrainer:
             Default is False.
         device (device, optional): device where the samples must be placed.
             Default is cpu.
+        flatten_tensordicts (bool, optional): if True, the tensordicts will be
+            flattened (or equivalently masked with the valid mask obtained from
+            the collector) before being passed to the replay buffer. Otherwise,
+            no transform will be achieved other than padding (see `max_dims` arg below).
+            Defaults to True
+        max_dims (sequence of int, optional): if `flatten_tensordicts` is set to False,
+            this will be a list of the length of the batch_size of the provided
+            tensordicts that represent the maximum size of each. If provided,
+            this list of sizes will be used to pad the tensordict and make their shape
+            match before they are passed to the replay buffer. If there is no
+            maximum value, a -1 value should be provided.
 
     Examples:
         >>> rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
@@ -546,17 +557,33 @@ class ReplayBufferTrainer:
         batch_size: int,
         memmap: bool = False,
         device: DEVICE_TYPING = "cpu",
+        flatten_tensordicts: bool = True,
+        max_dims: Optional[Sequence[int]] = None,
     ) -> None:
         self.replay_buffer = replay_buffer
         self.batch_size = batch_size
         self.memmap = memmap
         self.device = device
+        self.flatten_tensordicts = flatten_tensordicts
+        self.max_dims = max_dims
 
     def extend(self, batch: TensorDictBase) -> TensorDictBase:
-        if "mask" in batch.keys():
-            batch = batch[batch.get("mask").squeeze(-1)]
+        if self.flatten_tensordicts:
+            if "mask" in batch.keys():
+                batch = batch[batch.get("mask").squeeze(-1)]
+            else:
+                batch = batch.reshape(-1)
         else:
-            batch = batch.reshape(-1)
+            if self.max_dims is not None:
+                pads = []
+                for d in range(batch.ndimension()):
+                    pad_value = (
+                        0
+                        if self.max_dims[d] == -1
+                        else self.max_dims[d] - batch.batch_size[d]
+                    )
+                    pads += [0, pad_value]
+                batch = pad(batch, pads)
         # reward_training = batch.get("reward").mean().item()
         batch = batch.cpu()
         if self.memmap:

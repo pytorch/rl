@@ -25,30 +25,32 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
     It is meant to give an env framework to a world model (including but not limited to observations, reward, done state and safety constraints models).
     and to behave as a classical environment.
 
-    Meant to be used as a base class for other environments. It is not meant to be used directly.
+    This is a base class for other environments and it should not be used directly.
 
     Example:
     >>> import torch
+    >>> from torchrl.data import TensorDict, CompositeSpec, NdUnboundedContinuousTensorSpec
     >>> class MyMBEnv(ModelBasedEnvBase):
-    >>>     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
-    >>>         super(MyEnv, self).__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
-    >>>
-    >>>     def _reset(self):
-    >>>         td = TensorDict(
-    ...            {
-    ...                 "hidden_observation": torch.randn(*self.batch_size, 4),
-    ...                 "next_hidden_observation": torch.randn(*self.batch_size, 4),
-    ...                 "action": torch.randn(*self.batch_size, 1),
-    ...             },
-    ...             batch_size=self.batch_size,
+    ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
+    ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
+    ...         self.observation_spec = CompositeSpec(
+    ...             next_hidden_observation=NdUnboundedContinuousTensorSpec((4,))
     ...         )
-    >>>         return td
-    >>>
-    >>>     def _set_seed(self, seed: int) -> int:
-    >>>         return seed + 1
-
-    Then, you can use this environment as follows:
-
+    ...         self.input_spec = CompositeSpec(
+    ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
+    ...             action=NdUnboundedContinuousTensorSpec((1,)),
+    ...         )
+    ...         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+    ...
+    ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
+    ...         tensordict = TensorDict({},
+    ...             batch_size=self.batch_size,
+    ...             device=self.device,
+    ...         )
+    ...         tensordict = tensordict.update(self.input_spec.rand(self.batch_size))
+    ...         tensordict = tensordict.update(self.observation_spec.rand(self.batch_size))
+    ...         return tensordict
+    >>> # This environment is used as follows:
     >>> from torchrl.modules import MLP, WorldModelWrapper
     >>> import torch.nn as nn
     >>> world_model = WorldModelWrapper(
@@ -63,11 +65,19 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
     ...         out_keys=["reward"],
     ...     ),
     ... )
-    >>> world_model = MyWorldModel()
     >>> env = MyMBEnv(world_model)
-    >>> td = env.reset()
-    >>> env.rollout(td, max_steps=10)
-    ```
+    >>> tensordict = env.rollout(max_steps=10)
+    >>> print(tensordict)
+    TensorDict(
+        fields={
+            action: Tensor(torch.Size([10, 1]), dtype=torch.float32),
+            done: Tensor(torch.Size([10, 1]), dtype=torch.bool),
+            hidden_observation: Tensor(torch.Size([10, 4]), dtype=torch.float32),
+            next_hidden_observation: Tensor(torch.Size([10, 4]), dtype=torch.float32),
+            reward: Tensor(torch.Size([10, 1]), dtype=torch.float32)},
+        batch_size=torch.Size([10]),
+        device=cpu,
+        is_shared=False)
 
 
     Properties:
@@ -110,24 +120,23 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         super(ModelBasedEnvBase, self).__init__(
             device=device, dtype=dtype, batch_size=batch_size
         )
-        self.world_model = world_model
+        self.world_model = world_model.to(self.device)
         self.world_model_params = params
         self.world_model_buffers = buffers
 
     @classmethod
     def __new__(cls, *args, **kwargs):
         return super().__new__(
-            cls, *args, _inplace_update=False, _batch_locked=False, _run_checks=False, **kwargs
+            cls, *args, _inplace_update=False, _batch_locked=False, **kwargs
         )
 
     def set_specs_from_env(self, env: EnvBase):
         """
         Sets the specs of the environment from the specs of the given environment.
         """
-        self.observation_spec = deepcopy(env.observation_spec)
-        self.action_spec = deepcopy(env.action_spec)
-        self.reward_spec = deepcopy(env.reward_spec)
-        self.input_spec = deepcopy(env.input_spec)
+        self.observation_spec = deepcopy(env.observation_spec).to(self.device)
+        self.reward_spec = deepcopy(env.reward_spec).to(self.device)
+        self.input_spec = deepcopy(env.input_spec).to(self.device)
 
     def _step(
         self,
@@ -157,6 +166,5 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         raise NotImplementedError
 
-    @abc.abstractmethod
     def _set_seed(self, seed: Optional[int]) -> int:
-        raise NotImplementedError
+        raise Warning("Set seed isn't needed for model based environments")

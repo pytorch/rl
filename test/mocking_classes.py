@@ -657,15 +657,15 @@ class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
 
 
 class DummyModelBasedEnvBase(ModelBasedEnvBase):
-    """
-    Dummy environnement for Model Based RL algorithms.
+    """Dummy environnement for Model Based RL algorithms.
+
     This class is meant to be used to test the model based environnement.
 
     Args:
         world_model (WorldModel): the world model to use for the environnement.
-        device (str): the device to use for the environnement.
-        dtype (torch.dtype): the dtype to use for the environnement.
-        batch_size (int): the batch size to use for the environnement.
+        device (str or torch.device, optional): the device to use for the environnement.
+        dtype (torch.dtype, optional): the dtype to use for the environnement.
+        batch_size (sequence of int, optional): the batch size to use for the environnement.
     """
 
     def __init__(
@@ -675,13 +675,12 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
         dtype=None,
         batch_size=None,
     ):
-        super(DummyModelBasedEnvBase, self).__init__(
+        super().__init__(
             world_model,
             device=device,
             dtype=dtype,
             batch_size=batch_size,
         )
-        self.action_spec = NdUnboundedContinuousTensorSpec((1,))
         self.observation_spec = CompositeSpec(
             next_hidden_observation=NdUnboundedContinuousTensorSpec((4,))
         )
@@ -694,15 +693,17 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         td = TensorDict(
             {
-                "hidden_observation": torch.randn(*self.batch_size, 4),
-                "next_hidden_observation": torch.randn(*self.batch_size, 4),
+                "hidden_observation": self.input_spec["hidden_observation"].rand(
+                    self.batch_size
+                ),
+                "next_hidden_observation": self.observation_spec[
+                    "next_hidden_observation"
+                ].rand(self.batch_size),
             },
             batch_size=self.batch_size,
+            device=self.device,
         )
         return td
-
-    def _set_seed(self, seed: int) -> int:
-        return seed + 1
 
 
 class ActionObsMergeLinear(nn.Module):

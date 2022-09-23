@@ -8,11 +8,11 @@ import torch
 
 from torchrl.data import TensorDict
 from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import step_tensordict
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import hold_out_net, distance_loss
 from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
-from torchrl.envs.utils import step_tensordict
 
 
 class DreamerModelLoss(LossModule):
@@ -127,7 +127,9 @@ class DreamerActorLoss(LossModule):
 
     def forward(self, tensordict) -> torch.Tensor:
         with torch.no_grad():
-            tensordict = tensordict.select("posterior_state", "belief", "predicted_reward")
+            tensordict = tensordict.select(
+                "posterior_state", "belief", "predicted_reward"
+            )
 
             tensordict.batch_size = [
                 tensordict.shape[0],
@@ -143,9 +145,12 @@ class DreamerActorLoss(LossModule):
                 auto_reset=False,
                 tensordict=tensordict,
             )
-            tensordict = step_tensordict(tensordict, keep_other=True,
-                    exclude_reward=False,
-                    exclude_action=False,)
+            tensordict = step_tensordict(
+                tensordict,
+                keep_other=True,
+                exclude_reward=False,
+                exclude_action=False,
+            )
             with hold_out_net(self.value_model):
                 tensordict = self.value_model(tensordict)
 
@@ -196,13 +201,17 @@ class DreamerValueLoss(LossModule):
         discount[:, 0] = 1
         discount = discount.cumprod(dim=1).detach()
         value_loss = (
-            discount
-            * distance_loss(
-                tensordict.get("predicted_value"),
-                tensordict.get("lambda_target"),
-                self.value_loss,
+            (
+                discount
+                * distance_loss(
+                    tensordict.get("predicted_value"),
+                    tensordict.get("lambda_target"),
+                    self.value_loss,
+                )
             )
-        ).sum((-1,-2)).mean()
+            .sum((-1, -2))
+            .mean()
+        )
 
         return (
             TensorDict(
