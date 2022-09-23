@@ -5,6 +5,7 @@
 from typing import Optional
 
 import torch
+import torch.nn as nn
 from torchrl import seed_generator
 from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
@@ -18,6 +19,7 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase
+from torchrl.envs.model_based.common import ModelBasedEnvBase
 
 spec_dict = {
     "bounded": BoundedTensorSpec,
@@ -652,3 +654,62 @@ class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
     def _get_in_obs(self, tensordict):
         obs = tensordict.get(*self.in_keys).diagonal(0, -1, -2).squeeze()
         return obs
+
+
+class DummyModelBasedEnvBase(ModelBasedEnvBase):
+    """Dummy environnement for Model Based RL algorithms.
+
+    This class is meant to be used to test the model based environnement.
+
+    Args:
+        world_model (WorldModel): the world model to use for the environnement.
+        device (str or torch.device, optional): the device to use for the environnement.
+        dtype (torch.dtype, optional): the dtype to use for the environnement.
+        batch_size (sequence of int, optional): the batch size to use for the environnement.
+    """
+
+    def __init__(
+        self,
+        world_model,
+        device="cpu",
+        dtype=None,
+        batch_size=None,
+    ):
+        super().__init__(
+            world_model,
+            device=device,
+            dtype=dtype,
+            batch_size=batch_size,
+        )
+        self.observation_spec = CompositeSpec(
+            next_hidden_observation=NdUnboundedContinuousTensorSpec((4,))
+        )
+        self.input_spec = CompositeSpec(
+            hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
+            action=NdUnboundedContinuousTensorSpec((1,)),
+        )
+        self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+
+    def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
+        td = TensorDict(
+            {
+                "hidden_observation": self.input_spec["hidden_observation"].rand(
+                    self.batch_size
+                ),
+                "next_hidden_observation": self.observation_spec[
+                    "next_hidden_observation"
+                ].rand(self.batch_size),
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+        return td
+
+
+class ActionObsMergeLinear(nn.Module):
+    def __init__(self, in_size, out_size):
+        super().__init__()
+        self.linear = nn.Linear(in_size, out_size)
+
+    def forward(self, observation, action):
+        return self.linear(torch.cat([observation, action], dim=-1))

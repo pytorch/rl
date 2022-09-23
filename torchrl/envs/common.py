@@ -367,6 +367,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         """
         tensordict_reset = self._reset(tensordict, **kwargs)
+        if tensordict_reset.device_safe() != self.device:
+            tensordict_reset = tensordict_reset.to(self.device)
         if tensordict_reset is tensordict:
             raise RuntimeError(
                 "EnvBase._reset should return outplace changes to the input "
@@ -628,10 +630,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.reward_spec = self.reward_spec.to(device)
         self.observation_spec = self.observation_spec.to(device)
         self.input_spec = self.input_spec.to(device)
-
         self.is_done = self.is_done.to(device)
         self.device = device
-        return self
+        return super().to(device)
 
     def fake_tensordict(self) -> TensorDictBase:
         """
