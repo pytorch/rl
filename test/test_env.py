@@ -192,6 +192,7 @@ def test_rollout_predictability(device):
         == td_out.get("action").squeeze()
     ).all()
 
+
 def _make_envs(
     env_name,
     frame_skip,
