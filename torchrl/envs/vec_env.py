@@ -615,11 +615,7 @@ class SerialEnv(_BatchedEnv):
         return self.shared_tensordict_parent.select(*keys).clone()
 
     def __getattr__(self, attr: str) -> Any:
-        # module_attrs = dir(self.__class__)
-        # attrs = list(self.__dict__.keys())
-        # mod_dir = module_attrs + attrs
-        mod_dir = self.__dir__()
-        if attr in mod_dir:
+        if attr in self.__dir__():
             return super().__getattr__(
                 attr
             )  # make sure that appropriate exceptions are raised
@@ -844,11 +840,7 @@ class ParallelEnv(_BatchedEnv):
         return super().__reduce__()
 
     def __getattr__(self, attr: str) -> Any:
-        # module_attrs = dir(self.__class__)
-        # attrs = list(self.__dict__.keys())
-        # mod_dir = module_attrs + attrs
-        mod_dir = self.__dir__()
-        if attr in mod_dir:
+        if attr in self.__dir__():
             return super().__getattr__(
                 attr
             )  # make sure that appropriate exceptions are raised
