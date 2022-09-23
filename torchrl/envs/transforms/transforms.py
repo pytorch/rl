@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import collections
 import multiprocessing as mp
 from copy import deepcopy, copy
 from textwrap import indent
@@ -63,6 +64,7 @@ __all__ = [
     "PinMemoryTransform",
     "VecNorm",
     "gSDENoise",
+    "TensorDictPrimer",
 ]
 
 IMAGE_KEYS = ["next_pixels"]
@@ -1810,6 +1812,112 @@ class NoopResetEnv(Transform):
         return f"{class_name}(noops={noops}, random={random})"
 
 
+class TensorDictPrimer(Transform):
+    """A primer for TensorDict initialization at reset time.
+
+    This transform will populate the tensordict at reset with values drawn from
+    the relative tensorspecs provided at initialization.
+
+    Args:
+        random (bool, optional): if True, the values will be drawn randomly from
+            the TensorSpec domain. Otherwise a fixed value will be assumed.
+            Defaults to `False`.
+        default_value (float, optional): if non-random filling is chosen, this
+            value will be used to populate the tensors. Defaults to `0.0`.
+        **kwargs: each keyword argument corresponds to a key in the tensordict.
+            The corresponding value has to be a TensorSpec instance indicating
+            what the value must be.
+
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> base_env = GymEnv("Pendulum-v1")
+        >>> env = TransformedEnv(base_env)
+        >>> env.append_transform(TensorDictPrimer(mykey=NdUnboundedContinuousTensorSpec([3])))
+        >>> print(env.reset())
+        TensorDict(
+            fields={
+                done: Tensor(torch.Size([1]), dtype=torch.bool),
+                mykey: Tensor(torch.Size([3]), dtype=torch.float32),
+                observation: Tensor(torch.Size([3]), dtype=torch.float32)},
+            batch_size=torch.Size([]),
+            device=cpu,
+            is_shared=False)
+    """
+
+    inplace = False
+
+    def __init__(self, random=False, default_value=0.0, **kwargs):
+        self.primers = kwargs
+        self.random = random
+        self.default_value = default_value
+        self._batch_size = []
+        self.device = kwargs.get("device", torch.device("cpu"))
+        # sanity check
+        for spec in self.primers.values():
+            if not isinstance(spec, TensorSpec):
+                raise ValueError(
+                    "The values of the primers must be a subtype of the TensorSpec class. "
+                    f"Got {type(spec)} instead."
+                )
+        super().__init__([])
+
+    @property
+    def device(self):
+        return self._device
+
+    @device.setter
+    def device(self, value):
+        self._device = torch.device(value)
+
+    def to(self, dtype_or_device):
+        if not isinstance(dtype_or_device, torch.dtype):
+            self.device = dtype_or_device
+        return super().to(dtype_or_device)
+
+    def transform_observation_spec(
+        self, observation_spec: CompositeSpec
+    ) -> CompositeSpec:
+        if not isinstance(observation_spec, CompositeSpec):
+            raise ValueError(
+                f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
+            )
+        for key, spec in self.primers.items():
+            if key in observation_spec:
+                raise RuntimeError(
+                    f"The key {key} is already in the observation_spec. This means "
+                    f"that the value reset by TensorDictPrimer will confict with the "
+                    f"value obtained through the call to `env.reset()`. Consider renaming "
+                    f"the {key} key."
+                )
+            assert observation_spec.device == self.device
+            observation_spec[key] = spec.to(self.device)
+        return observation_spec
+
+    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
+        parent_env = parent
+        while not isinstance(parent_env, EnvBase):
+            parent_env = parent_env.parent
+        self._batch_size = parent_env.batch_size
+        self.device = parent_env.device
+        return super().set_parent(parent)
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for key, spec in self.primers.items():
+            if self.random:
+                value = spec.rand(tensordict.batch_size)
+            else:
+                value = torch.full_like(
+                    spec.rand(tensordict.batch_size),
+                    self.default_value,
+                )
+            tensordict.set(key, value)
+        return tensordict
+
+    def __repr__(self) -> str:
+        class_name = self.__class__.__name__
+        return f"{class_name}(primers={self.primers}, default_value={self.default_value}, random={self.random})"
+
+
 class PinMemoryTransform(Transform):
     """
     Calls pin_memory on the tensordict to facilitate writing on CUDA devices.
@@ -2106,7 +2214,7 @@ class VecNorm(Transform):
         return td_select.share_memory_()
 
     def get_extra_state(self) -> OrderedDict:
-        return OrderedDict([("lock", self.lock), ("td", self._td)])
+        return collections.OrderedDict({"lock": self.lock, "td": self._td})
 
     def set_extra_state(self, state: OrderedDict) -> None:
         lock = state["lock"]
