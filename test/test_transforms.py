@@ -46,7 +46,6 @@ from torchrl.envs import (
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm, TransformedEnv
 from torchrl.envs.transforms.r3m import _R3MNet
-from torchrl.envs.transforms.vip import _VIPNet
 from torchrl.envs.transforms.transforms import (
     _has_tv,
     NoopResetEnv,
@@ -55,6 +54,7 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
     SqueezeTransform,
 )
+from torchrl.envs.transforms.vip import _VIPNet
 
 TIMEOUT = 10.0
 
@@ -1384,6 +1384,7 @@ class TestR3M:
             + ["done"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys())
+
 
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("model", ["resnet50"])

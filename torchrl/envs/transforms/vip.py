@@ -2,7 +2,6 @@ from typing import List, Optional, Union
 
 import torch
 from torch.hub import load_state_dict_from_url
-from torch.nn import Identity
 
 from torchrl.data import TensorDict, DEVICE_TYPING
 from torchrl.data.tensor_specs import (
@@ -35,7 +34,7 @@ class _VIPNet(Transform):
 
     inplace = False
 
-    def __init__(self, in_keys, out_keys, model_name='resnet50', del_keys: bool = True):
+    def __init__(self, in_keys, out_keys, model_name="resnet50", del_keys: bool = True):
         if not _has_tv:
             raise ImportError(
                 "Tried to instantiate VIP without torchvision. Make sure you have "
@@ -94,9 +93,7 @@ class _VIPNet(Transform):
     @staticmethod
     def _load_weights(model_name, vip_instance, dir_prefix):
         if model_name not in ("vip_50"):
-            raise ValueError(
-                "model_name should be 'vip_50'"
-            )
+            raise ValueError("model_name should be 'vip_50'")
         url = "https://pytorch.s3.amazonaws.com/models/rl/vip/model.pt"
         d = load_state_dict_from_url(
             url,
@@ -132,7 +129,7 @@ class VIPTransform(Compose):
             Shagun Sodhani, Dinesh Jayaraman, Osbert Bastani, Vikash Kumar*, Amy Zhang*)
 
     Args:
-        model_name (str): one of resnet50 
+        model_name (str): one of resnet50
         keys_in (list of str, optional): list of input keys. If left empty, the
             "next_pixels" key is assumed.
         keys_out (list of str, optional): list of output keys. If left empty,
