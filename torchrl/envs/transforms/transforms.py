@@ -128,6 +128,7 @@ class Transform(nn.Module):
         if keys_inv_out is None:
             keys_inv_out = copy(self.keys_inv_in)
         self.keys_inv_out = keys_inv_out
+        self.__dict__["_parent"] = None
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets a tranform if it is stateful."""
@@ -239,6 +240,8 @@ class Transform(nn.Module):
         if not hasattr(self, "_parent"):
             raise AttributeError("transform parent uninitialized")
         parent = self._parent
+        if parent is None:
+            return parent
         if not isinstance(parent, EnvBase):
             # if it's not an env, it should be a Compose transform
             if not isinstance(parent, Compose):
