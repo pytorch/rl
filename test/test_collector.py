@@ -65,6 +65,78 @@ def make_policy(env):
     else:
         raise NotImplementedError
 
+def _is_consistent_device_type(device_type, passing_device_type, tensordict_device_type):
+    if passing_device_type is None:
+        if device_type == 'cuda':
+            return tensordict_device_type == 'cuda'
+            
+        return tensordict_device_type == 'cpu'
+
+    return tensordict_device_type == passing_device_type
+
+
+@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("env_name", ["conv", "vec"])
+@pytest.mark.parametrize("device", ["cpu", None])
+@pytest.mark.parametrize("passing_device", ["cpu", None])
+def test_default_output_device(num_env, env_name, device, passing_device, seed=40):
+    if num_env == 1:
+
+        def env_fn(seed):
+            env = make_make_env(env_name)()
+            env.set_seed(seed)
+            return env
+
+    else:
+
+        def env_fn(seed):
+            env = ParallelEnv(
+                num_workers=num_env,
+                create_env_fn=make_make_env(env_name),
+                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+            )
+            return env
+
+    policy = make_policy(env_name)
+
+    collector = SyncDataCollector(
+        create_env_fn=env_fn,
+        create_env_kwargs={"seed": seed},
+        policy=policy,
+        frames_per_batch=20,
+        max_frames_per_traj=2000,
+        total_frames=20000,
+        device=device,
+        passing_device=passing_device,
+        pin_memory=False,
+    )
+    for i, d in enumerate(collector):
+        assert _is_consistent_device_type(device, passing_device, d.device.type) == True
+        if i == 5:
+            break
+
+    collector.shutdown()
+
+    ccollector = aSyncDataCollector(
+        create_env_fn=env_fn,
+        create_env_kwargs={"seed": seed},
+        policy=policy,
+        frames_per_batch=20,
+        max_frames_per_traj=2000,
+        total_frames=20000,
+        device=device,
+        passing_device=passing_device,
+        pin_memory=False,
+    )
+
+    for i, d in enumerate(ccollector):
+        assert _is_consistent_device_type(device, passing_device, d.device.type) == True
+        if i == 5:
+            break
+
+    ccollector.shutdown()
+
+
 
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
@@ -132,6 +204,7 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     assert_allclose_td(b2c, b2)
 
     ccollector.shutdown()
+
 
 
 # TODO: design a test that ensures that collectors are interrupted even if __del__ is not called
