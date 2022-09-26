@@ -25,7 +25,7 @@ class DreamerActor(nn.Module):
     This network is used to predict the action distribution given the
     the stochastic state and the deterministic belief at the current
     time step.
-    It project actions in a TanhNormal space.
+    It output the mean and the scale of the action distribution.
 
     Reference: https://arxiv.org/abs/1912.016034
 
@@ -161,7 +161,7 @@ class RSSMRollout(nn.Module):
 
     def forward(self, posterior_state, belief, actions, obs_embedding):
         """Runs a rollout of simulated transitions in the latent space given
-        a defined sequence of actions, an initial prior state and an initial belief.
+        an initial posterior state,  an initial belief, a defined sequence of actions, and a sequence of encoded observations.
 
         Args:
             posterior_state: a batch x state_size tensor containing the initial posterior_state state
