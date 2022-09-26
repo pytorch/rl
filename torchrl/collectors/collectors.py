@@ -118,12 +118,10 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         # else:
         #     env = None
 
-        if (
-            policy is None
-        ):  # This can only happen in SyncDataCollector __init__ function
+        if policy is None:
             if not hasattr(self, "env") or self.env is None:
                 raise ValueError(
-                    "env must be provided to _get_policy_and_device if policy is None"  # For _MultiDataCollector it does not create self.env in its __init__ function so the policy has to be provided
+                    "env must be provided to _get_policy_and_device if policy is None"
                 )
             policy = RandomPolicy(self.env.action_spec)  # Get policy from the env
 
@@ -138,7 +136,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                 else torch.device(
                     "cpu"
                 )  # If there is no device specified inside the policy, uses the device from the function input parameter;
-                # if there is also no input parameter device, we assume the device is cpu for the policy
+                # if there is also no input parameter device, we assume that the device is cpu for the policy
             )
 
         device = (
@@ -235,7 +233,7 @@ class SyncDataCollector(_DataCollector):
         passing_device (int, str or torch.device, optional): The device on which the output TensorDict will be stored.
             For long trajectories, it may be necessary to store the data on a different device than the one where
             the policy is stored.
-            default = "cpu"
+            default = None
         return_in_place (bool): if True, the collector will yield the same tensordict container with updated values
             at each iteration.
             default = False
@@ -662,7 +660,7 @@ class _MultiDataCollector(_DataCollector):
         passing_devices (int, str, torch.device or sequence of such, optional): The devices on which the output
             TensorDict will be stored. For long trajectories, it may be necessary to store the data on a different
             device than the one where the policy is stored.
-            default = "cpu"
+            default = None
         update_at_each_batch (bool): if True, the policy weights will be updated every time a batch of trajectories
             is collected.
             default=False
@@ -740,7 +738,7 @@ class _MultiDataCollector(_DataCollector):
             if len(devices) != self.num_workers:
                 raise RuntimeError(
                     device_err_msg("devices", devices)
-                )  # If user provides a list of devices, make sure the number of devices provided equal the number of workers
+                )  # If user provides a list of devices, make sure the number of devices provided equals the number of workers
             devices = [torch.device(_device) for _device in devices]
         else:
             raise ValueError(
@@ -1275,7 +1273,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: bool = True,
         device: Optional[Union[int, str, torch.device]] = None,
-        passing_device: Union[int, str, torch.device] = "cpu",
+        passing_device: Union[int, str, torch.device] = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
     ):
@@ -1291,7 +1289,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             postproc=postproc,
             split_trajs=split_trajs,
             devices=[device] if device is not None else None,
-            passing_devices=[passing_device],
+            passing_devices=[passing_device] if passing_device is not None else None,
             seed=seed,
             pin_memory=pin_memory,
         )
