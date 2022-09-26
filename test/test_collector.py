@@ -113,7 +113,11 @@ def test_output_device_consistency(num_env, env_name, device, passing_device, se
         pin_memory=False,
     )
     for i, d in enumerate(collector):
-        assert True if _is_consistent_device_type(device, passing_device, d.device.type) else False
+        assert (
+            True
+            if _is_consistent_device_type(device, passing_device, d.device.type)
+            else False
+        )
         if i == 5:
             break
 
@@ -132,7 +136,11 @@ def test_output_device_consistency(num_env, env_name, device, passing_device, se
     )
 
     for i, d in enumerate(ccollector):
-        assert True if _is_consistent_device_type(device, passing_device, d.device.type) else False
+        assert (
+            True
+            if _is_consistent_device_type(device, passing_device, d.device.type)
+            else False
+        )
         if i == 5:
             break
 
