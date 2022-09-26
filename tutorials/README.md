@@ -17,5 +17,5 @@ tasks in batch mode and build task-specific policies.
 This tutorial is also a good example of the advanced features of TensorDict stacking and
 indexing.
 
-Finally, the [DDPG tutorial](coding_ddpg.ipynb) will guide you through the steps to code 
-your first RL algorithm in TorchRL.
+Finally, the [DDPG tutorial](coding_ddpg.ipynb) and [DQN tutorial](coding_dqn.ipynb) will guide you through the steps to code 
+your first RL algorithms with TorchRL.
