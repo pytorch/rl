@@ -1,70 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-
-import argparse
-
-import numpy as np
-import pytest
-import torch
-from _utils_internal import generate_seeds
-from mocking_classes import (
-    ContinuousActionVecMockEnv,
-    DiscreteActionConvMockEnv,
-    DiscreteActionConvPolicy,
-    DiscreteActionVecMockEnv,
-    DiscreteActionVecPolicy,
-)
-from torch import nn
-from torchrl import seed_generator
-from torchrl.collectors import aSyncDataCollector, SyncDataCollector
-from torchrl.collectors.collectors import (
-    MultiaSyncDataCollector,
-    MultiSyncDataCollector,
-    RandomPolicy,
-)
-from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.libs.gym import _has_gym
-from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.modules import Actor, OrnsteinUhlenbeckProcessWrapper
-
-# torch.set_default_dtype(torch.double)
-
-
-def make_make_env(env_name="conv"):
-    def make_transformed_env(seed=None):
-        if env_name == "conv":
-            env = DiscreteActionConvMockEnv()
-        elif env_name == "vec":
-            env = DiscreteActionVecMockEnv()
-        if seed is not None:
-            env.set_seed(seed)
-        return env
-
-    return make_transformed_env
-
-
-def dummypolicy_vec():
-    policy = DiscreteActionVecPolicy()
-    return policy
-
-
-def dummypolicy_conv():
-    policy = DiscreteActionConvPolicy()
-    return policy
-
-
-def make_policy(env):
-    if env == "conv":
-        return dummypolicy_conv()
-    elif env == "vec":
-        return dummypolicy_vec()
-    else:
-        raise NotImplementedError
-
-
 """
 def _is_consistent_device_type(
     device_type, passing_device_type, tensordict_device_type
@@ -147,6 +80,72 @@ def test_output_device_consistency(num_env, env_name, device, passing_device, se
 
     ccollector.shutdown()
 """
+
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+import argparse
+
+import numpy as np
+import pytest
+import torch
+from _utils_internal import generate_seeds
+from mocking_classes import (
+    ContinuousActionVecMockEnv,
+    DiscreteActionConvMockEnv,
+    DiscreteActionConvPolicy,
+    DiscreteActionVecMockEnv,
+    DiscreteActionVecPolicy,
+)
+from torch import nn
+from torchrl import seed_generator
+from torchrl.collectors import aSyncDataCollector, SyncDataCollector
+from torchrl.collectors.collectors import (
+    MultiaSyncDataCollector,
+    MultiSyncDataCollector,
+    RandomPolicy,
+)
+from torchrl.data.tensordict.tensordict import assert_allclose_td
+from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs.transforms import TransformedEnv, VecNorm
+from torchrl.modules import Actor, OrnsteinUhlenbeckProcessWrapper
+
+# torch.set_default_dtype(torch.double)
+
+
+def make_make_env(env_name="conv"):
+    def make_transformed_env(seed=None):
+        if env_name == "conv":
+            env = DiscreteActionConvMockEnv()
+        elif env_name == "vec":
+            env = DiscreteActionVecMockEnv()
+        if seed is not None:
+            env.set_seed(seed)
+        return env
+
+    return make_transformed_env
+
+
+def dummypolicy_vec():
+    policy = DiscreteActionVecPolicy()
+    return policy
+
+
+def dummypolicy_conv():
+    policy = DiscreteActionConvPolicy()
+    return policy
+
+
+def make_policy(env):
+    if env == "conv":
+        return dummypolicy_conv()
+    elif env == "vec":
+        return dummypolicy_vec()
+    else:
+        raise NotImplementedError
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
