@@ -33,7 +33,6 @@ from torchrl.data import (
 from torchrl.data.tensordict.tensordict import TensorDictBase, pad
 from torchrl.data.utils import expand_right, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
@@ -905,7 +904,7 @@ class Recorder:
         frame_skip: int,
         policy_exploration: TensorDictModule,
         recorder: EnvBase,
-        exploration_mode: str = "mean",
+        exploration_mode: str = "random",
         log_keys: Optional[List[str]] = None,
         out_keys: Optional[Dict[str, str]] = None,
         suffix: Optional[str] = None,
@@ -933,12 +932,11 @@ class Recorder:
     def __call__(self, batch: TensorDictBase) -> Dict:
         out = None
         if self._count % self.record_interval == 0:
+            torch.cuda.empty_cache()
             with set_exploration_mode(self.exploration_mode):
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.eval()
                 self.recorder.eval()
-                if isinstance(self.recorder, TransformedEnv):
-                    self.recorder.transform.eval()
                 td_record = self.recorder.rollout(
                     policy=self.policy_exploration,
                     max_steps=self.record_frames,
