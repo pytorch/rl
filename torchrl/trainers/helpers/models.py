@@ -38,7 +38,7 @@ from torchrl.modules.models.model_based_models import (
     ObsDecoder,
     RSSMPrior,
     RSSMPosterior,
-    RSSMPriorRollout,
+    RSSMRollout,
 )
 from torchrl.modules.models.models import (
     ConvNet,
@@ -1192,7 +1192,7 @@ def make_dreamer(
     rssm_posterior = RSSMPosterior(
         hidden_dim=cfg.rssm_hidden_dim, state_dim=cfg.state_dim
     )
-    rssm_prior_rollout = RSSMPriorRollout(rssm_prior, rssm_posterior)
+    rssm_prior_rollout = RSSMRollout(rssm_prior, rssm_posterior)
     reward_module = MLP(
         out_features=1, depth=2, num_cells=cfg.mlp_num_units, activation_class=nn.ELU
     )
