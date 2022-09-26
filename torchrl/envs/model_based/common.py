@@ -97,6 +97,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         device (torch.device, optional): device where the env input and output are expected to live
         dtype (torch.dtype, optional): dtype of the env input and output
         batch_size (torch.Size, optional): number of environments contained in the instance
+        run_type_check (bool, optional): whether to run type checks on the step of the env
 
     Methods:
         step (TensorDict -> TensorDict): step in the environment
@@ -116,9 +117,10 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
+        run_type_checks: bool = False,
     ):
         super(ModelBasedEnvBase, self).__init__(
-            device=device, dtype=dtype, batch_size=batch_size, run_type_checks=False
+            device=device, dtype=dtype, batch_size=batch_size, run_type_checks=run_type_checks
         )
         self.world_model = world_model.to(self.device)
         self.world_model_params = params
