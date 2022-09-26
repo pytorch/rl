@@ -118,7 +118,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         batch_size: Optional[torch.Size] = None,
     ):
         super(ModelBasedEnvBase, self).__init__(
-            device=device, dtype=dtype, batch_size=batch_size
+            device=device, dtype=dtype, batch_size=batch_size, run_type_checks=False
         )
         self.world_model = world_model.to(self.device)
         self.world_model_params = params

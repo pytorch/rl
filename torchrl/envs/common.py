@@ -202,6 +202,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
+        run_type_checks: bool = True,
     ):
         super().__init__()
         if device is not None:
@@ -224,6 +225,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             "batch_size" not in self.__class__.__dict__
         ):
             self.batch_size = torch.Size([])
+        self.run_type_checks = run_type_checks
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
@@ -312,21 +314,21 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
         self.is_done = tensordict_out.get("done")
+        if self.run_type_checks:
+            for key in self._select_observation_keys(tensordict_out):
+                obs = tensordict_out.get(key)
+                self.observation_spec.type_check(obs, key)
 
-        for key in self._select_observation_keys(tensordict_out):
-            obs = tensordict_out.get(key)
-            self.observation_spec.type_check(obs, key)
+            if tensordict_out._get_meta("reward").dtype is not self.reward_spec.dtype:
+                raise TypeError(
+                    f"expected reward.dtype to be {self.reward_spec.dtype} "
+                    f"but got {tensordict_out.get('reward').dtype}"
+                )
 
-        if tensordict_out._get_meta("reward").dtype is not self.reward_spec.dtype:
-            raise TypeError(
-                f"expected reward.dtype to be {self.reward_spec.dtype} "
-                f"but got {tensordict_out.get('reward').dtype}"
-            )
-
-        if tensordict_out._get_meta("done").dtype is not torch.bool:
-            raise TypeError(
-                f"expected done.dtype to be torch.bool but got {tensordict_out.get('done').dtype}"
-            )
+            if tensordict_out._get_meta("done").dtype is not torch.bool:
+                raise TypeError(
+                    f"expected done.dtype to be torch.bool but got {tensordict_out.get('done').dtype}"
+                )
         tensordict.update(tensordict_out, inplace=self._inplace_update)
 
         del tensordict_out
