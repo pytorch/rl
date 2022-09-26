@@ -1192,7 +1192,7 @@ def make_dreamer(
     rssm_posterior = RSSMPosterior(
         hidden_dim=cfg.rssm_hidden_dim, state_dim=cfg.state_dim
     )
-    rssm_prior_rollout = RSSMRollout(rssm_prior, rssm_posterior)
+    rssm_rollout = RSSMRollout(rssm_prior, rssm_posterior)
     reward_module = MLP(
         out_features=1, depth=2, num_cells=cfg.mlp_num_units, activation_class=nn.ELU
     )
@@ -1212,9 +1212,9 @@ def make_dreamer(
             in_keys=["pixels"],
             out_keys=["encoded_latents"],
         ),
-        # rssm_prior_rollout = transition
+        # rssm_rollout = transition
         TensorDictModule(
-            rssm_prior_rollout,
+            rssm_rollout,
             in_keys=[
                 "prev_posterior_state",
                 "prev_belief",
@@ -1231,7 +1231,6 @@ def make_dreamer(
                 "posterior_state",
             ],
         ),
-        # rssm_prior_rollout + rssm_posterior = representation
         TensorDictModule(
             obs_decoder,
             in_keys=["posterior_state", "belief"],
@@ -1243,7 +1242,7 @@ def make_dreamer(
         TensorDictModule(
             reward_module,
             in_keys=["posterior_state", "belief"],
-            out_keys=["predicted_reward"],
+            out_keys=["reward"],
         ),
     )
     # Actor value and policy

@@ -55,11 +55,9 @@ class DreamerEnv(ModelBasedEnvBase):
 
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
         td = self.input_spec.rand(shape=self.batch_size)
+        td["reward"] = self.reward_spec.rand(shape=self.batch_size)
         td = self.step(td)
         return td
-
-    def _set_seed(self, seed: Optional[int]) -> int:
-        return seed + 1
 
     def decode_obs(self, tensordict: TensorDict, compute_latents=False) -> TensorDict:
         if self.obs_decoder is None:
