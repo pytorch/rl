@@ -641,12 +641,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         """
         input_spec = self.input_spec
-        fake_input = input_spec.zero()
+        fake_input = input_spec.zero(self.batch_size)
         observation_spec = self.observation_spec
-        fake_obs = observation_spec.zero()
+        fake_obs = observation_spec.zero(self.batch_size)
         fake_obs_step = step_tensordict(fake_obs)
         reward_spec = self.reward_spec
-        fake_reward = reward_spec.zero()
+        fake_reward = reward_spec.zero(self.batch_size)
         fake_td = TensorDict(
             {
                 **fake_obs_step,
