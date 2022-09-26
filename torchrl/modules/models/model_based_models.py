@@ -67,7 +67,7 @@ class DreamerActor(nn.Module):
 
 class ObsEncoder(nn.Module):
     """Observation encoder network.
-    
+
     Takes an pixel observation and encodes it into a latent space.
 
     Reference: https://arxiv.org/abs/1803.10122
@@ -75,6 +75,7 @@ class ObsEncoder(nn.Module):
     Args:
         depth (int): Number of hidden units in the first layer.
     """
+
     def __init__(self, depth=32):
         super().__init__()
         self.encoder = nn.Sequential(
@@ -102,7 +103,7 @@ class ObsEncoder(nn.Module):
 
 class ObsDecoder(nn.Module):
     """Observation decoder network.
-    
+
     Takes the deterministic state and the stochastic belief and decodes it into a pixel observation.
 
     Reference: https://arxiv.org/abs/1803.10122
@@ -110,6 +111,7 @@ class ObsDecoder(nn.Module):
     Args:
         depth (int): Number of hidden units in the last layer.
     """
+
     def __init__(self, depth=32):
         super().__init__()
         self.state_to_latent = nn.Sequential(
@@ -139,7 +141,7 @@ class ObsDecoder(nn.Module):
 
 class RSSMRollout(nn.Module):
     """Rollout the RSSM network.
-    
+
     Given a set of encoded observations and actions, this function will rollout the RSSM network to compute all the intermediate
     states and beliefs.
     Here, we use the previous posterior as the prior for the next time step. At the first time step, we use the an empty prior to start the rollout.
@@ -151,8 +153,9 @@ class RSSMRollout(nn.Module):
         rssm_prior (RSSMPrior): Prior network.
         rssm_posterior (RSSMPosterior): Posterior network.
 
-    
+
     """
+
     def __init__(self, rssm_prior, rssm_posterior):
         super().__init__()
         self.rssm_prior = rssm_prior
@@ -220,7 +223,7 @@ class RSSMRollout(nn.Module):
 
 class RSSMPrior(nn.Module):
     """The prior network of the RSSM.
-    
+
     This network takes the previous state and belief and the action and outputs the next state and belief.
     State is by construction stochastic and belief is deterministic. In the paper this is called the
     deterministic state and stochastic state respectively. We prefer to call them belief and state for clarity.
@@ -239,8 +242,9 @@ class RSSMPrior(nn.Module):
         rnn_hidden_dim (int): Number of hidden units in the recurrent network. Also size of the belief.
         state_dim (int): Size of the state.
         action_spec (TensorSpec): Action spec.
-    
+
     """
+
     def __init__(
         self, hidden_dim=200, rnn_hidden_dim=200, state_dim=30, action_spec=None
     ):
@@ -289,6 +293,7 @@ class RSSMPosterior(nn.Module):
         state_dim (int): Size of the state.
 
     """
+
     def __init__(self, hidden_dim=200, state_dim=30):
         super().__init__()
         self.obs_rnn_to_post_projector = NormalParamWrapper(

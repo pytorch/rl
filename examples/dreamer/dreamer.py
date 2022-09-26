@@ -427,9 +427,7 @@ def main(cfg: "DictConfig"):
                     scaler1.update()
 
                 with autocast(dtype=torch.float16):
-                    actor_loss_td, sampled_tensordict = actor_loss(
-                        sampled_tensordict
-                    )
+                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
                 scaler2.scale(actor_loss_td["loss_actor"]).backward()
                 scaler2.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
@@ -449,9 +447,7 @@ def main(cfg: "DictConfig"):
                 scaler2.update()
 
                 with autocast(dtype=torch.float16):
-                    value_loss_td, sampled_tensordict = value_loss(
-                        sampled_tensordict
-                    )
+                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
                 scaler3.scale(value_loss_td["loss_value"]).backward()
                 scaler3.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)

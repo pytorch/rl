@@ -7,13 +7,14 @@ from typing import Optional
 import torch
 
 from torchrl.data import TensorDict
+from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.envs.utils import step_tensordict
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import hold_out_net, distance_loss
 from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
-from torchrl.envs.model_based.dreamer import DreamerEnv
+
 
 class DreamerModelLoss(LossModule):
     """Dreamer Model Loss
@@ -64,7 +65,9 @@ class DreamerModelLoss(LossModule):
         # prepare tensordict: remove time in batch dimensions
         tensordict.batch_size = tensordict.batch_size[:1]
         # take the first tensor for prev_posterior_state and prev_belief
-        tensordict["prev_posterior_state"] = torch.zeros_like(tensordict["prev_posterior_state"][:, 0])
+        tensordict["prev_posterior_state"] = torch.zeros_like(
+            tensordict["prev_posterior_state"][:, 0]
+        )
         tensordict["prev_belief"] = torch.zeros_like(tensordict["prev_belief"][:, 0])
         tensordict["true_reward"] = tensordict["reward"]
         del tensordict["reward"]
@@ -109,7 +112,13 @@ class DreamerModelLoss(LossModule):
             tensordict.detach(),
         )
 
-    def kl_loss(self, prior_mean: torch.Tensor, prior_std: torch.Tensor, posterior_mean: torch.Tensor, posterior_std: torch.Tensor) -> torch.Tensor:
+    def kl_loss(
+        self,
+        prior_mean: torch.Tensor,
+        prior_std: torch.Tensor,
+        posterior_mean: torch.Tensor,
+        posterior_std: torch.Tensor,
+    ) -> torch.Tensor:
         kl = (
             torch.log(prior_std / posterior_std)
             + (posterior_std ** 2 + (prior_mean - posterior_mean) ** 2)
@@ -139,15 +148,16 @@ class DreamerActorLoss(LossModule):
         lmbda (float, optional): the lambda factor.
         discount_loss (bool, optional): if True, the loss is discounted with a gamma discount factor.
     """
+
     def __init__(
         self,
         actor_model: TensorDictModule,
         value_model: TensorDictModule,
         model_based_env: DreamerEnv,
         cfg: "DictConfig",
-        gamma: int =0.99,
-        lmbda: int =0.95,
-        discount_loss: bool=True,
+        gamma: int = 0.99,
+        lmbda: int = 0.95,
+        discount_loss: bool = True,
     ):
         super().__init__()
         self.actor_model = actor_model
@@ -160,9 +170,7 @@ class DreamerActorLoss(LossModule):
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         with torch.no_grad():
-            tensordict = tensordict.select(
-                "posterior_state", "belief", "reward"
-            )
+            tensordict = tensordict.select("posterior_state", "belief", "reward")
 
             tensordict.batch_size = [
                 tensordict.shape[0],
@@ -193,7 +201,9 @@ class DreamerActorLoss(LossModule):
         tensordict.set("lambda_target", lambda_target)
 
         if self.discount_loss:
-            discount = self.gamma * torch.ones_like(lambda_target, device=tensordict.device)
+            discount = self.gamma * torch.ones_like(
+                lambda_target, device=tensordict.device
+            )
             discount[:, 0] = 1
             discount = discount.cumprod(dim=1).detach()
             actor_loss = -(lambda_target * discount).mean()
@@ -209,7 +219,7 @@ class DreamerActorLoss(LossModule):
             tensordict.detach(),
         )
 
-    def lambda_target(self, reward:  torch.Tensor, value: torch.Tensor)-> torch.Tensor:
+    def lambda_target(self, reward: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
         done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
         return vec_td_lambda_return_estimate(
             self.gamma, self.lmbda, value[:, 1:], reward[:, :-1], done[:, :-1]
@@ -229,12 +239,13 @@ class DreamerValueLoss(LossModule):
         gamma (float, optional): the discount factor.
         discount_loss (bool, optional): if True, the loss is discounted with a gamma discount factor.
     """
+
     def __init__(
         self,
         value_model: TensorDictModule,
         value_loss: Optional[str] = None,
-        gamma: int=0.99,
-        discount_loss: bool=True,
+        gamma: int = 0.99,
+        discount_loss: bool = True,
     ):
         super().__init__()
         self.value_model = value_model
