@@ -10,26 +10,25 @@ import pytest
 import torch
 from _utils_internal import generate_seeds
 from mocking_classes import (
+    ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnv,
+    DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
-    DiscreteActionConvPolicy,
-    ContinuousActionVecMockEnv,
 )
 from torch import nn
 from torchrl import seed_generator
-from torchrl.collectors import SyncDataCollector, aSyncDataCollector
+from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
-    RandomPolicy,
-    MultiSyncDataCollector,
     MultiaSyncDataCollector,
+    MultiSyncDataCollector,
+    RandomPolicy,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.envs import EnvCreator
-from torchrl.envs import ParallelEnv
+from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
+from torchrl.modules import Actor, OrnsteinUhlenbeckProcessWrapper
 
 # torch.set_default_dtype(torch.double)
 
@@ -65,21 +64,24 @@ def make_policy(env):
     else:
         raise NotImplementedError
 
-def _is_consistent_device_type(device_type, passing_device_type, tensordict_device_type):
+
+def _is_consistent_device_type(
+    device_type, passing_device_type, tensordict_device_type
+):
     if passing_device_type is None:
-        if device_type == 'cuda':
-            return tensordict_device_type == 'cuda'
-            
-        return tensordict_device_type == 'cpu'
+        if device_type == "cuda":
+            return tensordict_device_type == "cuda"
+
+        return tensordict_device_type == "cpu"
 
     return tensordict_device_type == passing_device_type
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
-@pytest.mark.parametrize("device", ["cpu", None])
-@pytest.mark.parametrize("passing_device", ["cpu", None])
-def test_default_output_device(num_env, env_name, device, passing_device, seed=40):
+@pytest.mark.parametrize("device", ["cuda", "cpu", None])
+@pytest.mark.parametrize("passing_device", ["cuda", "cpu", None])
+def test_output_device_consistency(num_env, env_name, device, passing_device, seed=40):
     if num_env == 1:
 
         def env_fn(seed):
@@ -111,7 +113,7 @@ def test_default_output_device(num_env, env_name, device, passing_device, seed=4
         pin_memory=False,
     )
     for i, d in enumerate(collector):
-        assert _is_consistent_device_type(device, passing_device, d.device.type) == True
+        assert True if _is_consistent_device_type(device, passing_device, d.device.type) else False
         if i == 5:
             break
 
@@ -130,12 +132,11 @@ def test_default_output_device(num_env, env_name, device, passing_device, seed=4
     )
 
     for i, d in enumerate(ccollector):
-        assert _is_consistent_device_type(device, passing_device, d.device.type) == True
+        assert True if _is_consistent_device_type(device, passing_device, d.device.type) else False
         if i == 5:
             break
 
     ccollector.shutdown()
-
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
@@ -204,7 +205,6 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     assert_allclose_td(b2c, b2)
 
     ccollector.shutdown()
-
 
 
 # TODO: design a test that ensures that collectors are interrupted even if __del__ is not called
