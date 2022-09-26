@@ -120,7 +120,10 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         run_type_checks: bool = False,
     ):
         super(ModelBasedEnvBase, self).__init__(
-            device=device, dtype=dtype, batch_size=batch_size, run_type_checks=run_type_checks
+            device=device,
+            dtype=dtype,
+            batch_size=batch_size,
+            run_type_checks=run_type_checks,
         )
         self.world_model = world_model.to(self.device)
         self.world_model_params = params
