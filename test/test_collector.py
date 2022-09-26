@@ -79,8 +79,8 @@ def _is_consistent_device_type(
 
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["conv", "vec"])
-@pytest.mark.parametrize("device", ["cuda", "cpu", None])
-@pytest.mark.parametrize("passing_device", ["cuda", "cpu", None])
+@pytest.mark.parametrize("device", ["cpu", None])
+@pytest.mark.parametrize("passing_device", ["cpu", None])
 def test_output_device_consistency(num_env, env_name, device, passing_device, seed=40):
     if num_env == 1:
 
