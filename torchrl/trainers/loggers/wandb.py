@@ -126,6 +126,12 @@ class WandbLogger(Logger):
                 (default is 'mp4') and 'fps' (default: 6). Other kwargs are
                 passed as-is to the `experiment.log` method.
         """
+        # check for correct format of the video tensor ((N), T, C, H, W)
+        # check that the color channel (C) is either 1 or 3
+        if video.dim() != 5 or video.size(dim=2) not in {1, 3}:
+            raise Exception(
+                "Wrong format of the video tensor. Should be ((N), T, C, H, W)"
+            )
         if not self._has_imported_moviepy:
             try:
                 import moviepy  # noqa
@@ -148,6 +154,7 @@ class WandbLogger(Logger):
                 f"be silenced from now on but the values will keep being incremented."
             )
             step = self._prev_video_step + 1
+        self._prev_video_step = step if step is not None else self._prev_video_step + 1
         self.experiment.log(
             {name: wandb.Video(video, fps=fps, format=format)}, step=step, **kwargs
         )

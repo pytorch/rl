@@ -139,7 +139,8 @@ class TestDQN:
                 "action": action,
                 "action_value": action_value,
             },
-        ).to(device)
+            device=device,
+        )
         return td
 
     def _create_seq_mock_data_dqn(
@@ -355,6 +356,7 @@ class TestDDPG:
                 "reward": reward,
                 "action": action,
             },
+            device=device,
         )
         return td
 
@@ -384,6 +386,7 @@ class TestDDPG:
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
             },
+            device=device,
         )
         return td
 
@@ -573,6 +576,7 @@ class TestSAC:
                 "reward": reward,
                 "action": action,
             },
+            device=device,
         )
         return td
 
@@ -602,6 +606,7 @@ class TestSAC:
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
             },
+            device=device,
         )
         return td
 
@@ -917,6 +922,7 @@ class TestREDQ:
                 "reward": reward,
                 "action": action,
             },
+            device=device,
         )
         return td
 
@@ -946,6 +952,7 @@ class TestREDQ:
                 "reward": reward * mask.to(obs.dtype),
                 "action": action * mask.to(obs.dtype),
             },
+            device=device,
         )
         return td
 
@@ -1302,6 +1309,7 @@ class TestPPO:
                 "action": action,
                 "sample_log_prob": torch.randn_like(action[..., :1]) / 10,
             },
+            device=device,
         )
         return td
 
@@ -1338,6 +1346,7 @@ class TestPPO:
                 "loc": params_mean * mask.to(obs.dtype),
                 "scale": params_scale * mask.to(obs.dtype),
             },
+            device=device,
         )
         return td
 

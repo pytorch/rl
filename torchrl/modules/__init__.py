@@ -6,3 +6,4 @@
 from .distributions import *
 from .models import *
 from .tensordict_module import *
+from .planners import *

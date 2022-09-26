@@ -8,6 +8,7 @@ from numbers import Number
 import pytest
 import torch
 from _utils_internal import get_available_devices
+from mocking_classes import MockBatchedUnLockedEnv
 from torch import nn
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
@@ -18,6 +19,7 @@ from torchrl.modules import (
     ValueOperator,
     ProbabilisticActor,
     LSTMNet,
+    CEMPlanner,
 )
 from torchrl.modules.functional_modules import (
     FunctionalModule,
@@ -324,6 +326,31 @@ class TestFunctionalModules:
         print(params, buffers)
         x = torch.randn(10, 128)
         torch.testing.assert_close(fmodule(params, buffers, x, x), module(x, x))
+
+
+class TestPlanner:
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("batch_size", [3, 5])
+    def test_CEM_model_free_env(self, device, batch_size, seed=1):
+        env = MockBatchedUnLockedEnv(device=device)
+        torch.manual_seed(seed)
+        planner = CEMPlanner(
+            env,
+            planning_horizon=10,
+            optim_steps=2,
+            num_candidates=100,
+            num_top_k_candidates=2,
+        )
+        td = env.reset(TensorDict({}, batch_size=batch_size).to(device))
+        td_copy = td.clone()
+        td = planner(td)
+        assert td.get("action").shape[1:] == env.action_spec.shape
+
+        assert env.action_spec.is_in(td.get("action"))
+
+        for key in td.keys():
+            if key != "action":
+                assert torch.allclose(td[key], td_copy[key])
 
 
 if __name__ == "__main__":

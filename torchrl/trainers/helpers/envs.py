@@ -13,7 +13,7 @@ from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import env_creator, EnvCreator
 from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.envs.libs.gym import GymEnv, RetroEnv
+from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     CatFrames,
     CatTensors,
@@ -42,7 +42,6 @@ __all__ = [
 
 LIBS = {
     "gym": GymEnv,
-    "retro": RetroEnv,
     "dm_control": DMControlEnv,
 }
 
@@ -127,7 +126,7 @@ def make_env_transforms(
         env.append_transform(ToTensorImage())
         if cfg.center_crop:
             env.append_transform(CenterCrop(*cfg.center_crop))
-        env.append_transform(Resize(84, 84))
+        env.append_transform(Resize(cfg.image_size, cfg.image_size))
         if cfg.grayscale:
             env.append_transform(GrayScale())
         env.append_transform(FlattenObservation(first_dim=batch_dims))
@@ -153,13 +152,16 @@ def make_env_transforms(
         double_to_float_list += [
             "reward",
         ]
+        double_to_float_list += [
+            "action",
+        ]
         double_to_float_inv_list += ["action"]  # DMControl requires double-precision
     if not from_pixels:
         selected_keys = [
             key
             for key in env.observation_spec.keys()
             if ("pixels" not in key)
-            and (key.strip("next_") not in env.input_spec.keys())
+            and (key.replace("next_", "") not in env.input_spec.keys())
         ]
 
         # even if there is a single tensor, it'll be renamed in "next_observation_vector"
@@ -349,28 +351,29 @@ def parallel_env_constructor(
     return parallel_env
 
 
+@torch.inference_mode()
 def get_stats_random_rollout(
-    cfg: "DictConfig",  # noqa: F821
-    proof_environment: EnvBase,
-    key: Optional[str] = None,  # noqa: F821
+    cfg: "DictConfig", proof_environment: EnvBase = None, key: Optional[str] = None
 ):
+    proof_env_is_none = proof_environment is None
+    if proof_env_is_none:
+        proof_environment = transformed_env_constructor(
+            cfg=cfg, use_env_creator=False
+        )()
+
     print("computing state stats")
     if not hasattr(cfg, "init_env_steps"):
         raise AttributeError("init_env_steps missing from arguments.")
 
     n = 0
-    td_stats = []
+    val_stats = []
     while n < cfg.init_env_steps:
         _td_stats = proof_environment.rollout(max_steps=cfg.init_env_steps)
         n += _td_stats.numel()
-        _td_stats_select = _td_stats.to_tensordict().select(key).cpu()
-        if not len(list(_td_stats_select.keys())):
-            raise RuntimeError(
-                f"key {key} not found in tensordict with keys {list(_td_stats.keys())}"
-            )
-        td_stats.append(_td_stats_select)
-        del _td_stats, _td_stats_select
-    td_stats = torch.cat(td_stats, 0)
+        val = _td_stats.get(key).cpu()
+        val_stats.append(val)
+        del _td_stats, val
+    val_stats = torch.cat(val_stats, 0)
 
     if key is None:
         keys = list(proof_environment.observation_spec.keys())
@@ -382,24 +385,32 @@ def get_stats_random_rollout(
             )
 
     if key == "next_pixels":
-        m = td_stats.get(key).mean()
-        s = td_stats.get(key).std().clamp_min(1e-5)
+        m = val_stats.mean()
+        s = val_stats.std()
     else:
-        m = td_stats.get(key).mean(dim=0)
-        s = td_stats.get(key).std(dim=0)
+        m = val_stats.mean(dim=0)
+        s = val_stats.std(dim=0)
     m[s == 0] = 0.0
     s[s == 0] = 1.0
 
     print(
-        f"stats computed for {td_stats.numel()} steps. Got: \n"
+        f"stats computed for {val_stats.numel()} steps. Got: \n"
         f"loc = {m}, \n"
-        f"scale: {s}"
+        f"scale = {s}"
     )
     if not torch.isfinite(m).all():
         raise RuntimeError("non-finite values found in mean")
     if not torch.isfinite(s).all():
         raise RuntimeError("non-finite values found in sd")
     stats = {"loc": m, "scale": s}
+    if proof_env_is_none:
+        proof_environment.close()
+        if (
+            proof_environment.device != torch.device("cpu")
+            and torch.cuda.device_count() > 0
+        ):
+            torch.cuda.empty_cache()
+        del proof_environment
     return stats
 
 
@@ -441,4 +452,5 @@ class EnvConfig:
     max_frames_per_traj: int = 1000
     # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
     batch_transform: bool = False
-    # if True, the transforms will be applied to the parallel env, and not to each individual env.
+    # if True, the transforms will be applied to the parallel env, and not to each individual env.\
+    image_size: int = 84
