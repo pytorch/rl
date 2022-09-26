@@ -1273,7 +1273,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
         split_trajs: bool = True,
         device: Optional[Union[int, str, torch.device]] = None,
-        passing_device: Union[int, str, torch.device] = None,
+        passing_device: Optional[Union[int, str, torch.device]] = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
     ):
