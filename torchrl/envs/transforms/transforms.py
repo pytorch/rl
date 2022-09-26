@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import collections
 import multiprocessing as mp
 from copy import deepcopy, copy
 from textwrap import indent
@@ -129,6 +130,7 @@ class Transform(nn.Module):
         if keys_inv_out is None:
             keys_inv_out = copy(self.keys_inv_in)
         self.keys_inv_out = keys_inv_out
+        self.__dict__["_parent"] = None
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets a tranform if it is stateful."""
@@ -240,6 +242,8 @@ class Transform(nn.Module):
         if not hasattr(self, "_parent"):
             raise AttributeError("transform parent uninitialized")
         parent = self._parent
+        if parent is None:
+            return parent
         if not isinstance(parent, EnvBase):
             # if it's not an env, it should be a Compose transform
             if not isinstance(parent, Compose):
@@ -1851,7 +1855,7 @@ class TensorDictPrimer(Transform):
         self.random = random
         self.default_value = default_value
         self._batch_size = []
-        self._device = torch.device("cpu")
+        self.device = kwargs.get("device", torch.device("cpu"))
         # sanity check
         for spec in self.primers.values():
             if not isinstance(spec, TensorSpec):
@@ -1860,6 +1864,19 @@ class TensorDictPrimer(Transform):
                     f"Got {type(spec)} instead."
                 )
         super().__init__([])
+
+    @property
+    def device(self):
+        return self._device
+
+    @device.setter
+    def device(self, value):
+        self._device = torch.device(value)
+
+    def to(self, dtype_or_device):
+        if not isinstance(dtype_or_device, torch.dtype):
+            self.device = dtype_or_device
+        return super().to(dtype_or_device)
 
     def transform_observation_spec(
         self, observation_spec: CompositeSpec
@@ -1876,7 +1893,8 @@ class TensorDictPrimer(Transform):
                     f"value obtained through the call to `env.reset()`. Consider renaming "
                     f"the {key} key."
                 )
-            observation_spec[key] = spec.to(self._device)
+            assert observation_spec.device == self.device
+            observation_spec[key] = spec.to(self.device)
         return observation_spec
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
@@ -1884,7 +1902,7 @@ class TensorDictPrimer(Transform):
         while not isinstance(parent_env, EnvBase):
             parent_env = parent_env.parent
         self._batch_size = parent_env.batch_size
-        self._device = parent_env.device
+        self.device = parent_env.device
         return super().set_parent(parent)
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -2200,7 +2218,7 @@ class VecNorm(Transform):
         return td_select.share_memory_()
 
     def get_extra_state(self) -> OrderedDict:
-        return OrderedDict([("lock", self.lock), ("td", self._td)])
+        return collections.OrderedDict({"lock": self.lock, "td": self._td})
 
     def set_extra_state(self, state: OrderedDict) -> None:
         lock = state["lock"]

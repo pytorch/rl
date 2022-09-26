@@ -219,7 +219,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if batch_size is not None:
             # we want an error to be raised if we pass batch_size but
             # it's already been set
-            self.batch_size = batch_size
+            self.batch_size = torch.Size(batch_size)
         elif ("batch_size" not in self.__dir__()) and (
             "batch_size" not in self.__class__.__dict__
         ):
@@ -367,7 +367,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         """
         tensordict_reset = self._reset(tensordict, **kwargs)
-        if tensordict_reset.device_safe() != self.device:
+        if tensordict_reset.device != self.device:
             tensordict_reset = tensordict_reset.to(self.device)
         if tensordict_reset is tensordict:
             raise RuntimeError(
@@ -641,12 +641,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         """
         input_spec = self.input_spec
-        fake_input = input_spec.rand()
+        fake_input = input_spec.zero()
         observation_spec = self.observation_spec
-        fake_obs = observation_spec.rand()
+        fake_obs = observation_spec.zero()
         fake_obs_step = step_tensordict(fake_obs)
         reward_spec = self.reward_spec
-        fake_reward = reward_spec.rand()
+        fake_reward = reward_spec.zero()
         fake_td = TensorDict(
             {
                 **fake_obs_step,
@@ -656,6 +656,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "done": fake_reward.to(torch.bool),
             },
             batch_size=self.batch_size,
+            device=self.device,
         )
         return fake_td
 

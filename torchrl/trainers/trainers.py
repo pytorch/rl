@@ -711,12 +711,9 @@ class RewardNormalizer:
         tensordict = tensordict.to_tensordict()  # make sure it is not a SubTensorDict
         reward = tensordict.get("reward")
 
-        reward_device = (
-            reward.device_safe() if hasattr(reward, "device_safe") else reward.device
-        )
-        if reward_device is not None:
-            reward = reward - self._reward_stats["mean"].to(reward_device)
-            reward = reward / self._reward_stats["std"].to(reward_device)
+        if reward.device is not None:
+            reward = reward - self._reward_stats["mean"].to(reward.device)
+            reward = reward / self._reward_stats["std"].to(reward.device)
         else:
             reward = reward - self._reward_stats["mean"]
             reward = reward / self._reward_stats["std"]
@@ -812,7 +809,7 @@ class BatchSubSampler:
             )
         else:
             traj_len = (
-                torch.ones(batch.shape[0], device=batch.device_safe(), dtype=torch.bool)
+                torch.ones(batch.shape[0], device=batch.device, dtype=torch.bool)
                 * batch.shape[1]
             )
         len_mask = traj_len >= sub_traj_len
@@ -827,7 +824,7 @@ class BatchSubSampler:
             )
         traj_idx = valid_trajectories[
             torch.randint(
-                valid_trajectories.numel(), (batch_size,), device=batch.device_safe()
+                valid_trajectories.numel(), (batch_size,), device=batch.device
             )
         ]
 
