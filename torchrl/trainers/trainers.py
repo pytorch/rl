@@ -932,7 +932,6 @@ class Recorder:
     def __call__(self, batch: TensorDictBase) -> Dict:
         out = None
         if self._count % self.record_interval == 0:
-            torch.cuda.empty_cache()
             with set_exploration_mode(self.exploration_mode):
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.eval()
