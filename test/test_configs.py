@@ -24,15 +24,14 @@ def make_env():
     return fun
 
 
-@pytest.fixture(scope="session", autouse=True)
-def init_hydra(request):
-    GlobalHydra.instance().clear()
-    hydra.initialize("../examples/configs/")
-    request.addfinalizer(GlobalHydra.instance().clear)
-
-
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestConfigs:
+    @pytest.fixture(scope="class", autouse=True)
+    def init_hydra(self, request):
+        GlobalHydra.instance().clear()
+        hydra.initialize("../examples/configs/")
+        request.addfinalizer(GlobalHydra.instance().clear)
+
     @pytest.mark.parametrize(
         "file,num_workers",
         [
@@ -87,7 +86,9 @@ class TestConfigs:
         if from_pixels:
             assert "next_pixels" in tensordict.keys()
             assert tensordict["next_pixels"].shape[-1] == 3
+        env.rollout(3)
         env.close()
+        del env
 
     @pytest.mark.skipif(not _has_gym, reason="No gym found")
     @pytest.mark.skipif(not _has_dmc, reason="No gym found")
@@ -122,6 +123,7 @@ class TestConfigs:
             env.append_transform(t)
         env.rollout(3)
         env.close()
+        del env
 
 
 if __name__ == "__main__":
