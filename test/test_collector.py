@@ -20,7 +20,7 @@ from mocking_classes import (
 
 from torch import nn
 from torchrl import seed_generator
-from torchrl.collectors import aSyncDataCollector, SyncDataCollector
+from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
@@ -30,7 +30,7 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.modules import Actor, OrnsteinUhlenbeckProcessWrapper, TensorDictModule
+from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor, TensorDictModule
 
 # torch.set_default_dtype(torch.double)
 
