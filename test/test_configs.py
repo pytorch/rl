@@ -133,29 +133,27 @@ class TestConfigs:
         env.close()
         del env
 
-
-@pytest.mark.skipif(not _has_hydra, reason="No hydra found")
-@pytest.mark.parametrize(
-    "file",
-    [
-        "circular",
-        "prioritized",
-    ],
-)
-@pytest.mark.parametrize(
-    "size",
-    [
-        "10",
-        None,
-    ],
-)
-def test_replaybuffer(file, size):
-    args = [f"replay_buffer={file}"]
-    if size is not None:
-        args += [f"replay_buffer.size={size}"]
-    cfg = hydra.compose("config", overrides=args)
-    replay_buffer = instantiate(cfg.replay_buffer)
-    assert replay_buffer._capacity == replay_buffer._storage.size
+    @pytest.mark.parametrize(
+        "file",
+        [
+            "circular",
+            "prioritized",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "size",
+        [
+            "10",
+            None,
+        ],
+    )
+    def test_replaybuffer(self, file, size):
+        args = [f"replay_buffer={file}"]
+        if size is not None:
+            args += [f"replay_buffer.size={size}"]
+        cfg = hydra.compose("config", overrides=args)
+        replay_buffer = instantiate(cfg.replay_buffer)
+        assert replay_buffer._capacity == replay_buffer._storage.size
 
 
 if __name__ == "__main__":
