@@ -103,14 +103,14 @@ def _is_consistent_device_type(
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
-@pytest.mark.parametrize("device", ["cuda", "cpu", None])
-@pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
-@pytest.mark.parametrize("passing_device", ["cuda", "cpu", None])
+@pytest.mark.parametrize("device", ["cuda:0", "cpu", None])
+@pytest.mark.parametrize("policy_device", ["cuda:0", "cpu", None])
+@pytest.mark.parametrize("passing_device", ["cuda:0", "cpu", None])
 def test_output_device_consistency(
     num_env, device, policy_device, passing_device, seed=40
 ):
     if (
-        device == "cuda" or policy_device == "cuda" or passing_device == "cuda"
+        device == "cuda:0" or policy_device == "cuda:0" or passing_device == "cuda:0"
     ) and not torch.cuda.is_available():
         pytest.skip("cuda is not available")
 
