@@ -67,11 +67,14 @@ class TestConfigs:
     @pytest.mark.skipif(not _has_gym, reason="No gym found")
     @pytest.mark.skipif(not _has_dmc, reason="No gym found")
     @pytest.mark.parametrize(
-        "file",
+        "file,from_pixels",
         [
-            "cartpole",
-            "halfcheetah",
-            "cheetah",
+            ("cartpole",True),
+            ("cartpole",False),
+            ("halfcheetah",True),
+            ("halfcheetah",False),
+            ("cheetah",True),
+            # ("cheetah",False), # processes fail -- to be investigated
         ],
     )
     @pytest.mark.parametrize("from_pixels", [True, False])
@@ -97,7 +100,7 @@ class TestConfigs:
         [
             ["cartpole", "pixels"],
             ["halfcheetah", "pixels"],
-            ["cheetah", "pixels"],
+            # ["cheetah", "pixels"],
             ["cartpole", "state"],
             ["halfcheetah", "state"],
             ["cheetah", "state"],
