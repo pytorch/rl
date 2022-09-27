@@ -70,13 +70,11 @@ def test_tensordict_set(device):
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensordict_device(device):
     tensordict = TensorDict({"a": torch.randn(3, 4)}, [])
-    with pytest.raises(RuntimeError):
-        tensordict.device
+    assert tensordict.device is None
 
     tensordict = TensorDict({"a": torch.randn(3, 4, device=device)}, [])
     assert tensordict["a"].device == device
-    with pytest.raises(RuntimeError):
-        tensordict.device
+    assert tensordict.device is None
 
     tensordict = TensorDict(
         {
@@ -2104,12 +2102,10 @@ def test_create_on_device():
 
     # TensorDict
     td = TensorDict({}, [5])
-    with pytest.raises(RuntimeError):
-        td.device
+    assert td.device is None
 
     td.set("a", torch.randn(5, device=device))
-    with pytest.raises(RuntimeError):
-        td.device
+    assert td.device is None
 
     td = TensorDict({}, [5], device="cuda:0")
     td.set("a", torch.randn(5, 1))
@@ -2119,11 +2115,10 @@ def test_create_on_device():
     td1 = TensorDict({}, [5])
     td2 = TensorDict({}, [5])
     stackedtd = stack_td([td1, td2], 0)
-    with pytest.raises(RuntimeError):
-        stackedtd.device
+    assert stackedtd.device is None
+
     stackedtd.set("a", torch.randn(2, 5, device=device))
-    with pytest.raises(RuntimeError):
-        stackedtd.device
+    assert stackedtd.device is None
 
     stackedtd = stackedtd.to(device)
     assert stackedtd.device == device
@@ -2139,12 +2134,12 @@ def test_create_on_device():
     # TensorDict, indexed
     td = TensorDict({}, [5])
     subtd = td[1]
-    with pytest.raises(RuntimeError):
-        subtd.device
+    assert subtd.device is None
+
     subtd.set("a", torch.randn(1, device=device))
-    with pytest.raises(RuntimeError):
-        # setting element of subtensordict doesn't set top-level device
-        subtd.device
+    # setting element of subtensordict doesn't set top-level device
+    assert subtd.device is None
+
     subtd = subtd.to(device)
     assert subtd.device == device
     assert subtd["a"].device == device
@@ -2162,8 +2157,8 @@ def test_create_on_device():
     # SavedTensorDict
     td = TensorDict({}, [5])
     savedtd = td.to(SavedTensorDict)
-    with pytest.raises(RuntimeError):
-        savedtd.device
+    assert savedtd.device is None
+
     savedtd = savedtd.to(device)
     assert savedtd.device == device
 
@@ -2175,8 +2170,8 @@ def test_create_on_device():
     # ViewedTensorDict
     td = TensorDict({}, [6])
     viewedtd = td.view(2, 3)
-    with pytest.raises(RuntimeError):
-        viewedtd.device
+    assert viewedtd.device is None
+
     viewedtd = viewedtd.to(device)
     assert viewedtd.device == device
 
