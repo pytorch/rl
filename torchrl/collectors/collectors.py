@@ -11,7 +11,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from textwrap import indent
-from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
+from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Dict
 
 import numpy as np
 import torch
@@ -32,7 +32,7 @@ __all__ = [
 
 from torchrl.envs.transforms import TransformedEnv
 from ..data import TensorSpec
-from ..data.tensordict.tensordict import TensorDict, TensorDictBase
+from ..data.tensordict.tensordict import TensorDictBase, TensorDict
 from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
 from ..envs.common import EnvBase
 from ..envs.vec_env import _BatchedEnv
@@ -123,45 +123,25 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                 raise ValueError(
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
-            policy = RandomPolicy(self.env.action_spec)  # Get policy from the env
+            policy = RandomPolicy(self.env.action_spec)
 
         try:
-            policy_device = next(
-                policy.parameters()
-            ).device  # Get the first device from the policy parameter list
+            policy_device = next(policy.parameters()).device
         except:  # noqa
-            policy_device = (
-                torch.device(device)
-                if device is not None
-                else torch.device(
-                    "cpu"
-                )  # If there is no device specified inside the policy, uses the device from the function input parameter;
-                # if there is also no input parameter device, we assume that the device is cpu for the policy
-            )
+            policy_device = torch.device(device) if device is not None else torch.device("cpu")
 
         device = (
             torch.device(device) if device is not None else policy_device
-        )  # Input parameter device has a higher priority than the policy's device. But if the input parameter device is None, we still use the
-        # the lower priority policy's device and will not set the device to cpu
-        if (
-            device is None
-        ):  # device will be None if the input parameter device is None and the device specified inside the policy is also None
+        )
+        if device is None:
             device = torch.device("cpu")
         get_weights_fn = None
         if policy_device != device:
             get_weights_fn = policy.state_dict
-            policy = (
-                deepcopy(policy).requires_grad_(False).to(device)
-            )  # Since input parameter device has higher priority than policy's device, we need to update the policy to use the input parameter device
+            policy = deepcopy(policy).requires_grad_(False).to(device)
             if device == torch.device("cpu"):
                 policy.share_memory()
-            # if not (len(list(policy.parameters())) == 0 or next(policy.parameters()).is_shared()):
-            #     raise RuntimeError("Provided policy parameters must be shared.")
-        return (
-            policy,
-            device,
-            get_weights_fn,
-        )  # get_weights_fn will be None if 1) input parameter device is None, 2) there is no device specified inside the policy, or 3) input parameter device is same as policy's device
+        return policy, device, get_weights_fn
 
     def update_policy_weights_(self) -> None:
         """Update the policy weights if the policy of the data collector and the trained policy live on different devices."""
@@ -302,13 +282,9 @@ class SyncDataCollector(_DataCollector):
                 passing_device = device
             elif policy is not None:
                 try:
-                    policy_device = next(
-                        policy.parameters()
-                    ).device  # Get the first device from the policy parameter list
-                except:  # noqa
-                    policy_device = torch.device(  # In case there is no parameter inside the policy
-                        "cpu"
-                    )  # Assume passing_device to be cpu if both device and policy_device do not exist
+                    policy_device = next(policy.parameters()).device
+                except (AttributeError, StopIteration):
+                    policy_device = torch.device("cpu")
                 passing_device = policy_device
             else:
                 passing_device = torch.device("cpu")
@@ -748,18 +724,12 @@ class _MultiDataCollector(_DataCollector):
             )
 
         if isinstance(devices, (str, int, torch.device)):
-            devices = [
-                torch.device(devices) for _ in range(self.num_workers)
-            ]  # If devices has only one value, copy the value to all the workers
+            devices = [torch.device(devices) for _ in range(self.num_workers)]
         elif devices is None:
-            devices = [
-                None for _ in range(self.num_workers)
-            ]  # If user does not provide any device, initialize all worker's device by None
+            devices = [None for _ in range(self.num_workers)]
         elif isinstance(devices, Sequence):
             if len(devices) != self.num_workers:
-                raise RuntimeError(
-                    device_err_msg("devices", devices)
-                )  # If user provides a list of devices, make sure the number of devices provided equals the number of workers
+                raise RuntimeError(device_err_msg("devices", devices))
             devices = [torch.device(_device) for _device in devices]
         else:
             raise ValueError(
@@ -769,35 +739,17 @@ class _MultiDataCollector(_DataCollector):
             )
         self._policy_dict = {}
         self._get_weights_fn_dict = {}
-        for i, _device in enumerate(
-            devices
-        ):  # By now the list of device values may be None
+        for i, _device in enumerate(devices):
             if _device in self._policy_dict:
                 devices[i] = _device
                 continue
-            (
-                _policy,
-                _device,
-                _get_weight_fn,
-            ) = self._get_policy_and_device(  # This function will assign a non-None value to every _device and the device specifided insdie the _policy
-                policy=policy,
-                device=_device,
-            )
-            # if _device not in self._policy_dict:
-            self._policy_dict[
-                _device
-            ] = _policy  # Put the newly retrieved policy to the corresponding device
-            self._get_weights_fn_dict[
-                _device
-            ] = _get_weight_fn  # Put the newly retrieved weight to the corresponding device
-            devices[
-                i
-            ] = _device  # Put the newly retrieved device, which could have changed after calling _get_policy_and_device, to the correct position of the device list
+            _policy, _device, _get_weight_fn = self._get_policy_and_device(policy=policy, device=_device)
+            self._policy_dict[_device] = _policy
+            self._get_weights_fn_dict[_device] = _get_weight_fn
+            devices[i] = _device
         self.devices = devices
 
-        if (
-            passing_devices is None
-        ):  # If user does not specify the passing_devices, we assume the output data will be stored at the same location as the input parameter devices or in devices specified in the policy
+        if passing_devices is None:
             self.passing_devices = self.devices
         else:
             if isinstance(passing_devices, (str, int, torch.device)):
@@ -806,9 +758,7 @@ class _MultiDataCollector(_DataCollector):
                 ]
             elif isinstance(passing_devices, Sequence):
                 if len(passing_devices) != self.num_workers:
-                    raise RuntimeError(
-                        device_err_msg("passing_devices", passing_devices)
-                    )  # Similar to the input parameter devices, number of passing devices provided must equal number of workers
+                    raise RuntimeError(device_err_msg("passing_devices", passing_devices))
                 self.passing_devices = [
                     torch.device(_passing_device) for _passing_device in passing_devices
                 ]
