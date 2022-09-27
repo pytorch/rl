@@ -106,7 +106,6 @@ def _is_consistent_device_type(
 @pytest.mark.parametrize("device", ["cuda", "cpu", None])
 @pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
 @pytest.mark.parametrize("passing_device", ["cuda", "cpu", None])
-@pytest.mark.skipif(torch.cuda.device_count() <= 1, reason="no cuda device found")
 def test_output_device_consistency(
     num_env, device, policy_device, passing_device, seed=40
 ):
