@@ -2,7 +2,6 @@ from typing import List, Optional, Union
 
 import torch
 from torch.hub import load_state_dict_from_url
-from torch.nn import Identity
 
 from torchrl.data import TensorDict, DEVICE_TYPING
 from torchrl.data.tensor_specs import (
@@ -28,36 +27,28 @@ try:
 except ImportError:
     _has_tv = False
 
-__all__ = ["R3MTransform"]
+__all__ = ["VIPTransform"]
 
 
-class _R3MNet(Transform):
+class _VIPNet(Transform):
 
     inplace = False
 
-    def __init__(self, in_keys, out_keys, model_name, del_keys: bool = True):
+    def __init__(self, in_keys, out_keys, model_name="resnet50", del_keys: bool = True):
         if not _has_tv:
             raise ImportError(
-                "Tried to instantiate R3M without torchvision. Make sure you have "
+                "Tried to instantiate VIP without torchvision. Make sure you have "
                 "torchvision installed in your environment."
             )
-        if model_name == "resnet18":
-            self.model_name = "r3m_18"
-            self.outdim = 512
-            convnet = models.resnet18(pretrained=False)
-        elif model_name == "resnet34":
-            self.model_name = "r3m_34"
-            self.outdim = 512
-            convnet = models.resnet34(pretrained=False)
-        elif model_name == "resnet50":
-            self.model_name = "r3m_50"
+        if model_name == "resnet50":
+            self.model_name = "vip_50"
             self.outdim = 2048
             convnet = models.resnet50(pretrained=False)
+            convnet.fc = torch.nn.Linear(self.outdim, 1024)
         else:
             raise NotImplementedError(
-                f"model {model_name} is currently not supported by R3M"
+                f"model {model_name} is currently not supported by VIP"
             )
-        convnet.fc = Identity()
         super().__init__(keys_in=in_keys, keys_out=out_keys)
         self.convnet = convnet
         self.del_keys = del_keys
@@ -82,7 +73,7 @@ class _R3MNet(Transform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if not isinstance(observation_spec, CompositeSpec):
-            raise ValueError("_R3MNet can only infer CompositeSpec")
+            raise ValueError("_VIPNet can only infer CompositeSpec")
 
         keys = [key for key in observation_spec._specs.keys() if key in self.keys_in]
         device = observation_spec[keys[0]].device
@@ -100,23 +91,20 @@ class _R3MNet(Transform):
         return observation_spec
 
     @staticmethod
-    def _load_weights(model_name, r3m_instance, dir_prefix):
-        if model_name not in ("r3m_50", "r3m_34", "r3m_18"):
-            raise ValueError(
-                "model_name should be one of 'r3m_50', 'r3m_34' or 'r3m_18'"
-            )
-        # url = "https://download.pytorch.org/models/rl/r3m/" + model_name
-        url = "https://pytorch.s3.amazonaws.com/models/rl/r3m/" + model_name + ".pt"
+    def _load_weights(model_name, vip_instance, dir_prefix):
+        if model_name not in ("vip_50"):
+            raise ValueError("model_name should be 'vip_50'")
+        url = "https://pytorch.s3.amazonaws.com/models/rl/vip/model.pt"
         d = load_state_dict_from_url(
             url,
             progress=True,
-            map_location=next(r3m_instance.parameters()).device,
+            map_location=next(vip_instance.parameters()).device,
             model_dir=dir_prefix,
         )
-        td = TensorDict(d["r3m"], []).unflatten_keys(".")
+        td = TensorDict(d["vip"], []).unflatten_keys(".")
         td_flatten = td["module"]["convnet"].flatten_keys(".")
         state_dict = td_flatten.to_dict()
-        r3m_instance.convnet.load_state_dict(state_dict)
+        vip_instance.convnet.load_state_dict(state_dict)
 
     def load_weights(self, dir_prefix=None):
         self._load_weights(self.model_name, self, dir_prefix)
@@ -131,35 +119,21 @@ def _init_first(fun):
     return new_fun
 
 
-class R3MTransform(Compose):
-    """R3M Transform class.
+class VIPTransform(Compose):
+    """VIP Transform class.
 
-    R3M provides pre-trained ResNet weights aimed at facilitating visual
-    embedding for robotic tasks. The models are trained using Ego4d.
-
+    VIP provides pre-trained ResNet weights aimed at facilitating visual
+    embedding and reward for robotic tasks. The models are trained using Ego4d.
     See the paper:
-        R3M: A Universal Visual Representation for Robot Manipulation (Suraj Nair,
-            Aravind Rajeswaran, Vikash Kumar, Chelsea Finn, Abhinav Gupta)
-            https://arxiv.org/abs/2203.12601
-
-    The R3MTransform is created in a lazy manner: the object will be initialized
-    only when an attribute (a spec or the forward method) will be queried.
-    The reason for this is that the `_init()` method requires some attributes of
-    the parent environment (if any) to be accessed: by making the class lazy we
-    can ensure that the following code snippet works as expected:
-
-    Examples:
-        >>> transform = R3MTransform("resenet50", keys_in=["next_pixels"])
-        >>> env.append_transform(transform)
-        >>> # the forward method will first call _init which will look at env.observation_spec
-        >>> env.reset()
+        VIP: Towards Universal Visual Reward and Representation via Value-Implicit Pre-Training (Jason Ma
+            Shagun Sodhani, Dinesh Jayaraman, Osbert Bastani, Vikash Kumar*, Amy Zhang*)
 
     Args:
-        model_name (str): one of resnet50, resnet34 or resnet18
+        model_name (str): one of resnet50
         keys_in (list of str, optional): list of input keys. If left empty, the
             "next_pixels" key is assumed.
         keys_out (list of str, optional): list of output keys. If left empty,
-             "next_r3m_vec" is assumed.
+             "next_vip_vec" is assumed.
         size (int, optional): Size of the image to feed to resnet.
             Defaults to 244.
         download (bool, optional): if True, the weights will be downloaded using
@@ -242,12 +216,12 @@ class R3MTransform(Compose):
         resize = Resize(size, size, keys_in=keys_in)
         transforms.append(resize)
 
-        # R3M
+        # VIP
         if keys_out is None:
             if stack_images:
-                keys_out = ["next_r3m_vec"]
+                keys_out = ["next_vip_vec"]
             else:
-                keys_out = [f"next_r3m_vec_{i}" for i in range(len(keys_in))]
+                keys_out = [f"next_vip_vec_{i}" for i in range(len(keys_in))]
         elif stack_images and len(keys_out) != 1:
             raise ValueError(
                 f"key_out must be of length 1 if stack_images is True. Got keys_out={keys_out}"
@@ -271,7 +245,7 @@ class R3MTransform(Compose):
                 keys_out[0],
                 dim=-4,
             )
-            network = _R3MNet(
+            network = _VIPNet(
                 in_keys=keys_out,
                 out_keys=keys_out,
                 model_name=model_name,
@@ -280,7 +254,7 @@ class R3MTransform(Compose):
             flatten = FlattenObservation(-2, -1, keys_out)
             transforms = [*transforms, cattensors, network, flatten]
         else:
-            network = _R3MNet(
+            network = _VIPNet(
                 in_keys=keys_in,
                 out_keys=keys_out,
                 model_name=model_name,

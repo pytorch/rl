@@ -215,35 +215,43 @@ def td_lambda_return_estimate(
 
     returns = torch.empty_like(next_state_value)
 
-    g = next_state_value[..., -1, :]
     T = returns.shape[-2]
 
+    # if gamma is not a tensor of the same shape as other inputs, we use rolling_gamma = True
+    single_gamma = False
     if not (isinstance(gamma, torch.Tensor) and gamma.shape == not_done.shape):
+        single_gamma = True
         gamma = torch.full_like(next_state_value, gamma)
-        rolling_gamma = True
-    elif rolling_gamma is None:
-        rolling_gamma = True
 
+    single_lambda = False
     if not (isinstance(lmbda, torch.Tensor) and lmbda.shape == not_done.shape):
+        single_lambda = True
         lmbda = torch.full_like(next_state_value, lmbda)
+
+    if rolling_gamma is None:
         rolling_gamma = True
-    elif rolling_gamma is None:
-        rolling_gamma = True
+    elif not rolling_gamma and single_gamma and single_lambda:
+        raise RuntimeError(
+            "rolling_gamma=False is expected only with time-sensitive gamma or lambda values"
+        )
 
     if rolling_gamma:
+        g = next_state_value[..., -1, :]
         for i in reversed(range(T)):
             g = returns[..., i, :] = reward[..., i, :] + gamma[..., i, :] * (
                 (1 - lmbda[..., i, :]) * next_state_value[..., i, :]
                 + lmbda[..., i, :] * g
             )
     else:
-        for i in range(T):
+        for k in range(T):
             g = next_state_value[..., -1, :]
-            for j in reversed(range(i, T)):
-                g = returns[..., i, :] = reward[..., j, :] + gamma[..., i, :] * (
-                    (1 - lmbda[..., i, :]) * next_state_value[..., j, :]
-                    + lmbda[..., i, :] * g
+            _gamma = gamma[..., k, :]
+            _lambda = lmbda[..., k, :]
+            for i in reversed(range(k, T)):
+                g = reward[..., i, :] + _gamma * (
+                    (1 - _lambda) * next_state_value[..., i, :] + _lambda * g
                 )
+            returns[..., k, :] = g
 
     return returns
 
@@ -419,57 +427,56 @@ def vec_td_lambda_return_estimate(
         gammas = torch.ones(T + 1, 1, device=device)
         gammas[1:] = gamma
 
-    gammas = torch.cumprod(gammas, -2)
+    gammas_cp = torch.cumprod(gammas, -2)
 
     lambdas = torch.ones(T + 1, 1, device=device)
     lambdas[1:] = lmbda
-    lambdas = torch.cumprod(lambdas, -2)
+    lambdas_cp = torch.cumprod(lambdas, -2)
 
     if not isinstance(gamma, torch.Tensor) or gamma.numel() <= 0:
-        first_below_thr = gammas < 1e-7
+        first_below_thr = gammas_cp < 1e-7
         while first_below_thr.ndimension() > 2:
             # if we have multiple gammas, we only want to truncate if _all_ of
             # the geometric sequences fall below the threshold
             first_below_thr = first_below_thr.all(axis=0)
         if first_below_thr.any():
             first_below_thr_gamma = first_below_thr.nonzero()[0, 0]
-        first_below_thr = lambdas < 1e-7
+        first_below_thr = lambdas_cp < 1e-7
         if first_below_thr.any() and first_below_thr_gamma is not None:
             first_below_thr = max(
                 first_below_thr_gamma, first_below_thr.nonzero()[0, 0]
             )
-            gammas = gammas[..., :first_below_thr, :]
-            lambdas = lambdas[:first_below_thr]
+            gammas_cp = gammas_cp[..., :first_below_thr, :]
+            lambdas_cp = lambdas_cp[:first_below_thr]
 
-    gammas, gammas_prime = gammas[..., :-1, :], gammas[..., 1:, :]
-    lambdas, lambdas_prime = lambdas[:-1], lambdas[1:]
+    gammas = gammas[..., 1:, :]
+    lambdas = lambdas[1:]
 
-    rs = _custom_conv1d(reward, gammas * lambdas)
-    vs = _custom_conv1d(next_state_value, gammas_prime * lambdas)
-    gam_lam = gammas_prime * lambdas_prime
-    mask = gam_lam.flip(-2)
-    if mask.shape[-2] < next_state_value.shape[-1]:
-        mask = torch.cat(
-            # [torch.zeros_like(next_state_value[..., : -mask.shape[-2], :]), mask], -2
-            [
-                torch.zeros(
-                    *mask.shape[:-2],
-                    next_state_value.shape[-1] - mask.shape[-2],
-                    1,
-                    device=device,
-                ),
-                mask,
-            ],
-            -2,
+    dec = gammas_cp * lambdas_cp
+    if rolling_gamma in (None, True):
+        if gammas.ndimension() == 4 and gammas.shape[1] > 1:
+            gammas = gammas[:, :1]
+        if lambdas.ndimension() == 4 and lambdas.shape[1] > 1:
+            lambdas = lambdas[:, :1]
+        v3 = (gammas * lambdas).squeeze(-1) * next_state_value
+        v3[..., :-1] = 0
+        out = _custom_conv1d(
+            reward + (gammas * (1 - lambdas)).squeeze(-1) * next_state_value + v3, dec
         )
-    if gammas.ndimension() > 2:
-        vs2 = (
-            _custom_conv1d(next_state_value, gam_lam)
-            - mask.squeeze(-1)[..., -1:, :] * next_state_value[..., -1:]
-        )
+        return out.view(shape)
     else:
-        vs2 = (
-            _custom_conv1d(next_state_value, gam_lam)
-            - mask.squeeze(-1) * next_state_value[..., -1:]
+        v1 = _custom_conv1d(reward, dec)
+
+        if gammas.ndimension() == 4 and gammas.shape[1] > 1:
+            gammas = gammas[:, :, :1].transpose(1, 2)
+        if lambdas.ndimension() == 4 and lambdas.shape[1] > 1:
+            lambdas = lambdas[:, :, :1].transpose(1, 2)
+
+        v2 = _custom_conv1d(
+            next_state_value, dec * (gammas * (1 - lambdas)).transpose(1, 2)
         )
-    return (rs + vs - vs2).view(shape)
+
+        v3 = next_state_value
+        v3[..., :-1] = 0
+        v3 = _custom_conv1d(v3, dec * (gammas * lambdas).transpose(1, 2))
+        return (v1 + v2 + v3).view(shape)

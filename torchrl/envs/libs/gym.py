@@ -5,6 +5,7 @@
 import warnings
 from types import ModuleType
 from typing import List, Dict
+from warnings import warn
 
 import torch
 from packaging import version
@@ -316,12 +317,12 @@ class GymEnv(GymWrapper):
                 made_env = True
             except TypeError as err:
                 if ACCEPTED_TYPE_ERRORS["frame_skip"] in str(err):
-                    print(
+                    warn(
                         "Discarding frameskip arg. This will be taken care of by TorchRL env wrapper."
                     )
                     self.wrapper_frame_skip = kwargs.pop("frameskip")
                 elif ACCEPTED_TYPE_ERRORS["render_mode"] in str(err):
-                    print("Discarding render_mode from the env constructor.")
+                    warn("Discarding render_mode from the env constructor.")
                     kwargs.pop("render_mode")
                 else:
                     raise err

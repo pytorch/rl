@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import dataclasses
+import os
+import pathlib
 import uuid
 from datetime import datetime
 
@@ -101,6 +103,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
         from torchrl.trainers.loggers.wandb import WandbLogger
 
         logger = WandbLogger(log_dir="redq_logging", exp_name=exp_name)
+    elif cfg.logger == "mlflow":
+        from torchrl.trainers.loggers.mlflow import MLFlowLogger
+
+        logger = MLFlowLogger(
+            tracking_uri=pathlib.Path(os.path.abspath("redq_logging")).as_uri(),
+            exp_name=exp_name,
+        )
     video_tag = exp_name if cfg.record_video else ""
 
     stats = None

@@ -5,3 +5,4 @@
 
 from .transforms import *
 from .r3m import *
+from .vip import *

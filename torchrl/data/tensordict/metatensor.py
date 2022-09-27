@@ -81,15 +81,7 @@ class MetaTensor:
                 _is_memmap = isinstance(tensor, MemmapTensor)
             # FIXME: using isinstance(tensor, TensorDictBase) would likely be
             # better here, but creates circular import without more refactoring
-            device = (
-                (
-                    tensor.device_safe()
-                    if hasattr(tensor, "device_safe")
-                    else tensor.device
-                )
-                if not tensor.is_meta
-                else device
-            )
+            device = tensor.device if not tensor.is_meta else device
             if _is_tensordict is None:
                 _is_tensordict = not _is_memmap and not isinstance(tensor, torch.Tensor)
             if not _is_tensordict:

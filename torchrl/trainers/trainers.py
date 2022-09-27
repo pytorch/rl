@@ -30,10 +30,9 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from torchrl.data.tensordict.tensordict import TensorDictBase, pad
 from torchrl.data.utils import expand_right, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
@@ -532,6 +531,17 @@ class ReplayBufferTrainer:
             Default is False.
         device (device, optional): device where the samples must be placed.
             Default is cpu.
+        flatten_tensordicts (bool, optional): if True, the tensordicts will be
+            flattened (or equivalently masked with the valid mask obtained from
+            the collector) before being passed to the replay buffer. Otherwise,
+            no transform will be achieved other than padding (see `max_dims` arg below).
+            Defaults to True
+        max_dims (sequence of int, optional): if `flatten_tensordicts` is set to False,
+            this will be a list of the length of the batch_size of the provided
+            tensordicts that represent the maximum size of each. If provided,
+            this list of sizes will be used to pad the tensordict and make their shape
+            match before they are passed to the replay buffer. If there is no
+            maximum value, a -1 value should be provided.
 
     Examples:
         >>> rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
@@ -547,17 +557,33 @@ class ReplayBufferTrainer:
         batch_size: int,
         memmap: bool = False,
         device: DEVICE_TYPING = "cpu",
+        flatten_tensordicts: bool = True,
+        max_dims: Optional[Sequence[int]] = None,
     ) -> None:
         self.replay_buffer = replay_buffer
         self.batch_size = batch_size
         self.memmap = memmap
         self.device = device
+        self.flatten_tensordicts = flatten_tensordicts
+        self.max_dims = max_dims
 
     def extend(self, batch: TensorDictBase) -> TensorDictBase:
-        if "mask" in batch.keys():
-            batch = batch[batch.get("mask").squeeze(-1)]
+        if self.flatten_tensordicts:
+            if "mask" in batch.keys():
+                batch = batch[batch.get("mask").squeeze(-1)]
+            else:
+                batch = batch.reshape(-1)
         else:
-            batch = batch.reshape(-1)
+            if self.max_dims is not None:
+                pads = []
+                for d in range(batch.ndimension()):
+                    pad_value = (
+                        0
+                        if self.max_dims[d] == -1
+                        else self.max_dims[d] - batch.batch_size[d]
+                    )
+                    pads += [0, pad_value]
+                batch = pad(batch, pads)
         # reward_training = batch.get("reward").mean().item()
         batch = batch.cpu()
         if self.memmap:
@@ -685,12 +711,9 @@ class RewardNormalizer:
         tensordict = tensordict.to_tensordict()  # make sure it is not a SubTensorDict
         reward = tensordict.get("reward")
 
-        reward_device = (
-            reward.device_safe() if hasattr(reward, "device_safe") else reward.device
-        )
-        if reward_device is not None:
-            reward = reward - self._reward_stats["mean"].to(reward_device)
-            reward = reward / self._reward_stats["std"].to(reward_device)
+        if reward.device is not None:
+            reward = reward - self._reward_stats["mean"].to(reward.device)
+            reward = reward / self._reward_stats["std"].to(reward.device)
         else:
             reward = reward - self._reward_stats["mean"]
             reward = reward / self._reward_stats["std"]
@@ -786,7 +809,7 @@ class BatchSubSampler:
             )
         else:
             traj_len = (
-                torch.ones(batch.shape[0], device=batch.device_safe(), dtype=torch.bool)
+                torch.ones(batch.shape[0], device=batch.device, dtype=torch.bool)
                 * batch.shape[1]
             )
         len_mask = traj_len >= sub_traj_len
@@ -801,7 +824,7 @@ class BatchSubSampler:
             )
         traj_idx = valid_trajectories[
             torch.randint(
-                valid_trajectories.numel(), (batch_size,), device=batch.device_safe()
+                valid_trajectories.numel(), (batch_size,), device=batch.device
             )
         ]
 
@@ -881,7 +904,7 @@ class Recorder:
         frame_skip: int,
         policy_exploration: TensorDictModule,
         recorder: EnvBase,
-        exploration_mode: str = "mean",
+        exploration_mode: str = "random",
         log_keys: Optional[List[str]] = None,
         out_keys: Optional[Dict[str, str]] = None,
         suffix: Optional[str] = None,
@@ -913,8 +936,6 @@ class Recorder:
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.eval()
                 self.recorder.eval()
-                if isinstance(self.recorder, TransformedEnv):
-                    self.recorder.transform.eval()
                 td_record = self.recorder.rollout(
                     policy=self.policy_exploration,
                     max_steps=self.record_frames,

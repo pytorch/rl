@@ -162,6 +162,7 @@ version.py
 torchrl/version.py
 wandb
 outputs
+log
 
 # PyCharm
 .idea
