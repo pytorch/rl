@@ -109,6 +109,11 @@ def _is_consistent_device_type(
 def test_output_device_consistency(
     num_env, device, policy_device, passing_device, seed=40
 ):
+    if (
+        device == "cuda" or policy_device == "cuda" or passing_device == "cuda"
+    ) and not torch.cuda.is_available():
+        pytest.skip("cuda is not available")
+
     if num_env == 1:
 
         def env_fn(seed):
@@ -129,7 +134,7 @@ def test_output_device_consistency(
     if policy_device is None:
         policy = make_policy("vec")
     else:
-        policy = ParametricPolicy().to(policy_device)
+        policy = ParametricPolicy().to(torch.device(policy_device))
 
     collector = SyncDataCollector(
         create_env_fn=env_fn,
