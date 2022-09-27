@@ -90,9 +90,6 @@ def make_policy(env):
 def _is_consistent_device_type(
     device_type, policy_device_type, passing_device_type, tensordict_device_type
 ):
-    if tensordict_type_type == "cuda":
-        tensordict_type_type = "cuda:0"
-
     if passing_device_type is None:
         if device_type is None:
             if policy_device_type is None:
@@ -106,16 +103,20 @@ def _is_consistent_device_type(
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
-@pytest.mark.parametrize("device", ["cuda:0", "cpu", None])
-@pytest.mark.parametrize("policy_device", ["cuda:0", "cpu", None])
-@pytest.mark.parametrize("passing_device", ["cuda:0", "cpu", None])
+@pytest.mark.parametrize("device", ["cuda", "cpu", None])
+@pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
+@pytest.mark.parametrize("passing_device", ["cuda", "cpu", None])
 def test_output_device_consistency(
     num_env, device, policy_device, passing_device, seed=40
 ):
     if (
-        device == "cuda:0" or policy_device == "cuda:0" or passing_device == "cuda:0"
+        device == "cuda" or policy_device == "cuda" or passing_device == "cuda"
     ) and not torch.cuda.is_available():
         pytest.skip("cuda is not available")
+
+    _device = "cuda:0" if device == "cuda" else device
+    _policy_device = "cuda:0" if policy_device == "cuda" else policy_device
+    _passing_device = "cuda:0" if passing_device == "cuda" else passing_device
 
     if num_env == 1:
 
@@ -134,10 +135,10 @@ def test_output_device_consistency(
             )
             return env
 
-    if policy_device is None:
+    if _policy_device is None:
         policy = make_policy("vec")
     else:
-        policy = ParametricPolicy().to(torch.device(policy_device))
+        policy = ParametricPolicy().to(torch.device(_policy_device))
 
     collector = SyncDataCollector(
         create_env_fn=env_fn,
@@ -146,8 +147,8 @@ def test_output_device_consistency(
         frames_per_batch=20,
         max_frames_per_traj=2000,
         total_frames=20000,
-        device=device,
-        passing_device=passing_device,
+        device=_device,
+        passing_device=_passing_device,
         pin_memory=False,
     )
     for _, d in enumerate(collector):
@@ -165,8 +166,8 @@ def test_output_device_consistency(
         frames_per_batch=20,
         max_frames_per_traj=2000,
         total_frames=20000,
-        device=device,
-        passing_device=passing_device,
+        device=_device,
+        passing_device=_passing_device,
         pin_memory=False,
     )
 
