@@ -245,6 +245,7 @@ class Transform(nn.Module):
         if parent is None:
             return parent
         if not isinstance(parent, EnvBase):
+            print(parent, parent.parent)
             # if it's not an env, it should be a Compose transform
             if not isinstance(parent, Compose):
                 raise ValueError(
@@ -454,7 +455,9 @@ class TransformedEnv(EnvBase):
             )
         transform = transform.to(self.device)
         if not isinstance(self.transform, Compose):
-            self.transform = Compose(self.transform)
+            prev_transform = self.transform
+            self.transform = Compose()
+            self.transform.append(prev_transform)
             self.transform.set_parent(self)
         self.transform.append(transform)
 
@@ -1853,7 +1856,6 @@ class TensorDictPrimer(Transform):
         self.primers = kwargs
         self.random = random
         self.default_value = default_value
-        self._batch_size = []
         self.device = kwargs.get("device", torch.device("cpu"))
         # sanity check
         for spec in self.primers.values():
@@ -1897,12 +1899,19 @@ class TensorDictPrimer(Transform):
         return observation_spec
 
     def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
-        parent_env = parent
-        while not isinstance(parent_env, EnvBase):
-            parent_env = parent_env.parent
-        self._batch_size = parent_env.batch_size
-        self.device = parent_env.device
-        return super().set_parent(parent)
+        super().set_parent(parent)
+
+    @property
+    def _batch_size(self):
+        return self.parent.batch_size
+
+    @property
+    def device(self):
+        return self._device
+
+    @device.setter
+    def device(self, value):
+        self._device = value
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         for key, spec in self.primers.items():
