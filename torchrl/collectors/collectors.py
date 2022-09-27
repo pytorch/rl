@@ -130,9 +130,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         except:  # noqa
             policy_device = torch.device(device) if device is not None else torch.device("cpu")
 
-        device = (
-            torch.device(device) if device is not None else policy_device
-        )
+        device = torch.device(device) if device is not None else policy_device
         if device is None:
             device = torch.device("cpu")
         get_weights_fn = None
