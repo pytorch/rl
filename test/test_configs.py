@@ -61,6 +61,7 @@ def test_collector_configs(file, num_workers):
     collector.shutdown()
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 @pytest.mark.parametrize(
     "file",
     [
