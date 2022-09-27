@@ -20,26 +20,24 @@ class DreamerModelLoss(LossModule):
     """Dreamer Model Loss
 
     Computes the loss of the dreamer world model. The loss is composed of the kl divergence between the prior and posterior of the RSSM,
-    the reconstruction loss between the observation and the reconstructed observation and the reward loss between the true reward and the predicted reward.
+    the reconstruction loss over the reconstructed observation and the reward loss over the predicted reward.
 
     Reference: https://arxiv.org/abs/1912.01603
 
     Args:
         world_model (TensorDictModule): the world model.
-        cfg (DictConfig): the config file.
-        lambda_kl (float): the weight of the kl divergence loss.
-        lambda_reco (float): the weight of the reconstruction loss.
-        lambda_reward (float): the weight of the reward loss.
-        reco_loss (Optional[str]): the reconstruction loss.
-        reward_loss (Optional[str]): the reward loss.
-        free_nats (int): the free nats.
-        inversed_free_nats (bool): if True, the free nats are inversed. First we average the kl divergence and then we clamp it to the free nats.
+        lambda_kl (float, optional): the weight of the kl divergence loss.
+        lambda_reco (float, optional): the weight of the reconstruction loss.
+        lambda_reward (float, optional): the weight of the reward loss.
+        reco_loss (str, optional): the reconstruction loss.
+        reward_loss (str, optional): the reward loss.
+        free_nats (int, optional): the free nats.
+        inversed_free_nats (bool, optional): if True, the free nats are inversed. First we average the kl divergence and then we clamp it to the free nats.
     """
 
     def __init__(
         self,
         world_model: TensorDictModule,
-        cfg: "DictConfig",
         lambda_kl: float = 1.0,
         lambda_reco: float = 1.0,
         lambda_reward: float = 1.0,
@@ -50,7 +48,6 @@ class DreamerModelLoss(LossModule):
     ):
         super().__init__()
         self.world_model = world_model
-        self.cfg = cfg
         self.reco_loss = reco_loss if reco_loss is not None else "l2"
         self.reward_loss = reward_loss if reward_loss is not None else "l2"
         self.lambda_kl = lambda_kl
@@ -94,18 +91,12 @@ class DreamerModelLoss(LossModule):
             tensordict.get("reward"),
             self.reward_loss,
         ).mean()
-        loss = (
-            self.lambda_kl * kl_loss
-            + self.lambda_reco * reco_loss
-            + self.lambda_reward * reward_loss
-        )
         return (
             TensorDict(
                 {
-                    "loss_world_model": loss,
-                    "kl_model_loss": kl_loss,
-                    "reco_model_loss": reco_loss,
-                    "reward_model_loss": reward_loss,
+                    "loss_model_kl": kl_loss * kl_loss,
+                    "loss_model_reco": reco_loss * reco_loss,
+                    "loss_model_reward": reward_loss * reward_loss,
                 },
                 [],
             ),
@@ -135,7 +126,7 @@ class DreamerModelLoss(LossModule):
 class DreamerActorLoss(LossModule):
     """Dreamer Actor Loss
 
-    Computes the loss of the dreamer actor. The actor loss is computed as the negative lambda return average.
+    Computes the loss of the dreamer actor. The actor loss is computed as the negative average lambda return.
 
     Reference: https://arxiv.org/abs/1912.01603
 
@@ -143,9 +134,9 @@ class DreamerActorLoss(LossModule):
         actor_model (TensorDictModule): the actor model.
         value_model (TensorDictModule): the value model.
         model_based_env (DreamerEnv): the model based environment.
-        cfg (DictConfig): the config file.
-        gamma (float, optional): the discount factor.
-        lmbda (float, optional): the lambda factor.
+        imagination_horizon (int, optional): The number of steps to unroll the model.
+        gamma (float, optional): the gamma discount factor.
+        lmbda (float, optional): the lambda discount factor factor.
         discount_loss (bool, optional): if True, the loss is discounted with a gamma discount factor.
     """
 
@@ -154,7 +145,7 @@ class DreamerActorLoss(LossModule):
         actor_model: TensorDictModule,
         value_model: TensorDictModule,
         model_based_env: DreamerEnv,
-        cfg: "DictConfig",
+        imagination_horizon: int = 15,
         gamma: int = 0.99,
         lmbda: int = 0.95,
         discount_loss: bool = True,
@@ -163,7 +154,7 @@ class DreamerActorLoss(LossModule):
         self.actor_model = actor_model
         self.value_model = value_model
         self.model_based_env = model_based_env
-        self.cfg = cfg
+        self.imagination_horizon = imagination_horizon
         self.gamma = gamma
         self.lmbda = lmbda
         self.discount_loss = discount_loss
@@ -180,7 +171,7 @@ class DreamerActorLoss(LossModule):
             tensordict = tensordict.view(-1).detach()
         with hold_out_net(self.model_based_env), set_exploration_mode("random"):
             tensordict = self.model_based_env.rollout(
-                max_steps=self.cfg.imagination_horizon,
+                max_steps=self.imagination_horizon,
                 policy=self.actor_model,
                 auto_reset=False,
                 tensordict=tensordict,
@@ -236,7 +227,7 @@ class DreamerValueLoss(LossModule):
     Args:
         value_model (TensorDictModule): the value model.
         value_loss (str, optional): the loss to use for the value loss.
-        gamma (float, optional): the discount factor.
+        gamma (float, optional): the gamma discount factor.
         discount_loss (bool, optional): if True, the loss is discounted with a gamma discount factor.
     """
 

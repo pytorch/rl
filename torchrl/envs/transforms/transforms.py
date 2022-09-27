@@ -1584,16 +1584,6 @@ class CatTensors(Transform):
         super(CatTensors, self).__init__(
             keys_in=sorted(list(self.keys_in)), keys_out=[out_key]
         )
-        # TODO: check this: do we want to allow it?
-        # if (
-        #     ("reward" in self.keys_in)
-        #     or ("action" in self.keys_in)
-        #     or ("reward" in self.keys_in)
-        # ):
-        #     raise RuntimeError(
-        #         "Concatenating observations and reward / action / done state "
-        #         "is not allowed."
-        #     )
         self.dim = dim
         self.del_keys = del_keys
         self.unsqueeze_if_oor = unsqueeze_if_oor

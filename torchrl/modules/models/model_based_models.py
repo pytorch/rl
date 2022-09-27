@@ -31,18 +31,18 @@ class DreamerActor(nn.Module):
 
     Args:
         out_features (int): Number of output features.
-        depth (int): Number of hidden layers.
-        num_cells (int): Number of hidden units per layer.
-        activation_class (nn.Module): Activation class.
-        rnn_hidden_size (int): Size of the hidden state of the RNN in the RSSM module.
+        depth (int, optional): Number of hidden layers.
+        num_cells (int, optional): Number of hidden units per layer.
+        activation_class (nn.Module, optional): Activation class.
+        rnn_hidden_size (int, optional): Size of the hidden state of the RNN in the RSSM module.
     """
 
     def __init__(
         self,
-        out_features=None,
-        depth=None,
-        num_cells=None,
-        activation_class=None,
+        out_features,
+        depth=4,
+        num_cells=200,
+        activation_class=nn.ELU,
         rnn_hidden_dim=200,
     ):
         super().__init__()
@@ -73,7 +73,7 @@ class ObsEncoder(nn.Module):
     Reference: https://arxiv.org/abs/1803.10122
 
     Args:
-        depth (int): Number of hidden units in the first layer.
+        depth (int, optional): Number of hidden units in the first layer.
     """
 
     def __init__(self, depth=32):
@@ -109,7 +109,7 @@ class ObsDecoder(nn.Module):
     Reference: https://arxiv.org/abs/1803.10122
 
     Args:
-        depth (int): Number of hidden units in the last layer.
+        depth (int, optional): Number of hidden units in the last layer.
     """
 
     def __init__(self, depth=32):
@@ -142,10 +142,10 @@ class ObsDecoder(nn.Module):
 class RSSMRollout(nn.Module):
     """Rollout the RSSM network.
 
-    Given a set of encoded observations and actions, this function will rollout the RSSM network to compute all the intermediate
-    states and beliefs.
-    Here, we use the previous posterior as the prior for the next time step. At the first time step, we use the an empty prior to start the rollout.
-    At the end, we end up with all the intermediate states and beliefs.
+    Given a set of encoded observations and actions, this module will rollout the RSSM network to compute all the intermediate
+    states and believes.
+    The previous posterior is used as the prior for the next time step. At the first time step, we use the an empty prior to start the rollout.
+    The forward method returns a stack of all intermediate states and believes.
 
     Reference: https://arxiv.org/abs/1811.04551
 
@@ -167,19 +167,19 @@ class RSSMRollout(nn.Module):
         an initial posterior state,  an initial belief, a defined sequence of actions, and a sequence of encoded observations.
 
         Args:
-            posterior_state: a batch x state_size tensor containing the initial posterior_state state
-            belief: a batch x belief_size tensor containing the initial belief state
-            actions: a batch x time_steps x action_size tensor containing the sequence of actions
-            obs_embedding: a batch x time_steps x latent_size tensor containing the sequence of encoded observations
+            posterior_state (torch.Tensor): a batch x state_size tensor containing the initial posterior_state state
+            belief (torch.Tensor): a batch x belief_size tensor containing the initial belief state
+            actions (torch.Tensor): a batch x time_steps x action_size tensor containing the sequence of actions
+            obs_embedding (torch.Tensor): a batch x time_steps x latent_size tensor containing the sequence of encoded observations
 
         Returns:
-            prior_means: a batch x time_steps x state_size containing the mean of the state distributions
-            prior_stds: a batch x time_steps x state_size containing the standard deviation of the state distributions
-            prior_states: a batch x time_steps x state_size containing the sampled states
-            beliefs: a batch x time_steps x belief_size containing the sequence of beliefs
-            posterior_means: a batch x time_steps x state_size containing the mean of the posterior state distributions
-            posterior_stds: a batch x time_steps x state_size containing the standard deviation of the posterior state distributions
-            posterior_states: a batch x time_steps x state_size containing the sampled posterior states
+            prior_means (torch.Tensor): a batch x time_steps x state_size containing the mean of the state distributions
+            prior_stds (torch.Tensor): a batch x time_steps x state_size containing the standard deviation of the state distributions
+            prior_states (torch.Tensor): a batch x time_steps x state_size containing the sampled states
+            beliefs (torch.Tensor): a batch x time_steps x belief_size containing the sequence of beliefs
+            posterior_means (torch.Tensor): a batch x time_steps x state_size containing the mean of the posterior state distributions
+            posterior_stds (torch.Tensor): a batch x time_steps x state_size containing the standard deviation of the posterior state distributions
+            posterior_states (torch.Tensor): a batch x time_steps x state_size containing the sampled posterior states
         """
         prior_means = []
         prior_stds = []
@@ -224,24 +224,18 @@ class RSSMRollout(nn.Module):
 class RSSMPrior(nn.Module):
     """The prior network of the RSSM.
 
-    This network takes the previous state and belief and the action and outputs the next state and belief.
-    State is by construction stochastic and belief is deterministic. In the paper this is called the
-    deterministic state and stochastic state respectively. We prefer to call them belief and state for clarity.
-    Furthermore, the paper refers to both prior and posterior as state. We will disntinguish them by calling
-    the prior state and posterior state.
-    The RSSMPrior is a transition model in the sense that it takes the previous state and belief and the action
-    and outputs the next state and belief. It contains a recurrent network that is used to model the temporal
-    dynamics of the state.
-    Other than the state and the belief, the RSSMPrior also outputs the mean and standard deviation of the
-    state distribution. This is useful for the loss function.
+    This network takes as input the previous state and belief and the current action.
+    It outputs the next prior state and belief, as well as the parameters of the prior state distribution.
+    State is by construction stochastic and belief is deterministic. In the "Dream to control" paper, these are called "deterministic state " and "stochastic state", respectively.
+    We distinguish states sampled according prior and posterior distribution for clarity.
 
     Reference: https://arxiv.org/abs/1811.04551
 
     Args:
-        hidden_dim (int): Number of hidden units in the linear network. Input size of the recurrent network.
-        rnn_hidden_dim (int): Number of hidden units in the recurrent network. Also size of the belief.
-        state_dim (int): Size of the state.
-        action_spec (TensorSpec): Action spec.
+        hidden_dim (int, optional): Number of hidden units in the linear network. Input size of the recurrent network.
+        rnn_hidden_dim (int, optional): Number of hidden units in the recurrent network. Also size of the belief.
+        state_dim (int, optional): Size of the state.
+        action_spec (TensorSpec, optional): Action spec. If None an error will be raised when initializing.
 
     """
 
@@ -283,14 +277,14 @@ class RSSMPrior(nn.Module):
 class RSSMPosterior(nn.Module):
     """The posterior network of the RSSM.
 
-    This network takes the belief and the encoded observation and outputs the associated posterior state.
-    It also outputs the mean and standard deviation of the state distribution. This is useful for the loss function.
+    This network takes as input the belief and the associated encoded observation.
+    It outputs the next posterior state and belief, as well as the parameters of the posterior state distribution.
 
     Reference: https://arxiv.org/abs/1811.04551
 
     Args:
-        hidden_dim (int): Number of hidden units in the linear network.
-        state_dim (int): Size of the state.
+        hidden_dim (int, optional): Number of hidden units in the linear network.
+        state_dim (int, optional): Size of the state.
 
     """
 

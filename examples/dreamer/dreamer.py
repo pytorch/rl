@@ -260,8 +260,8 @@ def main(cfg: "DictConfig"):
         reward_normalizer = None
 
     # Losses
-    world_model_loss = DreamerModelLoss(world_model, cfg).to(device)
-    actor_loss = DreamerActorLoss(actor_model, value_model, model_based_env, cfg).to(
+    world_model_loss = DreamerModelLoss(world_model).to(device)
+    actor_loss = DreamerActorLoss(actor_model, value_model, model_based_env, imagination_horizon=cfg.imagination_horizon).to(
         device
     )
     value_loss = DreamerValueLoss(value_model).to(device)
@@ -376,6 +376,8 @@ def main(cfg: "DictConfig"):
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
+                    loss_world_model = model_loss_td["loss_model_kl"] + model_loss_td["loss_model_reco"] + model_loss_td["loss_model_reward"]
+
                     if (
                         cfg.record_video
                         and (record._count + 1) % cfg.record_interval == 0
@@ -393,14 +395,14 @@ def main(cfg: "DictConfig"):
                     else:
                         sampled_tensordict_save = None
 
-                    scaler1.scale(model_loss_td["loss_world_model"]).backward()
+                    scaler1.scale(loss_world_model).backward()
                     scaler1.unscale_(world_model_opt)
                     clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
                     scaler1.step(world_model_opt)
                     if j == cfg.optim_steps_per_batch - 1 and do_log:
                         logger.log_scalar(
                             "loss_world_model",
-                            model_loss_td["loss_world_model"].detach().item(),
+                            loss_world_model.detach().item(),
                             step=collected_frames,
                         )
                         logger.log_scalar(
@@ -409,18 +411,18 @@ def main(cfg: "DictConfig"):
                             step=collected_frames,
                         )
                         logger.log_scalar(
-                            "kl_model_loss",
-                            model_loss_td["kl_model_loss"].detach().item(),
+                            "loss_model_kl",
+                            model_loss_td["loss_model_kl"].detach().item(),
                             step=collected_frames,
                         )
                         logger.log_scalar(
-                            "reco_model_loss",
-                            model_loss_td["reco_model_loss"].detach().item(),
+                            "loss_model_reco",
+                            model_loss_td["loss_model_reco"].detach().item(),
                             step=collected_frames,
                         )
                         logger.log_scalar(
-                            "reward_model_loss",
-                            model_loss_td["reward_model_loss"].detach().item(),
+                            "loss_model_reward",
+                            model_loss_td["loss_model_reward"].detach().item(),
                             step=collected_frames,
                         )
                     world_model_opt.zero_grad()
