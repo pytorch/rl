@@ -69,11 +69,11 @@ class TestConfigs:
     @pytest.mark.parametrize(
         "file,from_pixels",
         [
-            ("cartpole",True),
-            ("cartpole",False),
-            ("halfcheetah",True),
-            ("halfcheetah",False),
-            ("cheetah",True),
+            ("cartpole", True),
+            ("cartpole", False),
+            ("halfcheetah", True),
+            ("halfcheetah", False),
+            ("cheetah", True),
             # ("cheetah",False), # processes fail -- to be investigated
         ],
     )
