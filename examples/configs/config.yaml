@@ -2,4 +2,5 @@ defaults:
   - collector: sync_single
   - env: cheetah
   - transforms: pixels
+  - replay_buffer: circular
 num_workers: 0
