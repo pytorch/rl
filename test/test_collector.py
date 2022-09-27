@@ -90,6 +90,9 @@ def make_policy(env):
 def _is_consistent_device_type(
     device_type, policy_device_type, passing_device_type, tensordict_device_type
 ):
+    if tensordict_type_type == "cuda":
+        tensordict_type_type = "cuda:0"
+
     if passing_device_type is None:
         if device_type is None:
             if policy_device_type is None:
