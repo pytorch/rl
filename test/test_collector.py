@@ -280,7 +280,7 @@ def test_collector_done_persist(num_env, env_name, seed=5):
         pin_memory=False,
         reset_when_done=False,
     )
-    for _, d in enumerate(collector): # noqa
+    for _, d in enumerate(collector):  # noqa
         break
 
     assert (d["done"].sum(-2) >= 1).all()
