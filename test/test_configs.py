@@ -77,7 +77,6 @@ class TestConfigs:
             # ("cheetah",False), # processes fail -- to be investigated
         ],
     )
-    @pytest.mark.parametrize("from_pixels", [True, False])
     def test_env_configs(self, file, from_pixels):
         cfg = hydra.compose(
             "config", overrides=[f"env={file}", f"++env.env.from_pixels={from_pixels}"]
