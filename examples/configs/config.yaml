@@ -1,3 +1,4 @@
 defaults:
   - collector: sync_single
+  - replay_buffer: circular
 num_workers: 0
