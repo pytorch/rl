@@ -1,86 +1,3 @@
-"""
-def _is_consistent_device_type(
-    device_type, passing_device_type, tensordict_device_type
-):
-    if passing_device_type is None:
-        if device_type == "cuda":
-            return tensordict_device_type == "cuda"
-
-        return tensordict_device_type == "cpu"
-
-    return tensordict_device_type == passing_device_type
-
-
-@pytest.mark.parametrize("num_env", [1, 3])
-@pytest.mark.parametrize("env_name", ["conv", "vec"])
-@pytest.mark.parametrize("device", ["cpu", None])
-@pytest.mark.parametrize("passing_device", ["cpu", None])
-def test_output_device_consistency(num_env, env_name, device, passing_device, seed=40):
-    if num_env == 1:
-
-        def env_fn(seed):
-            env = make_make_env(env_name)()
-            env.set_seed(seed)
-            return env
-
-    else:
-
-        def env_fn(seed):
-            env = ParallelEnv(
-                num_workers=num_env,
-                create_env_fn=make_make_env(env_name),
-                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
-            )
-            return env
-
-    policy = make_policy(env_name)
-
-    collector = SyncDataCollector(
-        create_env_fn=env_fn,
-        create_env_kwargs={"seed": seed},
-        policy=policy,
-        frames_per_batch=20,
-        max_frames_per_traj=2000,
-        total_frames=20000,
-        device=device,
-        passing_device=passing_device,
-        pin_memory=False,
-    )
-    for i, d in enumerate(collector):
-        assert (
-            True
-            if _is_consistent_device_type(device, passing_device, d.device.type)
-            else False
-        )
-        if i == 5:
-            break
-
-    collector.shutdown()
-
-    ccollector = aSyncDataCollector(
-        create_env_fn=env_fn,
-        create_env_kwargs={"seed": seed},
-        policy=policy,
-        frames_per_batch=20,
-        max_frames_per_traj=2000,
-        total_frames=20000,
-        device=device,
-        passing_device=passing_device,
-        pin_memory=False,
-    )
-
-    for i, d in enumerate(ccollector):
-        assert (
-            True
-            if _is_consistent_device_type(device, passing_device, d.device.type)
-            else False
-        )
-        if i == 5:
-            break
-
-    ccollector.shutdown()
-"""
-
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
@@ -111,9 +28,29 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.modules import Actor, OrnsteinUhlenbeckProcessWrapper
+from torchrl.modules import Actor, OrnsteinUhlenbeckProcessWrapper, TensorDictModule
 
 # torch.set_default_dtype(torch.double)
+
+
+class ParametricPolicyNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.param = torch.nn.Parameter(torch.randn(1, requires_grad=True))
+
+    def forward(self, obs):
+        max_obs = (obs == obs.max(dim=-1, keepdim=True)[0]).cumsum(-1).argmax(-1)
+        k = obs.shape[-1]
+        max_obs = (max_obs + 1) % k
+        action = torch.nn.functional.one_hot(max_obs, k)
+        return action
+
+
+class ParametricPolicy(TensorDictModule):
+    def __init__(self):
+        super().__init__(
+            ParametricPolicyNet(), in_keys=["observation"], out_keys=["action"]
+        )
 
 
 def make_make_env(env_name="conv"):
@@ -146,6 +83,101 @@ def make_policy(env):
         return dummypolicy_vec()
     else:
         raise NotImplementedError
+
+
+def _is_consistent_device_type(
+    device_type, policy_device_type, passing_device_type, tensordict_device_type
+):
+    if passing_device_type is None:
+        if device_type is None:
+            if policy_device_type is None:
+                return tensordict_device_type == "cpu"
+
+            return tensordict_device_type == policy_device_type
+
+        return tensordict_device_type == device_type
+
+    return tensordict_device_type == passing_device_type
+
+
+@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("device", ["cuda", "cpu", None])
+@pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
+@pytest.mark.parametrize("passing_device", ["cuda", "cpu", None])
+@pytest.mark.skipif(torch.cuda.device_count() <= 1, reason="no cuda device found")
+def test_output_device_consistency(
+    num_env, device, policy_device, passing_device, seed=40
+):
+    if num_env == 1:
+
+        def env_fn(seed):
+            env = make_make_env("vec")()
+            env.set_seed(seed)
+            return env
+
+    else:
+
+        def env_fn(seed):
+            env = ParallelEnv(
+                num_workers=num_env,
+                create_env_fn=make_make_env("vec"),
+                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+            )
+            return env
+
+    if policy_device is None:
+        policy = make_policy("vec")
+    else:
+        policy = ParametricPolicy().to(policy_device)
+
+    collector = SyncDataCollector(
+        create_env_fn=env_fn,
+        create_env_kwargs={"seed": seed},
+        policy=policy,
+        frames_per_batch=20,
+        max_frames_per_traj=2000,
+        total_frames=20000,
+        device=device,
+        passing_device=passing_device,
+        pin_memory=False,
+    )
+    for i, d in enumerate(collector):
+        assert (
+            True
+            if _is_consistent_device_type(
+                device, policy_device, passing_device, d.device.type
+            )
+            else False
+        )
+        if i == 5:
+            break
+
+    collector.shutdown()
+
+    ccollector = aSyncDataCollector(
+        create_env_fn=env_fn,
+        create_env_kwargs={"seed": seed},
+        policy=policy,
+        frames_per_batch=20,
+        max_frames_per_traj=2000,
+        total_frames=20000,
+        device=device,
+        passing_device=passing_device,
+        pin_memory=False,
+    )
+
+    for i, d in enumerate(ccollector):
+        assert (
+            True
+            if _is_consistent_device_type(
+                device, policy_device, passing_device, d.device.type
+            )
+            else False
+        )
+        if i == 5:
+            break
+
+    ccollector.shutdown()
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
