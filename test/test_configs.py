@@ -1,6 +1,7 @@
 import argparse
 
 import pytest
+import torch.cuda
 
 try:
     import hydra
@@ -78,6 +79,9 @@ class TestConfigs:
         ],
     )
     def test_env_configs(self, file, from_pixels):
+        if from_pixels and torch.cuda.device_count() == 0:
+            return pytest.skip("not testing pixel rendering without gpu")
+
         cfg = hydra.compose(
             "config", overrides=[f"env={file}", f"++env.env.from_pixels={from_pixels}"]
         )
@@ -109,6 +113,8 @@ class TestConfigs:
         if transform_file == "state":
             from_pixels = False
         else:
+            if torch.cuda.device_count() == 0:
+                return pytest.skip("not testing pixel rendering without gpu")
             from_pixels = True
         cfg = hydra.compose(
             "config",
