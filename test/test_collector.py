@@ -10,17 +10,17 @@ import pytest
 import torch
 from _utils_internal import generate_seeds
 from mocking_classes import (
+    ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnv,
+    DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
-    DiscreteActionConvPolicy,
-    ContinuousActionVecMockEnv,
     MockSerialEnv,
 )
 
 from torch import nn
 from torchrl import seed_generator
-from torchrl.collectors import SyncDataCollector, aSyncDataCollector
+from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
@@ -30,7 +30,7 @@ from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor, TensorDictModule
+from torchrl.modules import Actor, OrnsteinUhlenbeckProcessWrapper, TensorDictModule
 
 # torch.set_default_dtype(torch.double)
 
@@ -143,8 +143,10 @@ def test_output_device_consistency(
         passing_device=passing_device,
         pin_memory=False,
     )
-    for i, d in enumerate(collector):
-        assert _is_consistent_device_type(device, policy_device, passing_device, d.device.type)
+    for _, d in enumerate(collector):
+        assert _is_consistent_device_type(
+            device, policy_device, passing_device, d.device.type
+        )
         break
 
     collector.shutdown()
@@ -161,8 +163,10 @@ def test_output_device_consistency(
         pin_memory=False,
     )
 
-    for i, d in enumerate(ccollector):
-        assert _is_consistent_device_type(device, policy_device, passing_device, d.device.type)
+    for _, d in enumerate(ccollector):
+        assert _is_consistent_device_type(
+            device, policy_device, passing_device, d.device.type
+        )
         break
 
     ccollector.shutdown()
@@ -276,7 +280,7 @@ def test_collector_done_persist(num_env, env_name, seed=5):
         pin_memory=False,
         reset_when_done=False,
     )
-    for i, d in enumerate(collector):
+    for _, d in enumerate(collector): # noqa
         break
 
     assert (d["done"].sum(-2) >= 1).all()

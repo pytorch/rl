@@ -11,7 +11,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from textwrap import indent
-from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Dict
+from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -32,7 +32,7 @@ __all__ = [
 
 from torchrl.envs.transforms import TransformedEnv
 from ..data import TensorSpec
-from ..data.tensordict.tensordict import TensorDictBase, TensorDict
+from ..data.tensordict.tensordict import TensorDict, TensorDictBase
 from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
 from ..envs.common import EnvBase
 from ..envs.vec_env import _BatchedEnv
@@ -128,7 +128,9 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
         try:
             policy_device = next(policy.parameters()).device
         except:  # noqa
-            policy_device = torch.device(device) if device is not None else torch.device("cpu")
+            policy_device = (
+                torch.device(device) if device is not None else torch.device("cpu")
+            )
 
         device = torch.device(device) if device is not None else policy_device
         if device is None:
@@ -741,7 +743,9 @@ class _MultiDataCollector(_DataCollector):
             if _device in self._policy_dict:
                 devices[i] = _device
                 continue
-            _policy, _device, _get_weight_fn = self._get_policy_and_device(policy=policy, device=_device)
+            _policy, _device, _get_weight_fn = self._get_policy_and_device(
+                policy=policy, device=_device
+            )
             self._policy_dict[_device] = _policy
             self._get_weights_fn_dict[_device] = _get_weight_fn
             devices[i] = _device
@@ -756,7 +760,9 @@ class _MultiDataCollector(_DataCollector):
                 ]
             elif isinstance(passing_devices, Sequence):
                 if len(passing_devices) != self.num_workers:
-                    raise RuntimeError(device_err_msg("passing_devices", passing_devices))
+                    raise RuntimeError(
+                        device_err_msg("passing_devices", passing_devices)
+                    )
                 self.passing_devices = [
                     torch.device(_passing_device) for _passing_device in passing_devices
                 ]
