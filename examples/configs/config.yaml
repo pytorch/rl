@@ -1,5 +1,5 @@
 defaults:
   - collector: sync_single
-  - env: gym_pixels
+  - env: cheetah
   - transforms: pixels
 num_workers: 0

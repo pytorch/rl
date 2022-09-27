@@ -1,4 +1,0 @@
-_target_: torchrl.envs.libs.gym.GymEnv
-env_name: Pendulum-v1
-frame_skip: 2
-from_pixels: False

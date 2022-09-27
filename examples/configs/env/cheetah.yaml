@@ -5,7 +5,8 @@ env:
   env_name: cheetah
   task_name: run
   frame_skip: 2
-  from_pixels: True
+  from_pixels: False
+  pixels_only: True
 transform:
   _target_: torchrl.envs.transforms.DoubleToFloat
   keys_in: ["action", "reward"]

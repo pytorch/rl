@@ -1,7 +1,6 @@
 import argparse
 
 import pytest
-from torchrl.envs import TransformedEnv, Compose
 
 try:
     import hydra
@@ -71,17 +70,23 @@ class TestConfigs:
     @pytest.mark.parametrize(
         "file",
         [
-            "dmcontrol_pixels",
-            "dmcontrol_state",
-            "gym_pixels",
-            "gym_state",
+            "cartpole",
+            "halfcheetah",
+            "cheetah",
         ],
     )
-    def test_env_configs(self, file):
-        cfg = hydra.compose("config", overrides=[f"env={file}"])
+    @pytest.mark.parametrize("from_pixels", [True, False])
+    def test_env_configs(self, file, from_pixels):
+        cfg = hydra.compose(
+            "config", overrides=[f"env={file}", f"++env.env.from_pixels={from_pixels}"]
+        )
 
         env = instantiate(cfg.env)
-        env.rollout(3)
+
+        tensordict = env.rollout(3)
+        if from_pixels:
+            assert "next_pixels" in tensordict.keys()
+            assert tensordict["next_pixels"].shape[-1] == 3
         env.close()
 
     @pytest.mark.skipif(not _has_gym, reason="No gym found")
@@ -89,20 +94,32 @@ class TestConfigs:
     @pytest.mark.parametrize(
         "env_file,transform_file",
         [
-            ["dmcontrol_pixels", "pixels"],
-            ["dmcontrol_state", "state"],
-            ["gym_pixels", "pixels"],
-            ["gym_state", "state"],
+            ["cartpole", "pixels"],
+            ["halfcheetah", "pixels"],
+            ["cheetah", "pixels"],
+            ["cartpole", "state"],
+            ["halfcheetah", "state"],
+            ["cheetah", "state"],
         ],
     )
     def test_transforms_configs(self, env_file, transform_file):
+        if transform_file == "state":
+            from_pixels = False
+        else:
+            from_pixels = True
         cfg = hydra.compose(
-            "config", overrides=[f"env={env_file}", f"transforms={transform_file}"]
+            "config",
+            overrides=[
+                f"env={env_file}",
+                f"++env.env.from_pixels={from_pixels}",
+                f"transforms={transform_file}",
+            ],
         )
 
-        base_env = instantiate(cfg.env)
+        env = instantiate(cfg.env)
         transforms = [instantiate(transform) for transform in cfg.transforms]
-        env = TransformedEnv(base_env, Compose(*transforms))
+        for t in transforms:
+            env.append_transform(t)
         env.rollout(3)
         env.close()
 
