@@ -261,9 +261,12 @@ def main(cfg: "DictConfig"):
 
     # Losses
     world_model_loss = DreamerModelLoss(world_model).to(device)
-    actor_loss = DreamerActorLoss(actor_model, value_model, model_based_env, imagination_horizon=cfg.imagination_horizon).to(
-        device
-    )
+    actor_loss = DreamerActorLoss(
+        actor_model,
+        value_model,
+        model_based_env,
+        imagination_horizon=cfg.imagination_horizon,
+    ).to(device)
     value_loss = DreamerValueLoss(value_model).to(device)
 
     # optimizers
@@ -376,7 +379,11 @@ def main(cfg: "DictConfig"):
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
-                    loss_world_model = model_loss_td["loss_model_kl"] + model_loss_td["loss_model_reco"] + model_loss_td["loss_model_reward"]
+                    loss_world_model = (
+                        model_loss_td["loss_model_kl"]
+                        + model_loss_td["loss_model_reco"]
+                        + model_loss_td["loss_model_reward"]
+                    )
 
                     if (
                         cfg.record_video

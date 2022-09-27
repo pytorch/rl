@@ -15,6 +15,8 @@ from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import hold_out_net, distance_loss
 from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
 
+__all__ = ["DreamerModelLoss", "DreamerActorLoss", "DreamerValueLoss"]
+
 
 class DreamerModelLoss(LossModule):
     """Dreamer Model Loss
@@ -26,13 +28,14 @@ class DreamerModelLoss(LossModule):
 
     Args:
         world_model (TensorDictModule): the world model.
-        lambda_kl (float, optional): the weight of the kl divergence loss.
-        lambda_reco (float, optional): the weight of the reconstruction loss.
-        lambda_reward (float, optional): the weight of the reward loss.
-        reco_loss (str, optional): the reconstruction loss.
-        reward_loss (str, optional): the reward loss.
+        lambda_kl (float, optional): the weight of the kl divergence loss. default: 1.0.
+        lambda_reco (float, optional): the weight of the reconstruction loss. default: 1.0.
+        lambda_reward (float, optional): the weight of the reward loss. default: 1.0
+        reco_loss (str, optional): the reconstruction loss. default to l2.
+        reward_loss (str, optional): the reward loss. default to l2.
         free_nats (int, optional): the free nats.
-        inversed_free_nats (bool, optional): if True, the free nats are inversed. First we average the kl divergence and then we clamp it to the free nats.
+        inversed_free_nats (bool, optional): if True, the free nats are inversed. First we average the kl divergence and then we clamp it to the free nats. 
+            If False, we clamp the kl divergence to the free nats and then we average it. default: False.
     """
 
     def __init__(
@@ -134,10 +137,10 @@ class DreamerActorLoss(LossModule):
         actor_model (TensorDictModule): the actor model.
         value_model (TensorDictModule): the value model.
         model_based_env (DreamerEnv): the model based environment.
-        imagination_horizon (int, optional): The number of steps to unroll the model.
-        gamma (float, optional): the gamma discount factor.
-        lmbda (float, optional): the lambda discount factor factor.
-        discount_loss (bool, optional): if True, the loss is discounted with a gamma discount factor.
+        imagination_horizon (int, optional): The number of steps to unroll the model. default: 15.
+        gamma (float, optional): the gamma discount factor. default: 0.99.
+        lmbda (float, optional): the lambda discount factor factor. default: 0.95
+        discount_loss (bool, optional): if True, the loss is discounted with a gamma discount factor. default: True.
     """
 
     def __init__(
@@ -226,9 +229,9 @@ class DreamerValueLoss(LossModule):
 
     Args:
         value_model (TensorDictModule): the value model.
-        value_loss (str, optional): the loss to use for the value loss.
-        gamma (float, optional): the gamma discount factor.
-        discount_loss (bool, optional): if True, the loss is discounted with a gamma discount factor.
+        value_loss (str, optional): the loss to use for the value loss. default: "l2".
+        gamma (float, optional): the gamma discount factor. default: 0.99
+        discount_loss (bool, optional): if True, the loss is discounted with a gamma discount factor. default: True
     """
 
     def __init__(

@@ -9,4 +9,5 @@ from .dqn import *
 from .ppo import *
 from .sac import *
 from .redq import *
+from .dreamer import *
 from .utils import *

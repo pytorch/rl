@@ -710,6 +710,87 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
         return td
 
 
+class MockPixelEnv(EnvBase):
+    """Mocks an env with pixel observations."""
+
+    @classmethod
+    def __new__(
+        cls,
+        *args,
+        observation_spec=None,
+        action_spec=None,
+        input_spec=None,
+        reward_spec=None,
+        **kwargs,
+    ):
+        if action_spec is None:
+            action_spec = NdUnboundedContinuousTensorSpec((6,))
+        if input_spec is None:
+            input_spec = CompositeSpec(
+                action=action_spec,
+                pixels=NdUnboundedContinuousTensorSpec(
+                    (
+                        3,
+                        64,
+                        64,
+                    )
+                ),
+            )
+        if observation_spec is None:
+            observation_spec = CompositeSpec(
+                next_pixels=NdUnboundedContinuousTensorSpec((3, 64, 64))
+            )
+        if reward_spec is None:
+            reward_spec = NdUnboundedContinuousTensorSpec((1,))
+        cls._reward_spec = reward_spec
+        cls._observation_spec = observation_spec
+        cls._input_spec = input_spec
+        return super().__new__(
+            cls,
+            *args,
+            **kwargs,
+        )
+
+    def __init__(self, device="cpu", batch_size=None):
+        super(MockPixelEnv, self).__init__(device=device, batch_size=batch_size)
+
+    set_seed = MockSerialEnv.set_seed
+
+    def _step(self, tensordict):
+        tendordict = TensorDict(
+            {
+                "pixels": self.input_spec["pixels"].rand(self.batch_size),
+                "next_pixels": self.observation_spec["next_pixels"].rand(
+                    self.batch_size
+                ),
+                "reward": self.reward_spec.rand(self.batch_size),
+                "action": self.input_spec["action"].rand(self.batch_size),
+                "done": torch.zeros(self.batch_size).bool(),
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+
+        return tendordict
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        tendordict = TensorDict(
+            {
+                "pixels": self.input_spec["pixels"].rand(self.batch_size),
+                "next_pixels": self.observation_spec["next_pixels"].rand(
+                    self.batch_size
+                ),
+                "reward": self.reward_spec.rand(self.batch_size),
+                "action": self.input_spec["action"].rand(self.batch_size),
+                "done": torch.zeros(self.batch_size).bool(),
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+
+        return tendordict
+
+
 class ActionObsMergeLinear(nn.Module):
     def __init__(self, in_size, out_size):
         super().__init__()
