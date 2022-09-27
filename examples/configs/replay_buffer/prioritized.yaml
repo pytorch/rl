@@ -1,0 +1,7 @@
+_target_: torchrl.data.TensorDictPrioritizedReplayBuffer
+size: 1000000
+alpha: 0.7
+beta: 0.5
+storage:
+  _target_: torchrl.data.LazyMemmapStorage
+  size: ${replay_buffer.size}
