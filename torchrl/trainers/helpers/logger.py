@@ -24,3 +24,5 @@ class LoggerConfig:
     # number of steps in validation rollouts. " "Default=1000.
     recorder_log_keys: Any = field(default_factory=lambda: ["reward"])
     # Keys to log in the recorder
+    offline_logging: bool = True
+    # If True, Wandb will do the logging offline

@@ -249,7 +249,7 @@ class SyncDataCollector(_DataCollector):
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        split_trajs: bool = True,
+        split_trajs: Optional[bool] = None,
         device: DEVICE_TYPING = None,
         passing_device: DEVICE_TYPING = "cpu",
         seed: Optional[int] = None,
@@ -258,6 +258,7 @@ class SyncDataCollector(_DataCollector):
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         init_with_lag: bool = False,
         return_same_td: bool = False,
+        reset_when_done: bool = True,
     ):
         self.closed = True
         if seed is not None:
@@ -281,6 +282,7 @@ class SyncDataCollector(_DataCollector):
         self.passing_device = torch.device(passing_device)
         self.env: EnvBase = env.to(self.passing_device)
         self.closed = False
+        self.reset_when_done = reset_when_done
         self.n_env = self.env.numel()
 
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
@@ -317,6 +319,15 @@ class SyncDataCollector(_DataCollector):
         )
 
         self.return_in_place = return_in_place
+        if split_trajs is None:
+            if not self.reset_when_done:
+                split_trajs = False
+            else:
+                split_trajs = True
+        elif not self.reset_when_done and split_trajs:
+            raise RuntimeError(
+                "Cannot split trajectories when reset_when_done is False."
+            )
         self.split_trajs = split_trajs
         if self.return_in_place and self.split_trajs:
             raise RuntimeError(
@@ -412,6 +423,8 @@ class SyncDataCollector(_DataCollector):
 
     def _reset_if_necessary(self) -> None:
         done = self._tensordict.get("done")
+        if not self.reset_when_done:
+            done = torch.zeros_like(done)
         steps = self._tensordict.get("step_count")
         done_or_terminated = done | (steps == self.max_frames_per_traj)
         if self._has_been_done is None:
@@ -636,6 +649,13 @@ class _MultiDataCollector(_DataCollector):
        exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
             "mode" or "mean".
             default = "random"
+        reset_when_done (bool, optional): if True, the contained environment will be reset
+            every time it hits a done. If the env contains multiple independent envs, a
+            reset index will be passed to it to reset only thos environments that need to
+            be reset. In practice, this will happen through a call to `env.reset(tensordict)`,
+            in other words, if the env is a multi-agent env, all agents will be
+            reset once one of them is done.
+            Defaults to `True`.
 
     """
 
@@ -655,7 +675,7 @@ class _MultiDataCollector(_DataCollector):
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        split_trajs: bool = True,
+        split_trajs: Optional[bool] = None,
         devices: DEVICE_TYPING = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
@@ -663,6 +683,7 @@ class _MultiDataCollector(_DataCollector):
         update_at_each_batch: bool = False,
         init_with_lag: bool = False,
         exploration_mode: str = DEFAULT_EXPLORATION_MODE,
+        reset_when_done: bool = True,
     ):
         self.closed = True
         self.create_env_fn = create_env_fn
@@ -744,6 +765,16 @@ class _MultiDataCollector(_DataCollector):
         self.max_frames_per_traj = max_frames_per_traj
         self.frames_per_batch = frames_per_batch
         self.seed = seed
+        self.reset_when_done = reset_when_done
+        if split_trajs is None:
+            if not self.reset_when_done:
+                split_trajs = False
+            else:
+                split_trajs = True
+        elif not self.reset_when_done and split_trajs:
+            raise RuntimeError(
+                "Cannot split trajectories when reset_when_done is False."
+            )
         self.split_trajs = split_trajs
         self.pin_memory = pin_memory
         self.init_random_frames = init_random_frames
@@ -801,6 +832,7 @@ class _MultiDataCollector(_DataCollector):
                 "pin_memory": self.pin_memory,
                 "init_with_lag": self.init_with_lag,
                 "exploration_mode": self.exploration_mode,
+                "reset_when_done": self.reset_when_done,
                 "idx": i,
             }
             proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
@@ -1212,11 +1244,12 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        split_trajs: bool = True,
+        split_trajs: Optional[bool] = None,
         device: Optional[Union[int, str, torch.device]] = None,
         passing_device: Union[int, str, torch.device] = "cpu",
         seed: Optional[int] = None,
         pin_memory: bool = False,
+        **kwargs,
     ):
         super().__init__(
             create_env_fn=[create_env_fn],
@@ -1233,6 +1266,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             passing_devices=[passing_device],
             seed=seed,
             pin_memory=pin_memory,
+            **kwargs,
         )
 
 
@@ -1254,6 +1288,7 @@ def _main_async_collector(
     idx: int = 0,
     init_with_lag: bool = False,
     exploration_mode: str = DEFAULT_EXPLORATION_MODE,
+    reset_when_done: bool = True,
     verbose: bool = False,
 ) -> None:
     pipe_parent.close()
@@ -1277,6 +1312,7 @@ def _main_async_collector(
         return_in_place=True,
         init_with_lag=init_with_lag,
         exploration_mode=exploration_mode,
+        reset_when_done=reset_when_done,
         return_same_td=True,
     )
     if verbose:

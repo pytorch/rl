@@ -15,6 +15,7 @@ from mocking_classes import (
     DiscreteActionVecPolicy,
     DiscreteActionConvPolicy,
     ContinuousActionVecMockEnv,
+    MockSerialEnv,
 )
 from torch import nn
 from torchrl import seed_generator
@@ -132,6 +133,55 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     assert_allclose_td(b2c, b2)
 
     ccollector.shutdown()
+
+
+@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("env_name", ["vec"])
+def test_collector_done_persist(num_env, env_name, seed=5):
+    if num_env == 1:
+
+        def env_fn(seed):
+            env = MockSerialEnv(device="cpu")
+            env.set_seed(seed)
+            return env
+
+    else:
+
+        def env_fn(seed):
+            def make_env(seed):
+                env = MockSerialEnv(device="cpu")
+                env.set_seed(seed)
+                return env
+
+            env = ParallelEnv(
+                num_workers=num_env,
+                create_env_fn=make_env,
+                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+                allow_step_when_done=True,
+            )
+            env.set_seed(seed)
+            return env
+
+    policy = make_policy(env_name)
+
+    collector = SyncDataCollector(
+        create_env_fn=env_fn,
+        create_env_kwargs={"seed": seed},
+        policy=policy,
+        frames_per_batch=200 * num_env,
+        max_frames_per_traj=2000,
+        total_frames=20000,
+        device="cpu",
+        pin_memory=False,
+        reset_when_done=False,
+    )
+    for i, d in enumerate(collector):
+        break
+
+    assert (d["done"].sum(-2) >= 1).all()
+    assert torch.unique(d["traj_ids"], dim=-1).shape[-1] == 1
+
+    del collector
 
 
 # TODO: design a test that ensures that collectors are interrupted even if __del__ is not called

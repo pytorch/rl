@@ -118,6 +118,9 @@ class _BatchedEnv(EnvBase):
             It is assumed that all environments will run on the same device as a common shared
             tensordict will be used to pass data from process to process. The device can be
             changed after instantiation using `env.to(device)`.
+        allow_step_when_done (bool, optional): if True, batched environments can
+            execute steps after a done state is encountered.
+            Defaults to `False`.
 
     """
 
@@ -143,6 +146,7 @@ class _BatchedEnv(EnvBase):
         memmap: bool = False,
         policy_proof: Optional[Callable] = None,
         device: Optional[DEVICE_TYPING] = None,
+        allow_step_when_done: bool = False,
     ):
         if device is not None:
             raise ValueError(
@@ -187,6 +191,7 @@ class _BatchedEnv(EnvBase):
         self.share_individual_td = bool(share_individual_td)
         self._share_memory = shared_memory
         self._memmap = memmap
+        self.allow_step_when_done = allow_step_when_done
         if self._share_memory and self._memmap:
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
@@ -695,6 +700,7 @@ class ParallelEnv(_BatchedEnv):
                     False,
                     self.env_input_keys,
                     self.device,
+                    self.allow_step_when_done,
                 ),
             )
             w.daemon = True
@@ -902,6 +908,7 @@ def _run_worker_pipe_shared_mem(
     pin_memory: bool,
     env_input_keys: Dict[str, Any],
     device: DEVICE_TYPING = "cpu",
+    allow_step_when_done: bool = False,
     verbose: bool = False,
 ) -> None:
     parent_pipe.close()
@@ -979,7 +986,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             _td = tensordict.select(*env_input_keys)
-            if env.is_done:
+            if env.is_done and not allow_step_when_done:
                 raise RuntimeError(
                     f"calling step when env is done, just reset = {just_reset}"
                 )
