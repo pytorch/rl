@@ -362,7 +362,9 @@ class TanhNormal(torch_dist.TransformedDistribution):
             t = torch_dist.ComposeTransform(
                 [
                     t,
-                    torch_dist.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                    torch_dist.AffineTransform(
+                        loc=(max + min) / 2, scale=(max - min) / 2
+                    ),
                 ]
             )
         self._t = t
@@ -385,7 +387,9 @@ class TanhNormal(torch_dist.TransformedDistribution):
             self.base_dist.base_dist.loc = self.loc
             self.base_dist.base_dist.scale = self.scale
         else:
-            base = torch_dist.Independent(torch_dist.Normal(self.loc, self.scale), self._event_dims)
+            base = torch_dist.Independent(
+                torch_dist.Normal(self.loc, self.scale), self._event_dims
+            )
             super().__init__(base, self._t)
 
     @property
