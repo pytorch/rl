@@ -17,7 +17,6 @@ from mocking_classes import (
     DiscreteActionVecPolicy,
     MockSerialEnv,
 )
-
 from torch import nn
 from torchrl import seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
