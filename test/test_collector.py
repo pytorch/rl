@@ -10,26 +10,26 @@ import pytest
 import torch
 from _utils_internal import generate_seeds
 from mocking_classes import (
-    ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnv,
-    DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
-    MockSerialEnv,
+    DiscreteActionConvPolicy,
+    ContinuousActionVecMockEnv,
 )
 from torch import nn
 from torchrl import seed_generator
-from torchrl.collectors import aSyncDataCollector, SyncDataCollector
+from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.collectors.collectors import (
-    MultiaSyncDataCollector,
-    MultiSyncDataCollector,
     RandomPolicy,
+    MultiSyncDataCollector,
+    MultiaSyncDataCollector,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs import EnvCreator
+from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.modules import Actor, OrnsteinUhlenbeckProcessWrapper, TensorDictModule
+from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
 
 # torch.set_default_dtype(torch.double)
 
@@ -47,10 +47,11 @@ class ParametricPolicyNet(nn.Module):
         return action
 
 
-class ParametricPolicy(TensorDictModule):
+class ParametricPolicy(Actor):
     def __init__(self):
         super().__init__(
-            ParametricPolicyNet(), in_keys=["observation"], out_keys=["action"]
+            ParametricPolicyNet(),
+            in_keys=["observation"],
         )
 
 

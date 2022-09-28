@@ -11,7 +11,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from textwrap import indent
-from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
+from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Dict
 
 import numpy as np
 import torch
@@ -32,7 +32,7 @@ __all__ = [
 
 from torchrl.envs.transforms import TransformedEnv
 from ..data import TensorSpec
-from ..data.tensordict.tensordict import TensorDict, TensorDictBase
+from ..data.tensordict.tensordict import TensorDictBase, TensorDict
 from ..data.utils import CloudpickleWrapper, DEVICE_TYPING
 from ..envs.common import EnvBase
 from ..envs.vec_env import _BatchedEnv
