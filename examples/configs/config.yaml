@@ -1,6 +1,8 @@
 defaults:
   - collector: sync_single
-  - env: cheetah
+  - env: cartpole
   - transforms: pixels
   - replay_buffer: circular
+  - model: dqn/distributional
+  - network: dqn/pixels
 num_workers: 0

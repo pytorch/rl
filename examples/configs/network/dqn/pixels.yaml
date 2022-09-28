@@ -1,0 +1,14 @@
+network:
+  _target_: torchrl.modules.DuelingCnnDQNet
+  _partial_: True  # we still need out_features
+  out_features: ${network.out_features}
+  cnn_kwargs:
+    bias_last_layer: True
+    depth: 3
+    num_cells: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
+  mlp_kwargs:
+    num_cells: 512
+    layer_class: linear
+in_keys: ["pixels"]

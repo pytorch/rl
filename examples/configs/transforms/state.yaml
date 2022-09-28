@@ -5,3 +5,8 @@
 - _target_: torchrl.envs.transforms.RewardScaling
   loc: 0.0
   scale: 1.0
+# should be re-written for envs that have multiple states to be concatenated
+- _target_: torchrl.envs.transforms.CatTensors
+  keys_in: ["next_observation"]
+  out_key: "next_observation_vector"
+  del_keys: True

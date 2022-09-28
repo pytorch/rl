@@ -1,0 +1,36 @@
+in_keys: ["pixels"]
+in_keys_policy_module: ["hidden"]
+latent_size: 128
+
+policy_network:
+  _target_: torchrl.modules.MLP
+  _partial_: True
+  num_cells: [128, 128]
+
+actor_critic:
+  _target_: torchrl.modules.ActorValueOperator
+  _partial_: True
+  common_operator:
+    _target_: torchrl.modules.TensorDictModule
+    in_keys: ${network.in_keys}
+    out_keys: ["hidden"]
+    module:
+      _target_: torchrl.modules.ConvNet
+      _convert_: partial
+      bias_last_layer: True
+      depth: 3
+      num_cells: [32, 64, 128]  # how to place ${network.latent_size} here?
+      kernel_sizes: [8, 4, 3]
+      strides: [4, 2, 1]
+      # we use avg pooling by default
+      aggregator_class: adaptive_avg_pooling
+      aggregator_kwargs:
+        output_size: [1, 1]
+      squeeze_output: True
+  value_operator:
+    _target_: torchrl.modules.ValueOperator
+    module:
+      _target_: torchrl.modules.MLP
+      out_features: 1
+      num_cells: [128, 128]
+    in_keys: ["hidden"]

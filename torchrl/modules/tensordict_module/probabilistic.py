@@ -9,8 +9,9 @@ from textwrap import indent
 from typing import List, Sequence, Union, Type, Optional, Tuple
 
 from torch import Tensor
-from torch import distributions as d
+from torch import distributions as dist
 
+import torchrl.modules.distributions as torchrl_dist
 from torchrl.data import TensorSpec
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import exploration_mode, set_exploration_mode
@@ -19,10 +20,18 @@ from torchrl.modules.tensordict_module.common import TensorDictModule, _check_al
 
 __all__ = ["ProbabilisticTensorDictModule"]
 
+_DIST_MAPPINGS = {
+    "normal": dist.Normal,
+    "independent_normal": torchrl_dist.IndependentNormal,
+    "tanh_normal": torchrl_dist.TanhNormal,
+    "truncated_normal": torchrl_dist.TruncatedNormal,
+    "onehot_categorical": torchrl_dist.OneHotCategorical,
+}
+
 
 class ProbabilisticTensorDictModule(TensorDictModule):
-    """
-    A probabilistic TD Module.
+    """A probabilistic TD Module.
+
     `ProbabilisticTDModule` is a special case of a TDModule where the output is
     sampled given some rule, specified by the input `default_interaction_mode`
     argument and the `exploration_mode()` global function.
@@ -75,7 +84,9 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             dictated by the `exploration_mode()` global function. If this returns `None` (its default value),
             then the `default_interaction_mode` of the `ProbabilisticTDModule` instance will be used.
             Note that DataCollector instances will use `set_exploration_mode` to `"random"` by default.
-        distribution_class (Type, optional): a torch.distributions.Distribution class to be used for sampling.
+        distribution_class (Type or str, optional): a torch.distributions.Distribution class
+            (or an equivalent string among `"normal", `"independent_normal"`, `"tanh_normal"`, `"truncated_normal"`, `"onehot_categorical"`)
+            to be used for sampling.
             Default is Delta.
         distribution_kwargs (dict, optional): kwargs to be passed to the distribution.
         return_log_prob (bool, optional): if True, the log-probability of the distribution sample will be written in the
@@ -227,7 +238,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
-    ) -> Tuple[d.Distribution, TensorDictBase]:
+    ) -> Tuple[dist.Distribution, TensorDictBase]:
         interaction_mode = exploration_mode()
         if interaction_mode is None:
             interaction_mode = self.default_interaction_mode
@@ -242,7 +253,9 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         dist = self.build_dist_from_params(tensordict_out)
         return dist, tensordict_out
 
-    def build_dist_from_params(self, tensordict_out: TensorDictBase) -> d.Distribution:
+    def build_dist_from_params(
+        self, tensordict_out: TensorDictBase
+    ) -> dist.Distribution:
         try:
             selected_td_out = tensordict_out.select(*self.dist_param_keys.values())
             dist_kwargs = {
@@ -304,13 +317,13 @@ class ProbabilisticTensorDictModule(TensorDictModule):
 
     def _dist_sample(
         self,
-        dist: d.Distribution,
+        dist: dist.Distribution,
         *tensors: Tensor,
         interaction_mode: bool = None,
     ) -> Union[Tuple[Tensor], Tensor]:
         if interaction_mode is None or interaction_mode == "":
             interaction_mode = self.default_interaction_mode
-        if not isinstance(dist, d.Distribution):
+        if not isinstance(dist, dist.Distribution):
             raise TypeError(f"type {type(dist)} not recognised by _dist_sample")
 
         if interaction_mode == "mode":

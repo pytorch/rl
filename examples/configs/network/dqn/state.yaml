@@ -1,0 +1,8 @@
+network:
+  _target_: torchrl.modules.DuelingMlpDQNet
+  _partial_: True
+  mlp_kwargs_feature: {}
+  mlp_kwargs_output:
+    num_cells: 512
+    layer_class: linear
+in_keys: ["observation_vector"]

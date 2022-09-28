@@ -1,0 +1,13 @@
+vmin: -3
+vmax: 3
+atoms: 51
+out_features: ${model.atoms}
+#out_features: [${model.dqn.distributional.atoms}]
+actor:
+  _target_: torchrl.modules.DistributionalQValueActor
+  _partial_: True  # we still need the module
+  support:
+    _target_: torch.linspace
+    start: ${model.vmin}
+    end: ${model.vmax}
+    steps: ${model.atoms}
