@@ -15,6 +15,7 @@ from mocking_classes import (
     DiscreteActionVecPolicy,
     DiscreteActionConvPolicy,
     ContinuousActionVecMockEnv,
+    MockSerialEnv,
 )
 from torch import nn
 from torchrl import seed_generator
