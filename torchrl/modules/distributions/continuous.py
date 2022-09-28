@@ -8,7 +8,7 @@ from typing import Dict, Sequence, Union, Optional, Tuple
 
 import numpy as np
 import torch
-from torch import distributions as D, nn
+from torch import distributions as torch_dist, nn
 from torch.distributions import constraints
 
 from torchrl._torchrl import safetanh
@@ -28,10 +28,10 @@ __all__ = [
 ]
 
 # speeds up distribution construction
-D.Distribution.set_default_validate_args(False)
+torch_dist.Distribution.set_default_validate_args(False)
 
 
-class IndependentNormal(D.Independent):
+class IndependentNormal(torch_dist.Independent):
     """Implements a Normal distribution with location scaling.
 
     Location scaling prevents the location to be "too far" from 0, which ultimately
@@ -74,19 +74,19 @@ class IndependentNormal(D.Independent):
         self.upscale = upscale
         self._event_dim = event_dim
         self._kwargs = kwargs
-        super().__init__(D.Normal(loc, scale, **kwargs), event_dim)
+        super().__init__(torch_dist.Normal(loc, scale, **kwargs), event_dim)
 
     def update(self, loc, scale):
         if self.tanh_loc:
             loc = self.upscale * (loc / self.upscale).tanh()
-        super().__init__(D.Normal(loc, scale, **self._kwargs), self._event_dim)
+        super().__init__(torch_dist.Normal(loc, scale, **self._kwargs), self._event_dim)
 
     @property
     def mode(self):
         return self.base_dist.mean
 
 
-class SafeTanhTransform(D.TanhTransform):
+class SafeTanhTransform(torch_dist.TanhTransform):
     """
     TanhTransform subclass that ensured that the transformation is numerically invertible.
 
@@ -155,7 +155,7 @@ class NormalParamWrapper(nn.Module):
         return (loc, scale, *others)
 
 
-class TruncatedNormal(D.Independent):
+class TruncatedNormal(torch_dist.Independent):
     """Implements a Truncated Normal distribution with location scaling.
 
     Location scaling prevents the location to be "too far" from 0, which ultimately
@@ -273,7 +273,7 @@ class TruncatedNormal(D.Independent):
         return super().log_prob(value, **kwargs)
 
 
-class TanhNormal(D.TransformedDistribution):
+class TanhNormal(torch_dist.TransformedDistribution):
     """Implements a TanhNormal distribution with location scaling.
 
     Location scaling prevents the location to be "too far" from 0 when a TanhTransform is applied, which ultimately
@@ -359,10 +359,10 @@ class TanhNormal(D.TransformedDistribution):
 
         t = SafeTanhTransform()
         if self.non_trivial_max or self.non_trivial_min:
-            t = D.ComposeTransform(
+            t = torch_dist.ComposeTransform(
                 [
                     t,
-                    D.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
+                    torch_dist.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2),
                 ]
             )
         self._t = t
@@ -385,7 +385,7 @@ class TanhNormal(D.TransformedDistribution):
             self.base_dist.base_dist.loc = self.loc
             self.base_dist.base_dist.scale = self.scale
         else:
-            base = D.Independent(D.Normal(self.loc, self.scale), self._event_dims)
+            base = torch_dist.Independent(torch_dist.Normal(self.loc, self.scale), self._event_dims)
             super().__init__(base, self._t)
 
     @property
@@ -413,7 +413,7 @@ def uniform_sample_tanhnormal(dist: TanhNormal, size=None) -> torch.Tensor:
     return torch.rand_like(dist.sample(size)) * (dist.max - dist.min) + dist.min
 
 
-class Delta(D.Distribution):
+class Delta(torch_dist.Distribution):
     """
     Delta distribution.
 
@@ -487,7 +487,7 @@ class Delta(D.Distribution):
         return self.param
 
 
-class TanhDelta(D.TransformedDistribution):
+class TanhDelta(torch_dist.TransformedDistribution):
     """
     Implements a Tanh transformed_in Delta distribution.
 
@@ -546,10 +546,10 @@ class TanhDelta(D.TransformedDistribution):
         loc = self.update(param)
 
         if self.non_trivial:
-            t = D.ComposeTransform(
+            t = torch_dist.ComposeTransform(
                 [
                     t,
-                    D.AffineTransform(
+                    torch_dist.AffineTransform(
                         loc=(self.max + self.min) / 2, scale=(self.max - self.min) / 2
                     ),
                 ]

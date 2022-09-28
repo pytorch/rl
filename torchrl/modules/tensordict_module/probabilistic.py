@@ -9,7 +9,7 @@ from textwrap import indent
 from typing import List, Sequence, Union, Type, Optional, Tuple
 
 from torch import Tensor
-from torch import distributions as dist
+from torch import distributions as torch_dist
 
 import torchrl.modules.distributions as torchrl_dist
 from torchrl.data import TensorSpec
@@ -21,7 +21,7 @@ from torchrl.modules.tensordict_module.common import TensorDictModule, _check_al
 __all__ = ["ProbabilisticTensorDictModule"]
 
 _DIST_MAPPINGS = {
-    "normal": dist.Normal,
+    "normal": torch_dist.Normal,
     "independent_normal": torchrl_dist.IndependentNormal,
     "tanh_normal": torchrl_dist.TanhNormal,
     "truncated_normal": torchrl_dist.TruncatedNormal,
@@ -238,7 +238,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
-    ) -> Tuple[dist.Distribution, TensorDictBase]:
+    ) -> Tuple[torch_dist.Distribution, TensorDictBase]:
         interaction_mode = exploration_mode()
         if interaction_mode is None:
             interaction_mode = self.default_interaction_mode
@@ -255,7 +255,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
 
     def build_dist_from_params(
         self, tensordict_out: TensorDictBase
-    ) -> dist.Distribution:
+    ) -> torch_dist.Distribution:
         try:
             selected_td_out = tensordict_out.select(*self.dist_param_keys.values())
             dist_kwargs = {
@@ -317,13 +317,13 @@ class ProbabilisticTensorDictModule(TensorDictModule):
 
     def _dist_sample(
         self,
-        dist: dist.Distribution,
+        dist: torch_dist.Distribution,
         *tensors: Tensor,
         interaction_mode: bool = None,
     ) -> Union[Tuple[Tensor], Tensor]:
         if interaction_mode is None or interaction_mode == "":
             interaction_mode = self.default_interaction_mode
-        if not isinstance(dist, dist.Distribution):
+        if not isinstance(dist, torch_dist.Distribution):
             raise TypeError(f"type {type(dist)} not recognised by _dist_sample")
 
         if interaction_mode == "mode":

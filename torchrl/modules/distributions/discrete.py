@@ -6,7 +6,7 @@
 from typing import Optional, Sequence, Union
 
 import torch
-from torch import distributions as D
+from torch import distributions as torch_dist
 
 __all__ = [
     "OneHotCategorical",
@@ -31,7 +31,7 @@ def rand_one_hot(values: torch.Tensor, do_softmax: bool = True) -> torch.Tensor:
     return out
 
 
-class OneHotCategorical(D.Categorical):
+class OneHotCategorical(torch_dist.Categorical):
     """One-hot categorical distribution.
 
     This class behaves excacly as torch.distributions.Categorical except that it reads and produces one-hot encodings
@@ -73,7 +73,7 @@ class OneHotCategorical(D.Categorical):
     def rsample(self, sample_shape: Union[torch.Size, Sequence] = None) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size([])
-        d = D.relaxed_categorical.RelaxedOneHotCategorical(
+        d = torch_dist.relaxed_categorical.RelaxedOneHotCategorical(
             1.0, probs=self.probs, logits=self.logits
         )
         out = d.rsample(sample_shape)
