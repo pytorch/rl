@@ -1,0 +1,13 @@
+# by default we map the double-prec tensors to single-prec
+_target_: torchrl.envs.TransformedEnv
+env:
+  _target_: torchrl.envs.libs.dm_control.DMControlEnv
+  env_name: cheetah
+  task_name: run
+  frame_skip: 2
+  from_pixels: False
+  pixels_only: True
+transform:
+  _target_: torchrl.envs.transforms.DoubleToFloat
+  keys_in: ["action", "reward"]
+  keys_inv_in: ["action"]

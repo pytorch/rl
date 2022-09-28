@@ -1,0 +1,23 @@
+- _target_: torchrl.envs.transforms.ToTensorImage
+  keys_in: ["next_pixels"]
+#- _target_: torchrl.envs.transforms.CenterCrop
+#  keys_in: [ "next_pixels" ]
+#  w: 244
+#  h: 244
+- _target_: torchrl.envs.transforms.Resize
+  w: 64
+  h: 64
+  keys_in: ["next_pixels"]
+- _target_: torchrl.envs.transforms.GrayScale
+  keys_in: ["next_pixels"]
+- _target_: torchrl.envs.transforms.ObservationNorm
+  keys_in: ["next_pixels"]
+  loc: 0.0
+  scale: 1.0
+- _target_: torchrl.envs.transforms.CatFrames
+  keys_in: ["next_pixels"]
+  N: 4
+  cat_dim: -3
+- _target_: torchrl.envs.transforms.RewardScaling
+  loc: 0.0
+  scale: 1.0
