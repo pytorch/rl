@@ -192,6 +192,16 @@ def make_model_sac(net_partial, model_params, env):
     return policy_operator, qvalue_operator, value_operator
 
 
+def make_model_ddpg(net_partial, env):
+    out_features = env.action_spec.shape[-1]
+
+    # build the module
+    policy_operator = net_partial.policy_network(out_features=out_features)
+
+    qvalue = net_partial.value_operator
+    return policy_operator, qvalue
+
+
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestModelConfigs:
     @pytest.fixture(scope="class", autouse=True)
@@ -327,6 +337,42 @@ class TestModelConfigs:
         assert env.action_spec.is_in(tensordict["action"]), env.action_spec
         qvalue(tensordict)
         value(tensordict)
+
+    @pytest.mark.parametrize("pixels", [True, False])
+    def test_ddpg(
+        self,
+        pixels,
+    ):
+        torch.manual_seed(0)
+        env_config = []
+        if pixels:
+            suffix = "pixels"
+            env_config += ["transforms=pixels", "++env.env.from_pixels=True"]
+        else:
+            suffix = "state"
+            env_config += ["transforms=state"]
+        net_conf = f"network=ddpg/{suffix}"
+
+        env_config += ["env=halfcheetah"]
+        model_conf = "model=ddpg/basic"
+
+        cfg = hydra.compose("config", overrides=env_config + [net_conf] + [model_conf])
+        env = instantiate(cfg.env)
+        transforms = [instantiate(transform) for transform in cfg.transforms]
+        for t in transforms:
+            env.append_transform(t)
+
+        net_partial = instantiate(cfg.network)
+        actor, qvalue = make_model_ddpg(net_partial, env)
+        actor(env.reset())
+        rollout = env.rollout(3)
+        assert all(key in rollout.keys() for key in actor.in_keys), (
+            actor.in_keys,
+            rollout.keys(),
+        )
+        tensordict = env.rollout(3, actor)
+        assert env.action_spec.is_in(tensordict["action"]), env.action_spec
+        qvalue(tensordict)
 
 
 if __name__ == "__main__":

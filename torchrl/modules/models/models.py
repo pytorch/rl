@@ -777,7 +777,7 @@ class DdpgMlpActor(nn.Module):
     It is trained to maximise the value returned by the DDPG Q Value network.
 
     Args:
-        action_dim (int): length of the action vector
+        out_features (int): length of the action vector
         mlp_net_kwargs (dict, optional): kwargs for MLP.
             Default: {
             'in_features': None,
@@ -789,11 +789,11 @@ class DdpgMlpActor(nn.Module):
         }
     """
 
-    def __init__(self, action_dim: int, mlp_net_kwargs: Optional[dict] = None):
+    def __init__(self, out_features: int, mlp_net_kwargs: Optional[dict] = None):
         super().__init__()
         mlp_net_default_kwargs = {
             "in_features": None,
-            "out_features": action_dim,
+            "out_features": out_features,
             "depth": 2,
             "num_cells": [400, 300],
             "activation_class": nn.ELU,
