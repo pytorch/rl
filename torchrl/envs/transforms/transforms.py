@@ -1580,7 +1580,7 @@ class CatTensors(Transform):
                     "Lazy call to CatTensors is only supported when `dim=-1`."
                 )
         else:
-            keys_in = sorted(list(self.keys_in))
+            keys_in = sorted(list(keys_in))
             self._check_keys_in(keys_in, out_key)
         if type(out_key) != str:
             raise Exception("CatTensors requires out_key to be of type string")
