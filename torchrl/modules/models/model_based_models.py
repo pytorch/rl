@@ -199,7 +199,7 @@ class RSSMRollout(nn.Module):
             next_beliefs.append(belief)
             next_posterior_means.append(posterior_mean)
             next_posterior_stds.append(posterior_std)
-            next_posterior_states.append(next_posterior_states)
+            next_posterior_states.append(posterior_state)
         next_prior_means = torch.stack(next_prior_means, dim=1)
         next_prior_stds = torch.stack(next_prior_stds, dim=1)
         next_prior_states = torch.stack(next_prior_states, dim=1)
