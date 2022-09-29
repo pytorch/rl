@@ -245,7 +245,6 @@ class Transform(nn.Module):
         if parent is None:
             return parent
         if not isinstance(parent, EnvBase):
-            print(parent, parent.parent)
             # if it's not an env, it should be a Compose transform
             if not isinstance(parent, Compose):
                 raise ValueError(
@@ -1534,7 +1533,9 @@ class CatTensors(Transform):
     "observation_velocity")
 
     Args:
-        keys_in (Sequence of str): keys to be concatenated
+        keys_in (Sequence of str): keys to be concatenated. If `None` (or not provided)
+            the keys will be retrieved from the parent environment the first time
+            the transform is used. This behaviour will only work if a parent is set.
         out_key: key of the resulting tensor.
         dim (int, optional): dimension along which the concatenation will occur.
             Default is -1.
@@ -1572,11 +1573,33 @@ class CatTensors(Transform):
         del_keys: bool = True,
         unsqueeze_if_oor: bool = False,
     ):
-        if keys_in is None:
-            raise Exception("CatTensors requires keys to be non-empty")
+        self._initialized = keys_in is not None
+        if not self._initialized:
+            if dim != -1:
+                raise ValueError(
+                    "Lazy call to CatTensors is only supported when `dim=-1`."
+                )
+        else:
+            keys_in = sorted(list(keys_in))
+            self._check_keys_in(keys_in, out_key)
         if type(out_key) != str:
             raise Exception("CatTensors requires out_key to be of type string")
-        super().__init__(keys_in=keys_in)
+        # super().__init__(keys_in=keys_in)
+        super(CatTensors, self).__init__(keys_in=keys_in, keys_out=[out_key])
+        self.dim = dim
+        self.del_keys = del_keys
+        self.unsqueeze_if_oor = unsqueeze_if_oor
+
+    def _check_keys_in(self, keys_in, out_key):
+        # if (
+        #     ("reward" in keys_in)
+        #     or ("action" in keys_in)
+        #     or ("reward" in keys_in)
+        # ):
+        #     raise RuntimeError(
+        #         "Concatenating observations and reward / action / done state "
+        #         "is not allowed."
+        #     )
         if not out_key.startswith("next_") and all(
             key.startswith("next_") for key in keys_in
         ):
@@ -1584,23 +1607,22 @@ class CatTensors(Transform):
                 f"It seems that 'next_'-like keys are being concatenated to a non 'next_' key {out_key}. This may result in unwanted behaviours, and the 'next_' flag is missing from the output key."
                 f"Consider renaming the out_key to 'next_{out_key}'"
             )
-        super(CatTensors, self).__init__(
-            keys_in=sorted(list(self.keys_in)), keys_out=[out_key]
-        )
-        if (
-            ("reward" in self.keys_in)
-            or ("action" in self.keys_in)
-            or ("reward" in self.keys_in)
-        ):
-            raise RuntimeError(
-                "Concatenating observations and reward / action / done state "
-                "is not allowed."
-            )
-        self.dim = dim
-        self.del_keys = del_keys
-        self.unsqueeze_if_oor = unsqueeze_if_oor
+
+    def _find_keys_in(self):
+        parent = self.parent
+        obs_spec = parent.observation_spec
+        keys_in = []
+        for key, value in obs_spec.items():
+            if len(value.shape) == 1:
+                keys_in.append(key)
+        self._check_keys_in(keys_in, self.keys_out[0])
+        return sorted(keys_in)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if not self._initialized:
+            self.keys_in = self._find_keys_in()
+            self._initialized = True
+
         if all([key in tensordict.keys() for key in self.keys_in]):
             values = [tensordict.get(key) for key in self.keys_in]
             if self.unsqueeze_if_oor:
