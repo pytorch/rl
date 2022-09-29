@@ -995,6 +995,18 @@ class TestTransforms:
                 [1, len(keys) * 4, 32]
             )
 
+    @pytest.mark.parametrize("append", [True, False])
+    def test_cattensors_empty(self, append):
+        ct = CatTensors(out_key="next_observation_out", dim=-1, del_keys=False)
+        if append:
+            mock_env = TransformedEnv(ContinuousActionVecMockEnv())
+            mock_env.append_transform(ct)
+        else:
+            mock_env = TransformedEnv(ContinuousActionVecMockEnv(), ct)
+        tensordict = mock_env.rollout(3)
+        assert all(key in tensordict.keys() for key in ["next_observation_out"])
+        # assert not any(key in tensordict.keys() for key in mock_env.base_env.observation_spec)
+
     @pytest.mark.parametrize("random", [True, False])
     @pytest.mark.parametrize("compose", [True, False])
     @pytest.mark.parametrize("device", get_available_devices())

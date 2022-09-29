@@ -18,7 +18,14 @@ from torchrl.modules.distributions.truncated_normal import (
 from torchrl.modules.distributions.utils import _cast_device
 from torchrl.modules.utils import mappings
 
-__all__ = ["NormalParamWrapper", "TanhNormal", "Delta", "TanhDelta", "TruncatedNormal"]
+__all__ = [
+    "NormalParamWrapper",
+    "TanhNormal",
+    "Delta",
+    "TanhDelta",
+    "TruncatedNormal",
+    "IndependentNormal",
+]
 
 # speeds up distribution construction
 D.Distribution.set_default_validate_args(False)

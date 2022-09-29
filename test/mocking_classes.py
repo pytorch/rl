@@ -112,7 +112,9 @@ class MockSerialEnv(EnvBase):
         if action_spec is None:
             action_spec = NdUnboundedContinuousTensorSpec((1,))
         if observation_spec is None:
-            observation_spec = NdUnboundedContinuousTensorSpec((1,))
+            observation_spec = CompositeSpec(
+                next_observation=NdUnboundedContinuousTensorSpec((1,))
+            )
         if reward_spec is None:
             reward_spec = NdUnboundedContinuousTensorSpec((1,))
         if input_spec is None:
