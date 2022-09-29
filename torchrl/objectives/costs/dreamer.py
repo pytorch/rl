@@ -174,24 +174,25 @@ class DreamerActorLoss(LossModule):
             tensordict = tensordict.view(-1).detach()
         with hold_out_net(self.model_based_env), set_exploration_mode("random"):
             tensordict = self.model_based_env.rollout(
-                max_steps=self.imagination_horizon,
+                max_steps=self.imagination_horizon + 1,
                 policy=self.actor_model,
                 auto_reset=False,
                 tensordict=tensordict,
             )
-            tensordict = step_tensordict(
+            tensordict = tensordict[0:] # remove the first timestep that came from the real environment.
+            
+            next_tensordict = step_tensordict(
                 tensordict,
                 keep_other=True,
                 exclude_reward=False,
                 exclude_action=False,
             )
             with hold_out_net(self.value_model):
-                tensordict = self.value_model(tensordict)
+                next_tensordict = self.value_model(next_tensordict)
 
         lambda_target = self.lambda_target(
-            tensordict.get("reward"), tensordict.get("predicted_value")
+            tensordict.get("reward"), next_tensordict.get("predicted_value")
         )
-        tensordict = tensordict[:, :-1]
         tensordict.set("lambda_target", lambda_target)
 
         if self.discount_loss:
@@ -216,7 +217,7 @@ class DreamerActorLoss(LossModule):
     def lambda_target(self, reward: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
         done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
         return vec_td_lambda_return_estimate(
-            self.gamma, self.lmbda, value[:, 1:], reward[:, :-1], done[:, :-1]
+            self.gamma, self.lmbda, value, reward, done
         )
 
 

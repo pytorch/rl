@@ -58,9 +58,6 @@ class DreamerActor(nn.Module):
         self.rnn_hidden_dim = rnn_hidden_dim
 
     def forward(self, state, belief):
-        if belief is None:
-            *batch_size, _ = state.shape
-            belief = torch.zeros(*batch_size, self.rnn_hidden_dim, device=state.device)
         loc, scale = self.backbone(state, belief)
         return loc, scale
 
@@ -143,9 +140,9 @@ class RSSMRollout(nn.Module):
     """Rollout the RSSM network.
 
     Given a set of encoded observations and actions, this module will rollout the RSSM network to compute all the intermediate
-    states and believes.
-    The previous posterior is used as the prior for the next time step. At the first time step, we use the an empty prior to start the rollout.
-    The forward method returns a stack of all intermediate states and believes.
+    states and beliefs.
+    The previous posterior is used as the prior for the next time step.
+    The forward method returns a stack of all intermediate states and beliefs.
 
     Reference: https://arxiv.org/abs/1811.04551
 
@@ -181,13 +178,13 @@ class RSSMRollout(nn.Module):
             posterior_stds (torch.Tensor): a batch x time_steps x state_size containing the standard deviation of the posterior state distributions
             posterior_states (torch.Tensor): a batch x time_steps x state_size containing the sampled posterior states
         """
-        prior_means = []
-        prior_stds = []
-        prior_states = []
-        beliefs = []
-        posterior_means = []
-        posterior_stds = []
-        posterior_states = []
+        next_prior_means = []
+        next_prior_stds = []
+        next_prior_states = []
+        next_beliefs = []
+        next_posterior_means = []
+        next_posterior_stds = []
+        next_posterior_states = []
 
         for i in range(actions.shape[1]):
             prior_mean, prior_std, prior_state, belief = self.rssm_prior(
@@ -196,28 +193,28 @@ class RSSMRollout(nn.Module):
             posterior_mean, posterior_std, posterior_state = self.rssm_posterior(
                 belief, obs_embedding[:, i]
             )
-            prior_means.append(prior_mean)
-            prior_stds.append(prior_std)
-            prior_states.append(prior_state)
-            beliefs.append(belief)
-            posterior_means.append(posterior_mean)
-            posterior_stds.append(posterior_std)
-            posterior_states.append(posterior_state)
-        prior_means = torch.stack(prior_means, dim=1)
-        prior_stds = torch.stack(prior_stds, dim=1)
-        prior_states = torch.stack(prior_states, dim=1)
-        beliefs = torch.stack(beliefs, dim=1)
-        posterior_means = torch.stack(posterior_means, dim=1)
-        posterior_stds = torch.stack(posterior_stds, dim=1)
-        posterior_states = torch.stack(posterior_states, dim=1)
+            next_prior_means.append(prior_mean)
+            next_prior_stds.append(prior_std)
+            next_prior_states.append(prior_state)
+            next_beliefs.append(belief)
+            next_posterior_means.append(posterior_mean)
+            next_posterior_stds.append(posterior_std)
+            next_posterior_states.append(next_posterior_states)
+        next_prior_means = torch.stack(next_prior_means, dim=1)
+        next_prior_stds = torch.stack(next_prior_stds, dim=1)
+        next_prior_states = torch.stack(next_prior_states, dim=1)
+        next_beliefs = torch.stack(next_beliefs, dim=1)
+        next_posterior_means = torch.stack(next_posterior_means, dim=1)
+        next_posterior_stds = torch.stack(next_posterior_stds, dim=1)
+        next_posterior_states = torch.stack(next_posterior_states, dim=1)
         return (
-            prior_means,
-            prior_stds,
-            prior_states,
-            beliefs,
-            posterior_means,
-            posterior_stds,
-            posterior_states,
+            next_prior_means,
+            next_prior_stds,
+            next_prior_states,
+            next_beliefs,
+            next_posterior_means,
+            next_posterior_stds,
+            next_posterior_states,
         )
 
 
@@ -253,7 +250,7 @@ class RSSMPrior(nn.Module):
                 nn.ELU(),
                 nn.Linear(hidden_dim, 2 * state_dim),
             ),
-            scale_lb=0,
+            scale_lb=0.1,
             scale_mapping="softplus",
         )
 
@@ -264,12 +261,10 @@ class RSSMPrior(nn.Module):
             raise ValueError("action_spec must be provided")
         self.action_shape = action_spec.shape
 
-    def forward(self, state, rnn_hidden, action):
+    def forward(self, state, belief, action):
         action_state = self.action_state_projector(torch.cat([state, action], dim=-1))
-        rnn_hidden = self.rnn(action_state, rnn_hidden)
-        belief = rnn_hidden
+        belief = self.rnn(action_state, belief)
         prior_mean, prior_std = self.rnn_to_prior_projector(belief)
-        prior_std = prior_std + 0.1
         prior_state = prior_mean + torch.randn_like(prior_std) * prior_std
         return prior_mean, prior_std, prior_state, belief
 
