@@ -1,20 +1,9 @@
-actor_tensordict:
-  _target_: torchrl.modules.TensorDictModule
-  _partial_: True
-  out_keys: ${model.param_out_keys}
+policy_wrapper:
+policy_out_keys: ["logits"]
 
-actor:
-  _target_: torchrl.modules.ProbabilisticActor
-  _partial_: True
-  dist_param_keys: ${model.param_out_keys}
-  default_interaction_mode: "random"
-  policy_distribution_class: OneHotCategorical
-  return_log_prob: True
+default_interaction_mode: "random"
+distribution_class: OneHotCategorical
+distribution_kwargs: {}
+return_log_prob: True
 
-critic:
-  _target_: torchrl.modules.ValueOperator
-  _partial_: True
-
-# utils
-param_out_keys: ["logit"]
 out_features_multiplier: 1

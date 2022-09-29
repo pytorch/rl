@@ -2,10 +2,29 @@ in_keys: ["observation_vector"]
 in_keys_policy_module: ["hidden"]
 latent_size: 300
 
+activation_class: elu
+num_cells: [200, 200]
+common_operator_cells: [300]
+
 policy_network:
-  _target_: torchrl.modules.MLP
+  _target_: torchrl.modules.partial_probabilisticactor
   _partial_: True
-  num_cells: [400, 300]
+  dist_param_keys: ${model.policy_out_keys}
+  default_interaction_mode: ${model.default_interaction_mode}
+  distribution_class: ${model.distribution_class}
+  distribution_kwargs: ${model.distribution_kwargs}
+  return_log_prob: True
+  partial_tensordictmodule:
+    _target_: torchrl.modules.partial_tensordictmodule
+    _partial_: True
+    in_keys: ${network.in_keys_policy_module}
+    out_keys: ${model.policy_out_keys}
+    wrapper: ${model.policy_wrapper}
+    partial_module:
+      _target_: torchrl.modules.MLP
+      _partial_: True  # misses out_features
+      activation_class: ${network.activation_class}
+      num_cells: ${network.num_cells}
 
 actor_critic:
   _target_: torchrl.modules.ActorValueOperator
@@ -13,15 +32,17 @@ actor_critic:
   common_operator:
     _target_: torchrl.modules.TensorDictModule
     in_keys: ${network.in_keys}
-    out_keys: ["hidden"]
+    out_keys: ${network.in_keys_policy_module}
     module:
       _target_: torchrl.modules.MLP
       out_features: ${network.latent_size}
-      num_cells: [400]
+      activation_class: ${network.activation_class}
+      num_cells: ${network.common_operator_cells}
   value_operator:
     _target_: torchrl.modules.ValueOperator
     module:
       _target_: torchrl.modules.MLP
       out_features: 1
-      num_cells: [128, 128]
-    in_keys: ["hidden"]
+      activation_class: ${network.activation_class}
+      num_cells: ${network.num_cells}
+    in_keys: ${network.in_keys_policy_module}

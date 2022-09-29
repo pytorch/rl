@@ -120,6 +120,16 @@ class Transform(nn.Module):
         keys_inv_out: Optional[Sequence[str]] = None,
     ):
         super().__init__()
+
+        if isinstance(keys_in, str):
+            keys_in = [keys_in]
+        if isinstance(keys_out, str):
+            keys_out = [keys_out]
+        if isinstance(keys_inv_in, str):
+            keys_inv_in = [keys_inv_in]
+        if isinstance(keys_inv_out, str):
+            keys_inv_out = [keys_inv_out]
+
         self.keys_in = keys_in
         if keys_out is None:
             keys_out = copy(self.keys_in)

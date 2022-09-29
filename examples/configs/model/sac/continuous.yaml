@@ -1,28 +1,12 @@
-module_wrapper:
-  _partial_: True
-  _target_: torchrl.modules.distributions.continuous.NormalParamWrapper
+policy_wrapper: normal_param
+policy_out_keys: ["loc", "scale"]
 
-actor_tensordict:
-  _target_: torchrl.modules.TensorDictModule
-  _partial_: True
-  out_keys: ${model.param_out_keys}
+default_interaction_mode: "random"
+distribution_class: TanhNormal
+distribution_kwargs:
+  min: -1  # get env boundaries
+  max: 1  # get env boundaries
+  tanh_loc: True
+return_log_prob: False
 
-actor:
-  _target_: torchrl.modules.ProbabilisticActor
-  _partial_: True
-  dist_param_keys: ${model.param_out_keys}
-  default_interaction_mode: "random"
-  distribution_class: "tanh_normal"
-  distribution_kwargs:
-    min: -1  # get env boundaries
-    max: 1  # get env boundaries
-    tanh_loc: True
-  return_log_prob: True
-
-critic:
-  _target_: torchrl.modules.ValueOperator
-  _partial_: True
-
-# utils
-param_out_keys: ["loc", "scale"]
 out_features_multiplier: 2

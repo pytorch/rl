@@ -10,3 +10,5 @@
   keys_in: # we leave keys_in blank and let the transform figure out what the state observations are
   out_key: "next_observation_vector"
   del_keys: True
+- _target_: torchrl.envs.transforms.DoubleToFloat
+  keys_in: ["next_observation_vector"]

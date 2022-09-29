@@ -25,6 +25,7 @@ _DIST_MAPPINGS = {
     "independent_normal": torchrl_dist.IndependentNormal,
     "tanh_normal": torchrl_dist.TanhNormal,
     "truncated_normal": torchrl_dist.TruncatedNormal,
+    "delta": torchrl_dist.Delta,
     "onehot_categorical": torchrl_dist.OneHotCategorical,
 }
 
@@ -85,7 +86,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             then the `default_interaction_mode` of the `ProbabilisticTDModule` instance will be used.
             Note that DataCollector instances will use `set_exploration_mode` to `"random"` by default.
         distribution_class (Type or str, optional): a torch.distributions.Distribution class
-            (or an equivalent string among `"normal", `"independent_normal"`, `"tanh_normal"`, `"truncated_normal"`, `"onehot_categorical"`)
+            (or an equivalent string among `"normal", `"delta"`, `"independent_normal"`, `"tanh_normal"`, `"truncated_normal"`, `"onehot_categorical"`)
             to be used for sampling.
             Default is Delta.
         distribution_kwargs (dict, optional): kwargs to be passed to the distribution.
@@ -158,7 +159,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         spec: Optional[TensorSpec] = None,
         safe: bool = False,
         default_interaction_mode: str = "mode",
-        distribution_class: Type = Delta,
+        distribution_class: Union[Type, str] = Delta,
         distribution_kwargs: Optional[dict] = None,
         return_log_prob: bool = False,
         cache_dist: bool = False,
