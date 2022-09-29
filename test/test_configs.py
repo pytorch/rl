@@ -128,6 +128,7 @@ class TestConfigs:
         env = instantiate(cfg.env)
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
+            print(env.observation_spec)
             env.append_transform(t)
         env.rollout(3)
         env.close()
@@ -211,12 +212,20 @@ class TestModelConfigs:
         env = instantiate(cfg.env)
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
+            print(env.observation_spec)
             env.append_transform(t)
 
         actor_partial = instantiate(cfg.model)
         net_partial = instantiate(cfg.network)
-        out_features = cfg.model.out_features
-        make_actor_dqn(net_partial, actor_partial, env, out_features)
+        out_features = cfg.model.out_features if hasattr(cfg.model, "out_features") else None
+        actor = make_actor_dqn(net_partial, actor_partial, env, out_features)
+        rollout = env.rollout(3)
+        assert all(key in rollout.keys() for key in actor.in_keys), (
+            actor.in_keys,
+            rollout.keys(),
+        )
+        tensordict = actor(rollout)
+        assert env.action_spec.is_in(tensordict["action"])
 
     @pytest.mark.parametrize("pixels", [True, False])
     @pytest.mark.parametrize("independent", [True, False])
@@ -244,6 +253,7 @@ class TestModelConfigs:
         env = instantiate(cfg.env)
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
+            print(env.observation_spec)
             env.append_transform(t)
 
         actor_partial = instantiate(cfg.model)

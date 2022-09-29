@@ -1,4 +1,3 @@
 actor:
   _target_: torchrl.modules.QValueActor
   _partial_: True
-out_features:

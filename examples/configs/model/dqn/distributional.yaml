@@ -1,8 +1,8 @@
 vmin: -3
 vmax: 3
 atoms: 51
+# distributional DQN needs to add the number of atoms to the output of the network
 out_features: ${model.atoms}
-#out_features: [${model.dqn.distributional.atoms}]
 actor:
   _target_: torchrl.modules.DistributionalQValueActor
   _partial_: True  # we still need the module

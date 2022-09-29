@@ -1534,7 +1534,7 @@ class CatTensors(Transform):
     "observation_velocity")
 
     Args:
-        keys_in (Sequence of str): keys to be concatenated
+        keys_in (Sequence of str): keys to be concatenated.
         out_key: key of the resulting tensor.
         dim (int, optional): dimension along which the concatenation will occur.
             Default is -1.

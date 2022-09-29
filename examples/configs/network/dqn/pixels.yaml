@@ -1,7 +1,6 @@
 network:
   _target_: torchrl.modules.DuelingCnnDQNet
   _partial_: True  # we still need out_features
-  out_features: ${network.out_features}
   cnn_kwargs:
     bias_last_layer: True
     depth: 3

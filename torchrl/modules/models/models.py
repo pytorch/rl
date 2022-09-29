@@ -541,6 +541,8 @@ class DuelingMlpDQNet(nn.Module):
         _mlp_kwargs_output.update(mlp_kwargs_output)
         self.out_features = out_features
         self.out_features_value = out_features_value
+        if not isinstance(out_features, int) and isinstance(out_features_value, int):
+            out_features_value = [out_features_value] * len(out_features)
         self.advantage = MLP(out_features=out_features, **_mlp_kwargs_output)
         self.value = MLP(out_features=out_features_value, **_mlp_kwargs_output)
         for layer in self.modules():
@@ -611,6 +613,8 @@ class DuelingCnnDQNet(nn.Module):
         mlp_kwargs = mlp_kwargs if mlp_kwargs is not None else dict()
         _mlp_kwargs.update(mlp_kwargs)
         self.out_features = out_features
+        if not isinstance(out_features, int) and isinstance(out_features_value, int):
+            out_features_value = [out_features_value] * len(out_features)
         self.out_features_value = out_features_value
         self.advantage = MLP(out_features=out_features, **_mlp_kwargs)
         self.value = MLP(out_features=out_features_value, **_mlp_kwargs)
@@ -628,8 +632,7 @@ class DuelingCnnDQNet(nn.Module):
 
 
 class DistributionalDQNnet(nn.Module):
-    """
-    Distributional Deep Q-Network.
+    """Distributional Deep Q-Network.
 
     Args:
         DQNet (nn.Module): Q-Network with output length equal to the number of atoms:
