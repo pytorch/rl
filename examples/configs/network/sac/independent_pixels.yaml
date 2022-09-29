@@ -1,0 +1,18 @@
+in_keys: ["pixels"]
+in_keys_policy_module: ["pixels"]
+
+policy_network:
+  _target_: torchrl.modules.DdpgCnnActor
+  _partial_: True
+  use_avg_pooling: True
+
+actor_critic:
+  _target_: torchrl.modules.ActorCriticWrapper
+  _partial_: True
+  value_operator:
+    _target_: torchrl.modules.ValueOperator
+    module:
+      _target_: torchrl.modules.DdpgCnnActor
+      use_avg_pooling: True
+      out_features: 1
+    in_keys: ${network.in_keys}

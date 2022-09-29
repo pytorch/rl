@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import argparse
 
 import pytest
@@ -128,7 +133,6 @@ class TestConfigs:
         env = instantiate(cfg.env)
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
-            print(env.observation_spec)
             env.append_transform(t)
         env.rollout(3)
         env.close()
@@ -212,12 +216,13 @@ class TestModelConfigs:
         env = instantiate(cfg.env)
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
-            print(env.observation_spec)
             env.append_transform(t)
 
         actor_partial = instantiate(cfg.model)
         net_partial = instantiate(cfg.network)
-        out_features = cfg.model.out_features if hasattr(cfg.model, "out_features") else None
+        out_features = (
+            cfg.model.out_features if hasattr(cfg.model, "out_features") else None
+        )
         actor = make_actor_dqn(net_partial, actor_partial, env, out_features)
         rollout = env.rollout(3)
         assert all(key in rollout.keys() for key in actor.in_keys), (
@@ -253,7 +258,6 @@ class TestModelConfigs:
         env = instantiate(cfg.env)
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
-            print(env.observation_spec)
             env.append_transform(t)
 
         actor_partial = instantiate(cfg.model)

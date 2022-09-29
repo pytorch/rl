@@ -7,6 +7,6 @@
   scale: 1.0
 # should be re-written for envs that have multiple states to be concatenated
 - _target_: torchrl.envs.transforms.CatTensors
-  keys_in: ["next_observation"]
+  keys_in: # we leave keys_in blank and let the transform figure out what the state observations are
   out_key: "next_observation_vector"
   del_keys: True
