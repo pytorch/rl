@@ -202,6 +202,17 @@ def make_model_ddpg(net_partial, env):
     return policy_operator, qvalue
 
 
+def make_model_redq(net_partial, model_params, env):
+    out_features = env.action_spec.shape[-1] * model_params.out_features_multiplier
+
+    # build the module
+    policy_operator = net_partial.policy_network(out_features=out_features)
+
+    qvalue_operator = net_partial.qvalue_network
+
+    return policy_operator, qvalue_operator
+
+
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestModelConfigs:
     @pytest.fixture(scope="class", autouse=True)
@@ -289,12 +300,7 @@ class TestModelConfigs:
         assert env.action_spec.is_in(tensordict["action"]), env.action_spec
 
     @pytest.mark.parametrize("pixels", [True, False])
-    @pytest.mark.parametrize(
-        "independent",
-        [
-            True,
-        ],
-    )
+    @pytest.mark.parametrize("independent", [True])
     @pytest.mark.parametrize("continuous", [True, False])
     def test_sac(self, pixels, independent, continuous):
         torch.manual_seed(0)
@@ -364,6 +370,50 @@ class TestModelConfigs:
 
         net_partial = instantiate(cfg.network)
         actor, qvalue = make_model_ddpg(net_partial, env)
+        actor(env.reset())
+        rollout = env.rollout(3)
+        assert all(key in rollout.keys() for key in actor.in_keys), (
+            actor.in_keys,
+            rollout.keys(),
+        )
+        tensordict = env.rollout(3, actor)
+        assert env.action_spec.is_in(tensordict["action"]), env.action_spec
+        qvalue(tensordict)
+
+    @pytest.mark.parametrize("pixels", [True, False])
+    @pytest.mark.parametrize("independent", [True])
+    @pytest.mark.parametrize("continuous", [True, False])
+    def test_redq(self, pixels, independent, continuous):
+        torch.manual_seed(0)
+        env_config = []
+        if independent:
+            prefix = "independent"
+        else:
+            prefix = "shared"
+        if pixels:
+            suffix = "pixels"
+            env_config += ["transforms=pixels", "++env.env.from_pixels=True"]
+        else:
+            suffix = "state"
+            env_config += ["transforms=state"]
+        net_conf = f"network=redq/{prefix}_{suffix}"
+
+        if continuous:
+            env_config += ["env=halfcheetah"]
+            model_conf = "model=redq/continuous"
+        else:
+            env_config += ["env=cartpole"]
+            model_conf = "model=redq/discrete"
+
+        cfg = hydra.compose("config", overrides=env_config + [net_conf] + [model_conf])
+        env = instantiate(cfg.env)
+        transforms = [instantiate(transform) for transform in cfg.transforms]
+        for t in transforms:
+            env.append_transform(t)
+
+        model_params = instantiate(cfg.model)
+        net_partial = instantiate(cfg.network)
+        actor, qvalue = make_model_redq(net_partial, model_params, env)
         actor(env.reset())
         rollout = env.rollout(3)
         assert all(key in rollout.keys() for key in actor.in_keys), (

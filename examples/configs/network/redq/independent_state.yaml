@@ -2,6 +2,7 @@ in_keys: ["observation_vector"]
 in_keys_qvalue: ["action", "observation_vector"]
 in_keys_policy_module: ["observation_vector"]
 
+layer_class: linear
 activation_class: elu
 num_cells: [400, 300]
 
@@ -24,6 +25,7 @@ policy_network:
       _partial_: True  # misses out_features
       activation_class: ${network.activation_class}
       num_cells: ${network.num_cells}
+      layer_class: ${network.layer_class}
 
 qvalue_network:
   _target_: torchrl.modules.ValueOperator
@@ -33,3 +35,4 @@ qvalue_network:
     out_features: 1
     activation_class: ${network.activation_class}
     num_cells: ${network.num_cells}
+    layer_class: ${network.layer_class}

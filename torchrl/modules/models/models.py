@@ -306,7 +306,7 @@ class ConvNet(nn.Sequential):
             depth, defined by the num_cells or depth arguments.
         strides (int or Sequence[int]): Stride(s) of the conv network. If iterable, the length must match the
             depth, defined by the num_cells or depth arguments.
-        activation_class (Type): activation class to be used.
+        activation_class (Type or str): activation class to be used.
             default: nn.Tanh
         activation_kwargs (dict, optional): kwargs to be used with the activation class;
         norm_class (Type, optional): normalization class, if any;
@@ -379,7 +379,7 @@ class ConvNet(nn.Sequential):
         kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 3,
         strides: Union[Sequence, int] = 1,
         paddings: Union[Sequence, int] = 0,
-        activation_class: Type = nn.ELU,
+        activation_class: Union[Type, str] = nn.ELU,
         activation_kwargs: Optional[dict] = None,
         norm_class: Type = None,
         norm_kwargs: Optional[dict] = None,
@@ -393,6 +393,8 @@ class ConvNet(nn.Sequential):
             num_cells = [32, 32, 32]
 
         self.in_features = in_features
+        if isinstance(activation_class, str):
+            activation_class = _ACTIVATION[activation_class]
         self.activation_class = activation_class
         self.activation_kwargs = (
             activation_kwargs if activation_kwargs is not None else dict()

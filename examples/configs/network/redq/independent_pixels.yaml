@@ -2,6 +2,15 @@ in_keys: ["pixels"]
 in_keys_policy_module: ["pixels"]
 in_keys_qvalue: ["pixels", "action"]
 
+layer_class: linear
+activation_class: elu
+
+mlp_net_kwargs:
+  layer_class: ${network.layer_class}
+  activation_class: ${network.activation_class}
+conv_net_kwargs:
+  activation_class: ${network.activation_class}
+
 policy_network:
   _target_: torchrl.modules.partial_probabilisticactor
   _partial_: True
@@ -20,6 +29,8 @@ policy_network:
       _target_: torchrl.modules.DdpgCnnActor
       _partial_: True  # misses out_features
       use_avg_pooling: True
+      mlp_net_kwargs: ${network.mlp_net_kwargs}
+      conv_net_kwargs: ${network.conv_net_kwargs}
 
 qvalue_network:
   _target_: torchrl.modules.ValueOperator
@@ -27,3 +38,5 @@ qvalue_network:
   module:
     _target_: torchrl.modules.DdpgCnnQNet
     use_avg_pooling: True
+    mlp_net_kwargs: ${network.mlp_net_kwargs}
+    conv_net_kwargs: ${network.conv_net_kwargs}
