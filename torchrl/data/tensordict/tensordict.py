@@ -1891,7 +1891,11 @@ class TensorDict(TensorDictBase):
             else isinstance(proc_value, MemmapTensor)
         )
         is_shared = (
-            self._is_shared if self._is_shared is not None else proc_value.is_shared()
+            self._is_shared
+            if self._is_shared is not None
+            else proc_value.is_shared()
+            if not is_batchedtensor(proc_value)
+            else False
         )
         return MetaTensor(
             proc_value,
