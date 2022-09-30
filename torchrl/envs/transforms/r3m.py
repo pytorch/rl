@@ -136,10 +136,23 @@ class R3MTransform(Compose):
 
     R3M provides pre-trained ResNet weights aimed at facilitating visual
     embedding for robotic tasks. The models are trained using Ego4d.
+
     See the paper:
         R3M: A Universal Visual Representation for Robot Manipulation (Suraj Nair,
             Aravind Rajeswaran, Vikash Kumar, Chelsea Finn, Abhinav Gupta)
             https://arxiv.org/abs/2203.12601
+
+    The R3MTransform is created in a lazy manner: the object will be initialized
+    only when an attribute (a spec or the forward method) will be queried.
+    The reason for this is that the `_init()` method requires some attributes of
+    the parent environment (if any) to be accessed: by making the class lazy we
+    can ensure that the following code snippet works as expected:
+
+    Examples:
+        >>> transform = R3MTransform("resenet50", keys_in=["next_pixels"])
+        >>> env.append_transform(transform)
+        >>> # the forward method will first call _init which will look at env.observation_spec
+        >>> env.reset()
 
     Args:
         model_name (str): one of resnet50, resnet34 or resnet18

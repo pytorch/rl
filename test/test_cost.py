@@ -83,6 +83,14 @@ from torchrl.objectives.returns.functional import (
 from torchrl.objectives.returns.utils import _custom_conv1d, _make_gammas_tensor
 
 
+@pytest.fixture
+def dtype_fixture():
+    dtype = torch.get_default_dtype()
+    torch.set_default_dtype(torch.DoubleTensor)
+    yield dtype
+    torch.set_default_dtype(dtype)
+
+
 class _check_td_steady:
     def __init__(self, td):
         self.td_clone = td.clone()
@@ -2079,6 +2087,8 @@ def test_vectdlambda_tensor_gamma(device, gamma, lmbda, N, T):
     with gamma being a tensor or a scalar
 
     """
+    _ = dtype_fixture
+
     torch.manual_seed(0)
 
     done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
@@ -2111,36 +2121,34 @@ def test_vectdlambda_tensor_gamma(device, gamma, lmbda, N, T):
     torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
 
 
-# TO BE FIXED
-# @pytest.mark.parametrize("device", get_available_devices())
-# @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
-# @pytest.mark.parametrize("N", [(3,), (7, 3)])
-# @pytest.mark.parametrize("T", [3, 5, 50])
-# @pytest.mark.parametrize("rolling_gamma", [False, True, None])
-# def test_vectdlambda_rand_gamma(device, lmbda, N, T, rolling_gamma):
-#     """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
-#     with gamma being a random tensor
-#
-#     """
-#     torch.manual_seed(0)
-#     torch.set_default_tensor_type(torch.DoubleTensor)
-#
-#     done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
-#     reward = torch.randn(*N, T, 1, device=device)
-#     state_value = torch.randn(*N, T, 1, device=device)
-#     next_state_value = torch.randn(*N, T, 1, device=device)
-#
-#     # avoid low values of gamma
-#     gamma_tensor = 0.5 + torch.rand_like(next_state_value) / 2
-#
-#     v1 = td_lambda_advantage_estimate(
-#         gamma_tensor, lmbda, state_value, next_state_value, reward, done, rolling_gamma
-#     )
-#     v2 = vec_td_lambda_advantage_estimate(
-#         gamma_tensor, lmbda, state_value, next_state_value, reward, done, rolling_gamma
-#     )
-#     print(abs(v1-v2))
-#     torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
+@pytest.mark.parametrize("N", [(3,), (7, 3)])
+@pytest.mark.parametrize("T", [50, 3])
+@pytest.mark.parametrize("rolling_gamma", [True, False, None])
+def test_vectdlambda_rand_gamma(device, lmbda, N, T, rolling_gamma):
+    """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+    with gamma being a random tensor
+
+    """
+    torch.manual_seed(0)
+    _ = dtype_fixture
+
+    done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+    reward = torch.randn(*N, T, 1, device=device)
+    state_value = torch.randn(*N, T, 1, device=device)
+    next_state_value = torch.randn(*N, T, 1, device=device)
+
+    # avoid low values of gamma
+    gamma_tensor = 0.5 + torch.rand_like(next_state_value) / 2
+
+    v1 = td_lambda_advantage_estimate(
+        gamma_tensor, lmbda, state_value, next_state_value, reward, done, rolling_gamma
+    )
+    v2 = vec_td_lambda_advantage_estimate(
+        gamma_tensor, lmbda, state_value, next_state_value, reward, done, rolling_gamma
+    )
+    torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
 
 
 @pytest.mark.parametrize("device", get_available_devices())

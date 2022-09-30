@@ -34,7 +34,7 @@ class DreamerModelLoss(LossModule):
         reco_loss (str, optional): the reconstruction loss. default to l2.
         reward_loss (str, optional): the reward loss. default to l2.
         free_nats (int, optional): the free nats.
-        inversed_free_nats (bool, optional): if True, the free nats are inversed. First we average the kl divergence and then we clamp it to the free nats. 
+        inversed_free_nats (bool, optional): if True, the free nats are inversed. First we average the kl divergence and then we clamp it to the free nats.
             If False, we clamp the kl divergence to the free nats and then we average it. default: False.
     """
 
