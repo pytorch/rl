@@ -36,6 +36,7 @@ import numpy as np
 import torch
 from torch import Tensor
 from torch.jit._shape_functions import infer_size_impl
+from torch.utils._pytree import _register_pytree_node
 
 from torchrl._utils import KeyDependentDefaultDict, prod
 from torchrl.data.tensordict.memmap import MemmapTensor
@@ -4699,3 +4700,18 @@ def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_devi
             device=self_device,
         )
         return out
+
+
+def _flatten_tensordict(tensordict):
+    keys, values = list(zip(*tensordict.items()))
+    return list(values), (list(keys), tensordict.device, tensordict.batch_size)
+
+
+def _unflatten_tensordict(values, context):
+    keys, device, batch_size = context
+    return TensorDict(
+        {key: value for key, value in zip(keys, values)}, batch_size, device=device
+    )
+
+
+_register_pytree_node(TensorDict, _flatten_tensordict, _unflatten_tensordict)

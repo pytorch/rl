@@ -19,6 +19,7 @@ try:
 except ImportError:
     _has_functorch = False
 
+"""Monky-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked"""
 if _has_functorch:
     from functorch._src.vmap import (
         _get_name,
@@ -28,6 +29,7 @@ if _has_functorch:
         _validate_and_get_batch_size,
         _add_batch_dim,
         tree_unflatten,
+        _remove_batch_dim,
     )
 
     # Monkey-patches
@@ -105,6 +107,54 @@ if _has_functorch:
 
     functorch._src.vmap._create_batched_inputs = _create_batched_inputs
 
+    def _unwrap_batched(
+        batched_outputs, out_dims, vmap_level: int, batch_size: int, func
+    ):
+        flat_batched_outputs, output_spec = tree_flatten(batched_outputs)
+
+        for out in flat_batched_outputs:
+            # Change here:
+            if isinstance(out, (TensorDictBase, torch.Tensor)):
+                continue
+            raise ValueError(
+                f"vmap({_get_name(func)}, ...): `{_get_name(func)}` must only return "
+                f"Tensors, got type {type(out)} as a return."
+            )
+
+        def incompatible_error():
+            raise ValueError(
+                f"vmap({_get_name(func)}, ..., out_dims={out_dims})(<inputs>): "
+                f"out_dims is not compatible with the structure of `outputs`. "
+                f"out_dims has structure {tree_flatten(out_dims)[1]} but outputs "
+                f"has structure {output_spec}."
+            )
+
+        # Here:
+        if isinstance(batched_outputs, (TensorDictBase, torch.Tensor)):
+            # Some weird edge case requires us to spell out the following
+            # see test_out_dims_edge_case
+            if isinstance(out_dims, int):
+                flat_out_dims = [out_dims]
+            elif isinstance(out_dims, tuple) and len(out_dims) == 1:
+                flat_out_dims = out_dims
+                out_dims = out_dims[0]
+            else:
+                incompatible_error()
+        else:
+            flat_out_dims = _broadcast_to_and_flatten(out_dims, output_spec)
+            if flat_out_dims is None:
+                incompatible_error()
+
+        flat_outputs = [
+            _remove_batch_dim(batched_output, vmap_level, batch_size, out_dim)
+            for batched_output, out_dim in zip(flat_batched_outputs, flat_out_dims)
+        ]
+        return tree_unflatten(flat_outputs, output_spec)
+
+    functorch._src.vmap._unwrap_batched = _unwrap_batched
+
+"""Tensordict-compatible Functional modules"""
+
 
 class FunctionalModule(nn.Module):
     """
@@ -176,6 +226,9 @@ class FunctionalModuleWithBuffers(nn.Module):
             if _RESET_OLD_TENSORDICT:
                 _swap_state(self.stateless_model, old_state)
                 _swap_state(self.stateless_model, old_state_buffers)
+
+
+"""Some utils for these"""
 
 
 def extract_weights(model):

@@ -83,7 +83,7 @@ def test_vmap_tdmodule(moduletype, batch_params):
         if batch_params:
             params = params.expand(10, *params.batch_size).contiguous()
             buffers = buffers.expand(10, *buffers.batch_size).contiguous()
-            y = tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
+            tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
         else:
             raise NotImplementedError
         y = td["y"]
@@ -126,7 +126,7 @@ def test_vmap_tdmodule_nativebuilt(moduletype, batch_params):
         if batch_params:
             params = params.expand(10, *params.batch_size).contiguous()
             buffers = buffers.expand(10, *buffers.batch_size).contiguous()
-            y = tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
+            tdmodule(td, params=params, buffers=buffers, vmap=(0, 0, 0))
         else:
             raise NotImplementedError
         y = td["y"]
@@ -239,6 +239,16 @@ def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
             raise NotImplementedError
         z = td["z"]
         assert z.shape == torch.Size([10, 2, 3])
+
+
+def test_vamp_basic():
+    class MyModule(torch.nn.Module):
+        def forward(self, tensordict):
+            a = tensordict["a"]
+            return TensorDict({"a": a}, tensordict.batch_size, device=tensordict.device)
+
+    tensordict = TensorDict({"a": torch.randn(3)}, [])
+    vmap(MyModule(), (0,))(tensordict.expand(3))
 
 
 if __name__ == "__main__":
