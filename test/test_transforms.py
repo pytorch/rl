@@ -16,7 +16,7 @@ from mocking_classes import (
 )
 from torch import Tensor
 from torch import multiprocessing as mp
-from torchrl import prod
+from torchrl._utils import prod
 from torchrl.data import (
     NdBoundedTensorSpec,
     CompositeSpec,

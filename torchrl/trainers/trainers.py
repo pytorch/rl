@@ -15,7 +15,7 @@ import numpy as np
 import torch.nn
 from torch import nn, optim
 
-from torchrl import KeyDependentDefaultDict
+from torchrl._utils import KeyDependentDefaultDict
 
 try:
     from tqdm import tqdm

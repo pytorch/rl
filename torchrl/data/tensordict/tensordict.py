@@ -37,7 +37,7 @@ import torch
 from torch import Tensor
 from torch.jit._shape_functions import infer_size_impl
 
-from torchrl import KeyDependentDefaultDict, prod
+from torchrl._utils import KeyDependentDefaultDict, prod
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.metatensor import MetaTensor
 from torchrl.data.tensordict.utils import (
