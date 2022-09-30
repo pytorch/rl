@@ -14,8 +14,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from torchrl import seed_generator, prod
 from torchrl.data import CompositeSpec, TensorDict, TensorSpec
+from .._utils import seed_generator, prod
 from ..data.tensordict.tensordict import TensorDictBase
 from ..data.utils import DEVICE_TYPING
 from .utils import get_available_libraries, step_tensordict

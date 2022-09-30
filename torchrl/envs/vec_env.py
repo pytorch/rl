@@ -17,7 +17,7 @@ from warnings import warn
 import torch
 from torch import multiprocessing as mp
 
-from torchrl import _check_for_faulty_process
+from torchrl._utils import _check_for_faulty_process
 from torchrl.data import TensorDict, TensorSpec, CompositeSpec
 from torchrl.data.tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING

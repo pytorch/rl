@@ -1,4 +1,4 @@
-[![facebookresearch](https://circleci.com/gh/facebookresearch/rl.svg?style=shield)](https://circleci.com/gh/facebookresearch/rl)
+[![pytorch](https://circleci.com/gh/pytorch/rl.svg?style=shield)](https://circleci.com/gh/pytorch/rl)
 
 # TorchRL
 
@@ -301,9 +301,9 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     ```
     </details>
 
-- A series of efficient [loss modules](https://github.com/facebookresearch/rl/blob/main/torchrl/objectives/costs)
+- A series of efficient [loss modules](https://github.com/pytorch/rl/blob/main/torchrl/objectives/costs)
     and highly vectorized
-    [functional return and advantage](https://github.com/facebookresearch/rl/blob/main/torchrl/objectives/returns/functional.py)
+    [functional return and advantage](https://github.com/pytorch/rl/blob/main/torchrl/objectives/returns/functional.py)
     computation.
 
     <details>
@@ -399,7 +399,7 @@ it in develop mode as this will make it possible to pull the latest changes and
 benefit from them immediately.
 Start by cloning the repo:
 ```
-git clone https://github.com/facebookresearch/rl
+git clone https://github.com/pytorch/rl
 ```
 
 Go to the directory where you have cloned the torchrl repo and install it
