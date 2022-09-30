@@ -10,7 +10,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from torchrl import prod
+from torchrl._utils import prod
 from torchrl.data import DEVICE_TYPING
 from torchrl.modules.models.utils import (
     _find_depth,

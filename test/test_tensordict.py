@@ -12,7 +12,7 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from torch import multiprocessing as mp
-from torchrl import prod
+from torchrl._utils import prod
 from torchrl.data import SavedTensorDict, TensorDict, MemmapTensor
 from torchrl.data.tensordict.tensordict import (
     assert_allclose_td,
