@@ -56,9 +56,9 @@ from torchrl.data.utils import (
 _has_functorch = False
 try:
     try:
-        from functorch._C import is_batchedtensor
+        from functorch._C import is_batchedtensor, get_unwrapped
     except ImportError:
-        from torch._C._functorch import is_batchedtensor
+        from torch._C._functorch import is_batchedtensor, get_unwrapped
 
     _has_functorch = True
 except ImportError:
@@ -4707,11 +4707,14 @@ def _flatten_tensordict(tensordict):
     return list(values), (list(keys), tensordict.device, tensordict.batch_size)
 
 
+def _unwrap_value(value):
+    if is_batchedtensor(value):
+        return get_unwrapped(value)
+    return value
+
 def _unflatten_tensordict(values, context):
     keys, device, batch_size = context
-    return TensorDict(
-        {key: value for key, value in zip(keys, values)}, batch_size, device=device
-    )
+    return TensorDict({key: _unwrap_value(value) for key, value in zip(keys, values)}, batch_size, device=device)
 
 
 _register_pytree_node(TensorDict, _flatten_tensordict, _unflatten_tensordict)
