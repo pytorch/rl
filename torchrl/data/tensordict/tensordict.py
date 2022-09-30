@@ -36,7 +36,8 @@ import numpy as np
 import torch
 from torch import Tensor
 from torch.jit._shape_functions import infer_size_impl
-from torch.utils._pytree import _register_pytree_node
+
+# from torch.utils._pytree import _register_pytree_node
 
 from torchrl._utils import KeyDependentDefaultDict, prod
 from torchrl.data.tensordict.memmap import MemmapTensor
@@ -56,9 +57,9 @@ from torchrl.data.utils import (
 _has_functorch = False
 try:
     try:
-        from functorch._C import is_batchedtensor, get_unwrapped
+        from functorch._C import is_batchedtensor
     except ImportError:
-        from torch._C._functorch import is_batchedtensor, get_unwrapped
+        from torch._C._functorch import is_batchedtensor
 
     _has_functorch = True
 except ImportError:
@@ -572,10 +573,11 @@ dtype=torch.float32)},
             tensor = self._convert_to_tensor(input)
         else:
             tensor = input
-        if (
-            _has_functorch and isinstance(tensor, Tensor) and is_batchedtensor(tensor)
-        ):  # TODO: find a proper way of doing that
-            return tensor
+        # if (
+        #     _has_functorch and isinstance(tensor, Tensor) and is_batchedtensor(tensor)
+        # ):  # TODO: find a proper way of doing that
+        #     return tensor
+        #     tensor = _unwrap_value(tensor)[0]
 
         if check_device and self.device is not None:
             device = self.device
@@ -1895,7 +1897,8 @@ class TensorDict(TensorDictBase):
             self._is_shared
             if self._is_shared is not None
             else proc_value.is_shared()
-            if not is_batchedtensor(proc_value)
+            if isinstance(proc_value, TensorDictBase)
+            or not is_batchedtensor(proc_value)
             else False
         )
         return MetaTensor(
@@ -4702,19 +4705,30 @@ def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_devi
         return out
 
 
-def _flatten_tensordict(tensordict):
-    keys, values = list(zip(*tensordict.items()))
-    return list(values), (list(keys), tensordict.device, tensordict.batch_size)
+# seems like we can do without registering in pytree -- which requires us to create a new TensorDict,
+# an operation that does not come for free
 
-
-def _unwrap_value(value):
-    if is_batchedtensor(value):
-        return get_unwrapped(value)
-    return value
-
-def _unflatten_tensordict(values, context):
-    keys, device, batch_size = context
-    return TensorDict({key: _unwrap_value(value) for key, value in zip(keys, values)}, batch_size, device=device)
-
-
-_register_pytree_node(TensorDict, _flatten_tensordict, _unflatten_tensordict)
+# def _flatten_tensordict(tensordict):
+#     return tensordict, tuple()
+#     # keys, values = list(zip(*tensordict.items()))
+#     # # represent values as batched tensors
+#     # vmap_level = 0
+#     # in_dim
+#     # values = [_add_batch_dim(value, in_dim, vmap_level)
+#     # return list(values), (list(keys), tensordict.device, tensordict.batch_size)
+#
+# def _unflatten_tensordict(values, context):
+#     return values
+#     # values = [_unwrap_value(value) for value in values]
+#     # keys, device, batch_size = context
+#     # print(values[0].shape)
+#     # return TensorDict(
+#     #     {key: value for key, value in zip(keys, values)},
+#     #     [],
+#     #     # [*new_batch_sizes[0], *batch_size],
+#     #     # new_batch_sizes[0],
+#     #     device=device
+#     # )
+#
+#
+# _register_pytree_node(TensorDict, _flatten_tensordict, _unflatten_tensordict)

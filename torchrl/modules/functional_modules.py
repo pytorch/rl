@@ -95,10 +95,15 @@ if _has_functorch:
 
     def _create_batched_inputs(flat_in_dims, flat_args, vmap_level: int, args_spec):
         # See NOTE [Ignored _remove_batch_dim, _add_batch_dim]
+        # If tensordict, we remove the dim at batch_size[in_dim] such that the TensorDict can accept
+        # the batched tensors. This will be added in _unwrap_batched
         batched_inputs = [
             arg
             if in_dim is None
-            else arg.apply(lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level))
+            else arg.apply(
+                lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
+                batch_size=[b for i, b in enumerate(arg.batch_size) if i != in_dim],
+            )
             if isinstance(arg, TensorDictBase)
             else _add_batch_dim(arg, in_dim, vmap_level)
             for in_dim, arg in zip(flat_in_dims, flat_args)
@@ -145,10 +150,16 @@ if _has_functorch:
             if flat_out_dims is None:
                 incompatible_error()
 
-        flat_outputs = [
-            _remove_batch_dim(batched_output, vmap_level, batch_size, out_dim)
-            for batched_output, out_dim in zip(flat_batched_outputs, flat_out_dims)
-        ]
+        flat_outputs = []
+        for batched_output, out_dim in zip(flat_batched_outputs, flat_out_dims):
+            if not isinstance(batched_output, TensorDictBase):
+                out = _remove_batch_dim(batched_output, vmap_level, batch_size, out_dim)
+            else:
+                out = batched_output.apply(
+                    lambda x: _remove_batch_dim(x, vmap_level, batch_size, out_dim),
+                    batch_size=[batch_size, *batched_output.batch_size],
+                )
+            flat_outputs.append(out)
         return tree_unflatten(flat_outputs, output_spec)
 
     functorch._src.vmap._unwrap_batched = _unwrap_batched

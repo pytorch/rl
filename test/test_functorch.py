@@ -241,14 +241,57 @@ def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
         assert z.shape == torch.Size([10, 2, 3])
 
 
-def test_vamp_basic():
-    class MyModule(torch.nn.Module):
-        def forward(self, tensordict):
-            a = tensordict["a"]
-            return TensorDict({"a": a}, tensordict.batch_size, device=tensordict.device)
+class TestNativeFunctorch:
+    def test_vamp_basic(self):
+        class MyModule(torch.nn.Module):
+            def forward(self, tensordict):
+                a = tensordict["a"]
+                return TensorDict(
+                    {"a": a}, tensordict.batch_size, device=tensordict.device
+                )
 
-    tensordict = TensorDict({"a": torch.randn(3)}, [])
-    vmap(MyModule(), (0,))(tensordict.expand(4))
+        tensordict = TensorDict({"a": torch.randn(3)}, []).expand(4)
+        out = vmap(MyModule(), (0,))(tensordict)
+        assert out.shape == torch.Size([4])
+        assert out["a"].shape == torch.Size([4, 3])
+
+    def test_vamp_composed(self):
+        class MyModule(torch.nn.Module):
+            def forward(self, tensordict, tensor):
+                a = tensordict["a"]
+                return (
+                    TensorDict(
+                        {"a": a}, tensordict.batch_size, device=tensordict.device
+                    ),
+                    tensor,
+                )
+
+        tensor = torch.randn(3)
+        tensordict = TensorDict({"a": torch.randn(3, 1)}, [3]).expand(4, 3)
+        out = vmap(MyModule(), (0, None))(tensordict, tensor)
+
+        assert out[0].shape == torch.Size([4, 3])
+        assert out[1].shape == torch.Size([4, 3])
+        assert out[0]["a"].shape == torch.Size([4, 3, 1])
+
+    def test_vamp_composed_flipped(self):
+        class MyModule(torch.nn.Module):
+            def forward(self, tensordict, tensor):
+                a = tensordict["a"]
+                return (
+                    TensorDict(
+                        {"a": a}, tensordict.batch_size, device=tensordict.device
+                    ),
+                    tensor,
+                )
+
+        tensor = torch.randn(3).expand(4, 3)
+        tensordict = TensorDict({"a": torch.randn(3, 1)}, [3])
+        out = vmap(MyModule(), (None, 0))(tensordict, tensor)
+
+        assert out[0].shape == torch.Size([4, 3])
+        assert out[1].shape == torch.Size([4, 3])
+        assert out[0]["a"].shape == torch.Size([4, 3, 1])
 
 
 if __name__ == "__main__":

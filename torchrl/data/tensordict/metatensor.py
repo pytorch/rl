@@ -14,7 +14,7 @@ import torch
 
 from torchrl.data.utils import DEVICE_TYPING, INDEX_TYPING
 from .memmap import MemmapTensor
-from .utils import _getitem_batch_size
+from .utils import _getitem_batch_size, _get_shape
 
 META_HANDLED_FUNCTIONS = dict()
 
@@ -74,7 +74,7 @@ class MetaTensor:
     ):
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
-            shape = tensor.shape
+            shape = _get_shape(tensor)
             if _is_shared is None:
                 _is_shared = tensor.is_shared()
             if _is_memmap is None:
