@@ -248,7 +248,7 @@ def test_vamp_basic():
             return TensorDict({"a": a}, tensordict.batch_size, device=tensordict.device)
 
     tensordict = TensorDict({"a": torch.randn(3)}, [])
-    vmap(MyModule(), (0,))(tensordict.expand(3))
+    vmap(MyModule(), (0,))(tensordict.expand(4))
 
 
 if __name__ == "__main__":
