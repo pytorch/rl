@@ -59,5 +59,5 @@ If you know or suspect the reason for this bug, paste the code lines and suggest
 ## Checklist
 
 - [ ] I have checked that there is no similar issue in the repo (**required**)
-- [ ] I have read the [documentation](https://github.com/facebookresearch/rl/tree/main/docs/) (**required**)
+- [ ] I have read the [documentation](https://github.com/pytorch/rl/tree/main/docs/) (**required**)
 - [ ] I have provided a minimal working example to reproduce the bug (**required**)

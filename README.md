@@ -1,4 +1,4 @@
-[![facebookresearch](https://circleci.com/gh/facebookresearch/rl.svg?style=shield)](https://circleci.com/gh/facebookresearch/rl)
+[![pytorch](https://circleci.com/gh/pytorch/rl.svg?style=shield)](https://circleci.com/gh/pytorch/rl)
 
 # TorchRL
 
@@ -301,9 +301,9 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     ```
     </details>
 
-- A series of efficient [loss modules](https://github.com/facebookresearch/rl/blob/main/torchrl/objectives/costs)
+- A series of efficient [loss modules](https://github.com/pytorch/rl/blob/main/torchrl/objectives/costs)
     and highly vectorized
-    [functional return and advantage](https://github.com/facebookresearch/rl/blob/main/torchrl/objectives/returns/functional.py)
+    [functional return and advantage](https://github.com/pytorch/rl/blob/main/torchrl/objectives/returns/functional.py)
     computation.
 
     <details>
@@ -350,32 +350,34 @@ conda create --name torch_rl python=3.9
 conda activate torch_rl
 ```
 
-Depending on the use of functorch that you want to make, you may want to install the latest (nightly) pytorch release or the latest stable version of pytorch:
+Depending on the use of functorch that you want to make, you may want to install the latest (nightly) pytorch release or the latest stable version of pytorch.
+See [here](https://pytorch.org/get-started/locally/) for a more detailed list of commands, including `pip3` or windows/OSX compatible installation commands:
 
 **Stable**
 
 ```
-# For CUDA 10.2
-conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
 # For CUDA 11.3
 conda install pytorch torchvision cudatoolkit=11.3 -c pytorch
+# For CUDA 11.6
+conda install pytorch torchvision torchaudio cudatoolkit=11.6 -c pytorch -c conda-forge
 # For CPU-only build
 conda install pytorch torchvision cpuonly -c pytorch
 
+# Functorch will be integrated in torch from 1.13. As of now, we still need the latest pip release
 pip3 install functorch
 ```
 
 **Nightly**
 ```
-# For CUDA 10.2
-pip3 install --pre torch torchvision --extra-index-url https://download.pytorch.org/whl/nightly/cu102
-# For CUDA 11.3
-pip3 install --pre torch torchvision --extra-index-url https://download.pytorch.org/whl/nightly/cu113
+# For CUDA 11.6
+conda install pytorch torchvision torchaudio pytorch-cuda=11.6 -c pytorch-nightly -c nvidia
+# For CUDA 11.7
+conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
 # For CPU-only build
-pip3 install --pre torch torchvision --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+conda install pytorch torchvision torchaudio cpuonly -c pytorch-nightly
 ```
 
-functorch is included in the nightly PyTorch package, so no need to install it separately.
+`functorch` is included in the nightly PyTorch package, so no need to install it separately.
 
 **Torchrl**
 
@@ -397,7 +399,7 @@ it in develop mode as this will make it possible to pull the latest changes and
 benefit from them immediately.
 Start by cloning the repo:
 ```
-git clone https://github.com/facebookresearch/rl
+git clone https://github.com/pytorch/rl
 ```
 
 Go to the directory where you have cloned the torchrl repo and install it
