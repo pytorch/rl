@@ -179,8 +179,10 @@ class DreamerActorLoss(LossModule):
                 auto_reset=False,
                 tensordict=tensordict,
             )
-            tensordict = tensordict[0:] # remove the first timestep that came from the real environment.
-            
+            tensordict = tensordict[
+                0:
+            ]  # remove the first timestep that came from the real environment.
+
             next_tensordict = step_tensordict(
                 tensordict,
                 keep_other=True,
