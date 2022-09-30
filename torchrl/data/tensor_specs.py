@@ -242,7 +242,7 @@ class TensorSpec:
                     # gym used to return lists of images since 0.26.0
                     # We convert these lists in np.array or take the first element
                     # if there is just one.
-                    # See https://github.com/facebookresearch/rl/pull/403/commits/73d77d033152c61d96126ccd10a2817fecd285a1
+                    # See https://github.com/pytorch/rl/pull/403/commits/73d77d033152c61d96126ccd10a2817fecd285a1
                     val = val[0]
                 else:
                     val = np.array(val)
