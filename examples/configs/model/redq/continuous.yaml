@@ -1,0 +1,12 @@
+policy_wrapper: normal_param
+policy_out_keys: ["loc", "scale"]
+
+default_interaction_mode: "random"
+distribution_class: TanhNormal
+distribution_kwargs:
+  min: -1  # get env boundaries
+  max: 1  # get env boundaries
+  tanh_loc: True
+return_log_prob: False
+
+out_features_multiplier: 2

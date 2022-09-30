@@ -1,0 +1,9 @@
+policy_wrapper:
+policy_out_keys: ["logits"]
+
+default_interaction_mode: "random"
+distribution_class: OneHotCategorical
+distribution_kwargs: {}
+return_log_prob: True
+
+out_features_multiplier: 1

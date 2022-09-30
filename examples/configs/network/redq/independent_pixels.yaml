@@ -1,0 +1,29 @@
+in_keys: ["pixels"]
+in_keys_policy_module: ["pixels"]
+in_keys_qvalue: ["pixels", "action"]
+
+policy_network:
+  _target_: torchrl.modules.partial_probabilisticactor
+  _partial_: True
+  dist_param_keys: ${model.policy_out_keys}
+  default_interaction_mode: ${model.default_interaction_mode}
+  distribution_class: ${model.distribution_class}
+  distribution_kwargs: ${model.distribution_kwargs}
+  return_log_prob: True
+  partial_tensordictmodule:
+    _target_: torchrl.modules.partial_tensordictmodule
+    _partial_: True
+    in_keys: ${network.in_keys_policy_module}
+    out_keys: ${model.policy_out_keys}
+    wrapper: ${model.policy_wrapper}
+    partial_module:
+      _target_: torchrl.modules.DdpgCnnActor
+      _partial_: True  # misses out_features
+      use_avg_pooling: True
+
+qvalue_network:
+  _target_: torchrl.modules.ValueOperator
+  in_keys: ${network.in_keys_qvalue}
+  module:
+    _target_: torchrl.modules.DdpgCnnQNet
+    use_avg_pooling: True
