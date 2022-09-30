@@ -61,24 +61,14 @@ class DreamerModelLoss(LossModule):
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
-
-        # prepare tensordict: remove time in batch dimensions
-        tensordict.batch_size = tensordict.batch_size[:1]
-        # take the first tensor for prev_posterior_state and prev_belief
-        tensordict["prev_posterior_state"] = torch.zeros_like(
-            tensordict["prev_posterior_state"][:, 0]
-        )
-        tensordict["prev_belief"] = torch.zeros_like(tensordict["prev_belief"][:, 0])
-        tensordict["true_reward"] = tensordict["reward"]
-        del tensordict["reward"]
-
+        tensordict.rename_key("reward", "true_reward")
         tensordict = self.world_model(tensordict)
         # compute model loss
         kl_loss = self.kl_loss(
-            tensordict.get("prior_means"),
-            tensordict.get("prior_stds"),
-            tensordict.get("posterior_means"),
-            tensordict.get("posterior_stds"),
+            tensordict.get("next_prior_mean"),
+            tensordict.get("next_prior_std"),
+            tensordict.get("next_posterior_mean"),
+            tensordict.get("next_posterior_std"),
         )
         reco_loss = (
             distance_loss(
@@ -166,28 +156,23 @@ class DreamerActorLoss(LossModule):
         with torch.no_grad():
             tensordict = tensordict.select("posterior_state", "belief", "reward")
 
-            tensordict.batch_size = [
-                tensordict.shape[0],
-                tensordict.get("belief").shape[1],
-            ]
+            # tensordict.batch_size = [
+            #     tensordict.shape[0],
+            #     tensordict.get("belief").shape[1],
+            # ]
             tensordict.rename_key("posterior_state", "prior_state")
             tensordict = tensordict.view(-1).detach()
         with hold_out_net(self.model_based_env), set_exploration_mode("random"):
             tensordict = self.model_based_env.rollout(
-                max_steps=self.imagination_horizon + 1,
+                max_steps=self.imagination_horizon,
                 policy=self.actor_model,
                 auto_reset=False,
                 tensordict=tensordict,
             )
-            tensordict = tensordict[
-                0:
-            ]  # remove the first timestep that came from the real environment.
 
             next_tensordict = step_tensordict(
                 tensordict,
                 keep_other=True,
-                exclude_reward=False,
-                exclude_action=False,
             )
             with hold_out_net(self.value_model):
                 next_tensordict = self.value_model(next_tensordict)

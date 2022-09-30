@@ -246,6 +246,7 @@ def main(cfg: "DictConfig"):
         use_decoder_in_env=True,
         action_key="action",
         value_key="predicted_value",
+        proof_environment=transformed_env_constructor(cfg)(),
     )
 
     # reward normalization
