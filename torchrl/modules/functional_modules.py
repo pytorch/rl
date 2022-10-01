@@ -19,7 +19,7 @@ try:
 except ImportError:
     _has_functorch = False
 
-"""Monky-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked"""
+# Monky-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
 if _has_functorch:
     from functorch._src.vmap import (
         _get_name,
@@ -164,7 +164,7 @@ if _has_functorch:
 
     functorch._src.vmap._unwrap_batched = _unwrap_batched
 
-"""Tensordict-compatible Functional modules"""
+# Tensordict-compatible Functional modules
 
 
 class FunctionalModule(nn.Module):
@@ -239,7 +239,7 @@ class FunctionalModuleWithBuffers(nn.Module):
                 _swap_state(self.stateless_model, old_state_buffers)
 
 
-"""Some utils for these"""
+# Some utils for these
 
 
 def extract_weights(model):

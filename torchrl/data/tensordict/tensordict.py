@@ -1897,7 +1897,7 @@ class TensorDict(TensorDictBase):
             self._is_shared
             if self._is_shared is not None
             else proc_value.is_shared()
-            if isinstance(proc_value, TensorDictBase)
+            if isinstance(proc_value, (TensorDictBase, MemmapTensor))
             or not is_batchedtensor(proc_value)
             else False
         )
