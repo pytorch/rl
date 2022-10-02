@@ -1205,7 +1205,7 @@ def make_dreamer(
         ),
         TensorDictModule(
             rssm_posterior,
-            in_keys=["next_belief", "encoded_latents"],
+            in_keys=["next_belief", "next_encoded_latents"],
             out_keys=[
                 "next_posterior_mean",
                 "next_posterior_std",
@@ -1229,39 +1229,21 @@ def make_dreamer(
     world_modeler = TensorDictSequential(
         TensorDictModule(
             obs_encoder,
-            in_keys=["pixels"],
-            out_keys=["encoded_latents"],
+            in_keys=["next_pixels"],
+            out_keys=["next_encoded_latents"],
         ),
-        # rssm_rollout = transition
-        # TensorDictModule(
         rssm_rollout,
-        #     in_keys=[
-        #         "prev_posterior_state",
-        #         "prev_belief",
-        #         "prev_" + action_key,
-        #         "encoded_latents",
-        #     ],
-        #     out_keys=[
-        #         "prior_means",
-        #         "prior_stds",
-        #         "prior_state",
-        #         "belief",
-        #         "posterior_means",
-        #         "posterior_stds",
-        #         "posterior_state",
-        #     ],
-        # ),
         TensorDictModule(
             obs_decoder,
-            in_keys=["posterior_state", "belief"],
-            out_keys=["reco_pixels"],
+            in_keys=["next_posterior_state", "next_belief"],
+            out_keys=["next_reco_pixels"],
         ),
     )
     world_model = WorldModelWrapper(
         world_modeler,
         TensorDictModule(
             reward_module,
-            in_keys=["posterior_state", "belief"],
+            in_keys=["next_posterior_state", "next_belief"],
             out_keys=["reward"],
         ),
     )
@@ -1294,6 +1276,26 @@ def make_dreamer(
             out_keys=["encoded_latents"],
         ),
         TensorDictModule(
+            rssm_posterior,
+            in_keys=["belief", "encoded_latents"],
+            out_keys=[
+                "posterior_means",
+                "posterior_stds",
+                "posterior_state",
+            ],
+        ),
+        ProbabilisticTensorDictModule(
+            TensorDictModule(
+                actor_module,
+                in_keys=["posterior_state", "belief"],
+                out_keys=["loc", "scale"],
+            ),
+            dist_param_keys=["loc", "scale"],
+            out_key_sample=[action_key],
+            default_interaction_mode="mode",
+            distribution_class=TanhNormal,
+        ),
+        TensorDictModule(
             rssm_prior,
             in_keys=["posterior_state", "belief", action_key],
             out_keys=[
@@ -1302,26 +1304,6 @@ def make_dreamer(
                 "next_prior_state",
                 "next_belief",
             ],
-        ),
-        TensorDictModule(
-            rssm_posterior,
-            in_keys=["next_belief", "encoded_latents"],
-            out_keys=[
-                "next_posterior_means",
-                "next_posterior_stds",
-                "next_posterior_state",
-            ],
-        ),
-        ProbabilisticTensorDictModule(
-            TensorDictModule(
-                actor_module,
-                in_keys=["next_posterior_state", "next_belief"],
-                out_keys=["loc", "scale"],
-            ),
-            dist_param_keys=["loc", "scale"],
-            out_key_sample=[action_key],
-            default_interaction_mode="mode",
-            distribution_class=TanhNormal,
         ),
     )
 

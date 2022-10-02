@@ -193,7 +193,9 @@ class RSSMRollout(nn.Module):
             # update the action and obs keys, which are the only things we don't want to carry over
             _tensordict["action"] = actions[t]
             _tensordict[obs_key] = observations[t]
+            # ["posterior_state", "belief", "action"] -> ["next_prior_mean", "next_prior_std", "next_prior_state", "next_belief"]
             self.rssm_prior(_tensordict)
+            # ["next_belief", "next_encoded_latents"] -> ["next_posterior_mean", "next_posterior_std", "next_posterior_state"]
             self.rssm_posterior(_tensordict)
             tensordict_out.append(_tensordict)
             _tensordict = step_tensordict(
