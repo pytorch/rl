@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import abc
 import os
 from dataclasses import dataclass
 from textwrap import indent
@@ -241,7 +242,7 @@ class TensorSpec:
                     # gym used to return lists of images since 0.26.0
                     # We convert these lists in np.array or take the first element
                     # if there is just one.
-                    # See https://github.com/facebookresearch/rl/pull/403/commits/73d77d033152c61d96126ccd10a2817fecd285a1
+                    # See https://github.com/pytorch/rl/pull/403/commits/73d77d033152c61d96126ccd10a2817fecd285a1
                     val = val[0]
                 else:
                     val = np.array(val)
@@ -277,6 +278,7 @@ class TensorSpec:
             self.assert_is_in(val)
         return val.detach().cpu().numpy()
 
+    @abc.abstractmethod
     def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
         """Indexes the input tensor
 
@@ -293,6 +295,7 @@ class TensorSpec:
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
+    @abc.abstractmethod
     def is_in(self, val: torch.Tensor) -> bool:
         """If the value `val` is in the box defined by the TensorSpec,
         returns True, otherwise False.
@@ -353,6 +356,7 @@ class TensorSpec:
                 f" {self.__class__.__name__}.dtype={self.dtype}"
             )
 
+    @abc.abstractmethod
     def rand(self, shape=None) -> torch.Tensor:
         """Returns a random tensor in the box. The sampling will be uniform
         unless the box is unbounded.
@@ -365,6 +369,20 @@ class TensorSpec:
 
         """
         raise NotImplementedError
+
+    def zero(self, shape=None) -> torch.Tensor:
+        """Returns a zero-filled tensor in the box.
+
+        Args:
+            shape (torch.Size): shape of the zero-tensor
+
+        Returns:
+            a zero-filled tensor sampled in the TensorSpec box.
+
+        """
+        if shape is None:
+            shape = torch.Size([])
+        return torch.zeros((*shape, *self.shape), dtype=self.dtype, device=self.device)
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> "TensorSpec":
         if self.space is not None:
@@ -1193,6 +1211,18 @@ dtype=torch.float32)},
             value.to(dest)
         self.device = torch.device(dest)
         return self
+
+    def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
+        return {key: self[key].to_numpy(val) for key, val in val.items()}
+
+    def zero(self, shape=None) -> TensorDictBase:
+        if shape is None:
+            shape = torch.Size([])
+        return TensorDict(
+            {key: self[key].zero(shape) for key in self.keys()},
+            shape,
+            device=self.device,
+        )
 
     def __eq__(self, other):
         return (

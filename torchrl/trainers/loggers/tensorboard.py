@@ -3,19 +3,18 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import os
-from warnings import warn
 
 from torch import Tensor
 
 from .common import Logger
 
-_has_tb = False
+
 try:
     from torch.utils.tensorboard import SummaryWriter
 
     _has_tb = True
 except ImportError:
-    warn("torch.utils.tensorboard could not be imported")
+    _has_tb = False
 
 
 class TensorboardLogger(Logger):
@@ -45,6 +44,8 @@ class TensorboardLogger(Logger):
             SummaryWriter: The tensorboard experiment.
 
         """
+        if not _has_tb:
+            raise ImportError("torch.utils.tensorboard could not be imported")
 
         log_dir = str(os.path.join(self.log_dir, self.exp_name))
         return SummaryWriter(log_dir=log_dir)

@@ -13,7 +13,7 @@ from typing import Any, Callable, List, Optional, Tuple, Union, Dict
 import numpy as np
 import torch
 
-from torchrl import prod
+from torchrl._utils import prod
 from torchrl.data.tensordict.utils import _getitem_batch_size
 from torchrl.data.utils import (
     DEVICE_TYPING,

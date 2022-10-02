@@ -17,7 +17,7 @@ from warnings import warn
 import torch
 from torch import multiprocessing as mp
 
-from torchrl import _check_for_faulty_process
+from torchrl._utils import _check_for_faulty_process
 from torchrl.data import TensorDict, TensorSpec, CompositeSpec
 from torchrl.data.tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -118,6 +118,9 @@ class _BatchedEnv(EnvBase):
             It is assumed that all environments will run on the same device as a common shared
             tensordict will be used to pass data from process to process. The device can be
             changed after instantiation using `env.to(device)`.
+        allow_step_when_done (bool, optional): if True, batched environments can
+            execute steps after a done state is encountered.
+            Defaults to `False`.
 
     """
 
@@ -143,6 +146,7 @@ class _BatchedEnv(EnvBase):
         memmap: bool = False,
         policy_proof: Optional[Callable] = None,
         device: Optional[DEVICE_TYPING] = None,
+        allow_step_when_done: bool = False,
     ):
         if device is not None:
             raise ValueError(
@@ -187,12 +191,12 @@ class _BatchedEnv(EnvBase):
         self.share_individual_td = bool(share_individual_td)
         self._share_memory = shared_memory
         self._memmap = memmap
+        self.allow_step_when_done = allow_step_when_done
         if self._share_memory and self._memmap:
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
         self._batch_size = None
-        self._action_spec = None
         self._observation_spec = None
         self._reward_spec = None
         self._device = None
@@ -273,7 +277,6 @@ class _BatchedEnv(EnvBase):
     def _set_properties(self):
         if self._single_task:
             self._batch_size = self.meta_data.batch_size
-            self._action_spec = self.meta_data.specs["action_spec"]
             self._observation_spec = self.meta_data.specs["observation_spec"]
             self._reward_spec = self.meta_data.specs["reward_spec"]
             self._input_spec = self.meta_data.specs["input_spec"]
@@ -287,16 +290,15 @@ class _BatchedEnv(EnvBase):
             )
             self._device = self.meta_data[0].device
             # TODO: check that all action_spec and reward spec match (issue #351)
-            self._action_spec = self.meta_data[0].specs["action_spec"]
             self._reward_spec = self.meta_data[0].specs["reward_spec"]
-            self._observation_spec = {}
+            _observation_spec = {}
             for md in self.meta_data:
-                self._observation_spec.update(dict(**md.specs["observation_spec"]))
-            self._observation_spec = CompositeSpec(**self._observation_spec)
-            self._input_spec = {}
+                _observation_spec.update(dict(**md.specs["observation_spec"]))
+            self._observation_spec = CompositeSpec(**_observation_spec)
+            _input_spec = {}
             for md in self.meta_data:
-                self._input_spec.update(dict(**md.specs["input_spec"]))
-            self._input_spec = CompositeSpec(**self._input_spec)
+                _input_spec.update(dict(**md.specs["input_spec"]))
+            self._input_spec = CompositeSpec(**_input_spec)
             self._dummy_env_str = str(self.meta_data[0])
             self._env_tensordict = torch.stack(
                 [meta_data.tensordict for meta_data in self.meta_data], 0
@@ -318,16 +320,6 @@ class _BatchedEnv(EnvBase):
         return self._batch_size
 
     @property
-    def action_spec(self) -> TensorSpec:
-        if self._action_spec is None:
-            self._set_properties()
-        return self._action_spec
-
-    @action_spec.setter
-    def action_spec(self, value: TensorSpec) -> None:
-        self._action_spec = value
-
-    @property
     def device(self) -> torch.device:
         if self._device is None:
             self._set_properties()
@@ -346,6 +338,16 @@ class _BatchedEnv(EnvBase):
     @observation_spec.setter
     def observation_spec(self, value: TensorSpec) -> None:
         self._observation_spec = value
+
+    @property
+    def input_spec(self) -> TensorSpec:
+        if self._input_spec is None:
+            self._set_properties()
+        return self._input_spec
+
+    @input_spec.setter
+    def input_spec(self, value: TensorSpec) -> None:
+        self._input_spec = value
 
     @property
     def reward_spec(self) -> TensorSpec:
@@ -492,7 +494,6 @@ class _BatchedEnv(EnvBase):
         if self._verbose:
             print(f"closing {self.__class__.__name__}")
 
-        self.action_spec = None
         self.observation_spec = None
         self.reward_spec = None
 
@@ -528,7 +529,7 @@ class _BatchedEnv(EnvBase):
             self.close()
             self.start()
         else:
-            self.action_spec = self.action_spec.to(device)
+            self.input_spec = self.input_spec.to(device)
             self.reward_spec = self.reward_spec.to(device)
             self.observation_spec = self.observation_spec.to(device)
         return self
@@ -699,6 +700,7 @@ class ParallelEnv(_BatchedEnv):
                     False,
                     self.env_input_keys,
                     self.device,
+                    self.allow_step_when_done,
                 ),
             )
             w.daemon = True
@@ -906,6 +908,7 @@ def _run_worker_pipe_shared_mem(
     pin_memory: bool,
     env_input_keys: Dict[str, Any],
     device: DEVICE_TYPING = "cpu",
+    allow_step_when_done: bool = False,
     verbose: bool = False,
 ) -> None:
     parent_pipe.close()
@@ -983,7 +986,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             _td = tensordict.select(*env_input_keys)
-            if env.is_done:
+            if env.is_done and not allow_step_when_done:
                 raise RuntimeError(
                     f"calling step when env is done, just reset = {just_reset}"
                 )

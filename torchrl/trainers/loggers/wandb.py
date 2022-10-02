@@ -11,22 +11,21 @@ from torch import Tensor
 
 from .common import Logger
 
-_has_wandb = False
+
 try:
     import wandb
 
     _has_wandb = True
 except ImportError:
-    warnings.warn("wandb could not be imported")
-_has_omgaconf = False
+    _has_wandb = False
+
+
 try:
     from omegaconf import OmegaConf
 
     _has_omgaconf = True
 except ImportError:
-    warnings.warn(
-        "OmegaConf could not be imported. Cannot log hydra configs without OmegaConf"
-    )
+    _has_omgaconf = False
 
 
 class WandbLogger(Logger):
@@ -52,6 +51,9 @@ class WandbLogger(Logger):
         project: str = None,
         **kwargs,
     ) -> None:
+        if not _has_wandb:
+            raise ImportError("wandb could not be imported")
+
         log_dir = kwargs.pop("log_dir", None)
         self.offline = offline
         if save_dir and log_dir:
@@ -154,6 +156,7 @@ class WandbLogger(Logger):
                 f"be silenced from now on but the values will keep being incremented."
             )
             step = self._prev_video_step + 1
+        self._prev_video_step = step if step is not None else self._prev_video_step + 1
         self.experiment.log(
             {name: wandb.Video(video, fps=fps, format=format)}, step=step, **kwargs
         )
@@ -167,6 +170,11 @@ class WandbLogger(Logger):
         """
 
         if type(cfg) is not dict and _has_omgaconf:
+            if not _has_omgaconf:
+                raise ImportError(
+                    "OmegaConf could not be imported. "
+                    "Cannot log hydra configs without OmegaConf."
+                )
             cfg = OmegaConf.to_container(cfg, resolve=True)
         self.experiment.config.update(cfg, allow_val_change=True)
 

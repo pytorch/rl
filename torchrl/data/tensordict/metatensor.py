@@ -14,7 +14,7 @@ import torch
 
 from torchrl.data.utils import DEVICE_TYPING, INDEX_TYPING
 from .memmap import MemmapTensor
-from .utils import _getitem_batch_size
+from .utils import _getitem_batch_size, _get_shape
 
 META_HANDLED_FUNCTIONS = dict()
 
@@ -74,22 +74,14 @@ class MetaTensor:
     ):
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
-            shape = tensor.shape
+            shape = _get_shape(tensor)
             if _is_shared is None:
                 _is_shared = tensor.is_shared()
             if _is_memmap is None:
                 _is_memmap = isinstance(tensor, MemmapTensor)
             # FIXME: using isinstance(tensor, TensorDictBase) would likely be
             # better here, but creates circular import without more refactoring
-            device = (
-                (
-                    tensor.device_safe()
-                    if hasattr(tensor, "device_safe")
-                    else tensor.device
-                )
-                if not tensor.is_meta
-                else device
-            )
+            device = tensor.device if not tensor.is_meta else device
             if _is_tensordict is None:
                 _is_tensordict = not _is_memmap and not isinstance(tensor, torch.Tensor)
             if not _is_tensordict:
@@ -120,7 +112,7 @@ class MetaTensor:
             name = "TensorDict"
         elif _is_memmap:
             name = "MemmapTensor"
-        elif _is_shared:
+        elif _is_shared and device.type != "cuda":
             name = "SharedTensor"
         else:
             name = "Tensor"
@@ -152,7 +144,7 @@ class MetaTensor:
         """
 
         self._is_shared = True
-        self.class_name = "SharedTensor"
+        self.class_name = "SharedTensor" if self.device.type != "cuda" else "Tensor"
         return self
 
     def is_shared(self) -> bool:
