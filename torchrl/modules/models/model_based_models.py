@@ -186,20 +186,19 @@ class RSSMRollout(nn.Module):
         tensordict_out = []
         *batch, time_steps = tensordict.shape
         _tensordict = tensordict[..., 0]
-        actions = tensordict["action"].unbind(tensordict.batch_dims - 1)
-        obs_key = self.rssm_posterior.in_keys[-1]
-        observations = tensordict[obs_key].unbind(tensordict.batch_dims - 1)
+
+        out_keys = {*self.rssm_prior.out_keys, *self.rssm_posterior.out_keys}
+        update_values = tensordict.exclude(*out_keys)
+
         for t in range(time_steps):
-            # update the action and obs keys, which are the only things we don't want to carry over
-            _tensordict["action"] = actions[t]
-            _tensordict[obs_key] = observations[t]
+            _tensordict = _tensordict.update(update_values[..., t])
             # ["posterior_state", "belief", "action"] -> ["next_prior_mean", "next_prior_std", "next_prior_state", "next_belief"]
             self.rssm_prior(_tensordict)
             # ["next_belief", "next_encoded_latents"] -> ["next_posterior_mean", "next_posterior_std", "next_posterior_state"]
             self.rssm_posterior(_tensordict)
             tensordict_out.append(_tensordict)
             _tensordict = step_tensordict(
-                _tensordict, exclude_action=False, keep_other=True
+                _tensordict, exclude_action=False, keep_other=False
             )
 
         return torch.stack(tensordict_out, tensordict.ndimension() - 1).contiguous()

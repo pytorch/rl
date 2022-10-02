@@ -1312,7 +1312,7 @@ def make_dreamer(
         mb_env_obs_decoder = TensorDictModule(
             obs_decoder,
             in_keys=["next_prior_state", "next_belief"],
-            out_keys=["reco_pixels"],
+            out_keys=["next_reco_pixels"],
         )
     else:
         mb_env_obs_decoder = None

@@ -72,8 +72,8 @@ class DreamerModelLoss(LossModule):
         )
         reco_loss = (
             distance_loss(
-                tensordict.get("pixels"),
-                tensordict.get("reco_pixels"),
+                tensordict.get("next_pixels"),
+                tensordict.get("next_reco_pixels"),
                 self.reco_loss,
             )
             .sum((-1, -2, -3))
