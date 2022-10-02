@@ -214,7 +214,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
             tensordicts.set(
                 "index",
                 torch.zeros(
-                    tensordicts.shape, device=tensordicts.device_safe(), dtype=torch.int
+                    tensordicts.shape, device=tensordicts.device, dtype=torch.int
                 ),
             )
 
@@ -226,7 +226,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         index = super().extend(tensordicts)
         stacked_td.set(
             "index",
-            torch.tensor(index, dtype=torch.int, device=stacked_td.device_safe()),
+            torch.tensor(index, dtype=torch.int, device=stacked_td.device),
             inplace=True,
         )
         self.update_tensordict_priority(tensordicts)
@@ -236,7 +236,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         priority = torch.tensor(
             [self._get_priority(td) for td in data],
             dtype=torch.float,
-            device=data.device_safe(),
+            device=data.device,
         )
         self.update_priority(data.get("index"), priority)
 
@@ -244,5 +244,5 @@ class TensorDictReplayBuffer(ReplayBuffer):
         data, info = super().sample(batch_size)
         if include_info:
             for k, v in info.items():
-                data.set(k, torch.tensor(v, device=data.device_safe()), inplace=True)
+                data.set(k, torch.tensor(v, device=data.device), inplace=True)
         return data, info
