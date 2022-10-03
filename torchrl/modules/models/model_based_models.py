@@ -43,7 +43,6 @@ class DreamerActor(nn.Module):
         depth=4,
         num_cells=200,
         activation_class=nn.ELU,
-        rnn_hidden_dim=200,
     ):
         super().__init__()
         self.backbone = NormalParamWrapper(
@@ -55,7 +54,6 @@ class DreamerActor(nn.Module):
             ),
             scale_mapping="biased_softplus_5.0_1e-4",
         )
-        self.rnn_hidden_dim = rnn_hidden_dim
 
     def forward(self, state, belief):
         loc, scale = self.backbone(state, belief)
