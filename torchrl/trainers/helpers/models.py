@@ -32,7 +32,7 @@ from torchrl.modules.distributions.continuous import (
     SafeTanhTransform,
 )
 from torchrl.modules.models.exploration import LazygSDEModule
-from torchrl.modules.models.model_based_models import (
+from torchrl.modules.models.model_based import (
     DreamerActor,
     ObsEncoder,
     ObsDecoder,
@@ -1217,16 +1217,8 @@ def make_dreamer(
         out_features=1, depth=2, num_cells=cfg.mlp_num_units, activation_class=nn.ELU
     )
 
-    actor_module = DreamerActor(
-        out_features=proof_environment.action_spec.shape[0],
-        depth=4,
-        num_cells=cfg.mlp_num_units,
-        activation_class=nn.ELU,
-        rnn_hidden_dim=cfg.rssm_hidden_dim,
-    )
-
     # World Model and reward model
-    world_modeler = TensorDictSequential(
+    transition_model = TensorDictSequential(
         TensorDictModule(
             obs_encoder,
             in_keys=["next_pixels"],
@@ -1239,16 +1231,25 @@ def make_dreamer(
             out_keys=["next_reco_pixels"],
         ),
     )
-    world_model = WorldModelWrapper(
-        world_modeler,
-        TensorDictModule(
-            reward_module,
-            in_keys=["next_posterior_state", "next_belief"],
-            out_keys=["reward"],
-        ),
+    reward_model = TensorDictModule(
+        reward_module,
+        in_keys=["next_posterior_state", "next_belief"],
+        out_keys=["reward"],
     )
-    # Actor value and policy
-    actor_model = ProbabilisticTensorDictModule(
+    world_model = WorldModelWrapper(
+        transition_model,
+        reward_model,
+    )
+
+    # actor for simulator: interacts with states ~ prior
+    actor_module = DreamerActor(
+        out_features=proof_environment.action_spec.shape[0],
+        depth=4,
+        num_cells=cfg.mlp_num_units,
+        activation_class=nn.ELU,
+        rnn_hidden_dim=cfg.rssm_hidden_dim,
+    )
+    actor_simulator = ProbabilisticTensorDictModule(
         TensorDictModule(
             actor_module,
             in_keys=["prior_state", "belief"],
@@ -1256,20 +1257,12 @@ def make_dreamer(
         ),
         dist_param_keys=["loc", "scale"],
         out_key_sample=[action_key],
-        default_interaction_mode="mode",
+        default_interaction_mode="random",
         distribution_class=TanhNormal,
     )
-    value_model = TensorDictModule(
-        MLP(
-            out_features=1,
-            depth=3,
-            num_cells=cfg.mlp_num_units,
-            activation_class=nn.ELU,
-        ),
-        in_keys=["prior_state", "belief"],
-        out_keys=[value_key],
-    )
-    policy = TensorDictSequential(
+
+    # actor for real world: interacts with states ~ posterior
+    actor_realworld = TensorDictSequential(
         TensorDictModule(
             obs_encoder,
             in_keys=["pixels"],
@@ -1279,8 +1272,8 @@ def make_dreamer(
             rssm_posterior,
             in_keys=["belief", "encoded_latents"],
             out_keys=[
-                "posterior_means",
-                "posterior_stds",
+                "_",
+                "_",
                 "posterior_state",
             ],
         ),
@@ -1292,19 +1285,30 @@ def make_dreamer(
             ),
             dist_param_keys=["loc", "scale"],
             out_key_sample=[action_key],
-            default_interaction_mode="mode",
+            default_interaction_mode="random",
             distribution_class=TanhNormal,
         ),
         TensorDictModule(
             rssm_prior,
             in_keys=["posterior_state", "belief", action_key],
             out_keys=[
-                "next_prior_means",
-                "next_prior_stds",
-                "next_prior_state",
+                "_",
+                "_",
+                "_",  # we don't need the prior state
                 "next_belief",
             ],
         ),
+    )
+
+    value_model = TensorDictModule(
+        MLP(
+            out_features=1,
+            depth=3,
+            num_cells=cfg.mlp_num_units,
+            activation_class=nn.ELU,
+        ),
+        in_keys=["prior_state", "belief"],
+        out_keys=[value_key],
     )
 
     # MB environment
@@ -1358,23 +1362,23 @@ def make_dreamer(
         world_model(td)
     model_based_env = model_based_env.to(device)
 
-    actor_model = actor_model.to(device)
+    actor_simulator = actor_simulator.to(device)
     value_model = value_model.to(device)
 
     with torch.no_grad(), set_exploration_mode("random"):
         td = model_based_env.rollout(4)
         td = td.to(device)
-        td = actor_model(td)
+        td = actor_simulator(td)
         value_model(td)
 
-    policy = policy.to(device)
+    actor_realworld = actor_realworld.to(device)
     if proof_env_is_none:
         proof_environment.close()
         torch.cuda.empty_cache()
         del proof_environment
 
     del td
-    return world_model, model_based_env, actor_model, value_model, policy
+    return world_model, model_based_env, actor_simulator, value_model, actor_realworld
 
 
 @dataclass

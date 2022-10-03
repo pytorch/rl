@@ -11,6 +11,7 @@ from torchrl.envs.utils import step_tensordict
 from torchrl.modules.distributions import NormalParamWrapper
 from torchrl.modules.models import MLP
 from torchrl.modules.tensordict_module.common import TensorDictModule
+from torchrl.modules.tensordict_module.sequence import TensorDictSequential
 
 __all__ = [
     "DreamerActor",
@@ -157,49 +158,47 @@ class RSSMRollout(nn.Module):
 
     def __init__(self, rssm_prior: TensorDictModule, rssm_posterior: TensorDictModule):
         super().__init__()
+        _module = TensorDictSequential(rssm_prior, rssm_posterior)
+        self.in_keys = _module.in_keys
+        self.out_keys = _module.out_keys
         self.rssm_prior = rssm_prior
         self.rssm_posterior = rssm_posterior
-        # self.rnn_hidden_dim = rssm_prior.rnn_hidden_dim
-        self.in_keys = ["action", *self.rssm_prior.in_keys]
-        self.out_keys = list({*self.rssm_prior.out_keys, *self.rssm_posterior.out_keys})
 
     def forward(self, tensordict):
-        # TODO: update description
-        """Runs a rollout of simulated transitions in the latent space given
-        an initial posterior state,  an initial belief, a defined sequence of actions, and a sequence of encoded observations.
+        """Runs a rollout of simulated transitions in the latent space given a sequence of actions and environment observations.
 
-        Args:
-            posterior_state (torch.Tensor): a batch x state_size tensor containing the initial posterior_state state
-            belief (torch.Tensor): a batch x belief_size tensor containing the initial belief state
-            actions (torch.Tensor): a batch x time_steps x action_size tensor containing the sequence of actions
-            obs_embedding (torch.Tensor): a batch x time_steps x latent_size tensor containing the sequence of encoded observations
+        The rollout requires a belief and posterior state primer.
 
-        Returns:
-            prior_means (torch.Tensor): a batch x time_steps x state_size containing the mean of the state distributions
-            prior_stds (torch.Tensor): a batch x time_steps x state_size containing the standard deviation of the state distributions
-            prior_states (torch.Tensor): a batch x time_steps x state_size containing the sampled states
-            beliefs (torch.Tensor): a batch x time_steps x belief_size containing the sequence of beliefs
-            posterior_means (torch.Tensor): a batch x time_steps x state_size containing the mean of the posterior state distributions
-            posterior_stds (torch.Tensor): a batch x time_steps x state_size containing the standard deviation of the posterior state distributions
-            posterior_states (torch.Tensor): a batch x time_steps x state_size containing the sampled posterior states
+        At each step, two probability distributions are built and sampled from:
+        - A prior distribution p(s_{t+1} | s_t, a_t, b_t) where b_t is a
+            deterministic transform of the form b_t(s_{t-1}, a_{t-1}). The
+            previous state s_t is sampled according to the posterior
+            distribution (see below), creating a chain of posterior-to-priors
+            that accumulates evidence to compute a prior distribution over
+            the current event distribution:
+            p(s_{t+1} s_t | o_t, a_t, s_{t-1}, a_{t-1}) = p(s_{t+1} | s_t, a_t, b_t) q(s_t | b_t, o_t)
+
+        - A posterior distribution of the form q(s_{t+1} | b_{t+1}, o_{t+1})
+            which amends to q(s_{t+1} | s_t, a_t, o_{t+1})
+
         """
         tensordict_out = []
         *batch, time_steps = tensordict.shape
         _tensordict = tensordict[..., 0]
 
-        out_keys = {*self.rssm_prior.out_keys, *self.rssm_posterior.out_keys}
-        update_values = tensordict.exclude(*out_keys)
-
+        update_values = tensordict.exclude(*self.out_keys)
         for t in range(time_steps):
-            _tensordict = _tensordict.update(update_values[..., t])
+            _tensordict = _tensordict.update(update_values[..., t], inplace=False)
+            # samples according to p(s_{t+1} | s_t, a_t, b_t)
             # ["posterior_state", "belief", "action"] -> ["next_prior_mean", "next_prior_std", "next_prior_state", "next_belief"]
             self.rssm_prior(_tensordict)
+
+            # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
             # ["next_belief", "next_encoded_latents"] -> ["next_posterior_mean", "next_posterior_std", "next_posterior_state"]
             self.rssm_posterior(_tensordict)
+
             tensordict_out.append(_tensordict)
-            _tensordict = step_tensordict(
-                _tensordict, exclude_action=False, keep_other=False
-            )
+            _tensordict = step_tensordict(_tensordict)
 
         return torch.stack(tensordict_out, tensordict.ndimension() - 1).contiguous()
 
