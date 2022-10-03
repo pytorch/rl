@@ -1321,25 +1321,27 @@ def make_dreamer(
     else:
         mb_env_obs_decoder = None
 
+    transition_model = TensorDictSequential(
+        TensorDictModule(
+            rssm_prior,
+            in_keys=["prior_state", "belief", "action"],
+            out_keys=[
+                "next_prior_mean",
+                "next_prior_std",
+                "next_prior_state",
+                "next_belief",
+            ],
+        ),
+    )
+    reward_model = TensorDictModule(
+        reward_module,
+        in_keys=["next_prior_state", "next_belief"],
+        out_keys=["reward"],
+    )
     model_based_env = DreamerEnv(
         world_model=WorldModelWrapper(
-            TensorDictSequential(
-                TensorDictModule(
-                    rssm_prior,
-                    in_keys=["prior_state", "belief", "action"],
-                    out_keys=[
-                        "next_prior_mean",
-                        "next_prior_std",
-                        "next_prior_state",
-                        "next_belief",
-                    ],
-                ),
-            ),
-            TensorDictModule(
-                reward_module,
-                in_keys=["next_prior_state", "next_belief"],
-                out_keys=["reward"],
-            ),
+            transition_model,
+            reward_model,
         ),
         prior_shape=torch.Size([cfg.state_dim]),
         belief_shape=torch.Size([cfg.rssm_hidden_dim]),
