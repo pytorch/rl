@@ -127,10 +127,12 @@ class DreamerActorLoss(LossModule):
         actor_model (TensorDictModule): the actor model.
         value_model (TensorDictModule): the value model.
         model_based_env (DreamerEnv): the model based environment.
-        imagination_horizon (int, optional): The number of steps to unroll the model. default: 15.
+        imagination_horizon (int, optional): The number of steps to unroll the
+            model. default: 15.
         gamma (float, optional): the gamma discount factor. default: 0.99.
         lmbda (float, optional): the lambda discount factor factor. default: 0.95
-        discount_loss (bool, optional): if True, the loss is discounted with a gamma discount factor. default: True.
+        discount_loss (bool, optional): if True, the loss is discounted with a
+            gamma discount factor. default: False.
     """
 
     def __init__(
@@ -141,7 +143,7 @@ class DreamerActorLoss(LossModule):
         imagination_horizon: int = 15,
         gamma: int = 0.99,
         lmbda: int = 0.95,
-        discount_loss: bool = True,
+        discount_loss: bool = False,  # for consistency with paper
     ):
         super().__init__()
         self.actor_model = actor_model
@@ -183,9 +185,9 @@ class DreamerActorLoss(LossModule):
             )
             discount[:, 0] = 1
             discount = discount.cumprod(dim=1).detach()
-            actor_loss = -(lambda_target * discount).mean()
+            actor_loss = -(lambda_target * discount).sum((-2, -1)).mean()
         else:
-            actor_loss = -lambda_target.mean()
+            actor_loss = -lambda_target.sum((-2, -1)).mean()
         loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
         return loss_tensordict, tensordict.detach()
 
@@ -207,7 +209,8 @@ class DreamerValueLoss(LossModule):
         value_model (TensorDictModule): the value model.
         value_loss (str, optional): the loss to use for the value loss. default: "l2".
         gamma (float, optional): the gamma discount factor. default: 0.99
-        discount_loss (bool, optional): if True, the loss is discounted with a gamma discount factor. default: True
+        discount_loss (bool, optional): if True, the loss is discounted with a
+            gamma discount factor. default: False
     """
 
     def __init__(
@@ -215,7 +218,7 @@ class DreamerValueLoss(LossModule):
         value_model: TensorDictModule,
         value_loss: Optional[str] = None,
         gamma: int = 0.99,
-        discount_loss: bool = True,
+        discount_loss: bool = False,  # for consistency with paper
     ):
         super().__init__()
         self.value_model = value_model
@@ -242,7 +245,7 @@ class DreamerValueLoss(LossModule):
                         self.value_loss,
                     )
                 )
-                # .sum((-1, -2))
+                .sum((-1, -2))
                 .mean()
             )
         else:
@@ -252,7 +255,7 @@ class DreamerValueLoss(LossModule):
                     lambda_target,
                     self.value_loss,
                 )
-                # .sum((-1, -2))
+                .sum((-1, -2))
                 .mean()
             )
 

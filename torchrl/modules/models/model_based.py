@@ -198,7 +198,7 @@ class RSSMRollout(nn.Module):
             self.rssm_posterior(_tensordict)
 
             tensordict_out.append(_tensordict)
-            _tensordict = step_tensordict(_tensordict)
+            _tensordict = step_tensordict(_tensordict, keep_other=False)
 
         return torch.stack(tensordict_out, tensordict.ndimension() - 1).contiguous()
 
