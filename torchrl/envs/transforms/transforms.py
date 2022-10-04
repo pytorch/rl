@@ -39,7 +39,7 @@ from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import FiniteTensor
-from torchrl.envs.utils import step_tensordict
+from torchrl.envs.utils import step_mdp
 
 __all__ = [
     "Transform",
@@ -329,6 +329,16 @@ class TransformedEnv(EnvBase):
     @batch_locked.setter
     def batch_locked(self, value):
         raise RuntimeError("batch_locked is a read-only property")
+
+    @property
+    def run_type_checks(self) -> bool:
+        return self.base_env.run_type_checks
+
+    @run_type_checks.setter
+    def run_type_checks(self, value):
+        raise RuntimeError(
+            "run_type_checks is a read-only property for TransformedEnvs"
+        )
 
     @property
     def _inplace_update(self):
@@ -1822,7 +1832,7 @@ class NoopResetEnv(Transform):
 
         while i < noops:
             i += 1
-            tensordict = parent.rand_step(step_tensordict(tensordict))
+            tensordict = parent.rand_step(step_mdp(tensordict))
             if parent.is_done:
                 parent.reset()
                 i = 0
@@ -1833,7 +1843,7 @@ class NoopResetEnv(Transform):
                     break
         if parent.is_done:
             raise RuntimeError("NoopResetEnv concluded with done environment")
-        td = step_tensordict(
+        td = step_mdp(
             tensordict, exclude_done=False, exclude_reward=True, exclude_action=True
         )
 

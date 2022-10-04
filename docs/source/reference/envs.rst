@@ -19,7 +19,7 @@ Helpers
     :toctree: generated/
     :template: rl_template_fun.rst
 
-    step_tensordict
+    step_mdp
     get_available_libraries
     set_exploration_mode
     exploration_mode
