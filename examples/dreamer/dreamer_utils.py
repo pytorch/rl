@@ -99,7 +99,7 @@ def make_env_transforms(
             env.append_transform(Resize(cfg.image_size, cfg.image_size))
             if cfg.grayscale:
                 env.append_transform(GrayScale())
-            env.append_transform(FlattenObservation(first_dim=batch_dims))
+            env.append_transform(FlattenObservation(first_dim=0))
             env.append_transform(CatFrames(N=cfg.catframes, keys_in=["next_pixels"]))
             if pixel_stats is None:
                 pixel_stats = {"loc": 0.0, "scale": 1.0}
@@ -129,7 +129,7 @@ def make_env_transforms(
         selected_keys = [
             key
             for key in env.observation_spec.keys()
-            if ("pixels" not in key)
+            if (("pixels" not in key) and ("r3m_vec" not in key))
             and (key.replace("next_", "") not in env.input_spec.keys())
         ]
 

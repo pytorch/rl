@@ -1188,6 +1188,7 @@ def make_dreamer(
         state_obs_hidden_dim=cfg.state_obs_hidden_dim,
         use_pixels=cfg.from_pixels,
         use_states=use_states,
+        use_r3m=cfg.use_r3m,
     )
     obs_decoder = ObsDecoder(
         depth=cfg.conv_depth,
@@ -1196,6 +1197,7 @@ def make_dreamer(
         r3m_spec=proof_environment.observation_spec["next_r3m_vec"] if cfg.use_r3m else None,
         use_pixels=cfg.from_pixels,
         use_states=use_states,
+        use_r3m=cfg.use_r3m,
     )
 
     rssm_prior = RSSMPrior(
