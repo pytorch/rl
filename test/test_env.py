@@ -1133,6 +1133,24 @@ def test_info_dict_reader(seed=0):
     assert "x_position" in env.observation_spec.keys()
     assert isinstance(env.observation_spec["x_position"], UnboundedContinuousTensorSpec)
 
+    tensordict = env.reset()
+    tensordict = env.rand_step(tensordict)
+
+    assert env.observation_spec["x_position"].is_in(tensordict["x_position"])
+
+    env2 = GymWrapper(gym.make("HalfCheetah-v4"))
+    env2.set_info_dict_reader(
+        default_info_dict_reader(
+            ["x_position"], spec={"x_position": OneHotDiscreteTensorSpec(5)}
+        )
+    )
+
+    tensordict2 = env2.reset()
+    tensordict2 = env2.rand_step(tensordict2)
+
+    assert not env.observation_spec["x_position"].is_in(tensordict["x_position"])
+
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
