@@ -1151,7 +1151,6 @@ def test_info_dict_reader(seed=0):
     assert not env.observation_spec["x_position"].is_in(tensordict["x_position"])
 
 
-
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
