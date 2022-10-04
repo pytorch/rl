@@ -1245,7 +1245,7 @@ def make_dreamer(
     # actor for simulator: interacts with states ~ prior
     actor_module = DreamerActor(
         out_features=proof_environment.action_spec.shape[0],
-        depth=4,
+        depth=3,
         num_cells=cfg.mlp_num_units,
         activation_class=nn.ELU,
         rnn_hidden_dim=cfg.rssm_hidden_dim,
