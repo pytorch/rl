@@ -39,7 +39,7 @@ from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import FiniteTensor
-from torchrl.envs.utils import step_tensordict
+from torchrl.envs.utils import step_mdp
 
 __all__ = [
     "Transform",
@@ -1822,7 +1822,7 @@ class NoopResetEnv(Transform):
 
         while i < noops:
             i += 1
-            tensordict = parent.rand_step(step_tensordict(tensordict))
+            tensordict = parent.rand_step(step_mdp(tensordict))
             if parent.is_done:
                 parent.reset()
                 i = 0
@@ -1833,7 +1833,7 @@ class NoopResetEnv(Transform):
                     break
         if parent.is_done:
             raise RuntimeError("NoopResetEnv concluded with done environment")
-        td = step_tensordict(
+        td = step_mdp(
             tensordict, exclude_done=False, exclude_reward=True, exclude_action=True
         )
 
