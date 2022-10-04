@@ -1179,7 +1179,10 @@ def make_dreamer(
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
         proof_environment = transformed_env_constructor(
-            cfg=cfg, use_env_creator=False, pixel_stats=pixel_stats, state_stats= state_stats
+            cfg=cfg,
+            use_env_creator=False,
+            pixel_stats=pixel_stats,
+            state_stats=state_stats,
         )()
 
     # Modules
@@ -1194,8 +1197,12 @@ def make_dreamer(
     obs_decoder = ObsDecoder(
         depth=cfg.conv_depth,
         state_obs_hidden_dim=cfg.state_obs_hidden_dim,
-        state_spec=proof_environment.observation_spec["next_observation_vector"] if use_states else None,
-        r3m_spec=proof_environment.observation_spec["next_r3m_vec"] if cfg.use_r3m else None,
+        state_spec=proof_environment.observation_spec["next_observation_vector"]
+        if use_states
+        else None,
+        r3m_spec=proof_environment.observation_spec["next_r3m_vec"]
+        if cfg.use_r3m
+        else None,
         use_pixels=cfg.from_pixels,
         use_states=use_states,
         use_r3m=cfg.use_r3m,

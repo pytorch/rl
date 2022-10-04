@@ -25,7 +25,7 @@ from torchrl.envs.transforms import (
     TransformedEnv,
     CenterCrop,
     R3MTransform,
-    VecNorm
+    VecNorm,
 )
 from torchrl.envs.transforms.transforms import (
     FlattenObservation,
@@ -85,7 +85,11 @@ def make_env_transforms(
 
     if from_pixels:
         if cfg.use_r3m:
-            env.append_transform(R3MTransform("resnet50", keys_in=["next_pixels"], keys_out=["next_r3m_vec"]))
+            env.append_transform(
+                R3MTransform(
+                    "resnet50", keys_in=["next_pixels"], keys_out=["next_r3m_vec"]
+                )
+            )
         else:
             if not cfg.catframes:
                 raise RuntimeError(
@@ -105,7 +109,9 @@ def make_env_transforms(
             else:
                 pixel_stats = pixel_stats
             pixel_stats["standard_normal"] = True
-            env.append_transform(ObservationNorm(**pixel_stats, keys_in=["next_pixels"]))
+            env.append_transform(
+                ObservationNorm(**pixel_stats, keys_in=["next_pixels"])
+            )
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0
@@ -123,7 +129,7 @@ def make_env_transforms(
             "action",
         ]
         float_to_double_list += ["action"]  # DMControl requires double-precision
-    
+
     if not from_pixels or not cfg.pixels_only:
         selected_keys = [
             key
@@ -204,7 +210,8 @@ def transformed_env_constructor(
         cfg (DictConfig): a DictConfig containing the arguments of the script.
         video_tag (str, optional): video tag to be passed to the Logger object
         logger (Logger, optional): logger associated with the script
-        stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
+        pixel_stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform for pixel based observations.
+        state_stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform for state based observations.
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.
         use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,

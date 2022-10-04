@@ -173,11 +173,11 @@ class ObsDecoder(nn.Module):
         self.use_pixels = use_pixels
         self.use_states = use_states
         self.use_r3m = use_r3m
-        
+
         self.state_to_latent = nn.Sequential(
-                nn.LazyLinear(depth * 8 * 2 * 2),
-                nn.ReLU(),
-            )
+            nn.LazyLinear(depth * 8 * 2 * 2),
+            nn.ReLU(),
+        )
         if use_pixels and use_r3m:
             self.r3m_decoder = nn.Sequential(
                 nn.LazyLinear(state_obs_hidden_dim),

@@ -95,11 +95,15 @@ class DreamerModelLoss(LossModule):
                     .sum((-1))
                     .mean()
                 )
-        reward_loss = distance_loss(
-            tensordict.get("true_reward"),
-            tensordict.get("reward"),
-            self.reward_loss,
-        ).sum((-2, -1)).mean()
+        reward_loss = (
+            distance_loss(
+                tensordict.get("true_reward"),
+                tensordict.get("reward"),
+                self.reward_loss,
+            )
+            .sum((-2, -1))
+            .mean()
+        )
         return (
             TensorDict(
                 {
