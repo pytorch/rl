@@ -7,4 +7,4 @@
 from .models import *
 from .exploration import *
 from .utils import *
-from .model_based_models import *
+from .model_based import *

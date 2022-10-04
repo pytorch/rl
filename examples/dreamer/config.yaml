@@ -33,5 +33,6 @@ init_random_frames: 5000
 logger: csv
 offline_logging: False
 normalize_rewards_online: False
-normalize_rewards_online_scale: 1.0
+normalize_rewards_online_scale: 5.0
+normalize_rewards_online_decay: 0.9999
 reward_scaling: 1.0

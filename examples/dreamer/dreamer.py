@@ -245,7 +245,8 @@ def main(cfg: "DictConfig"):
         device=device,
         use_decoder_in_env=True,
         action_key="action",
-        value_key="predicted_value",
+        value_key="state_value",
+        proof_environment=transformed_env_constructor(cfg)(),
     )
 
     # reward normalization
@@ -260,19 +261,14 @@ def main(cfg: "DictConfig"):
         reward_normalizer = None
 
     # Losses
-    world_model_loss = DreamerModelLoss(world_model).to(device)
+    world_model_loss = DreamerModelLoss(world_model)
     actor_loss = DreamerActorLoss(
         actor_model,
         value_model,
         model_based_env,
         imagination_horizon=cfg.imagination_horizon,
-    ).to(device)
-    value_loss = DreamerValueLoss(value_model).to(device)
-
-    # optimizers
-    world_model_opt = torch.optim.Adam(world_model.parameters(), lr=cfg.world_model_lr)
-    actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
-    value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
+    )
+    value_loss = DreamerValueLoss(value_model)
 
     action_spec = transformed_env_constructor(cfg)().action_spec
     # Actor and value network
@@ -336,6 +332,11 @@ def main(cfg: "DictConfig"):
     path = Path("./log")
     path.mkdir(exist_ok=True)
 
+    # optimizers
+    world_model_opt = torch.optim.Adam(world_model.parameters(), lr=cfg.world_model_lr)
+    actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
+    value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
+
     scaler1 = GradScaler()
     scaler2 = GradScaler()
     scaler3 = GradScaler()
@@ -373,7 +374,6 @@ def main(cfg: "DictConfig"):
                     sampled_tensordict = reward_normalizer.normalize_reward(
                         sampled_tensordict
                     )
-                sampled_tensordict_save = None
 
                 with autocast(dtype=torch.float16):
                     model_loss_td, sampled_tensordict = world_model_loss(
