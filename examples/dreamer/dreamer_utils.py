@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from copy import deepcopy
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import Callable, Optional, Union, Any, Sequence
@@ -173,24 +172,11 @@ def make_env_transforms(
         )
 
     default_dict = {
-        # "prior_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
-        "posterior_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
-        "belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
-        "action": deepcopy(env.action_spec),
+        "next_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
+        "next_belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
     }
     env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
-    )
-    env.append_transform(
-        CatTensors(keys_in=["belief"], out_key="prev_belief", del_keys=False)
-    )
-    env.append_transform(
-        CatTensors(keys_in=["action"], out_key="prev_action", del_keys=False)
-    )
-    env.append_transform(
-        CatTensors(
-            keys_in=["posterior_state"], out_key="prev_posterior_state", del_keys=False
-        )
     )
 
     return env

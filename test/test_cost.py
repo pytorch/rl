@@ -34,7 +34,7 @@ from torchrl.modules import (
     ProbabilisticTensorDictModule,
 )
 from torchrl.modules.distributions.continuous import TanhNormal, NormalParamWrapper
-from torchrl.modules.models.model_based_models import (
+from torchrl.modules.models.model_based import (
     ObsDecoder,
     ObsEncoder,
     RSSMPosterior,
