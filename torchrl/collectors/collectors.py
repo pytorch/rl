@@ -19,7 +19,7 @@ from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
 from torchrl.envs.utils import set_exploration_mode, step_tensordict
-from .. import _check_for_faulty_process, prod
+from .._utils import _check_for_faulty_process, prod
 from ..modules.tensordict_module import ProbabilisticTensorDictModule
 from .utils import split_trajectories
 

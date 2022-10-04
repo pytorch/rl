@@ -157,7 +157,7 @@ def _main():
         version=version,
         author="torchrl contributors",
         author_email="vmoens@fb.com",
-        url="https://github.com/facebookresearch/rl",
+        url="https://github.com/pytorch/rl",
         long_description=long_description,
         long_description_content_type="text/markdown",
         license="BSD",
