@@ -50,7 +50,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     +     tensordict = policy(tensordict)
     +     tensordict = env.step(tensordict)
     +     out.append(tensordict)
-    +     tensordict = step_tensordict(tensordict)  # renames next_observation_* keys to observation_*
+    +     tensordict = step_mdp(tensordict)  # renames next_observation_* keys to observation_*
     - obs, next_obs, action, log_prob, reward, done = [torch.stack(vals, 0) for vals in zip(*out)]
     + out = torch.stack(out, 0)  # TensorDict supports multiple tensor operations
     ```
