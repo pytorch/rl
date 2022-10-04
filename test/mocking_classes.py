@@ -6,7 +6,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-from torchrl import seed_generator
+from torchrl._utils import seed_generator
 from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
     NdBoundedTensorSpec,

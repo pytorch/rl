@@ -18,7 +18,7 @@ from mocking_classes import (
     MockSerialEnv,
 )
 from torch import nn
-from torchrl import seed_generator
+from torchrl._utils import seed_generator
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.collectors.collectors import (
     RandomPolicy,

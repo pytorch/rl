@@ -7,3 +7,4 @@ from .distributions import *
 from .models import *
 from .tensordict_module import *
 from .planners import *
+from .functional_modules import *

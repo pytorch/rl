@@ -18,8 +18,8 @@ import torch
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
-from torchrl.envs.utils import set_exploration_mode, step_tensordict
-from .. import _check_for_faulty_process, prod
+from torchrl.envs.utils import set_exploration_mode, step_mdp
+from .._utils import _check_for_faulty_process, prod
 from ..modules.tensordict_module import ProbabilisticTensorDictModule
 from .utils import split_trajectories
 
@@ -502,7 +502,7 @@ class SyncDataCollector(_DataCollector):
 
                 self._reset_if_necessary()
                 self._tensordict.update(
-                    step_tensordict(
+                    step_mdp(
                         self._tensordict.exclude("reward", "done"), keep_other=True
                     ),
                     inplace=True,

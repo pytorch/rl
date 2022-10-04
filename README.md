@@ -1,4 +1,4 @@
-[![facebookresearch](https://circleci.com/gh/facebookresearch/rl.svg?style=shield)](https://circleci.com/gh/facebookresearch/rl)
+[![pytorch](https://circleci.com/gh/pytorch/rl.svg?style=shield)](https://circleci.com/gh/pytorch/rl)
 
 # TorchRL
 
@@ -50,7 +50,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     +     tensordict = policy(tensordict)
     +     tensordict = env.step(tensordict)
     +     out.append(tensordict)
-    +     tensordict = step_tensordict(tensordict)  # renames next_observation_* keys to observation_*
+    +     tensordict = step_mdp(tensordict)  # renames next_observation_* keys to observation_*
     - obs, next_obs, action, log_prob, reward, done = [torch.stack(vals, 0) for vals in zip(*out)]
     + out = torch.stack(out, 0)  # TensorDict supports multiple tensor operations
     ```
@@ -301,9 +301,9 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     ```
     </details>
 
-- A series of efficient [loss modules](https://github.com/facebookresearch/rl/blob/main/torchrl/objectives/costs)
+- A series of efficient [loss modules](https://github.com/pytorch/rl/blob/main/torchrl/objectives/costs)
     and highly vectorized
-    [functional return and advantage](https://github.com/facebookresearch/rl/blob/main/torchrl/objectives/returns/functional.py)
+    [functional return and advantage](https://github.com/pytorch/rl/blob/main/torchrl/objectives/returns/functional.py)
     computation.
 
     <details>
@@ -327,6 +327,9 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
 
 - various [recipes](torchrl/trainers/helpers/models.py) to build models that
     correspond to the environment being deployed.
+
+If you feel a feature is missing from the library, please submit an issue!
+If you would like to contribute to new features, check our [call for contributions](https://github.com/pytorch/rl/issues/509) and our [contribution](CONTRIBUTING.md) page.
 
 ## Examples, tutorials and demos
 
@@ -399,7 +402,7 @@ it in develop mode as this will make it possible to pull the latest changes and
 benefit from them immediately.
 Start by cloning the repo:
 ```
-git clone https://github.com/facebookresearch/rl
+git clone https://github.com/pytorch/rl
 ```
 
 Go to the directory where you have cloned the torchrl repo and install it
@@ -498,6 +501,7 @@ Each example will write a tensorboard log in a dedicated folder, e.g. `ppo_loggi
 
 Internal collaborations to torchrl are welcome! Feel free to fork, submit issues and PRs.
 You can checkout the detailed contribution guide [here](CONTRIBUTING.md).
+As mentioned above, a list of open contributions can be found in [here](https://github.com/pytorch/rl/issues/509).
 
 Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is commited locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
 
