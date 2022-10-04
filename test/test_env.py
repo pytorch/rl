@@ -41,7 +41,7 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     RewardClipping,
 )
-from torchrl.envs.utils import step_tensordict
+from torchrl.envs.utils import step_mdp
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.modules import (
     ActorCriticOperator,
@@ -1037,7 +1037,7 @@ def test_steptensordict(
         [4],
     )
     next_tensordict = TensorDict({}, [4]) if has_out else None
-    out = step_tensordict(
+    out = step_mdp(
         tensordict,
         keep_other=keep_other,
         exclude_reward=exclude_reward,

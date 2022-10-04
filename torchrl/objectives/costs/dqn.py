@@ -6,7 +6,7 @@
 import torch
 
 from torchrl.data import TensorDict
-from torchrl.envs.utils import step_tensordict
+from torchrl.envs.utils import step_mdp
 from torchrl.modules import (
     DistributionalQValueActor,
     QValueActor,
@@ -209,7 +209,7 @@ class DistributionalDQNLoss(LossModule):
 
         with torch.no_grad():
             # Calculate nth next state probabilities
-            next_td = step_tensordict(tensordict)
+            next_td = step_mdp(tensordict)
             self.value_network(
                 next_td,
                 params=self.value_network_params,

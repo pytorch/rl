@@ -12,7 +12,7 @@ import torch
 from torch import Tensor
 
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
-from torchrl.envs.utils import set_exploration_mode, step_tensordict
+from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import (
@@ -176,7 +176,7 @@ class REDQLoss(LossModule):
         tensordict_actor_grad = tensordict_select.select(
             *obs_keys
         )  # to avoid overwriting keys
-        next_td_actor = step_tensordict(tensordict_select).select(
+        next_td_actor = step_mdp(tensordict_select).select(
             *self.actor_network.in_keys
         )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
