@@ -186,6 +186,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         - device (torch.device): device where the env input and output are expected to live
         - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the
             last reset
+        - run_type_checks (bool): if True, the observation and reward dtypes
+            will be compared against their respective spec and an exception
+            will be raised if they don't match.
 
     Methods:
         step (TensorDictBase -> TensorDictBase): step in the environment
@@ -225,7 +228,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             "batch_size" not in self.__class__.__dict__
         ):
             self.batch_size = torch.Size([])
-        self.run_type_checks = run_type_checks
+        self._run_type_checks = run_type_checks
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
@@ -249,6 +252,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @batch_locked.setter
     def batch_locked(self, value: bool) -> None:
         raise RuntimeError("batch_locked is a read-only property")
+
+    @property
+    def run_type_checks(self) -> bool:
+        return self._run_type_checks
+
+    @run_type_checks.setter
+    def run_type_checks(self, run_type_checks: bool) -> None:
+        self._run_type_checks = run_type_checks
 
     @property
     def action_spec(self) -> TensorSpec:
