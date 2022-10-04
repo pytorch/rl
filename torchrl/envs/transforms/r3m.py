@@ -149,7 +149,7 @@ class R3MTransform(Compose):
     can ensure that the following code snippet works as expected:
 
     Examples:
-        >>> transform = R3MTransform("resenet50", keys_in=["next_pixels"])
+        >>> transform = R3MTransform("resnet50", keys_in=["next_pixels"])
         >>> env.append_transform(transform)
         >>> # the forward method will first call _init which will look at env.observation_spec
         >>> env.reset()

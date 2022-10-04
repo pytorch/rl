@@ -71,29 +71,78 @@ class ObsEncoder(nn.Module):
         depth (int, optional): Number of hidden units in the first layer.
     """
 
-    def __init__(self, depth=32):
+    def __init__(
+        self,
+        conv_depth=32,
+        state_obs_hidden_dim=32,
+        use_pixels=True,
+        use_r3m=False,
+        use_states=False,
+    ):
         super().__init__()
-        self.encoder = nn.Sequential(
-            nn.LazyConv2d(depth, 4, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(depth, depth * 2, 4, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(depth * 2, depth * 4, 4, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(depth * 4, depth * 8, 4, stride=2),
-            nn.ReLU(),
-        )
+        self.use_pixels = use_pixels
+        self.use_states = use_states
+        self.use_r3m = use_r3m
+        if self.use_pixels and self.use_r3m:
+            self.pixel_encoder = nn.Sequential(
+                nn.LazyLinear(state_obs_hidden_dim),
+                nn.ReLU(),
+                nn.Linear(state_obs_hidden_dim, state_obs_hidden_dim),
+                nn.ReLU(),
+            )
 
-    def forward(self, observation):
-        *batch_sizes, C, H, W = observation.shape
-        if len(batch_sizes) == 0:
-            end_dim = 0
+        elif self.use_pixels:
+            self.pixel_encoder = nn.Sequential(
+                nn.LazyConv2d(conv_depth, 4, stride=2),
+                nn.ReLU(),
+                nn.Conv2d(conv_depth, conv_depth * 2, 4, stride=2),
+                nn.ReLU(),
+                nn.Conv2d(conv_depth * 2, conv_depth * 4, 4, stride=2),
+                nn.ReLU(),
+                nn.Conv2d(conv_depth * 4, conv_depth * 8, 4, stride=2),
+                nn.ReLU(),
+            )
+        if self.use_states:
+            self.states_encoder = nn.Sequential(
+                nn.LazyLinear(state_obs_hidden_dim),
+                nn.ReLU(),
+                nn.Linear(state_obs_hidden_dim, state_obs_hidden_dim),
+                nn.ReLU(),
+            )
+        self.embedding_size = conv_depth * 8
+
+        self.adapter = nn.LazyLinear(self.embedding_size)
+
+    def forward(self, *observations):
+        if self.use_pixels and self.use_states:
+            pixel_obs, state_obs = observations
+        elif self.use_pixels:
+            pixel_obs = observations[0]
+        elif self.use_states:
+            state_obs = observations[0]
+        if self.use_pixels and self.use_r3m:
+            pixel_latent = self.pixel_encoder(pixel_obs)
+
+        elif self.use_pixels:
+            *batch_sizes, C, H, W = pixel_obs.shape
+            if len(batch_sizes) == 0:
+                end_dim = 0
+            else:
+                end_dim = len(batch_sizes) - 1
+            pixel_obs = torch.flatten(pixel_obs, start_dim=0, end_dim=end_dim)
+            obs_encoded = self.pixel_encoder(pixel_obs)
+            pixel_latent = obs_encoded.reshape(*batch_sizes, -1)
+        if self.use_states:
+            state_latent = self.states_encoder(state_obs)
+        if self.use_pixels and self.use_states:
+            latent = torch.cat([pixel_latent, state_latent], dim=-1)
+        elif self.use_pixels:
+            latent = pixel_latent
+        elif self.use_states:
+            latent = state_latent
         else:
-            end_dim = len(batch_sizes) - 1
-        observation = torch.flatten(observation, start_dim=0, end_dim=end_dim)
-        obs_encoded = self.encoder(observation)
-        latent = obs_encoded.reshape(*batch_sizes, -1)
-        return latent
+            raise ValueError("Must use either pixels or states")
+        return self.adapter(latent)
 
 
 class ObsDecoder(nn.Module):
@@ -107,31 +156,75 @@ class ObsDecoder(nn.Module):
         depth (int, optional): Number of hidden units in the last layer.
     """
 
-    def __init__(self, depth=32):
+    def __init__(
+        self,
+        depth=32,
+        state_obs_hidden_dim=32,
+        state_spec=None,
+        r3m_spec=None,
+        use_pixels=True,
+        use_r3m=False,
+        use_states=False,
+    ):
         super().__init__()
+        self.use_pixels = use_pixels
+        self.use_states = use_states
+        self.use_r3m = use_r3m
+        
         self.state_to_latent = nn.Sequential(
-            nn.LazyLinear(depth * 8 * 2 * 2),
-            nn.ReLU(),
-        )
-        self.decoder = nn.Sequential(
-            nn.LazyConvTranspose2d(depth * 4, 5, stride=2),
-            nn.ReLU(),
-            nn.ConvTranspose2d(depth * 4, depth * 2, 5, stride=2),
-            nn.ReLU(),
-            nn.ConvTranspose2d(depth * 2, depth, 6, stride=2),
-            nn.ReLU(),
-            nn.ConvTranspose2d(depth, 3, 6, stride=2),
-        )
-        self._depth = depth
+                nn.LazyLinear(depth * 8 * 2 * 2),
+                nn.ReLU(),
+            )
+        if use_pixels and use_r3m:
+            self.r3m_decoder = nn.Sequential(
+                nn.LazyLinear(state_obs_hidden_dim),
+                nn.ReLU(),
+                nn.Linear(state_obs_hidden_dim, state_obs_hidden_dim),
+                nn.ReLU(),
+                nn.Linear(state_obs_hidden_dim, r3m_spec.shape[0]),
+            )
+
+        elif use_pixels:
+            self.pixel_decoder = nn.Sequential(
+                nn.LazyConvTranspose2d(depth * 4, 5, stride=2),
+                nn.ReLU(),
+                nn.ConvTranspose2d(depth * 4, depth * 2, 5, stride=2),
+                nn.ReLU(),
+                nn.ConvTranspose2d(depth * 2, depth, 6, stride=2),
+                nn.ReLU(),
+                nn.ConvTranspose2d(depth, 3, 6, stride=2),
+            )
+        if use_states:
+            if state_spec is None:
+                raise ValueError("Must specify state_spec if using states")
+            self.states_decoder = nn.Sequential(
+                nn.LazyLinear(state_obs_hidden_dim),
+                nn.ReLU(),
+                nn.Linear(state_obs_hidden_dim, state_obs_hidden_dim),
+                nn.ReLU(),
+                nn.Linear(state_obs_hidden_dim, state_spec.shape[0]),
+            )
 
     def forward(self, state, rnn_hidden):
         latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
         *batch_sizes, D = latent.shape
-        latent = latent.view(-1, D, 1, 1)
-        obs_decoded = self.decoder(latent)
-        _, C, H, W = obs_decoded.shape
-        obs_decoded = obs_decoded.view(*batch_sizes, C, H, W)
-        return obs_decoded
+        if self.use_pixels and self.use_r3m:
+            obs_decoded = self.r3m_decoder(latent)
+        elif self.use_pixels:
+            pixel_latent = latent.view(-1, D, 1, 1)
+            obs_decoded = self.pixel_decoder(pixel_latent)
+            _, C, H, W = obs_decoded.shape
+            obs_decoded = obs_decoded.view(*batch_sizes, C, H, W)
+        if self.use_states:
+            state_decoded = self.states_decoder(latent)
+        if self.use_pixels and self.use_states:
+            return obs_decoded, state_decoded
+        elif self.use_pixels:
+            return obs_decoded
+        elif self.use_states:
+            return state_decoded
+        else:
+            raise ValueError("Must use either pixels or states")
 
 
 class RSSMRollout(nn.Module):

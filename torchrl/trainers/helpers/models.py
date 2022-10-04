@@ -1170,18 +1170,33 @@ def make_dreamer(
     action_key: str = "action",
     value_key: str = "predicted_value",
     use_decoder_in_env: bool = False,
-    stats: Optional[dict] = None,
+    pixel_stats: Optional[dict] = None,
+    state_stats: Optional[dict] = None,
+    obs_keys: list = ["pixels"],
 ) -> nn.ModuleList:
 
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
         proof_environment = transformed_env_constructor(
-            cfg=cfg, use_env_creator=False, stats=stats
+            cfg=cfg, use_env_creator=False, pixel_stats=pixel_stats, state_stats= state_stats
         )()
 
     # Modules
-    obs_encoder = ObsEncoder()
-    obs_decoder = ObsDecoder()
+    use_states = not cfg.pixels_only or not cfg.from_pixels
+    obs_encoder = ObsEncoder(
+        conv_depth=cfg.conv_depth,
+        state_obs_hidden_dim=cfg.state_obs_hidden_dim,
+        use_pixels=cfg.from_pixels,
+        use_states=use_states,
+    )
+    obs_decoder = ObsDecoder(
+        depth=cfg.conv_depth,
+        state_obs_hidden_dim=cfg.state_obs_hidden_dim,
+        state_spec=proof_environment.observation_spec["next_observation_vector"] if use_states else None,
+        r3m_spec=proof_environment.observation_spec["next_r3m_vec"] if cfg.use_r3m else None,
+        use_pixels=cfg.from_pixels,
+        use_states=use_states,
+    )
 
     rssm_prior = RSSMPrior(
         hidden_dim=cfg.rssm_hidden_dim,
@@ -1202,14 +1217,13 @@ def make_dreamer(
         depth=4,
         num_cells=cfg.mlp_num_units,
         activation_class=nn.ELU,
-        rnn_hidden_dim=cfg.rssm_hidden_dim,
     )
 
     # World Model and reward model
     world_modeler = TensorDictSequential(
         TensorDictModule(
             obs_encoder,
-            in_keys=["pixels"],
+            in_keys=obs_keys,
             out_keys=["encoded_latents"],
         ),
         # rssm_rollout = transition
@@ -1234,7 +1248,7 @@ def make_dreamer(
         TensorDictModule(
             obs_decoder,
             in_keys=["posterior_state", "belief"],
-            out_keys=["reco_pixels"],
+            out_keys=[f"reco_{obs_key}" for obs_key in obs_keys],
         ),
     )
     world_model = WorldModelWrapper(
@@ -1270,7 +1284,7 @@ def make_dreamer(
     policy = TensorDictSequential(
         TensorDictModule(
             obs_encoder,
-            in_keys=["pixels"],
+            in_keys=obs_keys,
             out_keys=["encoded_latents"],
         ),
         TensorDictModule(
@@ -1306,7 +1320,7 @@ def make_dreamer(
         mb_env_obs_decoder = TensorDictModule(
             obs_decoder,
             in_keys=["next_prior_state", "next_belief"],
-            out_keys=["reco_pixels"],
+            out_keys=[f"reco_{obs_key}" for obs_key in obs_keys],
         )
     else:
         mb_env_obs_decoder = None
@@ -1376,6 +1390,9 @@ class DreamerConfig:
     state_dim: int = 30
     rssm_hidden_dim: int = 200
     mlp_num_units: int = 400
+    conv_depth: int = 32
+    state_obs_hidden_dim: int = 32
+    use_r3m: bool = False
     grad_clip: int = 100
     world_model_lr: float = 6e-4
     actor_value_lr: float = 8e-5

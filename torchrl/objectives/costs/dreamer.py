@@ -48,6 +48,7 @@ class DreamerModelLoss(LossModule):
         reward_loss: Optional[str] = None,
         free_nats: int = 3,
         inversed_free_nats: bool = False,
+        observation_keys: list = ["pixels"],
     ):
         super().__init__()
         self.world_model = world_model
@@ -58,6 +59,7 @@ class DreamerModelLoss(LossModule):
         self.lambda_reward = lambda_reward
         self.free_nats = free_nats
         self.inversed_free_nats = inversed_free_nats
+        self.observation_keys = observation_keys
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
@@ -80,15 +82,28 @@ class DreamerModelLoss(LossModule):
             tensordict.get("posterior_means"),
             tensordict.get("posterior_stds"),
         )
-        reco_loss = (
-            distance_loss(
-                tensordict.get("pixels"),
-                tensordict.get("reco_pixels"),
-                self.reco_loss,
-            )
-            .sum((-1, -2, -3))
-            .mean()
-        )
+        reco_loss = 0
+        for key in self.observation_keys:
+            if key == "pixels":
+                reco_loss += (
+                    distance_loss(
+                        tensordict.get("pixels"),
+                        tensordict.get("reco_pixels"),
+                        self.reco_loss,
+                    )
+                    .sum((-1, -2, -3))
+                    .mean()
+                )
+            else:
+                reco_loss += (
+                    distance_loss(
+                        tensordict.get(key),
+                        tensordict.get("reco_" + key),
+                        self.reco_loss,
+                    )
+                    .sum((-1))
+                    .mean()
+                )
         reward_loss = distance_loss(
             tensordict.get("true_reward"),
             tensordict.get("reward"),

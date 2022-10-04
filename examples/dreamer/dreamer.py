@@ -88,12 +88,13 @@ def grad_norm(optimizer: torch.optim.Optimizer):
     return sum_of_sq.sqrt().detach().item()
 
 
-def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
+def make_recorder_env(cfg, video_tag, pixel_stats, state_stats, logger, create_env_fn):
     recorder = transformed_env_constructor(
         cfg,
         video_tag=video_tag,
         norm_obs_only=True,
-        stats=stats,
+        pixel_stats=pixel_stats,
+        state_stats=state_stats,
         logger=logger,
         use_env_creator=False,
     )()
@@ -229,23 +230,45 @@ def main(cfg: "DictConfig"):
 
     video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
-    stats = None
+    pixel_stats = None
+    state_stats = None
     if not cfg.vecnorm and cfg.norm_stats:
-        stats = get_stats_random_rollout(
-            cfg,
-            proof_environment=transformed_env_constructor(cfg)(),
-            key="next_pixels" if cfg.from_pixels else "next_observation_vector",
-        )
-        stats = {k: v.clone() for k, v in stats.items()}
-    elif cfg.from_pixels:
-        stats = {"loc": 0.5, "scale": 0.5}
+        if cfg.from_pixels:
+            pixel_stats = get_stats_random_rollout(
+                cfg,
+                proof_environment=transformed_env_constructor(cfg)(),
+                key="next_pixels" if not cfg.use_r3m else "r3m_vec",
+            )
+            pixel_stats = {k: v.clone() for k, v in pixel_stats.items()}
+        if not cfg.from_pixels or not cfg.pixels_only:
+            state_stats = get_stats_random_rollout(
+                cfg,
+                proof_environment=transformed_env_constructor(cfg)(),
+                key="next_observation_vector",
+            )
+            state_stats = {k: v.clone() for k, v in state_stats.items()}
+    else:
+        if cfg.from_pixels:
+            pixel_stats = {"loc": 0.5, "scale": 0.5}
+    obs_keys = []
+    if cfg.from_pixels:
+        if cfg.use_r3m:
+            obs_keys.append("r3m_vec")
+        else:
+            obs_keys.append("pixels")
+    if not cfg.pixels_only or not cfg.from_pixels:
+        obs_keys.append("observation_vector")
+
     world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
-        stats=stats,
+        proof_environment=transformed_env_constructor(cfg)(),
+        pixel_stats=pixel_stats,
+        state_stats=state_stats,
         cfg=cfg,
         device=device,
         use_decoder_in_env=True,
         action_key="action",
         value_key="predicted_value",
+        obs_keys=obs_keys,
     )
 
     # reward normalization
@@ -260,7 +283,9 @@ def main(cfg: "DictConfig"):
         reward_normalizer = None
 
     # Losses
-    world_model_loss = DreamerModelLoss(world_model).to(device)
+    world_model_loss = DreamerModelLoss(world_model, observation_keys=obs_keys).to(
+        device
+    )
     actor_loss = DreamerActorLoss(
         actor_model,
         value_model,
@@ -295,7 +320,8 @@ def main(cfg: "DictConfig"):
     action_dim_gsde, state_dim_gsde = None, None
     create_env_fn = parallel_env_constructor(
         cfg=cfg,
-        stats=stats,
+        pixel_stats=pixel_stats,
+        state_stats=state_stats,
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
@@ -320,7 +346,8 @@ def main(cfg: "DictConfig"):
         recorder=make_recorder_env(
             cfg,
             video_tag,
-            stats,
+            pixel_stats,
+            state_stats,
             logger,
             create_env_fn,
         ),
@@ -482,7 +509,7 @@ def main(cfg: "DictConfig"):
                 record,
                 collected_frames,
                 sampled_tensordict_save,
-                stats,
+                pixel_stats,
                 model_based_env,
                 actor_model,
                 cfg,

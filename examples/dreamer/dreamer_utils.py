@@ -25,6 +25,8 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
     CenterCrop,
+    R3MTransform,
+    VecNorm
 )
 from torchrl.envs.transforms.transforms import (
     FlattenObservation,
@@ -50,7 +52,8 @@ def make_env_transforms(
     video_tag,
     logger,
     env_name,
-    stats,
+    pixel_stats,
+    state_stats,
     norm_obs_only,
     env_library,
     action_dim_gsde,
@@ -62,6 +65,7 @@ def make_env_transforms(
     from_pixels = cfg.from_pixels
     vecnorm = cfg.vecnorm
     norm_rewards = vecnorm and cfg.norm_rewards
+    _norm_obs_only = norm_obs_only or not norm_rewards
     reward_scaling = cfg.reward_scaling
     reward_loc = cfg.reward_loc
 
@@ -81,25 +85,28 @@ def make_env_transforms(
         env.append_transform(NoopResetEnv(cfg.noops))
 
     if from_pixels:
-        if not cfg.catframes:
-            raise RuntimeError(
-                "this env builder currently only accepts positive catframes values"
-                "when pixels are being used."
-            )
-        env.append_transform(ToTensorImage())
-        if cfg.center_crop:
-            env.append_transform(CenterCrop(*cfg.center_crop))
-        env.append_transform(Resize(cfg.image_size, cfg.image_size))
-        if cfg.grayscale:
-            env.append_transform(GrayScale())
-        env.append_transform(FlattenObservation(first_dim=batch_dims))
-        env.append_transform(CatFrames(N=cfg.catframes, keys_in=["next_pixels"]))
-        if stats is None:
-            obs_stats = {"loc": 0.0, "scale": 1.0}
+        if cfg.use_r3m:
+            env.append_transform(R3MTransform("resnet50", keys_in=["next_pixels"], keys_out=["next_r3m_vec"]))
         else:
-            obs_stats = stats
-        obs_stats["standard_normal"] = True
-        env.append_transform(ObservationNorm(**obs_stats, keys_in=["next_pixels"]))
+            if not cfg.catframes:
+                raise RuntimeError(
+                    "this env builder currently only accepts positive catframes values"
+                    "when pixels are being used."
+                )
+            env.append_transform(ToTensorImage())
+            if cfg.center_crop:
+                env.append_transform(CenterCrop(*cfg.center_crop))
+            env.append_transform(Resize(cfg.image_size, cfg.image_size))
+            if cfg.grayscale:
+                env.append_transform(GrayScale())
+            env.append_transform(FlattenObservation(first_dim=batch_dims))
+            env.append_transform(CatFrames(N=cfg.catframes, keys_in=["next_pixels"]))
+            if pixel_stats is None:
+                pixel_stats = {"loc": 0.0, "scale": 1.0}
+            else:
+                pixel_stats = pixel_stats
+            pixel_stats["standard_normal"] = True
+            env.append_transform(ObservationNorm(**pixel_stats, keys_in=["next_pixels"]))
     if norm_rewards:
         reward_scaling = 1.0
         reward_loc = 0.0
@@ -117,9 +124,53 @@ def make_env_transforms(
             "action",
         ]
         float_to_double_list += ["action"]  # DMControl requires double-precision
-    env.append_transform(
-        DoubleToFloat(keys_in=double_to_float_list, keys_inv_in=float_to_double_list)
-    )
+    
+    if not from_pixels or not cfg.pixels_only:
+        selected_keys = [
+            key
+            for key in env.observation_spec.keys()
+            if ("pixels" not in key)
+            and (key.replace("next_", "") not in env.input_spec.keys())
+        ]
+
+        # even if there is a single tensor, it'll be renamed in "next_observation_vector"
+        out_key = "next_observation_vector"
+        env.append_transform(CatTensors(keys_in=selected_keys, out_key=out_key))
+
+        if not vecnorm:
+            if state_stats is None:
+                _state_stats = {"loc": 0.0, "scale": 1.0}
+            else:
+                _state_stats = state_stats
+            env.append_transform(
+                ObservationNorm(**_state_stats, keys_in=[out_key], standard_normal=True)
+            )
+        else:
+            env.append_transform(
+                VecNorm(
+                    keys_in=[out_key, "reward"] if not _norm_obs_only else [out_key],
+                    decay=0.9999,
+                )
+            )
+
+        double_to_float_list.append(out_key)
+        env.append_transform(
+            DoubleToFloat(
+                keys_in=double_to_float_list, keys_inv_in=float_to_double_list
+            )
+        )
+
+        if hasattr(cfg, "catframes") and cfg.catframes:
+            env.append_transform(
+                CatFrames(N=cfg.catframes, keys_in=[out_key], cat_dim=-1)
+            )
+
+    else:
+        env.append_transform(
+            DoubleToFloat(
+                keys_in=double_to_float_list, keys_inv_in=float_to_double_list
+            )
+        )
 
     default_dict = {
         # "prior_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
@@ -149,7 +200,8 @@ def transformed_env_constructor(
     cfg: "DictConfig",  # noqa: F821
     video_tag: str = "",
     logger: Optional[Logger] = None,
-    stats: Optional[dict] = None,
+    pixel_stats: Optional[dict] = None,
+    state_stats: Optional[dict] = None,
     norm_obs_only: bool = False,
     use_env_creator: bool = False,
     custom_env_maker: Optional[Callable] = None,
@@ -196,6 +248,7 @@ def transformed_env_constructor(
         env_library = LIBS[cfg.env_library]
         frame_skip = cfg.frame_skip
         from_pixels = cfg.from_pixels
+        pixels_only = cfg.pixels_only
 
         if custom_env is None and custom_env_maker is None:
             if isinstance(cfg.collector_devices, str):
@@ -211,7 +264,7 @@ def transformed_env_constructor(
                 "device": device,
                 "frame_skip": frame_skip,
                 "from_pixels": from_pixels or len(video_tag),
-                "pixels_only": from_pixels,
+                "pixels_only": from_pixels and pixels_only,
             }
             if env_library is DMControlEnv:
                 env_kwargs.update({"task_name": env_task})
@@ -233,7 +286,8 @@ def transformed_env_constructor(
             video_tag,
             logger,
             env_name,
-            stats,
+            pixel_stats,
+            state_stats,
             norm_obs_only,
             env_library,
             action_dim_gsde,
@@ -293,6 +347,7 @@ class EnvConfig:
     env_task: str = ""
     # task (if any) for the environment. Default=run
     from_pixels: bool = False
+    pixels_only: bool = True
     # whether the environment output should be state vector(s) (default) or the pixels.
     frame_skip: int = 1
     # frame_skip for the environment. Note that this value does NOT impact the buffer size,
