@@ -129,7 +129,7 @@ def make_env_transforms(
         env.append_transform(Resize(cfg.image_size, cfg.image_size))
         if cfg.grayscale:
             env.append_transform(GrayScale())
-        env.append_transform(FlattenObservation(first_dim=batch_dims))
+        env.append_transform(FlattenObservation())
         env.append_transform(CatFrames(N=cfg.catframes, keys_in=["next_pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}

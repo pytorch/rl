@@ -1020,10 +1020,24 @@ class FlattenObservation(ObservationTransform):
         observation = torch.flatten(observation, self.first_dim, self.last_dim)
         return observation
 
+    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
+        out = super().set_parent(parent)
+        observation_spec = self.parent.observation_spec
+        for key in self.keys_in:
+            if key in observation_spec:
+                observation_spec = observation_spec[key]
+                if self.first_dim >= 0:
+                    self.first_dim = self.first_dim - len(observation_spec.shape)
+                if self.last_dim >= 0:
+                    self.last_dim = self.last_dim - len(observation_spec.shape)
+                break
+        return out
+
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
+
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
             space.maximum = self._apply_transform(space.maximum)
