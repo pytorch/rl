@@ -34,8 +34,9 @@ class DreamerModelLoss(LossModule):
         reco_loss (str, optional): the reconstruction loss. default to l2.
         reward_loss (str, optional): the reward loss. default to l2.
         free_nats (int, optional): the free nats.
-        inversed_free_nats (bool, optional): if True, the free nats are inversed. First we average the kl divergence and then we clamp it to the free nats.
-            If False, we clamp the kl divergence to the free nats and then we average it. default: False.
+        delayed_clamp (bool, optional): if True, the KL clamping occurs after
+            averaging. If False (default), the kl divergence is clamped to the
+            free nats value first and then averaged.
     """
 
     def __init__(
@@ -47,7 +48,7 @@ class DreamerModelLoss(LossModule):
         reco_loss: Optional[str] = None,
         reward_loss: Optional[str] = None,
         free_nats: int = 3,
-        inversed_free_nats: bool = False,
+        delayed_clamp: bool = False,
     ):
         super().__init__()
         self.world_model = world_model
@@ -57,7 +58,7 @@ class DreamerModelLoss(LossModule):
         self.lambda_reco = lambda_reco
         self.lambda_reward = lambda_reward
         self.free_nats = free_nats
-        self.inversed_free_nats = inversed_free_nats
+        self.delayed_clamp = delayed_clamp
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
@@ -79,11 +80,15 @@ class DreamerModelLoss(LossModule):
             .sum((-1, -2, -3))
             .mean()
         )
-        reward_loss = distance_loss(
-            tensordict.get("true_reward"),
-            tensordict.get("reward"),
-            self.reward_loss,
-        ).mean()
+        reward_loss = (
+            distance_loss(
+                tensordict.get("true_reward"),
+                tensordict.get("reward"),
+                self.reward_loss,
+            )
+            .sum((-2, -1))
+            .mean()
+        )
         return (
             TensorDict(
                 {
@@ -109,7 +114,7 @@ class DreamerModelLoss(LossModule):
             / (2 * prior_std ** 2)
             - 0.5
         )
-        if self.inversed_free_nats:
+        if self.delayed_clamp:
             kl = kl.sum(-1).mean().clamp_min(self.free_nats)
         else:
             kl = kl.sum(-1).clamp_min(self.free_nats).mean()
@@ -156,9 +161,9 @@ class DreamerActorLoss(LossModule):
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         with torch.no_grad():
-            tensordict = tensordict.select("posterior_state", "belief")
-            tensordict.rename_key("posterior_state", "prior_state")
+            tensordict = tensordict.select("state", "belief")
             tensordict = tensordict.reshape(-1)  # 50 x 50 -> 2500
+
         with hold_out_net(self.model_based_env), set_exploration_mode("random"):
             tensordict = self.model_based_env.rollout(
                 max_steps=self.imagination_horizon,
@@ -174,9 +179,9 @@ class DreamerActorLoss(LossModule):
             with hold_out_net(self.value_model):
                 next_tensordict = self.value_model(next_tensordict)
 
-        lambda_target = self.lambda_target(
-            tensordict.get("reward"), next_tensordict.get("predicted_value")
-        )
+        reward = tensordict.get("reward")
+        next_value = next_tensordict.get("state_value")
+        lambda_target = self.lambda_target(reward, next_value)
         tensordict.set("lambda_target", lambda_target.detach())
 
         if self.discount_loss:

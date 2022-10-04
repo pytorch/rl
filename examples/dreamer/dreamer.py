@@ -261,19 +261,14 @@ def main(cfg: "DictConfig"):
         reward_normalizer = None
 
     # Losses
-    world_model_loss = DreamerModelLoss(world_model).to(device)
+    world_model_loss = DreamerModelLoss(world_model)
     actor_loss = DreamerActorLoss(
         actor_model,
         value_model,
         model_based_env,
         imagination_horizon=cfg.imagination_horizon,
-    ).to(device)
-    value_loss = DreamerValueLoss(value_model).to(device)
-
-    # optimizers
-    world_model_opt = torch.optim.Adam(world_model.parameters(), lr=cfg.world_model_lr)
-    actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
-    value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
+    )
+    value_loss = DreamerValueLoss(value_model)
 
     action_spec = transformed_env_constructor(cfg)().action_spec
     # Actor and value network
@@ -336,6 +331,11 @@ def main(cfg: "DictConfig"):
     pbar = tqdm.tqdm(total=cfg.total_frames)
     path = Path("./log")
     path.mkdir(exist_ok=True)
+
+    # optimizers
+    world_model_opt = torch.optim.Adam(world_model.parameters(), lr=cfg.world_model_lr)
+    actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
+    value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
 
     scaler1 = GradScaler()
     scaler2 = GradScaler()

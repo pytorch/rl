@@ -120,23 +120,12 @@ def make_env_transforms(
     )
 
     default_dict = {
-        "next_posterior_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
+        "next_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
         "next_belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
     }
     env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
     )
-    # these things are useful to fill the replay buffer appropriately when using init_random_frames
-    # env.append_transform(
-    #     CatTensors(keys_in=["belief"], out_key="prev_belief", del_keys=False)
-    # )
-    # env.append_transform(
-    #     CatTensors(keys_in=["action"], out_key="prev_action", del_keys=False)
-    # )
-    # env.append_transform(
-    #     CatTensors(
-    #         keys_in=["posterior_state"], out_key="prev_posterior_state", del_keys=False)
-    # )
 
     return env
 

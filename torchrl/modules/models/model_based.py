@@ -188,17 +188,20 @@ class RSSMRollout(nn.Module):
 
         update_values = tensordict.exclude(*self.out_keys)
         for t in range(time_steps):
-            _tensordict = _tensordict.update(update_values[..., t], inplace=False)
             # samples according to p(s_{t+1} | s_t, a_t, b_t)
-            # ["posterior_state", "belief", "action"] -> ["next_prior_mean", "next_prior_std", "next_prior_state", "next_belief"]
+            # ["state", "belief", "action"] -> ["next_prior_mean", "next_prior_std", "_", "next_belief"]
             self.rssm_prior(_tensordict)
 
             # samples according to p(s_{t+1} | s_t, a_t, o_{t+1}) = p(s_t | b_t, o_t)
-            # ["next_belief", "next_encoded_latents"] -> ["next_posterior_mean", "next_posterior_std", "next_posterior_state"]
+            # ["next_belief", "next_encoded_latents"] -> ["next_posterior_mean", "next_posterior_std", "next_state"]
             self.rssm_posterior(_tensordict)
 
             tensordict_out.append(_tensordict)
-            _tensordict = step_tensordict(_tensordict, keep_other=False)
+            if t < time_steps - 1:
+                _tensordict = step_tensordict(
+                    _tensordict.select(*self.out_keys), keep_other=False
+                )
+                _tensordict = update_values[..., t + 1].update(_tensordict)
 
         return torch.stack(tensordict_out, tensordict.ndimension() - 1).contiguous()
 
@@ -251,8 +254,8 @@ class RSSMPrior(nn.Module):
         action_state = self.action_state_projector(projector_input)
         belief = self.rnn(action_state, belief)
         prior_mean, prior_std = self.rnn_to_prior_projector(belief)
-        prior_state = prior_mean + torch.randn_like(prior_std) * prior_std
-        return prior_mean, prior_std, prior_state, belief
+        state = prior_mean + torch.randn_like(prior_std) * prior_std
+        return prior_mean, prior_std, state, belief
 
 
 class RSSMPosterior(nn.Module):
@@ -283,9 +286,9 @@ class RSSMPosterior(nn.Module):
         self.hidden_dim = hidden_dim
 
     def forward(self, belief, obs_embedding):
-        post_mean, post_std = self.obs_rnn_to_post_projector(
+        posterior_mean, posterior_std = self.obs_rnn_to_post_projector(
             torch.cat([belief, obs_embedding], dim=-1)
         )
         # post_std = post_std + 0.1
-        post_state = post_mean + torch.randn_like(post_std) * post_std
-        return post_mean, post_std, post_state
+        state = posterior_mean + torch.randn_like(posterior_std) * posterior_std
+        return posterior_mean, posterior_std, state
