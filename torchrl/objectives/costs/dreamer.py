@@ -245,7 +245,7 @@ class DreamerValueLoss(LossModule):
                 (
                     discount
                     * distance_loss(
-                        tensordict_select.get("predicted_value"),
+                        tensordict_select.get("state_value"),
                         lambda_target,
                         self.value_loss,
                     )
@@ -256,7 +256,7 @@ class DreamerValueLoss(LossModule):
         else:
             value_loss = (
                 distance_loss(
-                    tensordict_select.get("predicted_value"),
+                    tensordict_select.get("state_value"),
                     lambda_target,
                     self.value_loss,
                 )
