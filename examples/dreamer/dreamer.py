@@ -146,18 +146,17 @@ def call_record(
     if cfg.record_video and record._count % cfg.record_interval == 0:
         world_model_td = sampled_tensordict
 
-        true_pixels = recover_pixels(world_model_td["pixels"], stats)
+        true_pixels = recover_pixels(world_model_td["next_pixels"], stats)
 
-        reco_pixels = recover_pixels(world_model_td["reco_pixels"], stats)
+        reco_pixels = recover_pixels(world_model_td["next_reco_pixels"], stats)
         with autocast(dtype=torch.float16):
             world_model_td = world_model_td.select(
-                "posterior_state", "belief", "reward"
+                "next_state", "next_belief", "reward"
             )
             world_model_td.batch_size = [
                 world_model_td.shape[0],
-                world_model_td.get("belief").shape[1],
+                world_model_td.get("next_belief").shape[1],
             ]
-            world_model_td.rename_key("posterior_state", "prior_state")
             world_model_td = model_based_env.rollout(
                 max_steps=true_pixels.shape[1],
                 policy=actor_model,
@@ -165,7 +164,7 @@ def call_record(
                 tensordict=world_model_td[:, 0],
             )
         imagine_pxls = recover_pixels(
-            model_based_env.decode_obs(world_model_td)["reco_pixels"],
+            model_based_env.decode_obs(world_model_td)["next_reco_pixels"],
             stats,
         )
 

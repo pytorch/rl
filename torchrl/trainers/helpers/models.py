@@ -1248,7 +1248,6 @@ def make_dreamer(
         depth=3,
         num_cells=cfg.mlp_num_units,
         activation_class=nn.ELU,
-        rnn_hidden_dim=cfg.rssm_hidden_dim,
     )
     actor_simulator = ProbabilisticTensorDictModule(
         TensorDictModule(
