@@ -322,10 +322,56 @@ class SyncDataCollector(_DataCollector):
         self._tensordict.set(
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
-        self._tensordict_out = TensorDict(
-            {},
-            batch_size=[*self.env.batch_size, self.frames_per_batch],
-            device=self.passing_device,
+
+        # TODO: can we rely on policy having spec and ditch hasattr?
+        if (
+            hasattr(policy, "spec")
+            and policy.spec is not None
+            and all(v is not None for v in policy.spec.values())
+            and set(policy.spec.keys()) == set(policy.out_keys)
+        ):
+            # if policy spec is non-empty, all the values are not None and the keys
+            # match the out_keys we assume the user has given all relevant information
+            self._tensordict_out = env.reset()
+            self._tensordict_out.update(policy.spec.rand())
+        else:
+            # otherwise, we perform a small number of steps with the policy to
+            # determine the relevant keys with which to pre-populate _tensordict_out.
+            # See #505 for additional context.
+            self._tensordict_out = env.rollout(3, policy)
+            if env.batch_size:
+                self._tensordict_out = self._tensordict_out[..., :1]
+            else:
+                self._tensordict_out = self._tensordict_out[:1]
+            self._tensordict_out = (
+                self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
+                .to_tensordict()
+                .zero_()
+                .detach()
+            )
+
+        # in addition to outputs of the policy, we add traj_ids and step_count to
+        # _tensordict_out which will be collected during rollout
+        if len(self.env.batch_size):
+            traj_ids = (
+                torch.arange(self.env.batch_size[0])
+                .unsqueeze(-1)
+                .expand(*self._tensordict_out.batch_size)
+                .unsqueeze(-1)
+                .clone()
+            )
+        else:
+            traj_ids = (
+                torch.arange(1)
+                .expand(*self._tensordict_out.batch_size)
+                .unsqueeze(-1)
+                .unsqueeze(-1)
+                .clone()
+            )
+
+        self._tensordict_out.set("traj_ids", traj_ids)
+        self._tensordict_out.set(
+            "step_count", torch.zeros(*self._tensordict_out.batch_size, 1)
         )
 
         self.return_in_place = return_in_place
