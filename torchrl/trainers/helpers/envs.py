@@ -353,7 +353,9 @@ def parallel_env_constructor(
 
 @torch.inference_mode()
 def get_stats_random_rollout(
-    cfg: "DictConfig", proof_environment: EnvBase = None, key: Optional[str] = None
+    cfg: "DictConfig",  # noqa: F821
+    proof_environment: EnvBase = None,
+    key: Optional[str] = None,
 ):
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
