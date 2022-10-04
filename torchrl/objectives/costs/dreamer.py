@@ -9,7 +9,7 @@ import torch
 from torchrl.data import TensorDict
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.envs.utils import step_tensordict
+from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.utils import hold_out_net, distance_loss
@@ -172,7 +172,7 @@ class DreamerActorLoss(LossModule):
                 tensordict=tensordict,
             )
 
-            next_tensordict = step_tensordict(
+            next_tensordict = step_mdp(
                 tensordict,
                 keep_other=True,
             )
