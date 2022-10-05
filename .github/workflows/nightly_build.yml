@@ -79,11 +79,7 @@ jobs:
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
-        conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
-        conda install -n build_binary -y cudnn
-#    - name: nvcc check
-#      run: |
-#        nvcc --version
+        conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
     - name: Test Installation of dependencies
       run: |
         conda run -n build_binary python -c "import torch.distributed"
@@ -92,13 +88,6 @@ jobs:
         echo "numpy succeeded"
     # for the conda run with quotes, we have to use "\" and double quotes
     # here is the issue: https://github.com/conda/conda/issues/10972
-    - name: Build TorchRL Nightly
-      run: |
-        rm -r dist || true
-        conda run -n build_binary \
-          python setup.py bdist_wheel \
-          --package_name torchrl-nightly \
-          --python-tag=${{ matrix.python-tag }}
     - name: Upload wheel as GHA artifact
       uses: actions/upload-artifact@v2
       with:
@@ -177,12 +166,7 @@ jobs:
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
-        conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
-        conda install -n build_binary -y cudnn
-#    - name: nvcc check
-#      run: |
-#        nvcc --version
-    # download wheel from GHA
+        conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
