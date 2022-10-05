@@ -2,14 +2,15 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-
+import argparse
 import distutils.command.clean
 import glob
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+from typing import List
 
 from setuptools import setup, find_packages
 from torch.utils.cpp_extension import (
@@ -40,6 +41,17 @@ if os.getenv("BUILD_VERSION"):
     version = os.getenv("BUILD_VERSION")
 elif sha != "Unknown":
     version += "+" + sha[:7]
+
+
+def parse_args(argv: List[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="torchrec setup")
+    parser.add_argument(
+        "--package_name",
+        type=str,
+        default="torchrec",
+        help="the name of this output wheel",
+    )
+    return parser.parse_known_args(argv)
 
 
 def write_version_file():
@@ -142,7 +154,9 @@ def get_extensions():
     return ext_modules
 
 
-def _main():
+def _main(argv):
+    args, unknown = parse_args(argv)
+    name = args.package_name
     pytorch_package_dep = _get_pytorch_version()
     print("-- PyTorch dependency:", pytorch_package_dep)
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
@@ -153,7 +167,7 @@ def _main():
 
     setup(
         # Metadata
-        name="torchrl",
+        name=name,
         version=version,
         author="torchrl contributors",
         author_email="vmoens@fb.com",
@@ -203,4 +217,4 @@ if __name__ == "__main__":
     write_version_file()
     print("Building wheel {}-{}".format(package_name, version))
     print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
-    _main()
+    _main(sys.argv[1:])
