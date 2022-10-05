@@ -17,6 +17,9 @@ on:
     - cron:  '15 11 * * *'
   # or manually trigger it
   workflow_dispatch:
+  push:
+    branches:
+      - "nightly"
 
 jobs:
   # build on cpu hosts and upload to GHA
@@ -78,9 +81,9 @@ jobs:
       run: |
         conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
         conda install -n build_binary -y cudnn
-    - name: nvcc check
-      run: |
-        nvcc --version
+#    - name: nvcc check
+#      run: |
+#        nvcc --version
     - name: Test Installation of dependencies
       run: |
         conda run -n build_binary python -c "import torch.distributed"
@@ -176,9 +179,9 @@ jobs:
       run: |
         conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
         conda install -n build_binary -y cudnn
-    - name: nvcc check
-      run: |
-        nvcc --version
+#    - name: nvcc check
+#      run: |
+#        nvcc --version
     # download wheel from GHA
     - name: Download wheel
       uses: actions/download-artifact@v2
@@ -195,15 +198,15 @@ jobs:
       run: |
         conda run -n build_binary \
           python -c "from torchrl.data import ReplayBuffer"
-    - name: Push TorchRL Binary to PYPI
-      env:
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-      run: |
-        conda run -n build_binary python -m pip install twine
-        conda run -n build_binary \
-          python -m twine upload \
-            --username __token__ \
-            --password "$PYPI_TOKEN" \
-            --skip-existing \
-            torchrl_nightly-*.whl \
-            --verbose
+#    - name: Push TorchRL Binary to PYPI
+#      env:
+#          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+#      run: |
+#        conda run -n build_binary python -m pip install twine
+#        conda run -n build_binary \
+#          python -m twine upload \
+#            --username __token__ \
+#            --password "$PYPI_TOKEN" \
+#            --skip-existing \
+#            torchrl_nightly-*.whl \
+#            --verbose
