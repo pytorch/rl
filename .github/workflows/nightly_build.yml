@@ -86,6 +86,13 @@ jobs:
         echo "torch.distributed succeeded"
         conda run -n build_binary python -c "import numpy"
         echo "numpy succeeded"
+    - name: Build TorchRL Nightly
+      run: |
+        rm -r dist || true
+        conda run -n build_binary \
+          python setup.py bdist_wheel \
+          --package_name torchrl-nightly \
+          --python-tag=${{ matrix.python-tag }}
     # for the conda run with quotes, we have to use "\" and double quotes
     # here is the issue: https://github.com/conda/conda/issues/10972
     - name: Upload wheel as GHA artifact
