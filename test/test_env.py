@@ -1148,7 +1148,7 @@ def test_info_dict_reader(seed=0):
     tensordict2 = env2.reset()
     tensordict2 = env2.rand_step(tensordict2)
 
-    assert not env.observation_spec["x_position"].is_in(tensordict["x_position"])
+    assert not env2.observation_spec["x_position"].is_in(tensordict2["x_position"])
 
 
 if __name__ == "__main__":
