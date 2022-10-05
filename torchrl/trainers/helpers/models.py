@@ -1165,7 +1165,7 @@ def make_redq_model(
 
 
 def make_dreamer(
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     proof_environment: EnvBase = None,
     device: DEVICE_TYPING = "cpu",
     action_key: str = "action",
