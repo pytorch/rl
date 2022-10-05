@@ -177,6 +177,11 @@ jobs:
       run: |
         conda install -n build_binary pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
         conda install -n build_binary numpy
+    - name: Move to new folder
+      shell: bash
+      run: |
+        mkdir binaries
+        cd binaries
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
