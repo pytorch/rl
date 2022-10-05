@@ -243,6 +243,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     else:
         if cfg.from_pixels:
             pixel_stats = {"loc": 0.5, "scale": 0.5}
+        if not cfg.from_pixels or not cfg.pixels_only:
+            state_stats = {"loc": 0.0, "scale": 1.0}
     obs_keys = []
     if cfg.from_pixels:
         if cfg.use_r3m:

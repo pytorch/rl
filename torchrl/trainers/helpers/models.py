@@ -1289,7 +1289,7 @@ def make_dreamer(
     actor_realworld = TensorDictSequential(
         TensorDictModule(
             obs_encoder,
-            in_keys=obs_keys,
+            in_keys=[f"next_{obs_key}" for obs_key in obs_keys],
             out_keys=["encoded_latents"],
         ),
         TensorDictModule(
