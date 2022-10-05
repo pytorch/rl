@@ -1,0 +1,209 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: Push Binary Nightly
+
+on:
+  workflow_call:
+    secrets:
+      AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID:
+        required: true
+      AWS_PYTORCH_UPLOADER_SECRET_ACCESS_KEY:
+        required: true
+      PYPI_TOKEN:
+        required: false
+  # run every day at 11:15am
+  schedule:
+    - cron:  '15 11 * * *'
+  # or manually trigger it
+  workflow_dispatch:
+
+jobs:
+  # build on cpu hosts and upload to GHA
+  build_on_cpu:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+         - os: linux.2xlarge
+           python-version: 3.7
+           python-tag: "py37"
+           cuda-tag: "cu11"
+         - os: linux.2xlarge
+           python-version: 3.8
+           python-tag: "py38"
+           cuda-tag: "cu11"
+         - os: linux.2xlarge
+           python-version: 3.9
+           python-tag: "py39"
+           cuda-tag: "cu11"
+         - os: linux.2xlarge
+           python-version: 3.10
+           python-tag: "py310"
+           cuda-tag: "cu11"
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Check ldd --version
+      run: ldd --version
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Update pip
+      run: |
+        sudo yum update -y
+        sudo yum -y install git python3-pip
+        sudo pip3 install --upgrade pip
+    - name: Setup conda
+      run: |
+        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+        bash ~/miniconda.sh -b -p $HOME/miniconda -u
+    - name: setup Path
+      run: |
+        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
+        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
+    - name: create conda env
+      run: |
+        conda create --name build_binary python=${{ matrix.python-version }}
+        conda info
+    - name: check python version no Conda
+      run: |
+        python --version
+    - name: check python version
+      run: |
+        conda run -n build_binary python --version
+    - name: Install C/C++ compilers
+      run: |
+        sudo yum install -y gcc gcc-c++
+    - name: Install PyTorch and CUDA
+      shell: bash
+      run: |
+        conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
+        conda install -n build_binary -y cudnn
+    - name: nvcc check
+      run: |
+        nvcc --version
+    - name: Test Installation of dependencies
+      run: |
+        conda run -n build_binary python -c "import torch.distributed"
+        echo "torch.distributed succeeded"
+        conda run -n build_binary python -c "import numpy"
+        echo "numpy succeeded"
+    # for the conda run with quotes, we have to use "\" and double quotes
+    # here is the issue: https://github.com/conda/conda/issues/10972
+    - name: Build TorchRL Nightly
+      run: |
+        rm -r dist || true
+        conda run -n build_binary \
+          python setup.py bdist_wheel \
+          --package_name torchrl-nightly \
+          --python-tag=${{ matrix.python-tag }}
+    - name: Upload wheel as GHA artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: torchrl_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+        path: dist/torchrl_nightly-*.whl
+
+  # download from GHA, test on gpu and push to pypi
+  test_on_gpu:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [linux.4xlarge.nvidia.gpu]
+        python-version: [3.7, 3.8, 3.9, 3.10]
+        cuda-tag: ["cu11"]
+    needs: build_on_cpu
+    # the glibc version should match the version of the one we used to build the binary
+    # for this case, it's 2.26
+    steps:
+    - name: Check ldd --version
+      run: ldd --version
+    - name: check cpu info
+      shell: bash
+      run: |
+        cat /proc/cpuinfo
+    - name: check distribution info
+      shell: bash
+      run: |
+        cat /proc/version
+    - name: Display EC2 information
+      shell: bash
+      run: |
+        set -euo pipefail
+        function get_ec2_metadata() {
+          # Pulled from instance metadata endpoint for EC2
+          # see https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
+          category=$1
+          curl -fsSL "http://169.254.169.254/latest/meta-data/${category}"
+        }
+        echo "ami-id: $(get_ec2_metadata ami-id)"
+        echo "instance-id: $(get_ec2_metadata instance-id)"
+        echo "instance-type: $(get_ec2_metadata instance-type)"
+    - name: check gpu info
+      shell: bash
+      run: |
+        sudo yum install lshw -y
+        sudo lshw -C display
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Update pip
+      run: |
+        sudo yum update -y
+        sudo yum -y install git python3-pip
+        sudo pip3 install --upgrade pip
+    - name: Setup conda
+      run: |
+        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+        bash ~/miniconda.sh -b -p $HOME/miniconda
+    - name: setup Path
+      run: |
+        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
+        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
+    - name: create conda env
+      run: |
+        conda create --name build_binary python=${{ matrix.python-version }}
+        conda info
+    - name: check python version no Conda
+      run: |
+        python --version
+    - name: check python version
+      run: |
+        conda run -n build_binary python --version
+    - name: Install C/C++ compilers
+      run: |
+        sudo yum install -y gcc gcc-c++
+    - name: Install PyTorch and CUDA
+      shell: bash
+      run: |
+        conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
+        conda install -n build_binary -y cudnn
+    - name: nvcc check
+      run: |
+        nvcc --version
+    # download wheel from GHA
+    - name: Download wheel
+      uses: actions/download-artifact@v2
+      with:
+        name: torchrl_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+    - name: Display structure of downloaded files
+      run: ls -R
+    - name: Install TorchRL Nightly
+      run: |
+        rm -r dist || true
+        conda run -n build_binary python -m pip install *.whl
+    - name: Test torchrl installation
+      shell: bash
+      run: |
+        conda run -n build_binary \
+          python -c "from torchrl.data import ReplayBuffer"
+    - name: Push TorchRL Binary to PYPI
+      env:
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      run: |
+        conda run -n build_binary python -m pip install twine
+        conda run -n build_binary \
+          python -m twine upload \
+            --username __token__ \
+            --password "$PYPI_TOKEN" \
+            --skip-existing \
+            torchrl_nightly-*.whl \
+            --verbose
