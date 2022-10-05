@@ -4743,7 +4743,7 @@ def make_tensordict(
     If batch_size is not specified, returns the maximum batch size possible
 
     Args:
-        data (TensorDict or dictionary): a data source.
+        source (TensorDict or dictionary): a data source.
         batch_size (iterable of int, optional): a batch size for the tensordict.
         device (torch.device or compatible type, optional): a device for the TensorDict.
     """
