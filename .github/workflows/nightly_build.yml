@@ -197,15 +197,15 @@ jobs:
       run: |
         conda run -n build_binary \
           python -c "from torchrl.data import ReplayBuffer"
-#    - name: Push TorchRL Binary to PYPI
-#      env:
-#          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-#      run: |
-#        conda run -n build_binary python -m pip install twine
-#        conda run -n build_binary \
-#          python -m twine upload \
-#            --username __token__ \
-#            --password "$PYPI_TOKEN" \
-#            --skip-existing \
-#            torchrl_nightly-*.whl \
-#            --verbose
+    - name: Push TorchRL Binary to PYPI
+      env:
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      run: |
+        conda run -n build_binary python -m pip install twine
+        conda run -n build_binary \
+          python -m twine upload \
+            --username __token__ \
+            --password "$PYPI_TOKEN" \
+            --skip-existing \
+            torchrl_nightly-*.whl \
+            --verbose
