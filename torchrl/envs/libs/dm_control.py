@@ -35,7 +35,7 @@ try:
 
     _has_dmc = True
 
-except ImportError as error:
+except ImportError:
     _has_dmc = False
 
 __all__ = ["DMControlEnv", "DMControlWrapper"]
