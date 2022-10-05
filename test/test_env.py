@@ -28,11 +28,13 @@ from torchrl.data.tensor_specs import (
     MultOneHotDiscreteTensorSpec,
     BoundedTensorSpec,
     NdBoundedTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import EnvCreator, ObservationNorm, CatTensors, DoubleToFloat
+from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
-from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.envs.libs.gym import GymEnv, GymWrapper, _has_gym
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
@@ -1119,6 +1121,34 @@ def test_batch_unlocked_with_batch_size(device):
         RuntimeError, match="Expected a tensordict with shape==env.shape, "
     ):
         env.step(td_expanded)
+
+
+@pytest.mark.skipif(not _has_gym, reason="no gym")
+def test_info_dict_reader(seed=0):
+    import gym
+
+    env = GymWrapper(gym.make("HalfCheetah-v4"))
+    env.set_info_dict_reader(default_info_dict_reader(["x_position"]))
+
+    assert "x_position" in env.observation_spec.keys()
+    assert isinstance(env.observation_spec["x_position"], UnboundedContinuousTensorSpec)
+
+    tensordict = env.reset()
+    tensordict = env.rand_step(tensordict)
+
+    assert env.observation_spec["x_position"].is_in(tensordict["x_position"])
+
+    env2 = GymWrapper(gym.make("HalfCheetah-v4"))
+    env2.set_info_dict_reader(
+        default_info_dict_reader(
+            ["x_position"], spec={"x_position": OneHotDiscreteTensorSpec(5)}
+        )
+    )
+
+    tensordict2 = env2.reset()
+    tensordict2 = env2.rand_step(tensordict2)
+
+    assert not env2.observation_spec["x_position"].is_in(tensordict2["x_position"])
 
 
 if __name__ == "__main__":
