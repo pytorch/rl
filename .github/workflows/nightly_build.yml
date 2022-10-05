@@ -177,11 +177,10 @@ jobs:
       run: |
         conda install -n build_binary pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
         conda install -n build_binary numpy
-    - name: Move to new folder
+    - name: New runnable folder
       shell: bash
       run: |
-        mkdir binaries
-        cd binaries
+        mkdir runnable_dir
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
@@ -194,6 +193,7 @@ jobs:
         conda run -n build_binary python -m pip install *.whl
     - name: Test torchrl installation
       shell: bash
+      working-directory: ./runnable_dir
       run: |
         conda run -n build_binary \
           python -c "from torchrl.data import ReplayBuffer"
