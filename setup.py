@@ -44,11 +44,11 @@ elif sha != "Unknown":
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="torchrec setup")
+    parser = argparse.ArgumentParser(description="torchrl setup")
     parser.add_argument(
         "--package_name",
         type=str,
-        default="torchrec",
+        default="torchrl",
         help="the name of this output wheel",
     )
     return parser.parse_known_args(argv)
