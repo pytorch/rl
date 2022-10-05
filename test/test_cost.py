@@ -1590,19 +1590,15 @@ class TestDreamer:
     ):
         td = TensorDict(
             {
-                "prev_posterior_state": torch.zeros(
-                    batch_size, temporal_length, state_dim
-                ),
-                "prev_belief": torch.zeros(
-                    batch_size, temporal_length, rssm_hidden_dim
-                ),
+                "state": torch.zeros(batch_size, temporal_length, state_dim),
+                "belief": torch.zeros(batch_size, temporal_length, rssm_hidden_dim),
                 "pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
                 "next_pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
-                "prev_action": torch.randn(batch_size, temporal_length, 6),
+                "action": torch.randn(batch_size, temporal_length, 6),
                 "reward": torch.randn(batch_size, temporal_length, 1),
                 "done": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
             },
-            [batch_size],
+            [batch_size, temporal_length],
         )
         return td
 
@@ -1611,11 +1607,11 @@ class TestDreamer:
     ):
         td = TensorDict(
             {
-                "posterior_state": torch.randn(batch_size, temporal_length, state_dim),
+                "state": torch.randn(batch_size, temporal_length, state_dim),
                 "belief": torch.randn(batch_size, temporal_length, rssm_hidden_dim),
                 "reward": torch.randn(batch_size, temporal_length, 1),
             },
-            [batch_size],
+            [batch_size, temporal_length],
         )
         return td
 
@@ -1624,11 +1620,11 @@ class TestDreamer:
     ):
         td = TensorDict(
             {
-                "prior_state": torch.randn(batch_size, temporal_length, state_dim),
-                "belief": torch.randn(batch_size, temporal_length, rssm_hidden_dim),
-                "lambda_target": torch.randn(batch_size, temporal_length, 1),
+                "state": torch.randn(batch_size * temporal_length, state_dim),
+                "belief": torch.randn(batch_size * temporal_length, rssm_hidden_dim),
+                "lambda_target": torch.randn(batch_size * temporal_length, 1),
             },
-            [batch_size],
+            [batch_size * temporal_length],
         )
         return td
 
@@ -1645,7 +1641,29 @@ class TestDreamer:
             action_spec=mock_env.action_spec,
         )
         rssm_posterior = RSSMPosterior(hidden_dim=rssm_hidden_dim, state_dim=state_dim)
-        rssm_rollout = RSSMRollout(rssm_prior, rssm_posterior)
+
+        # World Model and reward model
+        rssm_rollout = RSSMRollout(
+            TensorDictModule(
+                rssm_prior,
+                in_keys=["state", "belief", "action"],
+                out_keys=[
+                    "next_prior_mean",
+                    "next_prior_std",
+                    "_",
+                    "next_belief",
+                ],
+            ),
+            TensorDictModule(
+                rssm_posterior,
+                in_keys=["next_belief", "next_encoded_latents"],
+                out_keys=[
+                    "next_posterior_mean",
+                    "next_posterior_std",
+                    "next_state",
+                ],
+            ),
+        )
         reward_module = MLP(
             out_features=1, depth=2, num_cells=mlp_num_units, activation_class=nn.ELU
         )
@@ -1653,56 +1671,36 @@ class TestDreamer:
         world_modeler = TensorDictSequential(
             TensorDictModule(
                 obs_encoder,
-                in_keys=["pixels"],
-                out_keys=["encoded_latents"],
+                in_keys=["next_pixels"],
+                out_keys=["next_encoded_latents"],
             ),
-            # rssm_rollout = transition
-            TensorDictModule(
-                rssm_rollout,
-                in_keys=[
-                    "prev_posterior_state",
-                    "prev_belief",
-                    "prev_action",
-                    "encoded_latents",
-                ],
-                out_keys=[
-                    "prior_means",
-                    "prior_stds",
-                    "prior_state",
-                    "belief",
-                    "posterior_means",
-                    "posterior_stds",
-                    "posterior_state",
-                ],
-            ),
+            rssm_rollout,
             TensorDictModule(
                 obs_decoder,
-                in_keys=["posterior_state", "belief"],
-                out_keys=["reco_pixels"],
+                in_keys=["next_state", "next_belief"],
+                out_keys=["next_reco_pixels"],
             ),
         )
         world_model = WorldModelWrapper(
             world_modeler,
             TensorDictModule(
                 reward_module,
-                in_keys=["posterior_state", "belief"],
+                in_keys=["next_state", "next_belief"],
                 out_keys=["reward"],
             ),
         )
 
         with torch.no_grad():
-            td = mock_env.rollout(1000)
+            td = mock_env.rollout(10)
             td = td.unsqueeze(0).to_tensordict()
-            td.batch_size = [1]  # removes the time batch size, keeps only the batch
-            td["prev_posterior_state"] = torch.zeros((1, state_dim))
-            td["prev_belief"] = torch.zeros((1, rssm_hidden_dim))
-            td["prev_action"] = torch.zeros((1, 2, 6))
-            td = td
+            td["state"] = torch.zeros((1, 10, state_dim))
+            td["belief"] = torch.zeros((1, 10, rssm_hidden_dim))
             world_model(td)
         return world_model
 
     def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
         mock_env = MockPixelEnv()
+
         rssm_prior = RSSMPrior(
             hidden_dim=rssm_hidden_dim,
             rnn_hidden_dim=rssm_hidden_dim,
@@ -1712,32 +1710,34 @@ class TestDreamer:
         reward_module = MLP(
             out_features=1, depth=2, num_cells=mlp_num_units, activation_class=nn.ELU
         )
+        transition_model = TensorDictSequential(
+            TensorDictModule(
+                rssm_prior,
+                in_keys=["state", "belief", "action"],
+                out_keys=[
+                    "_",
+                    "_",
+                    "next_state",
+                    "next_belief",
+                ],
+            ),
+        )
+        reward_model = TensorDictModule(
+            reward_module,
+            in_keys=["next_state", "next_belief"],
+            out_keys=["reward"],
+        )
         model_based_env = DreamerEnv(
             world_model=WorldModelWrapper(
-                TensorDictSequential(
-                    TensorDictModule(
-                        rssm_prior,
-                        in_keys=["prior_state", "belief", "action"],
-                        out_keys=[
-                            "prior_means",
-                            "prior_stds",
-                            "next_prior_state",
-                            "next_belief",
-                        ],
-                    ),
-                ),
-                TensorDictModule(
-                    reward_module,
-                    in_keys=["next_prior_state", "next_belief"],
-                    out_keys=["next_reward"],
-                ),
+                transition_model,
+                reward_model,
             ),
             prior_shape=torch.Size([state_dim]),
             belief_shape=torch.Size([rssm_hidden_dim]),
         )
         model_based_env.set_specs_from_env(mock_env)
         with torch.no_grad():
-            model_based_env.rollout(1000)
+            model_based_env.rollout(3)
         return model_based_env
 
     def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
@@ -1747,23 +1747,22 @@ class TestDreamer:
             depth=4,
             num_cells=mlp_num_units,
             activation_class=nn.ELU,
-            rnn_hidden_dim=rssm_hidden_dim,
         )
         actor_model = ProbabilisticTensorDictModule(
             TensorDictModule(
                 actor_module,
-                in_keys=["prior_state", "belief"],
+                in_keys=["state", "belief"],
                 out_keys=["loc", "scale"],
             ),
             dist_param_keys=["loc", "scale"],
-            out_key_sample=["action"],
-            default_interaction_mode="mode",
+            out_key_sample="action",
+            default_interaction_mode="random",
             distribution_class=TanhNormal,
         )
         with torch.no_grad():
             td = TensorDict(
                 {
-                    "prior_state": torch.randn(1, 2, state_dim),
+                    "state": torch.randn(1, 2, state_dim),
                     "belief": torch.randn(1, 2, rssm_hidden_dim),
                 },
                 batch_size=[1],
@@ -1779,13 +1778,13 @@ class TestDreamer:
                 num_cells=mlp_num_units,
                 activation_class=nn.ELU,
             ),
-            in_keys=["prior_state", "belief"],
-            out_keys=["predicted_value"],
+            in_keys=["state", "belief"],
+            out_keys=["state_value"],
         )
         with torch.no_grad():
             td = TensorDict(
                 {
-                    "prior_state": torch.randn(1, 2, state_dim),
+                    "state": torch.randn(1, 2, state_dim),
                     "belief": torch.randn(1, 2, rssm_hidden_dim),
                 },
                 batch_size=[1],

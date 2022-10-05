@@ -40,7 +40,7 @@ class DreamerEnv(ModelBasedEnvBase):
         """
         super().set_specs_from_env(env)
         self.observation_spec = CompositeSpec(
-            next_prior_state=NdUnboundedContinuousTensorSpec(
+            next_state=NdUnboundedContinuousTensorSpec(
                 shape=self.prior_shape, device=self.device
             ),
             next_belief=NdUnboundedContinuousTensorSpec(
@@ -48,19 +48,19 @@ class DreamerEnv(ModelBasedEnvBase):
             ),
         )
         self.input_spec = CompositeSpec(
-            prior_state=self.observation_spec["next_prior_state"],
+            state=self.observation_spec["next_state"],
             belief=self.observation_spec["next_belief"],
             action=self.action_spec.to(self.device),
         )
 
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
-        # td = self.input_spec.rand(shape=self.batch_size)
-        # td["reward"] = self.reward_spec.rand(shape=self.batch_size)
-        # td = self.step(td)
         batch_size = tensordict.batch_size if tensordict is not None else []
-        device = tensordict.device if tensordict is not None else None
-
-        return TensorDict({}, batch_size=batch_size, device=device)
+        device = tensordict.device if tensordict is not None else self.device
+        td = self.input_spec.rand(shape=batch_size).to(device)
+        td["reward"] = self.reward_spec.rand(shape=batch_size).to(device)
+        td.update(self.observation_spec.rand(shape=batch_size).to(device))
+        td = self.step(td)
+        return td
 
     def decode_obs(self, tensordict: TensorDict, compute_latents=False) -> TensorDict:
         if self.obs_decoder is None:

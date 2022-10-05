@@ -129,7 +129,11 @@ def make_env_transforms(
         env.append_transform(Resize(cfg.image_size, cfg.image_size))
         if cfg.grayscale:
             env.append_transform(GrayScale())
+<<<<<<< HEAD
         env.append_transform(FlattenObservation(first_dim=0))
+=======
+        env.append_transform(FlattenObservation())
+>>>>>>> dreamer_model
         env.append_transform(CatFrames(N=cfg.catframes, keys_in=["next_pixels"]))
         if stats is None:
             obs_stats = {"loc": 0.0, "scale": 1.0}
@@ -353,7 +357,9 @@ def parallel_env_constructor(
 
 @torch.inference_mode()
 def get_stats_random_rollout(
-    cfg: "DictConfig", proof_environment: EnvBase = None, key: Optional[str] = None
+    cfg: "DictConfig",  # noqa: F821
+    proof_environment: EnvBase = None,
+    key: Optional[str] = None,
 ):
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
