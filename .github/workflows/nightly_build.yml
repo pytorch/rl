@@ -79,7 +79,7 @@ jobs:
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
-        conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
+        conda install -n build_binary pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
     - name: Test Installation of dependencies
       run: |
         conda run -n build_binary python -c "import torch.distributed"
@@ -166,7 +166,7 @@ jobs:
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
-        conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
+        conda install -n build_binary pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
