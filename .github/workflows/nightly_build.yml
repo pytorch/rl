@@ -176,6 +176,7 @@ jobs:
               --verbose
 
   upload-wheel-mac:
+    needs: [test-wheel]
     runs-on: macos-latest
     strategy:
       matrix:
