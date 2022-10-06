@@ -105,7 +105,7 @@ jobs:
           python3 -mpip install --upgrade pip
       - name: Install test dependencies
         run: |
-          python3 -mpip install numpy pytest --no-cache-dir
+          python3 -mpip install numpy pytest pillow>=4.1.1 scipy networkx expecttest pyyaml
       - name: Download built wheels
         uses: actions/download-artifact@v2
         with:
@@ -113,7 +113,7 @@ jobs:
           path: /tmp/wheels
       - name: Install built wheels
         run: |
-          find /tmp/wheels/ -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
+#          find /tmp/wheels/ -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
           python3 -mpip install /tmp/wheels/* --no-cache-dir
       - name: Log version string
         run: |
