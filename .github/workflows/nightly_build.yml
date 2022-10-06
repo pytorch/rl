@@ -55,11 +55,6 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: torchrl-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
-          path: dist/torchrl-*.whl
-      - name: Upload wheel for download
-        uses: actions/upload-artifact@v2
-        with:
-          name: torchrl-batch.whl
           path: dist/*.whl
 
   build-wheel-mac:
@@ -90,11 +85,6 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: torchrl-mac-${{ matrix.python_version[0] }}.whl
-          path: dist/torchrl-*.whl
-      - name: Upload wheel for download
-        uses: actions/upload-artifact@v2
-        with:
-          name: torchrl-batch.whl
           path: dist/*.whl
 
   test-wheel:
