@@ -40,18 +40,18 @@ jobs:
            python-version: 3.9
            python-tag: "py39"
            cuda-tag: "cu11"
-#         - os: macos-latest
-#           python-version: 3.7
-#           python-tag: "py37"
-#           cuda-tag: None
-#         - os: macos-latest
-#           python-version: 3.8
-#           python-tag: "py38"
-#           cuda-tag: None
-#         - os: macos-latest
-#           python-version: 3.9
-#           python-tag: "py39"
-#           cuda-tag: None
+         - os: macos-latest
+           python-version: 3.7
+           python-tag: "py37"
+           cuda-tag: None
+         - os: macos-latest
+           python-version: 3.8
+           python-tag: "py38"
+           cuda-tag: None
+         - os: macos-latest
+           python-version: 3.9
+           python-tag: "py39"
+           cuda-tag: None
     steps:
     # Checkout the repository to the GitHub Actions runner
     - name: Check ldd --version
@@ -108,17 +108,38 @@ jobs:
     - name: Upload wheel as GHA artifact
       uses: actions/upload-artifact@v2
       with:
-        name: torchrl_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+        name: torchrl_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}_${{ matrix.os }}.whl
         path: dist/torchrl_nightly-*.whl
 
-  # download from GHA, test on gpu and push to pypi
-  test_on_gpu:
+  test_and_upload:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [linux.4xlarge.nvidia.gpu]
-        python-version: [3.7, 3.8, 3.9]
-        cuda-tag: ["cu11"]
+        include:
+         - os: linux.2xlarge
+           python-version: 3.7
+           python-tag: "py37"
+           cuda-tag: "cu11"
+         - os: linux.2xlarge
+           python-version: 3.8
+           python-tag: "py38"
+           cuda-tag: "cu11"
+         - os: linux.2xlarge
+           python-version: 3.9
+           python-tag: "py39"
+           cuda-tag: "cu11"
+         - os: macos-latest
+           python-version: 3.7
+           python-tag: "py37"
+           cuda-tag: None
+         - os: macos-latest
+           python-version: 3.8
+           python-tag: "py38"
+           cuda-tag: None
+         - os: macos-latest
+           python-version: 3.9
+           python-tag: "py39"
+           cuda-tag: None
     needs: build_on_cpu
     # the glibc version should match the version of the one we used to build the binary
     # for this case, it's 2.26
@@ -193,7 +214,7 @@ jobs:
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
-        name: torchrl_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+        name: torchrl_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}_${{ matrix.os }}.whl
     - name: Display structure of downloaded files
       run: ls -R
     - name: Install TorchRL Nightly
@@ -206,7 +227,6 @@ jobs:
       run: |
         conda run -n build_binary \
           python -c "from torchrl.data import ReplayBuffer"
-    - name:
     - name: Push TorchRL Binary to PYPI
       env:
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
