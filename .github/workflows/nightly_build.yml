@@ -28,15 +28,15 @@ jobs:
     strategy:
       matrix:
         python_version: [["3.7", "cp37-cp37m"], ["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
-        cuda_support: [["cpu", "cpu"], ["cu116", "cuda116"]]
-    container: pytorch/manylinux-${{ matrix.cuda_support[1] }}
+        cuda_support: [["", "cpu", "cpu"], ["", "cu116", "cuda116"]]
+    container: pytorch/manylinux-${{ matrix.cuda_support[2] }}
     steps:
       - name: Checkout torchrl
         uses: actions/checkout@v2
       - name: Install PyTorch nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install --pre torch --extra-index-url ${{ matrix.cuda_support[0] }}
+          python3 -mpip install --pre torch --extra-index-url ${{ matrix.cuda_support[1] }}
       - name: Build TorchRL Nightly
         run: |
           rm -r dist || true
@@ -54,7 +54,7 @@ jobs:
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
         with:
-          name: torchrl-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[1] }}.whl
+          name: torchrl-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: dist/torchrl-*.whl
       - name: Upload wheel for download
         uses: actions/upload-artifact@v2
@@ -151,15 +151,15 @@ jobs:
     strategy:
       matrix:
         python_version: [["3.7", "cp37-cp37m"], ["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
-        cuda_support: [["cpu", "cpu"], ["cu116", "cuda116"]]
-    container: pytorch/manylinux-${{ matrix.cuda_support[1] }}
+        cuda_support: [["", "cpu", "cpu"], ["", "cu116", "cuda116"]]
+    container: pytorch/manylinux-${{ matrix.cuda_support[2] }}
     steps:
       - name: Checkout torchrl
         uses: actions/checkout@v2
       - name: Download built wheels
         uses: actions/download-artifact@v2
         with:
-          name: torchrl-${{ matrix.os[0] }}-${{ matrix.python_version }}_${{ matrix.cuda_support[1] }}.whl
+          name: torchrl-${{ matrix.os[0] }}-${{ matrix.python_version }}_${{ matrix.cuda_support[2] }}.whl
           path: /tmp/wheels
       - name: Push TorchRL Binary to PYPI
         env:
