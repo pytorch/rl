@@ -30,8 +30,8 @@ from torchrl.envs import EnvCreator
 from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
 from torchrl.modules import LSTMNet, TensorDictModule
+from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
 
 # torch.set_default_dtype(torch.double)
 
