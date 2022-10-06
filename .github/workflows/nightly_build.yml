@@ -88,6 +88,7 @@ jobs:
           path: dist/*.whl
 
   test-wheel-linux:
+    needs: build-wheel-mac
     runs-on: ubuntu-18.04
     strategy:
       matrix:
@@ -131,6 +132,7 @@ jobs:
           exit $EXIT_STATUS
 
   test-wheel-mac:
+    needs: build-wheel-mac
     runs-on: macos-latest
     strategy:
       matrix:
