@@ -674,14 +674,17 @@ def test_collector_vecnorm_envcreator(static_seed):
 
 
 @pytest.mark.parametrize("use_async", [False, True])
-@pytest.mark.skipif(torch.cuda.device_count() <= 1, reason="no cuda device found")
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
 def test_update_weights(use_async):
-    policy = torch.nn.Linear(3, 4).cuda(1)
+    n_actions = ContinuousActionVecMockEnv().action_spec.shape[-1]
+    policy = TensorDictModule(
+        torch.nn.LazyLinear(n_actions), in_keys=["observation"], out_keys=["action"]
+    )
     collector_class = (
         MultiSyncDataCollector if not use_async else MultiaSyncDataCollector
     )
     collector = collector_class(
-        [lambda: DiscreteActionVecMockEnv()] * 3,
+        [lambda: ContinuousActionVecMockEnv()] * 3,
         policy=policy,
         devices=[torch.device("cuda:0")] * 3,
         passing_devices=[torch.device("cuda:0")] * 3,
