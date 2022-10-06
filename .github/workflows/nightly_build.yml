@@ -40,12 +40,12 @@ jobs:
       - name: Build TorchRL Nightly
         run: |
           rm -r dist || true
-          export CC=clang CXX=clang++
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install wheel
           python3 setup.py bdist_wheel \
             --package_name torchrl-nightly \
             --python-tag=${{ matrix.python-tag }}
+           find . -name 'dist/*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
       # pretend that they're manylinux1 compliant so we do the same.
       - name: Show auditwheel output; confirm 2-17
