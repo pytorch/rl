@@ -90,6 +90,7 @@ jobs:
     - name: Build TorchRL Nightly
       run: |
         rm -r dist || true
+        BUILD_VERSION= \
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --package_name torchrl-nightly \

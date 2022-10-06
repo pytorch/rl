@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 from typing import List
 
@@ -19,14 +20,6 @@ from torch.utils.cpp_extension import (
 )
 
 cwd = os.path.dirname(os.path.abspath(__file__))
-version_txt = os.path.join(cwd, "version.txt")
-with open(version_txt, "r") as f:
-    version = f.readline().strip()
-
-
-ROOT_DIR = Path(__file__).parent.resolve()
-
-
 try:
     sha = (
         subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd)
@@ -35,12 +28,28 @@ try:
     )
 except Exception:
     sha = "Unknown"
+
+
+def get_version():
+    version_txt = os.path.join(cwd, "version.txt")
+    with open(version_txt, "r") as f:
+        version = f.readline().strip()
+    if os.getenv("BUILD_VERSION"):
+        version = os.getenv("BUILD_VERSION")
+    elif sha != "Unknown":
+        version += "+" + sha[:7]
+    return version
+
+
+ROOT_DIR = Path(__file__).parent.resolve()
+
+
 package_name = "torchrl"
 
-if os.getenv("BUILD_VERSION"):
-    version = os.getenv("BUILD_VERSION")
-elif sha != "Unknown":
-    version += "+" + sha[:7]
+
+def get_nightly_version():
+    today = date.today()
+    return f"{today.year}.{today.month}.{today.day}"
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -54,7 +63,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     return parser.parse_known_args(argv)
 
 
-def write_version_file():
+def write_version_file(version):
     version_path = os.path.join(cwd, "torchrl", "version.py")
     with open(version_path, "w") as f:
         f.write("__version__ = '{}'\n".format(version))
@@ -157,6 +166,16 @@ def get_extensions():
 def _main(argv):
     args, unknown = parse_args(argv)
     name = args.package_name
+    is_nightly = "nightly" in name
+
+    if is_nightly:
+        version = get_nightly_version()
+        write_version_file(version)
+        print("Building wheel {}-{}".format(package_name, version))
+        print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
+    else:
+        version = get_version()
+
     pytorch_package_dep = _get_pytorch_version()
     print("-- PyTorch dependency:", pytorch_package_dep)
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
@@ -215,7 +234,4 @@ def _main(argv):
 
 if __name__ == "__main__":
 
-    write_version_file()
-    print("Building wheel {}-{}".format(package_name, version))
-    print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
     _main(sys.argv[1:])
