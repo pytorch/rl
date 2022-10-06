@@ -313,6 +313,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
+    print(create_env_fn)
+    create_env_fn.rollout(3)
+    alkbkdhfad
 
     collector = make_collector_offpolicy(
         make_env=create_env_fn,
