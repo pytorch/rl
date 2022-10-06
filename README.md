@@ -484,18 +484,8 @@ OS: macOS **** (x86_64)
 
 ## Running examples
 Examples are coded in a very similar way but the configuration may change from one algorithm to another (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)
-To train an algorithm it is therefore advised to use the predefined configurations that are found in the `configs` sub-folder in each algorithm directory:
-```
-python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt
-```
-Note that using the config files requires the [configargparse](https://pypi.org/project/ConfigArgParse/) library.
 
-One can also overwrite the config parameters using flags, e.g.
-```
-python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt --frame_skip=2 --collection_devices=cuda:1
-```
-
-Each example will write a tensorboard log in a dedicated folder, e.g. `ppo_logging/...`.
+Check the [examples markdown](examples/EXAMPLES.md) directory for more details about handling the various configuration settings.
 
 ## Contributing
 
