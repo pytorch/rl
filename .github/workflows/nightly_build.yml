@@ -115,7 +115,7 @@ jobs:
       - name: Install built wheels
         run: |
           find . -name '/tmp/wheels/*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
-          python3 -mpip install *.whl --no-cache-dir
+          python3 -mpip install * --no-cache-dir
       - name: Log version string
         run: |
           # Avoid ambiguity of "import torchrl" by deleting the source files.
