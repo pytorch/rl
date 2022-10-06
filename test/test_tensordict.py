@@ -2566,55 +2566,62 @@ def test_memory_lock(method):
     td.set("b", torch.randn(4, 5), inplace=True)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
-def test_make_tensordict(device):
-    a = torch.randn(3, 4)
-    tensordict = make_tensordict({"a": a})
-    assert (tensordict["a"] == a.unsqueeze(-1)).all()
+class TestMakeTensorDict:
+    def test_create_tensordict(self):
+        tensordict = make_tensordict(a=torch.zeros(3, 4))
+        assert (tensordict["a"] == torch.zeros(3, 4, 1)).all()
 
-    tensordict = make_tensordict({"a": torch.randn(3, 4)})
-    assert tensordict.batch_size == torch.Size([3, 4])
-    assert tensordict.device is None
+    def test_tensordict_batch_size(self):
+        tensordict = make_tensordict()
+        assert tensordict.batch_size == torch.Size([])
 
-    tensordict = make_tensordict({"a": torch.randn(3, 4), "b": torch.randn(3, 4, 5)})
-    assert tensordict.batch_size == torch.Size([3, 4])
-    assert tensordict.device is None
+        tensordict = make_tensordict(a=torch.randn(3, 4))
+        assert tensordict.batch_size == torch.Size([3, 4])
 
-    tensordict = make_tensordict({"a": torch.randn(3, 4, 2), "b": torch.randn(3, 4, 5)})
-    assert tensordict.batch_size == torch.Size([3, 4])
+        tensordict = make_tensordict(a=torch.randn(3, 4), b=torch.randn(3, 4, 5))
+        assert tensordict.batch_size == torch.Size([3, 4])
 
-    tensordict = make_tensordict({"a": torch.randn(3, 4), "b": torch.randn(1)})
-    assert tensordict.batch_size == torch.Size([])
+        nested_tensordict = make_tensordict(c=tensordict, d=torch.randn(3, 5))  # nested
+        assert nested_tensordict.batch_size == torch.Size([3])
 
-    tensordict = make_tensordict(
-        {"a": torch.randn(3, 4), "b": torch.randn(3, 4, 5)}, batch_size=[3]
-    )
-    assert tensordict.batch_size == torch.Size([3])
+        nested_tensordict = make_tensordict(c=tensordict, d=torch.randn(4, 5))  # nested
+        assert nested_tensordict.batch_size == torch.Size([])
 
-    tensordict = make_tensordict(
-        {"a": torch.randn(3, 4), "b": torch.randn(3, 4, 5)}, batch_size=[]
-    )
-    assert tensordict.batch_size == torch.Size([])
+        tensordict = make_tensordict(a=torch.randn(3, 4, 2), b=torch.randn(3, 4, 5))
+        assert tensordict.batch_size == torch.Size([3, 4])
 
-    tensordict = make_tensordict(
-        {"a": torch.randn(3, 4), "b": torch.randn(3, 4)}, device=device
-    )
-    assert tensordict.device == device
-    assert tensordict["a"].device == device
-    assert tensordict["b"].device == device
+        tensordict = make_tensordict(a=torch.randn(3, 4), b=torch.randn(1))
+        assert tensordict.batch_size == torch.Size([])
 
-    tensordict = make_tensordict(
-        {
-            "a": torch.randn(3, 4, device=device),
-            "b": torch.randn(3, 4),
-            "c": torch.randn(3, 4, device="cpu"),
-        },
-        device=device,
-    )
-    assert tensordict.device == device
-    assert tensordict["a"].device == device
-    assert tensordict["b"].device == device
-    assert tensordict["c"].device == device
+        tensordict = make_tensordict(
+            a=torch.randn(3, 4), b=torch.randn(3, 4, 5), batch_size=[3]
+        )
+        assert tensordict.batch_size == torch.Size([3])
+
+        tensordict = make_tensordict(
+            a=torch.randn(3, 4), b=torch.randn(3, 4, 5), batch_size=[]
+        )
+        assert tensordict.batch_size == torch.Size([])
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_tensordict_device(self, device):
+        tensordict = make_tensordict(
+            a=torch.randn(3, 4), b=torch.randn(3, 4), device=device
+        )
+        assert tensordict.device == device
+        assert tensordict["a"].device == device
+        assert tensordict["b"].device == device
+
+        tensordict = make_tensordict(
+            a=torch.randn(3, 4, device=device),
+            b=torch.randn(3, 4),
+            c=torch.randn(3, 4, device="cpu"),
+            device=device,
+        )
+        assert tensordict.device == device
+        assert tensordict["a"].device == device
+        assert tensordict["b"].device == device
+        assert tensordict["c"].device == device
 
 
 if __name__ == "__main__":
