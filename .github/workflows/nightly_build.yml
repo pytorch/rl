@@ -40,6 +40,8 @@ jobs:
       - name: Build TorchRL Nightly
         run: |
           rm -r dist || true
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python3 -mpip install wheel
           python3 setup.py bdist_wheel \
             --package_name torchrl-nightly \
             --python-tag=${{ matrix.python-tag }}
@@ -73,12 +75,14 @@ jobs:
           architecture: x64
       - name: Checkout torchrl
         uses: actions/checkout@v2
-      - name: Install PyTorch 1.12 RC
+      - name: Install PyTorch nightly
         run: |
           python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/cpu
       - name: Build TorchRL Nightly
         run: |
           rm -r dist || true
+          export CC=clang CXX=clang++
+          python3 -mpip install wheel
           python3 setup.py bdist_wheel \
             --package_name torchrl-nightly \
             --python-tag=${{ matrix.python-tag }}
