@@ -113,7 +113,6 @@ jobs:
           path: /tmp/wheels
       - name: Install built wheels
         run: |
-#          find /tmp/wheels/ -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
           python3 -mpip install /tmp/wheels/* --no-cache-dir
       - name: Log version string
         run: |
