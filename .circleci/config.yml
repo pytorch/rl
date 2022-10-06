@@ -126,6 +126,9 @@ smoke_test_common: &smoke_test_common
   docker:
     - image: torchrl/smoke_test:latest
 
+orbs:
+  codecov: codecov/codecov@3.2.3
+
 jobs:
 #  circleci_consistency:
 #    docker:
@@ -276,6 +279,7 @@ jobs:
       - run:
           name: Run tests
           command: .circleci/unittest/linux/scripts/run_test.sh
+      - codecov/upload
       - run:
           name: Post process
           command: .circleci/unittest/linux/scripts/post_process.sh
@@ -331,6 +335,7 @@ jobs:
           name: Run tests
           command: bash .circleci/unittest/linux/scripts/run_test.sh
 #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
+      - codecov/upload
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/post_process.sh
@@ -386,6 +391,7 @@ jobs:
           name: Run tests
           command: bash .circleci/unittest/linux_optdeps/scripts/run_test.sh
 #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
+      - codecov/upload
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_optdeps/scripts/post_process.sh
@@ -433,6 +439,7 @@ jobs:
       - run:
           name: Run tests
           command: .circleci/unittest/linux_stable/scripts/run_test.sh
+      - codecov/upload
       - run:
           name: Post process
           command: .circleci/unittest/linux_stable/scripts/post_process.sh
@@ -488,6 +495,7 @@ jobs:
           name: Run tests
           command: bash .circleci/unittest/linux_stable/scripts/run_test.sh
 #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
+      - codecov/upload
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_stable/scripts/post_process.sh
@@ -532,6 +540,7 @@ jobs:
       - run:
           name: Run tests
           command: .circleci/unittest/linux/scripts/run_test.sh
+      - codecov/upload
       - run:
           name: Post process
           command: .circleci/unittest/linux/scripts/post_process.sh
