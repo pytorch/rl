@@ -231,7 +231,7 @@ jobs:
               --username __token__ \
               --password "$PYPI_TOKEN" \
               --skip-existing \
-              torchrl_nightly-*.whl \
+              /tmp/wheels/torchrl_nightly-*.whl \
               --verbose
 
 #jobs:
