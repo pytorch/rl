@@ -40,12 +40,10 @@ jobs:
         uses: actions/checkout@v2
       - name: Install PyTorch nightly
         run: |
-#          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
       - name: Build TorchRL Nightly
         run: |
           rm -r dist || true
-#          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install wheel
           python3 setup.py bdist_wheel \
             --package_name torchrl-nightly \
