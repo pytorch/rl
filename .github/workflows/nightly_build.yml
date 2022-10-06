@@ -110,7 +110,7 @@ jobs:
       - name: Download built wheels
         uses: actions/download-artifact@v2
         with:
-          name: torchrl-${{ matrix.os[0] }}-${{ matrix.python_version }}_cpu.whl
+          name: torchrl-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: /tmp/wheels
       - name: Install built wheels
         run: |
@@ -192,7 +192,7 @@ jobs:
       - name: Download built wheels
         uses: actions/download-artifact@v2
         with:
-          name: torchrl-${{ matrix.os[0] }}-${{ matrix.python_version }}_${{ matrix.cuda_support[2] }}.whl
+          name: torchrl-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: /tmp/wheels
       - name: Push TorchRL Binary to PYPI
         env:
