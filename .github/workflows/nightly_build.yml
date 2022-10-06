@@ -88,7 +88,7 @@ jobs:
           path: dist/*.whl
 
   test-wheel-linux:
-    needs: build-wheel-mac
+    needs: build-wheel-linux
     runs-on: ubuntu-18.04
     strategy:
       matrix:
