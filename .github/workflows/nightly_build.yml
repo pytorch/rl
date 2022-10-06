@@ -199,8 +199,8 @@ jobs:
             PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
           find . -name '/tmp/wheels/*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
-          conda run -n build_binary python -m pip install twine
-          conda run -n build_binary \
+          python3 -mpip install twine
+          python3 -m twine upload \
             python -m twine upload \
               --username __token__ \
               --password "$PYPI_TOKEN" \
@@ -226,9 +226,8 @@ jobs:
         env:
             PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
-          conda run -n build_binary python -m pip install twine
-          conda run -n build_binary \
-            python -m twine upload \
+          python3 -mpip install twine
+          python3 -m twine upload \
               --username __token__ \
               --password "$PYPI_TOKEN" \
               --skip-existing \
