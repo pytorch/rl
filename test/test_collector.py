@@ -31,6 +31,7 @@ from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
+from torchrl.modules import LSTMNet, TensorDictModule
 
 # torch.set_default_dtype(torch.double)
 
@@ -767,6 +768,67 @@ def test_excluded_keys(collector_class, exclude):
         break
     collector.shutdown()
     dummy_env.close()
+
+
+@pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
+@pytest.mark.parametrize(
+    "collector_class",
+    [MultiaSyncDataCollector, MultiSyncDataCollector, SyncDataCollector],
+)
+@pytest.mark.parametrize("init_random_frames", [0, 50])
+def test_collector_output_keys(collector_class, init_random_frames):
+    from torchrl.envs.libs.gym import GymEnv
+
+    out_features = 1
+    hidden_size = 12
+    net = LSTMNet(
+        out_features,
+        {"input_size": hidden_size, "hidden_size": hidden_size},
+        {"out_features": hidden_size},
+    )
+
+    policy = TensorDictModule(
+        net,
+        ["observation", "hidden1", "hidden2"],
+        ["action", "hidden1", "hidden2", "next_hidden1", "next_hidden2"],
+    )
+
+    env_maker = lambda: GymEnv("Pendulum-v1")
+
+    policy(env_maker().reset())
+
+    collector_kwargs = {
+        "create_env_fn": env_maker,
+        "policy": policy,
+        "total_frames": 200,
+        "frames_per_batch": 20,
+        "init_random_frames": init_random_frames,
+    }
+
+    if collector_class is not SyncDataCollector:
+        collector_kwargs["create_env_fn"] = [
+            collector_kwargs["create_env_fn"] for _ in range(3)
+        ]
+
+    collector = collector_class(**collector_kwargs)
+
+    keys = [
+        "action",
+        "done",
+        "hidden1",
+        "hidden2",
+        "mask",
+        "next_hidden1",
+        "next_hidden2",
+        "next_observation",
+        "observation",
+        "reward",
+        "step_count",
+        "traj_ids",
+    ]
+    b = next(iter(collector))
+
+    assert all(key in b for key in keys)
 
 
 def weight_reset(m):
