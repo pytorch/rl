@@ -25,6 +25,11 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     MultiaSyncDataCollector,
 )
+from torchrl.data import (
+    CompositeSpec,
+    NdUnboundedContinuousTensorSpec,
+    UnboundedContinuousTensorSpec,
+)
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.envs import EnvCreator
 from torchrl.envs import ParallelEnv
@@ -782,24 +787,41 @@ def test_excluded_keys(collector_class, exclude):
 @pytest.mark.parametrize(
     "collector_class",
     [MultiaSyncDataCollector, MultiSyncDataCollector, SyncDataCollector],
+    # [SyncDataCollector],
 )
 @pytest.mark.parametrize("init_random_frames", [0, 50])
-def test_collector_output_keys(collector_class, init_random_frames):
+@pytest.mark.parametrize("explicit_spec", [True, False])
+def test_collector_output_keys(collector_class, init_random_frames, explicit_spec):
     from torchrl.envs.libs.gym import GymEnv
 
     out_features = 1
     hidden_size = 12
+    total_frames = 200
+    frames_per_batch = 20
+    num_envs = 3
+
     net = LSTMNet(
         out_features,
         {"input_size": hidden_size, "hidden_size": hidden_size},
         {"out_features": hidden_size},
     )
 
-    policy = TensorDictModule(
-        net,
-        ["observation", "hidden1", "hidden2"],
-        ["action", "hidden1", "hidden2", "next_hidden1", "next_hidden2"],
-    )
+    policy_kwargs = {
+        "module": net,
+        "in_keys": ["observation", "hidden1", "hidden2"],
+        "out_keys": ["action", "hidden1", "hidden2", "next_hidden1", "next_hidden2"],
+    }
+    if explicit_spec:
+        hidden_spec = NdUnboundedContinuousTensorSpec(hidden_size)
+        policy_kwargs["spec"] = CompositeSpec(
+            action=UnboundedContinuousTensorSpec(),
+            hidden1=hidden_spec,
+            hidden2=hidden_spec,
+            next_hidden1=hidden_spec,
+            next_hidden2=hidden_spec,
+        )
+
+    policy = TensorDictModule(**policy_kwargs)
 
     env_maker = lambda: GymEnv("Pendulum-v1")
 
@@ -808,14 +830,14 @@ def test_collector_output_keys(collector_class, init_random_frames):
     collector_kwargs = {
         "create_env_fn": env_maker,
         "policy": policy,
-        "total_frames": 200,
-        "frames_per_batch": 20,
+        "total_frames": total_frames,
+        "frames_per_batch": frames_per_batch,
         "init_random_frames": init_random_frames,
     }
 
     if collector_class is not SyncDataCollector:
         collector_kwargs["create_env_fn"] = [
-            collector_kwargs["create_env_fn"] for _ in range(3)
+            collector_kwargs["create_env_fn"] for _ in range(num_envs)
         ]
 
     collector = collector_class(**collector_kwargs)

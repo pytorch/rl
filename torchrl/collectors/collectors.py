@@ -323,17 +323,24 @@ class SyncDataCollector(_DataCollector):
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
 
-        # TODO: can we rely on policy having spec and ditch hasattr?
         if (
-            hasattr(policy, "spec")
-            and policy.spec is not None
+            policy.spec is not None
             and all(v is not None for v in policy.spec.values())
             and set(policy.spec.keys()) == set(policy.out_keys)
         ):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information
-            self._tensordict_out = env.reset()
-            self._tensordict_out.update(policy.spec.rand())
+            self._tensordict_out = env.reset().update(policy.spec.rand())
+            self._tensordict_out.set(
+                "next_observation", self._tensordict_out["observation"].clone().zero_()
+            )
+            self._tensordict_out.set("reward", torch.zeros(1))
+            self._tensordict_out = (
+                self._tensordict_out.expand(*env.batch_size, self.frames_per_batch, 1)
+                .clone()
+                .zero_()
+                .detach()
+            )
         else:
             # otherwise, we perform a small number of steps with the policy to
             # determine the relevant keys with which to pre-populate _tensordict_out.
