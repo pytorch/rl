@@ -106,7 +106,7 @@ jobs:
           python3 -mpip install --upgrade pip
       - name: Install test dependencies
         run: |
-          python3 -mpip install numpy pytest pytest-cov codecov unittest-xml-reporting pillow>=4.1.1 scipy av networkx expecttest pyyaml
+          python3 -mpip install numpy pytest pytest-cov codecov unittest-xml-reporting pillow>=4.1.1 scipy av networkx expecttest pyyaml --no-cache-dir
       - name: Download built wheels
         uses: actions/download-artifact@v2
         with:
