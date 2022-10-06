@@ -177,7 +177,7 @@ jobs:
           exit $EXIT_STATUS
 
   upload-wheel-linux:
-    needs: [test-wheel-linux, test-wheel-mac]
+    needs: test-wheel-linux
     runs-on: ubuntu-18.04
     strategy:
       matrix:
@@ -207,7 +207,7 @@ jobs:
               --verbose
 
   upload-wheel-mac:
-    needs: [test-wheel]
+    needs: test-wheel-mac
     runs-on: macos-latest
     strategy:
       matrix:
