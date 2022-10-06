@@ -156,6 +156,7 @@ jobs:
             PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
           find /tmp/wheels/ -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install twine
           python3 -m twine upload \
             python -m twine upload \
