@@ -99,7 +99,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
-          python-version: ${{ matrix.python_version }}
+          python-version: ${{ matrix.python_version[0] }}
           architecture: x64
       - name: Checkout torchrl
         uses: actions/checkout@v2
