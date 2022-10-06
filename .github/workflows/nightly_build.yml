@@ -6,10 +6,10 @@ name: Push Binary Nightly
 on:
   workflow_call:
     secrets:
-      AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID:
-        required: true
-      AWS_PYTORCH_UPLOADER_SECRET_ACCESS_KEY:
-        required: true
+#      AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID:
+#        required: true
+#      AWS_PYTORCH_UPLOADER_SECRET_ACCESS_KEY:
+#        required: true
       PYPI_TOKEN:
         required: false
   # run every day at 11:15am
@@ -28,7 +28,7 @@ jobs:
     strategy:
       matrix:
         python_version: [["3.7", "cp37-cp37m"], ["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
-        cuda_support: [["", "--extra-index-url https://download.pytorch.org/whl/cpu", "\"['cpu', '11.3', '11.6']\"", "cpu"]]
+        cuda_support: [['cpu', 'cu116']]
     container: pytorch/manylinux-${{ matrix.cuda_support[3] }}
     steps:
       - name: Checkout torchrl
@@ -36,13 +36,11 @@ jobs:
       - name: Install PyTorch nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install --pre torch --extra-index-url ${{ matrix.cuda_support[1] }}
+          python3 -mpip install --pre torch --extra-index-url ${{ matrix.cuda_support }}
       - name: Build TorchRL Nightly
         run: |
           rm -r dist || true
-          BUILD_VERSION= \
-          conda run -n build_binary \
-            python setup.py bdist_wheel \
+          python3 setup.py bdist_wheel \
             --package_name torchrl-nightly \
             --python-tag=${{ matrix.python-tag }}
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
@@ -81,9 +79,7 @@ jobs:
       - name: Build TorchRL Nightly
         run: |
           rm -r dist || true
-          BUILD_VERSION= \
-          conda run -n build_binary \
-            python setup.py bdist_wheel \
+          python3 setup.py bdist_wheel \
             --package_name torchrl-nightly \
             --python-tag=${{ matrix.python-tag }}
       - name: Upload wheel for the test-wheel job
