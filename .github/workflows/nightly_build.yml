@@ -31,6 +31,11 @@ jobs:
         cuda_support: [["", "cpu", "cpu"]]
     container: pytorch/manylinux-cuda116
     steps:
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python_version[0] }}
+          architecture: x64
       - name: Checkout torchrl
         uses: actions/checkout@v2
       - name: Install PyTorch nightly
