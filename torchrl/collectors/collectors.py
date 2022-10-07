@@ -323,8 +323,11 @@ class SyncDataCollector(_DataCollector):
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
 
+        # TODO: perhaps check type of policy and raise TypeError if something
+        # inappropriate without a `spec` attribute?
         if (
-            policy.spec is not None
+            hasattr(policy, "spec")
+            and policy.spec is not None
             and all(v is not None for v in policy.spec.values())
             and set(policy.spec.keys()) == set(policy.out_keys)
         ):
@@ -336,7 +339,7 @@ class SyncDataCollector(_DataCollector):
             )
             self._tensordict_out.set("reward", torch.zeros(1))
             self._tensordict_out = (
-                self._tensordict_out.expand(*env.batch_size, self.frames_per_batch, 1)
+                self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
                 .clone()
                 .zero_()
                 .detach()

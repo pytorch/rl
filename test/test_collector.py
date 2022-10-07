@@ -787,7 +787,6 @@ def test_excluded_keys(collector_class, exclude):
 @pytest.mark.parametrize(
     "collector_class",
     [MultiaSyncDataCollector, MultiSyncDataCollector, SyncDataCollector],
-    # [SyncDataCollector],
 )
 @pytest.mark.parametrize("init_random_frames", [0, 50])
 @pytest.mark.parametrize("explicit_spec", [True, False])
@@ -812,7 +811,7 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
         "out_keys": ["action", "hidden1", "hidden2", "next_hidden1", "next_hidden2"],
     }
     if explicit_spec:
-        hidden_spec = NdUnboundedContinuousTensorSpec(hidden_size)
+        hidden_spec = NdUnboundedContinuousTensorSpec((1, hidden_size))
         policy_kwargs["spec"] = CompositeSpec(
             action=UnboundedContinuousTensorSpec(),
             hidden1=hidden_spec,
