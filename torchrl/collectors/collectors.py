@@ -359,6 +359,7 @@ class SyncDataCollector(_DataCollector):
                 .zero_()
                 .detach()
             )
+            env.reset()
 
         # in addition to outputs of the policy, we add traj_ids and step_count to
         # _tensordict_out which will be collected during rollout
