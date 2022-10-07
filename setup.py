@@ -2,14 +2,16 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-
+import argparse
 import distutils.command.clean
 import glob
 import os
 import shutil
 import subprocess
+import sys
+from datetime import date
 from pathlib import Path
+from typing import List
 
 from setuptools import setup, find_packages
 from torch.utils.cpp_extension import (
@@ -18,14 +20,6 @@ from torch.utils.cpp_extension import (
 )
 
 cwd = os.path.dirname(os.path.abspath(__file__))
-version_txt = os.path.join(cwd, "version.txt")
-with open(version_txt, "r") as f:
-    version = f.readline().strip()
-
-
-ROOT_DIR = Path(__file__).parent.resolve()
-
-
 try:
     sha = (
         subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd)
@@ -34,15 +28,42 @@ try:
     )
 except Exception:
     sha = "Unknown"
+
+
+def get_version():
+    version_txt = os.path.join(cwd, "version.txt")
+    with open(version_txt, "r") as f:
+        version = f.readline().strip()
+    if os.getenv("BUILD_VERSION"):
+        version = os.getenv("BUILD_VERSION")
+    elif sha != "Unknown":
+        version += "+" + sha[:7]
+    return version
+
+
+ROOT_DIR = Path(__file__).parent.resolve()
+
+
 package_name = "torchrl"
 
-if os.getenv("BUILD_VERSION"):
-    version = os.getenv("BUILD_VERSION")
-elif sha != "Unknown":
-    version += "+" + sha[:7]
+
+def get_nightly_version():
+    today = date.today()
+    return f"{today.year}.{today.month}.{today.day}"
 
 
-def write_version_file():
+def parse_args(argv: List[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="torchrl setup")
+    parser.add_argument(
+        "--package_name",
+        type=str,
+        default="torchrl",
+        help="the name of this output wheel",
+    )
+    return parser.parse_known_args(argv)
+
+
+def write_version_file(version):
     version_path = os.path.join(cwd, "torchrl", "version.py")
     with open(version_path, "w") as f:
         f.write("__version__ = '{}'\n".format(version))
@@ -142,7 +163,19 @@ def get_extensions():
     return ext_modules
 
 
-def _main():
+def _main(argv):
+    args, unknown = parse_args(argv)
+    name = args.package_name
+    is_nightly = "nightly" in name
+
+    if is_nightly:
+        version = get_nightly_version()
+        write_version_file(version)
+        print("Building wheel {}-{}".format(package_name, version))
+        print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
+    else:
+        version = get_version()
+
     pytorch_package_dep = _get_pytorch_version()
     print("-- PyTorch dependency:", pytorch_package_dep)
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
@@ -150,10 +183,11 @@ def _main():
 
     this_directory = Path(__file__).parent
     long_description = (this_directory / "README.md").read_text()
+    sys.argv = [sys.argv[0]] + unknown
 
     setup(
         # Metadata
-        name="torchrl",
+        name=name,
         version=version,
         author="torchrl contributors",
         author_email="vmoens@fb.com",
@@ -190,17 +224,19 @@ def _main():
             ],
         },
         zip_safe=False,
-        # classifiers = [
-        #    "Programming Language :: Python :: 3",
-        #    "License :: OSI Approved :: MIT License",
-        #    "Operating System :: OS Independent",
-        # ]
+        classifiers=[
+            "Programming Language :: Python :: 3",
+            "License :: OSI Approved :: MIT License",
+            "Operating System :: OS Independent",
+            "Development Status :: 3 - Alpha",
+            "Intended Audience :: Developers",
+            "Intended Audience :: Science/Research",
+            "License :: OSI Approved :: BSD License",
+            "Topic :: Scientific/Engineering :: Artificial Intelligence",
+        ],
     )
 
 
 if __name__ == "__main__":
 
-    write_version_file()
-    print("Building wheel {}-{}".format(package_name, version))
-    print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
-    _main()
+    _main(sys.argv[1:])
