@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 from typing import List, Optional, Union
 
 import torch
@@ -87,6 +92,7 @@ class _R3MNet(Transform):
         keys = [key for key in observation_spec._specs.keys() if key in self.keys_in]
         device = observation_spec[keys[0]].device
 
+        observation_spec = CompositeSpec(**observation_spec)
         if self.del_keys:
             for key_in in keys:
                 del observation_spec[key_in]
@@ -135,10 +141,23 @@ class R3MTransform(Compose):
 
     R3M provides pre-trained ResNet weights aimed at facilitating visual
     embedding for robotic tasks. The models are trained using Ego4d.
+
     See the paper:
         R3M: A Universal Visual Representation for Robot Manipulation (Suraj Nair,
             Aravind Rajeswaran, Vikash Kumar, Chelsea Finn, Abhinav Gupta)
             https://arxiv.org/abs/2203.12601
+
+    The R3MTransform is created in a lazy manner: the object will be initialized
+    only when an attribute (a spec or the forward method) will be queried.
+    The reason for this is that the `_init()` method requires some attributes of
+    the parent environment (if any) to be accessed: by making the class lazy we
+    can ensure that the following code snippet works as expected:
+
+    Examples:
+        >>> transform = R3MTransform("resenet50", keys_in=["next_pixels"])
+        >>> env.append_transform(transform)
+        >>> # the forward method will first call _init which will look at env.observation_spec
+        >>> env.reset()
 
     Args:
         model_name (str): one of resnet50, resnet34 or resnet18
@@ -272,7 +291,7 @@ class R3MTransform(Compose):
                 model_name=model_name,
                 del_keys=True,
             )
-            transforms = [*transforms, normalize, network]
+            transforms = [*transforms, network]
 
         for transform in transforms:
             self.append(transform)
@@ -310,7 +329,6 @@ class R3MTransform(Compose):
         return self._dtype
 
     forward = _init_first(Compose.forward)
-    transform_action_spec = _init_first(Compose.transform_action_spec)
     transform_observation_spec = _init_first(Compose.transform_observation_spec)
     transform_input_spec = _init_first(Compose.transform_input_spec)
     transform_reward_spec = _init_first(Compose.transform_reward_spec)

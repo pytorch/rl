@@ -13,7 +13,7 @@ from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
 
 __all__ = ["NoisyLinear", "NoisyLazyLinear", "reset_noise"]
 
-from torchrl import prod
+from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
 from torchrl.envs.utils import exploration_mode
 from torchrl.modules.distributions.utils import _cast_transform_device

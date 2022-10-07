@@ -16,6 +16,10 @@ from mocking_classes import (
     DiscreteActionVecMockEnv,
     MockSerialEnv,
     DiscreteActionConvMockEnv,
+    MockBatchedLockedEnv,
+    MockBatchedUnLockedEnv,
+    DummyModelBasedEnvBase,
+    ActionObsMergeLinear,
 )
 from scipy.stats import chisquare
 from torch import nn
@@ -24,18 +28,20 @@ from torchrl.data.tensor_specs import (
     MultOneHotDiscreteTensorSpec,
     BoundedTensorSpec,
     NdBoundedTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl.envs import EnvCreator, ObservationNorm, CatTensors, DoubleToFloat
+from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
-from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.envs.libs.gym import GymEnv, GymWrapper, _has_gym
 from torchrl.envs.transforms import (
     TransformedEnv,
     Compose,
     ToTensorImage,
     RewardClipping,
 )
-from torchrl.envs.utils import step_tensordict
+from torchrl.envs.utils import step_mdp
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.modules import (
     ActorCriticOperator,
@@ -44,6 +50,7 @@ from torchrl.modules import (
     Actor,
     MLP,
 )
+from torchrl.modules.tensordict_module import WorldModelWrapper
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -289,6 +296,78 @@ def _make_envs(
             )
 
     return env_parallel, env_serial, env0
+
+
+class TestModelBasedEnvBase:
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_mb_rollout(self, device, seed=0):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        world_model = WorldModelWrapper(
+            TensorDictModule(
+                ActionObsMergeLinear(5, 4),
+                in_keys=["hidden_observation", "action"],
+                out_keys=["next_hidden_observation"],
+            ),
+            TensorDictModule(
+                nn.Linear(4, 1),
+                in_keys=["hidden_observation"],
+                out_keys=["reward"],
+            ),
+        )
+        mb_env = DummyModelBasedEnvBase(
+            world_model, device=device, batch_size=torch.Size([10])
+        )
+        rollout = mb_env.rollout(max_steps=100)
+        assert set(rollout.keys()) == set(mb_env.observation_spec.keys()).union(
+            set(mb_env.input_spec.keys())
+        ).union({"reward", "done"})
+        assert rollout["next_hidden_observation"].shape == (10, 100, 4)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_mb_env_batch_lock(self, device, seed=0):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        world_model = WorldModelWrapper(
+            TensorDictModule(
+                ActionObsMergeLinear(5, 4),
+                in_keys=["hidden_observation", "action"],
+                out_keys=["next_hidden_observation"],
+            ),
+            TensorDictModule(
+                nn.Linear(4, 1),
+                in_keys=["hidden_observation"],
+                out_keys=["reward"],
+            ),
+        )
+        mb_env = DummyModelBasedEnvBase(
+            world_model, device=device, batch_size=torch.Size([10])
+        )
+        assert not mb_env.batch_locked
+
+        with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+            mb_env.batch_locked = False
+        td = mb_env.reset()
+        td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
+        td_expanded = td.unsqueeze(-1).expand(10, 2).reshape(-1).to_tensordict()
+        mb_env.step(td)
+
+        with pytest.raises(RuntimeError, match="Expected a tensordict with shape"):
+            mb_env.step(td_expanded)
+
+        mb_env = DummyModelBasedEnvBase(
+            world_model, device=device, batch_size=torch.Size([])
+        )
+        assert not mb_env.batch_locked
+
+        with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+            mb_env.batch_locked = False
+        td = mb_env.reset()
+        td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
+        td_expanded = td.expand(2)
+        mb_env.step(td)
+        # we should be able to do a step with a tensordict that has been expended
+        mb_env.step(td_expanded)
 
 
 class TestParallel:
@@ -958,7 +1037,7 @@ def test_steptensordict(
         [4],
     )
     next_tensordict = TensorDict({}, [4]) if has_out else None
-    out = step_tensordict(
+    out = step_mdp(
         tensordict,
         keep_other=keep_other,
         exclude_reward=exclude_reward,
@@ -990,6 +1069,86 @@ def test_steptensordict(
         assert "done" not in out.keys()
     if has_out:
         assert out is next_tensordict
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_locked(device):
+    env = MockBatchedLockedEnv(device)
+    assert env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2).clone()
+    td = env.step(td)
+
+    with pytest.raises(
+        RuntimeError, match="Expected a tensordict with shape==env.shape, "
+    ):
+        env.step(td_expanded)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked(device):
+    env = MockBatchedUnLockedEnv(device)
+    assert not env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2).clone()
+    td = env.step(td)
+
+    env.step(td_expanded)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked_with_batch_size(device):
+    env = MockBatchedUnLockedEnv(device, batch_size=torch.Size([2]))
+    assert not env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
+    td = env.step(td)
+
+    with pytest.raises(
+        RuntimeError, match="Expected a tensordict with shape==env.shape, "
+    ):
+        env.step(td_expanded)
+
+
+@pytest.mark.skipif(not _has_gym, reason="no gym")
+def test_info_dict_reader(seed=0):
+    import gym
+
+    env = GymWrapper(gym.make("HalfCheetah-v4"))
+    env.set_info_dict_reader(default_info_dict_reader(["x_position"]))
+
+    assert "x_position" in env.observation_spec.keys()
+    assert isinstance(env.observation_spec["x_position"], UnboundedContinuousTensorSpec)
+
+    tensordict = env.reset()
+    tensordict = env.rand_step(tensordict)
+
+    assert env.observation_spec["x_position"].is_in(tensordict["x_position"])
+
+    env2 = GymWrapper(gym.make("HalfCheetah-v4"))
+    env2.set_info_dict_reader(
+        default_info_dict_reader(
+            ["x_position"], spec={"x_position": OneHotDiscreteTensorSpec(5)}
+        )
+    )
+
+    tensordict2 = env2.reset()
+    tensordict2 = env2.rand_step(tensordict2)
+
+    assert not env2.observation_spec["x_position"].is_in(tensordict2["x_position"])
 
 
 if __name__ == "__main__":

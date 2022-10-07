@@ -169,7 +169,7 @@ class TensorDictRecorder(Transform):
         if self.count % self.skip == 0:
             _td = td
             if self.keys_in:
-                _td = td.select(*self.keys_in).clone()
+                _td = td.select(*self.keys_in).to_tensordict()
             self.td.append(_td)
         return td
 

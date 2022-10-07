@@ -101,7 +101,7 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
+@pytest.mark.parametrize("from_pixels", [("from_pixels=True", "catframes=4"), tuple()])
 @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_ddpg_maker(device, from_pixels, gsde, exploration):

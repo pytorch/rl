@@ -15,9 +15,10 @@ from mocking_classes import (
     DiscreteActionVecPolicy,
     DiscreteActionConvPolicy,
     ContinuousActionVecMockEnv,
+    MockSerialEnv,
 )
 from torch import nn
-from torchrl import seed_generator
+from torchrl._utils import seed_generator
 from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.collectors.collectors import (
     RandomPolicy,
@@ -32,6 +33,27 @@ from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
 
 # torch.set_default_dtype(torch.double)
+
+
+class ParametricPolicyNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.param = torch.nn.Parameter(torch.randn(1, requires_grad=True))
+
+    def forward(self, obs):
+        max_obs = (obs == obs.max(dim=-1, keepdim=True)[0]).cumsum(-1).argmax(-1)
+        k = obs.shape[-1]
+        max_obs = (max_obs + 1) % k
+        action = torch.nn.functional.one_hot(max_obs, k)
+        return action
+
+
+class ParametricPolicy(Actor):
+    def __init__(self):
+        super().__init__(
+            ParametricPolicyNet(),
+            in_keys=["observation"],
+        )
 
 
 def make_make_env(env_name="conv"):
@@ -66,8 +88,101 @@ def make_policy(env):
         raise NotImplementedError
 
 
-@pytest.mark.parametrize("num_env", [3, 1])
-@pytest.mark.parametrize("env_name", ["vec", "conv"])
+def _is_consistent_device_type(
+    device_type, policy_device_type, passing_device_type, tensordict_device_type
+):
+    if passing_device_type is None:
+        if device_type is None:
+            if policy_device_type is None:
+                return tensordict_device_type == "cpu"
+
+            return tensordict_device_type == policy_device_type
+
+        return tensordict_device_type == device_type
+
+    return tensordict_device_type == passing_device_type
+
+
+@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("device", ["cuda", "cpu", None])
+@pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
+@pytest.mark.parametrize("passing_device", ["cuda", "cpu", None])
+def test_output_device_consistency(
+    num_env, device, policy_device, passing_device, seed=40
+):
+    if (
+        device == "cuda" or policy_device == "cuda" or passing_device == "cuda"
+    ) and not torch.cuda.is_available():
+        pytest.skip("cuda is not available")
+
+    _device = "cuda:0" if device == "cuda" else device
+    _policy_device = "cuda:0" if policy_device == "cuda" else policy_device
+    _passing_device = "cuda:0" if passing_device == "cuda" else passing_device
+
+    if num_env == 1:
+
+        def env_fn(seed):
+            env = make_make_env("vec")()
+            env.set_seed(seed)
+            return env
+
+    else:
+
+        def env_fn(seed):
+            env = ParallelEnv(
+                num_workers=num_env,
+                create_env_fn=make_make_env("vec"),
+                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+            )
+            return env
+
+    if _policy_device is None:
+        policy = make_policy("vec")
+    else:
+        policy = ParametricPolicy().to(torch.device(_policy_device))
+
+    collector = SyncDataCollector(
+        create_env_fn=env_fn,
+        create_env_kwargs={"seed": seed},
+        policy=policy,
+        frames_per_batch=20,
+        max_frames_per_traj=2000,
+        total_frames=20000,
+        device=_device,
+        passing_device=_passing_device,
+        pin_memory=False,
+    )
+    for _, d in enumerate(collector):
+        assert _is_consistent_device_type(
+            device, policy_device, passing_device, d.device.type
+        )
+        break
+
+    collector.shutdown()
+
+    ccollector = aSyncDataCollector(
+        create_env_fn=env_fn,
+        create_env_kwargs={"seed": seed},
+        policy=policy,
+        frames_per_batch=20,
+        max_frames_per_traj=2000,
+        total_frames=20000,
+        device=_device,
+        passing_device=_passing_device,
+        pin_memory=False,
+    )
+
+    for _, d in enumerate(ccollector):
+        assert _is_consistent_device_type(
+            device, policy_device, passing_device, d.device.type
+        )
+        break
+
+    ccollector.shutdown()
+
+
+@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("env_name", ["conv", "vec"])
 def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     if num_env == 1:
 
@@ -132,6 +247,55 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     assert_allclose_td(b2c, b2)
 
     ccollector.shutdown()
+
+
+@pytest.mark.parametrize("num_env", [1, 3])
+@pytest.mark.parametrize("env_name", ["vec"])
+def test_collector_done_persist(num_env, env_name, seed=5):
+    if num_env == 1:
+
+        def env_fn(seed):
+            env = MockSerialEnv(device="cpu")
+            env.set_seed(seed)
+            return env
+
+    else:
+
+        def env_fn(seed):
+            def make_env(seed):
+                env = MockSerialEnv(device="cpu")
+                env.set_seed(seed)
+                return env
+
+            env = ParallelEnv(
+                num_workers=num_env,
+                create_env_fn=make_env,
+                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+                allow_step_when_done=True,
+            )
+            env.set_seed(seed)
+            return env
+
+    policy = make_policy(env_name)
+
+    collector = SyncDataCollector(
+        create_env_fn=env_fn,
+        create_env_kwargs={"seed": seed},
+        policy=policy,
+        frames_per_batch=200 * num_env,
+        max_frames_per_traj=2000,
+        total_frames=20000,
+        device="cpu",
+        pin_memory=False,
+        reset_when_done=False,
+    )
+    for _, d in enumerate(collector):  # noqa
+        break
+
+    assert (d["done"].sum(-2) >= 1).all()
+    assert torch.unique(d["traj_ids"], dim=-1).shape[-1] == 1
+
+    del collector
 
 
 # TODO: design a test that ensures that collectors are interrupted even if __del__ is not called

@@ -12,7 +12,7 @@ from torch import nn, Tensor
 from torch.nn import functional as F
 
 from torchrl.data.tensordict.tensordict import TensorDictBase
-from torchrl.envs.utils import step_tensordict
+from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule
 
 __all__ = ["SoftUpdate", "HardUpdate", "distance_loss", "hold_out_params"]
@@ -327,7 +327,7 @@ def next_state_value(
     done = tensordict.get("done").squeeze(-1)
 
     if pred_next_val is None:
-        next_td = step_tensordict(tensordict)  # next_observation -> observation
+        next_td = step_mdp(tensordict)  # next_observation -> observation
         next_td = next_td.select(*operator.in_keys)
         operator(next_td, **kwargs)
         pred_next_val_detach = next_td.get(next_val_key).squeeze(-1)

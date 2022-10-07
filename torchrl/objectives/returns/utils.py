@@ -175,7 +175,6 @@ def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
         # s2 = s1.flip(-1).triu().flip(-1).transpose(-2, -1)
         s2 = s1.transpose(-2, -1)
         gammas[..., 1:, :] = s2.unsqueeze(-1)
-
     else:
         gammas = torch.ones(*gamma.shape, T + 1, 1, device=device, dtype=dtype)
         gammas[..., 1:, :] = gamma[..., None, None]
