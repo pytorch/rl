@@ -351,6 +351,7 @@ def parallel_env_constructor(
     return parallel_env
 
 
+@torch.no_grad()
 def get_stats_random_rollout(
     cfg: "DictConfig",  # noqa: F821
     proof_environment: EnvBase = None,
