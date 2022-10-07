@@ -7,7 +7,21 @@ from time import sleep
 
 import pytest
 import torch
-import torchvision
+
+try:
+    import torchvision
+
+    _has_tv = True
+except ImportError:
+    _has_tv = False
+
+try:
+    import mlflow
+
+    _has_mlfow = True
+except ImportError:
+    _has_mlfow = False
+
 from torchrl.trainers.loggers.csv import CSVLogger
 from torchrl.trainers.loggers.mlflow import MLFlowLogger, _has_mlflow
 from torchrl.trainers.loggers.tensorboard import TensorboardLogger, _has_tb
@@ -225,7 +239,6 @@ class TestWandbLogger:
 @pytest.fixture
 def mlflow_fixture():
     torch.manual_seed(0)
-    import mlflow
 
     with tempfile.TemporaryDirectory() as log_dir:
         exp_name = "ramala"
@@ -240,7 +253,6 @@ def mlflow_fixture():
 class TestMLFlowLogger:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
     def test_log_scalar(self, steps, mlflow_fixture):
-        import mlflow
 
         logger, client = mlflow_fixture
         values = torch.rand(3)
@@ -259,8 +271,8 @@ class TestMLFlowLogger:
             assert metric.value == values[i].item()
 
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
+    @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
     def test_log_video(self, steps, mlflow_fixture):
-        import mlflow
 
         logger, client = mlflow_fixture
         videos = torch.cat(
