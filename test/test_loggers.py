@@ -249,7 +249,7 @@ def mlflow_fixture():
         mlflow.end_run()
 
 
-@pytest.mark.skipif(not _has_mlflow, reason="MLFlow not installed")
+@pytest.mark.skipif(not _has_mlfow, reason="MLFlow not installed")
 class TestMLFlowLogger:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
     def test_log_scalar(self, steps, mlflow_fixture):

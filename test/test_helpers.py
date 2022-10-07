@@ -297,11 +297,11 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
 
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
 @pytest.mark.parametrize("from_pixels", [tuple()])
 @pytest.mark.parametrize("tanh_loc", [tuple(), ("tanh_loc=True",)])
-@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
     if not gsde and exploration != "random":
@@ -413,10 +413,10 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
 
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
 @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
-@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_redq_make(device, from_pixels, gsde, exploration):
     if not gsde and exploration != "random":
