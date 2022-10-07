@@ -326,24 +326,32 @@ class SyncDataCollector(_DataCollector):
         # TODO: perhaps check type of policy and raise TypeError if something
         # inappropriate without a `spec` attribute?
         if (
-            hasattr(policy, "spec")
-            and policy.spec is not None
+            policy.spec is not None
             and all(v is not None for v in policy.spec.values())
             and set(policy.spec.keys()) == set(policy.out_keys)
         ):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information
-            self._tensordict_out = env.reset().update(policy.spec.rand())
-            self._tensordict_out.set(
-                "next_observation", self._tensordict_out["observation"].clone().zero_()
+            self._tensordict_out = TensorDict(
+                {
+                    **env.observation_spec.zero(env.batch_size),
+                    "reward": env.reward_spec.zero(env.batch_size),
+                    "done": torch.zeros(
+                        env.batch_size, dtype=torch.bool, device=env.device
+                    ),
+                    **policy.spec.zero(env.batch_size),
+                },
+                env.batch_size,
+                device=env.device,
             )
-            self._tensordict_out.set("reward", torch.zeros(1))
             self._tensordict_out = (
-                self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
-                .clone()
-                .zero_()
-                .detach()
+                self._tensordict_out.unsqueeze(-1)
+                .expand(*env.batch_size, self.frames_per_batch)
+                .to_tensordict()
             )
+            self._tensordict_out = self._tensordict_out.update(
+                step_mdp(self._tensordict_out)
+            )  # add "observation" when there is "next_observation"
         else:
             # otherwise, we perform a small number of steps with the policy to
             # determine the relevant keys with which to pre-populate _tensordict_out.

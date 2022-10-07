@@ -786,7 +786,11 @@ def test_excluded_keys(collector_class, exclude):
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
 @pytest.mark.parametrize(
     "collector_class",
-    [MultiaSyncDataCollector, MultiSyncDataCollector, SyncDataCollector],
+    [
+        SyncDataCollector,
+        MultiaSyncDataCollector,
+        MultiSyncDataCollector,
+    ],
 )
 @pytest.mark.parametrize("init_random_frames", [0, 50])
 @pytest.mark.parametrize("explicit_spec", [True, False])
@@ -857,7 +861,9 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     ]
     b = next(iter(collector))
 
-    assert all(key in b for key in keys)
+    assert set(b.keys()) == set(keys)
+    collector.shutdown()
+    del collector
 
 
 def weight_reset(m):
