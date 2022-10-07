@@ -7,12 +7,13 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from ._utils_internal import get_available_devices
 from packaging import version
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs.libs.dm_control import _has_dmc
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
+
+from ._utils_internal import get_available_devices
 
 if _has_gym:
     import gym

@@ -7,7 +7,6 @@ from copy import copy, deepcopy
 
 import pytest
 import torch
-from ._utils_internal import get_available_devices
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
@@ -56,6 +55,8 @@ from torchrl.envs.transforms.transforms import (
     TensorDictPrimer,
 )
 from torchrl.envs.transforms.vip import _VIPNet
+
+from ._utils_internal import get_available_devices
 
 TIMEOUT = 10.0
 

@@ -7,7 +7,6 @@ import argparse
 
 import pytest
 import torch
-from ._utils_internal import get_available_devices
 from torch import nn, autograd
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.modules import (
@@ -18,6 +17,8 @@ from torchrl.modules import (
 )
 from torchrl.modules.distributions import TanhDelta, Delta
 from torchrl.modules.distributions.continuous import SafeTanhTransform
+
+from ._utils_internal import get_available_devices
 
 
 @pytest.mark.parametrize("device", get_available_devices())

@@ -10,7 +10,6 @@ import functorch
 import numpy as np
 import pytest
 import torch
-from ._utils_internal import get_available_devices
 from torch import nn, autograd
 from torchrl.data import (
     TensorDict,
@@ -61,6 +60,8 @@ from torchrl.objectives.returns.functional import (
     generalized_advantage_estimate,
 )
 from torchrl.objectives.returns.utils import _custom_conv1d, _make_gammas_tensor
+
+from ._utils_internal import get_available_devices
 
 
 @pytest.fixture

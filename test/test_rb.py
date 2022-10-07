@@ -8,7 +8,6 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from ._utils_internal import get_available_devices
 from torchrl.data import (
     TensorDict,
     ReplayBuffer,
@@ -27,6 +26,8 @@ from torchrl.data.replay_buffers.storages import (
     LazyTensorStorage,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDictBase
+
+from ._utils_internal import get_available_devices
 
 
 collate_fn_dict = {

@@ -7,7 +7,6 @@ import argparse
 
 import pytest
 import torch
-from ._utils_internal import get_available_devices
 from scipy.stats import ttest_1samp
 from torch import nn
 from torchrl.data import NdBoundedTensorSpec, CompositeSpec
@@ -27,6 +26,8 @@ from torchrl.modules.tensordict_module.exploration import (
     OrnsteinUhlenbeckProcessWrapper,
     AdditiveGaussianWrapper,
 )
+
+from ._utils_internal import get_available_devices
 
 
 @pytest.mark.parametrize("device", get_available_devices())

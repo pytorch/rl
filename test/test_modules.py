@@ -7,7 +7,6 @@ from numbers import Number
 
 import pytest
 import torch
-from ._utils_internal import get_available_devices
 from mocking_classes import MockBatchedUnLockedEnv
 from torch import nn
 from torchrl.data import TensorDict
@@ -26,6 +25,8 @@ from torchrl.modules.functional_modules import (
     FunctionalModuleWithBuffers,
 )
 from torchrl.modules.models import NoisyLinear, MLP, NoisyLazyLinear
+
+from ._utils_internal import get_available_devices
 
 
 @pytest.mark.parametrize("in_features", [3, 10, None])

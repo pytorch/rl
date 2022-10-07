@@ -7,7 +7,6 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from ._utils_internal import get_available_devices
 from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
     NdBoundedTensorSpec,
@@ -19,6 +18,8 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import TensorDict, TensorDictBase
+
+from ._utils_internal import get_available_devices
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])

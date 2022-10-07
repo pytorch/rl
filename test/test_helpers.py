@@ -8,7 +8,6 @@ import dataclasses
 
 import pytest
 import torch
-from ._utils_internal import get_available_devices, generate_seeds
 from hydra import initialize, compose
 from hydra.core.config_store import ConfigStore
 from mocking_classes import (
@@ -33,6 +32,8 @@ from torchrl.trainers.helpers.models import (
     SACModelConfig,
     REDQModelConfig,
 )
+
+from ._utils_internal import get_available_devices, generate_seeds
 
 ## these tests aren't truly unitary but setting up a fake env for the
 # purpose of building a model with args is a lot of unstable scaffoldings

@@ -10,8 +10,9 @@ import tempfile
 import numpy as np
 import pytest
 import torch
-from ._utils_internal import get_available_devices
 from torchrl.data.tensordict.memmap import MemmapTensor
+
+from ._utils_internal import get_available_devices
 
 
 def test_memmap_type():

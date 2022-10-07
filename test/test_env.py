@@ -11,7 +11,6 @@ import numpy as np
 import pytest
 import torch
 import yaml
-from ._utils_internal import get_available_devices
 from mocking_classes import (
     DiscreteActionVecMockEnv,
     MockSerialEnv,
@@ -51,6 +50,8 @@ from torchrl.modules import (
     MLP,
 )
 from torchrl.modules.tensordict_module import WorldModelWrapper
+
+from ._utils_internal import get_available_devices
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))

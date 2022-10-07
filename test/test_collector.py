@@ -8,7 +8,6 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from ._utils_internal import generate_seeds
 from mocking_classes import (
     DiscreteActionConvMockEnv,
     DiscreteActionVecMockEnv,
@@ -31,6 +30,8 @@ from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
+
+from ._utils_internal import generate_seeds
 
 # torch.set_default_dtype(torch.double)
 

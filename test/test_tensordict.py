@@ -10,7 +10,6 @@ import re
 import numpy as np
 import pytest
 import torch
-from ._utils_internal import get_available_devices
 from torch import multiprocessing as mp
 from torchrl._utils import prod
 from torchrl.data import SavedTensorDict, TensorDict, MemmapTensor
@@ -23,6 +22,8 @@ from torchrl.data.tensordict.tensordict import (
     make_tensordict,
 )
 from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
+
+from ._utils_internal import get_available_devices
 
 
 @pytest.mark.parametrize("device", get_available_devices())
