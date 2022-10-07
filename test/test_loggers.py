@@ -23,7 +23,7 @@ except ImportError:
     _has_mlfow = False
 
 from torchrl.trainers.loggers.csv import CSVLogger
-from torchrl.trainers.loggers.mlflow import MLFlowLogger, _has_mlflow
+from torchrl.trainers.loggers.mlflow import MLFlowLogger
 from torchrl.trainers.loggers.tensorboard import TensorboardLogger, _has_tb
 from torchrl.trainers.loggers.wandb import WandbLogger, _has_wandb
 
