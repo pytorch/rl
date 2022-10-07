@@ -21,3 +21,4 @@ export MKL_THREADING_LAYER=GNU
 coverage run -m pytest test/smoke_test.py -v --durations 20
 coverage run -m pytest test/smoke_test_deps.py -v --durations 20
 coverage run -m pytest --instafail -v --durations 20
+coverage xml
