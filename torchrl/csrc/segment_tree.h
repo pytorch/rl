@@ -16,8 +16,8 @@
 #include <limits>
 #include <vector>
 
-#include "torchrl/csrc/numpy_utils.h"
-#include "torchrl/csrc/torch_utils.h"
+#include "numpy_utils.h"
+#include "torch_utils.h"
 
 namespace py = pybind11;
 

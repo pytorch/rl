@@ -385,12 +385,17 @@ conda install pytorch torchvision torchaudio cpuonly -c pytorch-nightly
 
 **Torchrl**
 
-You can install the latest release by using
+You can install the **latest stable release** by using
 ```
 pip3 install torchrl
 ```
 This should work on linux and MacOs (not M1). For Windows and M1/M2 machines, one
 should install the library locally (see below).
+
+The **nightly build** can be installed via 
+```
+pip install torchrl-nightly
+```
 
 To install extra dependencies, call
 ```
@@ -485,18 +490,8 @@ OS: macOS **** (x86_64)
 
 ## Running examples
 Examples are coded in a very similar way but the configuration may change from one algorithm to another (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)
-To train an algorithm it is therefore advised to use the predefined configurations that are found in the `configs` sub-folder in each algorithm directory:
-```
-python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt
-```
-Note that using the config files requires the [configargparse](https://pypi.org/project/ConfigArgParse/) library.
 
-One can also overwrite the config parameters using flags, e.g.
-```
-python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt --frame_skip=2 --collection_devices=cuda:1
-```
-
-Each example will write a tensorboard log in a dedicated folder, e.g. `ppo_logging/...`.
+Check the [examples markdown](examples/EXAMPLES.md) directory for more details about handling the various configuration settings.
 
 ## Contributing
 
