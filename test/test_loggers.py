@@ -7,36 +7,21 @@ from time import sleep
 
 import pytest
 import torch
+from torchrl.trainers.loggers.csv import CSVLogger
+from torchrl.trainers.loggers.mlflow import MLFlowLogger, _has_mlflow, _has_tv
+from torchrl.trainers.loggers.tensorboard import TensorboardLogger, _has_tb
+from torchrl.trainers.loggers.wandb import WandbLogger, _has_wandb
 
-try:
+if _has_tv:
     import torchvision
 
-    _has_tv = True
-except ImportError:
-    _has_tv = False
-
-try:
-    import mlflow
-
-    _has_mlflow = True
-except ImportError:
-    _has_mlflow = False
-
-try:
+if _has_tb:
     from tensorboard.backend.event_processing.event_accumulator import (
         EventAccumulator,
     )
 
-    _has_tb = True
-except ImportError:
-    _has_tb = False
-
-from torchrl.trainers.loggers.csv import CSVLogger
-from torchrl.trainers.loggers.mlflow import MLFlowLogger
-from torchrl.trainers.loggers.tensorboard import TensorboardLogger
-
-# we're not importing wandb directly so we gather _has_wandb from the relevant file
-from torchrl.trainers.loggers.wandb import WandbLogger, _has_wandb
+if _has_mlflow:
+    import mlflow
 
 
 @pytest.mark.skipif(not _has_tb, reason="TensorBoard not installed")
