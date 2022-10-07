@@ -10,7 +10,7 @@ import functorch
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from ._utils_internal import get_available_devices
 from torch import nn, autograd
 from torchrl.data import (
     TensorDict,

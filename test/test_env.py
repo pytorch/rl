@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 import torch
 import yaml
-from _utils_internal import get_available_devices
+from ._utils_internal import get_available_devices
 from mocking_classes import (
     DiscreteActionVecMockEnv,
     MockSerialEnv,

@@ -7,7 +7,7 @@ import argparse
 
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from ._utils_internal import get_available_devices
 from scipy.stats import ttest_1samp
 from torch import nn
 from torchrl.data import NdBoundedTensorSpec, CompositeSpec

@@ -7,7 +7,7 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from ._utils_internal import get_available_devices
 from torchrl.data.tensor_specs import (
     NdUnboundedContinuousTensorSpec,
     NdBoundedTensorSpec,

@@ -8,7 +8,7 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from _utils_internal import generate_seeds
+from ._utils_internal import generate_seeds
 from mocking_classes import (
     DiscreteActionConvMockEnv,
     DiscreteActionVecMockEnv,

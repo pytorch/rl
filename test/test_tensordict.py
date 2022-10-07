@@ -10,7 +10,7 @@ import re
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from ._utils_internal import get_available_devices
 from torch import multiprocessing as mp
 from torchrl._utils import prod
 from torchrl.data import SavedTensorDict, TensorDict, MemmapTensor

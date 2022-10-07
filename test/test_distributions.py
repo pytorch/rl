@@ -7,7 +7,7 @@ import argparse
 
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from ._utils_internal import get_available_devices
 from torch import nn, autograd
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.modules import (

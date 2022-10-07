@@ -7,7 +7,7 @@ from numbers import Number
 
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from ._utils_internal import get_available_devices
 from mocking_classes import MockBatchedUnLockedEnv
 from torch import nn
 from torchrl.data import TensorDict
