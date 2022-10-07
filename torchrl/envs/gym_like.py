@@ -5,20 +5,38 @@
 
 from __future__ import annotations
 
+import abc
 import warnings
-from typing import Optional, Union, Tuple, Any, Dict
+from typing import List, Optional, Sequence, Union, Tuple, Any, Dict
 
 import numpy as np
 import torch
 
 from torchrl.data import TensorDict
+from torchrl.data.tensor_specs import TensorSpec, UnboundedContinuousTensorSpec
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.common import _EnvWrapper
 
 __all__ = ["GymLikeEnv", "default_info_dict_reader"]
 
 
-class default_info_dict_reader:
+class BaseInfoDictReader(metaclass=abc.ABCMeta):
+    """
+    Base class for info-readers.
+    """
+
+    @abc.abstractmethod
+    def __call__(
+        self, info_dict: Dict[str, Any], tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        raise NotImplementedError
+
+    @abc.abstractproperty
+    def info_spec(self) -> Dict[str, TensorSpec]:
+        raise NotImplementedError
+
+
+class default_info_dict_reader(BaseInfoDictReader):
     """
     Default info-key reader.
 
@@ -39,10 +57,29 @@ class default_info_dict_reader:
 
     """
 
-    def __init__(self, keys=None):
+    def __init__(
+        self,
+        keys: List[str] = None,
+        spec: Union[Sequence[TensorSpec], Dict[str, TensorSpec]] = None,
+    ):
         if keys is None:
             keys = []
         self.keys = keys
+
+        if isinstance(spec, Sequence):
+            if len(spec) != len(self.keys):
+                raise ValueError(
+                    "If specifying specs for info keys with a sequence, the "
+                    "length of the sequence must match the number of keys"
+                )
+            self._info_spec = dict(zip(self.keys, spec))
+        else:
+            if spec is None:
+                spec = {}
+
+            self._info_spec = {
+                key: spec.get(key, UnboundedContinuousTensorSpec()) for key in self.keys
+            }
 
     def __call__(
         self, info_dict: Dict[str, Any], tensordict: TensorDictBase
@@ -57,9 +94,13 @@ class default_info_dict_reader:
                 tensordict[key] = info_dict[key]
         return tensordict
 
+    @property
+    def info_spec(self) -> Dict[str, TensorSpec]:
+        return self._info_spec
+
 
 class GymLikeEnv(_EnvWrapper):
-    _info_dict_reader: callable
+    _info_dict_reader: BaseInfoDictReader
 
     """
     A gym-like env is an environment whose behaviour is similar to gym environments in what
@@ -216,7 +257,7 @@ class GymLikeEnv(_EnvWrapper):
             )
         return step_outputs_tuple
 
-    def set_info_dict_reader(self, info_dict_reader: callable) -> GymLikeEnv:
+    def set_info_dict_reader(self, info_dict_reader: BaseInfoDictReader) -> GymLikeEnv:
         """
         Sets an info_dict_reader function. This function should take as input an
         info_dict dictionary and the tensordict returned by the step function, and
@@ -240,6 +281,8 @@ class GymLikeEnv(_EnvWrapper):
 
         """
         self.info_dict_reader = info_dict_reader
+        for info_key, spec in info_dict_reader.info_spec.items():
+            self.observation_spec[info_key] = spec
         return self
 
     def __repr__(self) -> str:

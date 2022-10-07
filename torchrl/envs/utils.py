@@ -18,7 +18,7 @@ class classproperty(property):
         return classmethod(self.fget).__get__(None, owner)()
 
 
-def step_tensordict(
+def step_mdp(
     tensordict: TensorDictBase,
     next_tensordict: TensorDictBase = None,
     keep_other: bool = True,
@@ -57,7 +57,7 @@ def step_tensordict(
         >>> td = env.reset()
         >>> for i in range(max_steps):
         >>>     td = env.step(td)
-        >>>     next_td = step_tensordict(td)
+        >>>     next_td = step_mdp(td)
         >>>     assert next_td is not td # make sure that keys are not overwritten
         >>>     td_out.append(td)
         >>>     td = next_td

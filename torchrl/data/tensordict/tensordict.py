@@ -37,7 +37,9 @@ import torch
 from torch import Tensor
 from torch.jit._shape_functions import infer_size_impl
 
-from torchrl import KeyDependentDefaultDict, prod
+# from torch.utils._pytree import _register_pytree_node
+
+from torchrl._utils import KeyDependentDefaultDict, prod
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.metatensor import MetaTensor
 from torchrl.data.tensordict.utils import (
@@ -571,10 +573,11 @@ dtype=torch.float32)},
             tensor = self._convert_to_tensor(input)
         else:
             tensor = input
-        if (
-            _has_functorch and isinstance(tensor, Tensor) and is_batchedtensor(tensor)
-        ):  # TODO: find a proper way of doing that
-            return tensor
+        # if (
+        #     _has_functorch and isinstance(tensor, Tensor) and is_batchedtensor(tensor)
+        # ):  # TODO: find a proper way of doing that
+        #     return tensor
+        #     tensor = _unwrap_value(tensor)[0]
 
         if check_device and self.device is not None:
             device = self.device
@@ -1891,7 +1894,12 @@ class TensorDict(TensorDictBase):
             else isinstance(proc_value, MemmapTensor)
         )
         is_shared = (
-            self._is_shared if self._is_shared is not None else proc_value.is_shared()
+            self._is_shared
+            if self._is_shared is not None
+            else proc_value.is_shared()
+            if isinstance(proc_value, (TensorDictBase, MemmapTensor))
+            or not is_batchedtensor(proc_value)
+            else False
         )
         return MetaTensor(
             proc_value,
@@ -4695,3 +4703,70 @@ def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_devi
             device=self_device,
         )
         return out
+
+
+# seems like we can do without registering in pytree -- which requires us to create a new TensorDict,
+# an operation that does not come for free
+
+# def _flatten_tensordict(tensordict):
+#     return tensordict, tuple()
+#     # keys, values = list(zip(*tensordict.items()))
+#     # # represent values as batched tensors
+#     # vmap_level = 0
+#     # in_dim
+#     # values = [_add_batch_dim(value, in_dim, vmap_level)
+#     # return list(values), (list(keys), tensordict.device, tensordict.batch_size)
+#
+# def _unflatten_tensordict(values, context):
+#     return values
+#     # values = [_unwrap_value(value) for value in values]
+#     # keys, device, batch_size = context
+#     # print(values[0].shape)
+#     # return TensorDict(
+#     #     {key: value for key, value in zip(keys, values)},
+#     #     [],
+#     #     # [*new_batch_sizes[0], *batch_size],
+#     #     # new_batch_sizes[0],
+#     #     device=device
+#     # )
+#
+#
+# _register_pytree_node(TensorDict, _flatten_tensordict, _unflatten_tensordict)
+
+
+def make_tensordict(
+    batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
+    device: Optional[DEVICE_TYPING] = None,
+    **kwargs,  # source
+) -> TensorDict:
+    """
+    Returns a TensorDict created from the keyword arguments.
+
+    If batch_size is not specified, returns the maximum batch size possible
+
+    Args:
+        **kwargs (TensorDict or torch.Tensor): keyword arguments as data source.
+        batch_size (iterable of int, optional): a batch size for the tensordict.
+        device (torch.device or compatible type, optional): a device for the TensorDict.
+    """
+    if batch_size is None:
+        batch_size = _find_max_batch_size(kwargs)
+    return TensorDict(kwargs, batch_size=batch_size, device=device)
+
+
+def _find_max_batch_size(source: Union[TensorDictBase, dict]) -> list[int]:
+    tensor_data = list(source.values())
+    batch_size = []
+    if not tensor_data:  # when source is empty
+        return batch_size
+    curr_dim = 0
+    while True:
+        if tensor_data[0].dim() > curr_dim:
+            curr_dim_size = tensor_data[0].size(curr_dim)
+        else:
+            return batch_size
+        for tensor in tensor_data[1:]:
+            if tensor.dim() <= curr_dim or tensor.size(curr_dim) != curr_dim_size:
+                return batch_size
+        batch_size.append(curr_dim_size)
+        curr_dim += 1

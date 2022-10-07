@@ -39,7 +39,7 @@ from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import FiniteTensor
-from torchrl.envs.utils import step_tensordict
+from torchrl.envs.utils import step_mdp
 
 __all__ = [
     "Transform",
@@ -339,6 +339,16 @@ class TransformedEnv(EnvBase):
     @batch_locked.setter
     def batch_locked(self, value):
         raise RuntimeError("batch_locked is a read-only property")
+
+    @property
+    def run_type_checks(self) -> bool:
+        return self.base_env.run_type_checks
+
+    @run_type_checks.setter
+    def run_type_checks(self, value):
+        raise RuntimeError(
+            "run_type_checks is a read-only property for TransformedEnvs"
+        )
 
     @property
     def _inplace_update(self):
@@ -1020,10 +1030,24 @@ class FlattenObservation(ObservationTransform):
         observation = torch.flatten(observation, self.first_dim, self.last_dim)
         return observation
 
+    def set_parent(self, parent: Union[Transform, EnvBase]) -> None:
+        out = super().set_parent(parent)
+        observation_spec = self.parent.observation_spec
+        for key in self.keys_in:
+            if key in observation_spec:
+                observation_spec = observation_spec[key]
+                if self.first_dim >= 0:
+                    self.first_dim = self.first_dim - len(observation_spec.shape)
+                if self.last_dim >= 0:
+                    self.last_dim = self.last_dim - len(observation_spec.shape)
+                break
+        return out
+
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
+
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
             space.maximum = self._apply_transform(space.maximum)
@@ -1818,7 +1842,7 @@ class NoopResetEnv(Transform):
 
         while i < noops:
             i += 1
-            tensordict = parent.rand_step(step_tensordict(tensordict))
+            tensordict = parent.rand_step(step_mdp(tensordict))
             if parent.is_done:
                 parent.reset()
                 i = 0
@@ -1829,7 +1853,7 @@ class NoopResetEnv(Transform):
                     break
         if parent.is_done:
             raise RuntimeError("NoopResetEnv concluded with done environment")
-        td = step_tensordict(
+        td = step_mdp(
             tensordict, exclude_done=False, exclude_reward=True, exclude_action=True
         )
 

@@ -14,11 +14,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from torchrl import seed_generator, prod
 from torchrl.data import CompositeSpec, TensorDict, TensorSpec
+from .._utils import seed_generator, prod
 from ..data.tensordict.tensordict import TensorDictBase
 from ..data.utils import DEVICE_TYPING
-from .utils import get_available_libraries, step_tensordict
+from .utils import get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
 
@@ -186,6 +186,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         - device (torch.device): device where the env input and output are expected to live
         - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the
             last reset
+        - run_type_checks (bool): if True, the observation and reward dtypes
+            will be compared against their respective spec and an exception
+            will be raised if they don't match.
 
     Methods:
         step (TensorDictBase -> TensorDictBase): step in the environment
@@ -225,7 +228,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             "batch_size" not in self.__class__.__dict__
         ):
             self.batch_size = torch.Size([])
-        self.run_type_checks = run_type_checks
+        self._run_type_checks = run_type_checks
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
@@ -249,6 +252,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @batch_locked.setter
     def batch_locked(self, value: bool) -> None:
         raise RuntimeError("batch_locked is a read-only property")
+
+    @property
+    def run_type_checks(self) -> bool:
+        return self._run_type_checks
+
+    @run_type_checks.setter
+    def run_type_checks(self, run_type_checks: bool) -> None:
+        self._run_type_checks = run_type_checks
 
     @property
     def action_spec(self) -> TensorSpec:
@@ -360,7 +371,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         Args:
             tensordict (TensorDictBase, optional): tensordict to be used to contain the resulting new observation.
                 In some cases, this input can also be used to pass argument to the reset function.
-            execute_step (bool, optional): if True, a `step_tensordict` is executed on the output TensorDict,
+            execute_step (bool, optional): if True, a `step_mdp` is executed on the output TensorDict,
                 hereby removing the `"next_"` prefixes from the keys.
             kwargs (optional): other arguments to be passed to the native
                 reset function.
@@ -391,7 +402,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"Env {self} was done after reset. This is (currently) not allowed."
             )
         if execute_step:
-            tensordict_reset = step_tensordict(
+            tensordict_reset = step_mdp(
                 tensordict_reset,
                 exclude_done=False,
                 exclude_reward=False,  # some policies may need reward and action at reset time
@@ -553,7 +564,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     break_when_any_done and tensordict.get("done").any()
                 ) or i == max_steps - 1:
                     break
-                tensordict = step_tensordict(
+                tensordict = step_mdp(
                     tensordict,
                     keep_other=True,
                     exclude_reward=False,
@@ -646,7 +657,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         fake_input = input_spec.zero(self.batch_size)
         observation_spec = self.observation_spec
         fake_obs = observation_spec.zero(self.batch_size)
-        fake_obs_step = step_tensordict(fake_obs)
+        fake_obs_step = step_mdp(fake_obs)
         reward_spec = self.reward_spec
         fake_reward = reward_spec.zero(self.batch_size)
         fake_td = TensorDict(

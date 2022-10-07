@@ -50,7 +50,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     +     tensordict = policy(tensordict)
     +     tensordict = env.step(tensordict)
     +     out.append(tensordict)
-    +     tensordict = step_tensordict(tensordict)  # renames next_observation_* keys to observation_*
+    +     tensordict = step_mdp(tensordict)  # renames next_observation_* keys to observation_*
     - obs, next_obs, action, log_prob, reward, done = [torch.stack(vals, 0) for vals in zip(*out)]
     + out = torch.stack(out, 0)  # TensorDict supports multiple tensor operations
     ```
@@ -328,6 +328,9 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
 - various [recipes](torchrl/trainers/helpers/models.py) to build models that
     correspond to the environment being deployed.
 
+If you feel a feature is missing from the library, please submit an issue!
+If you would like to contribute to new features, check our [call for contributions](https://github.com/pytorch/rl/issues/509) and our [contribution](CONTRIBUTING.md) page.
+
 ## Examples, tutorials and demos
 
 A series of [examples](examples/) are provided with an illustrative purpose:
@@ -379,14 +382,21 @@ conda install pytorch torchvision torchaudio cpuonly -c pytorch-nightly
 
 `functorch` is included in the nightly PyTorch package, so no need to install it separately.
 
+For M1 Mac users, if the above commands do not work, you can build torch from source by following [this guide](https://github.com/pytorch/pytorch#from-source).
+
 **Torchrl**
 
-You can install the latest release by using
+You can install the **latest stable release** by using
 ```
 pip3 install torchrl
 ```
 This should work on linux and MacOs (not M1). For Windows and M1/M2 machines, one
 should install the library locally (see below).
+
+The **nightly build** can be installed via 
+```
+pip install torchrl-nightly
+```
 
 To install extra dependencies, call
 ```
@@ -437,7 +447,7 @@ pip3 install moviepy
 pip3 install dm_control
 
 # gym, atari games
-pip3 install gym[atari] "gym[accept-rom-license]" pygame
+pip3 install "gym[atari]" "gym[accept-rom-license]" pygame
 
 # tests
 pip3 install pytest pyyaml pytest-instafail
@@ -481,23 +491,14 @@ OS: macOS **** (x86_64)
 
 ## Running examples
 Examples are coded in a very similar way but the configuration may change from one algorithm to another (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)
-To train an algorithm it is therefore advised to use the predefined configurations that are found in the `configs` sub-folder in each algorithm directory:
-```
-python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt
-```
-Note that using the config files requires the [configargparse](https://pypi.org/project/ConfigArgParse/) library.
 
-One can also overwrite the config parameters using flags, e.g.
-```
-python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt --frame_skip=2 --collection_devices=cuda:1
-```
-
-Each example will write a tensorboard log in a dedicated folder, e.g. `ppo_logging/...`.
+Check the [examples markdown](examples/EXAMPLES.md) directory for more details about handling the various configuration settings.
 
 ## Contributing
 
 Internal collaborations to torchrl are welcome! Feel free to fork, submit issues and PRs.
 You can checkout the detailed contribution guide [here](CONTRIBUTING.md).
+As mentioned above, a list of open contributions can be found in [here](https://github.com/pytorch/rl/issues/509).
 
 Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is commited locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
 
