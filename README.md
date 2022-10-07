@@ -382,6 +382,8 @@ conda install pytorch torchvision torchaudio cpuonly -c pytorch-nightly
 
 `functorch` is included in the nightly PyTorch package, so no need to install it separately.
 
+For M1 Mac users, if the above commands do not work, you can build torch from source by following [this guide](https://github.com/pytorch/pytorch#from-source).
+
 **Torchrl**
 
 You can install the **latest stable release** by using
@@ -445,7 +447,7 @@ pip3 install moviepy
 pip3 install dm_control
 
 # gym, atari games
-pip3 install gym[atari] "gym[accept-rom-license]" pygame
+pip3 install "gym[atari]" "gym[accept-rom-license]" pygame
 
 # tests
 pip3 install pytest pyyaml pytest-instafail
