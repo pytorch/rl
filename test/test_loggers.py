@@ -22,9 +22,20 @@ try:
 except ImportError:
     _has_mlflow = False
 
+try:
+    from tensorboard.backend.event_processing.event_accumulator import (
+        EventAccumulator,
+    )
+
+    _has_tb = True
+except ImportError:
+    _has_tb = False
+
 from torchrl.trainers.loggers.csv import CSVLogger
 from torchrl.trainers.loggers.mlflow import MLFlowLogger
-from torchrl.trainers.loggers.tensorboard import TensorboardLogger, _has_tb
+from torchrl.trainers.loggers.tensorboard import TensorboardLogger
+
+# we're not importing wandb directly so we gather _has_wandb from the relevant file
 from torchrl.trainers.loggers.wandb import WandbLogger, _has_wandb
 
 
@@ -48,9 +59,6 @@ class TestTensorboard:
                 )
 
             sleep(0.01)  # wait until events are registered
-            from tensorboard.backend.event_processing.event_accumulator import (
-                EventAccumulator,
-            )
 
             event_acc = EventAccumulator(logger.experiment.get_logdir())
             event_acc.Reload()
@@ -83,9 +91,6 @@ class TestTensorboard:
                 )
 
             sleep(0.01)  # wait until events are registered
-            from tensorboard.backend.event_processing.event_accumulator import (
-                EventAccumulator,
-            )
 
             event_acc = EventAccumulator(logger.experiment.get_logdir())
             event_acc.Reload()
