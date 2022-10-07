@@ -18,9 +18,9 @@ except ImportError:
 try:
     import mlflow
 
-    _has_mlfow = True
+    _has_mlflow = True
 except ImportError:
-    _has_mlfow = False
+    _has_mlflow = False
 
 from torchrl.trainers.loggers.csv import CSVLogger
 from torchrl.trainers.loggers.mlflow import MLFlowLogger
@@ -249,7 +249,7 @@ def mlflow_fixture():
         mlflow.end_run()
 
 
-@pytest.mark.skipif(not _has_mlfow, reason="MLFlow not installed")
+@pytest.mark.skipif(not _has_mlflow, reason="MLFlow not installed")
 class TestMLFlowLogger:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
     def test_log_scalar(self, steps, mlflow_fixture):
