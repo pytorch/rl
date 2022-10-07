@@ -323,8 +323,6 @@ class SyncDataCollector(_DataCollector):
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
 
-        # TODO: perhaps check type of policy and raise TypeError if something
-        # inappropriate without a `spec` attribute?
         if (
             hasattr(policy, "spec")
             and policy.spec is not None
@@ -373,21 +371,9 @@ class SyncDataCollector(_DataCollector):
         # in addition to outputs of the policy, we add traj_ids and step_count to
         # _tensordict_out which will be collected during rollout
         if len(self.env.batch_size):
-            traj_ids = (
-                torch.arange(self.env.batch_size[0])
-                .unsqueeze(-1)
-                .expand(*self._tensordict_out.batch_size)
-                .unsqueeze(-1)
-                .clone()
-            )
+            traj_ids = torch.zeros(*self._tensordict_out.batch_size, 1)
         else:
-            traj_ids = (
-                torch.arange(1)
-                .expand(*self._tensordict_out.batch_size)
-                .unsqueeze(-1)
-                .unsqueeze(-1)
-                .clone()
-            )
+            traj_ids = torch.zeros(*self._tensordict_out.batch_size, 1, 1)
 
         self._tensordict_out.set("traj_ids", traj_ids)
         self._tensordict_out.set(
