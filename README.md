@@ -384,12 +384,17 @@ conda install pytorch torchvision torchaudio cpuonly -c pytorch-nightly
 
 **Torchrl**
 
-You can install the latest release by using
+You can install the **latest stable release** by using
 ```
 pip3 install torchrl
 ```
 This should work on linux and MacOs (not M1). For Windows and M1/M2 machines, one
 should install the library locally (see below).
+
+The **nightly build** can be installed via 
+```
+pip install torchrl-nightly
+```
 
 To install extra dependencies, call
 ```
