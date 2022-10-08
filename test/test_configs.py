@@ -158,7 +158,7 @@ class TestConfigs:
             args += [f"replay_buffer.size={size}"]
         cfg = hydra.compose("config", overrides=args)
         replay_buffer = instantiate(cfg.replay_buffer)
-        assert replay_buffer._capacity == replay_buffer._storage.size
+        assert replay_buffer._capacity == replay_buffer._storage.max_size
 
 
 def make_actor_dqn(net_partial, actor_partial, env, out_features=None):
