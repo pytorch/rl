@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+from sys import platform
 
 import pytest
 import torch.cuda
@@ -21,6 +22,8 @@ try:
     _has_hydra = True
 except ImportError:
     _has_hydra = False
+
+IS_OSX = platform == "darwin"
 
 
 def make_env():
@@ -260,6 +263,8 @@ class TestModelConfigs:
     @pytest.mark.parametrize("independent", [True, False])
     @pytest.mark.parametrize("continuous", [True, False])
     def test_ppo(self, pixels, independent, continuous):
+        if IS_OSX and pixels and continuous:
+            pytest.skip("rendering halfcheetah can throw gladLoadGL error on OSX")
         torch.manual_seed(0)
         env_config = []
         if independent:
@@ -303,6 +308,8 @@ class TestModelConfigs:
     @pytest.mark.parametrize("independent", [True])
     @pytest.mark.parametrize("continuous", [True, False])
     def test_sac(self, pixels, independent, continuous):
+        if IS_OSX and pixels and continuous:
+            pytest.skip("rendering halfcheetah can throw gladLoadGL error on OSX")
         torch.manual_seed(0)
         env_config = []
         if independent:
@@ -349,6 +356,8 @@ class TestModelConfigs:
         self,
         pixels,
     ):
+        if IS_OSX and pixels:
+            pytest.skip("rendering halfcheetah can throw gladLoadGL error on OSX")
         torch.manual_seed(0)
         env_config = []
         if pixels:
@@ -384,6 +393,8 @@ class TestModelConfigs:
     @pytest.mark.parametrize("independent", [True])
     @pytest.mark.parametrize("continuous", [True, False])
     def test_redq(self, pixels, independent, continuous):
+        if IS_OSX and pixels and continuous:
+            pytest.skip("rendering halfcheetah can throw gladLoadGL error on OSX")
         torch.manual_seed(0)
         env_config = []
         if independent:
