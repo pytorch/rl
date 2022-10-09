@@ -10,7 +10,7 @@ import pytest
 import torch
 from hydra import initialize, compose
 from hydra.core.config_store import ConfigStore
-from mocking_classes import (
+from .mocking_classes import (
     ContinuousActionConvMockEnvNumpy,
     ContinuousActionVecMockEnv,
     DiscreteActionVecMockEnv,

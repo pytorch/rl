@@ -8,7 +8,7 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from mocking_classes import (
+from .mocking_classes import (
     DiscreteActionConvMockEnv,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,

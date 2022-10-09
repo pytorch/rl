@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 import torch
 import yaml
-from mocking_classes import (
+from .mocking_classes import (
     DiscreteActionVecMockEnv,
     MockSerialEnv,
     DiscreteActionConvMockEnv,

@@ -7,7 +7,7 @@ from copy import copy, deepcopy
 
 import pytest
 import torch
-from mocking_classes import (
+from .mocking_classes import (
     ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
     MockBatchedLockedEnv,

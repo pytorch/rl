@@ -7,7 +7,7 @@ from numbers import Number
 
 import pytest
 import torch
-from mocking_classes import MockBatchedUnLockedEnv
+from .mocking_classes import MockBatchedUnLockedEnv
 from torch import nn
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
