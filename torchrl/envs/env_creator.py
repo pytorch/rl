@@ -39,7 +39,7 @@ class EnvCreator:
         >>> # and check that the discounted count of observations match on
         >>> # both workers, even if one has not executed any step
         >>> import time
-        >>> from torchrl.envs import GymEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import VecNorm, TransformedEnv
         >>> from torchrl.envs import EnvCreator
         >>> from torch import multiprocessing as mp

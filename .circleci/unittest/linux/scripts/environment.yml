@@ -27,3 +27,4 @@ dependencies:
     - dm_control
     - mlflow
     - av
+    - coverage
