@@ -1173,6 +1173,30 @@ def make_dreamer(
     use_decoder_in_env: bool = False,
     stats: Optional[dict] = None,
 ) -> nn.ModuleList:
+    """Create Dreamer components.
+
+    Args:
+        cfg (DictConfig): Config object.
+        proof_environment (EnvBase): Environment to initialize the model.
+        device (DEVICE_TYPING, optional): Device to use.
+            Defaults to "cpu".
+        action_key (str, optional): Key to use for the action.
+            Defaults to "action".
+        value_key (str, optional): Key to use for the value.
+            Defaults to "state_value".
+        use_decoder_in_env (bool, optional): Whether to use the decoder in the model based dreamer env.
+            Defaults to False.
+        stats (Optional[dict], optional): Stats to use for normalization.
+            Defaults to None.
+
+    Returns:
+        nn.TensorDictModel: Dreamer World model.
+        nn.TensorDictModel: Dreamer Model based environnement.
+        nn.TensorDictModel: Dreamer Actor the world model space.
+        nn.TensorDictModel: Dreamer Value model.
+        nn.TensorDictModel: Dreamer Actor for the real world space.
+
+    """
 
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
