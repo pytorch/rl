@@ -1312,10 +1312,9 @@ class ObservationNorm(ObservationTransform):
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         observation_spec = deepcopy(observation_spec)
         space = observation_spec.space
-        observation_spec_device = deepcopy(observation_spec.device)
         if isinstance(space, ContinuousBox):
-            space.minimum = self._apply_transform(space.minimum).to(observation_spec_device)
-            space.maximum = self._apply_transform(space.maximum).to(observation_spec_device)
+            space.minimum = self._apply_transform(space.minimum)
+            space.maximum = self._apply_transform(space.maximum)
         return observation_spec
 
     def __repr__(self) -> str:
