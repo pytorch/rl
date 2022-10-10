@@ -4,4 +4,4 @@ alpha: 0.7
 beta: 0.5
 storage:
   _target_: torchrl.data.LazyMemmapStorage
-  size: ${replay_buffer.size}
+  max_size: ${replay_buffer.size}
