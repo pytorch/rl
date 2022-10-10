@@ -22,8 +22,8 @@ from .common import LossModule
 
 
 class DDPGLoss(LossModule):
-    """
-    The DDPG Loss class.
+    """The DDPG Loss class.
+
     Args:
         actor_network (TensorDictModule): a policy operator.
         value_network (TensorDictModule): a Q value operator.
@@ -68,6 +68,7 @@ class DDPGLoss(LossModule):
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DDPG losses given a tensordict sampled from the replay buffer.
+
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
 

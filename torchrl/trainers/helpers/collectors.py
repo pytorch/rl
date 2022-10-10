@@ -96,8 +96,7 @@ def sync_sync_collector(
     num_collectors: Optional[int] = None,
     **kwargs,
 ) -> Union[SyncDataCollector, MultiSyncDataCollector]:
-    """
-    Runs synchronous collectors, each running synchronous environments.
+    """Runs synchronous collectors, each running synchronous environments.
 
     E.g.
 
@@ -262,8 +261,7 @@ def make_collector_offpolicy(
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
-    """
-    Returns a data collector for off-policy algorithms.
+    """Returns a data collector for off-policy algorithms.
 
     Args:
         make_env (Callable): environment creator

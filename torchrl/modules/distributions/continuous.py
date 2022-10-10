@@ -87,10 +87,7 @@ class IndependentNormal(D.Independent):
 
 
 class SafeTanhTransform(D.TanhTransform):
-    """
-    TanhTransform subclass that ensured that the transformation is numerically invertible.
-
-    """
+    """TanhTransform subclass that ensured that the transformation is numerically invertible."""
 
     def _call(self, x: torch.Tensor) -> torch.Tensor:
         y = safetanh(x)
@@ -397,8 +394,7 @@ class TanhNormal(D.TransformedDistribution):
 
 
 def uniform_sample_tanhnormal(dist: TanhNormal, size=None) -> torch.Tensor:
-    """
-    Defines what uniform sampling looks like for a TanhNormal distribution.
+    """Defines what uniform sampling looks like for a TanhNormal distribution.
 
     Args:
         dist (TanhNormal): distribution defining the space where the sampling should occur.
@@ -414,8 +410,7 @@ def uniform_sample_tanhnormal(dist: TanhNormal, size=None) -> torch.Tensor:
 
 
 class Delta(D.Distribution):
-    """
-    Delta distribution.
+    """Delta distribution.
 
     Args:
         param (torch.Tensor): parameter of the delta distribution;
@@ -488,8 +483,7 @@ class Delta(D.Distribution):
 
 
 class TanhDelta(D.TransformedDistribution):
-    """
-    Implements a Tanh transformed_in Delta distribution.
+    """Implements a Tanh transformed_in Delta distribution.
 
     Args:
         param (torch.Tensor): parameter of the delta distribution;

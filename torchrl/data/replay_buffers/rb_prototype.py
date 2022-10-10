@@ -14,8 +14,8 @@ from .writers import Writer, RoundRobinWriter
 
 
 class ReplayBuffer:
-    """
-    #TODO: Description of the ReplayBuffer class needed.
+    """A generic, composable replay buffer class.
+
     Args:
         storage (Storage, optional): the storage to be used. If none is provided
             a default ListStorage with max_size of 1_000 will be created.
@@ -97,8 +97,7 @@ class ReplayBuffer:
         return index
 
     def extend(self, data: Sequence) -> torch.Tensor:
-        """Extends the replay buffer with one or more elements contained in
-        an iterable.
+        """Extends the replay buffer with one or more elements contained in an iterable.
 
         Args:
             data (iterable): collection of data to be added to the replay
@@ -130,8 +129,8 @@ class ReplayBuffer:
         return data, info
 
     def sample(self, batch_size: int) -> Tuple[Any, dict]:
-        """
-        Samples a batch of data from the replay buffer.
+        """Samples a batch of data from the replay buffer.
+
         Uses Sampler to sample indices, and retrieves them from Storage.
 
         Args:
@@ -158,8 +157,8 @@ class ReplayBuffer:
 
 
 class TensorDictReplayBuffer(ReplayBuffer):
-    """
-    TensorDict-specific wrapper around the ReplayBuffer class.
+    """TensorDict-specific wrapper around the ReplayBuffer class.
+
     Args:
         priority_key (str): the key at which priority is assumed to be stored
             within TensorDicts added to this ReplayBuffer.

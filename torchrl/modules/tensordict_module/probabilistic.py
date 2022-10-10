@@ -21,8 +21,8 @@ __all__ = ["ProbabilisticTensorDictModule"]
 
 
 class ProbabilisticTensorDictModule(TensorDictModule):
-    """
-    A probabilistic TD Module.
+    """A probabilistic TD Module.
+
     `ProbabilisticTDModule` is a special case of a TDModule where the output is
     sampled given some rule, specified by the input `default_interaction_mode`
     argument and the `exploration_mode()` global function.

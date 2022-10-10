@@ -54,6 +54,13 @@ class Storage:
 
 
 class ListStorage(Storage):
+    """A storage stored in a list.
+
+    Args:
+        max_size (int): the maximum number of elements stored in the storage.
+
+    """
+
     def __init__(self, max_size: int):
         super().__init__(max_size)
         self._storage = []

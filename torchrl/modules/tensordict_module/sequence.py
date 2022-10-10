@@ -39,8 +39,8 @@ __all__ = ["TensorDictSequential"]
 
 
 class TensorDictSequential(TensorDictModule):
-    """
-    A sequence of TDModules.
+    """A sequence of TDModules.
+
     Similarly to `nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
     each, this module will read and write over a tensordict by querying each of the input modules.
     When calling a `TDSequence` instance with a functional module, it is expected that the parameter lists (and
@@ -223,9 +223,7 @@ class TensorDictSequential(TensorDictModule):
     def select_subsequence(
         self, in_keys: Iterable[str] = None, out_keys: Iterable[str] = None
     ) -> "TensorDictSequential":
-        """
-        Returns a new TensorDictSequential with only the modules that are necessary to compute
-        the given output keys with the given input keys.
+        """Returns a new TensorDictSequential with only the modules that are necessary to compute the given output keys with the given input keys.
 
         Args:
             in_keys: input keys of the subsequence we want to select
@@ -387,8 +385,8 @@ class TensorDictSequential(TensorDictModule):
         return CompositeSpec(**kwargs)
 
     def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
-        """
-        Transforms a stateful module in a functional module and returns its parameters and buffers.
+        """Transforms a stateful module in a functional module and returns its parameters and buffers.
+
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
 
         Args:

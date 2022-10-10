@@ -6,9 +6,7 @@ import numpy as np
 
 
 class timeit:
-    """
-    A dirty but easy to use decorator for profiling code
-    """
+    """A dirty but easy to use decorator for profiling code."""
 
     _REG = {}
 
@@ -71,6 +69,17 @@ def _check_for_faulty_process(processes):
 
 
 def seed_generator(seed):
+    """A seed generator function.
+
+    Given a seeding integer, generates a deterministic next seed to be used in a
+    seeding sequence.
+
+    Args:
+        seed (int): initial seed.
+
+    Returns: Next seed of the chain.
+
+    """
     max_seed_val = (
         2 ** 32 - 1
     )  # https://discuss.pytorch.org/t/what-is-the-max-seed-you-can-set-up/145688
@@ -91,6 +100,11 @@ class KeyDependentDefaultDict(collections.defaultdict):
 
 
 def prod(sequence):
+    """General prod function, that generalised usage across math and np.
+
+    Created for multiple python versions compatibility).
+
+    """
     if hasattr(math, "prod"):
         return math.prod(sequence)
     else:

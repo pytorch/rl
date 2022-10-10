@@ -168,9 +168,7 @@ if _has_functorch:
 
 
 class FunctionalModule(nn.Module):
-    """
-    This is the callable object returned by :func:`make_functional`.
-    """
+    """This is the callable object returned by :func:`make_functional`."""
 
     def __init__(self, stateless_model):
         super(FunctionalModule, self).__init__()
@@ -199,9 +197,7 @@ class FunctionalModule(nn.Module):
 
 
 class FunctionalModuleWithBuffers(nn.Module):
-    """
-    This is the callable object returned by :func:`make_functional`.
-    """
+    """This is the callable object returned by :func:`make_functional`."""
 
     def __init__(self, stateless_model):
         super(FunctionalModuleWithBuffers, self).__init__()
@@ -242,7 +238,8 @@ class FunctionalModuleWithBuffers(nn.Module):
 # Some utils for these
 
 
-def extract_weights(model):
+def extract_weights(model: nn.Module):
+    """Extracts the weights of a model in a tensordict."""
     tensordict = TensorDict({}, [])
     for name, param in list(model.named_parameters(recurse=False)):
         setattr(model, name, None)
@@ -257,7 +254,8 @@ def extract_weights(model):
         return None
 
 
-def extract_buffers(model):
+def extract_buffers(model: nn.Module):
+    """Extracts the buffers of a model in a tensordict."""
     tensordict = TensorDict({}, [])
     for name, param in list(model.named_buffers(recurse=False)):
         setattr(model, name, None)

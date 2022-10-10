@@ -28,8 +28,8 @@ def generalized_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Get generalized advantage estimate of a trajectory
+    """Get generalized advantage estimate of a trajectory.
+
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
     https://arxiv.org/pdf/1506.02438.pdf for more context.
 
@@ -79,8 +79,8 @@ def vec_generalized_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Get generalized advantage estimate of a trajectory
+    """Get generalized advantage estimate of a trajectory.
+
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
     https://arxiv.org/pdf/1506.02438.pdf for more context.
 
@@ -140,8 +140,8 @@ def td_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Get generalized advantage estimate of a trajectory
+    """Get generalized advantage estimate of a trajectory.
+
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
     https://arxiv.org/pdf/1506.02438.pdf for more context.
 
@@ -397,7 +397,6 @@ def vec_td_lambda_return_estimate(
             Default is True.
 
     """
-
     shape = next_state_value.shape
     if not shape[-1] == 1:
         raise RuntimeError("last dimension of inputs shape must be singleton")

@@ -8,6 +8,7 @@ import torch
 
 def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
     """Computes a conv1d filter over a value.
+
     This is usually used to compute a discounted return:
 
     Tensor:                         Filter                      Result (discounted return)
@@ -29,7 +30,6 @@ def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
     Returns: a filtered tensor of the same shape as the input tensor.
 
     """
-
     if filter.ndimension() > 2:
         # filter will have shape batch_dims x timesteps x filter_dim x 1
         # reshape to batch_dims x timesteps x 1 x filter_dim ready for convolving
@@ -132,7 +132,8 @@ def roll_by_gather(mat: torch.Tensor, dim: int, shifts: torch.LongTensor):
 
 
 def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
-    """prepares a decay tensor for a matrix multiplication:
+    """Prepares a decay tensor for a matrix multiplication.
+
     Given a tensor gamma of size [*batch, T, 1],
     it will return a new tensor with size [*batch, T, T+1, 1].
     In the rolling_gamma case, a rolling of the gamma values will be performed
@@ -142,11 +143,13 @@ def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
     [ 1, g3, 0, 0]]
 
     Args:
-        gamma:
-        T:
-        rolling_gamma:
+        gamma (torch.tensor): the gamma tensor to be prepared.
+        T (int): the time length
+        rolling_gamma (bool): if True, the gamma value is set for each step
+            indepndently. If False, the gamma value at (i, t) will be used for the
+            trajectory following (i, t).
 
-    Returns:
+    Returns: the prepared gamma decay tensor
 
     """
     # some reshaping code vendored from vec_td_lambda_return_estimate

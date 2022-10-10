@@ -44,8 +44,7 @@ __all__ = [
 
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
-    """Zips a list of iterables containing tensor-like objects and stacks the
-    resulting lists of tensors together.
+    """Zips a list of iterables containing tensor-like objects and stacks the resulting lists of tensors together.
 
     Args:
         list_of_tensor_iterators (list): Sequence containing similar iterators,
@@ -82,8 +81,7 @@ def _pin_memory(output: Any) -> Any:
 
 
 def pin_memory_output(fun) -> Callable:
-    """Calls pin_memory on outputs of decorated function if they have such
-    method."""
+    """Calls pin_memory on outputs of decorated function if they have such method."""
 
     def decorated_fun(self, *args, **kwargs):
         output = fun(self, *args, **kwargs)
@@ -102,8 +100,7 @@ def pin_memory_output(fun) -> Callable:
 
 
 class ReplayBuffer:
-    """
-    Circular replay buffer.
+    """Circular replay buffer.
 
     Args:
         size (int): integer indicating the maximum size of the replay buffer.
@@ -187,8 +184,7 @@ class ReplayBuffer:
             return ret
 
     def extend(self, data: Sequence[Any]):
-        """Extends the replay buffer with one or more elements contained in
-        an iterable.
+        """Extends the replay buffer with one or more elements contained in an iterable.
 
         Args:
             data (iterable): collection of data to be added to the replay
@@ -281,8 +277,9 @@ class ReplayBuffer:
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
-    """
-    Prioritized replay buffer as presented in
+    """Prioritized replay buffer.
+
+    Presented in
         "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015.
         Prioritized experience replay."
         (https://arxiv.org/abs/1511.05952)
@@ -474,14 +471,12 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         return data, weight, index
 
     def sample(self, batch_size: int) -> Tuple[Any, np.ndarray, torch.Tensor]:
-        """Gather a batch of data according to the non-uniform multinomial
-        distribution with weights computed with the provided priorities of
-        each input.
+        """Gathers a batch of data according to the non-uniform multinomial distribution with weights computed with the provided priorities of each input.
 
         Args:
             batch_size (int): float of data to be collected.
 
-        Returns:
+        Returns: a random sample from the replay buffer.
 
         """
         if not self._prefetch:
@@ -540,9 +535,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 
 class TensorDictReplayBuffer(ReplayBuffer):
-    """
-    TensorDict-specific wrapper around the ReplayBuffer class.
-    """
+    """TensorDict-specific wrapper around the ReplayBuffer class."""
 
     def __init__(
         self,
@@ -561,8 +554,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
 
 
 class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
-    """
-    TensorDict-specific wrapper around the PrioritizedReplayBuffer class.
+    """TensorDict-specific wrapper around the PrioritizedReplayBuffer class.
+
     This class returns tensordicts with a new key "index" that represents
     the index of each element in the replay buffer. It also facilitates the
     call to the 'update_priority' method, as it only requires for the
@@ -681,8 +674,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         return idx
 
     def update_priority(self, tensordict: TensorDictBase) -> None:
-        """Updates the priorities of the tensordicts stored in the replay
-        buffer.
+        """Updates the priorities of the tensordicts stored in the replay buffer.
 
         Args:
             tensordict: tensordict with key-value pairs 'self.priority_key'
@@ -699,10 +691,7 @@ class TensorDictPrioritizedReplayBuffer(PrioritizedReplayBuffer):
         return super().update_priority(tensordict.get("index"), priority=priority)
 
     def sample(self, size: int, return_weight: bool = False) -> TensorDictBase:
-        """
-        Gather a batch of tensordicts according to the non-uniform multinomial
-        distribution with weights computed with the priority_key of each
-        input tensordict.
+        """Gather a batch of tensordicts according to the non-uniform multinomial distribution with weights computed with the priority_key of each input tensordict.
 
         Args:
             size (int): size of the batch to be returned
@@ -727,8 +716,7 @@ def create_replay_buffer(
     pin_memory: bool = False,
     prefetch: Optional[int] = None,
 ) -> ReplayBuffer:
-    """
-    Helper function to create a Replay buffer.
+    """Helper function to create a Replay buffer.
 
     Args:
         size (int): integer indicating the maximum size of the replay buffer.
@@ -767,8 +755,7 @@ def create_prioritized_replay_buffer(
     pin_memory: bool = False,
     prefetch: Optional[int] = None,
 ) -> PrioritizedReplayBuffer:
-    """
-    Helper function to create a Prioritized Replay buffer.
+    """Helper function to create a Prioritized Replay buffer.
 
     Args:
         size (int): integer indicating the maximum size of the replay buffer.
