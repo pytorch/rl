@@ -322,10 +322,62 @@ class SyncDataCollector(_DataCollector):
         self._tensordict.set(
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
-        self._tensordict_out = TensorDict(
-            {},
-            batch_size=[*self.env.batch_size, self.frames_per_batch],
-            device=self.passing_device,
+
+        if (
+            hasattr(policy, "spec")
+            and policy.spec is not None
+            and all(v is not None for v in policy.spec.values())
+            and set(policy.spec.keys()) == set(policy.out_keys)
+        ):
+            # if policy spec is non-empty, all the values are not None and the keys
+            # match the out_keys we assume the user has given all relevant information
+            self._tensordict_out = TensorDict(
+                {
+                    **env.observation_spec.zero(env.batch_size),
+                    "reward": env.reward_spec.zero(env.batch_size),
+                    "done": torch.zeros(
+                        env.batch_size, dtype=torch.bool, device=env.device
+                    ),
+                    **policy.spec.zero(env.batch_size),
+                },
+                env.batch_size,
+                device=env.device,
+            )
+            self._tensordict_out = (
+                self._tensordict_out.unsqueeze(-1)
+                .expand(*env.batch_size, self.frames_per_batch)
+                .to_tensordict()
+            )
+            self._tensordict_out = self._tensordict_out.update(
+                step_mdp(self._tensordict_out)
+            )  # add "observation" when there is "next_observation"
+        else:
+            # otherwise, we perform a small number of steps with the policy to
+            # determine the relevant keys with which to pre-populate _tensordict_out.
+            # See #505 for additional context.
+            self._tensordict_out = env.rollout(3, policy)
+            if env.batch_size:
+                self._tensordict_out = self._tensordict_out[..., :1]
+            else:
+                self._tensordict_out = self._tensordict_out[:1]
+            self._tensordict_out = (
+                self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
+                .to_tensordict()
+                .zero_()
+                .detach()
+            )
+            env.reset()
+
+        # in addition to outputs of the policy, we add traj_ids and step_count to
+        # _tensordict_out which will be collected during rollout
+        if len(self.env.batch_size):
+            traj_ids = torch.zeros(*self._tensordict_out.batch_size, 1)
+        else:
+            traj_ids = torch.zeros(*self._tensordict_out.batch_size, 1, 1)
+
+        self._tensordict_out.set("traj_ids", traj_ids)
+        self._tensordict_out.set(
+            "step_count", torch.zeros(*self._tensordict_out.batch_size, 1)
         )
 
         self.return_in_place = return_in_place

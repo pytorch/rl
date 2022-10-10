@@ -7,11 +7,21 @@ from time import sleep
 
 import pytest
 import torch
-import torchvision
 from torchrl.trainers.loggers.csv import CSVLogger
-from torchrl.trainers.loggers.mlflow import MLFlowLogger, _has_mlflow
+from torchrl.trainers.loggers.mlflow import MLFlowLogger, _has_mlflow, _has_tv
 from torchrl.trainers.loggers.tensorboard import TensorboardLogger, _has_tb
 from torchrl.trainers.loggers.wandb import WandbLogger, _has_wandb
+
+if _has_tv:
+    import torchvision
+
+if _has_tb:
+    from tensorboard.backend.event_processing.event_accumulator import (
+        EventAccumulator,
+    )
+
+if _has_mlflow:
+    import mlflow
 
 
 @pytest.mark.skipif(not _has_tb, reason="TensorBoard not installed")
@@ -34,9 +44,6 @@ class TestTensorboard:
                 )
 
             sleep(0.01)  # wait until events are registered
-            from tensorboard.backend.event_processing.event_accumulator import (
-                EventAccumulator,
-            )
 
             event_acc = EventAccumulator(logger.experiment.get_logdir())
             event_acc.Reload()
@@ -69,9 +76,6 @@ class TestTensorboard:
                 )
 
             sleep(0.01)  # wait until events are registered
-            from tensorboard.backend.event_processing.event_accumulator import (
-                EventAccumulator,
-            )
 
             event_acc = EventAccumulator(logger.experiment.get_logdir())
             event_acc.Reload()
@@ -225,7 +229,6 @@ class TestWandbLogger:
 @pytest.fixture
 def mlflow_fixture():
     torch.manual_seed(0)
-    import mlflow
 
     with tempfile.TemporaryDirectory() as log_dir:
         exp_name = "ramala"
@@ -240,7 +243,6 @@ def mlflow_fixture():
 class TestMLFlowLogger:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
     def test_log_scalar(self, steps, mlflow_fixture):
-        import mlflow
 
         logger, client = mlflow_fixture
         values = torch.rand(3)
@@ -259,8 +261,8 @@ class TestMLFlowLogger:
             assert metric.value == values[i].item()
 
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
+    @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
     def test_log_video(self, steps, mlflow_fixture):
-        import mlflow
 
         logger, client = mlflow_fixture
         videos = torch.cat(

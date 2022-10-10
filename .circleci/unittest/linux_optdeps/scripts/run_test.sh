@@ -17,4 +17,5 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/project/.mujoco/mujoco210/bin
 export MKL_THREADING_LAYER=GNU
 
 #MUJOCO_GL=glfw pytest --cov=torchrl --junitxml=test-results/junit.xml -v --durations 20
-MUJOCO_GL=egl pytest --instafail -v --durations 20
+MUJOCO_GL=egl coverage run -m pytest --instafail -v --durations 20
+coverage xml

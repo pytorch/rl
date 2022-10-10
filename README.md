@@ -1,4 +1,5 @@
 [![pytorch](https://circleci.com/gh/pytorch/rl.svg?style=shield)](https://circleci.com/gh/pytorch/rl)
+[![codecov](https://codecov.io/gh/pytorch/rl/branch/main/graph/badge.svg?token=HcpK1ILV6r)](https://codecov.io/gh/pytorch/rl)
 
 # TorchRL
 
@@ -32,7 +33,7 @@ one object to another without friction.
 algorithms. For instance, here's how to code a rollout in TorchRL:
     <details>
       <summary>Code</summary>
-   
+
     ```diff
     - obs, done = env.reset()
     + tensordict = env.reset()
@@ -57,7 +58,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     TensorDict abstracts away the input / output signatures of the modules, env, collectors, replay buffers and losses of the library, allowing its primitives
     to be easily recycled across settings.
     Here's another example of an off-policy training loop in TorchRL (assuming that a data collector, a replay buffer, a loss and an optimizer have been instantiated):
-   
+
     ```diff
     - for i, (obs, next_obs, action, hidden_state, reward, done) in enumerate(collector):
     + for i, tensordict in enumerate(collector):
@@ -73,7 +74,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
             optim.zero_grad()
     ```
     Again, this training loop can be re-used across algorithms as it makes a minimal number of assumptions about the structure of the data.
-   
+
     TensorDict supports multiple tensor operations on its device and shape
     (the shape of TensorDict, or its batch size, is the common arbitrary N first dimensions of all its contained tensors):
     ```python
@@ -96,11 +97,11 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     </details>
 
     Check our [TensorDict tutorial](tutorials/tensordict.ipynb) for more information.
-   
+
 - An associated [`TensorDictModule` class](torchrl/modules/tensordict_module/common.py) which is [functorch](https://github.com/pytorch/functorch)-compatible!
     <details>
       <summary>Code</summary>
-   
+
     ```diff
     transformer_model = nn.Transformer(nhead=16, num_encoder_layers=12)
     + td_module = TensorDictModule(transformer_model, in_keys=["src", "tgt"], out_keys=["out"])
@@ -111,7 +112,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     + td_module(tensordict)
     + out = tensordict["out"]
     ```
- 
+
     The `TensorDictSequential` class allows to branch sequences of `nn.Module` instances in a highly modular way.
     For instance, here is an implementation of a transformer using the encoder and decoder blocks:
     ```python
@@ -123,7 +124,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     assert transformer.in_keys == ["src", "src_mask", "tgt"]
     assert transformer.out_keys == ["memory", "output"]
     ```
-   
+
     `TensorDictSequential` allows to isolate subgraphs by querying a set of desired input / output keys:
     ```python
     transformer.select_subsequence(out_keys=["memory"])  # returns the encoder
@@ -144,7 +145,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     A common pytorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py) is also provided.
     <details>
       <summary>Code</summary>
-   
+
     ```python
     env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
     env_parallel = ParallelEnv(4, env_make)  # creates 4 envs in parallel
@@ -159,7 +160,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     learning (although the "dataloader" -- read data collector -- is modified on-the-fly):
     <details>
       <summary>Code</summary>
-   
+
     ```python
     env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
     collector = MultiaSyncDataCollector(
@@ -182,7 +183,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
 - efficient<sup>(2)</sup> and generic<sup>(1)</sup> [replay buffers](torchrl/data/replay_buffers/replay_buffers.py) with modularized storage:
     <details>
       <summary>Code</summary>
-   
+
     ```python
     storage = LazyMemmapStorage(  # memory-mapped (physical) storage
         cfg.buffer_size,
@@ -205,7 +206,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     which process and prepare the data coming out of the environments to be used by the agent:
     <details>
       <summary>Code</summary>
-   
+
     ```python
     env_make = lambda: GymEnv("Pendulum-v1", from_pixels=True)
     env_base = ParallelEnv(4, env_make, device="cuda:0")  # creates 4 envs in parallel
@@ -237,7 +238,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
 - various [architectures](torchrl/modules/models/) and models (e.g. [actor-critic](torchrl/modules/tensordict_module/actors.py))<sup>(1)</sup>:
     <details>
       <summary>Code</summary>
-   
+
     ```python
     # create an nn.Module
     common_module = ConvNet(
@@ -291,7 +292,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     [modules](torchrl/modules/models/exploration.py) to easily swap between exploration and exploitation<sup>(1)</sup>:
     <details>
       <summary>Code</summary>
-   
+
     ```python
     policy_explore = EGreedyWrapper(policy)
     with set_exploration_mode("random"):
@@ -308,7 +309,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
 
     <details>
       <summary>Code</summary>
-   
+
     ### Loss modules
     ```python
     from torchrl.objectives.costs import DQNLoss
@@ -316,7 +317,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
     tensordict = replay_buffer.sample(batch_size)
     loss = loss_module(tensordict)
     ```
- 
+
     ### Advantage computation
     ```python
     from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
@@ -382,14 +383,21 @@ conda install pytorch torchvision torchaudio cpuonly -c pytorch-nightly
 
 `functorch` is included in the nightly PyTorch package, so no need to install it separately.
 
+For M1 Mac users, if the above commands do not work, you can build torch from source by following [this guide](https://github.com/pytorch/pytorch#from-source).
+
 **Torchrl**
 
-You can install the latest release by using
+You can install the **latest stable release** by using
 ```
 pip3 install torchrl
 ```
 This should work on linux and MacOs (not M1). For Windows and M1/M2 machines, one
 should install the library locally (see below).
+
+The **nightly build** can be installed via 
+```
+pip install torchrl-nightly
+```
 
 To install extra dependencies, call
 ```
@@ -440,7 +448,7 @@ pip3 install moviepy
 pip3 install dm_control
 
 # gym, atari games
-pip3 install gym[atari] "gym[accept-rom-license]" pygame
+pip3 install "gym[atari]" "gym[accept-rom-license]" pygame
 
 # tests
 pip3 install pytest pyyaml pytest-instafail
@@ -484,18 +492,8 @@ OS: macOS **** (x86_64)
 
 ## Running examples
 Examples are coded in a very similar way but the configuration may change from one algorithm to another (e.g. async/sync data collection, hyperparameters, ratio of model updates / frame etc.)
-To train an algorithm it is therefore advised to use the predefined configurations that are found in the `configs` sub-folder in each algorithm directory:
-```
-python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt
-```
-Note that using the config files requires the [configargparse](https://pypi.org/project/ConfigArgParse/) library.
 
-One can also overwrite the config parameters using flags, e.g.
-```
-python examples/ppo/ppo.py --config=examples/ppo/configs/humanoid.txt --frame_skip=2 --collection_devices=cuda:1
-```
-
-Each example will write a tensorboard log in a dedicated folder, e.g. `ppo_logging/...`.
+Check the [examples markdown](examples/EXAMPLES.md) directory for more details about handling the various configuration settings.
 
 ## Contributing
 
