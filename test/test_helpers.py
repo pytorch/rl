@@ -9,8 +9,14 @@ import dataclasses
 import pytest
 import torch
 from _utils_internal import get_available_devices, generate_seeds
-from hydra import initialize, compose
-from hydra.core.config_store import ConfigStore
+
+try:
+    from hydra import initialize, compose
+    from hydra.core.config_store import ConfigStore
+
+    _has_hydra = True
+except ImportError:
+    _has_hydra = False
 from mocking_classes import (
     ContinuousActionConvMockEnvNumpy,
     ContinuousActionVecMockEnv,
@@ -49,6 +55,7 @@ def _assert_keys_match(td, expeceted_keys):
 
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("noisy", [tuple(), ("noisy=True",)])
 @pytest.mark.parametrize("distributional", [tuple(), ("distributional=True",)])
@@ -99,6 +106,7 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
         proof_environment.close()
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [("from_pixels=True", "catframes=4"), tuple()])
@@ -173,6 +181,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
         del proof_environment
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
@@ -287,11 +296,12 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
         del proof_environment
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
 @pytest.mark.parametrize("from_pixels", [tuple()])
 @pytest.mark.parametrize("tanh_loc", [tuple(), ("tanh_loc=True",)])
-@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
     if not gsde and exploration != "random":
@@ -402,10 +412,11 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
         del proof_environment
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
 @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
-@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_redq_make(device, from_pixels, gsde, exploration):
     if not gsde and exploration != "random":
