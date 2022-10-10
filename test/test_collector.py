@@ -44,6 +44,19 @@ from torchrl.modules import (
 # torch.set_default_dtype(torch.double)
 
 
+class UnwrappedPolicy(nn.Module):
+    def __init__(self, out_features: int, multiple_outputs: bool = False):
+        super().__init__()
+        self.multiple_outputs = multiple_outputs
+        self.linear = nn.LazyLinear(out_features)
+
+    def forward(self, observation):
+        output = self.linear(observation)
+        if self.multiple_outputs:
+            return output, output.sum(), output.min(), output.max()
+        return self.linear(observation)
+
+
 class ParametricPolicyNet(nn.Module):
     def __init__(self):
         super().__init__()
@@ -867,6 +880,51 @@ def test_collector_output_keys(collector_class, init_random_frames, explicit_spe
     assert set(b.keys()) == set(keys)
     collector.shutdown()
     del collector
+
+
+@pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
+@pytest.mark.parametrize(
+    "collector_class",
+    [
+        SyncDataCollector,
+        MultiaSyncDataCollector,
+        MultiSyncDataCollector,
+    ],
+)
+@pytest.mark.parametrize("multiple_outputs", [False, True])
+def test_auto_wrap_modules(collector_class, multiple_outputs):
+    from torchrl.envs.libs.gym import GymEnv
+
+    num_envs = 3
+
+    env_maker = lambda: GymEnv("Pendulum-v1")
+    out_features = env_maker().action_spec.shape[-1]
+    policy = UnwrappedPolicy(
+        out_features=out_features, multiple_outputs=multiple_outputs
+    )
+
+    collector_kwargs = {"create_env_fn": env_maker, "policy": policy}
+
+    if collector_class is not SyncDataCollector:
+        collector_kwargs["create_env_fn"] = [
+            collector_kwargs["create_env_fn"] for _ in range(num_envs)
+        ]
+
+    collector = collector_class(**collector_kwargs)
+    out_keys = ["action"]
+    if multiple_outputs:
+        out_keys.extend(f"output{i}" for i in range(1, 4))
+
+    if collector_class is not SyncDataCollector:
+        assert all(
+            isinstance(p, TensorDictModule) for p in collector._policy_dict.values()
+        )
+        assert all(p.out_keys == out_keys for p in collector._policy_dict.values())
+        assert all(p.module is policy for p in collector._policy_dict.values())
+    else:
+        assert isinstance(collector.policy, TensorDictModule)
+        assert collector.policy.out_keys == out_keys
+        assert collector.policy.module is policy
 
 
 def weight_reset(m):
