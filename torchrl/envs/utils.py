@@ -26,7 +26,8 @@ def step_mdp(
     exclude_done: bool = True,
     exclude_action: bool = True,
 ) -> TensorDictBase:
-    """
+    """Creates a new tensordict that reflects a step in time of the input tensordict.
+
     Given a tensordict retrieved after a step, returns another tensordict with all the 'next_' prefixes are removed,
     i.e. all the `'next_some_other_string'` keys will be renamed onto `'some_other_string'` keys.
 

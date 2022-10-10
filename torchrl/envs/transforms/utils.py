@@ -20,6 +20,13 @@ def no_dispatch():
 
 
 class FiniteTensor(torch.Tensor):
+    """A finite tensor.
+
+    If the data contained in this tensor contain non-finite values (nan or inf)
+    a `RuntimeError` will be thrown.
+
+    """
+
     @staticmethod
     def __new__(cls, elem: torch.Tensor, *args, **kwargs):
         if not torch.isfinite(elem).all():

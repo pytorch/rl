@@ -25,8 +25,7 @@ __all__ = ["REDQLoss"]
 
 
 class REDQLoss(LossModule):
-    """
-    REDQ Loss module.
+    """REDQ Loss module.
 
     REDQ (RANDOMIZED ENSEMBLED DOUBLE Q-LEARNING: LEARNING FAST WITHOUT A MODEL
     https://openreview.net/pdf?id=AY8zfZm0tDd) generalizes the idea of using an ensemble of Q-value functions to

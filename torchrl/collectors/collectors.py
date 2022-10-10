@@ -47,6 +47,7 @@ DEFAULT_EXPLORATION_MODE: str = "random"
 class RandomPolicy:
     def __init__(self, action_spec: TensorSpec):
         """Random policy for a given action_spec.
+
         This is a wrapper around the action_spec.rand method.
 
 
@@ -94,7 +95,9 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
     ) -> Tuple[
         ProbabilisticTensorDictModule, torch.device, Union[None, Callable[[], dict]]
     ]:
-        """From a policy and a device, assigns the self.device attribute to
+        """Util method to get a policy and its device given the collector __init__ inputs.
+
+        From a policy and a device, assigns the self.device attribute to
         the desired device and maps the policy onto it or (if the device is
         ommitted) assigns the self.device attribute to the policy device.
 
@@ -173,8 +176,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
 
 
 class SyncDataCollector(_DataCollector):
-    """
-    Generic data collector for RL problems. Requires and environment constructor and a policy.
+    """Generic data collector for RL problems. Requires and environment constructor and a policy.
 
     Args:
         create_env_fn (Callable), returns an instance of EnvBase class.
@@ -607,15 +609,13 @@ class SyncDataCollector(_DataCollector):
         self.shutdown()  # make sure env is closed
 
     def state_dict(self) -> OrderedDict:
-        """Returns the local state_dict of the data collector (environment
-        and policy).
+        """Returns the local state_dict of the data collector (environment and policy).
 
         Returns:
             an ordered dictionary with fields `"policy_state_dict"` and
             `"env_state_dict"`.
 
         """
-
         if isinstance(self.env, TransformedEnv):
             env_state_dict = self.env.transform.state_dict()
         elif isinstance(self.env, _BatchedEnv):
@@ -992,8 +992,8 @@ class _MultiDataCollector(_DataCollector):
                     raise RuntimeError(f"Expected msg='reset', got {msg}")
 
     def state_dict(self) -> OrderedDict:
-        """
-        Returns the state_dict of the data collector.
+        """Returns the state_dict of the data collector.
+
         Each field represents a worker containing its own state_dict.
 
         """
@@ -1009,15 +1009,13 @@ class _MultiDataCollector(_DataCollector):
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:
-        """
-        Loads the state_dict on the workers.
+        """Loads the state_dict on the workers.
 
         Args:
             state_dict (OrderedDict): state_dict of the form
                 ``{"worker0": state_dict0, "worker1": state_dict1}``.
 
         """
-
         for idx in range(self.num_workers):
             self.pipes[idx].send((state_dict[f"worker{idx}"], "load_state_dict"))
         for idx in range(self.num_workers):
@@ -1027,8 +1025,7 @@ class _MultiDataCollector(_DataCollector):
 
 
 class MultiSyncDataCollector(_MultiDataCollector):
-    """Runs a given number of DataCollectors on separate processes
-    synchronously.
+    """Runs a given number of DataCollectors on separate processes synchronously.
 
     The collection starts when the next item of the collector is queried,
     and no environment step is computed in between the reception of a batch of
@@ -1123,8 +1120,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
 
 class MultiaSyncDataCollector(_MultiDataCollector):
-    """Runs a given number of DataCollectors on separate processes
-    asynchronously.
+    """Runs a given number of DataCollectors on separate processes asynchronously.
 
     The collection keeps on occuring on all processes even between the time
     the batch of rollouts is collected and the next call to the iterator.

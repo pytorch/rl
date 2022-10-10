@@ -347,7 +347,7 @@ class TransformedEnv(EnvBase):
 
     @property
     def observation_spec(self) -> TensorSpec:
-        """Observation spec of the transformed environment"""
+        """Observation spec of the transformed environment."""
         if self._observation_spec is None or not self.cache_specs:
             observation_spec = self.transform.transform_observation_spec(
                 deepcopy(self.base_env.observation_spec)
@@ -360,12 +360,12 @@ class TransformedEnv(EnvBase):
 
     @property
     def action_spec(self) -> TensorSpec:
-        """Action spec of the transformed environment"""
+        """Action spec of the transformed environment."""
         return self.input_spec["action"]
 
     @property
     def input_spec(self) -> TensorSpec:
-        """Action spec of the transformed environment"""
+        """Action spec of the transformed environment."""
 
         if self._input_spec is None or not self.cache_specs:
             input_spec = self.transform.transform_input_spec(
@@ -379,7 +379,7 @@ class TransformedEnv(EnvBase):
 
     @property
     def reward_spec(self) -> TensorSpec:
-        """Reward spec of the transformed environment"""
+        """Reward spec of the transformed environment."""
 
         if self._reward_spec is None or not self.cache_specs:
             reward_spec = self.transform.transform_reward_spec(

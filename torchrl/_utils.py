@@ -89,6 +89,14 @@ def seed_generator(seed):
 
 
 class KeyDependentDefaultDict(collections.defaultdict):
+    """A key-dependent default dict.
+
+    Examples:
+        >>> my_dict = KeyDependentDefaultDict(lambda key: "foo_" + key)
+        >>> print(my_dict["bar"])
+        foo_bar
+    """
+
     def __init__(self, fun):
         self.fun = fun
         super().__init__()

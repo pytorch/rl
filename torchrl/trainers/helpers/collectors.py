@@ -34,8 +34,7 @@ def sync_async_collector(
     num_collectors: Optional[int] = None,
     **kwargs,
 ) -> MultiaSyncDataCollector:
-    """
-    Runs asynchronous collectors, each running synchronous environments.
+    """Runs asynchronous collectors, each running synchronous environments.
 
     .. aafig::
 
@@ -78,7 +77,6 @@ def sync_async_collector(
         **kwargs: Other kwargs passed to the data collectors
 
     """
-
     return _make_collector(
         MultiaSyncDataCollector,
         env_fns=env_fns,
@@ -325,6 +323,15 @@ def make_collector_onpolicy(
     cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
+    """Makes a collector in on-policy settings.
+
+    Args:
+        make_env (Callable): environment creator
+        actor_model_explore (TensorDictModule): Model instance used for evaluation and exploration update
+        cfg (DictConfig): config for creating collector object
+        make_env_kwargs (dict): kwargs for the env creator
+
+    """
     collector_helper = sync_sync_collector
 
     ms = None

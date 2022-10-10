@@ -42,6 +42,8 @@ __all__ = [
 
 
 class EnvMetaData:
+    """A class for environment meta-data storage and passing in multiprocessed settings."""
+
     def __init__(
         self,
         tensordict: TensorDictBase,
@@ -134,7 +136,18 @@ class Specs:
     def build_tensordict(
         self, next_observation: bool = True, log_prob: bool = False
     ) -> TensorDictBase:
-        """returns a TensorDict with empty tensors of the desired shape"""
+        """Returns a TensorDict with empty tensors of the desired shape.
+
+        Args:
+            next_observation (bool, optional): if False, the observation returned
+                will be of the current step only (no `"next_"` key will be present).
+                Default is True.
+            log_prob (bool, optional): If True, a log_prob key-value pair will be added
+                to the tensordict.
+
+        Returns: A tensordict populated according to the env specs.
+
+        """
         # build a tensordict from specs
         td = TensorDict({}, batch_size=torch.Size([]))
         action_placeholder = torch.zeros(
@@ -174,8 +187,7 @@ class Specs:
 
 
 class EnvBase(nn.Module, metaclass=abc.ABCMeta):
-    """
-    Abstract environment parent class.
+    """Abstract environment parent class.
 
     Properties:
         - observation_spec (CompositeSpec): sampling spec of the observations;
@@ -243,8 +255,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def batch_locked(self) -> bool:
-        """
-        Whether the environnement can be used with a batch size different from the one it was initialized with or not.
+        """Whether the environnement can be used with a batch size different from the one it was initialized with or not.
+
         If True, the env needs to be used with a tensordict having the same batch size as the env.
         batch_locked is an immutable property.
         """
@@ -299,6 +311,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
+
         Step accepts a single argument, tensordict, which usually carries an 'action' key which indicates the action
         to be taken.
         Step will call an out-place private method, _step, which is the method to be re-written by EnvBase subclasses.
@@ -311,7 +324,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             (+ others if needed).
 
         """
-
         # sanity check
         self._assert_tensordict_shape(tensordict)
 
@@ -367,6 +379,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         **kwargs,
     ) -> TensorDictBase:
         """Resets the environment.
+
         As for step and _step, only the private method `_reset` should be overwritten by EnvBase subclasses.
 
         Args:
@@ -376,6 +389,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 hereby removing the `"next_"` prefixes from the keys.
             kwargs (optional): other arguments to be passed to the native
                 reset function.
+
         Returns:
             a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
 
@@ -419,8 +433,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return prod(self.batch_size)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
-        """Sets the seed of the environment and returns the next seed to be used (
-        which is the input seed if a single environment is present)
+        """Sets the seed of the environment and returns the next seed to be used (which is the input seed if a single environment is present).
 
         Args:
             seed (int): seed to be set
@@ -484,9 +497,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def specs(self) -> Specs:
-        """
+        """Returns a Specs container where all the environment specs are contained.
 
-        Returns a Specs container where all the environment specs are contained.
         This feature allows one to create an environment, retrieve all of the specs in a single data container and then
         erase the environment from the workspace.
 
@@ -649,11 +661,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return super().to(device)
 
     def fake_tensordict(self) -> TensorDictBase:
-        """
-        Returns a fake tensordict with key-value pairs that match in shape, device
-        and dtype what can be expected during an environment rollout.
-
-        """
+        """Returns a fake tensordict with key-value pairs that match in shape, device and dtype what can be expected during an environment rollout."""
         input_spec = self.input_spec
         fake_input = input_spec.zero(self.batch_size)
         observation_spec = self.observation_spec
@@ -807,9 +815,7 @@ def make_tensordict(
     env: _EnvWrapper,
     policy: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
 ) -> TensorDictBase:
-    """
-    Returns a zeroed-tensordict with fields matching those required for a full step
-    (action selection and environment step) in the environment
+    """Returns a zeroed-tensordict with fields matching those required for a full step (action selection and environment step) in the environment.
 
     Args:
         env (_EnvWrapper): environment defining the observation, action and reward space;
