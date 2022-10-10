@@ -13,19 +13,19 @@ from torch import nn
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
 from torchrl.modules import (
-    QValueActor,
     ActorValueOperator,
+    CEMPlanner,
+    LSTMNet,
+    ProbabilisticActor,
+    QValueActor,
     TensorDictModule,
     ValueOperator,
-    ProbabilisticActor,
-    LSTMNet,
-    CEMPlanner,
 )
 from torchrl.modules.functional_modules import (
     FunctionalModule,
     FunctionalModuleWithBuffers,
 )
-from torchrl.modules.models import NoisyLinear, MLP, NoisyLazyLinear
+from torchrl.modules.models import MLP, NoisyLazyLinear, NoisyLinear
 
 
 @pytest.mark.parametrize("in_features", [3, 10, None])

@@ -10,7 +10,7 @@ import torch
 from _utils_internal import get_available_devices
 from scipy.stats import ttest_1samp
 from torch import nn
-from torchrl.data import NdBoundedTensorSpec, CompositeSpec
+from torchrl.data import CompositeSpec, NdBoundedTensorSpec
 from torchrl.data.tensordict.tensordict import TensorDict
 from torchrl.envs.transforms.transforms import gSDENoise
 from torchrl.envs.utils import set_exploration_mode
@@ -24,8 +24,8 @@ from torchrl.modules.models.exploration import LazygSDEModule
 from torchrl.modules.tensordict_module.actors import ProbabilisticActor
 from torchrl.modules.tensordict_module.exploration import (
     _OrnsteinUhlenbeckProcess,
-    OrnsteinUhlenbeckProcessWrapper,
     AdditiveGaussianWrapper,
+    OrnsteinUhlenbeckProcessWrapper,
 )
 
 

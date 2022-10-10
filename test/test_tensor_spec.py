@@ -9,14 +9,14 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from torchrl.data.tensor_specs import (
-    NdUnboundedContinuousTensorSpec,
-    NdBoundedTensorSpec,
-    CompositeSpec,
-    MultOneHotDiscreteTensorSpec,
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
-    UnboundedContinuousTensorSpec,
+    CompositeSpec,
+    MultOneHotDiscreteTensorSpec,
+    NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import TensorDict, TensorDictBase
 

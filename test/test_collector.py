@@ -10,20 +10,20 @@ import pytest
 import torch
 from _utils_internal import generate_seeds
 from mocking_classes import (
+    ContinuousActionVecMockEnv,
     DiscreteActionConvMockEnv,
+    DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
-    DiscreteActionConvPolicy,
-    ContinuousActionVecMockEnv,
     MockSerialEnv,
 )
 from torch import nn
 from torchrl._utils import seed_generator
-from torchrl.collectors import SyncDataCollector, aSyncDataCollector
+from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
-    RandomPolicy,
-    MultiSyncDataCollector,
     MultiaSyncDataCollector,
+    MultiSyncDataCollector,
+    RandomPolicy,
 )
 from torchrl.data import (
     CompositeSpec,
@@ -31,12 +31,15 @@ from torchrl.data import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.envs import EnvCreator
-from torchrl.envs import ParallelEnv
+from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.modules import LSTMNet, TensorDictModule
-from torchrl.modules import OrnsteinUhlenbeckProcessWrapper, Actor
+from torchrl.modules import (
+    Actor,
+    LSTMNet,
+    OrnsteinUhlenbeckProcessWrapper,
+    TensorDictModule,
+)
 
 # torch.set_default_dtype(torch.double)
 
