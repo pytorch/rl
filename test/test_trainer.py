@@ -203,8 +203,8 @@ class TestRewardNorm:
         reward_normalizer2 = RewardNormalizer()
         reward_normalizer2.register(trainer2)
         trainer2.load_state_dict(state_dict)
-        for key, item in reward_normalizer2._reward_stats.items():
-            assert item == reward_normalizer._reward_stats[key]
+        for key, item in reward_normalizer._reward_stats.items():
+            assert item == reward_normalizer2._reward_stats[key]
 
 
 def test_masking():

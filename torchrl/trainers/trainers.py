@@ -790,7 +790,7 @@ class RewardNormalizer:
         }
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        for key, value in state_dict.values():
+        for key, value in state_dict.items():
             setattr(self, key, value)
 
     def register(self, trainer: Trainer):
