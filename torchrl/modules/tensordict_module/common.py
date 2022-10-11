@@ -196,11 +196,19 @@ class TensorDictModule(nn.Module):
                     "Consider using a CompositeSpec object or no spec at all."
                 )
             spec = CompositeSpec(**{self.out_keys[0]: spec})
-        if spec and len(spec) < len(self.out_keys):
+        else:
+            spec = CompositeSpec()
+
+        if set(spec.keys()) != set(self.out_keys):
             # then assume that all the non indicated specs are None
             for key in self.out_keys:
                 if key not in spec:
                     spec[key] = None
+
+        if set(spec.keys()) != set(self.out_keys):
+            raise RuntimeError(
+                f"spec keys and out_keys do not match, got: {spec.keys()} and {self.out_keys} respectively"
+            )
 
         self._spec = spec
         self.safe = safe

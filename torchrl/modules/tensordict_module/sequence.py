@@ -137,12 +137,20 @@ class TensorDictSequential(TensorDictModule):
     ):
         in_keys, out_keys = self._compute_in_and_out_keys(modules)
 
+        spec = CompositeSpec()
+        for module in modules:
+            if hasattr(module, "_spec"):
+                spec.update(module._spec)
+            else:
+                spec.update(CompositeSpec(**{key: None for key in module.out_keys}))
+
         super().__init__(
-            spec=None,
+            spec=spec,
             module=nn.ModuleList(list(modules)),
             in_keys=in_keys,
             out_keys=out_keys,
         )
+
         self.partial_tolerant = partial_tolerant
 
     def _compute_in_and_out_keys(self, modules: List[TensorDictModule]) -> Tuple[List]:

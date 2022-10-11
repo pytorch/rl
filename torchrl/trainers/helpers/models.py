@@ -1325,14 +1325,12 @@ def make_dreamer(
             distribution_class=TanhNormal,
             spec=CompositeSpec(
                 **{
-                    action_key: proof_environment.action_spec,
+                    action_key: proof_environment.action_spec.to("cpu"),
                     "loc": NdUnboundedContinuousTensorSpec(
                         proof_environment.action_spec.shape,
-                        device=proof_environment.action_spec.device,
                     ),
                     "scale": NdUnboundedContinuousTensorSpec(
                         proof_environment.action_spec.shape,
-                        device=proof_environment.action_spec.device,
                     ),
                 }
             ),
