@@ -101,51 +101,97 @@ def test_selectkeys():
 
 
 @pytest.mark.parametrize("prioritized", [True, False])
-def test_rb_trainer(prioritized):
-    trainer = mocking_trainer()
-    S = 100
-    if prioritized:
-        replay_buffer = TensorDictPrioritizedReplayBuffer(S, 1.1, 0.9)
-    else:
-        replay_buffer = TensorDictReplayBuffer(S)
+class TestRB:
+    def test_rb_trainer(self, prioritized):
+        trainer = mocking_trainer()
+        S = 100
+        if prioritized:
+            replay_buffer = TensorDictPrioritizedReplayBuffer(S, 1.1, 0.9)
+        else:
+            replay_buffer = TensorDictReplayBuffer(S)
 
-    N = 9
-    rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
+        N = 9
+        rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
 
-    trainer.register_op("batch_process", rb_trainer.extend)
-    trainer.register_op("process_optim_batch", rb_trainer.sample)
-    trainer.register_op("post_loss", rb_trainer.update_priority)
+        trainer.register_op("batch_process", rb_trainer.extend)
+        trainer.register_op("process_optim_batch", rb_trainer.sample)
+        trainer.register_op("post_loss", rb_trainer.update_priority)
 
-    key1 = "first key"
-    key2 = "second key"
-    batch = 101
-    td = TensorDict(
-        {
-            key1: torch.randn(batch, 3),
-            key2: torch.randn(batch, 3),
-        },
-        [batch],
-    )
-    td_out = trainer._process_batch_hook(td)
-    assert td_out is td
+        key1 = "first key"
+        key2 = "second key"
+        batch = 101
+        td = TensorDict(
+            {
+                key1: torch.randn(batch, 3),
+                key2: torch.randn(batch, 3),
+            },
+            [batch],
+        )
+        td_out = trainer._process_batch_hook(td)
+        assert td_out is td
 
-    td_out = trainer._process_optim_batch_hook(td)
-    assert td_out is not td
-    assert td_out.shape[0] == N
+        td_out = trainer._process_optim_batch_hook(td)
+        assert td_out is not td
+        assert td_out.shape[0] == N
 
-    if prioritized:
-        td_out.set(replay_buffer.priority_key, torch.rand(N))
+        if prioritized:
+            td_out.set(replay_buffer.priority_key, torch.rand(N))
 
-    td_out = trainer._post_loss_hook(td_out)
-    if prioritized:
-        for idx in range(min(S, batch)):
-            if idx in td_out.get("index"):
-                assert replay_buffer._sum_tree[idx] != 1.0
-            else:
-                assert replay_buffer._sum_tree[idx] == 1.0
-    else:
-        assert "index" not in td_out.keys()
+        td_out = trainer._post_loss_hook(td_out)
+        if prioritized:
+            for idx in range(min(S, batch)):
+                if idx in td_out.get("index"):
+                    assert replay_buffer._sum_tree[idx] != 1.0
+                else:
+                    assert replay_buffer._sum_tree[idx] == 1.0
+        else:
+            assert "index" not in td_out.keys()
 
+    def test_rb_trainer_state_dict(self, prioritized):
+        trainer = mocking_trainer()
+        S = 100
+        if prioritized:
+            replay_buffer = TensorDictPrioritizedReplayBuffer(S, 1.1, 0.9)
+        else:
+            replay_buffer = TensorDictReplayBuffer(S)
+
+        N = 9
+        rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer,
+                                         batch_size=N)
+
+        trainer.register_op("batch_process", rb_trainer.extend)
+        trainer.register_op("process_optim_batch", rb_trainer.sample)
+        trainer.register_op("post_loss", rb_trainer.update_priority)
+
+        key1 = "first key"
+        key2 = "second key"
+        batch = 101
+        td = TensorDict(
+            {
+                key1: torch.randn(batch, 3),
+                key2: torch.randn(batch, 3),
+            },
+            [batch],
+        )
+        td_out = trainer._process_batch_hook(td)
+        assert td_out is td
+
+        td_out = trainer._process_optim_batch_hook(td)
+        assert td_out is not td
+        assert td_out.shape[0] == N
+
+        if prioritized:
+            td_out.set(replay_buffer.priority_key, torch.rand(N))
+
+        td_out = trainer._post_loss_hook(td_out)
+        if prioritized:
+            for idx in range(min(S, batch)):
+                if idx in td_out.get("index"):
+                    assert replay_buffer._sum_tree[idx] != 1.0
+                else:
+                    assert replay_buffer._sum_tree[idx] == 1.0
+        else:
+            assert "index" not in td_out.keys()
 
 @pytest.mark.parametrize("logname", ["a", "b"])
 @pytest.mark.parametrize("pbar", [True, False])
