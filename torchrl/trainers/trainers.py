@@ -176,6 +176,10 @@ class Trainer:
         self._post_loss_ops = []
         self._process_optim_batch_ops = []
         self._post_optim_ops = []
+        self._modules = {}
+
+    def register_module(self, module_name: str, module: Any) -> None:
+        self._modules[module_name] = module
 
     def save_trainer(self, force_save: bool = False) -> None:
         _save = force_save
@@ -239,6 +243,7 @@ class Trainer:
                 self._process_optim_batch_ops
             ),
             _post_optim_ops=_get_list_state_dict(self._post_optim_ops),
+            **{k: item.state_dict() for k, item in self._modules.items()},
         )
         return state_dict
 
@@ -266,6 +271,8 @@ class Trainer:
             state_dict["_process_optim_batch_ops"], self._process_optim_batch_ops
         )
         _load_list_state_dict(state_dict["_post_optim_ops"], self._post_optim_ops)
+        for key, item in self._modules.items():
+            item.load_state_dict(state_dict[key])
 
     @property
     def collector(self) -> _DataCollector:
@@ -785,6 +792,11 @@ class RewardNormalizer:
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         for key, value in state_dict.values():
             setattr(self, key, value)
+
+    def register(self, trainer: Trainer):
+        trainer.register_op("batch_process", self.update_reward_stats)
+        trainer.register_op("process_optim_batch", self.normalize_reward)
+        trainer.register_module("reward_normalizer", self)
 
 
 def mask_batch(batch: TensorDictBase) -> TensorDictBase:
