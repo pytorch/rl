@@ -147,7 +147,13 @@ class TestRB:
         else:
             assert "index" not in td_out.keys()
 
-    @pytest.mark.parametrize("storage_type", ["memmap", "list", ])
+    @pytest.mark.parametrize(
+        "storage_type",
+        [
+            "memmap",
+            "list",
+        ],
+    )
     def test_rb_trainer_state_dict(self, prioritized, storage_type):
         trainer = mocking_trainer()
         S = 100
@@ -201,7 +207,6 @@ class TestRB:
         rb_trainer2 = ReplayBufferTrainer(replay_buffer=replay_buffer2, batch_size=N)
         rb_trainer2.register(trainer2)
         sd = trainer.state_dict()
-        print(sd)
         trainer2.load_state_dict(sd)
 
         assert rb_trainer2.replay_buffer.cursor > 0
