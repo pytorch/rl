@@ -326,32 +326,67 @@ def test_masking():
     assert (td["tensor"][td["mask"].squeeze(-1)] == td_out["tensor"]).all()
 
 
-def test_subsampler():
-    torch.manual_seed(0)
-    trainer = mocking_trainer()
+class TestSubSampler:
+    def test_subsampler(self):
+        torch.manual_seed(0)
+        trainer = mocking_trainer()
 
-    batch_size = 10
-    sub_traj_len = 5
+        batch_size = 10
+        sub_traj_len = 5
 
-    key1 = "key1"
-    key2 = "key2"
+        key1 = "key1"
+        key2 = "key2"
 
-    trainer.register_op(
-        "process_optim_batch",
-        BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len),
-    )
+        trainer.register_op(
+            "process_optim_batch",
+            BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len),
+        )
 
-    td = TensorDict(
-        {
-            key1: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
-            key2: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
-        },
-        [2, 10],
-    )
+        td = TensorDict(
+            {
+                key1: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
+                key2: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
+            },
+            [2, 10],
+        )
 
-    td_out = trainer._process_optim_batch_hook(td)
-    assert td_out.shape == torch.Size([batch_size // sub_traj_len, sub_traj_len])
-    assert (td_out.get(key1) == td_out.get(key2)).all()
+        td_out = trainer._process_optim_batch_hook(td)
+        assert td_out.shape == torch.Size([batch_size // sub_traj_len, sub_traj_len])
+        assert (td_out.get(key1) == td_out.get(key2)).all()
+
+    def test_subsampler_state_dict(self):
+        trainer = mocking_trainer()
+
+        batch_size = 10
+        sub_traj_len = 5
+
+        key1 = "key1"
+        key2 = "key2"
+
+        trainer.register_op(
+            "process_optim_batch",
+            BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len),
+        )
+
+        td = TensorDict(
+            {
+                key1: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
+                key2: torch.stack([torch.arange(0, 10), torch.arange(10, 20)], 0),
+            },
+            [2, 10],
+        )
+
+        torch.manual_seed(0)
+        td0 = trainer._process_optim_batch_hook(td)
+        trainer2 = mocking_trainer()
+        trainer2.register_op(
+            "process_optim_batch",
+            BatchSubSampler(batch_size=batch_size, sub_traj_len=sub_traj_len),
+        )
+        trainer2.load_state_dict(trainer.state_dict())
+        torch.manual_seed(0)
+        td1 = trainer2._process_optim_batch_hook(td)
+        assert (td0 == td1).all()
 
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library")
