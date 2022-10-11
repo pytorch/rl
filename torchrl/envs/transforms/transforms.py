@@ -298,9 +298,9 @@ class TransformedEnv(EnvBase):
         cache_specs: bool = True,
         **kwargs,
     ):
-        kwargs.setdefault("device", env.device)
-        device = kwargs["device"]
-        super().__init__(**kwargs)
+        device = kwargs.pop("device", env.device)
+        env = env.to(device)
+        super().__init__(device=None, **kwargs)
         self._set_env(env, device)
         if transform is None:
             transform = Compose()
@@ -321,6 +321,14 @@ class TransformedEnv(EnvBase):
         self.base_env = env.to(device)
         # updates need not be inplace, as transforms may modify values out-place
         self.base_env._inplace_update = False
+
+    @property
+    def device(self) -> bool:
+        return self.base_env.device
+
+    @device.setter
+    def device(self, value):
+        raise RuntimeError("device is a read-only property")
 
     @property
     def batch_locked(self) -> bool:
@@ -516,7 +524,6 @@ class TransformedEnv(EnvBase):
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
         self.base_env.to(device)
-        self.device = torch.device(device)
         self.transform.to(device)
 
         self.is_done = self.is_done.to(device)
@@ -1940,7 +1947,6 @@ class TensorDictPrimer(Transform):
                     f"value obtained through the call to `env.reset()`. Consider renaming "
                     f"the {key} key."
                 )
-            assert observation_spec.device == self.device
             observation_spec[key] = spec.to(self.device)
         return observation_spec
 
