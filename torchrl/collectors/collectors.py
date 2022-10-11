@@ -105,11 +105,11 @@ def _policy_is_tensordict_compatible(policy: nn.Module):
     # that will have undetermined behaviour, we raise an error
     raise TypeError(
         "Received a policy that defines in_keys or out_keys and also expects multiple "
-        "arguments to self.forward. If the policy is compatible with TensorDict, it "
-        "should take a single argument of type TensorDict to self.forward and define "
-        "both in_keys and out_keys. Alternatively, self.forward can accept arbitrarily "
-        "many tensor inputs and leave in_keys and out_keys undefined and TorchRL will "
-        "attempt to automatically wrap the policy with a TensorDictModule."
+        "arguments to policy.forward. If the policy is compatible with TensorDict, it "
+        "should take a single argument of type TensorDict to policy.forward and define "
+        "both in_keys and out_keys. Alternatively, policy.forward can accept "
+        "arbitrarily many tensor inputs and leave in_keys and out_keys undefined and "
+        "TorchRL will attempt to automatically wrap the policy with a TensorDictModule."
     )
 
 
