@@ -85,21 +85,42 @@ def mocking_trainer() -> Trainer:
     return trainer
 
 
-def test_selectkeys():
-    trainer = mocking_trainer()
-    key1 = "first key"
-    key2 = "second key"
-    td = TensorDict(
-        {
-            key1: torch.randn(3),
-            key2: torch.randn(3),
-        },
-        [],
-    )
-    trainer.register_op("batch_process", SelectKeys([key1]))
-    td_out = trainer._process_batch_hook(td)
-    assert key1 in td_out.keys()
-    assert key2 not in td_out.keys()
+class TestSelectKeys:
+    def test_selectkeys(self):
+        trainer = mocking_trainer()
+        key1 = "first key"
+        key2 = "second key"
+        td = TensorDict(
+            {
+                key1: torch.randn(3),
+                key2: torch.randn(3),
+            },
+            [],
+        )
+        trainer.register_op("batch_process", SelectKeys([key1]))
+        td_out = trainer._process_batch_hook(td)
+        assert key1 in td_out.keys()
+        assert key2 not in td_out.keys()
+
+    def test_selectkeys_statedict(self):
+        trainer = mocking_trainer()
+        key1 = "first key"
+        key2 = "second key"
+        td = TensorDict(
+            {
+                key1: torch.randn(3),
+                key2: torch.randn(3),
+            },
+            [],
+        )
+        trainer.register_op("batch_process", SelectKeys([key1]))
+        trainer._process_batch_hook(td)
+
+        trainer2 = mocking_trainer()
+        trainer2.register_op("batch_process", SelectKeys([key1]))
+        sd = trainer.state_dict()
+        assert not len(sd["_batch_process_ops"][0][0])  # state_dict is empty
+        trainer2.load_state_dict(sd)
 
 
 @pytest.mark.parametrize("prioritized", [True, False])

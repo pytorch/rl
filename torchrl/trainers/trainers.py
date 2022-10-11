@@ -578,6 +578,12 @@ class SelectKeys:
     def __call__(self, batch: TensorDictBase) -> TensorDictBase:
         return batch.select(*self.keys)
 
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        pass
+
 
 class ReplayBufferTrainer:
     """Replay buffer hook provider.
