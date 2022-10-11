@@ -954,6 +954,12 @@ class BatchSubSampler:
             raise RuntimeError("Sampled invalid steps")
         return td
 
+    def state_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        pass
+
 
 class Recorder:
     """Recorder hook for Trainer.
