@@ -1287,10 +1287,12 @@ def make_dreamer(
             **{
                 action_key: proof_environment.action_spec,
                 "loc": NdUnboundedContinuousTensorSpec(
-                    proof_environment.action_spec.shape
+                    proof_environment.action_spec.shape,
+                    device=proof_environment.action_spec.device,
                 ),
                 "scale": NdUnboundedContinuousTensorSpec(
-                    proof_environment.action_spec.shape
+                    proof_environment.action_spec.shape,
+                    device=proof_environment.action_spec.device,
                 ),
             }
         ),
@@ -1325,10 +1327,12 @@ def make_dreamer(
                 **{
                     action_key: proof_environment.action_spec,
                     "loc": NdUnboundedContinuousTensorSpec(
-                        proof_environment.action_spec.shape
+                        proof_environment.action_spec.shape,
+                        device=proof_environment.action_spec.device,
                     ),
                     "scale": NdUnboundedContinuousTensorSpec(
-                        proof_environment.action_spec.shape
+                        proof_environment.action_spec.shape,
+                        device=proof_environment.action_spec.device,
                     ),
                 }
             ),
