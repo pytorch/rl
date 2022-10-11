@@ -83,6 +83,15 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
     )
 
 
+def _module_is_tensordict_compatible(module: nn.Module):
+    sig = inspect.signature(module.forward)
+    return (
+        len(sig.parameters) == 1
+        and hasattr(module, "in_keys")
+        and hasattr(module, "out_keys")
+    )
+
+
 class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
     def _get_policy_and_device(
         self,
@@ -128,28 +137,42 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
             policy = RandomPolicy(self.env.action_spec)
-        elif (
-            observation_spec is not None
-            and isinstance(policy, nn.Module)
-            and not isinstance(policy, TensorDictModule)
-        ):
-            # auto-wrap policy with TensorDictModule
-            sig = inspect.signature(policy.forward)
-            next_observation = {
-                key[5:]: value
-                for key, value in observation_spec.rand().items()
-                if key.startswith("next_")
-            }
-            if set(sig.parameters) == set(next_observation):
-                out_keys = ["action"]
-                output = policy(**next_observation)
+        elif isinstance(policy, nn.Module) and not isinstance(policy, TensorDictModule):
+            if not _module_is_tensordict_compatible(policy):
+                # policy is a nn.Module that doesn't operate on tensordicts directly
+                # so we attempt to auto-wrap policy with TensorDictModule
+                if observation_spec is None:
+                    raise ValueError(
+                        "Unable to read observation_spec from the environment. This is "
+                        "required to check compatibility of the environment and policy "
+                        "since the policy is a nn.Module that operates on tensors "
+                        "rather than a TensorDictModule or a nn.Module that accepts a "
+                        "TensorDict as input and defines in_keys and out_keys."
+                    )
+                sig = inspect.signature(policy.forward)
+                next_observation = {
+                    key[5:]: value
+                    for key, value in observation_spec.rand().items()
+                    if key.startswith("next_")
+                }
+                if set(sig.parameters) == set(next_observation):
+                    out_keys = ["action"]
+                    output = policy(**next_observation)
 
-                if isinstance(output, tuple):
-                    out_keys.extend(f"output{i+1}" for i in range(len(output) - 1))
+                    if isinstance(output, tuple):
+                        out_keys.extend(f"output{i+1}" for i in range(len(output) - 1))
 
-                policy = TensorDictModule(
-                    policy, in_keys=list(sig.parameters), out_keys=out_keys
-                )
+                    policy = TensorDictModule(
+                        policy, in_keys=list(sig.parameters), out_keys=out_keys
+                    )
+                else:
+                    raise TypeError(
+                        "If the supplied policy is a nn.Module, it must either accept "
+                        "a single TensorDict as input and define both in_keys and "
+                        "out_keys, or it must accept tensors that are named "
+                        "consistently with the environment's observation_spec so that "
+                        "it can be automatically wrapped with TensorDictModule."
+                    )
 
         try:
             policy_device = next(policy.parameters()).device
