@@ -83,12 +83,33 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
     )
 
 
-def _module_is_tensordict_compatible(module: nn.Module):
-    sig = inspect.signature(module.forward)
-    return (
+def _policy_is_tensordict_compatible(policy: nn.Module):
+    sig = inspect.signature(policy.forward)
+
+    if isinstance(policy, TensorDictModule) or (
         len(sig.parameters) == 1
-        and hasattr(module, "in_keys")
-        and hasattr(module, "out_keys")
+        and hasattr(policy, "in_keys")
+        and hasattr(policy, "out_keys")
+    ):
+        # if the policy is a TensorDictModule or takes a single argument and defines
+        # in_keys and out_keys then we assume it can already deal with TensorDict input
+        # to forward and we return True
+        return True
+    elif not hasattr(policy, "in_keys") and not hasattr(policy, "out_keys"):
+        # if it's not a TensorDictModule, and in_keys and out_keys are not defined then
+        # we assume no TensorDict compatibility and will try to wrap it.
+        return False
+
+    # if in_keys or out_keys were defined but policy is not a TensorDictModule or
+    # accepts multiple arguments then it's likely the user is trying to do something
+    # that will have undetermined behaviour, we raise an error
+    raise TypeError(
+        "Received a policy that defines in_keys or out_keys and also expects multiple "
+        "arguments to self.forward. If the policy is compatible with TensorDict, it "
+        "should take a single argument of type TensorDict to self.forward and define "
+        "both in_keys and out_keys. Alternatively, self.forward can accept arbitrarily "
+        "many tensor inputs and leave in_keys and out_keys undefined and TorchRL will "
+        "attempt to automatically wrap the policy with a TensorDictModule."
     )
 
 
@@ -137,8 +158,10 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
             policy = RandomPolicy(self.env.action_spec)
-        elif isinstance(policy, nn.Module) and not isinstance(policy, TensorDictModule):
-            if not _module_is_tensordict_compatible(policy):
+        elif isinstance(policy, nn.Module):
+            # TODO: revisit these checks when we have determined whether arbitrary
+            # callables should be supported as policies.
+            if not _policy_is_tensordict_compatible(policy):
                 # policy is a nn.Module that doesn't operate on tensordicts directly
                 # so we attempt to auto-wrap policy with TensorDictModule
                 if observation_spec is None:
@@ -167,11 +190,13 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                     )
                 else:
                     raise TypeError(
-                        "If the supplied policy is a nn.Module, it must either accept "
-                        "a single TensorDict as input and define both in_keys and "
-                        "out_keys, or it must accept tensors that are named "
-                        "consistently with the environment's observation_spec so that "
-                        "it can be automatically wrapped with TensorDictModule."
+                        "Arguments to policy.forward are incompatible with entries in "
+                        "env.observation_spec. If you want TorchRL to automatically "
+                        "wrap your policy with a TensorDictModule then the arguments "
+                        "to policy.forward must correspond one-to-one with entries in "
+                        "env.observation_spec that are prefixed with 'next_'. For more "
+                        "complex behaviour and more control you can consider writing "
+                        "your own TensorDictModule."
                     )
 
         try:
