@@ -11,6 +11,7 @@ from time import sleep
 
 import pytest
 import torch
+from torch import nn
 
 try:
     from tensorboard.backend.event_processing import event_accumulator
@@ -57,6 +58,16 @@ class MockingCollector:
     def shutdown(self):
         pass
 
+    def state_dict(self):
+        return dict()
+
+    def load_state_dict(self, state_dict):
+        pass
+
+
+class MockingLossModule(nn.Module):
+    pass
+
 
 def mocking_trainer() -> Trainer:
     trainer = Trainer(
@@ -64,10 +75,10 @@ def mocking_trainer() -> Trainer:
         *[
             None,
         ]
-        * 3,
-        MockingOptim(),
+        * 2,
+        loss_module=MockingLossModule(),
+        optimizer=MockingOptim(),
     )
-    trainer.collected_frames = 0
     trainer._pbar_str = OrderedDict()
     return trainer
 
@@ -153,25 +164,50 @@ def test_log_reward(logname, pbar):
     assert trainer._log_dict[logname][-1] == 1
 
 
-def test_reward_norm():
-    torch.manual_seed(0)
-    trainer = mocking_trainer()
+class TestRewardNorm:
+    def test_reward_norm(self):
+        torch.manual_seed(0)
+        trainer = mocking_trainer()
 
-    reward_normalizer = RewardNormalizer()
-    trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
-    trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
+        reward_normalizer = RewardNormalizer()
+        trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
+        trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
 
-    batch = 10
-    reward = torch.randn(batch, 1)
-    td = TensorDict({"reward": reward.clone()}, [batch])
-    td_out = trainer._process_batch_hook(td)
-    assert (td_out.get("reward") == reward).all()
-    assert not reward_normalizer._normalize_has_been_called
+        batch = 10
+        reward = torch.randn(batch, 1)
+        td = TensorDict({"reward": reward.clone()}, [batch])
+        td_out = trainer._process_batch_hook(td)
+        assert (td_out.get("reward") == reward).all()
+        assert not reward_normalizer._normalize_has_been_called
 
-    td_norm = trainer._process_optim_batch_hook(td)
-    assert reward_normalizer._normalize_has_been_called
-    torch.testing.assert_close(td_norm.get("reward").mean(), torch.zeros([]))
-    torch.testing.assert_close(td_norm.get("reward").std(), torch.ones([]))
+        td_norm = trainer._process_optim_batch_hook(td)
+        assert reward_normalizer._normalize_has_been_called
+        torch.testing.assert_close(td_norm.get("reward").mean(), torch.zeros([]))
+        torch.testing.assert_close(td_norm.get("reward").std(), torch.ones([]))
+
+    def test_reward_norm_state_dict(self):
+        torch.manual_seed(0)
+        trainer = mocking_trainer()
+
+        reward_normalizer = RewardNormalizer()
+        trainer.register_op("batch_process", reward_normalizer.update_reward_stats)
+        trainer.register_op("process_optim_batch", reward_normalizer.normalize_reward)
+
+        batch = 10
+        reward = torch.randn(batch, 1)
+        td = TensorDict({"reward": reward.clone()}, [batch])
+        trainer._process_batch_hook(td)
+        trainer._process_optim_batch_hook(td)
+        state_dict = trainer.state_dict()
+
+        trainer2 = mocking_trainer()
+
+        reward_normalizer2 = RewardNormalizer()
+        trainer2.register_op("batch_process", reward_normalizer.update_reward_stats)
+        trainer2.register_op("process_optim_batch", reward_normalizer.normalize_reward)
+        trainer2.load_state_dict(state_dict)
+        for key, item in reward_normalizer2._reward_stats.items():
+            assert item == reward_normalizer._reward_stats[key]
 
 
 def test_masking():
