@@ -1283,8 +1283,18 @@ def make_dreamer(
         out_key_sample=[action_key],
         default_interaction_mode="random",
         distribution_class=TanhNormal,
+        spec=CompositeSpec(
+            **{
+                action_key: proof_environment.action_spec,
+                "loc": NdUnboundedContinuousTensorSpec(
+                    proof_environment.action_spec.shape
+                ),
+                "scale": NdUnboundedContinuousTensorSpec(
+                    proof_environment.action_spec.shape
+                ),
+            }
+        ),
     )
-
     # actor for real world: interacts with states ~ posterior
     actor_realworld = TensorDictSequential(
         TensorDictModule(
@@ -1311,6 +1321,17 @@ def make_dreamer(
             out_key_sample=[action_key],
             default_interaction_mode="random",
             distribution_class=TanhNormal,
+            spec=CompositeSpec(
+                **{
+                    action_key: proof_environment.action_spec,
+                    "loc": NdUnboundedContinuousTensorSpec(
+                        proof_environment.action_spec.shape
+                    ),
+                    "scale": NdUnboundedContinuousTensorSpec(
+                        proof_environment.action_spec.shape
+                    ),
+                }
+            ),
         ),
         TensorDictModule(
             rssm_prior,
@@ -1323,7 +1344,6 @@ def make_dreamer(
             ],
         ),
     )
-
     value_model = TensorDictModule(
         MLP(
             out_features=1,
