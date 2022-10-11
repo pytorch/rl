@@ -1175,6 +1175,30 @@ def make_dreamer(
     state_stats: Optional[dict] = None,
     obs_keys: list = ["pixels"],
 ) -> nn.ModuleList:
+    """Create Dreamer components.
+
+    Args:
+        cfg (DictConfig): Config object.
+        proof_environment (EnvBase): Environment to initialize the model.
+        device (DEVICE_TYPING, optional): Device to use.
+            Defaults to "cpu".
+        action_key (str, optional): Key to use for the action.
+            Defaults to "action".
+        value_key (str, optional): Key to use for the value.
+            Defaults to "state_value".
+        use_decoder_in_env (bool, optional): Whether to use the decoder in the model based dreamer env.
+            Defaults to False.
+        stats (Optional[dict], optional): Stats to use for normalization.
+            Defaults to None.
+
+    Returns:
+        nn.TensorDictModel: Dreamer World model.
+        nn.TensorDictModel: Dreamer Model based environnement.
+        nn.TensorDictModel: Dreamer Actor the world model space.
+        nn.TensorDictModel: Dreamer Value model.
+        nn.TensorDictModel: Dreamer Actor for the real world space.
+
+    """
 
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
@@ -1283,8 +1307,18 @@ def make_dreamer(
         out_key_sample=[action_key],
         default_interaction_mode="random",
         distribution_class=TanhNormal,
+        spec=CompositeSpec(
+            **{
+                action_key: proof_environment.action_spec,
+                "loc": NdUnboundedContinuousTensorSpec(
+                    proof_environment.action_spec.shape
+                ),
+                "scale": NdUnboundedContinuousTensorSpec(
+                    proof_environment.action_spec.shape
+                ),
+            }
+        ),
     )
-
     # actor for real world: interacts with states ~ posterior
     actor_realworld = TensorDictSequential(
         TensorDictModule(
@@ -1311,6 +1345,17 @@ def make_dreamer(
             out_key_sample=[action_key],
             default_interaction_mode="random",
             distribution_class=TanhNormal,
+            spec=CompositeSpec(
+                **{
+                    action_key: proof_environment.action_spec,
+                    "loc": NdUnboundedContinuousTensorSpec(
+                        proof_environment.action_spec.shape
+                    ),
+                    "scale": NdUnboundedContinuousTensorSpec(
+                        proof_environment.action_spec.shape
+                    ),
+                }
+            ),
         ),
         TensorDictModule(
             rssm_prior,
@@ -1323,7 +1368,6 @@ def make_dreamer(
             ],
         ),
     )
-
     value_model = TensorDictModule(
         MLP(
             out_features=1,

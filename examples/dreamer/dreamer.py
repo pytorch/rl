@@ -287,15 +287,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     value_loss = DreamerValueLoss(value_model)
 
-    action_spec = transformed_env_constructor(cfg)().action_spec
     # Actor and value network
     if cfg.exploration == "additive_gaussian":
-
         exploration_policy = AdditiveGaussianWrapper(
             policy,
             sigma_init=0.3,
             sigma_end=0.3,
-            spec=action_spec,
         ).to(device)
     elif cfg.exploration == "ou_exploration":
         exploration_policy = OrnsteinUhlenbeckProcessWrapper(

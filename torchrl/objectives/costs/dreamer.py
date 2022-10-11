@@ -24,16 +24,16 @@ class DreamerModelLoss(LossModule):
     Computes the loss of the dreamer world model. The loss is composed of the kl divergence between the prior and posterior of the RSSM,
     the reconstruction loss over the reconstructed observation and the reward loss over the predicted reward.
 
-    Reference: https://arxiv.org/abs/1912.01603
+    Reference: https://arxiv.org/abs/1912.01603.
 
     Args:
         world_model (TensorDictModule): the world model.
         lambda_kl (float, optional): the weight of the kl divergence loss. default: 1.0.
         lambda_reco (float, optional): the weight of the reconstruction loss. default: 1.0.
-        lambda_reward (float, optional): the weight of the reward loss. default: 1.0
+        lambda_reward (float, optional): the weight of the reward loss. default: 1.0.
         reco_loss (str, optional): the reconstruction loss. default to l2.
         reward_loss (str, optional): the reward loss. default to l2.
-        free_nats (int, optional): the free nats.
+        free_nats (int, optional): the free nats. default: 3.
         delayed_clamp (bool, optional): if True, the KL clamping occurs after
             averaging. If False (default), the kl divergence is clamped to the
             free nats value first and then averaged.
@@ -141,7 +141,7 @@ class DreamerActorLoss(LossModule):
 
     Computes the loss of the dreamer actor. The actor loss is computed as the negative average lambda return.
 
-    Reference: https://arxiv.org/abs/1912.01603
+    Reference: https://arxiv.org/abs/1912.01603.
 
     Args:
         actor_model (TensorDictModule): the actor model.
@@ -177,7 +177,7 @@ class DreamerActorLoss(LossModule):
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         with torch.no_grad():
             tensordict = tensordict.select("state", "belief")
-            tensordict = tensordict.reshape(-1)  # 50 x 50 -> 2500
+            tensordict = tensordict.reshape(-1)
 
         with hold_out_net(self.model_based_env), set_exploration_mode("random"):
             tensordict = self.model_based_env.rollout(
@@ -221,16 +221,16 @@ class DreamerActorLoss(LossModule):
 class DreamerValueLoss(LossModule):
     """Dreamer Value Loss
 
-    Computes the loss of the dreamer value model. The value loss is computed as the mean squared error between the predicted value and the lambda target.
+    Computes the loss of the dreamer value model. The value loss is computed between the predicted value and the lambda target.
 
-    Reference: https://arxiv.org/abs/1912.01603
+    Reference: https://arxiv.org/abs/1912.01603.
 
     Args:
         value_model (TensorDictModule): the value model.
         value_loss (str, optional): the loss to use for the value loss. default: "l2".
-        gamma (float, optional): the gamma discount factor. default: 0.99
+        gamma (float, optional): the gamma discount factor. default: 0.99.
         discount_loss (bool, optional): if True, the loss is discounted with a
-            gamma discount factor. default: False
+            gamma discount factor. default: False.
     """
 
     def __init__(

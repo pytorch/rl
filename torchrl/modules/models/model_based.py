@@ -301,9 +301,8 @@ class RSSMPrior(nn.Module):
     """The prior network of the RSSM.
 
     This network takes as input the previous state and belief and the current action.
-    It outputs the next prior state and belief, as well as the parameters of the prior state distribution.
-    State is by construction stochastic and belief is deterministic. In the "Dream to control" paper, these are called "deterministic state " and "stochastic state", respectively.
-    We distinguish states sampled according prior and posterior distribution for clarity.
+    It returns the next prior state and belief, as well as the parameters of the prior state distribution.
+    State is by construction stochastic and belief is deterministic. In "Dream to control", these are called "deterministic state " and "stochastic state", respectively.
 
     Reference: https://arxiv.org/abs/1811.04551
 
@@ -353,7 +352,7 @@ class RSSMPosterior(nn.Module):
     """The posterior network of the RSSM.
 
     This network takes as input the belief and the associated encoded observation.
-    It outputs the next posterior state and belief, as well as the parameters of the posterior state distribution.
+    It returns the parameters of the posterior as well as a state sampled according to this distribution.
 
     Reference: https://arxiv.org/abs/1811.04551
 
