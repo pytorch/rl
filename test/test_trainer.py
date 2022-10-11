@@ -25,6 +25,8 @@ from torchrl.data import (
     TensorDict,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
+    ListStorage,
+    LazyMemmapStorage,
 )
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.trainers import Recorder, Trainer
@@ -113,9 +115,7 @@ class TestRB:
         N = 9
         rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
 
-        trainer.register_op("batch_process", rb_trainer.extend)
-        trainer.register_op("process_optim_batch", rb_trainer.sample)
-        trainer.register_op("post_loss", rb_trainer.update_priority)
+        rb_trainer.register(trainer)
 
         key1 = "first key"
         key2 = "second key"
@@ -147,21 +147,32 @@ class TestRB:
         else:
             assert "index" not in td_out.keys()
 
-    def test_rb_trainer_state_dict(self, prioritized):
+    @pytest.mark.parametrize("storage_type", ["list", "memmap"])
+    def test_rb_trainer_state_dict(self, prioritized, storage_type):
         trainer = mocking_trainer()
         S = 100
-        if prioritized:
-            replay_buffer = TensorDictPrioritizedReplayBuffer(S, 1.1, 0.9)
+        if storage_type == "list":
+            storage = ListStorage(S)
+            collate_fn = lambda x: torch.stack(x, 0)
+        elif storage_type == "memmap":
+            storage = LazyMemmapStorage(S)
+            collate_fn = lambda x: x
         else:
-            replay_buffer = TensorDictReplayBuffer(S)
+            raise NotImplementedError
+
+        if prioritized:
+            replay_buffer = TensorDictPrioritizedReplayBuffer(
+                S, 1.1, 0.9, storage=storage, collate_fn=collate_fn
+            )
+        else:
+            replay_buffer = TensorDictReplayBuffer(
+                S, storage=storage, collate_fn=collate_fn
+            )
 
         N = 9
-        rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer,
-                                         batch_size=N)
+        rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
 
-        trainer.register_op("batch_process", rb_trainer.extend)
-        trainer.register_op("process_optim_batch", rb_trainer.sample)
-        trainer.register_op("post_loss", rb_trainer.update_priority)
+        rb_trainer.register(trainer)
 
         key1 = "first key"
         key2 = "second key"
@@ -173,25 +184,43 @@ class TestRB:
             },
             [batch],
         )
-        td_out = trainer._process_batch_hook(td)
-        assert td_out is td
-
+        trainer._process_batch_hook(td)
         td_out = trainer._process_optim_batch_hook(td)
-        assert td_out is not td
-        assert td_out.shape[0] == N
-
         if prioritized:
             td_out.set(replay_buffer.priority_key, torch.rand(N))
+        trainer._post_loss_hook(td_out)
 
-        td_out = trainer._post_loss_hook(td_out)
+        trainer2 = mocking_trainer()
         if prioritized:
-            for idx in range(min(S, batch)):
-                if idx in td_out.get("index"):
-                    assert replay_buffer._sum_tree[idx] != 1.0
-                else:
-                    assert replay_buffer._sum_tree[idx] == 1.0
+            replay_buffer2 = TensorDictPrioritizedReplayBuffer(
+                S, 1.1, 0.9, storage=storage
+            )
         else:
-            assert "index" not in td_out.keys()
+            replay_buffer2 = TensorDictReplayBuffer(S, storage=storage)
+        N = 9
+        rb_trainer2 = ReplayBufferTrainer(replay_buffer=replay_buffer2, batch_size=N)
+        rb_trainer2.register(trainer2)
+        sd = trainer.state_dict()
+        print(sd)
+        trainer2.load_state_dict(sd)
+
+        assert rb_trainer2.replay_buffer.cursor > 0
+        assert rb_trainer2.replay_buffer.cursor == rb_trainer.replay_buffer.cursor
+
+        if storage_type == "list":
+            assert len(rb_trainer2.replay_buffer._storage._storage) > 0
+            assert len(rb_trainer2.replay_buffer._storage._storage) == len(
+                rb_trainer.replay_buffer._storage._storage
+            )
+            for i, s in enumerate(rb_trainer2.replay_buffer._storage._storage):
+                assert (s == rb_trainer.replay_buffer._storage._storage[i]).all()
+        elif storage_type == "memmap":
+            assert rb_trainer2.replay_buffer._storage._len > 0
+            assert (
+                rb_trainer2.replay_buffer._storage._storage
+                == rb_trainer.replay_buffer._storage._storage
+            ).all()
+
 
 @pytest.mark.parametrize("logname", ["a", "b"])
 @pytest.mark.parametrize("pbar", [True, False])

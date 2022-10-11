@@ -176,6 +176,10 @@ class Trainer:
         self._post_loss_ops = []
         self._process_optim_batch_ops = []
         self._post_optim_ops = []
+        self._modules = {}
+
+    def register_module(self, module_name, module):
+        self._modules[module_name] = module
 
     def save_trainer(self, force_save: bool = False) -> None:
         _save = force_save
@@ -239,6 +243,7 @@ class Trainer:
                 self._process_optim_batch_ops
             ),
             _post_optim_ops=_get_list_state_dict(self._post_optim_ops),
+            **{k: item.state_dict() for k, item in self._modules.items()},
         )
         return state_dict
 
@@ -266,6 +271,8 @@ class Trainer:
             state_dict["_process_optim_batch_ops"], self._process_optim_batch_ops
         )
         _load_list_state_dict(state_dict["_post_optim_ops"], self._post_optim_ops)
+        for key, item in self._modules.items():
+            item.load_state_dict(state_dict[key])
 
     @property
     def collector(self) -> _DataCollector:
@@ -651,6 +658,20 @@ class ReplayBufferTrainer:
     def update_priority(self, batch: TensorDictBase) -> None:
         if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
             self.replay_buffer.update_priority(batch)
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "replay_buffer": self.replay_buffer.state_dict(),
+        }
+
+    def load_state_dict(self, state_dict) -> None:
+        self.replay_buffer.load_state_dict(state_dict["replay_buffer"])
+
+    def register(self, trainer: Trainer):
+        trainer.register_op("batch_process", self.extend)
+        trainer.register_op("process_optim_batch", self.sample)
+        trainer.register_op("post_loss", self.update_priority)
+        trainer.register_module("replay_buffer", self)
 
 
 class ClearCudaCache:

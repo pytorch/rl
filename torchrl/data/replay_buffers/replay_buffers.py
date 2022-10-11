@@ -7,7 +7,8 @@ import collections
 import concurrent.futures
 import functools
 import threading
-from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
+from copy import deepcopy
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union, Dict
 
 import numpy as np
 import torch
@@ -161,6 +162,16 @@ class ReplayBuffer:
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
         return data
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "_storage": self._storage.state_dict(),
+            "_cursor": self._cursor,
+        }
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        self._storage.load_state_dict(state_dict.pop("_storage"))
+        self._cursor = state_dict.pop("_cursor")
 
     @property
     def capacity(self) -> int:
@@ -345,6 +356,19 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                 f"dtype {dtype} not supported by PrioritizedReplayBuffer"
             )
         self._max_priority = 1.0
+
+    def state_dict(self) -> Dict[str, Any]:
+        state_dict = super().state_dict()
+        state_dict["_sum_tree"] = deepcopy(self._sum_tree)
+        state_dict["_min_tree"] = deepcopy(self._min_tree)
+        state_dict["_max_priority"] = self._max_priority
+        return state_dict
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        self._sum_tree = state_dict.pop("_sum_tree")
+        self._min_tree = state_dict.pop("_min_tree")
+        self._max_priority = state_dict.pop("_max_priority")
+        super().load_state_dict(state_dict)
 
     @pin_memory_output
     def __getitem__(self, index: Union[int, Tensor]) -> Any:
