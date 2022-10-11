@@ -659,6 +659,20 @@ class ReplayBufferTrainer:
         if isinstance(self.replay_buffer, TensorDictPrioritizedReplayBuffer):
             self.replay_buffer.update_priority(batch)
 
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "replay_buffer": self.replay_buffer.state_dict(),
+        }
+
+    def load_state_dict(self, state_dict) -> None:
+        self.replay_buffer.load_state_dict(state_dict["replay_buffer"])
+
+    def register(self, trainer: Trainer):
+        trainer.register_op("batch_process", self.extend)
+        trainer.register_op("process_optim_batch", self.sample)
+        trainer.register_op("post_loss", self.update_priority)
+        trainer.register_module("replay_buffer", self)
+
 
 class ClearCudaCache:
     """Clears cuda cache at a given interval.

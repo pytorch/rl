@@ -5,7 +5,8 @@
 
 import abc
 import os
-from typing import Any, Sequence, Union
+from copy import deepcopy
+from typing import Any, Sequence, Union, Dict
 
 import torch
 
@@ -52,6 +53,12 @@ class Storage:
     def __len__(self):
         raise NotImplementedError
 
+    def state_dict(self) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        raise NotImplementedError
+
 
 class ListStorage(Storage):
     def __init__(self, max_size: int):
@@ -93,6 +100,12 @@ class ListStorage(Storage):
     def __len__(self):
         return len(self._storage)
 
+    def state_dict(self) -> Dict[str, Any]:
+        return {"_storage": deepcopy(self._storage)}
+
+    def load_state_dict(self, state_dict):
+        self._storage = state_dict["_storage"]
+
 
 class LazyTensorStorage(Storage):
     """A pre-allocated tensor storage for tensors and tensordicts.
@@ -109,6 +122,18 @@ class LazyTensorStorage(Storage):
         self.initialized = False
         self.device = device if device else torch.device("cpu")
         self._len = 0
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "_storage": deepcopy(self._storage),
+            "initialized": self.initialized,
+            "_len": self._len,
+        }
+
+    def load_state_dict(self, state_dict):
+        self._storage.update_(state_dict.pop("_storage"))
+        self.initialized = state_dict["initialized"]
+        self._len = state_dict["_len"]
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         print("Creating a TensorStorage...")
