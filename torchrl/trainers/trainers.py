@@ -178,7 +178,7 @@ class Trainer:
         self._post_optim_ops = []
         self._modules = {}
 
-    def register_module(self, module_name, module):
+    def register_module(self, module_name: str, module: Any) -> None:
         self._modules[module_name] = module
 
     def save_trainer(self, force_save: bool = False) -> None:
@@ -804,8 +804,13 @@ class RewardNormalizer:
         }
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        for key, value in state_dict.values():
+        for key, value in state_dict.items():
             setattr(self, key, value)
+
+    def register(self, trainer: Trainer):
+        trainer.register_op("batch_process", self.update_reward_stats)
+        trainer.register_op("process_optim_batch", self.normalize_reward)
+        trainer.register_module("reward_normalizer", self)
 
 
 def mask_batch(batch: TensorDictBase) -> TensorDictBase:

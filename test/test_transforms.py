@@ -1291,6 +1291,7 @@ class TestTransforms:
             assert env._reward_spec is not None
 
 
+@pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("model", ["resnet18", "resnet34", "resnet50"])
 class TestR3M:
@@ -1465,6 +1466,7 @@ class TestR3M:
         assert set(expected_keys) == set(transformed_env.rollout(3).keys())
 
 
+@pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("model", ["resnet50"])
 class TestVIP:
