@@ -147,7 +147,7 @@ class TestRB:
         else:
             assert "index" not in td_out.keys()
 
-    @pytest.mark.parametrize("storage_type", ["list", "memmap"])
+    @pytest.mark.parametrize("storage_type", ["memmap", "list", ])
     def test_rb_trainer_state_dict(self, prioritized, storage_type):
         trainer = mocking_trainer()
         S = 100
