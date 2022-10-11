@@ -1,0 +1,9 @@
+network: linear
+wrapper:
+  - __partial__: True
+  - __target__: torchrl.modules.tensordict_module.exploration.EGreedyWrapper
+  - eps_init: 1.0
+  - eps_end: 0.1
+  - annealing_num_steps: 1000
+  - action_key: "action"
+  - spec: null

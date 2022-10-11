@@ -2,11 +2,10 @@ in_keys: ["pixels"]
 in_keys_policy_module: ["pixels"]
 in_keys_qvalue: ["pixels", "action"]
 
-layer_class: linear
 activation_class: elu
 
 mlp_net_kwargs:
-  layer_class: ${network.layer_class}
+  layer_class: ${exploration.network}
   activation_class: ${network.activation_class}
 conv_net_kwargs:
   activation_class: ${network.activation_class}
@@ -24,7 +23,7 @@ policy_network:
     _partial_: True
     in_keys: ${network.in_keys_policy_module}
     out_keys: ${model.policy_out_keys}
-    wrapper: ${model.policy_wrapper}
+    wrapper: ${model.network_wrapper}
     partial_module:
       _target_: torchrl.modules.DdpgCnnActor
       _partial_: True  # misses out_features
