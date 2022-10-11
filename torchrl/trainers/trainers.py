@@ -8,6 +8,7 @@ from __future__ import annotations
 import pathlib
 import warnings
 from collections import OrderedDict, defaultdict
+from copy import deepcopy
 from textwrap import indent
 from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type, List, Any
 
@@ -108,12 +109,16 @@ class Trainer:
             Default is None (no saving)
     """
 
-    # trackers
-    _optim_count: int = 0
-    _collected_frames: int = 0
-    _last_log: Dict[str, Any] = {}
-    _last_save: int = 0
-    _log_interval: int = 10000
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        # trackers
+        cls._optim_count: int = 0
+        cls._collected_frames: int = 0
+        cls._last_log: Dict[str, Any] = {}
+        cls._last_save: int = 0
+        cls._log_interval: int = 10000
+        cls.collected_frames = 0
+        return super().__new__(cls)
 
     def __init__(
         self,
@@ -217,20 +222,50 @@ class Trainer:
 
     def state_dict(self) -> Dict:
         state_dict = OrderedDict(
-            env=self.collector.state_dict(),
+            collector=self.collector.state_dict(),
             loss_module=self.loss_module.state_dict(),
-            _collected_frames=self.collected_frames,
+            collected_frames=self.collected_frames,
             _last_log=self._last_log,
             _last_save=self._last_save,
             _optim_count=self._optim_count,
+            _batch_process_ops=_get_list_state_dict(self._batch_process_ops),
+            _post_steps_ops=_get_list_state_dict(self._post_steps_ops),
+            _post_steps_log_ops=_get_list_state_dict(self._post_steps_log_ops),
+            _pre_steps_log_ops=_get_list_state_dict(self._pre_steps_log_ops),
+            _post_optim_log_ops=_get_list_state_dict(self._post_optim_log_ops),
+            _pre_optim_ops=_get_list_state_dict(self._pre_optim_ops),
+            _post_loss_ops=_get_list_state_dict(self._post_loss_ops),
+            _process_optim_batch_ops=_get_list_state_dict(
+                self._process_optim_batch_ops
+            ),
+            _post_optim_ops=_get_list_state_dict(self._post_optim_ops),
         )
         return state_dict
 
     def load_state_dict(self, state_dict: Dict) -> None:
         model_state_dict = state_dict["loss_module"]
-        env_state_dict = state_dict["env"]
+        collector_state_dict = state_dict["collector"]
         self.loss_module.load_state_dict(model_state_dict)
-        self.collector.load_state_dict(env_state_dict)
+        self.collector.load_state_dict(collector_state_dict)
+        self.collected_frames = state_dict["collected_frames"]
+        self._last_log = state_dict["_last_log"]
+        self._last_save = state_dict["_last_save"]
+        self._optim_count = state_dict["_optim_count"]
+        _load_list_state_dict(state_dict["_batch_process_ops"], self._batch_process_ops)
+        _load_list_state_dict(state_dict["_post_steps_ops"], self._post_steps_ops)
+        _load_list_state_dict(
+            state_dict["_post_steps_log_ops"], self._post_steps_log_ops
+        )
+        _load_list_state_dict(state_dict["_pre_steps_log_ops"], self._pre_steps_log_ops)
+        _load_list_state_dict(
+            state_dict["_post_optim_log_ops"], self._post_optim_log_ops
+        )
+        _load_list_state_dict(state_dict["_pre_optim_ops"], self._pre_optim_ops)
+        _load_list_state_dict(state_dict["_post_loss_ops"], self._post_loss_ops)
+        _load_list_state_dict(
+            state_dict["_process_optim_batch_ops"], self._process_optim_batch_ops
+        )
+        _load_list_state_dict(state_dict["_post_optim_ops"], self._post_optim_ops)
 
     @property
     def collector(self) -> _DataCollector:
@@ -352,8 +387,6 @@ class Trainer:
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames)
             self._pbar_str = dict()
-
-        self.collected_frames = 0
 
         for batch in self.collector:
             batch = self._process_batch_hook(batch)
@@ -483,6 +516,25 @@ class Trainer:
         )
         string = f"Trainer(\n{string})"
         return string
+
+
+def _get_list_state_dict(hook_list):
+    out = []
+    for item, kwargs in hook_list:
+        if hasattr(item, "state_dict"):
+            out.append((item.state_dict(), kwargs))
+        else:
+            out.append((None, kwargs))
+    return out
+
+
+def _load_list_state_dict(list_state_dict, hook_list):
+    for i, ((state_dict_item, kwargs), (item, _)) in enumerate(
+        zip(list_state_dict, hook_list)
+    ):
+        if state_dict_item is not None:
+            item.load_state_dict(state_dict_item)
+            hook_list[i] = (item, kwargs)
 
 
 class SelectKeys:
@@ -721,6 +773,18 @@ class RewardNormalizer:
         tensordict.set("reward", reward * self.scale)
         self._normalize_has_been_called = True
         return tensordict
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "_reward_stats": deepcopy(self._reward_stats),
+            "scale": self.scale,
+            "_normalize_has_been_called": self._normalize_has_been_called,
+            "_update_has_been_called": self._update_has_been_called,
+        }
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        for key, value in state_dict.values():
+            setattr(self, key, value)
 
 
 def mask_batch(batch: TensorDictBase) -> TensorDictBase:
