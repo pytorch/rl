@@ -987,7 +987,10 @@ class TestAutoWrap:
 
         with pytest.raises(
             TypeError,
-            match="If the supplied policy is a nn.Module, it must either accept",
+            match=(
+                "Arguments to policy.forward are incompatible with entries in "
+                "env.observation_spec."
+            ),
         ):
             collector_class(
                 **self._create_collector_kwargs(env_maker, collector_class, policy)
