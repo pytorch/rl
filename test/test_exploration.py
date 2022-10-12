@@ -116,10 +116,10 @@ class TestAdditiveGaussian:
             net,
             in_keys=["observation"],
             out_keys=["loc", "scale"],
-            spec=CompositeSpec(action=action_spec) if spec_origin == "policy" else None,
+            spec=None,
         )
         policy = ProbabilisticActor(
-            spec=action_spec if spec_origin is not None else None,
+            spec=CompositeSpec(action=action_spec) if spec_origin is not None else None,
             module=module,
             dist_param_keys=["loc", "scale"],
             distribution_class=TanhNormal,
