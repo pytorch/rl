@@ -1,7 +1,7 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 
 
 class RNNAgent(nn.Module):
@@ -32,17 +32,18 @@ class QMixer(nn.Module):
 
         self.embed_dim = mixing_embed_dim
 
-        self.hyper_w_1 = nn.Linear(self.state_dim,
-                                   self.embed_dim * self.n_agents)
+        self.hyper_w_1 = nn.Linear(self.state_dim, self.embed_dim * self.n_agents)
         self.hyper_w_final = nn.Linear(self.state_dim, self.embed_dim)
 
         # State dependent bias for hidden layer
         self.hyper_b_1 = nn.Linear(self.state_dim, self.embed_dim)
 
         # V(s) instead of a bias for the last layers
-        self.V = nn.Sequential(nn.Linear(self.state_dim, self.embed_dim),
-                               nn.ReLU(),
-                               nn.Linear(self.embed_dim, 1))
+        self.V = nn.Sequential(
+            nn.Linear(self.state_dim, self.embed_dim),
+            nn.ReLU(),
+            nn.Linear(self.embed_dim, 1),
+        )
 
     def forward(self, agent_qs, states):
         bs = agent_qs.size(0)
