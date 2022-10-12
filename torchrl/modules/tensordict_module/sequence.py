@@ -24,7 +24,7 @@ except ImportError:
 import torch
 from torch import Tensor, nn
 
-from torchrl.data import CompositeSpec, TensorSpec
+from torchrl.data import CompositeSpec
 from torchrl.data.tensordict.tensordict import (
     LazyStackedTensorDict,
     TensorDict,
