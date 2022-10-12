@@ -1147,9 +1147,8 @@ def make_redq_model(
     del td
     return model
 
-    dataclass
 
-
+@dataclass
 class PPOModelConfig:
     gSDE: bool = False
     # if True, exploration is achieved using the gSDE technique.
