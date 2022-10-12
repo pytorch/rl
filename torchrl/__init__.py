@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import os
 from warnings import warn
 
 from torch import multiprocessing as mp
@@ -20,14 +20,16 @@ _init_extension()
 # if not HAS_OPS:
 #     print("could not load C++ libraries")
 
+_MP_START_METHOD = os.environ.get("MP_START_METHOD", "spawn")
+
 try:
-    mp.set_start_method("spawn")
+    mp.set_start_method(_MP_START_METHOD)
 except RuntimeError as err:
     if str(err).startswith("context has already been set"):
         mp_start_method = mp.get_start_method()
-        if mp_start_method != "spawn":
+        if mp_start_method != _MP_START_METHOD:
             warn(
-                f"failed to set start method to spawn, "
+                f"failed to set start method to {_MP_START_METHOD}, "
                 f"and current start method for mp is {mp_start_method}."
             )
 
