@@ -209,9 +209,9 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         noise = torch.randn(action.shape, device=action.device) * sigma
         action = action + noise
         spec = self.spec
+        if isinstance(spec, CompositeSpec):
+            spec = spec[self.action_key]
         if spec is not None:
-            if isinstance(spec, CompositeSpec):
-                spec = spec[self.action_key]
             action = spec.project(action)
         elif self.safe:
             raise RuntimeError(
