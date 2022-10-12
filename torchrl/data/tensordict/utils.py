@@ -131,7 +131,8 @@ def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
 
     if idx is Ellipsis:
         idx = (...,)
-    if num_dims < len(idx):
+    num_ellipsis = sum(_idx is Ellipsis for _idx in idx)
+    if num_dims < (len(idx) - num_ellipsis):
         raise RuntimeError("Not enough dimensions in TensorDict for index provided.")
 
     start_pos, after_ellipsis_length = None, 0

@@ -227,25 +227,23 @@ def test_gsde(
 ):
     torch.manual_seed(0)
     if gSDE:
-        model = torch.nn.LazyLinear(action_dim)
+        model = torch.nn.LazyLinear(action_dim, device=device)
         in_keys = ["observation"]
         module = TensorDictSequential(
             TensorDictModule(model, in_keys=in_keys, out_keys=["action"]),
             TensorDictModule(
-                LazygSDEModule(),
+                LazygSDEModule(device=device),
                 in_keys=["action", "observation", "_eps_gSDE"],
                 out_keys=["loc", "scale", "action", "_eps_gSDE"],
             ),
-        ).to(device)
+        )
         distribution_class = IndependentNormal
         distribution_kwargs = {}
     else:
         in_keys = ["observation"]
-        model = torch.nn.LazyLinear(action_dim * 2)
+        model = torch.nn.LazyLinear(action_dim * 2, device=device)
         wrapper = NormalParamWrapper(model)
-        module = TensorDictModule(
-            wrapper, in_keys=in_keys, out_keys=["loc", "scale"]
-        ).to(device)
+        module = TensorDictModule(wrapper, in_keys=in_keys, out_keys=["loc", "scale"])
         distribution_class = TanhNormal
         distribution_kwargs = {"min": -bound, "max": bound}
     spec = NdBoundedTensorSpec(
