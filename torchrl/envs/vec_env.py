@@ -275,35 +275,34 @@ class _BatchedEnv(EnvBase):
                 _kwargs.update(_new_kwargs)
 
     def _set_properties(self):
+        meta_data = deepcopy(self.meta_data)
         if self._single_task:
-            self._batch_size = self.meta_data.batch_size
-            self._observation_spec = self.meta_data.specs["observation_spec"]
-            self._reward_spec = self.meta_data.specs["reward_spec"]
-            self._input_spec = self.meta_data.specs["input_spec"]
-            self._dummy_env_str = self.meta_data.env_str
-            self._device = self.meta_data.device
-            self._env_tensordict = self.meta_data.tensordict
-            self._batch_locked = self.meta_data.batch_locked
+            self._batch_size = meta_data.batch_size
+            self._observation_spec = meta_data.specs["observation_spec"]
+            self._reward_spec = meta_data.specs["reward_spec"]
+            self._input_spec = meta_data.specs["input_spec"]
+            self._dummy_env_str = meta_data.env_str
+            self._device = meta_data.device
+            self._env_tensordict = meta_data.tensordict
+            self._batch_locked = meta_data.batch_locked
         else:
-            self._batch_size = torch.Size(
-                [self.num_workers, *self.meta_data[0].batch_size]
-            )
-            self._device = self.meta_data[0].device
+            self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
+            self._device = meta_data[0].device
             # TODO: check that all action_spec and reward spec match (issue #351)
-            self._reward_spec = self.meta_data[0].specs["reward_spec"]
+            self._reward_spec = meta_data[0].specs["reward_spec"]
             _observation_spec = {}
-            for md in self.meta_data:
+            for md in meta_data:
                 _observation_spec.update(dict(**md.specs["observation_spec"]))
             self._observation_spec = CompositeSpec(**_observation_spec)
             _input_spec = {}
-            for md in self.meta_data:
+            for md in meta_data:
                 _input_spec.update(dict(**md.specs["input_spec"]))
             self._input_spec = CompositeSpec(**_input_spec)
-            self._dummy_env_str = str(self.meta_data[0])
+            self._dummy_env_str = str(meta_data[0])
             self._env_tensordict = torch.stack(
-                [meta_data.tensordict for meta_data in self.meta_data], 0
+                [meta_data.tensordict for meta_data in meta_data], 0
             )
-            self._batch_locked = self.meta_data[0].batch_locked
+            self._batch_locked = meta_data[0].batch_locked
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
