@@ -3,11 +3,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional, Sequence
+import inspect
+from typing import Optional, Sequence, Type
 
 import torch
 from torch import nn
 
+from torchrl.data import DEVICE_TYPING
 from .exploration import NoisyLazyLinear, NoisyLinear
 
 LazyMapping = {
@@ -103,3 +105,25 @@ def _find_depth(depth: Optional[int], *list_or_ints: Sequence):
             f"num_cells) to be a a list or tuple. Got {tuple(type(item) for item in list_or_ints)}"
         )
     return depth
+
+
+def create_on_device(
+    module_class: Type[nn.Module], device: Optional[DEVICE_TYPING], *args, **kwargs
+) -> nn.Module:
+    """
+    Create a new instance of `module_class` on `device`.
+
+    The new instance is created directly on the device if its constructor supports this.
+
+    Args:
+        module_class (Type[nn.Module]): the class of module to be created.
+        device (DEVICE_TYPING): device to create the module on.
+        *args: positional arguments to be passed to the module constructor.
+        **kwargs: keyword arguments to be passed to the module constructor.
+    """
+    fullargspec = inspect.getfullargspec(module_class.__init__)
+    if "device" in fullargspec.args or "device" in fullargspec.kwonlyargs:
+        return module_class(*args, device=device, **kwargs)
+    else:
+        return module_class(*args, **kwargs).to(device)
+        # .to() is always available for nn.Module, and does nothing if the Module contains no parameters or buffers

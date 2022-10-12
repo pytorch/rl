@@ -355,7 +355,9 @@ class SyncDataCollector(_DataCollector):
             # otherwise, we perform a small number of steps with the policy to
             # determine the relevant keys with which to pre-populate _tensordict_out.
             # See #505 for additional context.
-            self._tensordict_out = env.rollout(3, policy)
+            self._tensordict_out = self.env.rollout(
+                3, self.policy, auto_cast_to_device=True
+            )
             if env.batch_size:
                 self._tensordict_out = self._tensordict_out[..., :1]
             else:
