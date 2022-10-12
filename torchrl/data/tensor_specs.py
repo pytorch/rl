@@ -1066,6 +1066,11 @@ dtype=torch.float32)},
 
     domain: str = "composite"
 
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._device = torch.device("cpu")
+        return super().__new__(cls)
+
     def __init__(self, **kwargs):
         self._specs = kwargs
         if len(kwargs):
@@ -1205,11 +1210,11 @@ dtype=torch.float32)},
                 "Only device casting is allowed with specs of type CompositeSpec."
             )
 
-        for value in self.values():
+        self.device = torch.device(dest)
+        for key, value in list(self.items()):
             if value is None:
                 continue
-            value.to(dest)
-        self.device = torch.device(dest)
+            self[key] = value.to(dest)
         return self
 
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
@@ -1230,3 +1235,7 @@ dtype=torch.float32)},
             and self._device == other._device
             and self._specs == other._specs
         )
+
+    def update(self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpec]]) -> None:
+        for key, item in dict_or_spec.items():
+            self[key] = item
