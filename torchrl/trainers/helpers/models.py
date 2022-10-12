@@ -1423,7 +1423,7 @@ def make_dreamer(
     default_dict = {
         "next_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
         "next_belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
-        "action": proof_environment.action_spec,
+        # "action": proof_environment.action_spec,
     }
     model_based_env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)

@@ -9,7 +9,7 @@ from typing import Tuple
 import numpy as np
 import torch
 
-from torchrl.data import TensorDict, CompositeSpec, NdUnboundedContinuousTensorSpec
+from torchrl.data import TensorDict, CompositeSpec
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs import EnvBase
 from torchrl.envs.model_based import ModelBasedEnvBase
@@ -39,14 +39,14 @@ class DreamerEnv(ModelBasedEnvBase):
         Sets the specs of the environment from the specs of the given environment.
         """
         super().set_specs_from_env(env)
-        self.observation_spec = CompositeSpec(
-            next_state=NdUnboundedContinuousTensorSpec(
-                shape=self.prior_shape, device=self.device
-            ),
-            next_belief=NdUnboundedContinuousTensorSpec(
-                shape=self.belief_shape, device=self.device
-            ),
-        )
+        # self.observation_spec = CompositeSpec(
+        #     next_state=NdUnboundedContinuousTensorSpec(
+        #         shape=self.prior_shape, device=self.device
+        #     ),
+        #     next_belief=NdUnboundedContinuousTensorSpec(
+        #         shape=self.belief_shape, device=self.device
+        #     ),
+        # )
         self.input_spec = CompositeSpec(
             state=self.observation_spec["next_state"],
             belief=self.observation_spec["next_belief"],
