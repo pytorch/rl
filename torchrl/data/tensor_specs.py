@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import abc
 import os
+from copy import deepcopy
 from dataclasses import dataclass
 from textwrap import indent
 from typing import (
@@ -1237,5 +1238,7 @@ dtype=torch.float32)},
         )
 
     def update(self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpec]]) -> None:
+        if isinstance(dict_or_spec, TensorSpec) and dict_or_spec.device != self.device:
+            dict_or_spec = deepcopy(dict_or_spec).to(self.device)
         for key, item in dict_or_spec.items():
             self[key] = item
