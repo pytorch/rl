@@ -106,7 +106,9 @@ class TestTDModule:
         else:
             raise NotImplementedError
         spec = (
-            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+            CompositeSpec(out=spec, **{out_key: None for out_key in out_keys})
+            if spec is not None
+            else None
         )
 
         kwargs = {"distribution_class": TanhNormal}
