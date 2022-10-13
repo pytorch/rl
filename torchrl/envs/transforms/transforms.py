@@ -954,12 +954,6 @@ class CenterCrop(ObservationTransform):
         h: int = None,
         keys_in: Optional[Sequence[str]] = None,
     ):
-        if not _has_tv:
-            raise ImportError(
-                "Torchvision not found. The Resize transform relies on "
-                "torchvision implementation. "
-                "Consider installing this dependency."
-            )
         if keys_in is None:
             keys_in = IMAGE_KEYS  # default
         super().__init__(keys_in=keys_in)
@@ -1021,12 +1015,6 @@ class FlattenObservation(ObservationTransform):
         last_dim: int = -3,
         keys_in: Optional[Sequence[str]] = None,
     ):
-        if not _has_tv:
-            raise ImportError(
-                "Torchvision not found. The Resize transform relies on "
-                "torchvision implementation. "
-                "Consider installing this dependency."
-            )
         if keys_in is None:
             keys_in = IMAGE_KEYS  # default
         super().__init__(keys_in=keys_in)
@@ -1095,12 +1083,6 @@ class UnsqueezeTransform(Transform):
         keys_inv_in: Optional[Sequence[str]] = None,
         keys_inv_out: Optional[Sequence[str]] = None,
     ):
-        if not _has_tv:
-            raise ImportError(
-                "Torchvision not found. The Resize transform relies on "
-                "torchvision implementation. "
-                "Consider installing this dependency."
-            )
         if keys_in is None:
             keys_in = IMAGE_KEYS  # default
         super().__init__(
