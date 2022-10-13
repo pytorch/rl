@@ -9,5 +9,5 @@ network:
     strides: [4, 2, 1]
   mlp_kwargs:
     num_cells: 512
-    layer_class: linear
+    layer_class: ${exploration.network}
 in_keys: ["pixels"]

@@ -33,14 +33,16 @@ def make_env():
     return fun
 
 
+@pytest.fixture(scope="module", autouse=True)
+def init_hydra():
+    GlobalHydra.instance().clear()
+    hydra.initialize("../examples/configs/")
+    yield
+    GlobalHydra.instance().clear()
+
+
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestConfigs:
-    @pytest.fixture(scope="class", autouse=True)
-    def init_hydra(self, request):
-        GlobalHydra.instance().clear()
-        hydra.initialize("../examples/configs/")
-        request.addfinalizer(GlobalHydra.instance().clear)
-
     @pytest.mark.parametrize(
         "file,num_workers",
         [
@@ -228,12 +230,6 @@ def make_model_redq(net_partial, model_params, env):
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestModelConfigs:
-    @pytest.fixture(scope="class", autouse=True)
-    def init_hydra(self, request):
-        GlobalHydra.instance().clear()
-        hydra.initialize("../examples/configs/")
-        request.addfinalizer(GlobalHydra.instance().clear)
-
     @pytest.mark.parametrize("pixels", [True, False])
     @pytest.mark.parametrize("distributional", [True, False])
     def test_dqn(self, pixels, distributional):
@@ -444,6 +440,69 @@ class TestModelConfigs:
         tensordict = env.rollout(3, actor)
         assert env.action_spec.is_in(tensordict["action"]), env.action_spec
         qvalue(tensordict)
+
+
+@pytest.mark.skipif(not _has_hydra, reason="No hydra found")
+class TestExplorationConfigs:
+    from torchrl.modules.models.models import _LAYER_CLASS_DICT
+    from torchrl.modules.tensordict_module.exploration import (
+        EGreedyWrapper,
+        AdditiveGaussianWrapper,
+        OrnsteinUhlenbeckProcessWrapper,
+    )
+
+    wrapper_map = {
+        "e_greedy": EGreedyWrapper,
+        "additive_gaussian": AdditiveGaussianWrapper,
+        "ou_process": OrnsteinUhlenbeckProcessWrapper,
+    }
+
+    @pytest.mark.parametrize("network", ["linear", "noisy_linear"])
+    @pytest.mark.parametrize(
+        "wrapper", [None, "e_greedy", "additive_gaussian", "ou_process"]
+    )
+    def test_exploration(self, network, wrapper):
+        additional_config = [
+            "env=cartpole",
+            "transforms=state",
+            "model=sac/discrete",
+            "network=sac/independent_state",
+        ]
+        exploration_config = []
+        if wrapper is not None:
+            exploration_config += [
+                f"exploration={wrapper}",
+                f"exploration.network={network}",
+            ]
+        else:
+            exploration_config += [f"exploration={network}"]
+
+        cfg = hydra.compose("config", overrides=exploration_config + additional_config)
+        env = instantiate(cfg.env)
+        transforms = [instantiate(transform) for transform in cfg.transforms]
+        for t in transforms:
+            env.append_transform(t)
+        model_params = instantiate(cfg.model)
+        net_partial = instantiate(cfg.network)
+        actor, qvalue, value = make_model_sac(net_partial, model_params, env)
+        actor(env.reset())
+        assert actor.module.module.layer_class is self._LAYER_CLASS_DICT[network]
+
+        if cfg.exploration.wrapper is not None:
+            actor_explore = instantiate(cfg.exploration.wrapper)(actor)
+            assert type(actor_explore) is self.wrapper_map[wrapper]
+        else:
+            actor_explore = actor
+
+        rollout = env.rollout(3)
+        assert all(key in rollout.keys() for key in actor_explore.in_keys), (
+            actor_explore.in_keys,
+            rollout.keys(),
+        )
+        tensordict = env.rollout(3, actor_explore)
+        assert env.action_spec.is_in(tensordict["action"]), env.action_spec
+        qvalue(tensordict)
+        value(tensordict)
 
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
