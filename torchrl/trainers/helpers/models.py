@@ -1243,6 +1243,7 @@ def make_dreamer(
             ],
         ),
     )
+
     transition_model = TensorDictSequential(
         TensorDictModule(
             obs_encoder,
@@ -1298,6 +1299,8 @@ def make_dreamer(
         ),
     )
     # actor for real world: interacts with states ~ posterior
+    # Out actor differs from the original paper where first they compute prior and posterior and then act on it
+    # but we found that this approach worked better.
     actor_realworld = TensorDictSequential(
         TensorDictModule(
             obs_encoder,

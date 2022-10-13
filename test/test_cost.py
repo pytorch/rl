@@ -26,6 +26,7 @@ from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.data.utils import expand_as_right
 from torchrl.envs.model_based.dreamer import DreamerEnv
+from torchrl.envs.transforms import TransformedEnv, TensorDictPrimer
 from torchrl.modules import (
     DistributionalQValueActor,
     QValueActor,
@@ -1627,7 +1628,14 @@ class TestDreamer:
         return td
 
     def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = MockPixelEnv()
+        mock_env = TransformedEnv(MockPixelEnv())
+        default_dict = {
+            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
+            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+        }
+        mock_env.append_transform(
+            TensorDictPrimer(random=False, default_value=0, **default_dict)
+        )
 
         obs_encoder = ObsEncoder()
         obs_decoder = ObsDecoder()
@@ -1697,7 +1705,14 @@ class TestDreamer:
         return world_model
 
     def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = MockPixelEnv()
+        mock_env = TransformedEnv(MockPixelEnv())
+        default_dict = {
+            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
+            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+        }
+        mock_env.append_transform(
+            TensorDictPrimer(random=False, default_value=0, **default_dict)
+        )
 
         rssm_prior = RSSMPrior(
             hidden_dim=rssm_hidden_dim,
@@ -1739,7 +1754,15 @@ class TestDreamer:
         return model_based_env
 
     def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = MockPixelEnv()
+        mock_env = TransformedEnv(MockPixelEnv())
+        default_dict = {
+            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
+            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+        }
+        mock_env.append_transform(
+            TensorDictPrimer(random=False, default_value=0, **default_dict)
+        )
+
         actor_module = DreamerActor(
             out_features=mock_env.action_spec.shape[0],
             depth=4,
