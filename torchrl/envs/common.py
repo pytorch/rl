@@ -238,6 +238,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # It can also lead to inconsistencies when calling rollout.
         cls._inplace_update = _inplace_update
         cls._batch_locked = _batch_locked
+        cls._device = None
         return super().__new__(cls)
 
     @property
