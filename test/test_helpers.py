@@ -25,7 +25,6 @@ from mocking_classes import (
     DiscreteActionVecMockEnv,
 )
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import EnvConfig
@@ -423,7 +422,6 @@ class TestMakers:
                 raise
             proof_environment.close()
             del proof_environment
-
 
     @pytest.mark.skipif(not _has_gym, reason="No gym library found")
     @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
