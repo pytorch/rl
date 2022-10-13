@@ -21,24 +21,25 @@ except ImportError:
 from mocking_classes import (
     ContinuousActionConvMockEnvNumpy,
     ContinuousActionVecMockEnv,
-    DiscreteActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
+    DiscreteActionVecMockEnv,
 )
 from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import EnvConfig
 from torchrl.trainers.helpers.models import (
-    make_dqn_actor,
-    make_ddpg_actor,
-    make_ppo_model,
-    make_sac_model,
-    make_redq_model,
-    DiscreteModelConfig,
     DDPGModelConfig,
+    DiscreteModelConfig,
+    make_ddpg_actor,
+    make_dqn_actor,
+    make_ppo_model,
+    make_redq_model,
+    make_sac_model,
     PPOModelConfig,
-    SACModelConfig,
     REDQModelConfig,
+    SACModelConfig,
 )
 
 ## these tests aren't truly unitary but setting up a fake env for the
@@ -422,6 +423,7 @@ class TestMakers:
                 raise
             proof_environment.close()
             del proof_environment
+
 
     @pytest.mark.skipif(not _has_gym, reason="No gym library found")
     @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
