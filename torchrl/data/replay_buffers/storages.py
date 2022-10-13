@@ -204,7 +204,7 @@ class LazyMemmapStorage(LazyTensorStorage):
         else:
             out = TensorDict({}, [self.max_size, *data.shape])
             print("The storage is being created: ")
-            for key, tensor in data.items():
+            for key, tensor in sorted(data.items()):
                 if isinstance(tensor, TensorDictBase):
                     out[key] = (
                         tensor.expand(self.max_size)
