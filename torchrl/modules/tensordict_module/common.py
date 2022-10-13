@@ -196,19 +196,11 @@ class TensorDictModule(nn.Module):
                     "Consider using a CompositeSpec object or no spec at all."
                 )
             spec = CompositeSpec(**{self.out_keys[0]: spec})
-        elif spec is None:
-            spec = CompositeSpec()
-
-        if set(spec.keys()) != set(self.out_keys):
+        if spec and len(spec) < len(self.out_keys):
             # then assume that all the non indicated specs are None
             for key in self.out_keys:
                 if key not in spec:
                     spec[key] = None
-
-        if set(spec.keys()) != set(self.out_keys):
-            raise RuntimeError(
-                f"spec keys and out_keys do not match, got: {spec.keys()} and {self.out_keys} respectively"
-            )
 
         self._spec = spec
         self.safe = safe
@@ -225,6 +217,12 @@ class TensorDictModule(nn.Module):
 
         self.module = module
 
+    def __setattr__(self, key: str, attribute: Any) -> None:
+        if key == "spec" and isinstance(attribute, TensorSpec):
+            self._spec = attribute
+            return
+        super().__setattr__(key, attribute)
+
     @property
     def is_functional(self):
         return isinstance(
@@ -233,14 +231,14 @@ class TensorDictModule(nn.Module):
         )
 
     @property
-    def spec(self) -> CompositeSpec:
+    def spec(self) -> TensorSpec:
         return self._spec
 
     @spec.setter
-    def spec(self, spec: CompositeSpec) -> None:
-        if not isinstance(spec, CompositeSpec):
+    def spec(self, spec: TensorSpec) -> None:
+        if not isinstance(spec, TensorSpec):
             raise RuntimeError(
-                f"Trying to set an object of type {type(spec)} as a tensorspec but expected a CompositeSpec instance."
+                f"Trying to set an object of type {type(spec)} as a tensorspec."
             )
         self._spec = spec
 

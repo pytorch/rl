@@ -6,7 +6,7 @@ import argparse
 import tempfile
 from argparse import Namespace
 from collections import OrderedDict
-from os import path, walk
+from os import walk, path
 from time import sleep
 
 import pytest
@@ -26,19 +26,20 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.trainers import Recorder, Trainer
+from torchrl.trainers import Recorder
+from torchrl.trainers import Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
-    _has_tqdm,
-    BatchSubSampler,
-    CountFramesLog,
-    LogReward,
-    mask_batch,
-    ReplayBufferTrainer,
-    RewardNormalizer,
     SelectKeys,
+    ReplayBufferTrainer,
+    LogReward,
+    RewardNormalizer,
+    mask_batch,
+    BatchSubSampler,
     UpdateWeights,
+    CountFramesLog,
 )
+from torchrl.trainers.trainers import _has_tqdm
 
 
 class MockingOptim:
@@ -65,7 +66,7 @@ def mocking_trainer() -> Trainer:
             None,
         ]
         * 3,
-        MockingOptim(),
+        MockingOptim()
     )
     trainer.collected_frames = 0
     trainer._pbar_str = OrderedDict()

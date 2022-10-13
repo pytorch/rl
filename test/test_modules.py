@@ -13,29 +13,25 @@ from torch import nn
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
 from torchrl.modules import (
-    ActorValueOperator,
-    CEMPlanner,
-    LSTMNet,
-    ProbabilisticActor,
     QValueActor,
+    ActorValueOperator,
     TensorDictModule,
     ValueOperator,
+    ProbabilisticActor,
+    LSTMNet,
+    CEMPlanner,
 )
 from torchrl.modules.functional_modules import (
     FunctionalModule,
     FunctionalModuleWithBuffers,
 )
-from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
-from torchrl.modules.models.utils import SquashDims
+from torchrl.modules.models import NoisyLinear, MLP, NoisyLazyLinear
 
 
 @pytest.mark.parametrize("in_features", [3, 10, None])
 @pytest.mark.parametrize("out_features", [3, (3, 10)])
 @pytest.mark.parametrize("depth, num_cells", [(3, 32), (None, (32, 32, 32))])
-@pytest.mark.parametrize(
-    "activation_class, activation_kwargs",
-    [(nn.ReLU, {"inplace": True}), (nn.ReLU, {}), (nn.PReLU, {})],
-)
+@pytest.mark.parametrize("activation_kwargs", [{"inplace": True}, {}])
 @pytest.mark.parametrize(
     "norm_class, norm_kwargs",
     [(nn.LazyBatchNorm1d, {}), (nn.BatchNorm1d, {"num_features": 32})],
@@ -49,7 +45,6 @@ def test_mlp(
     out_features,
     depth,
     num_cells,
-    activation_class,
     activation_kwargs,
     bias_last_layer,
     norm_class,
@@ -66,87 +61,20 @@ def test_mlp(
         out_features=out_features,
         depth=depth,
         num_cells=num_cells,
-        activation_class=activation_class,
+        activation_class=nn.ReLU,
         activation_kwargs=activation_kwargs,
         norm_class=norm_class,
         norm_kwargs=norm_kwargs,
         bias_last_layer=bias_last_layer,
         single_bias_last_layer=False,
         layer_class=layer_class,
-        device=device,
-    )
+    ).to(device)
     if in_features is None:
         in_features = 5
     x = torch.randn(batch, in_features, device=device)
     y = mlp(x)
     out_features = [out_features] if isinstance(out_features, Number) else out_features
     assert y.shape == torch.Size([batch, *out_features])
-
-
-@pytest.mark.parametrize("in_features", [3, 10, None])
-@pytest.mark.parametrize(
-    "input_size, depth, num_cells, kernel_sizes, strides, paddings, expected_features",
-    [(100, None, None, 3, 1, 0, 32 * 94 * 94), (100, 3, 32, 3, 1, 1, 32 * 100 * 100)],
-)
-@pytest.mark.parametrize(
-    "activation_class, activation_kwargs",
-    [(nn.ReLU, {"inplace": True}), (nn.ReLU, {}), (nn.PReLU, {})],
-)
-@pytest.mark.parametrize(
-    "norm_class, norm_kwargs",
-    [(None, None), (nn.LazyBatchNorm2d, {}), (nn.BatchNorm2d, {"num_features": 32})],
-)
-@pytest.mark.parametrize("bias_last_layer", [True, False])
-@pytest.mark.parametrize(
-    "aggregator_class, aggregator_kwargs",
-    [(SquashDims, {})],
-)
-@pytest.mark.parametrize("squeeze_output", [False])
-@pytest.mark.parametrize("device", get_available_devices())
-def test_convnet(
-    in_features,
-    depth,
-    num_cells,
-    kernel_sizes,
-    strides,
-    paddings,
-    activation_class,
-    activation_kwargs,
-    norm_class,
-    norm_kwargs,
-    bias_last_layer,
-    aggregator_class,
-    aggregator_kwargs,
-    squeeze_output,
-    device,
-    input_size,
-    expected_features,
-    seed=0,
-):
-    torch.manual_seed(seed)
-    batch = 2
-    convnet = ConvNet(
-        in_features=in_features,
-        depth=depth,
-        num_cells=num_cells,
-        kernel_sizes=kernel_sizes,
-        strides=strides,
-        paddings=paddings,
-        activation_class=activation_class,
-        activation_kwargs=activation_kwargs,
-        norm_class=norm_class,
-        norm_kwargs=norm_kwargs,
-        bias_last_layer=bias_last_layer,
-        aggregator_class=aggregator_class,
-        aggregator_kwargs=aggregator_kwargs,
-        squeeze_output=squeeze_output,
-        device=device,
-    )
-    if in_features is None:
-        in_features = 5
-    x = torch.randn(batch, in_features, input_size, input_size, device=device)
-    y = convnet(x)
-    assert y.shape == torch.Size([batch, expected_features])
 
 
 @pytest.mark.parametrize(
@@ -159,7 +87,7 @@ def test_convnet(
 @pytest.mark.parametrize("device", get_available_devices())
 def test_noisy(layer_class, device, seed=0):
     torch.manual_seed(seed)
-    layer = layer_class(3, 4, device=device)
+    layer = layer_class(3, 4).to(device)
     x = torch.randn(10, 3, device=device)
     y1 = layer(x)
     layer.reset_noise()
@@ -178,25 +106,25 @@ def test_value_based_policy(device):
     action_spec = OneHotDiscreteTensorSpec(action_dim)
 
     def make_net():
-        net = MLP(in_features=obs_dim, out_features=action_dim, depth=2, device=device)
+        net = MLP(in_features=obs_dim, out_features=action_dim, depth=2)
         for mod in net.modules():
             if hasattr(mod, "bias") and mod.bias is not None:
                 mod.bias.data.zero_()
         return net
 
-    actor = QValueActor(spec=action_spec, module=make_net(), safe=True)
+    actor = QValueActor(spec=action_spec, module=make_net(), safe=True).to(device)
     obs = torch.zeros(2, obs_dim, device=device)
     td = TensorDict(batch_size=[2], source={"observation": obs})
     action = actor(td).get("action")
     assert (action.sum(-1) == 1).all()
 
-    actor = QValueActor(spec=action_spec, module=make_net(), safe=False)
+    actor = QValueActor(spec=action_spec, module=make_net(), safe=False).to(device)
     obs = torch.randn(2, obs_dim, device=device)
     td = TensorDict(batch_size=[2], source={"observation": obs})
     action = actor(td).get("action")
     assert (action.sum(-1) == 1).all()
 
-    actor = QValueActor(spec=action_spec, module=make_net(), safe=False)
+    actor = QValueActor(spec=action_spec, module=make_net(), safe=False).to(device)
     obs = torch.zeros(2, obs_dim, device=device)
     td = TensorDict(batch_size=[2], source={"observation": obs})
     action = actor(td).get("action")
@@ -270,8 +198,7 @@ def test_lstm_net(device, out_features, hidden_size, num_layers, has_precond_hid
             "num_layers": num_layers,
         },
         {"out_features": hidden_size},
-        device=device,
-    )
+    ).to(device)
     # test single step vs multi-step
     x = torch.randn(batch, time_steps, in_features, device=device)
     x_unbind = x.unbind(1)
@@ -337,8 +264,7 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
         out_features,
         {"input_size": hidden_size, "hidden_size": hidden_size},
         {"out_features": hidden_size},
-        device=device,
-    )
+    ).to(device)
     # test single step vs multi-step
     x = torch.randn(time_steps, in_features, device=device)
     x_unbind = x.unbind(0)

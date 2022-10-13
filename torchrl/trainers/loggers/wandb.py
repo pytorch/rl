@@ -69,8 +69,7 @@ class WandbLogger(Logger):
             "name": exp_name,
             "dir": save_dir,
             "id": id,
-            "project": "torchrl-private",
-            "entity": "vmoens",
+            "project": project,
             "resume": "allow",
             **kwargs,
         }
@@ -159,9 +158,7 @@ class WandbLogger(Logger):
             step = self._prev_video_step + 1
         self._prev_video_step = step if step is not None else self._prev_video_step + 1
         self.experiment.log(
-            {name: wandb.Video(video, fps=fps, format=format)},
-            # step=step,
-            **kwargs,
+            {name: wandb.Video(video, fps=fps, format=format)}, step=step, **kwargs
         )
 
     def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821

@@ -8,16 +8,16 @@ import torch
 import torch.nn as nn
 from torchrl._utils import seed_generator
 from torchrl.data.tensor_specs import (
-    BinaryDiscreteTensorSpec,
-    BoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
+    NdBoundedTensorSpec,
     CompositeSpec,
     MultOneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
-    OneHotDiscreteTensorSpec,
+    BinaryDiscreteTensorSpec,
+    BoundedTensorSpec,
     UnboundedContinuousTensorSpec,
+    OneHotDiscreteTensorSpec,
 )
-from torchrl.data.tensordict.tensordict import TensorDict, TensorDictBase
+from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
 

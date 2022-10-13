@@ -11,13 +11,13 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from torch import autograd, nn
+from torch import nn, autograd
 from torchrl.data import (
-    CompositeSpec,
-    MultOneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     TensorDict,
+    NdBoundedTensorSpec,
+    MultOneHotDiscreteTensorSpec,
+    NdUnboundedContinuousTensorSpec,
+    CompositeSpec,
 )
 from torchrl.data.postprocs.postprocs import MultiStep
 
@@ -25,38 +25,40 @@ from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.data.utils import expand_as_right
 from torchrl.modules import DistributionalQValueActor, QValueActor, TensorDictModule
-from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+from torchrl.modules.distributions.continuous import TanhNormal, NormalParamWrapper
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.actors import (
-    Actor,
-    ActorCriticOperator,
-    ActorValueOperator,
-    ProbabilisticActor,
     ValueOperator,
+    Actor,
+    ProbabilisticActor,
+    ActorValueOperator,
+    ActorCriticOperator,
 )
 from torchrl.objectives import (
-    ClipPPOLoss,
-    DDPGLoss,
-    DistributionalDQNLoss,
     DQNLoss,
-    KLPENPPOLoss,
-    PPOLoss,
+    DistributionalDQNLoss,
+    DDPGLoss,
     SACLoss,
+    PPOLoss,
+    ClipPPOLoss,
+    KLPENPPOLoss,
 )
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.deprecated import (
-    DoubleREDQLoss_deprecated,
     REDQLoss_deprecated,
+    DoubleREDQLoss_deprecated,
 )
-from torchrl.objectives.costs.redq import REDQLoss
+from torchrl.objectives.costs.redq import (
+    REDQLoss,
+)
 from torchrl.objectives.costs.reinforce import ReinforceLoss
-from torchrl.objectives.costs.utils import HardUpdate, hold_out_net, SoftUpdate
-from torchrl.objectives.returns.advantages import GAE, TDEstimate, TDLambdaEstimate
+from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
+from torchrl.objectives.returns.advantages import TDEstimate, GAE, TDLambdaEstimate
 from torchrl.objectives.returns.functional import (
-    generalized_advantage_estimate,
+    vec_td_lambda_advantage_estimate,
     td_lambda_advantage_estimate,
     vec_generalized_advantage_estimate,
-    vec_td_lambda_advantage_estimate,
+    generalized_advantage_estimate,
 )
 from torchrl.objectives.returns.utils import _custom_conv1d, _make_gammas_tensor
 

@@ -8,15 +8,15 @@ import argparse
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from torch import autograd, nn
+from torch import nn, autograd
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.modules import (
-    NormalParamWrapper,
-    OneHotCategorical,
     TanhNormal,
+    NormalParamWrapper,
     TruncatedNormal,
+    OneHotCategorical,
 )
-from torchrl.modules.distributions import Delta, TanhDelta
+from torchrl.modules.distributions import TanhDelta, Delta
 from torchrl.modules.distributions.continuous import SafeTanhTransform
 
 

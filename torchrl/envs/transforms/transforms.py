@@ -308,9 +308,9 @@ class TransformedEnv(EnvBase):
         cache_specs: bool = True,
         **kwargs,
     ):
-        device = kwargs.pop("device", env.device)
-        env = env.to(device)
-        super().__init__(device=None, **kwargs)
+        kwargs.setdefault("device", env.device)
+        device = kwargs["device"]
+        super().__init__(**kwargs)
         self._set_env(env, device)
         if transform is None:
             transform = Compose()
@@ -331,14 +331,6 @@ class TransformedEnv(EnvBase):
         self.base_env = env.to(device)
         # updates need not be inplace, as transforms may modify values out-place
         self.base_env._inplace_update = False
-
-    @property
-    def device(self) -> bool:
-        return self.base_env.device
-
-    @device.setter
-    def device(self, value):
-        raise RuntimeError("device is a read-only property")
 
     @property
     def batch_locked(self) -> bool:
@@ -534,6 +526,7 @@ class TransformedEnv(EnvBase):
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
         self.base_env.to(device)
+        self.device = torch.device(device)
         self.transform.to(device)
 
         self.is_done = self.is_done.to(device)
@@ -954,6 +947,12 @@ class CenterCrop(ObservationTransform):
         h: int = None,
         keys_in: Optional[Sequence[str]] = None,
     ):
+        if not _has_tv:
+            raise ImportError(
+                "Torchvision not found. The Resize transform relies on "
+                "torchvision implementation. "
+                "Consider installing this dependency."
+            )
         if keys_in is None:
             keys_in = IMAGE_KEYS  # default
         super().__init__(keys_in=keys_in)
@@ -1015,6 +1014,12 @@ class FlattenObservation(ObservationTransform):
         last_dim: int = -3,
         keys_in: Optional[Sequence[str]] = None,
     ):
+        if not _has_tv:
+            raise ImportError(
+                "Torchvision not found. The Resize transform relies on "
+                "torchvision implementation. "
+                "Consider installing this dependency."
+            )
         if keys_in is None:
             keys_in = IMAGE_KEYS  # default
         super().__init__(keys_in=keys_in)
@@ -1083,6 +1088,12 @@ class UnsqueezeTransform(Transform):
         keys_inv_in: Optional[Sequence[str]] = None,
         keys_inv_out: Optional[Sequence[str]] = None,
     ):
+        if not _has_tv:
+            raise ImportError(
+                "Torchvision not found. The Resize transform relies on "
+                "torchvision implementation. "
+                "Consider installing this dependency."
+            )
         if keys_in is None:
             keys_in = IMAGE_KEYS  # default
         super().__init__(
@@ -1939,6 +1950,7 @@ class TensorDictPrimer(Transform):
                     f"value obtained through the call to `env.reset()`. Consider renaming "
                     f"the {key} key."
                 )
+            assert observation_spec.device == self.device
             observation_spec[key] = spec.to(self.device)
         return observation_spec
 

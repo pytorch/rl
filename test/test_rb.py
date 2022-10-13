@@ -10,21 +10,21 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from torchrl.data import (
-    PrioritizedReplayBuffer,
-    ReplayBuffer,
     TensorDict,
+    ReplayBuffer,
+    PrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
 from torchrl.data.replay_buffers import (
     rb_prototype,
     samplers,
-    TensorDictPrioritizedReplayBuffer,
     writers,
+    TensorDictPrioritizedReplayBuffer,
 )
 from torchrl.data.replay_buffers.storages import (
+    ListStorage,
     LazyMemmapStorage,
     LazyTensorStorage,
-    ListStorage,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDictBase
 
