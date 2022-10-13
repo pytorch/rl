@@ -9,8 +9,7 @@ import warnings
 import pytest
 import torch
 from torch import multiprocessing as mp
-from torchrl.data import SavedTensorDict
-from torchrl.data import TensorDict
+from torchrl.data import SavedTensorDict, TensorDict
 
 
 class TestShared:

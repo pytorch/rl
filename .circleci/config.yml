@@ -276,6 +276,12 @@ jobs:
       - run:
           name: Run tests
           command: .circleci/unittest/linux/scripts/run_test.sh
+
+      - run:
+          name: Codecov upload
+          command: |
+            bash <(curl -s https://codecov.io/bash) -Z -F linux-cpu
+
       - run:
           name: Post process
           command: .circleci/unittest/linux/scripts/post_process.sh
@@ -332,6 +338,10 @@ jobs:
           command: bash .circleci/unittest/linux/scripts/run_test.sh
 #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
       - run:
+          name: Codecov upload
+          command: |
+            bash <(curl -s https://codecov.io/bash) -Z -F linux-gpu
+      - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/post_process.sh
       - store_test_results:
@@ -381,11 +391,15 @@ jobs:
       - run:
           name: Install torchrl
 #          command: bash .circleci/unittest/linux_optdeps/scripts/install.sh
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux/scripts/install.sh
+          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_optdeps/scripts/install.sh
       - run:
           name: Run tests
           command: bash .circleci/unittest/linux_optdeps/scripts/run_test.sh
 #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
+      - run:
+          name: Codecov upload
+          command: |
+            bash <(curl -s https://codecov.io/bash) -Z -F linux-outdeps-gpu
       - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_optdeps/scripts/post_process.sh
@@ -433,6 +447,10 @@ jobs:
       - run:
           name: Run tests
           command: .circleci/unittest/linux_stable/scripts/run_test.sh
+      - run:
+          name: Codecov upload
+          command: |
+            bash <(curl -s https://codecov.io/bash) -Z -F linux-stable-cpu
       - run:
           name: Post process
           command: .circleci/unittest/linux_stable/scripts/post_process.sh
@@ -489,6 +507,10 @@ jobs:
           command: bash .circleci/unittest/linux_stable/scripts/run_test.sh
 #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
       - run:
+          name: Codecov upload
+          command: |
+            bash <(curl -s https://codecov.io/bash) -Z -F linux-stable-gpu
+      - run:
           name: Post Process
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_stable/scripts/post_process.sh
       - store_test_results:
@@ -532,6 +554,10 @@ jobs:
       - run:
           name: Run tests
           command: .circleci/unittest/linux/scripts/run_test.sh
+      - run:
+          name: Codecov upload
+          command: |
+            bash <(curl -s https://codecov.io/bash) -Z -F macos-cpu
       - run:
           name: Post process
           command: .circleci/unittest/linux/scripts/post_process.sh

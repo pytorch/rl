@@ -9,14 +9,14 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from torchrl.data.tensor_specs import (
-    NdUnboundedContinuousTensorSpec,
-    NdBoundedTensorSpec,
-    CompositeSpec,
-    MultOneHotDiscreteTensorSpec,
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
-    UnboundedContinuousTensorSpec,
+    CompositeSpec,
+    MultOneHotDiscreteTensorSpec,
+    NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
     OneHotDiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import TensorDict, TensorDictBase
 
@@ -410,7 +410,7 @@ class TestEquality:
         ts_other = BoundedTensorSpec(minimum, maximum + 1, device, dtype)
         assert ts != ts_other
 
-        ts_other = BoundedTensorSpec(minimum, maximum, "cpu:2", dtype)
+        ts_other = BoundedTensorSpec(minimum, maximum, "cpu:0", dtype)
         assert ts != ts_other
 
         ts_other = BoundedTensorSpec(minimum, maximum, device, torch.float64)
@@ -435,7 +435,7 @@ class TestEquality:
         ts_other = OneHotDiscreteTensorSpec(n + 1, device, dtype, use_register)
         assert ts != ts_other
 
-        ts_other = OneHotDiscreteTensorSpec(n, "cpu:2", dtype, use_register)
+        ts_other = OneHotDiscreteTensorSpec(n, "cpu:0", dtype, use_register)
         assert ts != ts_other
 
         ts_other = OneHotDiscreteTensorSpec(n, device, torch.float64, use_register)
@@ -458,7 +458,7 @@ class TestEquality:
         ts_same = UnboundedContinuousTensorSpec(device, dtype)
         assert ts == ts_same
 
-        ts_other = UnboundedContinuousTensorSpec("cpu:2", dtype)
+        ts_other = UnboundedContinuousTensorSpec("cpu:0", dtype)
         assert ts != ts_other
 
         ts_other = UnboundedContinuousTensorSpec(device, torch.float64)
@@ -495,7 +495,7 @@ class TestEquality:
         assert ts != ts_other
 
         ts_other = NdBoundedTensorSpec(
-            minimum=minimum, maximum=maximum, device="cpu:2", dtype=dtype
+            minimum=minimum, maximum=maximum, device="cpu:0", dtype=dtype
         )
         assert ts != ts_other
 
@@ -535,7 +535,7 @@ class TestEquality:
         assert ts != ts_other
 
         ts_other = NdUnboundedContinuousTensorSpec(
-            shape=shape, device="cpu:2", dtype=dtype
+            shape=shape, device="cpu:0", dtype=dtype
         )
         assert ts != ts_other
 
@@ -562,7 +562,7 @@ class TestEquality:
         ts_other = BinaryDiscreteTensorSpec(n=n + 5, device=device, dtype=dtype)
         assert ts != ts_other
 
-        ts_other = BinaryDiscreteTensorSpec(n=n, device="cpu:2", dtype=dtype)
+        ts_other = BinaryDiscreteTensorSpec(n=n, device="cpu:0", dtype=dtype)
         assert ts != ts_other
 
         ts_other = BinaryDiscreteTensorSpec(n=n, device=device, dtype=torch.float64)
@@ -601,7 +601,7 @@ class TestEquality:
         )
         assert ts != ts_other
 
-        ts_other = MultOneHotDiscreteTensorSpec(nvec=nvec, device="cpu:2", dtype=dtype)
+        ts_other = MultOneHotDiscreteTensorSpec(nvec=nvec, device="cpu:0", dtype=dtype)
         assert ts != ts_other
 
         ts_other = MultOneHotDiscreteTensorSpec(
