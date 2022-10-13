@@ -436,6 +436,67 @@ class TestModelConfigs:
         qvalue(tensordict)
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra found")
+class TestLossConfigs:
+    import torchrl.objectives.costs as costs
+
+    @pytest.fixture(scope="class", autouse=True)
+    def init_hydra(self, request):
+        GlobalHydra.instance().clear()
+        hydra.initialize("../examples/configs/")
+        request.addfinalizer(GlobalHydra.instance().clear)
+
+    model_specific_config = {
+        "ddpg": ["model=ddpg/basic", "network=ddpg/state"],
+        "dqn": ["model=dqn/regular", "network=dqn/state"],
+        "ppo": ["model=ppo/discrete", "network=ppo/independent_state"],
+        "redq": ["model=redq/discrete", "network=redq/independent_state"],
+        "sac": ["model=sac/discrete", "network=sac/independent_state"],
+    }
+
+    @pytest.mark.parametrize("model", ["ddpg", "dqn", "ppo", "redq", "sac"])
+    def test_model_loss(self, model):
+        config = ["env=cartpole", "transforms=state", f"loss={model}_loss"]
+        config += self.model_specific_config[model]
+
+        cfg = hydra.compose("config", overrides=config)
+        env = instantiate(cfg.env)
+        transforms = [instantiate(transform) for transform in cfg.transforms]
+        for t in transforms:
+            env.append_transform(t)
+
+        model_params = instantiate(cfg.model)
+        net_partial = instantiate(cfg.network)
+        loss_partial = instantiate(cfg.loss)
+        if model == "ddpg":
+            actor, qvalue = make_model_ddpg(net_partial, env)
+            qvalue(actor(env.reset()))
+            loss = loss_partial(actor, qvalue)
+        elif model == "dqn":
+            actor = make_actor_dqn(net_partial, model_params, env, None)
+            actor(env.reset())
+            loss = loss_partial(actor)
+        elif model == "ppo":
+            actorcritic = make_model_ppo(net_partial, model_params, env)
+            actor, critic = (
+                actorcritic.get_policy_operator(),
+                actorcritic.get_value_operator(),
+            )
+            critic(actor(env.reset()))
+            loss = loss_partial(actor, critic)
+        elif model == "redq":
+            actor, qvalue = make_model_redq(net_partial, model_params, env)
+            actor.spec["action"] = env.action_spec
+            qvalue(actor(env.reset()))
+            loss = loss_partial(actor, qvalue)
+        else:
+            actor, qvalue, value = make_model_sac(net_partial, model_params, env)
+            actor.spec["action"] = env.action_spec
+            value(qvalue(actor(env.reset())))
+            loss = loss_partial(actor, qvalue, value)
+        assert type(loss) is getattr(self.costs, f"{model.upper()}Loss")
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

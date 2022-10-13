@@ -1,0 +1,14 @@
+_target_: torchrl.objectives.costs.REDQLoss
+_partial_: True
+num_qvalue_nets: 10
+sub_sample_len: 2
+gamma: 0.99
+priotity_key: "td_error"
+loss_function: "smooth_l1"
+alpha_init: 1.0
+min_alpha: 0.1
+max_alpha: 10.0
+fixed_alpha: False
+target_entropy: "auto"
+delay_qvalue: True
+gSDE: False

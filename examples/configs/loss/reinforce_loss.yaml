@@ -1,0 +1,8 @@
+_target_: torchrl.objectives.costs.ReinforceLoss
+_partial_: True
+critic: Optional[TensorDictModule] = None,
+delay_value: bool = False,
+gamma: float = 0.99,
+advantage_key: str = "advantage",
+advantage_diff_key: str = "value_error",
+loss_critic_type: str = "smooth_l1",
