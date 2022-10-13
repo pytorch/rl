@@ -6,4 +6,5 @@ wrapper:
   sigma_end: 0.1
   annealing_num_steps: 1000
   action_key: "action"
+  spec: null
   safe: True

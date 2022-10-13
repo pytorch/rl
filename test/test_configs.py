@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
-from inspect import signature
 from sys import platform
 
 import pytest
@@ -435,6 +434,18 @@ class TestModelConfigs:
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestExplorationConfigs:
+    from torchrl.modules.tensordict_module.exploration import (
+        EGreedyWrapper,
+        AdditiveGaussianWrapper,
+        OrnsteinUhlenbeckProcessWrapper,
+    )
+
+    wrapper_map = {
+        "e_greedy": EGreedyWrapper,
+        "additive_gaussian": AdditiveGaussianWrapper,
+        "ou_process": OrnsteinUhlenbeckProcessWrapper,
+    }
+
     @pytest.mark.parametrize("network", ["linear", "noisy_linear"])
     @pytest.mark.parametrize(
         "wrapper", [None, "e_greedy", "additive_gaussian", "ou_process"]
@@ -460,23 +471,21 @@ class TestExplorationConfigs:
         transforms = [instantiate(transform) for transform in cfg.transforms]
         for t in transforms:
             env.append_transform(t)
-
         model_params = instantiate(cfg.model)
         net_partial = instantiate(cfg.network)
         actor, qvalue, value = make_model_sac(net_partial, model_params, env)
+        from torchrl.modules.models.models import _LAYER_CLASS_DICT
+
+        assert actor.module.module.layer_class is _LAYER_CLASS_DICT[network]
+
         actor(env.reset())
-        print(actor)
-        print(env.action_spec)
+        actor._spec["action"] = env.action_spec
         if cfg.exploration.wrapper is not None:
-            actor_explore = instantiate(cfg.exploration.wrapper)
-            actor_signature = signature(actor_explore.func.__init__)
-            if "spec" in actor_signature.parameters:
-                spec = env.action_spec
-                actor_explore = actor_explore(actor, spec=spec)
-            else:
-                actor_explore = actor_explore(actor)
+            actor_explore = instantiate(cfg.exploration.wrapper)(actor)
+            assert type(actor_explore) is self.wrapper_map[wrapper]
         else:
             actor_explore = actor
+
         rollout = env.rollout(3)
         assert all(key in rollout.keys() for key in actor_explore.in_keys), (
             actor_explore.in_keys,
