@@ -25,7 +25,15 @@ from torchrl.data.postprocs.postprocs import MultiStep
 # from torchrl.data.postprocs.utils import expand_as_right
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.data.utils import expand_as_right
-from torchrl.modules import DistributionalQValueActor, QValueActor, TensorDictModule
+from torchrl.envs.model_based.dreamer import DreamerEnv
+from torchrl.modules import (
+    DistributionalQValueActor,
+    QValueActor,
+    TensorDictModule,
+    TensorDictSequential,
+    ProbabilisticTensorDictModule,
+    WorldModelWrapper,
+)
 from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
 from torchrl.modules.models.model_based import (
     ObsDecoder,
