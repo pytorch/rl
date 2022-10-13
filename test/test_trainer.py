@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import os
 import tempfile
 from argparse import Namespace
 from collections import OrderedDict
@@ -12,6 +13,7 @@ from time import sleep
 import pytest
 import torch
 from torch import nn
+from torch.testing._internal.common_utils import TemporaryFileName
 
 try:
     from tensorboard.backend.event_processing import event_accumulator
@@ -71,7 +73,7 @@ class MockingLossModule(nn.Module):
     pass
 
 
-def mocking_trainer() -> Trainer:
+def mocking_trainer(file=None) -> Trainer:
     trainer = Trainer(
         MockingCollector(),
         *[
@@ -80,6 +82,7 @@ def mocking_trainer() -> Trainer:
         * 2,
         loss_module=MockingLossModule(),
         optimizer=MockingOptim(),
+        save_trainer_file=file,
     )
     trainer._pbar_str = OrderedDict()
     return trainer
@@ -122,6 +125,58 @@ class TestSelectKeys:
         assert not len(sd["_batch_process_ops"][0][0])  # state_dict is empty
         trainer2.load_state_dict(sd)
 
+    @pytest.mark.parametrize("backend", ["torchsnapshot", "torch"])
+    def test_selectkeys_save(self, backend):
+        # we overwrite the method to make sure that load_state_dict and state_dict are being called
+        state_dict_fun = SelectKeys.state_dict
+        load_state_dict_fun = SelectKeys.load_state_dict
+        state_dict_has_been_called = [False]
+        load_state_dict_has_been_called = [False]
+        def new_state_dict(self):
+            state_dict_has_been_called[0] = True
+            return state_dict_fun(self)
+
+        def new_load_state_dict(self, state_dict):
+            load_state_dict_has_been_called[0] = True
+            return load_state_dict_fun(self, state_dict)
+
+        SelectKeys.state_dict = new_state_dict
+        SelectKeys.load_state_dict = new_load_state_dict
+
+        os.environ["CKPT_BACKEND"] = backend
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            if backend == "torch":
+                file = path.join(tmpdirname, "file.pt")
+            else:
+                file = tmpdirname
+            trainer = mocking_trainer(file=file)
+            key1 = "first key"
+            key2 = "second key"
+            td = TensorDict(
+                {
+                    key1: torch.randn(3),
+                    key2: torch.randn(3),
+                },
+                [],
+            )
+            select_keys = SelectKeys([key1])
+            select_keys.register(trainer)
+            trainer._process_batch_hook(td)
+            trainer.save_trainer(force_save=True)
+            assert state_dict_has_been_called[0]
+
+            trainer2 = mocking_trainer()
+            select_keys2 = SelectKeys([key1])
+            select_keys2.register(trainer2)
+
+            trainer2.load_from_file(file)
+            assert state_dict_has_been_called[0]
+            if backend == "torch":
+                assert load_state_dict_has_been_called[0]
+
+        SelectKeys.state_dict = state_dict_fun
+        SelectKeys.load_state_dict = load_state_dict_fun
 
 @pytest.mark.parametrize("prioritized", [True, False])
 class TestRB:
@@ -246,6 +301,105 @@ class TestRB:
                 rb_trainer2.replay_buffer._storage._storage
                 == rb_trainer.replay_buffer._storage._storage
             ).all()
+
+    @pytest.mark.parametrize(
+        "storage_type",
+        [
+            "memmap",
+            "list",
+        ],
+    )
+    @pytest.mark.parametrize("backend", ["torch", "torchsnapshot",])
+    def test_rb_trainer_save(self, prioritized, storage_type, backend):
+        # we overwrite the method to make sure that load_state_dict and state_dict are being called
+        state_dict_fun = ReplayBufferTrainer.state_dict
+        load_state_dict_fun = ReplayBufferTrainer.load_state_dict
+        state_dict_has_been_called = [False]
+        load_state_dict_has_been_called = [False]
+
+        def new_state_dict(self):
+            state_dict_has_been_called[0] = True
+            return state_dict_fun(self)
+
+        def new_load_state_dict(self, state_dict):
+            load_state_dict_has_been_called[0] = True
+            return load_state_dict_fun(self, state_dict)
+
+        ReplayBufferTrainer.state_dict = new_state_dict
+        ReplayBufferTrainer.load_state_dict = new_load_state_dict
+
+        os.environ["CKPT_BACKEND"] = backend
+        def make_storage():
+            if storage_type == "list":
+                storage = ListStorage(S)
+                collate_fn = lambda x: torch.stack(x, 0)
+            elif storage_type == "memmap":
+                storage = LazyMemmapStorage(S)
+                collate_fn = lambda x: x
+            else:
+                raise NotImplementedError
+            return storage, collate_fn
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            if backend == "torch":
+                file = path.join(tmpdirname, "file.pt")
+            else:
+                file = tmpdirname
+            trainer = mocking_trainer(file)
+            S = 100
+            storage, collate_fn = make_storage()
+            if prioritized:
+                replay_buffer = TensorDictPrioritizedReplayBuffer(
+                    S, 1.1, 0.9, storage=storage, collate_fn=collate_fn
+                )
+            else:
+                replay_buffer = TensorDictReplayBuffer(
+                    S, storage=storage, collate_fn=collate_fn
+                )
+
+            N = 9
+            rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
+            rb_trainer.register(trainer)
+            key1 = "first key"
+            key2 = "second key"
+            batch = 101
+            td = TensorDict(
+                {
+                    key1: torch.randn(batch, 3),
+                    key2: torch.randn(batch, 3),
+                },
+                [batch],
+            )
+            trainer._process_batch_hook(td)
+            td_out = trainer._process_optim_batch_hook(td)
+            if prioritized:
+                td_out.set(replay_buffer.priority_key, torch.rand(N))
+            trainer._post_loss_hook(td_out)
+            trainer.save_trainer(True)
+
+            trainer2 = mocking_trainer()
+            storage2, _ = make_storage()
+            if prioritized:
+                replay_buffer2 = TensorDictPrioritizedReplayBuffer(
+                    S, 1.1, 0.9, storage=storage2
+                )
+            else:
+                replay_buffer2 = TensorDictReplayBuffer(S, storage=storage2)
+            N = 9
+            rb_trainer2 = ReplayBufferTrainer(replay_buffer=replay_buffer2, batch_size=N)
+            rb_trainer2.register(trainer2)
+            trainer2._process_batch_hook(td.to_tensordict().zero_())
+            trainer2.load_from_file(file)
+            assert state_dict_has_been_called[0]
+            if backend == "torch":
+                assert load_state_dict_has_been_called[0]
+            else:
+                td1 = trainer.app_state["state"]["replay_buffer.replay_buffer._storage._storage"]
+                td2 = trainer2.app_state["state"]["replay_buffer.replay_buffer._storage._storage"]
+                assert (td1 == td2).all()
+
+        ReplayBufferTrainer.state_dict = state_dict_fun
+        ReplayBufferTrainer.load_state_dict = load_state_dict_fun
 
 
 @pytest.mark.parametrize("logname", ["a", "b"])

@@ -9,10 +9,16 @@ from copy import deepcopy
 from typing import Any, Sequence, Union, Dict
 
 import torch
-
+from torchrl._utils import _CKPT_BACKEND
 from torchrl.data.replay_buffers.utils import INT_CLASSES
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
+
+try:
+    from torchsnapshot.serialization import tensor_from_memoryview
+    _has_ts = True
+except:
+    _has_ts = False
 
 __all__ = ["Storage", "ListStorage", "LazyMemmapStorage", "LazyTensorStorage"]
 
@@ -204,6 +210,10 @@ class LazyMemmapStorage(LazyTensorStorage):
             stored and sent. Default is `torch.device("cpu")`.
     """
 
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._storage = None
+        return super().__new__(cls)
     def __init__(self, max_size, scratch_dir=None, device=None):
         super().__init__(max_size)
         self.initialized = False
@@ -214,6 +224,36 @@ class LazyMemmapStorage(LazyTensorStorage):
                 self.scratch_dir += "/"
         self.device = device if device else torch.device("cpu")
         self._len = 0
+
+    def state_dict(self) -> Dict[str, Any]:
+        if isinstance(self._storage, MemmapTensor):
+            _storage = _mem_map_tensor_as_tensor(self._storage)
+        elif isinstance(self._storage, TensorDictBase):
+            print("calling state_dict")
+            _storage = self._storage.apply(_mem_map_tensor_as_tensor)
+        elif self._storage is None:
+            _storage = None
+        else:
+            raise NotImplementedError(f"Unsupported type {type(self._storage)}")
+
+        return {
+            "_storage": _storage,
+            "initialized": self.initialized,
+            "_len": self._len,
+        }
+
+    def load_state_dict(self, state_dict):
+        storage = state_dict.pop("_storage")
+        if self._storage is None:
+            self._storage = storage
+        elif isinstance(self._storage, TensorDictBase):
+            self._storage.update_(storage)
+        elif isinstance(self._storage, MemmapTensor):
+            self._storage.copy_(storage)
+        else:
+            raise NotImplementedError(f"Unsupported type {type(self._storage)}")
+        self.initialized = state_dict["initialized"]
+        self._len = state_dict["_len"]
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         print("Creating a MemmapStorage...")
@@ -252,3 +292,22 @@ class LazyMemmapStorage(LazyTensorStorage):
                 )
         self._storage = out
         self.initialized = True
+
+
+# Utils
+def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
+    if _CKPT_BACKEND == "torchsnapshot" and not _has_ts:
+        raise ImportError(
+            "the checkpointing backend is set to torchsnapshot but the library is not installed. Consider installing the library or switch to another backend. "
+            f"Supported backends are {_CKPT_BACKEND.backends}"
+        )
+    if _CKPT_BACKEND == "torchsnapshot":
+        # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor
+        # as a Tensor for saving and loading purposes. This doesn't incur any copy.
+        return tensor_from_memoryview(
+            dtype=mem_map_tensor.dtype,
+            shape=list(mem_map_tensor.shape),
+            mv=memoryview(mem_map_tensor._memmap_array)
+        )
+    elif _CKPT_BACKEND == "torch":
+        return mem_map_tensor._tensor

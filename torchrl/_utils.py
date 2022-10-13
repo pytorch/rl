@@ -1,5 +1,6 @@
 import collections
 import math
+import os
 import time
 
 import numpy as np
@@ -95,3 +96,19 @@ def prod(sequence):
         return math.prod(sequence)
     else:
         return int(np.prod(sequence))
+
+class _Dynamic_CKPT_BACKEND:
+    """Allows CKPT_BACKEND to be changed on-the-fly."""
+    backends = ["torch", "torchsnapshot"]
+
+    def __getattr__(self, item):
+        return getattr(os.environ.get("CKPT_BACKEND", "torchsnapshot"), item)
+
+    def __eq__(self, other):
+        return os.environ.get("CKPT_BACKEND", "torchsnapshot") == other
+
+    def __ne__(self, other):
+        return os.environ.get("CKPT_BACKEND", "torchsnapshot") != other
+    def __repr__(self):
+        return os.environ.get("CKPT_BACKEND", "torchsnapshot")
+_CKPT_BACKEND = _Dynamic_CKPT_BACKEND()

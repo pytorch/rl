@@ -25,7 +25,7 @@ try:
 except ImportError:
     _has_tqdm = False
 
-from torchrl import _CKPT_BACKEND
+from torchrl._utils import _CKPT_BACKEND
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import (
     ReplayBuffer,
@@ -125,6 +125,7 @@ class Trainer:
         cls._last_save: int = 0
         cls._log_interval: int = 10000
         cls.collected_frames = 0
+        cls._app_state = None
         return super().__new__(cls)
 
     def __init__(
@@ -186,7 +187,15 @@ class Trainer:
         self._modules = {}
 
     def register_module(self, module_name: str, module: Any) -> None:
+        if module_name in self._modules:
+            raise RuntimeError(f"{module_name} is already registered, choose a different name.")
         self._modules[module_name] = module
+
+    @property
+    def app_state(self):
+        if self._app_state is None:
+            self._app_state = {"state": StateDict(**flatten_dict(self.state_dict()))}
+        return self._app_state
 
     def _save_trainer(self) -> None:
         if _CKPT_BACKEND == "torchsnapshot":
@@ -195,12 +204,12 @@ class Trainer:
                     "torchsnapshot not found. Consider installing torchsnapshot or "
                       "using the torch checkpointing backend (`CKPT_BACKEND=torch`)"
                                   )
-            Snapshot.take(app_state=self.state_dict(), path=self.save_trainer_file)
+            Snapshot.take(app_state=self.app_state, path=self.save_trainer_file)
         elif _CKPT_BACKEND == "torch":
             torch.save(self.state_dict(), self.save_trainer_file)
         else:
             raise NotImplementedError(
-                f"CKPT_BACKEND should be one of torch or torchsnapshot, got {_CKPT_BACKEND}."
+                f"CKPT_BACKEND should be one of {_CKPT_BACKEND.backends}, got {_CKPT_BACKEND}."
             )
 
     def save_trainer(self, force_save: bool = False) -> None:
@@ -215,7 +224,8 @@ class Trainer:
 
     def load_from_file(self, file: Union[str, pathlib.Path]) -> Trainer:
         if _CKPT_BACKEND == "torchsnapshot":
-            snapshot = Snapshot()
+            snapshot = Snapshot(path=file)
+            snapshot.restore(app_state=self.app_state)
         elif _CKPT_BACKEND == "torch":
             loaded_dict: OrderedDict = torch.load(file)
             self.load_state_dict(loaded_dict)
@@ -585,6 +595,10 @@ class SelectKeys:
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         pass
+
+    def register(self, trainer) -> None:
+        trainer.register_op("batch_process", self)
+        trainer.register_module("select_keys", self)
 
 
 class ReplayBufferTrainer:
@@ -1135,3 +1149,13 @@ def _check_input_output_typehint(func: Callable, input: Type, output: Type):
     # Placeholder for a function that checks the types input / output against expectations
     return
 
+def flatten_dict(d):
+    out = {}
+    for key, item in d.items():
+        if isinstance(item, dict):
+            item = flatten_dict(item)
+            for _key, _item in item.items():
+                out[".".join([key, _key])] = _item
+        else:
+            out[key] = item
+    return out
