@@ -170,7 +170,9 @@ def make_actor_dqn(net_partial, actor_partial, env, out_features=None):
     else:
         out_features = list(env.action_spec.shape)
     network = net_partial.network(out_features=out_features)
-    actor = actor_partial.actor(module=network, in_keys=net_partial.in_keys)
+    actor = actor_partial.actor(
+        module=network, in_keys=net_partial.in_keys, spec=env.action_spec
+    )
     return actor
 
 
@@ -178,7 +180,9 @@ def make_model_ppo(net_partial, model_params, env):
     out_features = env.action_spec.shape[-1] * model_params.out_features_multiplier
 
     # build the module
-    policy_operator = net_partial.policy_network(out_features=out_features)
+    policy_operator = net_partial.policy_network(
+        out_features=out_features, spec=env.action_spec
+    )
     actor_critic = net_partial.actor_critic(policy_operator=policy_operator)
     return actor_critic
 
@@ -187,7 +191,9 @@ def make_model_sac(net_partial, model_params, env):
     out_features = env.action_spec.shape[-1] * model_params.out_features_multiplier
 
     # build the module
-    policy_operator = net_partial.policy_network(out_features=out_features)
+    policy_operator = net_partial.policy_network(
+        out_features=out_features, spec=env.action_spec
+    )
 
     qvalue_operator = net_partial.qvalue_network
 
@@ -199,7 +205,9 @@ def make_model_ddpg(net_partial, env):
     out_features = env.action_spec.shape[-1]
 
     # build the module
-    policy_operator = net_partial.policy_network(out_features=out_features)
+    policy_operator = net_partial.policy_network(
+        out_features=out_features, spec=env.action_spec
+    )
 
     qvalue = net_partial.value_operator
     return policy_operator, qvalue
@@ -209,7 +217,9 @@ def make_model_redq(net_partial, model_params, env):
     out_features = env.action_spec.shape[-1] * model_params.out_features_multiplier
 
     # build the module
-    policy_operator = net_partial.policy_network(out_features=out_features)
+    policy_operator = net_partial.policy_network(
+        out_features=out_features, spec=env.action_spec
+    )
 
     qvalue_operator = net_partial.qvalue_network
 
@@ -456,7 +466,7 @@ class TestLossConfigs:
 
     @pytest.mark.parametrize("model", ["ddpg", "dqn", "ppo", "redq", "sac"])
     def test_model_loss(self, model):
-        config = ["env=cartpole", "transforms=state", f"loss={model}_loss"]
+        config = ["env=halfcheetah", "transforms=state", f"loss={model}_loss"]
         config += self.model_specific_config[model]
 
         cfg = hydra.compose("config", overrides=config)
@@ -486,15 +496,21 @@ class TestLossConfigs:
             loss = loss_partial(actor, critic)
         elif model == "redq":
             actor, qvalue = make_model_redq(net_partial, model_params, env)
-            actor.spec["action"] = env.action_spec
             qvalue(actor(env.reset()))
             loss = loss_partial(actor, qvalue)
         else:
             actor, qvalue, value = make_model_sac(net_partial, model_params, env)
-            actor.spec["action"] = env.action_spec
             value(qvalue(actor(env.reset())))
             loss = loss_partial(actor, qvalue, value)
         assert type(loss) is getattr(self.costs, f"{model.upper()}Loss")
+
+        rollout = env.rollout(3)
+        assert all(key in rollout.keys() for key in actor.in_keys), (
+            actor.in_keys,
+            rollout.keys(),
+        )
+        tensordict = env.rollout(3, actor)
+        assert env.action_spec.is_in(tensordict["action"]), env.action_spec
 
 
 if __name__ == "__main__":
