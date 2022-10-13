@@ -477,7 +477,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor_model,
                 cfg,
             )
-        exploration_policy.step(current_frames)
+        if cfg.exploration != "":
+            exploration_policy.step(current_frames)
         collector.update_policy_weights_()
 
 
