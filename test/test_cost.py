@@ -1687,14 +1687,12 @@ class TestDreamer:
                 out_keys=["next_reco_pixels"],
             ),
         )
-        world_model = WorldModelWrapper(
-            world_modeler,
-            TensorDictModule(
-                reward_module,
-                in_keys=["next_state", "next_belief"],
-                out_keys=["reward"],
-            ),
+        reward_module = TensorDictModule(
+            reward_module,
+            in_keys=["next_state", "next_belief"],
+            out_keys=["reward"],
         )
+        world_model = WorldModelWrapper(world_modeler, reward_module)
 
         with torch.no_grad():
             td = mock_env.rollout(10)
