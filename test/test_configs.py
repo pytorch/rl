@@ -509,12 +509,6 @@ class TestExplorationConfigs:
 class TestLossConfigs:
     import torchrl.objectives.costs as costs
 
-    @pytest.fixture(scope="class", autouse=True)
-    def init_hydra(self, request):
-        GlobalHydra.instance().clear()
-        hydra.initialize("../examples/configs/")
-        request.addfinalizer(GlobalHydra.instance().clear)
-
     model_specific_config = {
         "ddpg": ["model=ddpg/basic", "network=ddpg/state"],
         "dqn": ["model=dqn/regular", "network=dqn/state"],
