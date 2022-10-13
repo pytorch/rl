@@ -172,7 +172,9 @@ def make_actor_dqn(net_partial, actor_partial, env, out_features=None):
     else:
         out_features = list(env.action_spec.shape)
     network = net_partial.network(out_features=out_features)
-    actor = actor_partial.actor(module=network, in_keys=net_partial.in_keys)
+    actor = actor_partial.actor(
+        module=network, in_keys=net_partial.in_keys, spec=env.action_spec
+    )
     return actor
 
 
@@ -180,7 +182,9 @@ def make_model_ppo(net_partial, model_params, env):
     out_features = env.action_spec.shape[-1] * model_params.out_features_multiplier
 
     # build the module
-    policy_operator = net_partial.policy_network(out_features=out_features)
+    policy_operator = net_partial.policy_network(
+        out_features=out_features, spec=env.action_spec
+    )
     actor_critic = net_partial.actor_critic(policy_operator=policy_operator)
     return actor_critic
 
@@ -189,7 +193,9 @@ def make_model_sac(net_partial, model_params, env):
     out_features = env.action_spec.shape[-1] * model_params.out_features_multiplier
 
     # build the module
-    policy_operator = net_partial.policy_network(out_features=out_features)
+    policy_operator = net_partial.policy_network(
+        out_features=out_features, spec=env.action_spec
+    )
 
     qvalue_operator = net_partial.qvalue_network
 
@@ -201,7 +207,9 @@ def make_model_ddpg(net_partial, env):
     out_features = env.action_spec.shape[-1]
 
     # build the module
-    policy_operator = net_partial.policy_network(out_features=out_features)
+    policy_operator = net_partial.policy_network(
+        out_features=out_features, spec=env.action_spec
+    )
 
     qvalue = net_partial.value_operator
     return policy_operator, qvalue
@@ -211,7 +219,9 @@ def make_model_redq(net_partial, model_params, env):
     out_features = env.action_spec.shape[-1] * model_params.out_features_multiplier
 
     # build the module
-    policy_operator = net_partial.policy_network(out_features=out_features)
+    policy_operator = net_partial.policy_network(
+        out_features=out_features, spec=env.action_spec
+    )
 
     qvalue_operator = net_partial.qvalue_network
 
@@ -478,7 +488,6 @@ class TestExplorationConfigs:
         actor(env.reset())
         assert actor.module.module.layer_class is self._LAYER_CLASS_DICT[network]
 
-        actor.spec["action"] = env.action_spec
         if cfg.exploration.wrapper is not None:
             actor_explore = instantiate(cfg.exploration.wrapper)(actor)
             assert type(actor_explore) is self.wrapper_map[wrapper]
