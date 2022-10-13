@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import os
 from warnings import warn
 
 from torch import multiprocessing as mp
@@ -38,3 +38,11 @@ import torchrl.envs
 import torchrl.modules
 import torchrl.objectives
 import torchrl.trainers
+
+class _Dynamic_CKPT_BACKEND:
+    """Allows CKPT_BACKEND to be changed on-the-fly."""
+
+    def __getattr__(self, item):
+        return getattr(os.environ.get("CKPT_BACKEND", "torchsnapshot"), item)
+
+_CKPT_BACKEND = _Dynamic_CKPT_BACKEND()

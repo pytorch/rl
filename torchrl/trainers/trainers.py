@@ -25,6 +25,7 @@ try:
 except ImportError:
     _has_tqdm = False
 
+from torchrl import _CKPT_BACKEND
 from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import (
     ReplayBuffer,
@@ -38,6 +39,12 @@ from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
 from torchrl.trainers.loggers import Logger
+
+try:
+    from torchsnapshot import StateDict, Snapshot
+    _has_ts = True
+except ImportError:
+    _has_ts = False
 
 REPLAY_BUFFER_CLASS = {
     "prioritized": TensorDictPrioritizedReplayBuffer,
@@ -181,6 +188,21 @@ class Trainer:
     def register_module(self, module_name: str, module: Any) -> None:
         self._modules[module_name] = module
 
+    def _save_trainer(self) -> None:
+        if _CKPT_BACKEND == "torchsnapshot":
+            if not _has_ts:
+                raise ImportError(
+                    "torchsnapshot not found. Consider installing torchsnapshot or "
+                      "using the torch checkpointing backend (`CKPT_BACKEND=torch`)"
+                                  )
+            Snapshot.take(app_state=self.state_dict(), path=self.save_trainer_file)
+        elif _CKPT_BACKEND == "torch":
+            torch.save(self.state_dict(), self.save_trainer_file)
+        else:
+            raise NotImplementedError(
+                f"CKPT_BACKEND should be one of torch or torchsnapshot, got {_CKPT_BACKEND}."
+            )
+
     def save_trainer(self, force_save: bool = False) -> None:
         _save = force_save
         if self.save_trainer_file is not None:
@@ -188,35 +210,15 @@ class Trainer:
                 self._last_save = self.collected_frames
                 _save = True
         if _save and self.save_trainer_file:
-            torch.save(self.state_dict(), self.save_trainer_file)
+            self._save_trainer()
+
 
     def load_from_file(self, file: Union[str, pathlib.Path]) -> Trainer:
-        loaded_dict: OrderedDict = torch.load(file)
-
-        # checks that keys match
-        expected_keys = {
-            "env",
-            "loss_module",
-            "_last_log",
-            "_last_save",
-            "_optim_count",
-        }
-        actual_keys = set(loaded_dict.keys())
-        if len(actual_keys.difference(expected_keys)) or len(
-            expected_keys.difference(actual_keys)
-        ):
-            raise RuntimeError(
-                f"Expected keys {expected_keys} in the loaded file but got"
-                f" {actual_keys}"
-            )
-        self.collector.load_state_dict(loaded_dict["env"])
-        self.model.load_state_dict(loaded_dict["model"])
-        for key in [
-            "_last_log",
-            "_last_save",
-            "_optim_count",
-        ]:
-            setattr(self, key, loaded_dict[key])
+        if _CKPT_BACKEND == "torchsnapshot":
+            snapshot = Snapshot()
+        elif _CKPT_BACKEND == "torch":
+            loaded_dict: OrderedDict = torch.load(file)
+            self.load_state_dict(loaded_dict)
         return self
 
     def set_seed(self):
@@ -1132,3 +1134,4 @@ class CountFramesLog:
 def _check_input_output_typehint(func: Callable, input: Type, output: Type):
     # Placeholder for a function that checks the types input / output against expectations
     return
+

@@ -222,6 +222,9 @@ def _main(argv):
                 "hydra-core>=1.1",
                 "hydra-submitit-launcher",
             ],
+            "checkpointing": [
+                "torchinductor",
+            ]
         },
         zip_safe=False,
         classifiers=[
