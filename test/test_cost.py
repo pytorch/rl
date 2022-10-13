@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from mocking_classes import MockPixelEnv
+from mocking_classes import ContinuousActionConvMockEnv
 from torch import autograd, nn
 from torchrl.data import (
     CompositeSpec,
@@ -1593,7 +1593,7 @@ class TestDreamer:
                 "belief": torch.zeros(batch_size, temporal_length, rssm_hidden_dim),
                 "pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
                 "next_pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
-                "action": torch.randn(batch_size, temporal_length, 6),
+                "action": torch.randn(batch_size, temporal_length, 64),
                 "reward": torch.randn(batch_size, temporal_length, 1),
                 "done": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
             },
@@ -1628,7 +1628,7 @@ class TestDreamer:
         return td
 
     def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = TransformedEnv(MockPixelEnv())
+        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
             "next_state": NdUnboundedContinuousTensorSpec(state_dim),
             "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
@@ -1705,7 +1705,7 @@ class TestDreamer:
         return world_model
 
     def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = TransformedEnv(MockPixelEnv())
+        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
             "next_state": NdUnboundedContinuousTensorSpec(state_dim),
             "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
@@ -1754,7 +1754,7 @@ class TestDreamer:
         return model_based_env
 
     def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = TransformedEnv(MockPixelEnv())
+        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
         default_dict = {
             "next_state": NdUnboundedContinuousTensorSpec(state_dim),
             "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
