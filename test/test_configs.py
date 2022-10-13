@@ -434,6 +434,7 @@ class TestModelConfigs:
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestExplorationConfigs:
+    from torchrl.modules.models.models import _LAYER_CLASS_DICT
     from torchrl.modules.tensordict_module.exploration import (
         EGreedyWrapper,
         AdditiveGaussianWrapper,
@@ -474,12 +475,10 @@ class TestExplorationConfigs:
         model_params = instantiate(cfg.model)
         net_partial = instantiate(cfg.network)
         actor, qvalue, value = make_model_sac(net_partial, model_params, env)
-        from torchrl.modules.models.models import _LAYER_CLASS_DICT
-
-        assert actor.module.module.layer_class is _LAYER_CLASS_DICT[network]
-
         actor(env.reset())
-        actor._spec["action"] = env.action_spec
+        assert actor.module.module.layer_class is self._LAYER_CLASS_DICT[network]
+
+        actor.spec["action"] = env.action_spec
         if cfg.exploration.wrapper is not None:
             actor_explore = instantiate(cfg.exploration.wrapper)(actor)
             assert type(actor_explore) is self.wrapper_map[wrapper]
