@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import inspect
 import os
 import queue
 import time
@@ -15,12 +16,13 @@ from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Di
 
 import numpy as np
 import torch
+import torch.nn as nn
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from .._utils import _check_for_faulty_process, prod
-from ..modules.tensordict_module import ProbabilisticTensorDictModule
+from ..modules.tensordict_module import ProbabilisticTensorDictModule, TensorDictModule
 from .utils import split_trajectories
 
 __all__ = [
@@ -81,6 +83,36 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
     )
 
 
+def _policy_is_tensordict_compatible(policy: nn.Module):
+    sig = inspect.signature(policy.forward)
+
+    if isinstance(policy, TensorDictModule) or (
+        len(sig.parameters) == 1
+        and hasattr(policy, "in_keys")
+        and hasattr(policy, "out_keys")
+    ):
+        # if the policy is a TensorDictModule or takes a single argument and defines
+        # in_keys and out_keys then we assume it can already deal with TensorDict input
+        # to forward and we return True
+        return True
+    elif not hasattr(policy, "in_keys") and not hasattr(policy, "out_keys"):
+        # if it's not a TensorDictModule, and in_keys and out_keys are not defined then
+        # we assume no TensorDict compatibility and will try to wrap it.
+        return False
+
+    # if in_keys or out_keys were defined but policy is not a TensorDictModule or
+    # accepts multiple arguments then it's likely the user is trying to do something
+    # that will have undetermined behaviour, we raise an error
+    raise TypeError(
+        "Received a policy that defines in_keys or out_keys and also expects multiple "
+        "arguments to policy.forward. If the policy is compatible with TensorDict, it "
+        "should take a single argument of type TensorDict to policy.forward and define "
+        "both in_keys and out_keys. Alternatively, policy.forward can accept "
+        "arbitrarily many tensor inputs and leave in_keys and out_keys undefined and "
+        "TorchRL will attempt to automatically wrap the policy with a TensorDictModule."
+    )
+
+
 class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
     def _get_policy_and_device(
         self,
@@ -91,6 +123,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             ]
         ] = None,
         device: Optional[DEVICE_TYPING] = None,
+        observation_spec: TensorSpec = None,
     ) -> Tuple[
         ProbabilisticTensorDictModule, torch.device, Union[None, Callable[[], dict]]
     ]:
@@ -105,6 +138,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             policy (ProbabilisticTensorDictModule, optional): a policy to be used
             device (int, str or torch.device, optional): device where to place
                 the policy
+            observation_spec (TensorSpec, optional): spec of the observations
 
         """
         # if create_env_fn is not None:
@@ -124,6 +158,46 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
             policy = RandomPolicy(self.env.action_spec)
+        elif isinstance(policy, nn.Module):
+            # TODO: revisit these checks when we have determined whether arbitrary
+            # callables should be supported as policies.
+            if not _policy_is_tensordict_compatible(policy):
+                # policy is a nn.Module that doesn't operate on tensordicts directly
+                # so we attempt to auto-wrap policy with TensorDictModule
+                if observation_spec is None:
+                    raise ValueError(
+                        "Unable to read observation_spec from the environment. This is "
+                        "required to check compatibility of the environment and policy "
+                        "since the policy is a nn.Module that operates on tensors "
+                        "rather than a TensorDictModule or a nn.Module that accepts a "
+                        "TensorDict as input and defines in_keys and out_keys."
+                    )
+                sig = inspect.signature(policy.forward)
+                next_observation = {
+                    key[5:]: value
+                    for key, value in observation_spec.rand().items()
+                    if key.startswith("next_")
+                }
+                if set(sig.parameters) == set(next_observation):
+                    out_keys = ["action"]
+                    output = policy(**next_observation)
+
+                    if isinstance(output, tuple):
+                        out_keys.extend(f"output{i+1}" for i in range(len(output) - 1))
+
+                    policy = TensorDictModule(
+                        policy, in_keys=list(sig.parameters), out_keys=out_keys
+                    )
+                else:
+                    raise TypeError(
+                        "Arguments to policy.forward are incompatible with entries in "
+                        "env.observation_spec. If you want TorchRL to automatically "
+                        "wrap your policy with a TensorDictModule then the arguments "
+                        "to policy.forward must correspond one-to-one with entries in "
+                        "env.observation_spec that are prefixed with 'next_'. For more "
+                        "complex behaviour and more control you can consider writing "
+                        "your own TensorDictModule."
+                    )
 
         try:
             policy_device = next(policy.parameters()).device
@@ -298,6 +372,7 @@ class SyncDataCollector(_DataCollector):
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,
             device=device,
+            observation_spec=self.env.observation_spec,
         )
 
         self.env_device = env.device
@@ -324,10 +399,10 @@ class SyncDataCollector(_DataCollector):
         )
 
         if (
-            hasattr(policy, "spec")
-            and policy.spec is not None
-            and all(v is not None for v in policy.spec.values())
-            and set(policy.spec.keys()) == set(policy.out_keys)
+            hasattr(self.policy, "spec")
+            and self.policy.spec is not None
+            and all(v is not None for v in self.policy.spec.values())
+            and set(self.policy.spec.keys()) == set(self.policy.out_keys)
         ):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information
@@ -338,7 +413,7 @@ class SyncDataCollector(_DataCollector):
                     "done": torch.zeros(
                         env.batch_size, dtype=torch.bool, device=env.device
                     ),
-                    **policy.spec.zero(env.batch_size),
+                    **self.policy.spec.zero(env.batch_size),
                 },
                 env.batch_size,
                 device=env.device,
@@ -355,7 +430,9 @@ class SyncDataCollector(_DataCollector):
             # otherwise, we perform a small number of steps with the policy to
             # determine the relevant keys with which to pre-populate _tensordict_out.
             # See #505 for additional context.
-            self._tensordict_out = self.env.rollout(3, self.policy)
+            self._tensordict_out = self.env.rollout(
+                3, self.policy, auto_cast_to_device=True
+            )
             if env.batch_size:
                 self._tensordict_out = self._tensordict_out[..., :1]
             else:
@@ -791,12 +868,24 @@ class _MultiDataCollector(_DataCollector):
             )
         self._policy_dict = {}
         self._get_weights_fn_dict = {}
-        for i, _device in enumerate(devices):
+
+        for i, (_device, create_env, kwargs) in enumerate(
+            zip(devices, self.create_env_fn, self.create_env_kwargs)
+        ):
             if _device in self._policy_dict:
                 devices[i] = _device
                 continue
+
+            if hasattr(create_env, "observation_spec"):
+                observation_spec = create_env.observation_spec
+            else:
+                try:
+                    observation_spec = create_env(**kwargs).observation_spec
+                except:  # noqa
+                    observation_spec = None
+
             _policy, _device, _get_weight_fn = self._get_policy_and_device(
-                policy=policy, device=_device
+                policy=policy, device=_device, observation_spec=observation_spec
             )
             self._policy_dict[_device] = _policy
             self._get_weights_fn_dict[_device] = _get_weight_fn

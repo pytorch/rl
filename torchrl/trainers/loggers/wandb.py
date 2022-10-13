@@ -69,7 +69,7 @@ class WandbLogger(Logger):
             "name": exp_name,
             "dir": save_dir,
             "id": id,
-            "project": None,
+            "project": project,
             "resume": "allow",
             **kwargs,
         }

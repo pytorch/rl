@@ -391,7 +391,7 @@ jobs:
       - run:
           name: Install torchrl
 #          command: bash .circleci/unittest/linux_optdeps/scripts/install.sh
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux/scripts/install.sh
+          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_optdeps/scripts/install.sh
       - run:
           name: Run tests
           command: bash .circleci/unittest/linux_optdeps/scripts/run_test.sh

@@ -7,8 +7,8 @@ from torch import nn
 from torchrl.data import TensorDict
 from torchrl.modules import TensorDictModule, TensorDictSequential
 from torchrl.modules.functional_modules import (
-    FunctionalModuleWithBuffers,
     FunctionalModule,
+    FunctionalModuleWithBuffers,
 )
 
 
