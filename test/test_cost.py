@@ -1583,6 +1583,7 @@ class TestReinforce:
             )
 
 
+@pytest.mark.parametrize("device", get_available_devices())
 class TestDreamer:
     def _create_world_model_data(
         self, batch_size, temporal_length, rssm_hidden_dim, state_dim
@@ -1811,7 +1812,6 @@ class TestDreamer:
             value_model(td)
         return value_model
 
-    @pytest.mark.parametrize("device", get_available_devices())
     def test_dreamer_world_model(self, device):
         tensordict = self._create_world_model_data(2, 3, 10, 5).to(device)
         world_model = self._create_world_model_model(10, 5).to(device)
@@ -1827,9 +1827,21 @@ class TestDreamer:
             + loss_td.get("loss_model_reward")
         )
         loss.backward()
-        world_model.zero_grad()
+        grad_is_zero = True
+        for name, param in loss_module.named_parameters():
+            if param.grad is not None:
+                valid_gradients = not (
+                    torch.isnan(param.grad).any() or torch.isinf(param.grad).any()
+                )
+                grad_is_zero = (
+                    grad_is_zero and torch.sum(torch.pow((param.grad), 2)) == 0
+                )
+                if not valid_gradients:
+                    raise ValueError(f"Invalid gradients for {name}")
+        if grad_is_zero:
+            raise ValueError("Gradients are zero")
+        loss_module.zero_grad()
 
-    @pytest.mark.parametrize("device", get_available_devices())
     def test_dreamer_actor(self, device):
         tensordict = self._create_actor_data(2, 3, 10, 5).to(device)
         mb_env = self._create_mb_env(10, 5).to(device)
@@ -1840,9 +1852,21 @@ class TestDreamer:
         assert loss_td.get("loss_actor") is not None
         loss = loss_td.get("loss_actor")
         loss.backward()
-        actor_model.zero_grad()
+        grad_is_zero = True
+        for name, param in loss_module.named_parameters():
+            if param.grad is not None:
+                valid_gradients = not (
+                    torch.isnan(param.grad).any() or torch.isinf(param.grad).any()
+                )
+                grad_is_zero = (
+                    grad_is_zero and torch.sum(torch.pow((param.grad), 2)) == 0
+                )
+                if not valid_gradients:
+                    raise ValueError(f"Invalid gradients for {name}")
+        if grad_is_zero:
+            raise ValueError("Gradients are zero")
+        loss_module.zero_grad()
 
-    @pytest.mark.parametrize("device", get_available_devices())
     def test_dreamer_value(self, device):
         tensordict = self._create_value_data(2, 3, 10, 5).to(device)
         value_model = self._create_value_model(10, 5).to(device)
@@ -1851,7 +1875,20 @@ class TestDreamer:
         assert loss_td.get("loss_value") is not None
         loss = loss_td.get("loss_value")
         loss.backward()
-        value_model.zero_grad()
+        grad_is_zero = True
+        for name, param in loss_module.named_parameters():
+            if param.grad is not None:
+                valid_gradients = not (
+                    torch.isnan(param.grad).any() or torch.isinf(param.grad).any()
+                )
+                grad_is_zero = (
+                    grad_is_zero and torch.sum(torch.pow((param.grad), 2)) == 0
+                )
+                if not valid_gradients:
+                    raise ValueError(f"Invalid gradients for {name}")
+        if grad_is_zero:
+            raise ValueError("Gradients are zero")
+        loss_module.zero_grad()
 
 
 def test_hold_out():
