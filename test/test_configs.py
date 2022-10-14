@@ -442,6 +442,21 @@ class TestModelConfigs:
         qvalue(tensordict)
 
 
+def make_halfcheetah_env_with_state_transforms():
+    import torchrl.envs.transforms as T
+    from torchrl.envs import TransformedEnv
+    from torchrl.envs.libs.gym import GymEnv
+
+    transforms = T.Compose(
+        T.ObservationNorm(0, 1, ["next_observation"]),
+        T.RewardScaling(0, 1, ["reward"]),
+        T.CatTensors(),
+        T.DoubleToFloat(["next_observation_vector"]),
+    )
+    env = TransformedEnv(GymEnv("HalfCheetah-v4"), transforms)
+    return env
+
+
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestExplorationConfigs:
     from torchrl.modules.models.models import _LAYER_CLASS_DICT
@@ -456,20 +471,6 @@ class TestExplorationConfigs:
         "additive_gaussian": AdditiveGaussianWrapper,
         "ou_process": OrnsteinUhlenbeckProcessWrapper,
     }
-
-    def _make_env(self):
-        import torchrl.envs.transforms as T
-        from torchrl.envs import TransformedEnv
-        from torchrl.envs.libs.gym import GymEnv
-
-        transforms = T.Compose(
-            T.ObservationNorm(0, 1, ["next_observation"]),
-            T.RewardScaling(0, 1, ["reward"]),
-            T.CatTensors(),
-            T.DoubleToFloat(["next_observation_vector"]),
-        )
-        env = TransformedEnv(GymEnv("HalfCheetah-v4"), transforms)
-        return env
 
     @pytest.mark.parametrize("network", ["linear", "noisy_linear"])
     @pytest.mark.parametrize(
@@ -492,7 +493,7 @@ class TestExplorationConfigs:
             exploration_config += [f"exploration={network}"]
 
         cfg = hydra.compose("config", overrides=exploration_config + additional_config)
-        env = self._make_env()
+        env = make_halfcheetah_env_with_state_transforms()
         model_params = instantiate(cfg.model)
         net_partial = instantiate(cfg.network)
         actor, qvalue, value = make_model_sac(net_partial, model_params, env)
@@ -534,11 +535,7 @@ class TestLossConfigs:
         config += self.model_specific_config[model]
 
         cfg = hydra.compose("config", overrides=config)
-        env = instantiate(cfg.env)
-        transforms = [instantiate(transform) for transform in cfg.transforms]
-        for t in transforms:
-            env.append_transform(t)
-
+        env = make_halfcheetah_env_with_state_transforms()
         model_params = instantiate(cfg.model)
         net_partial = instantiate(cfg.network)
         loss_partial = instantiate(cfg.loss)
@@ -567,14 +564,6 @@ class TestLossConfigs:
             value(qvalue(actor(env.reset())))
             loss = loss_partial(actor, qvalue, value)
         assert type(loss) is getattr(self.costs, f"{model.upper()}Loss")
-
-        rollout = env.rollout(3)
-        assert all(key in rollout.keys() for key in actor.in_keys), (
-            actor.in_keys,
-            rollout.keys(),
-        )
-        tensordict = env.rollout(3, actor)
-        assert env.action_spec.is_in(tensordict["action"]), env.action_spec
 
 
 if __name__ == "__main__":
