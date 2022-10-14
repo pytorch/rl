@@ -463,7 +463,7 @@ class TestExplorationConfigs:
     )
     def test_exploration(self, network, wrapper):
         additional_config = [
-            "env=cartpole",
+            "env=halfcheetah",
             "transforms=state",
             "model=sac/discrete",
             "network=sac/independent_state",
@@ -488,8 +488,8 @@ class TestExplorationConfigs:
         actor(env.reset())
         assert actor.module.module.layer_class is self._LAYER_CLASS_DICT[network]
 
-        if cfg.exploration.wrapper is not None:
-            actor_explore = instantiate(cfg.exploration.wrapper)(actor)
+        if cfg.exploration.exploration_wrapper is not None:
+            actor_explore = instantiate(cfg.exploration.exploration_wrapper)(actor)
             assert type(actor_explore) is self.wrapper_map[wrapper]
         else:
             actor_explore = actor

@@ -1,4 +1,4 @@
-network_wrapper: normal_param
+policy_net_wrapper: normal_param
 policy_out_keys: ["loc", "scale"]
 
 default_interaction_mode: "random"
