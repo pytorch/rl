@@ -460,8 +460,8 @@ class TestDreamerComponents:
         assert emb.shape == (batch_size, *temporal_size, depth * 8 * 4)
 
     @pytest.mark.parametrize("depth", [32, 64])
-    @pytest.mark.parametrize("stoch_size", [30, 40])
-    @pytest.mark.parametrize("deter_size", [200, 300])
+    @pytest.mark.parametrize("stoch_size", [10, 20])
+    @pytest.mark.parametrize("deter_size", [20, 30])
     @pytest.mark.parametrize("temporal_size", [[], [2], [4]])
     def test_dreamer_decoder(
         self, device, batch_size, temporal_size, depth, stoch_size, deter_size
@@ -472,8 +472,8 @@ class TestDreamerComponents:
         obs = decoder(stoch_state, det_state)
         assert obs.shape == (batch_size, *temporal_size, 3, 64, 64)
 
-    @pytest.mark.parametrize("stoch_size", [30, 40])
-    @pytest.mark.parametrize("deter_size", [200, 300])
+    @pytest.mark.parametrize("stoch_size", [10, 20])
+    @pytest.mark.parametrize("deter_size", [20, 30])
     @pytest.mark.parametrize("action_size", [3, 6])
     def test_rssm_prior(self, device, batch_size, stoch_size, deter_size, action_size):
         action_spec = NdBoundedTensorSpec(
@@ -495,8 +495,8 @@ class TestDreamerComponents:
         assert belief.shape == (batch_size, stoch_size)
         assert torch.all(prior_std > 0)
 
-    @pytest.mark.parametrize("stoch_size", [30, 40])
-    @pytest.mark.parametrize("deter_size", [200, 300])
+    @pytest.mark.parametrize("stoch_size", [10, 20])
+    @pytest.mark.parametrize("deter_size", [20, 30])
     def test_rssm_posterior(self, device, batch_size, stoch_size, deter_size):
         rssm_posterior = RSSMPosterior(
             hidden_dim=stoch_size,
@@ -524,8 +524,8 @@ class TestDreamerComponents:
         assert torch.allclose(posterior_std, posterior_std_bis)
         assert torch.allclose(next_state, next_state_bis)
 
-    @pytest.mark.parametrize("stoch_size", [30, 40])
-    @pytest.mark.parametrize("deter_size", [200, 300])
+    @pytest.mark.parametrize("stoch_size", [10, 20])
+    @pytest.mark.parametrize("deter_size", [20, 30])
     @pytest.mark.parametrize("temporal_size", [2, 4])
     @pytest.mark.parametrize("action_size", [3, 6])
     def test_rssm_rollout(
