@@ -5,7 +5,6 @@
 import argparse
 from numbers import Number
 
-import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
@@ -505,6 +504,8 @@ class TestDreamerComponents:
         ).to(device)
         belief = torch.randn(batch_size, stoch_size, device=device)
         obs_emb = torch.randn(batch_size, 1024, device=device)
+        # Init of lazy linears
+        _ = rssm_posterior(belief.clone(), obs_emb.clone())
 
         torch.manual_seed(0)
         posterior_mean, posterior_std, next_state = rssm_posterior(
@@ -581,6 +582,8 @@ class TestDreamerComponents:
             device=device,
             batch_size=torch.Size([batch_size, temporal_size]),
         )
+        ## Init of lazy linears
+        _ = rssm_rollout(tensordict.clone())
         torch.manual_seed(0)
         rollout = rssm_rollout(tensordict)
         assert rollout["next_prior_mean"].shape == (
@@ -608,8 +611,10 @@ class TestDreamerComponents:
         assert torch.all(rollout["next_prior_std"] > 0)
         assert torch.all(rollout["next_posterior_std"] > 0)
 
-        # state[:, 1:] = 0
-        # belief[:, 1:] = 0 # Only the first state is used for the prior. The rest are recomputed
+        state[:, 1:] = 0
+        belief[
+            :, 1:
+        ] = 0  # Only the first state is used for the prior. The rest are recomputed
 
         tensordict_bis = TensorDict(
             {
