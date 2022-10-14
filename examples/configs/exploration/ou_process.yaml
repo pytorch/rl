@@ -1,0 +1,16 @@
+network: linear
+exploration_wrapper:
+  _partial_: True
+  _target_: torchrl.modules.tensordict_module.exploration.OrnsteinUhlenbeckProcessWrapper
+  eps_init: 1.0
+  eps_end: 0.1
+  annealing_num_steps: ${collector.total_frames}
+  theta: 0.15
+  mu: 0.0
+  sigma: 0.2
+  dt: 1e-2
+  x0: null
+  sigma_min: null
+  n_steps_annealing: 1000
+  key: "action"
+  safe: True

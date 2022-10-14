@@ -33,14 +33,16 @@ def make_env():
     return fun
 
 
+@pytest.fixture(scope="module", autouse=True)
+def init_hydra():
+    GlobalHydra.instance().clear()
+    hydra.initialize("../examples/configs/")
+    yield
+    GlobalHydra.instance().clear()
+
+
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestConfigs:
-    @pytest.fixture(scope="class", autouse=True)
-    def init_hydra(self, request):
-        GlobalHydra.instance().clear()
-        hydra.initialize("../examples/configs/")
-        request.addfinalizer(GlobalHydra.instance().clear)
-
     @pytest.mark.parametrize(
         "file,num_workers",
         [
@@ -170,7 +172,9 @@ def make_actor_dqn(net_partial, actor_partial, env, out_features=None):
     else:
         out_features = list(env.action_spec.shape)
     network = net_partial.network(out_features=out_features)
-    actor = actor_partial.actor(module=network, in_keys=net_partial.in_keys)
+    actor = actor_partial.actor(
+        module=network, in_keys=net_partial.in_keys, spec=env.action_spec
+    )
     return actor
 
 
@@ -178,7 +182,9 @@ def make_model_ppo(net_partial, model_params, env):
     out_features = env.action_spec.shape[-1] * model_params.out_features_multiplier
 
     # build the module
-    policy_operator = net_partial.policy_network(out_features=out_features)
+    policy_operator = net_partial.policy_network(
+        out_features=out_features, spec=env.action_spec
+    )
     actor_critic = net_partial.actor_critic(policy_operator=policy_operator)
     return actor_critic
 
@@ -187,7 +193,9 @@ def make_model_sac(net_partial, model_params, env):
     out_features = env.action_spec.shape[-1] * model_params.out_features_multiplier
 
     # build the module
-    policy_operator = net_partial.policy_network(out_features=out_features)
+    policy_operator = net_partial.policy_network(
+        out_features=out_features, spec=env.action_spec
+    )
 
     qvalue_operator = net_partial.qvalue_network
 
@@ -199,7 +207,9 @@ def make_model_ddpg(net_partial, env):
     out_features = env.action_spec.shape[-1]
 
     # build the module
-    policy_operator = net_partial.policy_network(out_features=out_features)
+    policy_operator = net_partial.policy_network(
+        out_features=out_features, spec=env.action_spec
+    )
 
     qvalue = net_partial.value_operator
     return policy_operator, qvalue
@@ -209,7 +219,9 @@ def make_model_redq(net_partial, model_params, env):
     out_features = env.action_spec.shape[-1] * model_params.out_features_multiplier
 
     # build the module
-    policy_operator = net_partial.policy_network(out_features=out_features)
+    policy_operator = net_partial.policy_network(
+        out_features=out_features, spec=env.action_spec
+    )
 
     qvalue_operator = net_partial.qvalue_network
 
@@ -218,12 +230,6 @@ def make_model_redq(net_partial, model_params, env):
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestModelConfigs:
-    @pytest.fixture(scope="class", autouse=True)
-    def init_hydra(self, request):
-        GlobalHydra.instance().clear()
-        hydra.initialize("../examples/configs/")
-        request.addfinalizer(GlobalHydra.instance().clear)
-
     @pytest.mark.parametrize("pixels", [True, False])
     @pytest.mark.parametrize("distributional", [True, False])
     def test_dqn(self, pixels, distributional):
@@ -434,6 +440,80 @@ class TestModelConfigs:
         tensordict = env.rollout(3, actor)
         assert env.action_spec.is_in(tensordict["action"]), env.action_spec
         qvalue(tensordict)
+
+
+@pytest.mark.skipif(not _has_hydra, reason="No hydra found")
+class TestExplorationConfigs:
+    from torchrl.modules.models.models import _LAYER_CLASS_DICT
+    from torchrl.modules.tensordict_module.exploration import (
+        EGreedyWrapper,
+        AdditiveGaussianWrapper,
+        OrnsteinUhlenbeckProcessWrapper,
+    )
+
+    _WRAPPER_MAP = {
+        "e_greedy": EGreedyWrapper,
+        "additive_gaussian": AdditiveGaussianWrapper,
+        "ou_process": OrnsteinUhlenbeckProcessWrapper,
+    }
+
+    def _make_env(self):
+        import torchrl.envs.transforms as T
+        from torchrl.envs import TransformedEnv
+        from torchrl.envs.libs.gym import GymEnv
+
+        transforms = T.Compose(
+            T.ObservationNorm(0, 1, ["next_observation"]),
+            T.RewardScaling(0, 1, ["reward"]),
+            T.CatTensors(),
+            T.DoubleToFloat(["next_observation_vector"]),
+        )
+        env = TransformedEnv(GymEnv("HalfCheetah-v4"), transforms)
+        return env
+
+    @pytest.mark.parametrize("network", ["linear", "noisy_linear"])
+    @pytest.mark.parametrize(
+        "wrapper", [None, "e_greedy", "additive_gaussian", "ou_process"]
+    )
+    def test_exploration(self, network, wrapper):
+        additional_config = [
+            "env=halfcheetah",
+            "transforms=state",
+            "model=sac/discrete",
+            "network=sac/independent_state",
+        ]
+        exploration_config = []
+        if wrapper is not None:
+            exploration_config += [
+                f"exploration={wrapper}",
+                f"exploration.network={network}",
+            ]
+        else:
+            exploration_config += [f"exploration={network}"]
+
+        cfg = hydra.compose("config", overrides=exploration_config + additional_config)
+        env = self._make_env()
+        model_params = instantiate(cfg.model)
+        net_partial = instantiate(cfg.network)
+        actor, qvalue, value = make_model_sac(net_partial, model_params, env)
+        actor(env.reset())
+        assert actor.module.module.layer_class is self._LAYER_CLASS_DICT[network]
+
+        if cfg.exploration.exploration_wrapper is not None:
+            actor_explore = instantiate(cfg.exploration.exploration_wrapper)(actor)
+            assert type(actor_explore) is self._WRAPPER_MAP[wrapper]
+        else:
+            actor_explore = actor
+
+        rollout = env.rollout(3)
+        assert all(key in rollout.keys() for key in actor_explore.in_keys), (
+            actor_explore.in_keys,
+            rollout.keys(),
+        )
+        tensordict = env.rollout(3, actor_explore)
+        assert env.action_spec.is_in(tensordict["action"]), env.action_spec
+        qvalue(tensordict)
+        value(tensordict)
 
 
 if __name__ == "__main__":
