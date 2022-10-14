@@ -612,9 +612,8 @@ class TestDreamerComponents:
         assert torch.all(rollout["next_posterior_std"] > 0)
 
         state[:, 1:] = 0
-        belief[
-            :, 1:
-        ] = 0  # Only the first state is used for the prior. The rest are recomputed
+        belief[:, 1:] = 0
+        # Only the first state is used for the prior. The rest are recomputed
 
         tensordict_bis = TensorDict(
             {
