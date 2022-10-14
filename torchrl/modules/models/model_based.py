@@ -286,10 +286,12 @@ class RSSMPosterior(nn.Module):
             Defaults to 200.
         state_dim (int, optional): Size of the state.
             Defaults to 30.
+        scale_lb (float, optional): Lower bound of the scale of the state distribution.
+            Defaults to 0.1.
 
     """
 
-    def __init__(self, hidden_dim=200, state_dim=30):
+    def __init__(self, hidden_dim=200, state_dim=30, scale_lb=0.1):
         super().__init__()
         self.obs_rnn_to_post_projector = NormalParamWrapper(
             nn.Sequential(
@@ -297,7 +299,7 @@ class RSSMPosterior(nn.Module):
                 nn.ELU(),
                 nn.Linear(hidden_dim, 2 * state_dim),
             ),
-            scale_lb=0.1,
+            scale_lb=scale_lb,
             scale_mapping="softplus",
         )
         self.hidden_dim = hidden_dim

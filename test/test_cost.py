@@ -1886,13 +1886,26 @@ class TestDreamer:
             assert not (lambda_kl_corr or lambda_reward or lambda_reco)
         loss_module.zero_grad()
 
-    def test_dreamer_actor(self, device):
+    @pytest.mark.parametrize("imagination_horizon", [3, 5])
+    @pytest.mark.parametrize("discount_loss", [True, False])
+    def test_dreamer_actor(self, device, imagination_horizon, discount_loss):
         tensordict = self._create_actor_data(2, 3, 10, 5).to(device)
         mb_env = self._create_mb_env(10, 5).to(device)
         actor_model = self._create_actor_model(10, 5).to(device)
         value_model = self._create_value_model(10, 5).to(device)
-        loss_module = DreamerActorLoss(actor_model, value_model, mb_env).to(device)
-        loss_td, _ = loss_module(tensordict)
+        loss_module = DreamerActorLoss(
+            actor_model,
+            value_model,
+            mb_env,
+            imagination_horizon=imagination_horizon,
+            discount_loss=discount_loss,
+        )
+        loss_td, fake_data = loss_module(tensordict)
+        assert not fake_data.requires_grad
+        assert fake_data.shape == torch.Size([tensordict.numel(), imagination_horizon])
+        if discount_loss:
+            assert loss_module.discount_loss
+
         assert loss_td.get("loss_actor") is not None
         loss = loss_td.get("loss_actor")
         loss.backward()
@@ -1914,9 +1927,10 @@ class TestDreamer:
     def test_dreamer_value(self, device):
         tensordict = self._create_value_data(2, 3, 10, 5).to(device)
         value_model = self._create_value_model(10, 5).to(device)
-        loss_module = DreamerValueLoss(value_model).to(device)
-        loss_td, _ = loss_module(tensordict)
+        loss_module = DreamerValueLoss(value_model)
+        loss_td, fake_data = loss_module(tensordict)
         assert loss_td.get("loss_value") is not None
+        assert not fake_data.requires_grad
         loss = loss_td.get("loss_value")
         loss.backward()
         grad_is_zero = True
