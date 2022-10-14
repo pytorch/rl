@@ -397,12 +397,13 @@ def grad_norm(optimizer: torch.optim.Optimizer):
     return sum_of_sq.sqrt().detach().item()
 
 
-def make_recorder_env(cfg, video_tag, stats, logger, create_env_fn):
+def make_recorder_env(cfg, video_tag, pixel_stats, state_stats, logger, create_env_fn):
     recorder = transformed_env_constructor(
         cfg,
         video_tag=video_tag,
         norm_obs_only=True,
-        stats=stats,
+        pixel_stats=pixel_stats,
+        state_stats=state_stats,
         logger=logger,
         use_env_creator=False,
     )()
