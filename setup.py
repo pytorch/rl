@@ -224,7 +224,7 @@ def _main(argv):
             ],
             "checkpointing": [
                 "torchinductor",
-            ]
+            ],
         },
         zip_safe=False,
         classifiers=[

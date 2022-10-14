@@ -42,6 +42,7 @@ from torchrl.trainers.loggers import Logger
 
 try:
     from torchsnapshot import StateDict, Snapshot
+
     _has_ts = True
 except ImportError:
     _has_ts = False
@@ -188,13 +189,14 @@ class Trainer:
 
     def register_module(self, module_name: str, module: Any) -> None:
         if module_name in self._modules:
-            raise RuntimeError(f"{module_name} is already registered, choose a different name.")
+            raise RuntimeError(
+                f"{module_name} is already registered, choose a different name."
+            )
         self._modules[module_name] = module
 
     @property
     def app_state(self):
-        if self._app_state is None:
-            self._app_state = {"state": StateDict(**flatten_dict(self.state_dict()))}
+        self._app_state = {"state": self}
         return self._app_state
 
     def _save_trainer(self) -> None:
@@ -202,8 +204,8 @@ class Trainer:
             if not _has_ts:
                 raise ImportError(
                     "torchsnapshot not found. Consider installing torchsnapshot or "
-                      "using the torch checkpointing backend (`CKPT_BACKEND=torch`)"
-                                  )
+                    "using the torch checkpointing backend (`CKPT_BACKEND=torch`)"
+                )
             Snapshot.take(app_state=self.app_state, path=self.save_trainer_file)
         elif _CKPT_BACKEND == "torch":
             torch.save(self.state_dict(), self.save_trainer_file)
@@ -220,7 +222,6 @@ class Trainer:
                 _save = True
         if _save and self.save_trainer_file:
             self._save_trainer()
-
 
     def load_from_file(self, file: Union[str, pathlib.Path]) -> Trainer:
         if _CKPT_BACKEND == "torchsnapshot":
@@ -1148,6 +1149,7 @@ class CountFramesLog:
 def _check_input_output_typehint(func: Callable, input: Type, output: Type):
     # Placeholder for a function that checks the types input / output against expectations
     return
+
 
 def flatten_dict(d):
     out = {}

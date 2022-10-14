@@ -29,6 +29,7 @@ from torchrl.data import (
     TensorDictReplayBuffer,
     ListStorage,
     LazyMemmapStorage,
+    LazyTensorStorage,
 )
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.trainers import Recorder, Trainer
@@ -44,6 +45,14 @@ from torchrl.trainers.trainers import (
     SelectKeys,
     UpdateWeights,
 )
+
+
+def _fun_checker(fun, checker):
+    def new_fun(*args, **kwargs):
+        checker[0] = True
+        return fun(*args, **kwargs)
+
+    return new_fun, fun
 
 
 class MockingOptim:
@@ -128,20 +137,14 @@ class TestSelectKeys:
     @pytest.mark.parametrize("backend", ["torchsnapshot", "torch"])
     def test_selectkeys_save(self, backend):
         # we overwrite the method to make sure that load_state_dict and state_dict are being called
-        state_dict_fun = SelectKeys.state_dict
-        load_state_dict_fun = SelectKeys.load_state_dict
         state_dict_has_been_called = [False]
         load_state_dict_has_been_called = [False]
-        def new_state_dict(self):
-            state_dict_has_been_called[0] = True
-            return state_dict_fun(self)
-
-        def new_load_state_dict(self, state_dict):
-            load_state_dict_has_been_called[0] = True
-            return load_state_dict_fun(self, state_dict)
-
-        SelectKeys.state_dict = new_state_dict
-        SelectKeys.load_state_dict = new_load_state_dict
+        SelectKeys.state_dict, SelectKeys_state_dict = _fun_checker(
+            SelectKeys.state_dict, state_dict_has_been_called
+        )
+        SelectKeys.load_state_dict, SelectKeys_load_state_dict = _fun_checker(
+            SelectKeys.load_state_dict, load_state_dict_has_been_called
+        )
 
         os.environ["CKPT_BACKEND"] = backend
 
@@ -175,12 +178,14 @@ class TestSelectKeys:
             if backend == "torch":
                 assert load_state_dict_has_been_called[0]
 
-        SelectKeys.state_dict = state_dict_fun
-        SelectKeys.load_state_dict = load_state_dict_fun
+        SelectKeys.state_dict = SelectKeys_state_dict
+        SelectKeys.load_state_dict = SelectKeys_load_state_dict
+
 
 @pytest.mark.parametrize("prioritized", [True, False])
 class TestRB:
     def test_rb_trainer(self, prioritized):
+        torch.manual_seed(0)
         trainer = mocking_trainer()
         S = 100
         if prioritized:
@@ -231,6 +236,7 @@ class TestRB:
         ],
     )
     def test_rb_trainer_state_dict(self, prioritized, storage_type):
+        torch.manual_seed(0)
         trainer = mocking_trainer()
         S = 100
         if storage_type == "list":
@@ -305,34 +311,53 @@ class TestRB:
     @pytest.mark.parametrize(
         "storage_type",
         [
-            "memmap",
             "list",
+            "memmap",
+            "tensor",
         ],
     )
-    @pytest.mark.parametrize("backend", ["torch", "torchsnapshot",])
-    def test_rb_trainer_save(self, prioritized, storage_type, backend):
+    @pytest.mark.parametrize(
+        "backend",
+        [
+            "torch",
+            "torchsnapshot",
+        ],
+    )
+    @pytest.mark.parametrize("re_init", [True, False])
+    def test_rb_trainer_save(
+        self, prioritized, storage_type, backend, re_init, S=10, batch=11, N=3
+    ):
+        torch.manual_seed(0)
         # we overwrite the method to make sure that load_state_dict and state_dict are being called
-        state_dict_fun = ReplayBufferTrainer.state_dict
-        load_state_dict_fun = ReplayBufferTrainer.load_state_dict
         state_dict_has_been_called = [False]
         load_state_dict_has_been_called = [False]
-
-        def new_state_dict(self):
-            state_dict_has_been_called[0] = True
-            return state_dict_fun(self)
-
-        def new_load_state_dict(self, state_dict):
-            load_state_dict_has_been_called[0] = True
-            return load_state_dict_fun(self, state_dict)
-
-        ReplayBufferTrainer.state_dict = new_state_dict
-        ReplayBufferTrainer.load_state_dict = new_load_state_dict
+        state_dict_has_been_called_td = [False]
+        load_state_dict_has_been_called_td = [False]
+        ReplayBufferTrainer.state_dict, ReplayBufferTrainer_state_dict = _fun_checker(
+            ReplayBufferTrainer.state_dict, state_dict_has_been_called
+        )
+        (
+            ReplayBufferTrainer.load_state_dict,
+            ReplayBufferTrainer_load_state_dict,
+        ) = _fun_checker(
+            ReplayBufferTrainer.load_state_dict, load_state_dict_has_been_called
+        )
+        TensorDict.state_dict, TensorDict_state_dict = _fun_checker(
+            TensorDict.state_dict, state_dict_has_been_called_td
+        )
+        TensorDict.load_state_dict, TensorDict_load_state_dict = _fun_checker(
+            TensorDict.load_state_dict, load_state_dict_has_been_called_td
+        )
 
         os.environ["CKPT_BACKEND"] = backend
+
         def make_storage():
             if storage_type == "list":
                 storage = ListStorage(S)
                 collate_fn = lambda x: torch.stack(x, 0)
+            elif storage_type == "tensor":
+                storage = LazyTensorStorage(S)
+                collate_fn = lambda x: x
             elif storage_type == "memmap":
                 storage = LazyMemmapStorage(S)
                 collate_fn = lambda x: x
@@ -346,7 +371,7 @@ class TestRB:
             else:
                 file = tmpdirname
             trainer = mocking_trainer(file)
-            S = 100
+
             storage, collate_fn = make_storage()
             if prioritized:
                 replay_buffer = TensorDictPrioritizedReplayBuffer(
@@ -357,12 +382,10 @@ class TestRB:
                     S, storage=storage, collate_fn=collate_fn
                 )
 
-            N = 9
             rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
             rb_trainer.register(trainer)
             key1 = "first key"
             key2 = "second key"
-            batch = 101
             td = TensorDict(
                 {
                     key1: torch.randn(batch, 3),
@@ -376,6 +399,7 @@ class TestRB:
                 td_out.set(replay_buffer.priority_key, torch.rand(N))
             trainer._post_loss_hook(td_out)
             trainer.save_trainer(True)
+            print(trainer.state_dict()["replay_buffer"]["replay_buffer"]["_storage"]["_storage"])
 
             trainer2 = mocking_trainer()
             storage2, _ = make_storage()
@@ -386,20 +410,42 @@ class TestRB:
             else:
                 replay_buffer2 = TensorDictReplayBuffer(S, storage=storage2)
             N = 9
-            rb_trainer2 = ReplayBufferTrainer(replay_buffer=replay_buffer2, batch_size=N)
+            rb_trainer2 = ReplayBufferTrainer(
+                replay_buffer=replay_buffer2, batch_size=N
+            )
             rb_trainer2.register(trainer2)
-            trainer2._process_batch_hook(td.to_tensordict().zero_())
+            if re_init:
+                trainer2._process_batch_hook(td.to_tensordict().zero_())
             trainer2.load_from_file(file)
             assert state_dict_has_been_called[0]
-            if backend == "torch":
-                assert load_state_dict_has_been_called[0]
-            else:
-                td1 = trainer.app_state["state"]["replay_buffer.replay_buffer._storage._storage"]
-                td2 = trainer2.app_state["state"]["replay_buffer.replay_buffer._storage._storage"]
-                assert (td1 == td2).all()
+            assert load_state_dict_has_been_called[0]
+            assert state_dict_has_been_called_td[0]
+            if re_init:
+                assert load_state_dict_has_been_called_td[0]
+            if backend != "torch":
+                td1 = (
+                    storage._storage
+                )  # trainer.app_state["state"]["replay_buffer.replay_buffer._storage._storage"]
+                td2 = trainer2._modules["replay_buffer"].replay_buffer._storage._storage
+                if storage_type == "list":
+                    print(td1[0], td2[0])
+                    print(td1[1], td2[1])
+                    assert all([(_td1 == _td2).all() for _td1, _td2 in zip(td1, td2)])
+                    assert all(
+                        [(_td1 is not _td2).all() for _td1, _td2 in zip(td1, td2)]
+                    )
+                    assert storage2._storage is td2
+                else:
+                    assert (td1 == td2).all()
+                    assert td1 is not td2
+                    if storage_type == "memmap":
+                        assert td2.is_memmap()
+                    assert storage2._storage is td2
 
-        ReplayBufferTrainer.state_dict = state_dict_fun
-        ReplayBufferTrainer.load_state_dict = load_state_dict_fun
+        ReplayBufferTrainer.state_dict = ReplayBufferTrainer_state_dict
+        ReplayBufferTrainer.load_state_dict = ReplayBufferTrainer_load_state_dict
+        TensorDict.state_dict = TensorDict_state_dict
+        TensorDict.load_state_dict = TensorDict_load_state_dict
 
 
 @pytest.mark.parametrize("logname", ["a", "b"])
