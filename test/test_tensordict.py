@@ -13,14 +13,14 @@ import torch
 from _utils_internal import get_available_devices
 from torch import multiprocessing as mp
 from torchrl._utils import prod
-from torchrl.data import SavedTensorDict, TensorDict, MemmapTensor
+from torchrl.data import MemmapTensor, SavedTensorDict, TensorDict
 from torchrl.data.tensordict.tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
-    stack as stack_td,
-    pad,
-    TensorDictBase,
     make_tensordict,
+    pad,
+    stack as stack_td,
+    TensorDictBase,
 )
 from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 

@@ -1267,6 +1267,7 @@ def make_dreamer(
             ],
         ),
     )
+
     transition_model = TensorDictSequential(
         TensorDictModule(
             obs_encoder,
@@ -1322,6 +1323,8 @@ def make_dreamer(
         ),
     )
     # actor for real world: interacts with states ~ posterior
+    # Out actor differs from the original paper where first they compute prior and posterior and then act on it
+    # but we found that this approach worked better.
     actor_realworld = TensorDictSequential(
         TensorDictModule(
             obs_encoder,
@@ -1460,6 +1463,7 @@ def make_dreamer(
 
 @dataclass
 class DreamerConfig:
+    batch_length: int = 50
     state_dim: int = 30
     rssm_hidden_dim: int = 200
     mlp_num_units: int = 400
@@ -1471,11 +1475,6 @@ class DreamerConfig:
     actor_value_lr: float = 8e-5
     imagination_horizon: int = 15
     model_device: str = ""
-    normalize_rewards_online: bool = False
-    # Computes the running statistics of the rewards and normalizes them before they are passed to the loss module.
-    normalize_rewards_online_scale: float = 1.0
-    # Final scale of the normalized rewards.
-    normalize_rewards_online_decay: float = 0.9999
     # Decay of the reward moving averaging
     exploration: str = "additive_gaussian"
     # One of "additive_gaussian", "ou_exploration" or ""

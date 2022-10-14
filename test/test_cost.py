@@ -11,14 +11,14 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from mocking_classes import MockPixelEnv
-from torch import nn, autograd
+from mocking_classes import ContinuousActionConvMockEnv
+from torch import autograd, nn
 from torchrl.data import (
-    TensorDict,
-    NdBoundedTensorSpec,
-    MultOneHotDiscreteTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     CompositeSpec,
+    MultOneHotDiscreteTensorSpec,
+    NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
+    TensorDict,
 )
 from torchrl.data.postprocs.postprocs import MultiStep
 
@@ -26,14 +26,16 @@ from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.data.tensordict.tensordict import assert_allclose_td
 from torchrl.data.utils import expand_as_right
 from torchrl.envs.model_based.dreamer import DreamerEnv
+from torchrl.envs.transforms import TransformedEnv, TensorDictPrimer
 from torchrl.modules import (
     DistributionalQValueActor,
     QValueActor,
     TensorDictModule,
     TensorDictSequential,
     ProbabilisticTensorDictModule,
+    WorldModelWrapper,
 )
-from torchrl.modules.distributions.continuous import TanhNormal, NormalParamWrapper
+from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
 from torchrl.modules.models.model_based import (
     ObsDecoder,
     ObsEncoder,
@@ -44,41 +46,38 @@ from torchrl.modules.models.model_based import (
 )
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.actors import (
-    ValueOperator,
     Actor,
-    ProbabilisticActor,
-    ActorValueOperator,
     ActorCriticOperator,
+    ActorValueOperator,
+    ProbabilisticActor,
+    ValueOperator,
 )
-from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 from torchrl.objectives import (
-    DQNLoss,
-    DistributionalDQNLoss,
-    DDPGLoss,
-    SACLoss,
-    PPOLoss,
     ClipPPOLoss,
+    DDPGLoss,
+    DistributionalDQNLoss,
+    DQNLoss,
     KLPENPPOLoss,
+    PPOLoss,
+    SACLoss,
     DreamerModelLoss,
     DreamerActorLoss,
     DreamerValueLoss,
 )
 from torchrl.objectives.costs.common import LossModule
 from torchrl.objectives.costs.deprecated import (
-    REDQLoss_deprecated,
     DoubleREDQLoss_deprecated,
+    REDQLoss_deprecated,
 )
-from torchrl.objectives.costs.redq import (
-    REDQLoss,
-)
+from torchrl.objectives.costs.redq import REDQLoss
 from torchrl.objectives.costs.reinforce import ReinforceLoss
-from torchrl.objectives.costs.utils import hold_out_net, HardUpdate, SoftUpdate
-from torchrl.objectives.returns.advantages import TDEstimate, GAE, TDLambdaEstimate
+from torchrl.objectives.costs.utils import HardUpdate, hold_out_net, SoftUpdate
+from torchrl.objectives.returns.advantages import GAE, TDEstimate, TDLambdaEstimate
 from torchrl.objectives.returns.functional import (
-    vec_td_lambda_advantage_estimate,
+    generalized_advantage_estimate,
     td_lambda_advantage_estimate,
     vec_generalized_advantage_estimate,
-    generalized_advantage_estimate,
+    vec_td_lambda_advantage_estimate,
 )
 from torchrl.objectives.returns.utils import _custom_conv1d, _make_gammas_tensor
 
@@ -1584,6 +1583,7 @@ class TestReinforce:
             )
 
 
+@pytest.mark.parametrize("device", get_available_devices())
 class TestDreamer:
     def _create_world_model_data(
         self, batch_size, temporal_length, rssm_hidden_dim, state_dim
@@ -1594,7 +1594,7 @@ class TestDreamer:
                 "belief": torch.zeros(batch_size, temporal_length, rssm_hidden_dim),
                 "pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
                 "next_pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
-                "action": torch.randn(batch_size, temporal_length, 6),
+                "action": torch.randn(batch_size, temporal_length, 64),
                 "reward": torch.randn(batch_size, temporal_length, 1),
                 "done": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
             },
@@ -1629,7 +1629,14 @@ class TestDreamer:
         return td
 
     def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = MockPixelEnv()
+        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
+        default_dict = {
+            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
+            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+        }
+        mock_env.append_transform(
+            TensorDictPrimer(random=False, default_value=0, **default_dict)
+        )
 
         obs_encoder = ObsEncoder()
         obs_decoder = ObsDecoder()
@@ -1681,14 +1688,12 @@ class TestDreamer:
                 out_keys=["next_reco_pixels"],
             ),
         )
-        world_model = WorldModelWrapper(
-            world_modeler,
-            TensorDictModule(
-                reward_module,
-                in_keys=["next_state", "next_belief"],
-                out_keys=["reward"],
-            ),
+        reward_module = TensorDictModule(
+            reward_module,
+            in_keys=["next_state", "next_belief"],
+            out_keys=["reward"],
         )
+        world_model = WorldModelWrapper(world_modeler, reward_module)
 
         with torch.no_grad():
             td = mock_env.rollout(10)
@@ -1699,7 +1704,14 @@ class TestDreamer:
         return world_model
 
     def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = MockPixelEnv()
+        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
+        default_dict = {
+            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
+            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+        }
+        mock_env.append_transform(
+            TensorDictPrimer(random=False, default_value=0, **default_dict)
+        )
 
         rssm_prior = RSSMPrior(
             hidden_dim=rssm_hidden_dim,
@@ -1741,7 +1753,15 @@ class TestDreamer:
         return model_based_env
 
     def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = MockPixelEnv()
+        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
+        default_dict = {
+            "next_state": NdUnboundedContinuousTensorSpec(state_dim),
+            "next_belief": NdUnboundedContinuousTensorSpec(rssm_hidden_dim),
+        }
+        mock_env.append_transform(
+            TensorDictPrimer(random=False, default_value=0, **default_dict)
+        )
+
         actor_module = DreamerActor(
             out_features=mock_env.action_spec.shape[0],
             depth=4,
@@ -1792,15 +1812,49 @@ class TestDreamer:
             value_model(td)
         return value_model
 
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_dreamer_world_model(self, device):
+    @pytest.mark.parametrize("lambda_kl", [0, 1.0])
+    @pytest.mark.parametrize("lambda_reco", [0, 1.0])
+    @pytest.mark.parametrize("lambda_reward", [0, 1.0])
+    @pytest.mark.parametrize("reco_loss", ["l2", "smooth_l1"])
+    @pytest.mark.parametrize("reward_loss", ["l2", "smooth_l1"])
+    @pytest.mark.parametrize("free_nats", [-1000, 1000])
+    @pytest.mark.parametrize(
+        "delayed_clamp", [False]
+    )  # hard to test its effect indirectly
+    def test_dreamer_world_model(
+        self,
+        device,
+        lambda_reward,
+        lambda_kl,
+        lambda_reco,
+        reward_loss,
+        reco_loss,
+        delayed_clamp,
+        free_nats,
+    ):
         tensordict = self._create_world_model_data(2, 3, 10, 5).to(device)
         world_model = self._create_world_model_model(10, 5).to(device)
-        loss_module = DreamerModelLoss(world_model).to(device)
+        loss_module = DreamerModelLoss(
+            world_model,
+            lambda_reco=lambda_reco,
+            lambda_kl=lambda_kl,
+            lambda_reward=lambda_reward,
+            reward_loss=reward_loss,
+            reco_loss=reco_loss,
+            delayed_clamp=delayed_clamp,
+            free_nats=free_nats,
+        )
         loss_td, _ = loss_module(tensordict)
-        assert loss_td.get("loss_model_kl") is not None
-        assert loss_td.get("loss_model_reco") is not None
-        assert loss_td.get("loss_model_reward") is not None
+        for loss_str, lmbda in zip(
+            ["loss_model_kl", "loss_model_reco", "loss_model_reward"],
+            [lambda_kl, lambda_reco, lambda_reward],
+        ):
+            assert loss_td.get(loss_str) is not None
+            assert loss_td.get(loss_str).shape == torch.Size([1])
+            if lmbda == 0:
+                assert loss_td.get(loss_str) == 0
+            else:
+                assert loss_td.get(loss_str) > 0
 
         loss = (
             loss_td.get("loss_model_kl")
@@ -1808,31 +1862,91 @@ class TestDreamer:
             + loss_td.get("loss_model_reward")
         )
         loss.backward()
-        world_model.zero_grad()
+        grad_total = 0.0
+        for name, param in loss_module.named_parameters():
+            if param.grad is not None:
+                valid_gradients = not (
+                    torch.isnan(param.grad).any() or torch.isinf(param.grad).any()
+                )
+                if not valid_gradients:
+                    raise ValueError(f"Invalid gradients for {name}")
+                gsq = param.grad.pow(2).sum()
+                grad_total += gsq.item()
+        grad_is_zero = grad_total == 0
+        if free_nats < 0:
+            lambda_kl_corr = lambda_kl
+        else:
+            # we expect the kl loss to have 0 grad
+            lambda_kl_corr = 0
+        if grad_is_zero and (lambda_kl_corr or lambda_reward or lambda_reco):
+            raise ValueError(
+                f"Gradients are zero: lambdas={(lambda_kl_corr, lambda_reward, lambda_reco)}"
+            )
+        elif grad_is_zero:
+            assert not (lambda_kl_corr or lambda_reward or lambda_reco)
+        loss_module.zero_grad()
 
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_dreamer_actor(self, device):
+    @pytest.mark.parametrize("imagination_horizon", [3, 5])
+    @pytest.mark.parametrize("discount_loss", [True, False])
+    def test_dreamer_actor(self, device, imagination_horizon, discount_loss):
         tensordict = self._create_actor_data(2, 3, 10, 5).to(device)
         mb_env = self._create_mb_env(10, 5).to(device)
         actor_model = self._create_actor_model(10, 5).to(device)
         value_model = self._create_value_model(10, 5).to(device)
-        loss_module = DreamerActorLoss(actor_model, value_model, mb_env).to(device)
-        loss_td, _ = loss_module(tensordict)
+        loss_module = DreamerActorLoss(
+            actor_model,
+            value_model,
+            mb_env,
+            imagination_horizon=imagination_horizon,
+            discount_loss=discount_loss,
+        )
+        loss_td, fake_data = loss_module(tensordict)
+        assert not fake_data.requires_grad
+        assert fake_data.shape == torch.Size([tensordict.numel(), imagination_horizon])
+        if discount_loss:
+            assert loss_module.discount_loss
+
         assert loss_td.get("loss_actor") is not None
         loss = loss_td.get("loss_actor")
         loss.backward()
-        actor_model.zero_grad()
+        grad_is_zero = True
+        for name, param in loss_module.named_parameters():
+            if param.grad is not None:
+                valid_gradients = not (
+                    torch.isnan(param.grad).any() or torch.isinf(param.grad).any()
+                )
+                grad_is_zero = (
+                    grad_is_zero and torch.sum(torch.pow((param.grad), 2)) == 0
+                )
+                if not valid_gradients:
+                    raise ValueError(f"Invalid gradients for {name}")
+        if grad_is_zero:
+            raise ValueError("Gradients are zero")
+        loss_module.zero_grad()
 
-    @pytest.mark.parametrize("device", get_available_devices())
     def test_dreamer_value(self, device):
         tensordict = self._create_value_data(2, 3, 10, 5).to(device)
         value_model = self._create_value_model(10, 5).to(device)
-        loss_module = DreamerValueLoss(value_model).to(device)
-        loss_td, _ = loss_module(tensordict)
+        loss_module = DreamerValueLoss(value_model)
+        loss_td, fake_data = loss_module(tensordict)
         assert loss_td.get("loss_value") is not None
+        assert not fake_data.requires_grad
         loss = loss_td.get("loss_value")
         loss.backward()
-        value_model.zero_grad()
+        grad_is_zero = True
+        for name, param in loss_module.named_parameters():
+            if param.grad is not None:
+                valid_gradients = not (
+                    torch.isnan(param.grad).any() or torch.isinf(param.grad).any()
+                )
+                grad_is_zero = (
+                    grad_is_zero and torch.sum(torch.pow((param.grad), 2)) == 0
+                )
+                if not valid_gradients:
+                    raise ValueError(f"Invalid gradients for {name}")
+        if grad_is_zero:
+            raise ValueError("Gradients are zero")
+        loss_module.zero_grad()
 
 
 def test_hold_out():

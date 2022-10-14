@@ -1,6 +1,5 @@
 import dataclasses
 import uuid
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -11,6 +10,9 @@ import tqdm
 from dreamer_utils import (
     parallel_env_constructor,
     transformed_env_constructor,
+    call_record,
+    grad_norm,
+    make_recorder_env,
     EnvConfig,
 )
 from hydra.core.config_store import ConfigStore
@@ -18,8 +20,6 @@ from hydra.core.config_store import ConfigStore
 # float16
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
-from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
@@ -29,7 +29,6 @@ from torchrl.objectives.costs.dreamer import (
     DreamerModelLoss,
     DreamerValueLoss,
 )
-from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     OffPolicyCollectorConfig,
@@ -47,20 +46,8 @@ from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
     ReplayArgsConfig,
 )
+from torchrl.trainers.helpers.trainers import TrainerConfig
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
-
-
-@dataclass
-class TrainingConfig:
-    optim_steps_per_batch: int = 500
-    # Number of optimization steps in between two collection of data. See frames_per_batch below.
-    # LR scheduler.
-    batch_size: int = 256
-
-    batch_length: int = 50
-    # batch size of the TensorDict retrieved from the replay buffer. Default=256.
-    log_interval: int = 10000
-    # logging interval, in terms of optimization steps. Default=10000.
 
 
 config_fields = [
@@ -71,104 +58,13 @@ config_fields = [
         LoggerConfig,
         ReplayArgsConfig,
         DreamerConfig,
-        TrainingConfig,
+        TrainerConfig,
     )
     for config_field in dataclasses.fields(config_cls)
 ]
 Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
 cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
-
-
-def grad_norm(optimizer: torch.optim.Optimizer):
-    sum_of_sq = 0.0
-    for pg in optimizer.param_groups:
-        for p in pg["params"]:
-            sum_of_sq += p.grad.pow(2).sum()
-    return sum_of_sq.sqrt().detach().item()
-
-
-def make_recorder_env(cfg, video_tag, pixel_stats, state_stats, logger, create_env_fn):
-    recorder = transformed_env_constructor(
-        cfg,
-        video_tag=video_tag,
-        norm_obs_only=True,
-        pixel_stats=pixel_stats,
-        state_stats=state_stats,
-        logger=logger,
-        use_env_creator=False,
-    )()
-
-    # remove video recorder from recorder to have matching state_dict keys
-    if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.base_env)
-        for transform in recorder.transform:
-            if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform)
-    else:
-        recorder_rm = recorder
-
-    if isinstance(create_env_fn, ParallelEnv):
-        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
-        create_env_fn.close()
-    elif isinstance(create_env_fn, EnvCreator):
-        recorder_rm.load_state_dict(create_env_fn().state_dict())
-    else:
-        recorder_rm.load_state_dict(create_env_fn.state_dict())
-    # reset reward scaling
-    for t in recorder.transform:
-        if isinstance(t, RewardScaling):
-            t.scale.fill_(1.0)
-            t.loc.fill_(0.0)
-    return recorder
-
-
-@torch.inference_mode()
-def call_record(
-    logger,
-    record,
-    collected_frames,
-    sampled_tensordict,
-    stats,
-    model_based_env,
-    actor_model,
-    cfg,
-):
-    td_record = record(None)
-    if td_record is not None and logger is not None:
-        for key, value in td_record.items():
-            if key in ["r_evaluation", "total_r_evaluation"]:
-                logger.log_scalar(
-                    key,
-                    value.detach().item(),
-                    step=collected_frames,
-                )
-    # Compute observation reco
-    if cfg.record_video and record._count % cfg.record_interval == 0:
-        world_model_td = sampled_tensordict
-
-        true_pixels = recover_pixels(world_model_td["next_pixels"], stats)
-
-        reco_pixels = recover_pixels(world_model_td["next_reco_pixels"], stats)
-        with autocast(dtype=torch.float16):
-            world_model_td = world_model_td.select("state", "belief", "reward")
-            world_model_td = model_based_env.rollout(
-                max_steps=true_pixels.shape[1],
-                policy=actor_model,
-                auto_reset=False,
-                tensordict=world_model_td[:, 0],
-            )
-        imagine_pxls = recover_pixels(
-            model_based_env.decode_obs(world_model_td)["next_reco_pixels"],
-            stats,
-        )
-
-        stacked_pixels = torch.cat([true_pixels, reco_pixels, imagine_pxls], dim=-1)
-        if logger is not None:
-            logger.log_video(
-                "pixels_rec_and_imag",
-                stacked_pixels.detach().cpu(),
-            )
 
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
@@ -287,7 +183,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     value_loss = DreamerValueLoss(value_model)
 
-    # Actor and value network
+    # Exploration noise to be added to the actions
     if cfg.exploration == "additive_gaussian":
         exploration_policy = AdditiveGaussianWrapper(
             policy,
@@ -310,6 +206,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
+
+    # Create the replay buffer
 
     collector = make_collector_offpolicy(
         make_env=create_env_fn,
@@ -364,6 +262,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(tensordict.numel())
         current_frames = tensordict.numel()
         collected_frames += current_frames
+
+        # Compared to the original paper, the replay buffer is not temporally sampled. We fill it with trajectories of length batch_length.
+        # To be closer to the paper, we would need to fill it with trajectories of lentgh 1000 and then sample subsequences of length batch_length.
+
         # tensordict = tensordict.reshape(-1, cfg.batch_length)
         replay_buffer.extend(tensordict.cpu())
         logger.log_scalar(
@@ -390,7 +292,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     sampled_tensordict = reward_normalizer.normalize_reward(
                         sampled_tensordict
                     )
-
+                # update world model
                 with autocast(dtype=torch.float16):
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
@@ -400,7 +302,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         + model_loss_td["loss_model_reco"]
                         + model_loss_td["loss_model_reward"]
                     )
-
+                    # If we are logging videos, we keep some frames.
                     if (
                         cfg.record_video
                         and (record._count + 1) % cfg.record_interval == 0
@@ -451,6 +353,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     world_model_opt.zero_grad()
                     scaler1.update()
 
+                # update actor network
                 with autocast(dtype=torch.float16):
                     actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
                 scaler2.scale(actor_loss_td["loss_actor"]).backward()
@@ -471,6 +374,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor_opt.zero_grad()
                 scaler2.update()
 
+                # update value network
                 with autocast(dtype=torch.float16):
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
                 scaler3.scale(value_loss_td["loss_value"]).backward()
@@ -503,16 +407,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor_model,
                 cfg,
             )
-        exploration_policy.step(current_frames)
+        if cfg.exploration != "":
+            exploration_policy.step(current_frames)
         collector.update_policy_weights_()
-
-
-def recover_pixels(pixels, stats):
-    return (
-        (255 * (pixels * stats["scale"] + stats["loc"]))
-        .clamp(min=0, max=255)
-        .to(torch.uint8)
-    )
 
 
 if __name__ == "__main__":

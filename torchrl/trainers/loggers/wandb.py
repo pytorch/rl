@@ -69,8 +69,7 @@ class WandbLogger(Logger):
             "name": exp_name,
             "dir": save_dir,
             "id": id,
-            "project": "torchrl-private",
-            "entity": "vmoens",
+            "project": project,
             "resume": "allow",
             **kwargs,
         }

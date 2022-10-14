@@ -28,16 +28,22 @@ class DreamerActor(nn.Module):
     This network is used to predict the action distribution given the
     the stochastic state and the deterministic belief at the current
     time step.
-    It output the mean and the scale of the action distribution.
+    It outputs the mean and the scale of the action distribution.
 
     Reference: https://arxiv.org/abs/1912.016034
 
     Args:
         out_features (int): Number of output features.
         depth (int, optional): Number of hidden layers.
+            Defaults to 4.
         num_cells (int, optional): Number of hidden units per layer.
+            Defaults to 200.
         activation_class (nn.Module, optional): Activation class.
-        rnn_hidden_size (int, optional): Size of the hidden state of the RNN in the RSSM module.
+            Defaults to nn.ELU.
+        std_bias (float, optional): Bias of the softplus transform.
+            Defaults to 5.0.
+        std_min_val (float, optional): Minimum value of the standard deviation.
+            Defaults to 1e-4.
     """
 
     def __init__(
@@ -46,6 +52,8 @@ class DreamerActor(nn.Module):
         depth=4,
         num_cells=200,
         activation_class=nn.ELU,
+        std_bias=5.0,
+        std_min_val=1e-4,
     ):
         super().__init__()
         self.backbone = NormalParamWrapper(
@@ -55,7 +63,7 @@ class DreamerActor(nn.Module):
                 num_cells=num_cells,
                 activation_class=activation_class,
             ),
-            scale_mapping="biased_softplus_5.0_1e-4",
+            scale_mapping=f"biased_softplus_{std_bias}_{std_min_val}",
         )
 
     def forward(self, state, belief):
@@ -72,6 +80,7 @@ class ObsEncoder(nn.Module):
 
     Args:
         depth (int, optional): Number of hidden units in the first layer.
+            Defaults to 32.
     """
 
     def __init__(
@@ -157,6 +166,7 @@ class ObsDecoder(nn.Module):
 
     Args:
         depth (int, optional): Number of hidden units in the last layer.
+            Defaults to 32.
     """
 
     def __init__(
@@ -241,8 +251,8 @@ class RSSMRollout(nn.Module):
     Reference: https://arxiv.org/abs/1811.04551
 
     Args:
-        rssm_prior (RSSMPrior): Prior network.
-        rssm_posterior (RSSMPosterior): Posterior network.
+        rssm_prior (TensorDictModule): Prior network.
+        rssm_posterior (TensorDictModule): Posterior network.
 
 
     """
@@ -307,15 +317,26 @@ class RSSMPrior(nn.Module):
     Reference: https://arxiv.org/abs/1811.04551
 
     Args:
+        action_spec (TensorSpec): Action spec.
         hidden_dim (int, optional): Number of hidden units in the linear network. Input size of the recurrent network.
+            Defaults to 200.
         rnn_hidden_dim (int, optional): Number of hidden units in the recurrent network. Also size of the belief.
+            Defaults to 200.
         state_dim (int, optional): Size of the state.
-        action_spec (TensorSpec, optional): Action spec. If None an error will be raised when initializing.
+            Defaults to 30.
+        scale_lb (float, optional): Lower bound of the scale of the state distribution.
+            Defaults to 0.1.
+
 
     """
 
     def __init__(
-        self, hidden_dim=200, rnn_hidden_dim=200, state_dim=30, action_spec=None
+        self,
+        action_spec,
+        hidden_dim=200,
+        rnn_hidden_dim=200,
+        state_dim=30,
+        scale_lb=0.1,
     ):
         super().__init__()
 
@@ -328,15 +349,12 @@ class RSSMPrior(nn.Module):
                 nn.ELU(),
                 nn.Linear(hidden_dim, 2 * state_dim),
             ),
-            scale_lb=0.1,
+            scale_lb=scale_lb,
             scale_mapping="softplus",
         )
 
         self.state_dim = state_dim
         self.rnn_hidden_dim = rnn_hidden_dim
-
-        if action_spec is None:
-            raise ValueError("action_spec must be provided")
         self.action_shape = action_spec.shape
 
     def forward(self, state, belief, action):
@@ -358,11 +376,15 @@ class RSSMPosterior(nn.Module):
 
     Args:
         hidden_dim (int, optional): Number of hidden units in the linear network.
+            Defaults to 200.
         state_dim (int, optional): Size of the state.
+            Defaults to 30.
+        scale_lb (float, optional): Lower bound of the scale of the state distribution.
+            Defaults to 0.1.
 
     """
 
-    def __init__(self, hidden_dim=200, state_dim=30):
+    def __init__(self, hidden_dim=200, state_dim=30, scale_lb=0.1):
         super().__init__()
         self.obs_rnn_to_post_projector = NormalParamWrapper(
             nn.Sequential(
@@ -370,7 +392,7 @@ class RSSMPosterior(nn.Module):
                 nn.ELU(),
                 nn.Linear(hidden_dim, 2 * state_dim),
             ),
-            scale_lb=0.1,
+            scale_lb=scale_lb,
             scale_mapping="softplus",
         )
         self.hidden_dim = hidden_dim

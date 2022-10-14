@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 
@@ -28,12 +28,12 @@ class DreamerModelLoss(LossModule):
 
     Args:
         world_model (TensorDictModule): the world model.
-        lambda_kl (float, optional): the weight of the kl divergence loss. default: 1.0.
-        lambda_reco (float, optional): the weight of the reconstruction loss. default: 1.0.
-        lambda_reward (float, optional): the weight of the reward loss. default: 1.0.
-        reco_loss (str, optional): the reconstruction loss. default to l2.
-        reward_loss (str, optional): the reward loss. default to l2.
-        free_nats (int, optional): the free nats. default: 3.
+        lambda_kl (float, optional): the weight of the kl divergence loss. Default: 1.0.
+        lambda_reco (float, optional): the weight of the reconstruction loss. Default: 1.0.
+        lambda_reward (float, optional): the weight of the reward loss. Default: 1.0.
+        reco_loss (str, optional): the reconstruction loss. Default: "l2".
+        reward_loss (str, optional): the reward loss. Default: "l2".
+        free_nats (int, optional): the free nats. Default: 3.
         delayed_clamp (bool, optional): if True, the KL clamping occurs after
             averaging. If False (default), the kl divergence is clamped to the
             free nats value first and then averaged.
@@ -107,9 +107,9 @@ class DreamerModelLoss(LossModule):
         return (
             TensorDict(
                 {
-                    "loss_model_kl": kl_loss * kl_loss,
-                    "loss_model_reco": reco_loss * reco_loss,
-                    "loss_model_reward": reward_loss * reward_loss,
+                    "loss_model_kl": self.lambda_kl * kl_loss,
+                    "loss_model_reco": self.lambda_reco * reco_loss,
+                    "loss_model_reward": self.lambda_reward * reward_loss,
                 },
                 [],
             ),
@@ -148,11 +148,11 @@ class DreamerActorLoss(LossModule):
         value_model (TensorDictModule): the value model.
         model_based_env (DreamerEnv): the model based environment.
         imagination_horizon (int, optional): The number of steps to unroll the
-            model. default: 15.
-        gamma (float, optional): the gamma discount factor. default: 0.99.
-        lmbda (float, optional): the lambda discount factor factor. default: 0.95
+            model. Default: 15.
+        gamma (float, optional): the gamma discount factor. Default: 0.99.
+        lmbda (float, optional): the lambda discount factor factor. Default: 0.95.
         discount_loss (bool, optional): if True, the loss is discounted with a
-            gamma discount factor. default: False.
+            gamma discount factor. Default: False.
     """
 
     def __init__(
@@ -174,13 +174,13 @@ class DreamerActorLoss(LossModule):
         self.lmbda = lmbda
         self.discount_loss = discount_loss
 
-    def forward(self, tensordict: TensorDict) -> torch.Tensor:
+    def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
         with torch.no_grad():
             tensordict = tensordict.select("state", "belief")
             tensordict = tensordict.reshape(-1)
 
         with hold_out_net(self.model_based_env), set_exploration_mode("random"):
-            tensordict = self.model_based_env.rollout(
+            fake_data = self.model_based_env.rollout(
                 max_steps=self.imagination_horizon,
                 policy=self.actor_model,
                 auto_reset=False,
@@ -188,28 +188,28 @@ class DreamerActorLoss(LossModule):
             )
 
             next_tensordict = step_mdp(
-                tensordict,
+                fake_data,
                 keep_other=True,
             )
             with hold_out_net(self.value_model):
                 next_tensordict = self.value_model(next_tensordict)
 
-        reward = tensordict.get("reward")
+        reward = fake_data.get("reward")
         next_value = next_tensordict.get("state_value")
         lambda_target = self.lambda_target(reward, next_value)
-        tensordict.set("lambda_target", lambda_target.detach())
+        fake_data.set("lambda_target", lambda_target)
 
         if self.discount_loss:
             discount = self.gamma * torch.ones_like(
                 lambda_target, device=tensordict.device
             )
-            discount[:, 0] = 1
-            discount = discount.cumprod(dim=1).detach()
+            discount[..., 0, :] = 1
+            discount = discount.cumprod(dim=-2)
             actor_loss = -(lambda_target * discount).sum((-2, -1)).mean()
         else:
             actor_loss = -lambda_target.sum((-2, -1)).mean()
         loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
-        return loss_tensordict, tensordict.detach()
+        return loss_tensordict, fake_data.detach()
 
     def lambda_target(self, reward: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
         done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
@@ -227,10 +227,10 @@ class DreamerValueLoss(LossModule):
 
     Args:
         value_model (TensorDictModule): the value model.
-        value_loss (str, optional): the loss to use for the value loss. default: "l2".
-        gamma (float, optional): the gamma discount factor. default: 0.99.
+        value_loss (str, optional): the loss to use for the value loss. Default: "l2".
+        gamma (float, optional): the gamma discount factor. Default: 0.99.
         discount_loss (bool, optional): if True, the loss is discounted with a
-            gamma discount factor. default: False.
+            gamma discount factor. Default: False.
     """
 
     def __init__(
@@ -246,16 +246,16 @@ class DreamerValueLoss(LossModule):
         self.gamma = gamma
         self.discount_loss = discount_loss
 
-    def forward(self, tensordict) -> torch.Tensor:
-        lambda_target = tensordict.get("lambda_target")
-        tensordict_select = tensordict.select(*self.value_model.in_keys)
+    def forward(self, fake_data) -> torch.Tensor:
+        lambda_target = fake_data.get("lambda_target")
+        tensordict_select = fake_data.select(*self.value_model.in_keys)
         self.value_model(tensordict_select)
         if self.discount_loss:
             discount = self.gamma * torch.ones_like(
                 lambda_target, device=lambda_target.device
             )
-            discount[:, 0] = 1
-            discount = discount.cumprod(dim=1).detach()
+            discount[..., 0, :] = 1
+            discount = discount.cumprod(dim=-2)
             value_loss = (
                 (
                     discount
@@ -280,4 +280,4 @@ class DreamerValueLoss(LossModule):
             )
 
         loss_tensordict = TensorDict({"loss_value": value_loss}, [])
-        return loss_tensordict, tensordict.detach()
+        return loss_tensordict, fake_data
