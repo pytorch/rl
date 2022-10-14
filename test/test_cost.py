@@ -1812,14 +1812,49 @@ class TestDreamer:
             value_model(td)
         return value_model
 
-    def test_dreamer_world_model(self, device):
+    @pytest.mark.parametrize("lambda_kl", [0, 1.0])
+    @pytest.mark.parametrize("lambda_reco", [0, 1.0])
+    @pytest.mark.parametrize("lambda_reward", [0, 1.0])
+    @pytest.mark.parametrize("reco_loss", ["l2", "smooth_l1"])
+    @pytest.mark.parametrize("reward_loss", ["l2", "smooth_l1"])
+    @pytest.mark.parametrize("free_nats", [-1000, 1000])
+    @pytest.mark.parametrize(
+        "delayed_clamp", [False]
+    )  # hard to test its effect indirectly
+    def test_dreamer_world_model(
+        self,
+        device,
+        lambda_reward,
+        lambda_kl,
+        lambda_reco,
+        reward_loss,
+        reco_loss,
+        delayed_clamp,
+        free_nats,
+    ):
         tensordict = self._create_world_model_data(2, 3, 10, 5).to(device)
         world_model = self._create_world_model_model(10, 5).to(device)
-        loss_module = DreamerModelLoss(world_model).to(device)
+        loss_module = DreamerModelLoss(
+            world_model,
+            lambda_reco=lambda_reco,
+            lambda_kl=lambda_kl,
+            lambda_reward=lambda_reward,
+            reward_loss=reward_loss,
+            reco_loss=reco_loss,
+            delayed_clamp=delayed_clamp,
+            free_nats=free_nats,
+        )
         loss_td, _ = loss_module(tensordict)
-        assert loss_td.get("loss_model_kl") is not None
-        assert loss_td.get("loss_model_reco") is not None
-        assert loss_td.get("loss_model_reward") is not None
+        for loss_str, lmbda in zip(
+            ["loss_model_kl", "loss_model_reco", "loss_model_reward"],
+            [lambda_kl, lambda_reco, lambda_reward],
+        ):
+            assert loss_td.get(loss_str) is not None
+            assert loss_td.get(loss_str).shape == torch.Size([1])
+            if lmbda == 0:
+                assert loss_td.get(loss_str) == 0
+            else:
+                assert loss_td.get(loss_str) > 0
 
         loss = (
             loss_td.get("loss_model_kl")
@@ -1827,19 +1862,28 @@ class TestDreamer:
             + loss_td.get("loss_model_reward")
         )
         loss.backward()
-        grad_is_zero = True
+        grad_total = 0.0
         for name, param in loss_module.named_parameters():
             if param.grad is not None:
                 valid_gradients = not (
                     torch.isnan(param.grad).any() or torch.isinf(param.grad).any()
                 )
-                grad_is_zero = (
-                    grad_is_zero and torch.sum(torch.pow((param.grad), 2)) == 0
-                )
                 if not valid_gradients:
                     raise ValueError(f"Invalid gradients for {name}")
-        if grad_is_zero:
-            raise ValueError("Gradients are zero")
+                gsq = param.grad.pow(2).sum()
+                grad_total += gsq.item()
+        grad_is_zero = grad_total == 0
+        if free_nats < 0:
+            lambda_kl_corr = lambda_kl
+        else:
+            # we expect the kl loss to have 0 grad
+            lambda_kl_corr = 0
+        if grad_is_zero and (lambda_kl_corr or lambda_reward or lambda_reco):
+            raise ValueError(
+                f"Gradients are zero: lambdas={(lambda_kl_corr, lambda_reward, lambda_reco)}"
+            )
+        elif grad_is_zero:
+            assert not (lambda_kl_corr or lambda_reward or lambda_reco)
         loss_module.zero_grad()
 
     def test_dreamer_actor(self, device):

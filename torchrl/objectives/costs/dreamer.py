@@ -92,9 +92,9 @@ class DreamerModelLoss(LossModule):
         return (
             TensorDict(
                 {
-                    "loss_model_kl": kl_loss * kl_loss,
-                    "loss_model_reco": reco_loss * reco_loss,
-                    "loss_model_reward": reward_loss * reward_loss,
+                    "loss_model_kl": self.lambda_kl * kl_loss,
+                    "loss_model_reco": self.lambda_reco * reco_loss,
+                    "loss_model_reward": self.lambda_reward * reward_loss,
                 },
                 [],
             ),
