@@ -89,7 +89,10 @@ def make_env_transforms(
         if cfg.use_r3m:
             env.append_transform(
                 R3MTransform(
-                    "resnet50", keys_in=["next_pixels"], keys_out=["next_r3m_vec"]
+                    "resnet50",
+                    keys_in=["next_pixels"],
+                    keys_out=["next_r3m_vec"],
+                    download=True,
                 )
             )
         else:
