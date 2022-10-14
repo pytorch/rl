@@ -451,11 +451,25 @@ class TestExplorationConfigs:
         OrnsteinUhlenbeckProcessWrapper,
     )
 
-    wrapper_map = {
+    _WRAPPER_MAP = {
         "e_greedy": EGreedyWrapper,
         "additive_gaussian": AdditiveGaussianWrapper,
         "ou_process": OrnsteinUhlenbeckProcessWrapper,
     }
+
+    def _make_env(self):
+        import torchrl.envs.transforms as T
+        from torchrl.envs import TransformedEnv
+        from torchrl.envs.libs.gym import GymEnv
+
+        transforms = T.Compose(
+            T.ObservationNorm(0, 1, ["next_observation"]),
+            T.RewardScaling(0, 1, ["reward"]),
+            T.CatTensors(),
+            T.DoubleToFloat(["next_observation_vector"]),
+        )
+        env = TransformedEnv(GymEnv("HalfCheetah-v4"), transforms)
+        return env
 
     @pytest.mark.parametrize("network", ["linear", "noisy_linear"])
     @pytest.mark.parametrize(
@@ -463,7 +477,7 @@ class TestExplorationConfigs:
     )
     def test_exploration(self, network, wrapper):
         additional_config = [
-            "env=cartpole",
+            "env=halfcheetah",
             "transforms=state",
             "model=sac/discrete",
             "network=sac/independent_state",
@@ -478,19 +492,16 @@ class TestExplorationConfigs:
             exploration_config += [f"exploration={network}"]
 
         cfg = hydra.compose("config", overrides=exploration_config + additional_config)
-        env = instantiate(cfg.env)
-        transforms = [instantiate(transform) for transform in cfg.transforms]
-        for t in transforms:
-            env.append_transform(t)
+        env = self._make_env()
         model_params = instantiate(cfg.model)
         net_partial = instantiate(cfg.network)
         actor, qvalue, value = make_model_sac(net_partial, model_params, env)
         actor(env.reset())
         assert actor.module.module.layer_class is self._LAYER_CLASS_DICT[network]
 
-        if cfg.exploration.wrapper is not None:
-            actor_explore = instantiate(cfg.exploration.wrapper)(actor)
-            assert type(actor_explore) is self.wrapper_map[wrapper]
+        if cfg.exploration.exploration_wrapper is not None:
+            actor_explore = instantiate(cfg.exploration.exploration_wrapper)(actor)
+            assert type(actor_explore) is self._WRAPPER_MAP[wrapper]
         else:
             actor_explore = actor
 

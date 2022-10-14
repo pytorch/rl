@@ -5,6 +5,6 @@ defaults:
   - replay_buffer: circular
   - model: dqn/distributional
   - network: dqn/pixels
-  - exploration: noisy_linear
+  - exploration: linear
   - loss: dqn_loss
 num_workers: 0
