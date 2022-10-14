@@ -517,53 +517,149 @@ class TestExplorationConfigs:
         value(tensordict)
 
 
+from torchrl.modules import (
+    DuelingMlpDQNet,
+    QValueActor,
+    ProbabilisticActor,
+    MLP,
+    NormalParamWrapper,
+    ValueOperator,
+    DdpgMlpActor,
+    DdpgMlpQNet,
+)
+
+
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestLossConfigs:
     import torchrl.objectives.costs as costs
 
-    model_specific_config = {
-        "ddpg": ["model=ddpg/basic", "network=ddpg/state"],
-        "dqn": ["model=dqn/regular", "network=dqn/state"],
-        "ppo": ["model=ppo/discrete", "network=ppo/independent_state"],
-        "redq": ["model=redq/discrete", "network=redq/independent_state"],
-        "sac": ["model=sac/discrete", "network=sac/independent_state"],
-    }
+    def _make_actor_dqn(self, env):
+        network = DuelingMlpDQNet(
+            out_features=list(env.action_spec.shape),
+            mlp_kwargs_output={"num_cells": 10, "layer_class": "linear"},
+        )
+        actor = QValueActor(
+            module=network, in_keys=["observation_vector"], spec=env.action_spec
+        )
+        return actor
+
+    def _make_model_ppo(self, env):
+        td_module = TensorDictModule(
+            module=NormalParamWrapper(
+                MLP(num_cells=[10], out_features=2 * env.action_spec.shape[-1])
+            ),
+            in_keys=["observation_vector"],
+            out_keys=["loc", "scale"],
+        )
+        policy_operator = ProbabilisticActor(
+            module=td_module,
+            dist_param_keys=["loc", "scale"],
+            spec=env.action_spec,
+            distribution_class="TanhNormal",
+        )
+        value_operator = ValueOperator(
+            MLP(num_cells=[10], out_features=1), in_keys=["observation_vector"]
+        )
+        return policy_operator, value_operator
+
+    def _make_model_sac(self, env):
+        td_module = TensorDictModule(
+            module=NormalParamWrapper(
+                MLP(num_cells=[10], out_features=2 * env.action_spec.shape[-1])
+            ),
+            in_keys=["observation_vector"],
+            out_keys=["loc", "scale"],
+        )
+        policy_operator = ProbabilisticActor(
+            module=td_module,
+            dist_param_keys=["loc", "scale"],
+            spec=env.action_spec,
+            distribution_class="TanhNormal",
+        )
+        qvalue_operator = ValueOperator(
+            MLP(num_cells=[10], out_features=1),
+            in_keys=["action", "observation_vector"],
+        )
+        value_operator = ValueOperator(
+            MLP(num_cells=[10], out_features=1), in_keys=["observation_vector"]
+        )
+        return policy_operator, qvalue_operator, value_operator
+
+    def _make_model_ddpg(self, env):
+        td_module = TensorDictModule(
+            module=DdpgMlpActor(
+                mlp_net_kwargs={"num_cells": 10}, out_features=env.action_spec.shape[-1]
+            ),
+            in_keys=["observation_vector"],
+            out_keys=["param"],
+        )
+        policy_operator = ProbabilisticActor(
+            module=td_module,
+            dist_param_keys=["param"],
+            spec=env.action_spec,
+            distribution_class="TanhDelta",
+        )
+        qvalue_operator = ValueOperator(
+            DdpgMlpQNet(), in_keys=["observation_vector", "action"]
+        )
+        return policy_operator, qvalue_operator
+
+    def _make_model_redq(self, env):
+        td_module = TensorDictModule(
+            module=NormalParamWrapper(
+                MLP(num_cells=[10], out_features=2 * env.action_spec.shape[-1])
+            ),
+            in_keys=["observation_vector"],
+            out_keys=["loc", "scale"],
+        )
+        policy_operator = ProbabilisticActor(
+            module=td_module,
+            dist_param_keys=["loc", "scale"],
+            spec=env.action_spec,
+            distribution_class="TanhNormal",
+        )
+        qvalue_operator = ValueOperator(
+            MLP(num_cells=[10], out_features=1),
+            in_keys=["action", "observation_vector"],
+        )
+        return policy_operator, qvalue_operator
 
     @pytest.mark.parametrize("model", ["ddpg", "dqn", "ppo", "redq", "sac"])
     def test_model_loss(self, model):
-        config = ["env=halfcheetah", "transforms=state", f"loss={model}_loss"]
-        config += self.model_specific_config[model]
+        config = [f"loss={model}_loss"]
 
         cfg = hydra.compose("config", overrides=config)
         env = make_halfcheetah_env_with_state_transforms()
-        model_params = instantiate(cfg.model)
-        net_partial = instantiate(cfg.network)
         loss_partial = instantiate(cfg.loss)
         if model == "ddpg":
-            actor, qvalue = make_model_ddpg(net_partial, env)
+            actor, qvalue = self._make_model_ddpg(env)
             qvalue(actor(env.reset()))
             loss = loss_partial(actor, qvalue)
         elif model == "dqn":
-            actor = make_actor_dqn(net_partial, model_params, env, None)
+            actor = self._make_actor_dqn(env)
             actor(env.reset())
             loss = loss_partial(actor)
         elif model == "ppo":
-            actorcritic = make_model_ppo(net_partial, model_params, env)
-            actor, critic = (
-                actorcritic.get_policy_operator(),
-                actorcritic.get_value_operator(),
-            )
+            actor, critic = self._make_model_ppo(env)
             critic(actor(env.reset()))
             loss = loss_partial(actor, critic)
         elif model == "redq":
-            actor, qvalue = make_model_redq(net_partial, model_params, env)
+            actor, qvalue = self._make_model_redq(env)
             qvalue(actor(env.reset()))
             loss = loss_partial(actor, qvalue)
         else:
-            actor, qvalue, value = make_model_sac(net_partial, model_params, env)
+            actor, qvalue, value = self._make_model_sac(env)
             value(qvalue(actor(env.reset())))
             loss = loss_partial(actor, qvalue, value)
         assert type(loss) is getattr(self.costs, f"{model.upper()}Loss")
+
+        rollout = env.rollout(3)
+        assert all(key in rollout.keys() for key in actor.in_keys), (
+            actor.in_keys,
+            rollout.keys(),
+        )
+        tensordict = env.rollout(3, actor)
+        assert env.action_spec.is_in(tensordict["action"]), env.action_spec
 
 
 if __name__ == "__main__":
