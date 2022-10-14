@@ -14,7 +14,7 @@ policy_network:
     _partial_: True
     in_keys: ${network.in_keys_policy_module}
     out_keys: ${model.policy_out_keys}
-    wrapper: ${model.policy_wrapper}
+    wrapper: ${model.policy_net_wrapper}
     partial_module:
       _target_: torchrl.modules.DdpgCnnActor
       _partial_: True  # misses out_features

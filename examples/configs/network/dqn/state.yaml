@@ -4,5 +4,5 @@ network:
   mlp_kwargs_feature: {}
   mlp_kwargs_output:
     num_cells: 512
-    layer_class: linear
+    layer_class: ${exploration.network}
 in_keys: ["observation_vector"]

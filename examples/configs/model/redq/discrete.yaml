@@ -1,4 +1,4 @@
-policy_wrapper:
+policy_net_wrapper: null
 policy_out_keys: ["logits"]
 
 default_interaction_mode: "random"
