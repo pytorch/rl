@@ -25,6 +25,7 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     RandomPolicy,
 )
+from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     CompositeSpec,
     NdUnboundedContinuousTensorSpec,
@@ -32,8 +33,8 @@ from torchrl.data import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
+from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import (
     Actor,
@@ -293,6 +294,32 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
     assert_allclose_td(b2c, b2)
 
     ccollector.shutdown()
+
+
+@pytest.mark.skipif(not _has_gym, reason="gym library is not installed")
+def test_collector_env_reset():
+    torch.manual_seed(0)
+    env = SerialEnv(2, lambda: GymEnv("ALE/Pong-v5", frame_skip=4))
+    # env = SerialEnv(3, lambda: GymEnv("CartPole-v1", frame_skip=4))
+    env.set_seed(0)
+    collector = SyncDataCollector(
+        env, total_frames=10000, frames_per_batch=10000, split_trajs=False
+    )
+    for data in collector:
+        continue
+    steps = data["step_count"][..., 1:, :]
+    done = data["done"][..., :-1, :]
+    # we don't want just one done
+    assert done.sum() > 3
+    # check that after a done, the next step count is always 1
+    assert (steps[done] == 1).all()
+    # check that if the env is not done, the next step count is > 1
+    assert (steps[~done] > 1).all()
+    # check that if step is 1, then the env was done before
+    assert (steps == 1)[done].all()
+    # check that split traj has a minimum total reward of -21 (for pong only)
+    data = split_trajectories(data)
+    assert data["reward"].sum(-2).min() == -21
 
 
 @pytest.mark.parametrize("num_env", [1, 3])
