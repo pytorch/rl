@@ -194,10 +194,57 @@ class Trainer:
             )
         self._modules[module_name] = module
 
+
+    def _get_state(self):
+        if _CKPT_BACKEND == "torchsnapshot":
+            state = StateDict(
+                collected_frames=self.collected_frames,
+                _last_log=self._last_log,
+                _last_save=self._last_save,
+                _optim_count=self._optim_count,
+            )
+        else:
+            state = OrderedDict(
+                collected_frames=self.collected_frames,
+                _last_log=self._last_log,
+                _last_save=self._last_save,
+                _optim_count=self._optim_count,
+            )
+        return state
+
     @property
     def app_state(self):
-        self._app_state = {"state": self}
+        self._app_state = {
+            "state": StateDict(**self._get_state()),
+            "collector": self.collector,
+            "loss_module": self.loss_module,
+            **{k: item for k, item in self._modules.items()},
+        }
         return self._app_state
+
+    def state_dict(self) -> Dict:
+        state = self._get_state()
+        state_dict = OrderedDict(
+            collector=self.collector.state_dict(),
+            loss_module=self.loss_module.state_dict(),
+            state=state,
+            **{k: item.state_dict() for k, item in self._modules.items()},
+        )
+        return state_dict
+
+    def load_state_dict(self, state_dict: Dict) -> None:
+        model_state_dict = state_dict["loss_module"]
+        collector_state_dict = state_dict["collector"]
+
+        self.loss_module.load_state_dict(model_state_dict)
+        self.collector.load_state_dict(collector_state_dict)
+        for key, item in self._modules.items():
+            item.load_state_dict(state_dict[key])
+
+        self.collected_frames = state_dict["state"]["collected_frames"]
+        self._last_log = state_dict["state"]["_last_log"]
+        self._last_save = state_dict["state"]["_last_save"]
+        self._optim_count = state_dict["state"]["_optim_count"]
 
     def _save_trainer(self) -> None:
         if _CKPT_BACKEND == "torchsnapshot":
@@ -237,55 +284,7 @@ class Trainer:
         torch.manual_seed(seed)
         np.random.seed(seed)
 
-    def state_dict(self) -> Dict:
-        state_dict = OrderedDict(
-            collector=self.collector.state_dict(),
-            loss_module=self.loss_module.state_dict(),
-            collected_frames=self.collected_frames,
-            _last_log=self._last_log,
-            _last_save=self._last_save,
-            _optim_count=self._optim_count,
-            _batch_process_ops=_get_list_state_dict(self._batch_process_ops),
-            _post_steps_ops=_get_list_state_dict(self._post_steps_ops),
-            _post_steps_log_ops=_get_list_state_dict(self._post_steps_log_ops),
-            _pre_steps_log_ops=_get_list_state_dict(self._pre_steps_log_ops),
-            _post_optim_log_ops=_get_list_state_dict(self._post_optim_log_ops),
-            _pre_optim_ops=_get_list_state_dict(self._pre_optim_ops),
-            _post_loss_ops=_get_list_state_dict(self._post_loss_ops),
-            _process_optim_batch_ops=_get_list_state_dict(
-                self._process_optim_batch_ops
-            ),
-            _post_optim_ops=_get_list_state_dict(self._post_optim_ops),
-            **{k: item.state_dict() for k, item in self._modules.items()},
-        )
-        return state_dict
 
-    def load_state_dict(self, state_dict: Dict) -> None:
-        model_state_dict = state_dict["loss_module"]
-        collector_state_dict = state_dict["collector"]
-        self.loss_module.load_state_dict(model_state_dict)
-        self.collector.load_state_dict(collector_state_dict)
-        self.collected_frames = state_dict["collected_frames"]
-        self._last_log = state_dict["_last_log"]
-        self._last_save = state_dict["_last_save"]
-        self._optim_count = state_dict["_optim_count"]
-        _load_list_state_dict(state_dict["_batch_process_ops"], self._batch_process_ops)
-        _load_list_state_dict(state_dict["_post_steps_ops"], self._post_steps_ops)
-        _load_list_state_dict(
-            state_dict["_post_steps_log_ops"], self._post_steps_log_ops
-        )
-        _load_list_state_dict(state_dict["_pre_steps_log_ops"], self._pre_steps_log_ops)
-        _load_list_state_dict(
-            state_dict["_post_optim_log_ops"], self._post_optim_log_ops
-        )
-        _load_list_state_dict(state_dict["_pre_optim_ops"], self._pre_optim_ops)
-        _load_list_state_dict(state_dict["_post_loss_ops"], self._post_loss_ops)
-        _load_list_state_dict(
-            state_dict["_process_optim_batch_ops"], self._process_optim_batch_ops
-        )
-        _load_list_state_dict(state_dict["_post_optim_ops"], self._post_optim_ops)
-        for key, item in self._modules.items():
-            item.load_state_dict(state_dict[key])
 
     @property
     def collector(self) -> _DataCollector:

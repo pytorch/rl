@@ -110,7 +110,6 @@ class ListStorage(Storage):
         return len(self._storage)
 
     def state_dict(self) -> Dict[str, Any]:
-        print("list storage", self._storage)
         return {
             "_storage": [
                 elt if not hasattr(elt, "state_dict") else elt.state_dict()
@@ -119,8 +118,8 @@ class ListStorage(Storage):
         }
 
     def load_state_dict(self, state_dict):
-        print("list storage -- losd", state_dict)
         _storage = state_dict["_storage"]
+        self._storage = []
         for elt in _storage:
             if isinstance(elt, torch.Tensor):
                 self._storage.append(elt)
@@ -141,6 +140,11 @@ class LazyTensorStorage(Storage):
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is `torch.device("cpu")`.
     """
+
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._storage = None
+        return super().__new__(cls)
 
     def __init__(self, max_size, scratch_dir=None, device=None):
         super().__init__(max_size)
@@ -264,11 +268,6 @@ class LazyMemmapStorage(LazyTensorStorage):
             stored and sent. Default is `torch.device("cpu")`.
     """
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._storage = None
-        return super().__new__(cls)
-
     def __init__(self, max_size, scratch_dir=None, device=None):
         super().__init__(max_size)
         self.initialized = False
@@ -375,6 +374,8 @@ def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
             "the checkpointing backend is set to torchsnapshot but the library is not installed. Consider installing the library or switch to another backend. "
             f"Supported backends are {_CKPT_BACKEND.backends}"
         )
+    if isinstance(mem_map_tensor, torch.Tensor):
+        return mem_map_tensor
     if _CKPT_BACKEND == "torchsnapshot":
         # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor
         # as a Tensor for saving and loading purposes. This doesn't incur any copy.

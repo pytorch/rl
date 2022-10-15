@@ -319,11 +319,11 @@ class TestRB:
     @pytest.mark.parametrize(
         "backend",
         [
-            "torch",
             "torchsnapshot",
+            "torch",
         ],
     )
-    @pytest.mark.parametrize("re_init", [True, False])
+    @pytest.mark.parametrize("re_init", [True, False, ])
     def test_rb_trainer_save(
         self, prioritized, storage_type, backend, re_init, S=10, batch=11, N=3
     ):
@@ -398,17 +398,18 @@ class TestRB:
             if prioritized:
                 td_out.set(replay_buffer.priority_key, torch.rand(N))
             trainer._post_loss_hook(td_out)
+            # print("trainer1 (a)", trainer.state_dict()["replay_buffer"]["replay_buffer"]["_storage"]["_storage"])
             trainer.save_trainer(True)
-            print(trainer.state_dict()["replay_buffer"]["replay_buffer"]["_storage"]["_storage"])
+            # print("trainer1", trainer.state_dict()["replay_buffer"]["replay_buffer"]["_storage"]["_storage"])
 
             trainer2 = mocking_trainer()
             storage2, _ = make_storage()
             if prioritized:
                 replay_buffer2 = TensorDictPrioritizedReplayBuffer(
-                    S, 1.1, 0.9, storage=storage2
+                    S, 1.1, 0.9, storage=storage2, collate_fn=collate_fn
                 )
             else:
-                replay_buffer2 = TensorDictReplayBuffer(S, storage=storage2)
+                replay_buffer2 = TensorDictReplayBuffer(S, storage=storage2, collate_fn=collate_fn)
             N = 9
             rb_trainer2 = ReplayBufferTrainer(
                 replay_buffer=replay_buffer2, batch_size=N
@@ -428,8 +429,8 @@ class TestRB:
                 )  # trainer.app_state["state"]["replay_buffer.replay_buffer._storage._storage"]
                 td2 = trainer2._modules["replay_buffer"].replay_buffer._storage._storage
                 if storage_type == "list":
-                    print(td1[0], td2[0])
-                    print(td1[1], td2[1])
+                    # print(td1[0], td2[0])
+                    # print(td1[1], td2[1])
                     assert all([(_td1 == _td2).all() for _td1, _td2 in zip(td1, td2)])
                     assert all(
                         [(_td1 is not _td2).all() for _td1, _td2 in zip(td1, td2)]

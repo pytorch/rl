@@ -170,8 +170,8 @@ class ReplayBuffer:
         }
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        self._storage.load_state_dict(state_dict.pop("_storage"))
-        self._cursor = state_dict.pop("_cursor")
+        self._storage.load_state_dict(state_dict["_storage"])
+        self._cursor = state_dict["_cursor"]
 
     @property
     def capacity(self) -> int:
