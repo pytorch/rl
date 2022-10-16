@@ -585,7 +585,7 @@ class SyncDataCollector(_DataCollector):
             else:
                 self._tensordict.zero_()
 
-            self._tensordict.update(self.env.reset(), inplace=True)
+            self.env.reset(self._tensordict)
             if self._tensordict.get("done").any():
                 raise RuntimeError(
                     f"Got {sum(self._tensordict.get('done'))} done envs after reset."
