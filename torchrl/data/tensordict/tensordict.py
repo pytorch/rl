@@ -725,11 +725,10 @@ dtype=torch.float32)},
 
         """
 
-        if not isinstance(other, (TensorDictBase, float, int)):
-            raise TypeError(
-                f"TensorDict comparision requires both objects to be "
-                f"TensorDictBase subclass, int or float, got {type(other)}"
-            )
+        if not isinstance(other, (TensorDictBase, dict, float, int)):
+            return False
+        if not isinstance(other, TensorDictBase) and isinstance(other, dict):
+            other = make_tensordict(**other, batch_size=self.batch_size)
         if not isinstance(other, TensorDictBase):
             return TensorDict(
                 {key: value != other for key, value in self.items()},
@@ -756,11 +755,10 @@ dtype=torch.float32)},
             tensors of the same shape as the original tensors.
 
         """
-        if not isinstance(other, (TensorDictBase, float, int)):
-            raise TypeError(
-                f"TensorDict comparision requires both objects to be "
-                f"TensorDictBase subclass, got {type(other)}"
-            )
+        if not isinstance(other, (TensorDictBase, dict, float, int)):
+            return False
+        if not isinstance(other, TensorDictBase) and isinstance(other, dict):
+            other = make_tensordict(**other, batch_size=self.batch_size)
         if not isinstance(other, TensorDictBase):
             return TensorDict(
                 {key: value == other for key, value in self.items()},
