@@ -35,6 +35,9 @@ from torchrl.modules.tensordict_module.exploration import (
 )
 from torchrl.trainers.loggers.csv import CSVLogger
 from torchrl.trainers.loggers.mlflow import MLFlowLogger, _has_mlflow
+
+if _has_mlflow:
+    import mlflow
 from torchrl.trainers.loggers.tensorboard import TensorboardLogger, _has_tb
 from torchrl.trainers.loggers.wandb import WandbLogger, _has_wandb
 
@@ -734,6 +737,11 @@ class TestLossConfigs:
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestLoggerConfigs:
+    @pytest.fixture
+    def mlflow_teardown(self):
+        yield
+        mlflow.end_run()
+
     def test_csv_logger(self, tmp_path):
         config = ["logger=csv", f"++logger.log_dir={tmp_path}"]
         cfg = hydra.compose("config", overrides=config)
@@ -741,7 +749,7 @@ class TestLoggerConfigs:
         assert isinstance(logger, CSVLogger)
 
     @pytest.mark.skipif(not _has_mlflow, reason="No mlflow found")
-    def test_mlflow_logger(self, tmp_path):
+    def test_mlflow_logger(self, tmp_path, mlflow_teardown):
         config = ["logger=mlflow", f"++logger.tracking_uri={tmp_path}"]
         cfg = hydra.compose("config", overrides=config)
         logger = instantiate(cfg.logger)
