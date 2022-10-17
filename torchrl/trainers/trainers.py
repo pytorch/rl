@@ -667,13 +667,18 @@ class RewardNormalizer:
     """
 
     def __init__(
-        self, decay: float = 0.999, scale: float = 1.0, log_pbar: bool = False
+        self,
+        decay: float = 0.999,
+        scale: float = 1.0,
+        eps: float = 1e-4,
+        log_pbar: bool = False,
     ):
         self._normalize_has_been_called = False
         self._update_has_been_called = False
         self._reward_stats = OrderedDict()
         self._reward_stats["decay"] = decay
         self.scale = scale
+        self.eps = eps
 
     @torch.no_grad()
     def update_reward_stats(self, batch: TensorDictBase) -> None:
@@ -704,7 +709,7 @@ class RewardNormalizer:
         else:
             var = self._reward_stats["var"] = torch.zeros_like(sum)
 
-        self._reward_stats["std"] = var.clamp_min(1e-6).sqrt()
+        self._reward_stats["std"] = var.clamp_min(self.eps).sqrt()
         self._update_has_been_called = True
 
     def normalize_reward(self, tensordict: TensorDictBase) -> TensorDictBase:
