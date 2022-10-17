@@ -25,20 +25,16 @@ except ImportError:
 from torch import nn
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import (
-    NdUnboundedContinuousTensorSpec,
-    NdBoundedTensorSpec,
     CompositeSpec,
+    NdBoundedTensorSpec,
+    NdUnboundedContinuousTensorSpec,
 )
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import (
-    TensorDictModule,
-    TanhNormal,
-    NormalParamWrapper,
-)
+from torchrl.modules import NormalParamWrapper, TanhNormal, TensorDictModule
 from torchrl.modules.tensordict_module.probabilistic import (
     ProbabilisticTensorDictModule,
 )
-from torchrl.modules.tensordict_module.sequence import TensorDictSequence
+from torchrl.modules.tensordict_module.sequence import TensorDictSequential
 
 
 class TestTDModule:
@@ -124,7 +120,9 @@ class TestTDModule:
         else:
             raise NotImplementedError
         spec = (
-            CompositeSpec(out=spec, loc=None, scale=None) if spec is not None else None
+            CompositeSpec(out=spec, **{out_key: None for out_key in out_keys})
+            if spec is not None
+            else None
         )
 
         kwargs = {"distribution_class": TanhNormal}
@@ -147,7 +145,7 @@ class TestTDModule:
                     dist_param_keys=dist_param_keys,
                     out_key_sample=["out"],
                     safe=safe,
-                    **kwargs
+                    **kwargs,
                 )
             return
         else:
@@ -157,7 +155,7 @@ class TestTDModule:
                 dist_param_keys=dist_param_keys,
                 out_key_sample=["out"],
                 safe=safe,
-                **kwargs
+                **kwargs,
             )
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -263,7 +261,7 @@ class TestTDModule:
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
-                    **kwargs
+                    **kwargs,
                 )
             return
         else:
@@ -273,7 +271,7 @@ class TestTDModule:
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
-                **kwargs
+                **kwargs,
             )
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
@@ -326,7 +324,7 @@ class TestTDModule:
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
-                    **kwargs
+                    **kwargs,
                 )
             return
         else:
@@ -336,7 +334,7 @@ class TestTDModule:
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
-                **kwargs
+                **kwargs,
             )
         tensordict_module, (
             params,
@@ -445,7 +443,7 @@ class TestTDModule:
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
-                    **kwargs
+                    **kwargs,
                 )
             return
         else:
@@ -455,7 +453,7 @@ class TestTDModule:
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
-                **kwargs
+                **kwargs,
             )
 
         td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
@@ -508,7 +506,7 @@ class TestTDModule:
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
-                    **kwargs
+                    **kwargs,
                 )
             return
         else:
@@ -518,7 +516,7 @@ class TestTDModule:
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
-                **kwargs
+                **kwargs,
             )
         tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers()
 
@@ -601,7 +599,7 @@ class TestTDModule:
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0)
-        td_repeat = td.expand(10).clone()
+        td_repeat = td.expand(10, *td.batch_size).clone()
         td_out = tdmodule(td_repeat, params=params, vmap=(0, 0))
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
@@ -655,7 +653,7 @@ class TestTDModule:
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
-                    **kwargs
+                    **kwargs,
                 )
             return
         else:
@@ -665,7 +663,7 @@ class TestTDModule:
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
-                **kwargs
+                **kwargs,
             )
 
         # vmap = True
@@ -693,7 +691,7 @@ class TestTDModule:
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0)
-        td_repeat = td.expand(10).clone()
+        td_repeat = td.expand(10, *td.batch_size).clone()
         td_out = tdmodule(td_repeat, params=params, vmap=(0, 0))
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
@@ -746,7 +744,7 @@ class TestTDModule:
                     dist_param_keys=["loc", "scale"],
                     out_key_sample=["out"],
                     safe=safe,
-                    **kwargs
+                    **kwargs,
                 )
             return
         else:
@@ -756,7 +754,7 @@ class TestTDModule:
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
-                **kwargs
+                **kwargs,
             )
         tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers()
 
@@ -785,7 +783,7 @@ class TestTDModule:
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0, 0)
-        td_repeat = td.expand(10).clone()
+        td_repeat = td.expand(10, *td.batch_size).clone()
         td_out = tdmodule(td_repeat, params=params, buffers=buffers, vmap=(0, 0, 0))
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
@@ -808,7 +806,7 @@ class TestTDSequence:
         module3 = TensorDictModule(
             nn.Linear(3, 4), in_keys=["foo1", "key3"], out_keys=["key2"]
         )
-        seq = TensorDictSequence(module1, module2, module3)
+        seq = TensorDictSequential(module1, module2, module3)
         assert set(seq.in_keys) == {"key1", "key2", "key3"}
         assert set(seq.out_keys) == {"foo1", "key1", "key2"}
 
@@ -859,9 +857,9 @@ class TestTDSequence:
                 in_keys=["hidden"],
                 out_keys=["out"],
                 safe=False,
-                **kwargs
+                **kwargs,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -947,9 +945,9 @@ class TestTDSequence:
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=False,
-                **kwargs
+                **kwargs,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1024,7 +1022,7 @@ class TestTDSequence:
                 out_keys=["out"],
                 safe=safe,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1109,9 +1107,9 @@ class TestTDSequence:
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
-                **kwargs
+                **kwargs,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1197,7 +1195,7 @@ class TestTDSequence:
                 out_keys=["out"],
                 safe=safe,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1294,9 +1292,9 @@ class TestTDSequence:
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
-                **kwargs
+                **kwargs,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1370,9 +1368,9 @@ class TestTDSequence:
                 dist_param_keys=["loc", "scale"],
                 out_key_sample=["out"],
                 safe=safe,
-                **kwargs
+                **kwargs,
             )
-            tdmodule = TensorDictSequence(tdmodule1, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
 
         tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers()
 
@@ -1440,7 +1438,7 @@ class TestTDSequence:
                 out_keys=["out"],
                 safe=safe,
             )
-            tdmodule = TensorDictSequence(tdmodule1, dummy_tdmodule, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -1481,7 +1479,7 @@ class TestTDSequence:
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0)
-        td_repeat = td.expand(10).clone()
+        td_repeat = td.expand(10, *td.batch_size).clone()
         td_out = tdmodule(td_repeat, params=params, vmap=(0, 0))
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
@@ -1541,9 +1539,9 @@ class TestTDSequence:
                 out_key_sample=["out"],
                 dist_param_keys=["loc", "scale"],
                 safe=safe,
-                **kwargs
+                **kwargs,
             )
-            tdmodule = TensorDictSequence(tdmodule1, tdmodule2)
+            tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
 
         # vmap = True
         params = [p.repeat(10, *[1 for _ in p.shape]) for p in params]
@@ -1570,7 +1568,7 @@ class TestTDSequence:
             assert ((td_out.get("out") < 0.1) | (td_out.get("out") > -0.1)).all()
 
         # vmap = (0, 0)
-        td_repeat = td.expand(10).clone()
+        td_repeat = td.expand(10, *td.batch_size).clone()
         td_out = tdmodule(td_repeat, params=params, vmap=(0, 0))
         assert td_out is not td
         assert td_out.shape == torch.Size([10, 3])
@@ -1593,7 +1591,7 @@ class TestTDSequence:
             in_keys=["hidden"],
             out_keys=["out"],
         )
-        td_module = TensorDictSequence(td_module_1, td_module_2)
+        td_module = TensorDictSequential(td_module_1, td_module_2)
 
         if functional:
             td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
@@ -1677,7 +1675,7 @@ class TestTDSequence:
             out_key_sample=["out"],
             dist_param_keys=["loc", "scale"],
             safe=True,
-            **kwargs
+            **kwargs,
         )
         tdmodule3 = ProbabilisticTensorDictModule(
             fnet3,
@@ -1685,9 +1683,9 @@ class TestTDSequence:
             out_key_sample=["out"],
             dist_param_keys=["loc", "scale"],
             safe=True,
-            **kwargs
+            **kwargs,
         )
-        tdmodule = TensorDictSequence(
+        tdmodule = TensorDictSequential(
             tdmodule1, tdmodule2, tdmodule3, partial_tolerant=True
         )
 
@@ -1753,7 +1751,7 @@ class TestTDSequence:
             in_keys=["hidden"],
             out_keys=["out"],
         )
-        td_module = TensorDictSequence(td_module_1, td_module_2)
+        td_module = TensorDictSequential(td_module_1, td_module_2)
 
         td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
         sub_seq_1 = td_module.select_subsequence(out_keys=["hidden"])

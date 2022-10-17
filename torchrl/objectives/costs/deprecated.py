@@ -8,7 +8,7 @@ from torch import Tensor
 
 from torchrl.data import TensorDict
 from torchrl.data.tensordict.tensordict import TensorDictBase
-from torchrl.envs.utils import set_exploration_mode, step_tensordict
+from torchrl.envs.utils import set_exploration_mode, step_mdp
 from torchrl.modules import TensorDictModule
 from torchrl.objectives import (
     hold_out_params,
@@ -205,7 +205,7 @@ class REDQLoss_deprecated(LossModule):
                 b[selected_models_idx] for b in self.target_qvalue_network_buffers
             ]
 
-            next_td = step_tensordict(tensordict).select(
+            next_td = step_mdp(tensordict).select(
                 *self.actor_network.in_keys
             )  # next_observation ->
             # observation

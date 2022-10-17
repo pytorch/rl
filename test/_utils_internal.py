@@ -8,7 +8,7 @@ import os
 # Get relative file path
 # this returns relative path from current file.
 import torch.cuda
-from torchrl import seed_generator
+from torchrl._utils import seed_generator
 
 
 def get_relative_path(curr_file, *path_components):

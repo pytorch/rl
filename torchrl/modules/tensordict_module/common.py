@@ -17,6 +17,13 @@ from typing import (
 )
 from warnings import warn
 
+try:
+    import functorch
+
+    _has_functorch = True
+except ImportError:
+    _has_functorch = False
+
 import torch
 
 from torchrl.modules import functional_modules
@@ -47,6 +54,10 @@ from torchrl.data import (
     CompositeSpec,
 )
 from torchrl.data.tensordict.tensordict import TensorDictBase
+from torchrl.modules.functional_modules import (
+    FunctionalModule as rlFunctionalModule,
+    FunctionalModuleWithBuffers as rlFunctionalModuleWithBuffers,
+)
 
 __all__ = [
     "TensorDictModule",
@@ -201,15 +212,23 @@ class TensorDictModule(nn.Module):
         elif spec is not None and not isinstance(spec, CompositeSpec):
             if len(self.out_keys) > 1:
                 raise RuntimeError(
-                    f"got mode than one out_key for the TensorDictModule: {self.out_keys},\nbut only one spec. "
+                    f"got more than one out_key for the TensorDictModule: {self.out_keys},\nbut only one spec. "
                     "Consider using a CompositeSpec object or no spec at all."
                 )
             spec = CompositeSpec(**{self.out_keys[0]: spec})
-        if spec and len(spec) < len(self.out_keys):
+        elif spec is None:
+            spec = CompositeSpec()
+
+        if set(spec.keys()) != set(self.out_keys):
             # then assume that all the non indicated specs are None
             for key in self.out_keys:
                 if key not in spec:
                     spec[key] = None
+
+        if set(spec.keys()) != set(self.out_keys):
+            raise RuntimeError(
+                f"spec keys and out_keys do not match, got: {spec.keys()} and {self.out_keys} respectively"
+            )
 
         self._spec = spec
         self.safe = safe
@@ -225,12 +244,6 @@ class TensorDictModule(nn.Module):
             self.register_forward_hook(_forward_hook_safe_action)
 
         self.module = module
-
-    def __setattr__(self, key: str, attribute: Any) -> None:
-        if key == "spec" and isinstance(attribute, TensorSpec):
-            self._spec = attribute
-            return
-        super().__setattr__(key, attribute)
 
     @property
     def is_functional(self):
@@ -248,14 +261,14 @@ class TensorDictModule(nn.Module):
         )
 
     @property
-    def spec(self) -> TensorSpec:
+    def spec(self) -> CompositeSpec:
         return self._spec
 
     @spec.setter
-    def spec(self, spec: TensorSpec) -> None:
-        if not isinstance(spec, TensorSpec):
+    def spec(self, spec: CompositeSpec) -> None:
+        if not isinstance(spec, CompositeSpec):
             raise RuntimeError(
-                f"Trying to set an object of type {type(spec)} as a tensorspec."
+                f"Trying to set an object of type {type(spec)} as a tensorspec but expected a CompositeSpec instance."
             )
         self._spec = spec
 
@@ -277,24 +290,26 @@ class TensorDictModule(nn.Module):
         ):
             #
             dim = tensors[0].shape[0]
-            tensordict_out = tensordict.expand(dim).contiguous()
+            tensordict_out = tensordict.expand(dim, *tensordict.batch_size).contiguous()
         elif tensordict_out is None:
             tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):
             tensordict_out.set(_out_key, _tensor)
         return tensordict_out
 
-    def _make_vmap(self, kwargs, n_input):
+    def _make_vmap(self, buffers, kwargs, n_input):
         if "vmap" in kwargs and kwargs["vmap"]:
             if not isinstance(kwargs["vmap"], (tuple, bool)):
                 raise RuntimeError(
                     "vmap argument must be a boolean or a tuple of dim expensions."
                 )
-            _buffers = "buffers" in kwargs
             # if vmap is a tuple, we make sure the number of inputs after params and buffers match
             if isinstance(kwargs["vmap"], (tuple, list)):
                 err_msg = f"the vmap argument had {len(kwargs['vmap'])} elements, but the module has {len(self.in_keys)} inputs"
-                if isinstance(self.module, FunctionalModuleWithBuffers):
+                if isinstance(
+                    self.module,
+                    (FunctionalModuleWithBuffers, rlFunctionalModuleWithBuffers),
+                ):
                     if len(kwargs["vmap"]) == 3:
                         _vmap = (
                             *kwargs["vmap"][:2],
@@ -304,7 +319,7 @@ class TensorDictModule(nn.Module):
                         _vmap = kwargs["vmap"]
                     else:
                         raise RuntimeError(err_msg)
-                elif isinstance(self.module, FunctionalModule):
+                elif isinstance(self.module, (FunctionalModule, rlFunctionalModule)):
                     if len(kwargs["vmap"]) == 2:
                         _vmap = (
                             *kwargs["vmap"][:1],
@@ -320,44 +335,56 @@ class TensorDictModule(nn.Module):
                     )
             else:
                 _vmap = (
-                    (0, 0, *(None,) * n_input) if _buffers else (0, *(None,) * n_input)
+                    (0, 0, *(None,) * n_input)
+                    if buffers is not None
+                    else (0, *(None,) * n_input)
                 )
             return _vmap
 
     def _call_module(
-        self, tensors: Sequence[Tensor], **kwargs
+        self,
+        tensors: Sequence[Tensor],
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        **kwargs,
     ) -> Union[Tensor, Sequence[Tensor]]:
         err_msg = "Did not find the {0} keyword argument to be used with the functional module. Check it was passed to the TensorDictModule method."
-        if isinstance(self.module, (FunctionalModule, FunctionalModuleWithBuffers)):
-            _vmap = self._make_vmap(kwargs, len(tensors))
+        if isinstance(
+            self.module,
+            (
+                FunctionalModule,
+                FunctionalModuleWithBuffers,
+                rlFunctionalModule,
+                rlFunctionalModuleWithBuffers,
+            ),
+        ):
+            _vmap = self._make_vmap(buffers, kwargs, len(tensors))
             if _vmap:
                 module = vmap(self.module, _vmap)
             else:
                 module = self.module
 
-        if isinstance(self.module, FunctionalModule):
-            if "params" not in kwargs:
+        if isinstance(self.module, (FunctionalModule, rlFunctionalModule)):
+            if params is None:
                 raise KeyError(err_msg.format("params"))
             kwargs_pruned = {
-                key: item
-                for key, item in kwargs.items()
-                if key not in ("params", "vmap")
+                key: item for key, item in kwargs.items() if key not in ("vmap")
             }
-            out = module(kwargs["params"], *tensors, **kwargs_pruned)
+            out = module(params, *tensors, **kwargs_pruned)
             return out
 
-        elif isinstance(self.module, FunctionalModuleWithBuffers):
-            if "params" not in kwargs:
+        elif isinstance(
+            self.module, (FunctionalModuleWithBuffers, rlFunctionalModuleWithBuffers)
+        ):
+            if params is None:
                 raise KeyError(err_msg.format("params"))
-            if "buffers" not in kwargs:
+            if buffers is None:
                 raise KeyError(err_msg.format("buffers"))
 
             kwargs_pruned = {
-                key: item
-                for key, item in kwargs.items()
-                if key not in ("params", "buffers", "vmap")
+                key: item for key, item in kwargs.items() if key not in ("vmap")
             }
-            out = module(kwargs["params"], kwargs["buffers"], *tensors, **kwargs_pruned)
+            out = module(params, buffers, *tensors, **kwargs_pruned)
             return out
         else:
             out = self.module(*tensors, **kwargs)
@@ -367,10 +394,12 @@ class TensorDictModule(nn.Module):
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> TensorDictBase:
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
-        tensors = self._call_module(tensors, **kwargs)
+        tensors = self._call_module(tensors, params=params, buffers=buffers, **kwargs)
         if not isinstance(tensors, tuple):
             tensors = (tensors,)
         tensordict_out = self._write_to_tensordict(
@@ -423,10 +452,18 @@ class TensorDictModule(nn.Module):
 
         return f"{self.__class__.__name__}(\n{fields})"
 
-    def make_functional_with_buffers(self, clone: bool = True):
+    def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
         """
         Transforms a stateful module in a functional module and returns its parameters and buffers.
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
+
+        Args:
+            clone (bool, optional): if True, a clone of the module is created before it is returned.
+                This is useful as it prevents the original module to be scraped off of its
+                parameters and buffers.
+                Defaults to True
+            native (bool, optional): if True, TorchRL's functional modules will be used.
+                Defaults to True
 
         Returns:
             A tuple of parameter and buffer tuples
@@ -453,15 +490,7 @@ class TensorDictModule(nn.Module):
                 is_shared=False)
 
         """
-        if not _has_functorch:
-            make_functional_with_buffers = FunctionalModuleWithBuffers._create_from
-            warn(
-                "using torchrl's functional modules. This is an experimental feature "
-                "with no working guarantee."
-            )
-        else:
-            make_functional_with_buffers = functorch.make_functional_with_buffers
-
+        native = native or not _has_functorch
         if clone:
             self_copy = deepcopy(self)
         else:
@@ -469,7 +498,13 @@ class TensorDictModule(nn.Module):
 
         if isinstance(
             self_copy.module,
-            (TensorDictModule, FunctionalModule, FunctionalModuleWithBuffers),
+            (
+                TensorDictModule,
+                FunctionalModule,
+                FunctionalModuleWithBuffers,
+                rlFunctionalModule,
+                rlFunctionalModuleWithBuffers,
+            ),
         ):
             raise RuntimeError(
                 "TensorDictModule.make_functional_with_buffers requires the "
@@ -485,10 +520,12 @@ class TensorDictModule(nn.Module):
                 break
 
         module = self_copy.module
-        if not _has_functorch:
-            fmodule, params, buffers = make_functional_with_buffers(module)
+        if native:
+            fmodule, params, buffers = rlFunctionalModuleWithBuffers._create_from(
+                module
+            )
         else:
-            fmodule, params, buffers = make_functional_with_buffers(module)
+            fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         self_copy.module = fmodule
 
         # Erase meta params

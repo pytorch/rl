@@ -6,14 +6,15 @@ import argparse
 import tempfile
 from argparse import Namespace
 from collections import OrderedDict
-from os import walk, path
+from os import path, walk
+from time import sleep
 
 import pytest
 import torch
 
 try:
     from tensorboard.backend.event_processing import event_accumulator
-    from torchrl.trainers.loggers import TensorboardLogger
+    from torchrl.trainers.loggers.tensorboard import TensorboardLogger
 
     _has_tb = True
 except ImportError:
@@ -25,20 +26,19 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.trainers import Recorder
-from torchrl.trainers import Trainer
+from torchrl.trainers import Recorder, Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
-    SelectKeys,
-    ReplayBufferTrainer,
-    LogReward,
-    RewardNormalizer,
-    mask_batch,
+    _has_tqdm,
     BatchSubSampler,
-    UpdateWeights,
     CountFramesLog,
+    LogReward,
+    mask_batch,
+    ReplayBufferTrainer,
+    RewardNormalizer,
+    SelectKeys,
+    UpdateWeights,
 )
-from torchrl.trainers.trainers import _has_tqdm
 
 
 class MockingOptim:
@@ -65,7 +65,7 @@ def mocking_trainer() -> Trainer:
             None,
         ]
         * 3,
-        MockingOptim()
+        MockingOptim(),
     )
     trainer.collected_frames = 0
     trainer._pbar_str = OrderedDict()
@@ -242,6 +242,8 @@ def test_recorder():
         args.record_frames = 24 // args.frame_skip
         args.record_interval = 2
         args.catframes = 4
+        args.image_size = 84
+        args.collector_devices = ["cpu"]
 
         N = 8
 
@@ -262,22 +264,26 @@ def test_recorder():
         )
 
         for _ in range(N):
-            out = recorder(None)
+            recorder(None)
 
-        for (dirpath, dirnames, filenames) in walk(folder):
+        for (_, _, filenames) in walk(folder):
+            filename = filenames[0]
             break
-
-        filename = filenames[0]
-        ea = event_accumulator.EventAccumulator(
-            path.join(folder, filename),
-            size_guidance={
-                event_accumulator.IMAGES: 0,
-            },
-        )
-        ea.Reload()
-        print(ea.Tags())
-        img = ea.Images("tmp_ALE/Pong-v5_video")
-        assert len(img) == N // args.record_interval
+        for _ in range(3):
+            ea = event_accumulator.EventAccumulator(
+                path.join(folder, filename),
+                size_guidance={
+                    event_accumulator.IMAGES: 0,
+                },
+            )
+            ea.Reload()
+            print(ea.Tags())
+            img = ea.Images("tmp_ALE/Pong-v5_video")
+            try:
+                assert len(img) == N // args.record_interval
+                break
+            except AssertionError:
+                sleep(0.1)
 
 
 def test_updateweights():

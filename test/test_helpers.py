@@ -8,32 +8,39 @@ import dataclasses
 
 import pytest
 import torch
-from _utils_internal import get_available_devices, generate_seeds
-from hydra import initialize, compose
-from hydra.core.config_store import ConfigStore
+from _utils_internal import generate_seeds, get_available_devices
+
+try:
+    from hydra import compose, initialize
+    from hydra.core.config_store import ConfigStore
+
+    _has_hydra = True
+except ImportError:
+    _has_hydra = False
 from mocking_classes import (
     ContinuousActionConvMockEnvNumpy,
     ContinuousActionVecMockEnv,
-    DiscreteActionVecMockEnv,
     DiscreteActionConvMockEnvNumpy,
+    DiscreteActionVecMockEnv,
 )
 from packaging import version
 from torchrl.envs.libs.gym import _has_gym
+from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules.tensordict_module.common import _has_functorch
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import EnvConfig
 from torchrl.trainers.helpers.models import (
-    make_dqn_actor,
-    make_ddpg_actor,
-    make_ppo_model,
-    make_sac_model,
-    make_redq_model,
-    DiscreteModelConfig,
     DDPGModelConfig,
+    DiscreteModelConfig,
+    make_ddpg_actor,
+    make_dqn_actor,
+    make_ppo_model,
+    make_redq_model,
+    make_sac_model,
     PPOModelConfig,
-    SACModelConfig,
     REDQModelConfig,
+    SACModelConfig,
 )
 
 TORCH_VERSION = version.parse(torch.__version__)
@@ -57,6 +64,8 @@ def _assert_keys_match(td, expeceted_keys):
 
 
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
+@pytest.mark.skipif(not _has_tv, reason="No torchvision library found")
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("noisy", [tuple(), ("noisy=True",)])
 @pytest.mark.parametrize("distributional", [tuple(), ("distributional=True",)])
@@ -111,9 +120,10 @@ def test_dqn_maker(device, noisy, distributional, from_pixels):
         proof_environment.close()
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
+@pytest.mark.parametrize("from_pixels", [("from_pixels=True", "catframes=4"), tuple()])
 @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_ddpg_maker(device, from_pixels, gsde, exploration):
@@ -193,6 +203,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
         del proof_environment
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
@@ -316,11 +327,12 @@ def test_ppo_maker(device, from_pixels, shared_mapping, gsde, exploration):
         del proof_environment
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
 @pytest.mark.parametrize("from_pixels", [tuple()])
 @pytest.mark.parametrize("tanh_loc", [tuple(), ("tanh_loc=True",)])
-@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
     if not gsde and exploration != "random":
@@ -446,10 +458,11 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
 
 
 @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [tuple(), ("from_pixels=True", "catframes=4")])
 @pytest.mark.parametrize("gsde", [tuple(), ("gSDE=True",)])
-@pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.parametrize("exploration", ["random", "mode"])
 def test_redq_make(device, from_pixels, gsde, exploration):
     if not gsde and exploration != "random":
@@ -547,12 +560,11 @@ def test_redq_make(device, from_pixels, gsde, exploration):
 @pytest.mark.parametrize("initial_seed", range(5))
 def test_seed_generator(initial_seed):
     num_seeds = 100
-    prev_seeds = []
 
     # Check unique seed generation
     if initial_seed == 0:
-        with pytest.raises(ValueError) as e:
-            seeds0 = generate_seeds(initial_seed - 1, num_seeds)
+        with pytest.raises(ValueError):
+            generate_seeds(initial_seed - 1, num_seeds)
         return
     else:
         seeds0 = generate_seeds(initial_seed - 1, num_seeds)

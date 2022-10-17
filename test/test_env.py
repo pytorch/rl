@@ -13,37 +13,44 @@ import torch
 import yaml
 from _utils_internal import get_available_devices
 from mocking_classes import (
-    DiscreteActionVecMockEnv,
-    MockSerialEnv,
+    ActionObsMergeLinear,
     DiscreteActionConvMockEnv,
+    DiscreteActionVecMockEnv,
+    DummyModelBasedEnvBase,
+    MockBatchedLockedEnv,
+    MockBatchedUnLockedEnv,
+    MockSerialEnv,
 )
 from scipy.stats import chisquare
 from torch import nn
 from torchrl.data.tensor_specs import (
-    OneHotDiscreteTensorSpec,
-    MultOneHotDiscreteTensorSpec,
     BoundedTensorSpec,
+    MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
+    OneHotDiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td, TensorDict
-from torchrl.envs import EnvCreator, ObservationNorm, CatTensors, DoubleToFloat
+from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator, ObservationNorm
+from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
-from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
 from torchrl.envs.transforms import (
-    TransformedEnv,
     Compose,
-    ToTensorImage,
     RewardClipping,
+    ToTensorImage,
+    TransformedEnv,
 )
-from torchrl.envs.utils import step_tensordict
+from torchrl.envs.utils import step_mdp
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
 from torchrl.modules import (
+    Actor,
     ActorCriticOperator,
+    MLP,
     TensorDictModule,
     ValueOperator,
-    Actor,
-    MLP,
 )
+from torchrl.modules.tensordict_module import WorldModelWrapper
 
 if _has_gym:
     import gym
@@ -220,21 +227,32 @@ def _make_envs(
 ):
     torch.manual_seed(0)
     if not transformed_in:
-        create_env_fn = lambda: GymEnv(env_name, frame_skip=frame_skip, device=device)
+
+        def create_env_fn():
+            return GymEnv(env_name, frame_skip=frame_skip, device=device)
+
     else:
         if env_name == "ALE/Pong-v5":
-            create_env_fn = lambda: TransformedEnv(
-                GymEnv(env_name, frame_skip=frame_skip, device=device),
-                Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
-            )
+
+            def create_env_fn():
+                return TransformedEnv(
+                    GymEnv(env_name, frame_skip=frame_skip, device=device),
+                    Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
+                )
+
         else:
-            create_env_fn = lambda: TransformedEnv(
-                GymEnv(env_name, frame_skip=frame_skip, device=device),
-                Compose(
-                    ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
-                    RewardClipping(0, 0.1),
-                ),
-            )
+
+            def create_env_fn():
+                return TransformedEnv(
+                    GymEnv(env_name, frame_skip=frame_skip, device=device),
+                    Compose(
+                        ObservationNorm(
+                            keys_in=["next_observation"], loc=0.5, scale=1.1
+                        ),
+                        RewardClipping(0, 0.1),
+                    ),
+                )
+
     env0 = create_env_fn()
     env_parallel = ParallelEnv(
         N, create_env_fn, selected_keys=selected_keys, create_env_kwargs=kwargs
@@ -244,13 +262,16 @@ def _make_envs(
     )
     if transformed_out:
         if env_name == "ALE/Pong-v5":
-            t_out = lambda: (
-                Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
-                if not transformed_in
-                else Compose(
-                    *[ObservationNorm(keys_in=["next_pixels"], loc=0, scale=1)]
+
+            def t_out():
+                return (
+                    Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
+                    if not transformed_in
+                    else Compose(
+                        *[ObservationNorm(keys_in=["next_pixels"], loc=0, scale=1)]
+                    )
                 )
-            )
+
             env0 = TransformedEnv(
                 env0,
                 t_out(),
@@ -264,16 +285,23 @@ def _make_envs(
                 t_out(),
             )
         else:
-            t_out = lambda: (
-                Compose(
-                    ObservationNorm(keys_in=["next_observation"], loc=0.5, scale=1.1),
-                    RewardClipping(0, 0.1),
+
+            def t_out():
+                return (
+                    Compose(
+                        ObservationNorm(
+                            keys_in=["next_observation"], loc=0.5, scale=1.1
+                        ),
+                        RewardClipping(0, 0.1),
+                    )
+                    if not transformed_in
+                    else Compose(
+                        ObservationNorm(
+                            keys_in=["next_observation"], loc=1.0, scale=1.0
+                        )
+                    )
                 )
-                if not transformed_in
-                else Compose(
-                    ObservationNorm(keys_in=["next_observation"], loc=1.0, scale=1.0)
-                )
-            )
+
             env0 = TransformedEnv(
                 env0,
                 t_out(),
@@ -290,6 +318,78 @@ def _make_envs(
     return env_parallel, env_serial, env0
 
 
+class TestModelBasedEnvBase:
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_mb_rollout(self, device, seed=0):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        world_model = WorldModelWrapper(
+            TensorDictModule(
+                ActionObsMergeLinear(5, 4),
+                in_keys=["hidden_observation", "action"],
+                out_keys=["next_hidden_observation"],
+            ),
+            TensorDictModule(
+                nn.Linear(4, 1),
+                in_keys=["hidden_observation"],
+                out_keys=["reward"],
+            ),
+        )
+        mb_env = DummyModelBasedEnvBase(
+            world_model, device=device, batch_size=torch.Size([10])
+        )
+        rollout = mb_env.rollout(max_steps=100)
+        assert set(rollout.keys()) == set(mb_env.observation_spec.keys()).union(
+            set(mb_env.input_spec.keys())
+        ).union({"reward", "done"})
+        assert rollout["next_hidden_observation"].shape == (10, 100, 4)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_mb_env_batch_lock(self, device, seed=0):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        world_model = WorldModelWrapper(
+            TensorDictModule(
+                ActionObsMergeLinear(5, 4),
+                in_keys=["hidden_observation", "action"],
+                out_keys=["next_hidden_observation"],
+            ),
+            TensorDictModule(
+                nn.Linear(4, 1),
+                in_keys=["hidden_observation"],
+                out_keys=["reward"],
+            ),
+        )
+        mb_env = DummyModelBasedEnvBase(
+            world_model, device=device, batch_size=torch.Size([10])
+        )
+        assert not mb_env.batch_locked
+
+        with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+            mb_env.batch_locked = False
+        td = mb_env.reset()
+        td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
+        td_expanded = td.unsqueeze(-1).expand(10, 2).reshape(-1).to_tensordict()
+        mb_env.step(td)
+
+        with pytest.raises(RuntimeError, match="Expected a tensordict with shape"):
+            mb_env.step(td_expanded)
+
+        mb_env = DummyModelBasedEnvBase(
+            world_model, device=device, batch_size=torch.Size([])
+        )
+        assert not mb_env.batch_locked
+
+        with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+            mb_env.batch_locked = False
+        td = mb_env.reset()
+        td["action"] = mb_env.action_spec.rand(mb_env.batch_size)
+        td_expanded = td.expand(2)
+        mb_env.step(td)
+        # we should be able to do a step with a tensordict that has been expended
+        mb_env.step(td_expanded)
+
+
 class TestParallel:
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
@@ -298,7 +398,10 @@ class TestParallel:
         tasks = env_task.split(",")
         if len(tasks) == 1:
             single_task = True
-            env_make = lambda: DMControlEnv("humanoid", tasks[0])
+
+            def env_make():
+                return DMControlEnv("humanoid", tasks[0])
+
         elif len(set(tasks)) == 1 and len(tasks) == 3:
             single_task = True
             env_make = [lambda: DMControlEnv("humanoid", tasks[0])] * 3
@@ -310,15 +413,11 @@ class TestParallel:
             with pytest.raises(
                 ValueError, match="share_individual_td must be set to None"
             ):
-                env_serial = SerialEnv(
-                    3, env_make, share_individual_td=share_individual_td
-                )
+                SerialEnv(3, env_make, share_individual_td=share_individual_td)
             with pytest.raises(
                 ValueError, match="share_individual_td must be set to None"
             ):
-                env_parallel = ParallelEnv(
-                    3, env_make, share_individual_td=share_individual_td
-                )
+                ParallelEnv(3, env_make, share_individual_td=share_individual_td)
             return
 
         env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
@@ -344,28 +443,33 @@ class TestParallel:
         env1_obs_keys = list(env1.observation_spec.keys())
         env2 = DMControlEnv("humanoid", "walk")
         env2_obs_keys = list(env2.observation_spec.keys())
-        env1_maker = lambda: TransformedEnv(
-            DMControlEnv("humanoid", "stand"),
-            Compose(
-                CatTensors(env1_obs_keys, "next_observation_stand", del_keys=False),
-                CatTensors(env1_obs_keys, "next_observation"),
-                DoubleToFloat(
-                    keys_in=["next_observation_stand", "next_observation"],
-                    keys_inv_in=["action"],
+
+        def env1_maker():
+            return TransformedEnv(
+                DMControlEnv("humanoid", "stand"),
+                Compose(
+                    CatTensors(env1_obs_keys, "next_observation_stand", del_keys=False),
+                    CatTensors(env1_obs_keys, "next_observation"),
+                    DoubleToFloat(
+                        keys_in=["next_observation_stand", "next_observation"],
+                        keys_inv_in=["action"],
+                    ),
                 ),
-            ),
-        )
-        env2_maker = lambda: TransformedEnv(
-            DMControlEnv("humanoid", "walk"),
-            Compose(
-                CatTensors(env2_obs_keys, "next_observation_walk", del_keys=False),
-                CatTensors(env2_obs_keys, "next_observation"),
-                DoubleToFloat(
-                    keys_in=["next_observation_walk", "next_observation"],
-                    keys_inv_in=["action"],
+            )
+
+        def env2_maker():
+            return TransformedEnv(
+                DMControlEnv("humanoid", "walk"),
+                Compose(
+                    CatTensors(env2_obs_keys, "next_observation_walk", del_keys=False),
+                    CatTensors(env2_obs_keys, "next_observation"),
+                    DoubleToFloat(
+                        keys_in=["next_observation_walk", "next_observation"],
+                        keys_inv_in=["action"],
+                    ),
                 ),
-            ),
-        )
+            )
+
         env = ParallelEnv(2, [env1_maker, env2_maker])
         assert not env._single_task
 
@@ -953,7 +1057,7 @@ def test_steptensordict(
         [4],
     )
     next_tensordict = TensorDict({}, [4]) if has_out else None
-    out = step_tensordict(
+    out = step_mdp(
         tensordict,
         keep_other=keep_other,
         exclude_reward=exclude_reward,
@@ -985,6 +1089,86 @@ def test_steptensordict(
         assert "done" not in out.keys()
     if has_out:
         assert out is next_tensordict
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_locked(device):
+    env = MockBatchedLockedEnv(device)
+    assert env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2).clone()
+    td = env.step(td)
+
+    with pytest.raises(
+        RuntimeError, match="Expected a tensordict with shape==env.shape, "
+    ):
+        env.step(td_expanded)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked(device):
+    env = MockBatchedUnLockedEnv(device)
+    assert not env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2).clone()
+    td = env.step(td)
+
+    env.step(td_expanded)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_batch_unlocked_with_batch_size(device):
+    env = MockBatchedUnLockedEnv(device, batch_size=torch.Size([2]))
+    assert not env.batch_locked
+
+    with pytest.raises(RuntimeError, match="batch_locked is a read-only property"):
+        env.batch_locked = False
+
+    td = env.reset()
+    td["action"] = env.action_spec.rand(env.batch_size)
+    td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
+    td = env.step(td)
+
+    with pytest.raises(
+        RuntimeError, match="Expected a tensordict with shape==env.shape, "
+    ):
+        env.step(td_expanded)
+
+
+@pytest.mark.skipif(not _has_gym, reason="no gym")
+def test_info_dict_reader(seed=0):
+    import gym
+
+    env = GymWrapper(gym.make("HalfCheetah-v4"))
+    env.set_info_dict_reader(default_info_dict_reader(["x_position"]))
+
+    assert "x_position" in env.observation_spec.keys()
+    assert isinstance(env.observation_spec["x_position"], UnboundedContinuousTensorSpec)
+
+    tensordict = env.reset()
+    tensordict = env.rand_step(tensordict)
+
+    assert env.observation_spec["x_position"].is_in(tensordict["x_position"])
+
+    env2 = GymWrapper(gym.make("HalfCheetah-v4"))
+    env2.set_info_dict_reader(
+        default_info_dict_reader(
+            ["x_position"], spec={"x_position": OneHotDiscreteTensorSpec(5)}
+        )
+    )
+
+    tensordict2 = env2.reset()
+    tensordict2 = env2.rand_step(tensordict2)
+
+    assert not env2.observation_spec["x_position"].is_in(tensordict2["x_position"])
 
 
 if __name__ == "__main__":

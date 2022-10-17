@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import collections
 import os
-from typing import Optional, Tuple, Union, Dict
+from typing import Optional, Tuple, Union, Dict, Any
 
 import numpy as np
 import torch
@@ -75,10 +75,10 @@ def _dmcontrol_to_torchrl_spec_transform(
             )
 
     else:
-        raise NotImplementedError
+        raise NotImplementedError(type(spec))
 
 
-def _get_envs(to_dict: bool = True) -> dict:
+def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
     if not _has_dmc:
         return dict()
     if not to_dict:
@@ -150,7 +150,7 @@ class DMControlWrapper(GymLikeEnv):
             )
         return env
 
-    def _make_specs(self, env: "gym.Env") -> None:
+    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         # specs are defined when first called
         return
 
@@ -197,7 +197,7 @@ class DMControlWrapper(GymLikeEnv):
         return _seed
 
     def _output_transform(
-        self, timestep_tuple: Tuple["TimeStep"]
+        self, timestep_tuple: Tuple["TimeStep"]  # noqa: F821
     ) -> Tuple[np.ndarray, float, bool]:
         if type(timestep_tuple) is not tuple:
             timestep_tuple = (timestep_tuple,)
@@ -208,16 +208,18 @@ class DMControlWrapper(GymLikeEnv):
         return observation, reward, done
 
     @property
-    def action_spec(self) -> TensorSpec:
-        if self._action_spec is None:
-            self._action_spec = _dmcontrol_to_torchrl_spec_transform(
-                self._env.action_spec(), device=self.device
+    def input_spec(self) -> TensorSpec:
+        if self._input_spec is None:
+            self._input_spec = CompositeSpec(
+                action=_dmcontrol_to_torchrl_spec_transform(
+                    self._env.action_spec(), device=self.device
+                )
             )
-        return self._action_spec
+        return self._input_spec
 
-    @action_spec.setter
-    def action_spec(self, value: TensorSpec) -> None:
-        self._action_spec = value
+    @input_spec.setter
+    def input_spec(self, value: TensorSpec) -> None:
+        self._input_spec = value
 
     @property
     def observation_spec(self) -> TensorSpec:
@@ -270,6 +272,11 @@ class DMControlEnv(DMControlWrapper):
     """
 
     def __init__(self, env_name, task_name, **kwargs):
+        if not _has_dmc:
+            raise ImportError(
+                "dm_control python package was not found."
+                "Please install this dependency."
+            )
         kwargs["env_name"] = env_name
         kwargs["task_name"] = task_name
         super().__init__(**kwargs)

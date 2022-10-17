@@ -17,7 +17,7 @@ from torchrl.modules import (
     NoisyLinear,
     TensorDictModule,
     NormalParamWrapper,
-    TensorDictSequence,
+    TensorDictSequential,
 )
 from torchrl.modules.distributions import (
     Delta,
@@ -75,7 +75,7 @@ __all__ = [
 
 
 def make_dqn_actor(
-    proof_environment: EnvBase, cfg: "DictConfig", device: torch.device
+    proof_environment: EnvBase, cfg: "DictConfig", device: torch.device  # noqa: F821
 ) -> Actor:
     """
     DQN constructor helper function.
@@ -199,7 +199,7 @@ def make_dqn_actor(
 
 def make_ddpg_actor(
     proof_environment: EnvBase,
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     actor_net_kwargs: Optional[dict] = None,
     value_net_kwargs: Optional[dict] = None,
     device: DEVICE_TYPING = "cpu",
@@ -313,7 +313,7 @@ def make_ddpg_actor(
             transform = d.ComposeTransform(
                 transform, d.AffineTransform(loc=(max + min) / 2, scale=(max - min) / 2)
             )
-        actor_module = TensorDictSequence(
+        actor_module = TensorDictSequential(
             actor_module,
             TensorDictModule(
                 LazygSDEModule(transform=transform, learn_sigma=False),
@@ -401,7 +401,7 @@ def make_ddpg_actor(
 
 def make_ppo_model(
     proof_environment: EnvBase,
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     device: DEVICE_TYPING,
     in_keys_actor: Optional[Sequence[str]] = None,
     observation_key=None,
@@ -577,7 +577,7 @@ def make_ppo_model(
             else:
                 raise RuntimeError("cannot use gSDE with discrete actions")
 
-            actor_module = TensorDictSequence(
+            actor_module = TensorDictSequential(
                 actor_module,
                 TensorDictModule(
                     LazygSDEModule(transform=transform),
@@ -652,7 +652,7 @@ def make_ppo_model(
             else:
                 raise RuntimeError("cannot use gSDE with discrete actions")
 
-            actor_module = TensorDictSequence(
+            actor_module = TensorDictSequential(
                 actor_module,
                 TensorDictModule(
                     LazygSDEModule(transform=transform),
@@ -690,7 +690,7 @@ def make_ppo_model(
 
 def make_sac_model(
     proof_environment: EnvBase,
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -870,7 +870,7 @@ def make_sac_model(
         else:
             raise RuntimeError("cannot use gSDE with discrete actions")
 
-        actor_module = TensorDictSequence(
+        actor_module = TensorDictSequential(
             actor_module,
             TensorDictModule(
                 LazygSDEModule(transform=transform),
@@ -912,7 +912,7 @@ def make_sac_model(
 
 def make_redq_model(
     proof_environment: EnvBase,
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -1114,7 +1114,7 @@ def make_redq_model(
         else:
             raise RuntimeError("cannot use gSDE with discrete actions")
 
-        actor_module = TensorDictSequence(
+        actor_module = TensorDictSequential(
             actor_module,
             TensorDictModule(
                 LazygSDEModule(transform=transform),

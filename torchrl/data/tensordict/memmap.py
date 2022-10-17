@@ -8,12 +8,12 @@ from __future__ import annotations
 import functools
 import os
 import tempfile
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, Callable, List, Optional, Tuple, Union, Dict
 
 import numpy as np
 import torch
 
-from torchrl import prod
+from torchrl._utils import prod
 from torchrl.data.tensordict.utils import _getitem_batch_size
 from torchrl.data.utils import (
     DEVICE_TYPING,
@@ -410,8 +410,13 @@ class MemmapTensor(object):
             os.unlink(self.filename)
 
     def __eq__(self, other: Any) -> torch.Tensor:
-        if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
-            raise NotImplementedError(f"Unknown type {type(other)}")
+        # if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
+        #     raise NotImplementedError(f"Unknown type {type(other)}")
+        return self._tensor == other
+
+    def __ne__(self, other: Any) -> torch.Tensor:
+        # if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
+        #     raise NotImplementedError(f"Unknown type {type(other)}")
         return self._tensor == other
 
     def __getattr__(self, attr: str) -> Any:
@@ -490,7 +495,7 @@ class MemmapTensor(object):
                 )
             self.memmap_array[idx] = to_numpy(value)
 
-    def __setstate__(self, state: dict) -> None:
+    def __setstate__(self, state: Dict[str, Any]) -> None:
         if state["file"] is None:
             # state["_had_ownership"] = state["_had_ownership"]
             # state["_has_ownership"] = delete
@@ -501,7 +506,7 @@ class MemmapTensor(object):
             state["file"] = tmpfile
         self.__dict__.update(state)
 
-    def __getstate__(self) -> dict:
+    def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
         state["file"] = None
         state["_memmap_array"] = None

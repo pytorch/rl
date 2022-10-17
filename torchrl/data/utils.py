@@ -32,7 +32,7 @@ if hasattr(typing, "get_args"):
 else:
     DEVICE_TYPING_ARGS = (torch.device, str, int)
 
-INDEX_TYPING = Union[None, int, slice, Tensor, List[Any], Tuple[Any, ...]]
+INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 
 
 class CloudpickleWrapper(object):
@@ -62,8 +62,8 @@ class CloudpickleWrapper(object):
 
 
 def expand_as_right(
-    tensor: Union[torch.Tensor, "MemmapTensor", "TensorDictBase"],
-    dest: Union[torch.Tensor, "MemmapTensor", "TensorDictBase"],
+    tensor: Union[torch.Tensor, "MemmapTensor", "TensorDictBase"],  # noqa: F821
+    dest: Union[torch.Tensor, "MemmapTensor", "TensorDictBase"],  # noqa: F821
 ):
     """Expand a tensor on the right to match another tensor shape.
     Args:
@@ -98,7 +98,7 @@ def expand_as_right(
 
 
 def expand_right(
-    tensor: Union[torch.Tensor, "MemmapTensor"], shape: Sequence[int]
+    tensor: Union[torch.Tensor, "MemmapTensor"], shape: Sequence[int]  # noqa: F821
 ) -> torch.Tensor:
     """Expand a tensor on the right to match a desired shape.
     Args:

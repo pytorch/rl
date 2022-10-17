@@ -17,7 +17,7 @@ from warnings import warn
 import torch
 from torch import multiprocessing as mp
 
-from torchrl import _check_for_faulty_process
+from torchrl._utils import _check_for_faulty_process
 from torchrl.data import TensorDict, TensorSpec, CompositeSpec
 from torchrl.data.tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -48,7 +48,7 @@ class _dispatch_caller_parallel:
     def __call__(self, *args, **kwargs):
         # remove self from args
         args = [_arg if _arg is not self.parallel_env else "_self" for _arg in args]
-        for i, channel in enumerate(self.parallel_env.parent_channels):
+        for channel in self.parallel_env.parent_channels:
             channel.send((self.attr, (args, kwargs)))
 
         results = []
@@ -118,6 +118,9 @@ class _BatchedEnv(EnvBase):
             It is assumed that all environments will run on the same device as a common shared
             tensordict will be used to pass data from process to process. The device can be
             changed after instantiation using `env.to(device)`.
+        allow_step_when_done (bool, optional): if True, batched environments can
+            execute steps after a done state is encountered.
+            Defaults to `False`.
 
     """
 
@@ -143,6 +146,7 @@ class _BatchedEnv(EnvBase):
         memmap: bool = False,
         policy_proof: Optional[Callable] = None,
         device: Optional[DEVICE_TYPING] = None,
+        allow_step_when_done: bool = False,
     ):
         if device is not None:
             raise ValueError(
@@ -187,12 +191,12 @@ class _BatchedEnv(EnvBase):
         self.share_individual_td = bool(share_individual_td)
         self._share_memory = shared_memory
         self._memmap = memmap
+        self.allow_step_when_done = allow_step_when_done
         if self._share_memory and self._memmap:
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
         self._batch_size = None
-        self._action_spec = None
         self._observation_spec = None
         self._reward_spec = None
         self._device = None
@@ -271,35 +275,34 @@ class _BatchedEnv(EnvBase):
                 _kwargs.update(_new_kwargs)
 
     def _set_properties(self):
+        meta_data = deepcopy(self.meta_data)
         if self._single_task:
-            self._batch_size = self.meta_data.batch_size
-            self._action_spec = self.meta_data.specs["action_spec"]
-            self._observation_spec = self.meta_data.specs["observation_spec"]
-            self._reward_spec = self.meta_data.specs["reward_spec"]
-            self._input_spec = self.meta_data.specs["input_spec"]
-            self._dummy_env_str = self.meta_data.env_str
-            self._device = self.meta_data.device
-            self._env_tensordict = self.meta_data.tensordict
+            self._batch_size = meta_data.batch_size
+            self._observation_spec = meta_data.specs["observation_spec"]
+            self._reward_spec = meta_data.specs["reward_spec"]
+            self._input_spec = meta_data.specs["input_spec"]
+            self._dummy_env_str = meta_data.env_str
+            self._device = meta_data.device
+            self._env_tensordict = meta_data.tensordict
+            self._batch_locked = meta_data.batch_locked
         else:
-            self._batch_size = torch.Size(
-                [self.num_workers, *self.meta_data[0].batch_size]
-            )
-            self._device = self.meta_data[0].device
+            self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
+            self._device = meta_data[0].device
             # TODO: check that all action_spec and reward spec match (issue #351)
-            self._action_spec = self.meta_data[0].specs["action_spec"]
-            self._reward_spec = self.meta_data[0].specs["reward_spec"]
-            self._observation_spec = {}
-            for md in self.meta_data:
-                self._observation_spec.update(dict(**md.specs["observation_spec"]))
-            self._observation_spec = CompositeSpec(**self._observation_spec)
-            self._input_spec = {}
-            for md in self.meta_data:
-                self._input_spec.update(dict(**md.specs["input_spec"]))
-            self._input_spec = CompositeSpec(**self._input_spec)
-            self._dummy_env_str = str(self.meta_data[0])
+            self._reward_spec = meta_data[0].specs["reward_spec"]
+            _observation_spec = {}
+            for md in meta_data:
+                _observation_spec.update(dict(**md.specs["observation_spec"]))
+            self._observation_spec = CompositeSpec(**_observation_spec)
+            _input_spec = {}
+            for md in meta_data:
+                _input_spec.update(dict(**md.specs["input_spec"]))
+            self._input_spec = CompositeSpec(**_input_spec)
+            self._dummy_env_str = str(meta_data[0])
             self._env_tensordict = torch.stack(
-                [meta_data.tensordict for meta_data in self.meta_data], 0
+                [meta_data.tensordict for meta_data in meta_data], 0
             )
+            self._batch_locked = meta_data[0].batch_locked
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
@@ -314,16 +317,6 @@ class _BatchedEnv(EnvBase):
         if self._batch_size is None:
             self._set_properties()
         return self._batch_size
-
-    @property
-    def action_spec(self) -> TensorSpec:
-        if self._action_spec is None:
-            self._set_properties()
-        return self._action_spec
-
-    @action_spec.setter
-    def action_spec(self, value: TensorSpec) -> None:
-        self._action_spec = value
 
     @property
     def device(self) -> torch.device:
@@ -344,6 +337,16 @@ class _BatchedEnv(EnvBase):
     @observation_spec.setter
     def observation_spec(self, value: TensorSpec) -> None:
         self._observation_spec = value
+
+    @property
+    def input_spec(self) -> TensorSpec:
+        if self._input_spec is None:
+            self._set_properties()
+        return self._input_spec
+
+    @input_spec.setter
+    def input_spec(self, value: TensorSpec) -> None:
+        self._input_spec = value
 
     @property
     def reward_spec(self) -> TensorSpec:
@@ -490,7 +493,6 @@ class _BatchedEnv(EnvBase):
         if self._verbose:
             print(f"closing {self.__class__.__name__}")
 
-        self.action_spec = None
         self.observation_spec = None
         self.reward_spec = None
 
@@ -526,7 +528,7 @@ class _BatchedEnv(EnvBase):
             self.close()
             self.start()
         else:
-            self.action_spec = self.action_spec.to(device)
+            self.input_spec = self.input_spec.to(device)
             self.reward_spec = self.reward_spec.to(device)
             self.observation_spec = self.observation_spec.to(device)
         return self
@@ -593,7 +595,7 @@ class SerialEnv(_BatchedEnv):
 
     @_check_start
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
-        for i, env in enumerate(self._envs):
+        for env in self._envs:
             new_seed = env.set_seed(seed, static_seed=static_seed)
             seed = new_seed
         return seed
@@ -697,6 +699,7 @@ class ParallelEnv(_BatchedEnv):
                     False,
                     self.env_input_keys,
                     self.device,
+                    self.allow_step_when_done,
                 ),
             )
             w.daemon = True
@@ -715,7 +718,7 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def state_dict(self) -> OrderedDict:
         state_dict = OrderedDict()
-        for idx, channel in enumerate(self.parent_channels):
+        for channel in self.parent_channels:
             channel.send(("state_dict", None))
         for idx, channel in enumerate(self.parent_channels):
             msg, _state_dict = channel.recv()
@@ -900,10 +903,11 @@ def _run_worker_pipe_shared_mem(
     parent_pipe: connection.Connection,
     child_pipe: connection.Connection,
     env_fun: Union[EnvBase, Callable],
-    env_fun_kwargs: dict,
+    env_fun_kwargs: Dict[str, Any],
     pin_memory: bool,
-    env_input_keys: dict,
+    env_input_keys: Dict[str, Any],
     device: DEVICE_TYPING = "cpu",
+    allow_step_when_done: bool = False,
     verbose: bool = False,
 ) -> None:
     parent_pipe.close()
@@ -981,7 +985,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             _td = tensordict.select(*env_input_keys)
-            if env.is_done:
+            if env.is_done and not allow_step_when_done:
                 raise RuntimeError(
                     f"calling step when env is done, just reset = {just_reset}"
                 )

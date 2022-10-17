@@ -3,19 +3,18 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import os
-from warnings import warn
 
 from torch import Tensor
 
 from .common import Logger
 
-_has_tb = False
+
 try:
     from torch.utils.tensorboard import SummaryWriter
 
     _has_tb = True
 except ImportError:
-    warn("torch.utils.tensorboard could not be imported")
+    _has_tb = False
 
 
 class TensorboardLogger(Logger):
@@ -45,6 +44,8 @@ class TensorboardLogger(Logger):
             SummaryWriter: The tensorboard experiment.
 
         """
+        if not _has_tb:
+            raise ImportError("torch.utils.tensorboard could not be imported")
 
         log_dir = str(os.path.join(self.log_dir, self.exp_name))
         return SummaryWriter(log_dir=log_dir)
@@ -69,6 +70,12 @@ class TensorboardLogger(Logger):
             video (Tensor): The video to be logged.
             step (int, optional): The step at which the video is logged. Defaults to None.
         """
+        # check for correct format of the video tensor ((N), T, C, H, W)
+        # check that the color channel (C) is either 1 or 3
+        if video.dim() != 5 or video.size(dim=2) not in {1, 3}:
+            raise Exception(
+                "Wrong format of the video tensor. Should be ((N), T, C, H, W)"
+            )
         if not self._has_imported_moviepy:
             try:
                 import moviepy  # noqa
@@ -85,7 +92,7 @@ class TensorboardLogger(Logger):
             **kwargs,
         )
 
-    def log_hparams(self, cfg: "DictConfig") -> None:
+    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
         """
         Logs the hyperparameters of the experiment.
 

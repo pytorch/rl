@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import inspect
 import os
 import queue
 import time
@@ -11,16 +12,17 @@ from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from textwrap import indent
-from typing import Callable, Iterator, Optional, Sequence, Tuple, Union
+from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Dict
 
 import numpy as np
 import torch
+import torch.nn as nn
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
-from torchrl.envs.utils import set_exploration_mode, step_tensordict
-from .. import _check_for_faulty_process, prod
-from ..modules.tensordict_module import ProbabilisticTensorDictModule
+from torchrl.envs.utils import set_exploration_mode, step_mdp
+from .._utils import _check_for_faulty_process, prod
+from ..modules.tensordict_module import ProbabilisticTensorDictModule, TensorDictModule
 from .utils import split_trajectories
 
 __all__ = [
@@ -40,6 +42,8 @@ from ..envs.vec_env import _BatchedEnv
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
 _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", 1000))
+
+DEFAULT_EXPLORATION_MODE: str = "random"
 
 
 class RandomPolicy:
@@ -79,6 +83,36 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
     )
 
 
+def _policy_is_tensordict_compatible(policy: nn.Module):
+    sig = inspect.signature(policy.forward)
+
+    if isinstance(policy, TensorDictModule) or (
+        len(sig.parameters) == 1
+        and hasattr(policy, "in_keys")
+        and hasattr(policy, "out_keys")
+    ):
+        # if the policy is a TensorDictModule or takes a single argument and defines
+        # in_keys and out_keys then we assume it can already deal with TensorDict input
+        # to forward and we return True
+        return True
+    elif not hasattr(policy, "in_keys") and not hasattr(policy, "out_keys"):
+        # if it's not a TensorDictModule, and in_keys and out_keys are not defined then
+        # we assume no TensorDict compatibility and will try to wrap it.
+        return False
+
+    # if in_keys or out_keys were defined but policy is not a TensorDictModule or
+    # accepts multiple arguments then it's likely the user is trying to do something
+    # that will have undetermined behaviour, we raise an error
+    raise TypeError(
+        "Received a policy that defines in_keys or out_keys and also expects multiple "
+        "arguments to policy.forward. If the policy is compatible with TensorDict, it "
+        "should take a single argument of type TensorDict to policy.forward and define "
+        "both in_keys and out_keys. Alternatively, policy.forward can accept "
+        "arbitrarily many tensor inputs and leave in_keys and out_keys undefined and "
+        "TorchRL will attempt to automatically wrap the policy with a TensorDictModule."
+    )
+
+
 class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
     def _get_policy_and_device(
         self,
@@ -89,6 +123,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             ]
         ] = None,
         device: Optional[DEVICE_TYPING] = None,
+        observation_spec: TensorSpec = None,
     ) -> Tuple[
         ProbabilisticTensorDictModule, torch.device, Union[None, Callable[[], dict]]
     ]:
@@ -103,6 +138,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             policy (ProbabilisticTensorDictModule, optional): a policy to be used
             device (int, str or torch.device, optional): device where to place
                 the policy
+            observation_spec (TensorSpec, optional): spec of the observations
 
         """
         # if create_env_fn is not None:
@@ -122,6 +158,47 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
             policy = RandomPolicy(self.env.action_spec)
+        elif isinstance(policy, nn.Module):
+            # TODO: revisit these checks when we have determined whether arbitrary
+            # callables should be supported as policies.
+            if not _policy_is_tensordict_compatible(policy):
+                # policy is a nn.Module that doesn't operate on tensordicts directly
+                # so we attempt to auto-wrap policy with TensorDictModule
+                if observation_spec is None:
+                    raise ValueError(
+                        "Unable to read observation_spec from the environment. This is "
+                        "required to check compatibility of the environment and policy "
+                        "since the policy is a nn.Module that operates on tensors "
+                        "rather than a TensorDictModule or a nn.Module that accepts a "
+                        "TensorDict as input and defines in_keys and out_keys."
+                    )
+                sig = inspect.signature(policy.forward)
+                next_observation = {
+                    key[5:]: value
+                    for key, value in observation_spec.rand().items()
+                    if key.startswith("next_")
+                }
+                if set(sig.parameters) == set(next_observation):
+                    out_keys = ["action"]
+                    output = policy(**next_observation)
+
+                    if isinstance(output, tuple):
+                        out_keys.extend(f"output{i+1}" for i in range(len(output) - 1))
+
+                    policy = TensorDictModule(
+                        policy, in_keys=list(sig.parameters), out_keys=out_keys
+                    )
+                else:
+                    raise TypeError(
+                        "Arguments to policy.forward are incompatible with entries in "
+                        "env.observation_spec. If you want TorchRL to automatically "
+                        "wrap your policy with a TensorDictModule then the arguments "
+                        "to policy.forward must correspond one-to-one with entries in "
+                        "env.observation_spec that are prefixed with 'next_'. For more "
+                        "complex behaviour and more control you can consider writing "
+                        "your own TensorDictModule."
+                    )
+
         try:
             policy_device = next(policy.parameters()).device
         except:  # noqa
@@ -131,7 +208,6 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
 
         device = torch.device(device) if device is not None else policy_device
         if device is None:
-            # if device cannot be found in policy and is not specified, set cpu
             device = torch.device("cpu")
         get_weights_fn = None
         if policy_device != device:
@@ -139,8 +215,6 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             policy = deepcopy(policy).requires_grad_(False).to(device)
             if device == torch.device("cpu"):
                 policy.share_memory()
-            # if not (len(list(policy.parameters())) == 0 or next(policy.parameters()).is_shared()):
-            #     raise RuntimeError("Provided policy parameters must be shared.")
         return policy, device, get_weights_fn
 
     def update_policy_weights_(self) -> None:
@@ -213,7 +287,7 @@ class SyncDataCollector(_DataCollector):
         passing_device (int, str or torch.device, optional): The device on which the output TensorDict will be stored.
             For long trajectories, it may be necessary to store the data on a different device than the one where
             the policy is stored.
-            default = "cpu"
+            default = None
         return_in_place (bool): if True, the collector will yield the same tensordict container with updated values
             at each iteration.
             default = False
@@ -231,7 +305,9 @@ class SyncDataCollector(_DataCollector):
 
     def __init__(
         self,
-        create_env_fn: Union[EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]],
+        create_env_fn: Union[
+            EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]  # noqa: F821
+        ],  # noqa: F821
         policy: Optional[
             Union[
                 ProbabilisticTensorDictModule,
@@ -245,15 +321,16 @@ class SyncDataCollector(_DataCollector):
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        split_trajs: bool = True,
+        split_trajs: Optional[bool] = None,
         device: DEVICE_TYPING = None,
-        passing_device: DEVICE_TYPING = "cpu",
+        passing_device: DEVICE_TYPING = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
         return_in_place: bool = False,
-        exploration_mode: str = "random",
+        exploration_mode: str = DEFAULT_EXPLORATION_MODE,
         init_with_lag: bool = False,
         return_same_td: bool = False,
+        reset_when_done: bool = True,
     ):
         self.closed = True
         if seed is not None:
@@ -274,14 +351,28 @@ class SyncDataCollector(_DataCollector):
                     )
                 env.update_kwargs(create_env_kwargs)
 
+        if passing_device is None:
+            if device is not None:
+                passing_device = device
+            elif policy is not None:
+                try:
+                    policy_device = next(policy.parameters()).device
+                except (AttributeError, StopIteration):
+                    policy_device = torch.device("cpu")
+                passing_device = policy_device
+            else:
+                passing_device = torch.device("cpu")
+
         self.passing_device = torch.device(passing_device)
         self.env: EnvBase = env.to(self.passing_device)
         self.closed = False
+        self.reset_when_done = reset_when_done
         self.n_env = self.env.numel()
 
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,
             device=device,
+            observation_spec=self.env.observation_spec,
         )
 
         self.env_device = env.device
@@ -296,7 +387,9 @@ class SyncDataCollector(_DataCollector):
         self.max_frames_per_traj = max_frames_per_traj
         self.frames_per_batch = -(-frames_per_batch // self.n_env)
         self.pin_memory = pin_memory
-        self.exploration_mode = exploration_mode
+        self.exploration_mode = (
+            exploration_mode if exploration_mode else DEFAULT_EXPLORATION_MODE
+        )
         self.init_with_lag = init_with_lag and max_frames_per_traj > 0
         self.return_same_td = return_same_td
 
@@ -304,13 +397,76 @@ class SyncDataCollector(_DataCollector):
         self._tensordict.set(
             "step_count", torch.zeros(*self.env.batch_size, 1, dtype=torch.int)
         )
-        self._tensordict_out = TensorDict(
-            {},
-            batch_size=[*self.env.batch_size, self.frames_per_batch],
-            device=self.passing_device,
+
+        if (
+            hasattr(self.policy, "spec")
+            and self.policy.spec is not None
+            and all(v is not None for v in self.policy.spec.values())
+            and set(self.policy.spec.keys()) == set(self.policy.out_keys)
+        ):
+            # if policy spec is non-empty, all the values are not None and the keys
+            # match the out_keys we assume the user has given all relevant information
+            self._tensordict_out = TensorDict(
+                {
+                    **env.observation_spec.zero(env.batch_size),
+                    "reward": env.reward_spec.zero(env.batch_size),
+                    "done": torch.zeros(
+                        env.batch_size, dtype=torch.bool, device=env.device
+                    ),
+                    **self.policy.spec.zero(env.batch_size),
+                },
+                env.batch_size,
+                device=env.device,
+            )
+            self._tensordict_out = (
+                self._tensordict_out.unsqueeze(-1)
+                .expand(*env.batch_size, self.frames_per_batch)
+                .to_tensordict()
+            )
+            self._tensordict_out = self._tensordict_out.update(
+                step_mdp(self._tensordict_out)
+            )  # add "observation" when there is "next_observation"
+        else:
+            # otherwise, we perform a small number of steps with the policy to
+            # determine the relevant keys with which to pre-populate _tensordict_out.
+            # See #505 for additional context.
+            self._tensordict_out = self.env.rollout(
+                3, self.policy, auto_cast_to_device=True
+            )
+            if env.batch_size:
+                self._tensordict_out = self._tensordict_out[..., :1]
+            else:
+                self._tensordict_out = self._tensordict_out[:1]
+            self._tensordict_out = (
+                self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
+                .to_tensordict()
+                .zero_()
+                .detach()
+            )
+            env.reset()
+
+        # in addition to outputs of the policy, we add traj_ids and step_count to
+        # _tensordict_out which will be collected during rollout
+        if len(self.env.batch_size):
+            traj_ids = torch.zeros(*self._tensordict_out.batch_size, 1)
+        else:
+            traj_ids = torch.zeros(*self._tensordict_out.batch_size, 1, 1)
+
+        self._tensordict_out.set("traj_ids", traj_ids)
+        self._tensordict_out.set(
+            "step_count", torch.zeros(*self._tensordict_out.batch_size, 1)
         )
 
         self.return_in_place = return_in_place
+        if split_trajs is None:
+            if not self.reset_when_done:
+                split_trajs = False
+            else:
+                split_trajs = True
+        elif not self.reset_when_done and split_trajs:
+            raise RuntimeError(
+                "Cannot split trajectories when reset_when_done is False."
+            )
         self.split_trajs = split_trajs
         if self.return_in_place and self.split_trajs:
             raise RuntimeError(
@@ -406,6 +562,8 @@ class SyncDataCollector(_DataCollector):
 
     def _reset_if_necessary(self) -> None:
         done = self._tensordict.get("done")
+        if not self.reset_when_done:
+            done = torch.zeros_like(done)
         steps = self._tensordict.get("step_count")
         done_or_terminated = done | (steps == self.max_frames_per_traj)
         if self._has_been_done is None:
@@ -427,7 +585,7 @@ class SyncDataCollector(_DataCollector):
             else:
                 self._tensordict.zero_()
 
-            self._tensordict.update(self.env.reset(), inplace=True)
+            self.env.reset(self._tensordict)
             if self._tensordict.get("done").any():
                 raise RuntimeError(
                     f"Got {sum(self._tensordict.get('done'))} done envs after reset."
@@ -458,7 +616,7 @@ class SyncDataCollector(_DataCollector):
 
         tensordict_out = []
         with set_exploration_mode(self.exploration_mode):
-            for t in range(self.frames_per_batch):
+            for _ in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
@@ -473,7 +631,7 @@ class SyncDataCollector(_DataCollector):
 
                 self._reset_if_necessary()
                 self._tensordict.update(
-                    step_tensordict(
+                    step_mdp(
                         self._tensordict.exclude("reward", "done"), keep_other=True
                     ),
                     inplace=True,
@@ -571,7 +729,13 @@ class SyncDataCollector(_DataCollector):
         env_str = indent(f"env={self.env}", 4 * " ")
         policy_str = indent(f"policy={self.policy}", 4 * " ")
         td_out_str = indent(f"td_out={self._tensordict_out}", 4 * " ")
-        string = f"{self.__class__.__name__}(\n{env_str},\n{policy_str},\n{td_out_str})"
+        string = (
+            f"{self.__class__.__name__}("
+            f"\n{env_str},"
+            f"\n{policy_str},"
+            f"\n{td_out_str},"
+            f"\nexploration={self.exploration_mode})"
+        )
         return string
 
 
@@ -614,7 +778,7 @@ class _MultiDataCollector(_DataCollector):
         passing_devices (int, str, torch.device or sequence of such, optional): The devices on which the output
             TensorDict will be stored. For long trajectories, it may be necessary to store the data on a different
             device than the one where the policy is stored.
-            default = "cpu"
+            default = None
         update_at_each_batch (bool): if True, the policy weights will be updated every time a batch of trajectories
             is collected.
             default=False
@@ -624,6 +788,13 @@ class _MultiDataCollector(_DataCollector):
        exploration_mode (str, optional): interaction mode to be used when collecting data. Must be one of "random",
             "mode" or "mean".
             default = "random"
+        reset_when_done (bool, optional): if True, the contained environment will be reset
+            every time it hits a done. If the env contains multiple independent envs, a
+            reset index will be passed to it to reset only thos environments that need to
+            be reset. In practice, this will happen through a call to `env.reset(tensordict)`,
+            in other words, if the env is a multi-agent env, all agents will be
+            reset once one of them is done.
+            Defaults to `True`.
 
     """
 
@@ -643,14 +814,15 @@ class _MultiDataCollector(_DataCollector):
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        split_trajs: bool = True,
+        split_trajs: Optional[bool] = None,
         devices: DEVICE_TYPING = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
-        passing_devices: Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]] = "cpu",
+        passing_devices: Optional[Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]]] = None,
         update_at_each_batch: bool = False,
         init_with_lag: bool = False,
-        exploration_mode: str = "random",
+        exploration_mode: str = DEFAULT_EXPLORATION_MODE,
+        reset_when_done: bool = True,
     ):
         self.closed = True
         self.create_env_fn = create_env_fn
@@ -658,7 +830,7 @@ class _MultiDataCollector(_DataCollector):
         self.create_env_kwargs = (
             create_env_kwargs
             if create_env_kwargs is not None
-            else [dict() for _ in range(self.num_workers)]
+            else [{} for _ in range(self.num_workers)]
         )
         # Preparing devices:
         # We want the user to be able to choose, for each worker, on which
@@ -696,35 +868,50 @@ class _MultiDataCollector(_DataCollector):
             )
         self._policy_dict = {}
         self._get_weights_fn_dict = {}
-        for i, _device in enumerate(devices):
+
+        for i, (_device, create_env, kwargs) in enumerate(
+            zip(devices, self.create_env_fn, self.create_env_kwargs)
+        ):
             if _device in self._policy_dict:
                 devices[i] = _device
                 continue
+
+            if hasattr(create_env, "observation_spec"):
+                observation_spec = create_env.observation_spec
+            else:
+                try:
+                    observation_spec = create_env(**kwargs).observation_spec
+                except:  # noqa
+                    observation_spec = None
+
             _policy, _device, _get_weight_fn = self._get_policy_and_device(
-                policy=policy,
-                device=_device,
+                policy=policy, device=_device, observation_spec=observation_spec
             )
-            if _device not in self._policy_dict:
-                self._policy_dict[_device] = _policy
-                self._get_weights_fn_dict[_device] = _get_weight_fn
+            self._policy_dict[_device] = _policy
+            self._get_weights_fn_dict[_device] = _get_weight_fn
             devices[i] = _device
         self.devices = devices
 
-        if isinstance(passing_devices, (str, int, torch.device)):
-            self.passing_devices = [
-                torch.device(passing_devices) for _ in range(self.num_workers)
-            ]
-        elif isinstance(passing_devices, Sequence):
-            if len(passing_devices) != self.num_workers:
-                raise RuntimeError(device_err_msg("passing_devices", passing_devices))
-            self.passing_devices = [
-                torch.device(_passing_device) for _passing_device in passing_devices
-            ]
+        if passing_devices is None:
+            self.passing_devices = self.devices
         else:
-            raise ValueError(
-                "passing_devices should be either a torch.device or equivalent or an iterable of devices. "
-                f"Found {type(passing_devices)} instead."
-            )
+            if isinstance(passing_devices, (str, int, torch.device)):
+                self.passing_devices = [
+                    torch.device(passing_devices) for _ in range(self.num_workers)
+                ]
+            elif isinstance(passing_devices, Sequence):
+                if len(passing_devices) != self.num_workers:
+                    raise RuntimeError(
+                        device_err_msg("passing_devices", passing_devices)
+                    )
+                self.passing_devices = [
+                    torch.device(_passing_device) for _passing_device in passing_devices
+                ]
+            else:
+                raise ValueError(
+                    "passing_devices should be either a torch.device or equivalent or an iterable of devices. "
+                    f"Found {type(passing_devices)} instead."
+                )
 
         self.total_frames = total_frames if total_frames > 0 else float("inf")
         self.reset_at_each_iter = reset_at_each_iter
@@ -732,6 +919,16 @@ class _MultiDataCollector(_DataCollector):
         self.max_frames_per_traj = max_frames_per_traj
         self.frames_per_batch = frames_per_batch
         self.seed = seed
+        self.reset_when_done = reset_when_done
+        if split_trajs is None:
+            if not self.reset_when_done:
+                split_trajs = False
+            else:
+                split_trajs = True
+        elif not self.reset_when_done and split_trajs:
+            raise RuntimeError(
+                "Cannot split trajectories when reset_when_done is False."
+            )
         self.split_trajs = split_trajs
         self.pin_memory = pin_memory
         self.init_random_frames = init_random_frames
@@ -789,6 +986,7 @@ class _MultiDataCollector(_DataCollector):
                 "pin_memory": self.pin_memory,
                 "init_with_lag": self.init_with_lag,
                 "exploration_mode": self.exploration_mode,
+                "reset_when_done": self.reset_when_done,
                 "idx": i,
             }
             proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
@@ -958,7 +1156,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             i += 1
             max_traj_idx = None
-            for k in range(self.num_workers):
+            for _ in range(self.num_workers):
                 new_data, j = self.queue_out.get()
                 if j == 0:
                     data, idx = new_data
@@ -989,7 +1187,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     else:
                         same_device = same_device and (item.device == prev_device)
             if same_device:
-                out = torch.cat([item for item in out_tensordicts_shared.values()], 0)
+                out = torch.cat(list(out_tensordicts_shared.values()), 0)
             else:
                 out = torch.cat(
                     [item.cpu() for item in out_tensordicts_shared.values()], 0
@@ -1026,12 +1224,12 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.out_tensordicts = dict()
+        self.out_tensordicts = {}
         self.running = False
 
         if self.postprocs is not None:
             postproc = self.postprocs
-            self.postprocs = dict()
+            self.postprocs = {}
             for _device in self.passing_devices:
                 if _device not in self.postprocs:
                     self.postprocs[_device] = deepcopy(postproc).to(_device)
@@ -1174,7 +1372,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         passing_device (int, str, torch.device, optional): The device on which
             the output TensorDict will be stored. For long trajectories,
             it may be necessary to store the data on a different.
-            device than the one where the policy is stored. Default is `"cpu"`.
+            device than the one where the policy is stored. Default is None.
         update_at_each_batch (bool): if True, the policy weights will be updated every time a batch of trajectories
             is collected.
             default=False
@@ -1200,11 +1398,12 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
         postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        split_trajs: bool = True,
+        split_trajs: Optional[bool] = None,
         device: Optional[Union[int, str, torch.device]] = None,
-        passing_device: Union[int, str, torch.device] = "cpu",
+        passing_device: Optional[Union[int, str, torch.device]] = None,
         seed: Optional[int] = None,
         pin_memory: bool = False,
+        **kwargs,
     ):
         super().__init__(
             create_env_fn=[create_env_fn],
@@ -1218,9 +1417,10 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             postproc=postproc,
             split_trajs=split_trajs,
             devices=[device] if device is not None else None,
-            passing_devices=[passing_device],
+            passing_devices=[passing_device] if passing_device is not None else None,
             seed=seed,
             pin_memory=pin_memory,
+            **kwargs,
         )
 
 
@@ -1228,8 +1428,8 @@ def _main_async_collector(
     pipe_parent: connection.Connection,
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
-    create_env_fn: Union[EnvBase, "EnvCreator", Callable[[], EnvBase]],
-    create_env_kwargs: dict,
+    create_env_fn: Union[EnvBase, "EnvCreator", Callable[[], EnvBase]],  # noqa: F821
+    create_env_kwargs: Dict[str, Any],
     policy: Callable[[TensorDictBase], TensorDictBase],
     frames_per_worker: int,
     max_frames_per_traj: int,
@@ -1241,7 +1441,8 @@ def _main_async_collector(
     pin_memory: bool,
     idx: int = 0,
     init_with_lag: bool = False,
-    exploration_mode: str = "random",
+    exploration_mode: str = DEFAULT_EXPLORATION_MODE,
+    reset_when_done: bool = True,
     verbose: bool = False,
 ) -> None:
     pipe_parent.close()
@@ -1265,6 +1466,7 @@ def _main_async_collector(
         return_in_place=True,
         init_with_lag=init_with_lag,
         exploration_mode=exploration_mode,
+        reset_when_done=reset_when_done,
         return_same_td=True,
     )
     if verbose:

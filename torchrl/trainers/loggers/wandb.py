@@ -11,22 +11,21 @@ from torch import Tensor
 
 from .common import Logger
 
-_has_wandb = False
+
 try:
     import wandb
 
     _has_wandb = True
 except ImportError:
-    warnings.warn("wandb could not be imported")
-_has_omgaconf = False
+    _has_wandb = False
+
+
 try:
     from omegaconf import OmegaConf
 
     _has_omgaconf = True
 except ImportError:
-    warnings.warn(
-        "OmegaConf could not be imported. Cannot log hydra configs without OmegaConf"
-    )
+    _has_omgaconf = False
 
 
 class WandbLogger(Logger):
@@ -52,6 +51,9 @@ class WandbLogger(Logger):
         project: str = None,
         **kwargs,
     ) -> None:
+        if not _has_wandb:
+            raise ImportError("wandb could not be imported")
+
         log_dir = kwargs.pop("log_dir", None)
         self.offline = offline
         if save_dir and log_dir:
@@ -67,7 +69,8 @@ class WandbLogger(Logger):
             "name": exp_name,
             "dir": save_dir,
             "id": id,
-            "project": project,
+            "project": "torchrl-private",
+            "entity": "vmoens",
             "resume": "allow",
             **kwargs,
         }
@@ -126,6 +129,12 @@ class WandbLogger(Logger):
                 (default is 'mp4') and 'fps' (default: 6). Other kwargs are
                 passed as-is to the `experiment.log` method.
         """
+        # check for correct format of the video tensor ((N), T, C, H, W)
+        # check that the color channel (C) is either 1 or 3
+        if video.dim() != 5 or video.size(dim=2) not in {1, 3}:
+            raise Exception(
+                "Wrong format of the video tensor. Should be ((N), T, C, H, W)"
+            )
         if not self._has_imported_moviepy:
             try:
                 import moviepy  # noqa
@@ -148,11 +157,14 @@ class WandbLogger(Logger):
                 f"be silenced from now on but the values will keep being incremented."
             )
             step = self._prev_video_step + 1
+        self._prev_video_step = step if step is not None else self._prev_video_step + 1
         self.experiment.log(
-            {name: wandb.Video(video, fps=fps, format=format)}, step=step, **kwargs
+            {name: wandb.Video(video, fps=fps, format=format)},
+            # step=step,
+            **kwargs,
         )
 
-    def log_hparams(self, cfg: "DictConfig") -> None:
+    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
         """
         Logs the hyperparameters of the experiment.
 
@@ -161,6 +173,11 @@ class WandbLogger(Logger):
         """
 
         if type(cfg) is not dict and _has_omgaconf:
+            if not _has_omgaconf:
+                raise ImportError(
+                    "OmegaConf could not be imported. "
+                    "Cannot log hydra configs without OmegaConf."
+                )
             cfg = OmegaConf.to_container(cfg, resolve=True)
         self.experiment.config.update(cfg, allow_val_change=True)
 

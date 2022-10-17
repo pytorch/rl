@@ -9,13 +9,13 @@ import pathlib
 import warnings
 from collections import OrderedDict, defaultdict
 from textwrap import indent
-from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type, List
+from typing import Callable, Dict, Optional, Union, Sequence, Tuple, Type, List, Any
 
 import numpy as np
 import torch.nn
 from torch import nn, optim
 
-from torchrl import KeyDependentDefaultDict
+from torchrl._utils import KeyDependentDefaultDict
 
 try:
     from tqdm import tqdm
@@ -30,10 +30,9 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.data.tensordict.tensordict import TensorDictBase
+from torchrl.data.tensordict.tensordict import TensorDictBase, pad
 from torchrl.data.utils import expand_right, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-from torchrl.envs.transforms import TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.costs.common import LossModule
@@ -112,7 +111,7 @@ class Trainer:
     # trackers
     _optim_count: int = 0
     _collected_frames: int = 0
-    _last_log: dict = {}
+    _last_log: Dict[str, Any] = {}
     _last_save: int = 0
     _log_interval: int = 10000
 
@@ -356,7 +355,7 @@ class Trainer:
 
         self.collected_frames = 0
 
-        for i, batch in enumerate(self.collector):
+        for batch in self.collector:
             batch = self._process_batch_hook(batch)
             self._pre_steps_log_hook(batch)
             current_frames = (
@@ -532,6 +531,17 @@ class ReplayBufferTrainer:
             Default is False.
         device (device, optional): device where the samples must be placed.
             Default is cpu.
+        flatten_tensordicts (bool, optional): if True, the tensordicts will be
+            flattened (or equivalently masked with the valid mask obtained from
+            the collector) before being passed to the replay buffer. Otherwise,
+            no transform will be achieved other than padding (see `max_dims` arg below).
+            Defaults to True
+        max_dims (sequence of int, optional): if `flatten_tensordicts` is set to False,
+            this will be a list of the length of the batch_size of the provided
+            tensordicts that represent the maximum size of each. If provided,
+            this list of sizes will be used to pad the tensordict and make their shape
+            match before they are passed to the replay buffer. If there is no
+            maximum value, a -1 value should be provided.
 
     Examples:
         >>> rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
@@ -547,17 +557,33 @@ class ReplayBufferTrainer:
         batch_size: int,
         memmap: bool = False,
         device: DEVICE_TYPING = "cpu",
+        flatten_tensordicts: bool = True,
+        max_dims: Optional[Sequence[int]] = None,
     ) -> None:
         self.replay_buffer = replay_buffer
         self.batch_size = batch_size
         self.memmap = memmap
         self.device = device
+        self.flatten_tensordicts = flatten_tensordicts
+        self.max_dims = max_dims
 
     def extend(self, batch: TensorDictBase) -> TensorDictBase:
-        if "mask" in batch.keys():
-            batch = batch[batch.get("mask").squeeze(-1)]
+        if self.flatten_tensordicts:
+            if "mask" in batch.keys():
+                batch = batch[batch.get("mask").squeeze(-1)]
+            else:
+                batch = batch.reshape(-1)
         else:
-            batch = batch.reshape(-1)
+            if self.max_dims is not None:
+                pads = []
+                for d in range(batch.ndimension()):
+                    pad_value = (
+                        0
+                        if self.max_dims[d] == -1
+                        else self.max_dims[d] - batch.batch_size[d]
+                    )
+                    pads += [0, pad_value]
+                batch = pad(batch, pads)
         # reward_training = batch.get("reward").mean().item()
         batch = batch.cpu()
         if self.memmap:
@@ -641,13 +667,18 @@ class RewardNormalizer:
     """
 
     def __init__(
-        self, decay: float = 0.999, scale: float = 1.0, log_pbar: bool = False
+        self,
+        decay: float = 0.999,
+        scale: float = 1.0,
+        eps: float = 1e-4,
+        log_pbar: bool = False,
     ):
         self._normalize_has_been_called = False
         self._update_has_been_called = False
         self._reward_stats = OrderedDict()
         self._reward_stats["decay"] = decay
         self.scale = scale
+        self.eps = eps
 
     @torch.no_grad()
     def update_reward_stats(self, batch: TensorDictBase) -> None:
@@ -678,14 +709,20 @@ class RewardNormalizer:
         else:
             var = self._reward_stats["var"] = torch.zeros_like(sum)
 
-        self._reward_stats["std"] = var.clamp_min(1e-6).sqrt()
+        self._reward_stats["std"] = var.clamp_min(self.eps).sqrt()
         self._update_has_been_called = True
 
     def normalize_reward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.to_tensordict()  # make sure it is not a SubTensorDict
         reward = tensordict.get("reward")
-        reward = reward - self._reward_stats["mean"].to(tensordict.device)
-        reward = reward / self._reward_stats["std"].to(tensordict.device)
+
+        if reward.device is not None:
+            reward = reward - self._reward_stats["mean"].to(reward.device)
+            reward = reward / self._reward_stats["std"].to(reward.device)
+        else:
+            reward = reward - self._reward_stats["mean"]
+            reward = reward / self._reward_stats["std"]
+
         tensordict.set("reward", reward * self.scale)
         self._normalize_has_been_called = True
         return tensordict
@@ -872,7 +909,7 @@ class Recorder:
         frame_skip: int,
         policy_exploration: TensorDictModule,
         recorder: EnvBase,
-        exploration_mode: str = "mean",
+        exploration_mode: str = "random",
         log_keys: Optional[List[str]] = None,
         out_keys: Optional[Dict[str, str]] = None,
         suffix: Optional[str] = None,
@@ -904,8 +941,6 @@ class Recorder:
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.eval()
                 self.recorder.eval()
-                if isinstance(self.recorder, TransformedEnv):
-                    self.recorder.transform.eval()
                 td_record = self.recorder.rollout(
                     policy=self.policy_exploration,
                     max_steps=self.record_frames,

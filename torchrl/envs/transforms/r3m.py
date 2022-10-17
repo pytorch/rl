@@ -1,10 +1,20 @@
-from typing import List, Optional
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+from typing import List, Optional, Union
 
 import torch
 from torch.hub import load_state_dict_from_url
 from torch.nn import Identity
 
-from torchrl.data import TensorDict
+from torchrl.data import TensorDict, DEVICE_TYPING
+from torchrl.data.tensor_specs import (
+    TensorSpec,
+    CompositeSpec,
+    NdUnboundedContinuousTensorSpec,
+)
 from torchrl.envs.transforms import (
     ToTensorImage,
     Compose,
@@ -12,6 +22,8 @@ from torchrl.envs.transforms import (
     Resize,
     Transform,
     CatTensors,
+    FlattenObservation,
+    UnsqueezeTransform,
 )
 
 try:
@@ -73,6 +85,25 @@ class _R3MNet(Transform):
             out = out.view(*shape, *out.shape[1:])
         return out
 
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if not isinstance(observation_spec, CompositeSpec):
+            raise ValueError("_R3MNet can only infer CompositeSpec")
+
+        keys = [key for key in observation_spec._specs.keys() if key in self.keys_in]
+        device = observation_spec[keys[0]].device
+
+        observation_spec = CompositeSpec(**observation_spec)
+        if self.del_keys:
+            for key_in in keys:
+                del observation_spec[key_in]
+
+        for key_out in self.keys_out:
+            observation_spec[key_out] = NdUnboundedContinuousTensorSpec(
+                shape=torch.Size([self.outdim]), device=device
+            )
+
+        return observation_spec
+
     @staticmethod
     def _load_weights(model_name, r3m_instance, dir_prefix):
         if model_name not in ("r3m_50", "r3m_34", "r3m_18"):
@@ -96,15 +127,37 @@ class _R3MNet(Transform):
         self._load_weights(self.model_name, self, dir_prefix)
 
 
+def _init_first(fun):
+    def new_fun(self, *args, **kwargs):
+        if not self.initialized:
+            self._init()
+        return fun(self, *args, **kwargs)
+
+    return new_fun
+
+
 class R3MTransform(Compose):
     """R3M Transform class.
 
     R3M provides pre-trained ResNet weights aimed at facilitating visual
     embedding for robotic tasks. The models are trained using Ego4d.
+
     See the paper:
         R3M: A Universal Visual Representation for Robot Manipulation (Suraj Nair,
             Aravind Rajeswaran, Vikash Kumar, Chelsea Finn, Abhinav Gupta)
             https://arxiv.org/abs/2203.12601
+
+    The R3MTransform is created in a lazy manner: the object will be initialized
+    only when an attribute (a spec or the forward method) will be queried.
+    The reason for this is that the `_init()` method requires some attributes of
+    the parent environment (if any) to be accessed: by making the class lazy we
+    can ensure that the following code snippet works as expected:
+
+    Examples:
+        >>> transform = R3MTransform("resenet50", keys_in=["next_pixels"])
+        >>> env.append_transform(transform)
+        >>> # the forward method will first call _init which will look at env.observation_spec
+        >>> env.reset()
 
     Args:
         model_name (str): one of resnet50, resnet34 or resnet18
@@ -124,6 +177,14 @@ class R3MTransform(Compose):
             If no value is provided, this won't be collected.
     """
 
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._is_3d = None
+        cls.initialized = False
+        cls._device = None
+        cls._dtype = None
+        return super().__new__(cls)
+
     def __init__(
         self,
         model_name: str,
@@ -135,8 +196,24 @@ class R3MTransform(Compose):
         download_path: Optional[str] = None,
         tensor_pixels_keys: List[str] = None,
     ):
+        super().__init__()
+        self.keys_in = keys_in
         self.download = download
         self.download_path = download_path
+        self.model_name = model_name
+        self.keys_out = keys_out
+        self.size = size
+        self.stack_images = stack_images
+        self.tensor_pixels_keys = tensor_pixels_keys
+
+    def _init(self):
+        keys_in = self.keys_in
+        model_name = self.model_name
+        keys_out = self.keys_out
+        size = self.size
+        stack_images = self.stack_images
+        tensor_pixels_keys = self.tensor_pixels_keys
+
         # ToTensor
         transforms = []
         if tensor_pixels_keys:
@@ -177,18 +254,27 @@ class R3MTransform(Compose):
             else:
                 keys_out = [f"next_r3m_vec_{i}" for i in range(len(keys_in))]
         elif stack_images and len(keys_out) != 1:
-            raise ValueError("key_out must be of length 1 if stack_images is True.")
+            raise ValueError(
+                f"key_out must be of length 1 if stack_images is True. Got keys_out={keys_out}"
+            )
         elif not stack_images and len(keys_out) != len(keys_in):
             raise ValueError(
                 "key_out must be of length equal to keys_in if stack_images is False."
             )
 
-        if stack_images:
+        if stack_images and len(keys_in) > 1:
+            if self.is_3d:
+                unsqueeze = UnsqueezeTransform(
+                    keys_in=keys_in,
+                    keys_out=keys_in,
+                    unsqueeze_dim=-4,
+                )
+                transforms.append(unsqueeze)
+
             cattensors = CatTensors(
                 keys_in,
                 keys_out[0],
                 dim=-4,
-                unsqueeze_if_oor=True,
             )
             network = _R3MNet(
                 in_keys=keys_out,
@@ -196,7 +282,8 @@ class R3MTransform(Compose):
                 model_name=model_name,
                 del_keys=False,
             )
-            transforms = [*transforms, cattensors, network]
+            flatten = FlattenObservation(-2, -1, keys_out)
+            transforms = [*transforms, cattensors, network, flatten]
         else:
             network = _R3MNet(
                 in_keys=keys_in,
@@ -204,8 +291,46 @@ class R3MTransform(Compose):
                 model_name=model_name,
                 del_keys=True,
             )
-            transforms = [*transforms, normalize, network]
+            transforms = [*transforms, network]
 
-        super().__init__(*transforms)
+        for transform in transforms:
+            self.append(transform)
         if self.download:
             self[-1].load_weights(dir_prefix=self.download_path)
+        self.initialized = True
+
+        if self._device is not None:
+            self.to(self._device)
+        if self._dtype is not None:
+            self.to(self._dtype)
+
+    @property
+    def is_3d(self):
+        if self._is_3d is None:
+            parent = self.parent
+            for key in parent.observation_spec.keys():
+                self._is_3d = len(parent.observation_spec[key].shape) == 3
+                break
+        return self._is_3d
+
+    def to(self, dest: Union[DEVICE_TYPING, torch.dtype]):
+        if isinstance(dest, torch.dtype):
+            self._dtype = dest
+        else:
+            self._device = dest
+        return super().to(dest)
+
+    @property
+    def device(self):
+        return self._device
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    forward = _init_first(Compose.forward)
+    transform_observation_spec = _init_first(Compose.transform_observation_spec)
+    transform_input_spec = _init_first(Compose.transform_input_spec)
+    transform_reward_spec = _init_first(Compose.transform_reward_spec)
+    reset = _init_first(Compose.reset)
+    init = _init_first(Compose.init)

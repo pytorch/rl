@@ -9,12 +9,15 @@ from typing import Callable, List, Optional, Type, Union, Dict, Any
 from torchrl.collectors.collectors import (
     _DataCollector,
     _MultiDataCollector,
+    SyncDataCollector,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
 )
 from torchrl.data import MultiStep
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs import ParallelEnv
+from torchrl.envs.common import EnvBase
+from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule
 
 __all__ = [
     "sync_sync_collector",
@@ -22,9 +25,6 @@ __all__ = [
     "make_collector_offpolicy",
     "make_collector_onpolicy",
 ]
-
-from torchrl.envs.common import EnvBase
-from torchrl.modules import TensorDictModuleWrapper, ProbabilisticTensorDictModule
 
 
 def sync_async_collector(
@@ -95,7 +95,7 @@ def sync_sync_collector(
     num_env_per_collector: Optional[int] = None,
     num_collectors: Optional[int] = None,
     **kwargs,
-) -> MultiSyncDataCollector:
+) -> Union[SyncDataCollector, MultiSyncDataCollector]:
     """
     Runs synchronous collectors, each running synchronous environments.
 
@@ -149,6 +149,19 @@ def sync_sync_collector(
         **kwargs: Other kwargs passed to the data collectors
 
     """
+    if num_collectors == 1:
+        if "devices" in kwargs:
+            kwargs["device"] = kwargs.pop("devices")
+        if "passing_devices" in kwargs:
+            kwargs["passing_device"] = kwargs.pop("passing_devices")
+        return _make_collector(
+            SyncDataCollector,
+            env_fns=env_fns,
+            env_kwargs=env_kwargs,
+            num_env_per_collector=num_env_per_collector,
+            num_collectors=num_collectors,
+            **kwargs,
+        )
     return _make_collector(
         MultiSyncDataCollector,
         env_fns=env_fns,
@@ -224,6 +237,13 @@ def _make_collector(
             for _env_fn, _env_kwargs in zip(env_fns_split, env_kwargs_split)
         ]
         env_kwargs = None
+    if collector_class is SyncDataCollector:
+        if len(env_fns) > 1:
+            raise RuntimeError(
+                f"Something went wrong: expected a single env constructor but got {len(env_fns)}"
+            )
+        env_fns = env_fns[0]
+        env_kwargs = env_kwargs[0]
     return collector_class(
         create_env_fn=env_fns,
         create_env_kwargs=env_kwargs,
@@ -239,7 +259,7 @@ def _make_collector(
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     """
@@ -304,7 +324,7 @@ def make_collector_offpolicy(
 def make_collector_onpolicy(
     make_env: Callable[[], EnvBase],
     actor_model_explore: Union[TensorDictModuleWrapper, ProbabilisticTensorDictModule],
-    cfg: "DictConfig",
+    cfg: "DictConfig",  # noqa: F821
     make_env_kwargs: Optional[Dict] = None,
 ) -> _DataCollector:
     collector_helper = sync_sync_collector

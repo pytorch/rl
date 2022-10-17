@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import dataclasses
+import os
+import pathlib
 import uuid
 from datetime import datetime
 
@@ -68,7 +70,7 @@ DEFAULT_REWARD_SCALING = {
 
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
-def main(cfg: "DictConfig"):
+def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
 
@@ -101,6 +103,13 @@ def main(cfg: "DictConfig"):
         from torchrl.trainers.loggers.wandb import WandbLogger
 
         logger = WandbLogger(log_dir="sac_logging", exp_name=exp_name)
+    elif cfg.logger == "mlflow":
+        from torchrl.trainers.loggers.mlflow import MLFlowLogger
+
+        logger = MLFlowLogger(
+            tracking_uri=pathlib.Path(os.path.abspath("sac_logging")).as_uri(),
+            exp_name=exp_name,
+        )
     video_tag = exp_name if cfg.record_video else ""
 
     stats = None

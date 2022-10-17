@@ -6,7 +6,7 @@
 import re
 from copy import deepcopy
 from textwrap import indent
-from typing import Sequence, Union, Type, Optional, Tuple
+from typing import List, Sequence, Union, Type, Optional, Tuple
 
 from torch import Tensor
 from torch import distributions as d
@@ -193,10 +193,16 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
 
-    def _call_module(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        return self.module(tensordict, **kwargs)
+    def _call_module(
+        self,
+        tensordict: TensorDictBase,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        **kwargs,
+    ) -> TensorDictBase:
+        return self.module(tensordict, params=params, buffers=buffers, **kwargs)
 
-    def make_functional_with_buffers(self, clone: bool = True):
+    def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
         module_params = self.parameters(recurse=False)
         if len(list(module_params)):
             raise RuntimeError(
@@ -209,7 +215,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             self_copy = self
 
         self_copy.module, other = self_copy.module.make_functional_with_buffers(
-            clone=True
+            clone=True,
+            native=native,
         )
         return self_copy, other
 
@@ -217,6 +224,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> Tuple[d.Distribution, TensorDictBase]:
         interaction_mode = exploration_mode()
@@ -224,7 +233,11 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             interaction_mode = self.default_interaction_mode
         with set_exploration_mode(interaction_mode):
             tensordict_out = self._call_module(
-                tensordict, tensordict_out=tensordict_out, **kwargs
+                tensordict,
+                tensordict_out=tensordict_out,
+                params=params,
+                buffers=buffers,
+                **kwargs,
             )
         dist = self.build_dist_from_params(tensordict_out)
         return dist, tensordict_out
@@ -255,11 +268,17 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
+        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
+        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> TensorDictBase:
 
         dist, tensordict_out = self.get_dist(
-            tensordict, tensordict_out=tensordict_out, **kwargs
+            tensordict,
+            tensordict_out=tensordict_out,
+            params=params,
+            buffers=buffers,
+            **kwargs,
         )
         if self._requires_sample:
             out_tensors = self._dist_sample(dist, interaction_mode=exploration_mode())

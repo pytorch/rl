@@ -18,10 +18,10 @@ import torch
 from torch import Tensor, nn
 
 from torchrl.data.tensordict.tensordict import TensorDictBase
-from torchrl.envs.utils import step_tensordict
+from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule
 from torchrl.objectives.returns.functional import (
-    generalized_advantage_estimate,
+    vec_generalized_advantage_estimate,
     td_lambda_advantage_estimate,
     vec_td_lambda_advantage_estimate,
 )
@@ -112,7 +112,7 @@ class TDEstimate(nn.Module):
         with hold_out_net(self.value_network):
             # we may still need to pass gradient, but we don't want to assign grads to
             # value net params
-            step_td = step_tensordict(tensordict)
+            step_td = step_mdp(tensordict)
             if target_params is not None:
                 # we assume that target parameters are not differentiable
                 kwargs["params"] = target_params
@@ -223,7 +223,7 @@ class TDLambdaEstimate(nn.Module):
         with hold_out_net(self.value_network):
             # we may still need to pass gradient, but we don't want to assign grads to
             # value net params
-            step_td = step_tensordict(tensordict)
+            step_td = step_mdp(tensordict)
             if target_params is not None:
                 # we assume that target parameters are not differentiable
                 kwargs["params"] = target_params
@@ -334,7 +334,7 @@ class GAE(nn.Module):
         with hold_out_net(self.value_network):
             # we may still need to pass gradient, but we don't want to assign grads to
             # value net params
-            step_td = step_tensordict(tensordict)
+            step_td = step_mdp(tensordict)
             if target_params is not None:
                 # we assume that target parameters are not differentiable
                 kwargs["params"] = target_params
@@ -347,7 +347,7 @@ class GAE(nn.Module):
             self.value_network(step_td, **kwargs)
             next_value = step_td.get("state_value")
             done = tensordict.get("done")
-            adv, value_target = generalized_advantage_estimate(
+            adv, value_target = vec_generalized_advantage_estimate(
                 gamma, lmbda, value, next_value, reward, done
             )
 

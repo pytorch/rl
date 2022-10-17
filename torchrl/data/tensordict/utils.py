@@ -11,6 +11,16 @@ from typing import Tuple, List, Union
 import numpy as np
 import torch
 
+try:
+    try:
+        from functorch._C import is_batchedtensor, get_unwrapped
+    except ImportError:
+        from torch._C._functorch import is_batchedtensor, get_unwrapped
+
+    _has_functorch = True
+except ImportError:
+    _has_functorch = False
+
 from torchrl.data.utils import INDEX_TYPING
 
 
@@ -121,7 +131,8 @@ def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
 
     if idx is Ellipsis:
         idx = (...,)
-    if num_dims < len(idx):
+    num_ellipsis = sum(_idx is Ellipsis for _idx in idx)
+    if num_dims < (len(idx) - num_ellipsis):
         raise RuntimeError("Not enough dimensions in TensorDict for index provided.")
 
     start_pos, after_ellipsis_length = None, 0
@@ -184,3 +195,22 @@ def infer_size_impl(shape: List[int], numel: int) -> List[int]:
     if infer_dim is not None:
         out[infer_dim] = numel // newsize
     return out
+
+
+def _get_shape(value):
+    # we call it "legacy code"
+    return value.shape
+
+
+def _unwrap_value(value):
+    # batch_dims = value.ndimension()
+    if not isinstance(value, torch.Tensor):
+        out = value
+    elif is_batchedtensor(value):
+        out = get_unwrapped(value)
+    else:
+        out = value
+    return out
+    # batch_dims = out.ndimension() - batch_dims
+    # batch_size = out.shape[:batch_dims]
+    # return out, batch_size
