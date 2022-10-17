@@ -82,33 +82,29 @@ class DreamerModelLoss(LossModule):
         reco_loss = 0
         for key in self.observation_keys:
             if key == "pixels":
-                loss = (
-                    distance_loss(
-                        tensordict.get("next_pixels"),
-                        tensordict.get("next_reco_pixels"),
-                        self.reco_loss,
-                    )
+                loss = distance_loss(
+                    tensordict.get("next_pixels"),
+                    tensordict.get("next_reco_pixels"),
+                    self.reco_loss,
                 )
                 if not self.global_average:
                     loss = loss.sum((-3, -2, -1))
                 reco_loss += loss.mean()
             else:
-                loss = (
-                    distance_loss(
-                        tensordict.get(key),
-                        tensordict.get("next_reco_" + key),
-                        self.reco_loss,
-                    )
+                loss = distance_loss(
+                    tensordict.get(key),
+                    tensordict.get("next_reco_" + key),
+                    self.reco_loss,
                 )
                 if not self.global_average:
                     loss = loss.sum(-1)
                 reco_loss += loss.mean()
-                
+
         reward_loss = distance_loss(
-                tensordict.get("true_reward"),
-                tensordict.get("reward"),
-                self.reward_loss,
-            )
+            tensordict.get("true_reward"),
+            tensordict.get("reward"),
+            self.reward_loss,
+        )
         if not self.global_average:
             reward_loss = reward_loss.squeeze(-1)
         reward_loss = reward_loss.mean()
