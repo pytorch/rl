@@ -667,7 +667,11 @@ class RewardNormalizer:
     """
 
     def __init__(
-        self, decay: float = 0.999, scale: float = 1.0, eps: float = 1e-4, log_pbar: bool = False
+        self,
+        decay: float = 0.999,
+        scale: float = 1.0,
+        eps: float = 1e-4,
+        log_pbar: bool = False,
     ):
         self._normalize_has_been_called = False
         self._update_has_been_called = False
