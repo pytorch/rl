@@ -35,9 +35,6 @@ from torchrl.modules.tensordict_module.exploration import (
 )
 from torchrl.trainers.loggers.csv import CSVLogger
 from torchrl.trainers.loggers.mlflow import MLFlowLogger, _has_mlflow
-
-if _has_mlflow:
-    import mlflow
 from torchrl.trainers.loggers.tensorboard import TensorboardLogger, _has_tb
 from torchrl.trainers.loggers.wandb import WandbLogger, _has_wandb
 
@@ -49,6 +46,9 @@ try:
     _has_hydra = True
 except ImportError:
     _has_hydra = False
+
+if _has_mlflow:
+    import mlflow
 
 IS_OSX = platform == "darwin"
 
