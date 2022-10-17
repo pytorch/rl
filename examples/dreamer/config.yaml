@@ -34,5 +34,5 @@ logger: csv
 offline_logging: False
 normalize_rewards_online: True
 normalize_rewards_online_scale: 5.0
-normalize_rewards_online_decay: 0.9999
+normalize_rewards_online_decay: 0.99999
 reward_scaling: 1.0

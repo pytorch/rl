@@ -37,6 +37,10 @@ class DreamerModelLoss(LossModule):
         delayed_clamp (bool, optional): if True, the KL clamping occurs after
             averaging. If False (default), the kl divergence is clamped to the
             free nats value first and then averaged.
+        global_average (bool, optional): if True, the losses will be averaged
+            over all dimensions. Otherwise, a sum will be performed over all
+            non-batch/time dimensions and an average over batch and time.
+            Default: False.
     """
 
     def __init__(
@@ -49,6 +53,7 @@ class DreamerModelLoss(LossModule):
         reward_loss: Optional[str] = None,
         free_nats: int = 3,
         delayed_clamp: bool = False,
+        global_average: bool = False,
     ):
         super().__init__()
         self.world_model = world_model
@@ -59,6 +64,7 @@ class DreamerModelLoss(LossModule):
         self.lambda_reward = lambda_reward
         self.free_nats = free_nats
         self.delayed_clamp = delayed_clamp
+        self.global_average = global_average
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
@@ -71,24 +77,23 @@ class DreamerModelLoss(LossModule):
             tensordict.get("next_posterior_mean"),
             tensordict.get("next_posterior_std"),
         )
-        reco_loss = (
-            distance_loss(
+        reco_loss = distance_loss(
                 tensordict.get("next_pixels"),
                 tensordict.get("next_reco_pixels"),
                 self.reco_loss,
             )
-            .sum((-1, -2, -3))
-            .mean()
-        )
-        reward_loss = (
-            distance_loss(
+        if not self.global_average:
+            reco_loss = reco_loss.sum((-3, -2, -1))
+        reco_loss = reco_loss.mean()
+
+        reward_loss = distance_loss(
                 tensordict.get("true_reward"),
                 tensordict.get("reward"),
                 self.reward_loss,
             )
-            .sum((-2, -1))
-            .mean()
-        )
+        if not self.global_average:
+            reward_loss = reward_loss.squeeze(-1)
+        reward_loss = reward_loss.mean()
         return (
             TensorDict(
                 {
@@ -114,10 +119,12 @@ class DreamerModelLoss(LossModule):
             / (2 * prior_std ** 2)
             - 0.5
         )
+        if not self.global_average:
+            kl = kl.sum(-1)
         if self.delayed_clamp:
-            kl = kl.sum(-1).mean().clamp_min(self.free_nats)
+            kl = kl.mean().clamp_min(self.free_nats)
         else:
-            kl = kl.sum(-1).clamp_min(self.free_nats).mean()
+            kl = kl.clamp_min(self.free_nats).mean()
         return kl
 
 

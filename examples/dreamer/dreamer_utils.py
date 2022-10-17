@@ -200,6 +200,10 @@ def transformed_env_constructor(
                 "from_pixels": from_pixels or len(video_tag),
                 "pixels_only": from_pixels,
             }
+            if env_name == "quadruped":
+                # hard code camera_id for quadruped
+                camera_id = "x"
+                env_kwargs["camera_id"] = camera_id
             if env_library is DMControlEnv:
                 env_kwargs.update({"task_name": env_task})
             env_kwargs.update(kwargs)
