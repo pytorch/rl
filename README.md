@@ -317,7 +317,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
 
     ### Loss modules
     ```python
-    from torchrl.objectives.costs import DQNLoss
+    from torchrl.objectives import DQNLoss
     loss_module = DQNLoss(value_network=value_network, gamma=0.99)
     tensordict = replay_buffer.sample(batch_size)
     loss = loss_module(tensordict)
@@ -325,7 +325,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
 
     ### Advantage computation
     ```python
-    from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
+    from torchrl.objectives.value.functional import vec_td_lambda_return_estimate
     advantage = vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done)
     ```
 

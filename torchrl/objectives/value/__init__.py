@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .pg import *
-from .returns import *
-from .vtrace import *
-from .advantages import *
+from .returns import bellman_max
+from .vtrace import c_val, dv_val, vtrace
+from .advantages import GAE, TDLambdaEstimate, TDEstimate
