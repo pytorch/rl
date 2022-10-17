@@ -43,6 +43,7 @@ from torchrl.trainers.trainers import (
     RewardNormalizer,
     SelectKeys,
     UpdateWeights,
+    _has_ts,
 )
 
 
@@ -124,17 +125,21 @@ class TestSelectKeys:
             },
             [],
         )
-        trainer.register_op("batch_process", SelectKeys([key1]))
+        hook = SelectKeys([key1])
+        hook.register(trainer)
         trainer._process_batch_hook(td)
 
         trainer2 = mocking_trainer()
-        trainer2.register_op("batch_process", SelectKeys([key1]))
+        hook2 = SelectKeys([key1])
+        hook2.register(trainer2)
         sd = trainer.state_dict()
-        assert not len(sd["_batch_process_ops"][0][0])  # state_dict is empty
+        assert not len(sd["select_keys"])
         trainer2.load_state_dict(sd)
 
     @pytest.mark.parametrize("backend", ["torchsnapshot", "torch"])
     def test_selectkeys_save(self, backend):
+        if not _has_ts:
+            pytest.skip("torchsnapshot not found")
         # we overwrite the method to make sure that load_state_dict and state_dict are being called
         state_dict_has_been_called = [False]
         load_state_dict_has_been_called = [False]
@@ -332,6 +337,9 @@ class TestRB:
     def test_rb_trainer_save(
         self, prioritized, storage_type, backend, re_init, S=10, batch=11, N=3
     ):
+        if not _has_ts:
+            pytest.skip("torchsnapshot not found")
+
         torch.manual_seed(0)
         # we overwrite the method to make sure that load_state_dict and state_dict are being called
         state_dict_has_been_called = [False]
@@ -512,6 +520,53 @@ class TestRewardNorm:
         trainer2.load_state_dict(state_dict)
         for key, item in reward_normalizer._reward_stats.items():
             assert item == reward_normalizer2._reward_stats[key]
+
+    @pytest.mark.parametrize(
+        "backend",
+        [
+            "torchsnapshot",
+            "torch",
+        ],
+    )
+    def test_reward_norm_save(self, backend):
+        if not _has_ts:
+            pytest.skip("torchsnapshot not found")
+
+        state_dict_has_been_called = [False]
+        load_state_dict_has_been_called = [False]
+        RewardNormalizer.state_dict, RewardNormalizer_state_dict = _fun_checker(
+            RewardNormalizer.state_dict, state_dict_has_been_called
+        )
+        (
+            RewardNormalizer.load_state_dict,
+            RewardNormalizer_load_state_dict,
+        ) = _fun_checker(
+            RewardNormalizer.load_state_dict, load_state_dict_has_been_called
+        )
+
+        torch.manual_seed(0)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            if backend == "torch":
+                file = path.join(tmpdirname, "file.pt")
+            else:
+                file = tmpdirname
+            trainer = mocking_trainer(file)
+            reward_normalizer = RewardNormalizer()
+            reward_normalizer.register(trainer)
+
+            batch = 10
+            reward = torch.randn(batch, 1)
+            td = TensorDict({"reward": reward.clone()}, [batch])
+            trainer._process_batch_hook(td)
+            trainer._process_optim_batch_hook(td)
+            trainer.save_trainer(True)
+
+            trainer2 = mocking_trainer()
+            reward_normalizer2 = RewardNormalizer()
+            reward_normalizer2.register(trainer2)
+            trainer2.load_from_file(file)
+        RewardNormalizer.state_dict = RewardNormalizer_state_dict
+        RewardNormalizer.load_state_dict = RewardNormalizer_load_state_dict
 
 
 def test_masking():
