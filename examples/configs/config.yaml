@@ -6,4 +6,5 @@ defaults:
   - model: dqn/distributional
   - network: dqn/pixels
   - exploration: linear
+  - loss: dqn_loss
 num_workers: 0
