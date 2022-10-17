@@ -1,0 +1,3 @@
+_target_: torchrl.trainers.loggers.csv.CSVLogger
+exp_name: example_exp
+log_dir: csv_logs

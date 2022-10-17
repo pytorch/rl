@@ -1,0 +1,6 @@
+_target_: torchrl.trainers.loggers.wandb.WandbLogger
+exp_name: example_exp
+save_dir: wandb_logs
+offline: False
+id: null
+project: null

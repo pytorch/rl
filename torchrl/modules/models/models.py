@@ -12,6 +12,7 @@ from torch.nn import functional as F
 
 from torchrl._utils import prod
 from torchrl.data import DEVICE_TYPING
+from torchrl.modules.models.exploration import NoisyLinear, NoisyLazyLinear
 from torchrl.modules.models.utils import (
     _find_depth,
     create_on_device,
@@ -24,13 +25,36 @@ __all__ = [
     "MLP",
     "ConvNet",
     "DuelingCnnDQNet",
+    "DuelingMlpDQNet",
     "DistributionalDQNnet",
     "DdpgCnnActor",
     "DdpgCnnQNet",
     "DdpgMlpActor",
     "DdpgMlpQNet",
     "LSTMNet",
+    "DualInputCnn",
 ]
+
+_LAYER_CLASS_DICT = {
+    "linear": nn.Linear,
+    "noisy_linear": NoisyLinear,
+    "lazy_linear": nn.LazyLinear,
+    "lazy_noisy_linear": NoisyLazyLinear,
+}
+
+_AGGREGATORS = {
+    "squash_dims": SquashDims,
+    "adaptive_avg_pooling": nn.AdaptiveAvgPool2d,
+}
+
+_ACTIVATION = {
+    "tanh": nn.Tanh,
+    "elu": nn.ELU,
+    "relu": nn.ReLU,
+    "gelu": nn.GELU,
+    "hard_tanh": nn.Hardtanh,
+    "hard_swish": nn.Hardswish,
+}
 
 
 class MLP(nn.Sequential):
@@ -57,19 +81,26 @@ class MLP(nn.Sequential):
             an integer is provided, every layer will have the same number of cells. If an iterable is provided,
             the linear layers out_features will match the content of num_cells.
             default: 32;
-        activation_class (Type[nn.Module]): activation class to be used.
+        activation_class (Type[nn.Module] or str, optional): activation class to be used.
             default: nn.Tanh
-        activation_kwargs (dict, optional): kwargs to be used with the activation class;
+        activation_kwargs (dict, optional): kwargs to be used with the
+            activation class;
         norm_class (Type, optional): normalization class, if any.
-        norm_kwargs (dict, optional): kwargs to be used with the normalization layers;
-        bias_last_layer (bool): if True, the last Linear layer will have a bias parameter.
+        norm_kwargs (dict, optional): kwargs to be used with the normalization
+            layers;
+        bias_last_layer (bool, optional): if True, the last Linear layer will have a bias
+            parameter.
             default: True;
-        single_bias_last_layer (bool): if True, the last dimension of the bias of the last layer will be a singleton
+        single_bias_last_layer (bool, optional): if True, the last dimension of the bias
+            of the last layer will be a singleton
             dimension.
             default: True;
-        layer_class (Type[nn.Module]): class to be used for the linear layers;
+        layer_class (Type[nn.Module] or str, optional): class to be used for the linear layers. If
+            str, can be one of `"linear"`, `"noisy_linear"`, or one of these with
+            the `"lazy_"` prefix.
+            Defaults to nn.Linear.
         layer_kwargs (dict, optional): kwargs for the linear layers;
-        activate_last_layer (bool): whether the MLP output should be activated. This is useful when the MLP output
+        activate_last_layer (bool, optional): whether the MLP output should be activated. This is useful when the MLP output
             is used as the input for another module.
             default: False.
         device (Optional[DEVICE_TYPING]): device to create the module on.
@@ -156,7 +187,7 @@ class MLP(nn.Sequential):
         out_features: Union[int, Sequence[int]] = None,
         depth: Optional[int] = None,
         num_cells: Optional[Union[Sequence, int]] = None,
-        activation_class: Type[nn.Module] = nn.Tanh,
+        activation_class: Union[str, Type[nn.Module]] = nn.Tanh,
         activation_kwargs: Optional[dict] = None,
         norm_class: Optional[Type[nn.Module]] = None,
         norm_kwargs: Optional[dict] = None,
@@ -185,6 +216,8 @@ class MLP(nn.Sequential):
             _out_features_num = prod(out_features)
         self.out_features = out_features
         self._out_features_num = _out_features_num
+        if isinstance(activation_class, str):
+            activation_class = _ACTIVATION[activation_class]
         self.activation_class = activation_class
         self.activation_kwargs = (
             activation_kwargs if activation_kwargs is not None else dict()
@@ -193,6 +226,8 @@ class MLP(nn.Sequential):
         self.norm_kwargs = norm_kwargs if norm_kwargs is not None else dict()
         self.bias_last_layer = bias_last_layer
         self.single_bias_last_layer = single_bias_last_layer
+        if isinstance(layer_class, str):
+            layer_class = _LAYER_CLASS_DICT[layer_class]
         self.layer_class = layer_class
         self.layer_kwargs = layer_kwargs if layer_kwargs is not None else dict()
         self.activate_last_layer = activate_last_layer
@@ -284,21 +319,22 @@ class ConvNet(nn.Sequential):
             an integer is provided, every layer will have the same number of cells. If an iterable is provided,
             the linear layers out_features will match the content of num_cells.
             default: [32, 32, 32];
-        kernel_sizes (int, Sequence[Union[int, Sequence[int]]]): Kernel size(s) of the conv network. If iterable, the length must match the
-            depth, defined by the num_cells or depth arguments.
-        strides (int or Sequence[int]): Stride(s) of the conv network. If iterable, the length must match the
-            depth, defined by the num_cells or depth arguments.
-        activation_class (Type[nn.Module]): activation class to be used.
+        kernel_sizes (int, Sequence[Union[int, Sequence[int]]], optional): Kernel size(s) of the conv network. If iterable, the length must match the
+            depth, defined by the num_cells or depth arguments. Default is 3.
+        strides (int or Sequence[int], optional): Stride(s) of the conv network. If iterable, the length must match the
+            depth, defined by the num_cells or depth arguments. Default is 1.
+        activation_class (Type[nn.Module] or str): activation class to be used.
             default: nn.Tanh
         activation_kwargs (dict, optional): kwargs to be used with the activation class;
         norm_class (Type, optional): normalization class, if any;
         norm_kwargs (dict, optional): kwargs to be used with the normalization layers;
-        bias_last_layer (bool): if True, the last Linear layer will have a bias parameter.
+        bias_last_layer (bool, optional): if True, the last Linear layer will have a bias parameter.
             default: True;
-        aggregator_class (Type[nn.Module]): aggregator to use at the end of the chain.
+        aggregator_class (Type[nn.Module] or str): aggregator to use at the end of the chain.
+            If a string is provided, it must be one of `"squash_dims"` or `"adaptive_avg_pooling"`.
             default:  SquashDims;
         aggregator_kwargs (dict, optional): kwargs for the aggregator_class;
-        squeeze_output (bool): whether the output should be squeezed of its singleton dimensions.
+        squeeze_output (bool, optional): whether the output should be squeezed of its singleton dimensions.
             default: True.
         device (Optional[DEVICE_TYPING]): device to create the module on.
 
@@ -361,12 +397,12 @@ class ConvNet(nn.Sequential):
         kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 3,
         strides: Union[Sequence, int] = 1,
         paddings: Union[Sequence, int] = 0,
-        activation_class: Type[nn.Module] = nn.ELU,
+        activation_class: Union[Type[nn.Module], str] = nn.ELU,
         activation_kwargs: Optional[dict] = None,
         norm_class: Optional[Type[nn.Module]] = None,
         norm_kwargs: Optional[dict] = None,
         bias_last_layer: bool = True,
-        aggregator_class: Optional[Type[nn.Module]] = SquashDims,
+        aggregator_class: Union[str, Type[nn.Module]] = SquashDims,
         aggregator_kwargs: Optional[dict] = None,
         squeeze_output: bool = False,
         device: Optional[DEVICE_TYPING] = None,
@@ -375,6 +411,8 @@ class ConvNet(nn.Sequential):
             num_cells = [32, 32, 32]
 
         self.in_features = in_features
+        if isinstance(activation_class, str):
+            activation_class = _ACTIVATION[activation_class]
         self.activation_class = activation_class
         self.activation_kwargs = (
             activation_kwargs if activation_kwargs is not None else dict()
@@ -382,6 +420,8 @@ class ConvNet(nn.Sequential):
         self.norm_class = norm_class
         self.norm_kwargs = norm_kwargs if norm_kwargs is not None else dict()
         self.bias_last_layer = bias_last_layer
+        if isinstance(aggregator_class, str):
+            aggregator_class = _AGGREGATORS[aggregator_class]
         self.aggregator_class = aggregator_class
         self.aggregator_kwargs = (
             aggregator_kwargs if aggregator_kwargs is not None else {"ndims_in": 3}
@@ -544,6 +584,8 @@ class DuelingMlpDQNet(nn.Module):
         _mlp_kwargs_output.update(mlp_kwargs_output)
         self.out_features = out_features
         self.out_features_value = out_features_value
+        if not isinstance(out_features, int) and isinstance(out_features_value, int):
+            out_features_value = [out_features_value] * len(out_features)
         self.advantage = MLP(
             out_features=out_features, device=device, **_mlp_kwargs_output
         )
@@ -620,6 +662,8 @@ class DuelingCnnDQNet(nn.Module):
         mlp_kwargs = mlp_kwargs if mlp_kwargs is not None else dict()
         _mlp_kwargs.update(mlp_kwargs)
         self.out_features = out_features
+        if not isinstance(out_features, int) and isinstance(out_features_value, int):
+            out_features_value = [out_features_value] * len(out_features)
         self.out_features_value = out_features_value
         self.advantage = MLP(out_features=out_features, device=device, **_mlp_kwargs)
         self.value = MLP(out_features=out_features_value, device=device, **_mlp_kwargs)
@@ -637,8 +681,7 @@ class DuelingCnnDQNet(nn.Module):
 
 
 class DistributionalDQNnet(nn.Module):
-    """
-    Distributional Deep Q-Network.
+    """Distributional Deep Q-Network.
 
     Args:
         DQNet (nn.Module): Q-Network with output length equal to the number of atoms:
@@ -693,7 +736,7 @@ class DdpgCnnActor(nn.Module):
     It is trained to maximise the value returned by the DDPG Q Value network.
 
     Args:
-        action_dim (int): length of the action vector.
+        out_features (int): length of the action vector.
         conv_net_kwargs (dict, optional): kwargs for the ConvNet.
             default: {
             'in_features': None,
@@ -723,7 +766,7 @@ class DdpgCnnActor(nn.Module):
 
     def __init__(
         self,
-        action_dim: int,
+        out_features: int,
         conv_net_kwargs: Optional[dict] = None,
         mlp_net_kwargs: Optional[dict] = None,
         use_avg_pooling: bool = False,
@@ -750,7 +793,7 @@ class DdpgCnnActor(nn.Module):
         conv_net_default_kwargs.update(conv_net_kwargs)
         mlp_net_default_kwargs = {
             "in_features": None,
-            "out_features": action_dim,
+            "out_features": out_features,
             "depth": 2,
             "num_cells": 200,
             "activation_class": nn.ELU,
@@ -777,7 +820,7 @@ class DdpgMlpActor(nn.Module):
     It is trained to maximise the value returned by the DDPG Q Value network.
 
     Args:
-        action_dim (int): length of the action vector
+        out_features (int): length of the action vector
         mlp_net_kwargs (dict, optional): kwargs for MLP.
             Default: {
             'in_features': None,
@@ -792,14 +835,14 @@ class DdpgMlpActor(nn.Module):
 
     def __init__(
         self,
-        action_dim: int,
+        out_features: int,
         mlp_net_kwargs: Optional[dict] = None,
         device: Optional[DEVICE_TYPING] = None,
     ):
         super().__init__()
         mlp_net_default_kwargs = {
             "in_features": None,
-            "out_features": action_dim,
+            "out_features": out_features,
             "depth": 2,
             "num_cells": [400, 300],
             "activation_class": nn.ELU,
@@ -815,9 +858,87 @@ class DdpgMlpActor(nn.Module):
         return action
 
 
-class DdpgCnnQNet(nn.Module):
+class DualInputCnn(nn.Module):
+    """Generic class for 3d and 1d dual input (e.g. image and action for q-value networks).
+
+    Args:
+        out_features (int): output size.
+        conv_net_kwargs (dict, optional): kwargs for the convolutional network.
+            default: {
+            'in_features': None,
+            "num_cells": [32, 64, 128],
+            "kernel_sizes": [8, 4, 3],
+            "strides": [4, 2, 1],
+            "paddings": [0, 0, 1],
+            'activation_class': nn.ELU,
+            'norm_class': None,
+            'aggregator_class': nn.AdaptiveAvgPool2d,
+            'aggregator_kwargs': {},
+            'squeeze_output': True,
+        }
+        mlp_net_kwargs (dict, optional): kwargs for MLP.
+            Default: {
+            'in_features': None,
+            'out_features': 1,
+            'depth': 2,
+            'num_cells': 200,
+            'activation_class': nn.ELU,
+            'bias_last_layer': True,
+        }
+        use_avg_pooling (bool, optional): if True, a nn.AvgPooling layer is
+            used to aggregate the output. Default is `True`.
+        device (Optional[DEVICE_TYPING]): device to create the module on.
     """
-    DDPG Convolutional Q-value class, as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+
+    def __init__(
+        self,
+        out_features: int,
+        conv_net_kwargs: Optional[dict] = None,
+        mlp_net_kwargs: Optional[dict] = None,
+        use_avg_pooling: bool = True,
+        device: Optional[DEVICE_TYPING] = None,
+    ):
+        super().__init__()
+        conv_net_default_kwargs = {
+            "in_features": None,
+            "num_cells": [32, 64, 128],
+            "kernel_sizes": [8, 4, 3],
+            "strides": [4, 2, 1],
+            "paddings": [0, 0, 1],
+            "activation_class": nn.ELU,
+            "norm_class": None,
+            "aggregator_class": SquashDims
+            if not use_avg_pooling
+            else nn.AdaptiveAvgPool2d,
+            "aggregator_kwargs": {"ndims_in": 3}
+            if not use_avg_pooling
+            else {"output_size": (1, 1)},
+            "squeeze_output": use_avg_pooling,
+        }
+        conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else dict()
+        conv_net_default_kwargs.update(conv_net_kwargs)
+        mlp_net_default_kwargs = {
+            "in_features": None,
+            "out_features": out_features,
+            "depth": 2,
+            "num_cells": 200,
+            "activation_class": nn.ELU,
+            "bias_last_layer": True,
+        }
+        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
+        mlp_net_default_kwargs.update(mlp_net_kwargs)
+        self.convnet = ConvNet(device=device, **conv_net_default_kwargs)
+        self.mlp = MLP(device=device, **mlp_net_default_kwargs)
+        ddpg_init_last_layer(self.mlp[-1], 6e-4, device=device)
+
+    def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+        hidden = torch.cat([self.convnet(observation), action], -1)
+        value = self.mlp(hidden)
+        return value
+
+
+class DdpgCnnQNet(DualInputCnn):
+    """DDPG Convolutional Q-value class, as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
     https://arxiv.org/pdf/1509.02971.pdf
 
     The DDPG Q-value network takes as input an observation and an action, and returns a scalar from it.
@@ -857,43 +978,13 @@ class DdpgCnnQNet(nn.Module):
         use_avg_pooling: bool = True,
         device: Optional[DEVICE_TYPING] = None,
     ):
-        super().__init__()
-        conv_net_default_kwargs = {
-            "in_features": None,
-            "num_cells": [32, 64, 128],
-            "kernel_sizes": [8, 4, 3],
-            "strides": [4, 2, 1],
-            "paddings": [0, 0, 1],
-            "activation_class": nn.ELU,
-            "norm_class": None,
-            "aggregator_class": SquashDims
-            if not use_avg_pooling
-            else nn.AdaptiveAvgPool2d,
-            "aggregator_kwargs": {"ndims_in": 3}
-            if not use_avg_pooling
-            else {"output_size": (1, 1)},
-            "squeeze_output": use_avg_pooling,
-        }
-        conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else dict()
-        conv_net_default_kwargs.update(conv_net_kwargs)
-        mlp_net_default_kwargs = {
-            "in_features": None,
-            "out_features": 1,
-            "depth": 2,
-            "num_cells": 200,
-            "activation_class": nn.ELU,
-            "bias_last_layer": True,
-        }
-        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
-        mlp_net_default_kwargs.update(mlp_net_kwargs)
-        self.convnet = ConvNet(device=device, **conv_net_default_kwargs)
-        self.mlp = MLP(device=device, **mlp_net_default_kwargs)
-        ddpg_init_last_layer(self.mlp[-1], 6e-4, device=device)
-
-    def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
-        hidden = torch.cat([self.convnet(observation), action], -1)
-        value = self.mlp(hidden)
-        return value
+        super().__init__(
+            out_features=1,
+            conv_net_kwargs=conv_net_kwargs,
+            mlp_net_kwargs=mlp_net_kwargs,
+            use_avg_pooling=use_avg_pooling,
+            device=device,
+        )
 
 
 class DdpgMlpQNet(nn.Module):

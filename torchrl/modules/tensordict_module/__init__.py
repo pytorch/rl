@@ -9,3 +9,4 @@ from .exploration import *
 from .sequence import *
 from .probabilistic import *
 from .world_models import *
+from .helpers import *

@@ -492,6 +492,8 @@ class DistributionalQValueActor(QValueActor):
         self.register_buffer("support", support)
         self.action_space = action_space
         if not isinstance(self.module, DistributionalDQNnet):
+            # automatically cast to DistributionalDQNnet which will compute the
+            # value softmax
             self.module = DistributionalDQNnet(self.module)
         self.module.register_forward_hook(
             DistributionalQValueHook(self.action_space, self.support)

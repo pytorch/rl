@@ -1,0 +1,4 @@
+_target_: torchrl.trainers.loggers.mlflow.MLFlowLogger
+exp_name: example_exp
+tracking_uri: mlflow_logs
+tags: null

@@ -283,7 +283,7 @@ def make_ddpg_actor(
     out_features = env_specs["action_spec"].shape[0]
 
     actor_net_default_kwargs = {
-        "action_dim": out_features,
+        "out_features": out_features,
         "mlp_net_kwargs": {
             "layer_class": linear_layer_class,
             "activation_class": ACTIVATIONS[cfg.activation],

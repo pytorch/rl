@@ -1,0 +1,33 @@
+in_keys_policy_module: ["pixels"]
+in_keys_qnet: ["pixels", "action"]
+
+
+# We use a ProbabilisticActor to make sure that we map the network output to the right space using a TanhDelta
+# distribution.
+policy_network:
+  _target_: torchrl.modules.partial_probabilisticactor
+  _partial_: True
+  dist_param_keys: ["param"]
+  default_interaction_mode: "random"
+  distribution_class: TanhDelta
+  distribution_kwargs:
+    min: -1  # get env boundaries
+    max: 1  # get env boundaries
+    tanh_loc: True
+  return_log_prob: True
+  partial_tensordictmodule:
+    _target_: torchrl.modules.partial_tensordictmodule
+    _partial_: True
+    in_keys: ${network.in_keys_policy_module}
+    out_keys: ["param"]
+    partial_module:
+      _target_: torchrl.modules.DdpgCnnActor
+      _partial_: True  # misses out_features
+      use_avg_pooling: True
+
+value_operator:
+  _target_: torchrl.modules.ValueOperator
+  module:
+    _target_: torchrl.modules.DdpgCnnQNet
+    use_avg_pooling: True
+  in_keys: ${network.in_keys_qnet}

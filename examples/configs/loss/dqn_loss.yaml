@@ -1,0 +1,6 @@
+_target_: torchrl.objectives.costs.DQNLoss
+_partial_: True
+gamma: 0.9
+loss_function: "l2"
+priority_key: "td_error"
+delay_value: False

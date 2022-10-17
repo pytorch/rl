@@ -19,7 +19,6 @@ dependencies:
     - pytest-mock
     - pytest-instafail
     - expecttest
-    - pyyaml
     - scipy
     - hydra-core
     - tensorboard
