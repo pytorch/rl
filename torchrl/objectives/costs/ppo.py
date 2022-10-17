@@ -85,7 +85,7 @@ class PPOLoss(LossModule):
     def reset(self) -> None:
         pass
 
-    def get_entropy_bonus(self, dist: Optional[d.Distribution] = None) -> torch.Tensor:
+    def get_entropy_bonus(self, dist: d.Distribution) -> torch.Tensor:
         try:
             entropy = dist.entropy()
         except NotImplementedError:
