@@ -6,7 +6,6 @@
 import abc
 import os
 from collections import OrderedDict
-from copy import deepcopy
 from typing import Any, Sequence, Union, Dict
 
 import torch
@@ -20,7 +19,7 @@ try:
     from torchsnapshot.serialization import tensor_from_memoryview
 
     _has_ts = True
-except:
+except ImportError:
     _has_ts = False
 
 __all__ = ["Storage", "ListStorage", "LazyMemmapStorage", "LazyTensorStorage"]
@@ -158,6 +157,8 @@ class LazyTensorStorage(Storage):
             pass
         elif isinstance(_storage, TensorDictBase):
             _storage = _storage.state_dict()
+        elif _storage is None:
+            _storage = {}
         else:
             raise TypeError(
                 f"Objects of type {type(_storage)} are not supported by LazyTensorStorage.state_dict"
@@ -285,6 +286,8 @@ class LazyMemmapStorage(LazyTensorStorage):
             _storage = _mem_map_tensor_as_tensor(_storage)
         elif isinstance(_storage, TensorDictBase):
             _storage = _storage.apply(_mem_map_tensor_as_tensor).state_dict()
+        elif _storage is None:
+            _storage = {}
         else:
             raise TypeError(
                 f"Objects of type {type(_storage)} are not supported by LazyTensorStorage.state_dict"

@@ -194,7 +194,6 @@ class Trainer:
             )
         self._modules[module_name] = module
 
-
     def _get_state(self):
         if _CKPT_BACKEND == "torchsnapshot":
             state = StateDict(
@@ -283,8 +282,6 @@ class Trainer:
         seed = self.collector.set_seed(self.seed, static_seed=False)
         torch.manual_seed(seed)
         np.random.seed(seed)
-
-
 
     @property
     def collector(self) -> _DataCollector:

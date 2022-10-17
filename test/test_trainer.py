@@ -13,7 +13,6 @@ from time import sleep
 import pytest
 import torch
 from torch import nn
-from torch.testing._internal.common_utils import TemporaryFileName
 
 try:
     from tensorboard.backend.event_processing import event_accumulator
@@ -182,7 +181,7 @@ class TestSelectKeys:
         SelectKeys.load_state_dict = SelectKeys_load_state_dict
 
 
-@pytest.mark.parametrize("prioritized", [True, False])
+@pytest.mark.parametrize("prioritized", [False, True])
 class TestRB:
     def test_rb_trainer(self, prioritized):
         torch.manual_seed(0)
@@ -311,8 +310,8 @@ class TestRB:
     @pytest.mark.parametrize(
         "storage_type",
         [
-            "list",
             "memmap",
+            "list",
             "tensor",
         ],
     )
@@ -323,7 +322,13 @@ class TestRB:
             "torch",
         ],
     )
-    @pytest.mark.parametrize("re_init", [True, False, ])
+    @pytest.mark.parametrize(
+        "re_init",
+        [
+            False,
+            True,
+        ],
+    )
     def test_rb_trainer_save(
         self, prioritized, storage_type, backend, re_init, S=10, batch=11, N=3
     ):
@@ -409,7 +414,9 @@ class TestRB:
                     S, 1.1, 0.9, storage=storage2, collate_fn=collate_fn
                 )
             else:
-                replay_buffer2 = TensorDictReplayBuffer(S, storage=storage2, collate_fn=collate_fn)
+                replay_buffer2 = TensorDictReplayBuffer(
+                    S, storage=storage2, collate_fn=collate_fn
+                )
             N = 9
             rb_trainer2 = ReplayBufferTrainer(
                 replay_buffer=replay_buffer2, batch_size=N
@@ -432,9 +439,7 @@ class TestRB:
                     # print(td1[0], td2[0])
                     # print(td1[1], td2[1])
                     assert all([(_td1 == _td2).all() for _td1, _td2 in zip(td1, td2)])
-                    assert all(
-                        [(_td1 is not _td2).all() for _td1, _td2 in zip(td1, td2)]
-                    )
+                    assert all([(_td1 is not _td2) for _td1, _td2 in zip(td1, td2)])
                     assert storage2._storage is td2
                 else:
                     assert (td1 == td2).all()
