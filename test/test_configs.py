@@ -13,6 +13,10 @@ from torch import nn
 from torchrl.envs.libs.dm_control import _has_dmc
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.modules import TensorDictModule
+from torchrl.trainers.loggers.csv import CSVLogger
+from torchrl.trainers.loggers.mlflow import MLFlowLogger, _has_mlflow
+from torchrl.trainers.loggers.tensorboard import TensorboardLogger, _has_tb
+from torchrl.trainers.loggers.wandb import WandbLogger, _has_wandb
 
 try:
     import hydra
@@ -660,6 +664,41 @@ class TestLossConfigs:
         )
         tensordict = env.rollout(3, actor)
         assert env.action_spec.is_in(tensordict["action"]), env.action_spec
+
+
+@pytest.mark.skipif(not _has_hydra, reason="No hydra found")
+class TestLoggerConfigs:
+    def test_csv_logger(self, tmp_path):
+        config = ["logger=csv", f"++logger.log_dir={tmp_path}"]
+        cfg = hydra.compose("config", overrides=config)
+        logger = instantiate(cfg.logger)
+        assert isinstance(logger, CSVLogger)
+
+    @pytest.mark.skipif(not _has_mlflow, reason="No mlflow found")
+    def test_mlflow_logger(self, tmp_path):
+        config = ["logger=mlflow", f"++logger.tracking_uri={tmp_path}"]
+        cfg = hydra.compose("config", overrides=config)
+        logger = instantiate(cfg.logger)
+        assert isinstance(logger, MLFlowLogger)
+
+    @pytest.mark.skipif(not _has_tb, reason="No tensorboard found")
+    def test_tensorboard_logger(self, tmp_path):
+        config = ["logger=tensorboard", f"++logger.log_dir={tmp_path}"]
+        cfg = hydra.compose("config", overrides=config)
+        logger = instantiate(cfg.logger)
+        assert isinstance(logger, TensorboardLogger)
+
+    @pytest.mark.skipif(not _has_wandb, reason="No wandb found")
+    def test_wandb_logger(self, tmp_path):
+        # offline needs to be set for testing, otherwise login will be attempted
+        config = [
+            "logger=wandb",
+            f"++logger.save_dir={tmp_path}",
+            "++logger.offline=True",
+        ]
+        cfg = hydra.compose("config", overrides=config)
+        logger = instantiate(cfg.logger)
+        assert isinstance(logger, WandbLogger)
 
 
 if __name__ == "__main__":
