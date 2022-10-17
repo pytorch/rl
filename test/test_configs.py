@@ -4,15 +4,35 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import math
 from sys import platform
 
 import pytest
 import torch.cuda
+import torchrl.envs.transforms as T
+import torchrl.objectives.costs
 from mocking_classes import ContinuousActionVecMockEnv
 from torch import nn
+from torchrl.envs import TransformedEnv
 from torchrl.envs.libs.dm_control import _has_dmc
-from torchrl.envs.libs.gym import _has_gym
-from torchrl.modules import TensorDictModule
+from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.modules import (
+    TensorDictModule,
+    DuelingMlpDQNet,
+    QValueActor,
+    ProbabilisticActor,
+    MLP,
+    NormalParamWrapper,
+    ValueOperator,
+    DdpgMlpActor,
+    DdpgMlpQNet,
+)
+from torchrl.modules.models.models import _LAYER_CLASS_DICT
+from torchrl.modules.tensordict_module.exploration import (
+    EGreedyWrapper,
+    AdditiveGaussianWrapper,
+    OrnsteinUhlenbeckProcessWrapper,
+)
 from torchrl.trainers.loggers.csv import CSVLogger
 from torchrl.trainers.loggers.mlflow import MLFlowLogger, _has_mlflow
 from torchrl.trainers.loggers.tensorboard import TensorboardLogger, _has_tb
@@ -447,10 +467,6 @@ class TestModelConfigs:
 
 
 def make_halfcheetah_env_with_state_transforms():
-    import torchrl.envs.transforms as T
-    from torchrl.envs import TransformedEnv
-    from torchrl.envs.libs.gym import GymEnv
-
     transforms = T.Compose(
         T.ObservationNorm(0, 1, ["next_observation"]),
         T.RewardScaling(0, 1, ["reward"]),
@@ -463,13 +479,6 @@ def make_halfcheetah_env_with_state_transforms():
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestExplorationConfigs:
-    from torchrl.modules.models.models import _LAYER_CLASS_DICT
-    from torchrl.modules.tensordict_module.exploration import (
-        EGreedyWrapper,
-        AdditiveGaussianWrapper,
-        OrnsteinUhlenbeckProcessWrapper,
-    )
-
     _WRAPPER_MAP = {
         "e_greedy": EGreedyWrapper,
         "additive_gaussian": AdditiveGaussianWrapper,
@@ -502,7 +511,7 @@ class TestExplorationConfigs:
         net_partial = instantiate(cfg.network)
         actor, qvalue, value = make_model_sac(net_partial, model_params, env)
         actor(env.reset())
-        assert actor.module.module.layer_class is self._LAYER_CLASS_DICT[network]
+        assert actor.module.module.layer_class is _LAYER_CLASS_DICT[network]
 
         if cfg.exploration.exploration_wrapper is not None:
             actor_explore = instantiate(cfg.exploration.exploration_wrapper)(actor)
@@ -521,25 +530,11 @@ class TestExplorationConfigs:
         value(tensordict)
 
 
-from torchrl.modules import (
-    DuelingMlpDQNet,
-    QValueActor,
-    ProbabilisticActor,
-    MLP,
-    NormalParamWrapper,
-    ValueOperator,
-    DdpgMlpActor,
-    DdpgMlpQNet,
-)
-
-
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestLossConfigs:
-    import torchrl.objectives.costs as costs
-
     def _make_actor_dqn(self, env):
         network = DuelingMlpDQNet(
-            out_features=list(env.action_spec.shape),
+            out_features=env.action_spec.shape[-1],
             mlp_kwargs_output={"num_cells": 10, "layer_class": "linear"},
         )
         actor = QValueActor(
@@ -628,42 +623,113 @@ class TestLossConfigs:
         )
         return policy_operator, qvalue_operator
 
-    @pytest.mark.parametrize("model", ["ddpg", "dqn", "ppo", "redq", "sac"])
-    def test_model_loss(self, model):
-        config = [f"loss={model}_loss"]
-
+    def test_ddpg_loss(self):
+        config = ["loss=ddpg_loss"]
         cfg = hydra.compose("config", overrides=config)
         env = make_halfcheetah_env_with_state_transforms()
         loss_partial = instantiate(cfg.loss)
-        if model == "ddpg":
-            actor, qvalue = self._make_model_ddpg(env)
-            qvalue(actor(env.reset()))
-            loss = loss_partial(actor, qvalue)
-        elif model == "dqn":
-            actor = self._make_actor_dqn(env)
-            actor(env.reset())
-            loss = loss_partial(actor)
-        elif model == "ppo":
-            actor, critic = self._make_model_ppo(env)
-            critic(actor(env.reset()))
-            loss = loss_partial(actor, critic)
-        elif model == "redq":
-            actor, qvalue = self._make_model_redq(env)
-            qvalue(actor(env.reset()))
-            loss = loss_partial(actor, qvalue)
-        else:
-            actor, qvalue, value = self._make_model_sac(env)
-            value(qvalue(actor(env.reset())))
-            loss = loss_partial(actor, qvalue, value)
-        assert type(loss) is getattr(self.costs, f"{model.upper()}Loss")
+        actor, qvalue = self._make_model_ddpg(env)
+        qvalue(actor(env.reset()))
+        loss = loss_partial(actor, qvalue)
 
-        rollout = env.rollout(3)
-        assert all(key in rollout.keys() for key in actor.in_keys), (
-            actor.in_keys,
-            rollout.keys(),
+        assert isinstance(loss, torchrl.objectives.costs.DDPGLoss)
+        for param in ["gamma", "loss_function", "delay_actor", "delay_value"]:
+            assert cfg.loss[param] == getattr(loss, param)
+
+    def test_dqn_loss(self):
+        config = ["loss=dqn_loss"]
+        cfg = hydra.compose("config", overrides=config)
+        env = make_halfcheetah_env_with_state_transforms()
+        loss_partial = instantiate(cfg.loss)
+        actor = self._make_actor_dqn(env)
+        actor(env.reset())
+        loss = loss_partial(actor)
+
+        assert isinstance(loss, torchrl.objectives.costs.DQNLoss)
+        for param in ["gamma", "loss_function", "priority_key", "delay_value"]:
+            assert cfg.loss[param] == getattr(loss, param)
+
+    def test_ppo_loss(self):
+        config = ["loss=ppo_loss"]
+        cfg = hydra.compose("config", overrides=config)
+        env = make_halfcheetah_env_with_state_transforms()
+        loss_partial = instantiate(cfg.loss)
+        actor, critic = self._make_model_ppo(env)
+        critic(actor(env.reset()))
+        loss = loss_partial(actor, critic)
+
+        assert isinstance(loss, torchrl.objectives.costs.PPOLoss)
+        for param in [
+            "advantage_key",
+            "advantage_diff_key",
+            "samples_mc_entropy",
+            "entropy_coef",
+            "critic_coef",
+            "gamma",
+            "loss_critic_type",
+        ]:
+            assert cfg.loss[param] == getattr(loss, param)
+        assert loss.entropy_bonus == (
+            cfg.loss["entropy_bonus"] and cfg.loss["entropy_coef"]
         )
-        tensordict = env.rollout(3, actor)
-        assert env.action_spec.is_in(tensordict["action"]), env.action_spec
+        # non-primitive loss.advantage_module is not tested
+
+    def test_redq_loss(self):
+        config = ["loss=redq_loss"]
+        cfg = hydra.compose("config", overrides=config)
+        env = make_halfcheetah_env_with_state_transforms()
+        loss_partial = instantiate(cfg.loss)
+        actor, qvalue = self._make_model_redq(env)
+        qvalue(actor(env.reset()))
+        loss = loss_partial(actor, qvalue)
+
+        assert isinstance(loss, torchrl.objectives.costs.REDQLoss)
+        for param in [
+            "num_qvalue_nets",
+            "gamma",
+            "priority_key",
+            "loss_function",
+            "alpha_init",
+            "delay_qvalue",
+            "gSDE",
+        ]:
+            assert cfg.loss[param] == getattr(loss, param)
+        assert (
+            max(1, min(cfg.loss["sub_sample_len"], cfg.loss["num_qvalue_nets"] - 1))
+            == loss.sub_sample_len
+        )
+        assert math.log(cfg.loss["min_alpha"]) == loss.min_log_alpha
+        assert math.log(cfg.loss["max_alpha"]) == loss.max_log_alpha
+        assert math.log(cfg.loss["alpha_init"]) == loss.log_alpha
+        if cfg.loss["target_entropy"] != "auto":
+            assert cfg.loss["target_entropy"] == loss.target_entropy
+
+    def test_sac_loss(self):
+        config = ["loss=sac_loss"]
+        cfg = hydra.compose("config", overrides=config)
+        env = make_halfcheetah_env_with_state_transforms()
+        loss_partial = instantiate(cfg.loss)
+        actor, qvalue, value = self._make_model_sac(env)
+        value(qvalue(actor(env.reset())))
+        loss = loss_partial(actor, qvalue, value)
+
+        assert isinstance(loss, torchrl.objectives.costs.SACLoss)
+        for param in [
+            "num_qvalue_nets",
+            "gamma",
+            "priority_key",
+            "loss_function",
+            "alpha_init",
+            "delay_actor",
+            "delay_qvalue",
+            "delay_value",
+        ]:
+            assert cfg.loss[param] == getattr(loss, param)
+        assert math.log(cfg.loss["min_alpha"]) == loss.min_log_alpha
+        assert math.log(cfg.loss["max_alpha"]) == loss.max_log_alpha
+        assert math.log(cfg.loss["alpha_init"]) == loss.log_alpha
+        if cfg.loss["target_entropy"] != "auto":
+            assert cfg.loss["target_entropy"] == loss.target_entropy
 
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
