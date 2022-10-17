@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import math
 from sys import platform
 
 import pytest
@@ -618,42 +619,113 @@ class TestLossConfigs:
         )
         return policy_operator, qvalue_operator
 
-    @pytest.mark.parametrize("model", ["ddpg", "dqn", "ppo", "redq", "sac"])
-    def test_model_loss(self, model):
-        config = [f"loss={model}_loss"]
-
+    def test_ddpg_loss(self):
+        config = ["loss=ddpg_loss"]
         cfg = hydra.compose("config", overrides=config)
         env = make_halfcheetah_env_with_state_transforms()
         loss_partial = instantiate(cfg.loss)
-        if model == "ddpg":
-            actor, qvalue = self._make_model_ddpg(env)
-            qvalue(actor(env.reset()))
-            loss = loss_partial(actor, qvalue)
-        elif model == "dqn":
-            actor = self._make_actor_dqn(env)
-            actor(env.reset())
-            loss = loss_partial(actor)
-        elif model == "ppo":
-            actor, critic = self._make_model_ppo(env)
-            critic(actor(env.reset()))
-            loss = loss_partial(actor, critic)
-        elif model == "redq":
-            actor, qvalue = self._make_model_redq(env)
-            qvalue(actor(env.reset()))
-            loss = loss_partial(actor, qvalue)
-        else:
-            actor, qvalue, value = self._make_model_sac(env)
-            value(qvalue(actor(env.reset())))
-            loss = loss_partial(actor, qvalue, value)
-        assert type(loss) is getattr(torchrl.objectives.costs, f"{model.upper()}Loss")
+        actor, qvalue = self._make_model_ddpg(env)
+        qvalue(actor(env.reset()))
+        loss = loss_partial(actor, qvalue)
 
-        rollout = env.rollout(3)
-        assert all(key in rollout.keys() for key in actor.in_keys), (
-            actor.in_keys,
-            rollout.keys(),
+        assert type(loss) is getattr(torchrl.objectives.costs, "DDPGLoss")
+        for param in ["gamma", "loss_function", "delay_actor", "delay_value"]:
+            assert cfg.loss[param] == getattr(loss, param)
+
+    def test_dqn_loss(self):
+        config = ["loss=dqn_loss"]
+        cfg = hydra.compose("config", overrides=config)
+        env = make_halfcheetah_env_with_state_transforms()
+        loss_partial = instantiate(cfg.loss)
+        actor = self._make_actor_dqn(env)
+        actor(env.reset())
+        loss = loss_partial(actor)
+
+        assert type(loss) is getattr(torchrl.objectives.costs, "DQNLoss")
+        for param in ["gamma", "loss_function", "priority_key", "delay_value"]:
+            assert cfg.loss[param] == getattr(loss, param)
+
+    def test_ppo_loss(self):
+        config = ["loss=ppo_loss"]
+        cfg = hydra.compose("config", overrides=config)
+        env = make_halfcheetah_env_with_state_transforms()
+        loss_partial = instantiate(cfg.loss)
+        actor, critic = self._make_model_ppo(env)
+        critic(actor(env.reset()))
+        loss = loss_partial(actor, critic)
+
+        assert type(loss) is getattr(torchrl.objectives.costs, "PPOLoss")
+        for param in [
+            "advantage_key",
+            "advantage_diff_key",
+            "samples_mc_entropy",
+            "entropy_coef",
+            "critic_coef",
+            "gamma",
+            "loss_critic_type",
+        ]:
+            assert cfg.loss[param] == getattr(loss, param)
+        assert loss.entropy_bonus == (
+            cfg.loss["entropy_bonus"] and cfg.loss["entropy_coef"]
         )
-        tensordict = env.rollout(3, actor)
-        assert env.action_spec.is_in(tensordict["action"]), env.action_spec
+        # non-primitive loss.advantage_module is not tested
+
+    def test_redq_loss(self):
+        config = ["loss=redq_loss"]
+        cfg = hydra.compose("config", overrides=config)
+        env = make_halfcheetah_env_with_state_transforms()
+        loss_partial = instantiate(cfg.loss)
+        actor, qvalue = self._make_model_redq(env)
+        qvalue(actor(env.reset()))
+        loss = loss_partial(actor, qvalue)
+
+        assert type(loss) is getattr(torchrl.objectives.costs, "REDQLoss")
+        for param in [
+            "num_qvalue_nets",
+            "gamma",
+            "priority_key",
+            "loss_function",
+            "alpha_init",
+            "delay_qvalue",
+            "gSDE",
+        ]:
+            assert cfg.loss[param] == getattr(loss, param)
+        assert (
+            max(1, min(cfg.loss["sub_sample_len"], cfg.loss["num_qvalue_nets"] - 1))
+            == loss.sub_sample_len
+        )
+        assert math.log(cfg.loss["min_alpha"]) == loss.min_log_alpha
+        assert math.log(cfg.loss["max_alpha"]) == loss.max_log_alpha
+        assert math.log(cfg.loss["alpha_init"]) == loss.log_alpha
+        if cfg.loss["target_entropy"] != "auto":
+            assert cfg.loss["target_entropy"] == loss.target_entropy
+
+    def test_sac_loss(self):
+        config = ["loss=sac_loss"]
+        cfg = hydra.compose("config", overrides=config)
+        env = make_halfcheetah_env_with_state_transforms()
+        loss_partial = instantiate(cfg.loss)
+        actor, qvalue, value = self._make_model_sac(env)
+        value(qvalue(actor(env.reset())))
+        loss = loss_partial(actor, qvalue, value)
+
+        assert type(loss) is getattr(torchrl.objectives.costs, "SACLoss")
+        for param in [
+            "num_qvalue_nets",
+            "gamma",
+            "priority_key",
+            "loss_function",
+            "alpha_init",
+            "delay_actor",
+            "delay_qvalue",
+            "delay_value",
+        ]:
+            assert cfg.loss[param] == getattr(loss, param)
+        assert math.log(cfg.loss["min_alpha"]) == loss.min_log_alpha
+        assert math.log(cfg.loss["max_alpha"]) == loss.max_log_alpha
+        assert math.log(cfg.loss["alpha_init"]) == loss.log_alpha
+        if cfg.loss["target_entropy"] != "auto":
+            assert cfg.loss["target_entropy"] == loss.target_entropy
 
 
 if __name__ == "__main__":
