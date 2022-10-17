@@ -7,7 +7,13 @@ from .common import LossModule
 from .ddpg import DDPGLoss
 from .dqn import DQNLoss, DistributionalDQNLoss
 from .ppo import PPOLoss, ClipPPOLoss, KLPENPPOLoss
-from .sac import SACLoss
 from .redq import REDQLoss
-from .utils import SoftUpdate, HardUpdate, distance_loss, hold_out_params, next_state_value
+from .sac import SACLoss
+from .utils import (
+    SoftUpdate,
+    HardUpdate,
+    distance_loss,
+    hold_out_params,
+    next_state_value,
+)
 from .value import bellman_max, c_val, dv_val, vtrace, GAE, TDLambdaEstimate, TDEstimate

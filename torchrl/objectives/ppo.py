@@ -11,9 +11,8 @@ from torch import distributions as d
 
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.modules import TensorDictModule
-from ..modules.tensordict_module import ProbabilisticTensorDictModule
-
 from torchrl.objectives.utils import distance_loss
+from ..modules.tensordict_module import ProbabilisticTensorDictModule
 from .common import LossModule
 
 

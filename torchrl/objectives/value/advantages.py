@@ -25,8 +25,8 @@ from torchrl.objectives.value.functional import (
     td_lambda_advantage_estimate,
     vec_td_lambda_advantage_estimate,
 )
-from .functional import td_advantage_estimate
 from ..utils import hold_out_net
+from .functional import td_advantage_estimate
 
 
 class TDEstimate(nn.Module):

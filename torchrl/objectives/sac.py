@@ -18,9 +18,8 @@ from torchrl.modules.tensordict_module.actors import (
     ActorCriticWrapper,
 )
 from torchrl.objectives.utils import distance_loss, next_state_value
-from .common import LossModule
-
 from ..envs.utils import set_exploration_mode
+from .common import LossModule
 
 
 class SACLoss(LossModule):
