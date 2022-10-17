@@ -8,11 +8,30 @@ from sys import platform
 
 import pytest
 import torch.cuda
+import torchrl.envs.transforms as T
+import torchrl.objectives.costs
 from mocking_classes import ContinuousActionVecMockEnv
 from torch import nn
+from torchrl.envs import TransformedEnv
 from torchrl.envs.libs.dm_control import _has_dmc
-from torchrl.envs.libs.gym import _has_gym
-from torchrl.modules import TensorDictModule
+from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.modules import (
+    TensorDictModule,
+    DuelingMlpDQNet,
+    QValueActor,
+    ProbabilisticActor,
+    MLP,
+    NormalParamWrapper,
+    ValueOperator,
+    DdpgMlpActor,
+    DdpgMlpQNet,
+)
+from torchrl.modules.models.models import _LAYER_CLASS_DICT
+from torchrl.modules.tensordict_module.exploration import (
+    EGreedyWrapper,
+    AdditiveGaussianWrapper,
+    OrnsteinUhlenbeckProcessWrapper,
+)
 
 try:
     import hydra
@@ -443,10 +462,6 @@ class TestModelConfigs:
 
 
 def make_halfcheetah_env_with_state_transforms():
-    import torchrl.envs.transforms as T
-    from torchrl.envs import TransformedEnv
-    from torchrl.envs.libs.gym import GymEnv
-
     transforms = T.Compose(
         T.ObservationNorm(0, 1, ["next_observation"]),
         T.RewardScaling(0, 1, ["reward"]),
@@ -459,13 +474,6 @@ def make_halfcheetah_env_with_state_transforms():
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestExplorationConfigs:
-    from torchrl.modules.models.models import _LAYER_CLASS_DICT
-    from torchrl.modules.tensordict_module.exploration import (
-        EGreedyWrapper,
-        AdditiveGaussianWrapper,
-        OrnsteinUhlenbeckProcessWrapper,
-    )
-
     _WRAPPER_MAP = {
         "e_greedy": EGreedyWrapper,
         "additive_gaussian": AdditiveGaussianWrapper,
@@ -498,7 +506,7 @@ class TestExplorationConfigs:
         net_partial = instantiate(cfg.network)
         actor, qvalue, value = make_model_sac(net_partial, model_params, env)
         actor(env.reset())
-        assert actor.module.module.layer_class is self._LAYER_CLASS_DICT[network]
+        assert actor.module.module.layer_class is _LAYER_CLASS_DICT[network]
 
         if cfg.exploration.exploration_wrapper is not None:
             actor_explore = instantiate(cfg.exploration.exploration_wrapper)(actor)
@@ -517,25 +525,11 @@ class TestExplorationConfigs:
         value(tensordict)
 
 
-from torchrl.modules import (
-    DuelingMlpDQNet,
-    QValueActor,
-    ProbabilisticActor,
-    MLP,
-    NormalParamWrapper,
-    ValueOperator,
-    DdpgMlpActor,
-    DdpgMlpQNet,
-)
-
-
 @pytest.mark.skipif(not _has_hydra, reason="No hydra found")
 class TestLossConfigs:
-    import torchrl.objectives.costs as costs
-
     def _make_actor_dqn(self, env):
         network = DuelingMlpDQNet(
-            out_features=list(env.action_spec.shape),
+            out_features=env.action_spec.shape[-1],
             mlp_kwargs_output={"num_cells": 10, "layer_class": "linear"},
         )
         actor = QValueActor(
@@ -651,7 +645,7 @@ class TestLossConfigs:
             actor, qvalue, value = self._make_model_sac(env)
             value(qvalue(actor(env.reset())))
             loss = loss_partial(actor, qvalue, value)
-        assert type(loss) is getattr(self.costs, f"{model.upper()}Loss")
+        assert type(loss) is getattr(torchrl.objectives.costs, f"{model.upper()}Loss")
 
         rollout = env.rollout(3)
         assert all(key in rollout.keys() for key in actor.in_keys), (
