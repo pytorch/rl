@@ -628,7 +628,7 @@ class TestLossConfigs:
         qvalue(actor(env.reset()))
         loss = loss_partial(actor, qvalue)
 
-        assert type(loss) is torchrl.objectives.costs.DDPGLoss
+        assert isinstance(loss, torchrl.objectives.costs.DDPGLoss)
         for param in ["gamma", "loss_function", "delay_actor", "delay_value"]:
             assert cfg.loss[param] == getattr(loss, param)
 
@@ -641,7 +641,7 @@ class TestLossConfigs:
         actor(env.reset())
         loss = loss_partial(actor)
 
-        assert type(loss) is torchrl.objectives.costs.DQNLoss
+        assert isinstance(loss, torchrl.objectives.costs.DQNLoss)
         for param in ["gamma", "loss_function", "priority_key", "delay_value"]:
             assert cfg.loss[param] == getattr(loss, param)
 
@@ -654,7 +654,7 @@ class TestLossConfigs:
         critic(actor(env.reset()))
         loss = loss_partial(actor, critic)
 
-        assert type(loss) is torchrl.objectives.costs.PPOLoss
+        assert isinstance(loss, torchrl.objectives.costs.PPOLoss)
         for param in [
             "advantage_key",
             "advantage_diff_key",
@@ -679,7 +679,7 @@ class TestLossConfigs:
         qvalue(actor(env.reset()))
         loss = loss_partial(actor, qvalue)
 
-        assert type(loss) is torchrl.objectives.costs.REDQLoss
+        assert isinstance(loss, torchrl.objectives.costs.REDQLoss)
         for param in [
             "num_qvalue_nets",
             "gamma",
@@ -709,7 +709,7 @@ class TestLossConfigs:
         value(qvalue(actor(env.reset())))
         loss = loss_partial(actor, qvalue, value)
 
-        assert type(loss) is torchrl.objectives.costs.SACLoss
+        assert isinstance(loss, torchrl.objectives.costs.SACLoss)
         for param in [
             "num_qvalue_nets",
             "gamma",
