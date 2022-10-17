@@ -33,6 +33,10 @@ from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
+from torchrl.trainers.loggers.csv import CSVLogger
+from torchrl.trainers.loggers.mlflow import MLFlowLogger, _has_mlflow
+from torchrl.trainers.loggers.tensorboard import TensorboardLogger, _has_tb
+from torchrl.trainers.loggers.wandb import WandbLogger, _has_wandb
 
 try:
     import hydra
@@ -42,6 +46,9 @@ try:
     _has_hydra = True
 except ImportError:
     _has_hydra = False
+
+if _has_mlflow:
+    import mlflow
 
 IS_OSX = platform == "darwin"
 
@@ -726,6 +733,46 @@ class TestLossConfigs:
         assert math.log(cfg.loss["alpha_init"]) == loss.log_alpha
         if cfg.loss["target_entropy"] != "auto":
             assert cfg.loss["target_entropy"] == loss.target_entropy
+
+
+@pytest.mark.skipif(not _has_hydra, reason="No hydra found")
+class TestLoggerConfigs:
+    @pytest.fixture
+    def mlflow_teardown(self):
+        yield
+        mlflow.end_run()
+
+    def test_csv_logger(self, tmp_path):
+        config = ["logger=csv", f"++logger.log_dir={tmp_path}"]
+        cfg = hydra.compose("config", overrides=config)
+        logger = instantiate(cfg.logger)
+        assert isinstance(logger, CSVLogger)
+
+    @pytest.mark.skipif(not _has_mlflow, reason="No mlflow found")
+    def test_mlflow_logger(self, tmp_path, mlflow_teardown):
+        config = ["logger=mlflow", f"++logger.tracking_uri={tmp_path}"]
+        cfg = hydra.compose("config", overrides=config)
+        logger = instantiate(cfg.logger)
+        assert isinstance(logger, MLFlowLogger)
+
+    @pytest.mark.skipif(not _has_tb, reason="No tensorboard found")
+    def test_tensorboard_logger(self, tmp_path):
+        config = ["logger=tensorboard", f"++logger.log_dir={tmp_path}"]
+        cfg = hydra.compose("config", overrides=config)
+        logger = instantiate(cfg.logger)
+        assert isinstance(logger, TensorboardLogger)
+
+    @pytest.mark.skipif(not _has_wandb, reason="No wandb found")
+    def test_wandb_logger(self, tmp_path):
+        # offline needs to be set for testing, otherwise login will be attempted
+        config = [
+            "logger=wandb",
+            f"++logger.save_dir={tmp_path}",
+            "++logger.offline=True",
+        ]
+        cfg = hydra.compose("config", overrides=config)
+        logger = instantiate(cfg.logger)
+        assert isinstance(logger, WandbLogger)
 
 
 if __name__ == "__main__":

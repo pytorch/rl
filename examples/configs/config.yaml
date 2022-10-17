@@ -7,4 +7,5 @@ defaults:
   - network: dqn/pixels
   - exploration: linear
   - loss: dqn_loss
+  - logger: csv
 num_workers: 0
