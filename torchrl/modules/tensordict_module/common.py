@@ -15,14 +15,6 @@ from typing import (
     Sequence,
     Union,
 )
-from warnings import warn
-
-try:
-    import functorch
-
-    _has_functorch = True
-except ImportError:
-    _has_functorch = False
 
 import torch
 

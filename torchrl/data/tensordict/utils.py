@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from numbers import Number
-from typing import Tuple, List, Union
+from typing import Tuple, List, Union, Optional
 
 import numpy as np
 import torch

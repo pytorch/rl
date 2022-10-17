@@ -9,7 +9,6 @@ import pytest
 import torch
 from _utils_internal import get_available_devices
 from mocking_classes import MockBatchedUnLockedEnv
-from packaging import version
 from torch import nn
 from torchrl.data import TensorDict
 from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
