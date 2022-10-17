@@ -35,7 +35,7 @@ from torchrl.data.utils import expand_right, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import TensorDictModule
-from torchrl.objectives.costs.common import LossModule
+from torchrl.objectives.common import LossModule
 from torchrl.trainers.loggers import Logger
 
 REPLAY_BUFFER_CLASS = {
