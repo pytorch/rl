@@ -161,13 +161,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
     elif cfg.from_pixels:
         stats = {"loc": torch.Tensor(0.5), "scale": torch.Tensor(0.5)}
     
-    # # Make the stats shared by all processes
-    # if world_size > 1:
-    #     for k, v in stats.items():
-    #         dist.all_reduce(v, op=dist.ReduceOp.SUM, group=group_wm)
-    #     stats = {k: v / world_size for k, v in stats.items()}
-    # stats = {k: v.to(torch.device("cpu")) for k, v in stats.items()}
-    # print("shared stats", stats)
+    # Make the stats shared by all processes
+    if world_size > 1:
+        for k, v in stats.items():
+            dist.all_reduce(v, op=dist.ReduceOp.SUM, group=group_wm)
+        stats = {k: v / world_size for k, v in stats.items()}
+    stats = {k: v.to(torch.device("cpu")) for k, v in stats.items()}
+    print("shared stats", stats)
 
     # Create the different components of dreamer
     world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
@@ -280,26 +280,28 @@ def main(cfg: "DictConfig"):  # noqa: F821
     scaler2 = GradScaler()
     scaler3 = GradScaler()
 
-    for i, tensordict in enumerate(collector):
+    for i in range(len(collector)):
         cmpt = 0
-        if reward_normalizer is not None:
-            reward_normalizer.update_reward_stats(tensordict)
-        pbar.update(tensordict.numel())
-        current_frames = tensordict.numel()
-        collected_frames += current_frames
-
-        # Compared to the original paper, the replay buffer is not temporally sampled. We fill it with trajectories of length batch_length.
-        # To be closer to the paper, we would need to fill it with trajectories of lentgh 1000 and then sample subsequences of length batch_length.
-
-        # tensordict = tensordict.reshape(-1, cfg.batch_length)
-        replay_buffer.extend(tensordict.cpu())
-        
         if rank == 0:
+            tensordict = next(collector)
+            if reward_normalizer is not None:
+                reward_normalizer.update_reward_stats(tensordict)
+            pbar.update(tensordict.numel())
+            current_frames = tensordict.numel()
+            collected_frames += current_frames
+
+            # Compared to the original paper, the replay buffer is not temporally sampled. We fill it with trajectories of length batch_length.
+            # To be closer to the paper, we would need to fill it with trajectories of lentgh 1000 and then sample subsequences of length batch_length.
+
+            # tensordict = tensordict.reshape(-1, cfg.batch_length)
+            replay_buffer.extend(tensordict.cpu())
             logger.log_scalar(
                 "r_training",
                 tensordict["reward"].mean().detach().item(),
                 step=collected_frames,
             )
+            dist.broadcast_object_list([collected_frames], src=0, group=group_wm)
+            dist.broadcast_object_list([replay_buffer], src=0, group=group_wm)
 
         if (i % cfg.record_interval) == 0:
             do_log = True
