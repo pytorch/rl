@@ -291,13 +291,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(tensordict.numel())
         current_frames = tensordict.numel()
         collected_frames += current_frames
+        replay_buffer.extend(tensordict.cpu())
 
         # Compared to the original paper, the replay buffer is not temporally sampled. We fill it with trajectories of length batch_length.
         # To be closer to the paper, we would need to fill it with trajectories of lentgh 1000 and then sample subsequences of length batch_length.
 
         # tensordict = tensordict.reshape(-1, cfg.batch_length)
         if rank == 0:
-            replay_buffer.extend(tensordict.cpu())
+            
             logger.log_scalar(
                 "r_training",
                 tensordict["reward"].mean().detach().item(),
