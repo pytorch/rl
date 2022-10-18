@@ -51,6 +51,7 @@ from torchrl.trainers.trainers import Recorder, RewardNormalizer
 import os
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
+import hostlist
 
 config_fields = [
     (config_field.name, config_field.type, config_field)
