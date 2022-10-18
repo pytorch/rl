@@ -279,29 +279,32 @@ def main(cfg: "DictConfig"):  # noqa: F821
     scaler1 = GradScaler()
     scaler2 = GradScaler()
     scaler3 = GradScaler()
-
-    for i in range(len(collector)):
+    i = 0
+    while True:
+        i +=1
         cmpt = 0
         if rank == 0:
             tensordict = next(collector)
-            if reward_normalizer is not None:
-                reward_normalizer.update_reward_stats(tensordict)
-            pbar.update(tensordict.numel())
-            current_frames = tensordict.numel()
-            collected_frames += current_frames
+        else:
+            tensordict = None
+        dist.broadcast_object_list([tensordict], src=0, group=group_wm)
+        if reward_normalizer is not None:
+            reward_normalizer.update_reward_stats(tensordict)
+        pbar.update(tensordict.numel())
+        current_frames = tensordict.numel()
+        collected_frames += current_frames
 
-            # Compared to the original paper, the replay buffer is not temporally sampled. We fill it with trajectories of length batch_length.
-            # To be closer to the paper, we would need to fill it with trajectories of lentgh 1000 and then sample subsequences of length batch_length.
+        # Compared to the original paper, the replay buffer is not temporally sampled. We fill it with trajectories of length batch_length.
+        # To be closer to the paper, we would need to fill it with trajectories of lentgh 1000 and then sample subsequences of length batch_length.
 
-            # tensordict = tensordict.reshape(-1, cfg.batch_length)
+        # tensordict = tensordict.reshape(-1, cfg.batch_length)
+        if rank == 0:
             replay_buffer.extend(tensordict.cpu())
             logger.log_scalar(
                 "r_training",
                 tensordict["reward"].mean().detach().item(),
                 step=collected_frames,
             )
-            dist.broadcast_object_list([collected_frames], src=0, group=group_wm)
-            dist.broadcast_object_list([replay_buffer], src=0, group=group_wm)
 
         if (i % cfg.record_interval) == 0:
             do_log = True
