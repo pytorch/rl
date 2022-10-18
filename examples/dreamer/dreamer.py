@@ -284,7 +284,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         i +=1
         cmpt = 0
         if rank == 0:
-            tensordict = next(iter(collector))
+            tensordict = next(iter(collector)).to(device)
         else:
             tensordict = None
         dist.broadcast_object_list([tensordict], src=0, group=group_wm)
