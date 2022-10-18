@@ -84,18 +84,6 @@ Planners
     MPCPlannerBase
 
 
-Planners
---------
-.. currentmodule:: torchrl.modules
-
-.. autosummary::
-    :toctree: generated/
-    :template: rl_template_noinherit.rst
-
-    CEMPlanner
-    MPCPlannerBase
-
-
 Distributions
 -------------
 .. autosummary::

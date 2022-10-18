@@ -34,7 +34,7 @@ Domain-specific
     :template: rl_template_fun.rst
 
     ModelBasedEnvBase
-    model_based.DreamerEnv
+    model_based.dreamer.DreamerEnv
 
 
 Libraries
