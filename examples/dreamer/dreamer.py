@@ -157,15 +157,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
             proof_environment=transformed_env_constructor(cfg)(),
             key="next_pixels" if cfg.from_pixels else "next_observation_vector",
         )
-        stats = {k: v.clone() for k, v in stats.items()}
+        stats = {k: v.clone().to(device) for k, v in stats.items()}
     elif cfg.from_pixels:
         stats = {"loc": torch.Tensor(0.5), "scale": torch.Tensor(0.5)}
     
     # Make the stats shared by all processes
     if world_size > 1:
-        print(stats)
-        stats = {k: dist.all_reduce(v.to(device), group=group_wm, op=dist.ReduceOp.SUM) for k, v in stats.items()}
-        print(stats)
+        for k, v in stats.items():
+            dist.all_reduce(v, op=dist.ReduceOp.SUM, group=group_wm)
         stats = {k: v / world_size for k, v in stats.items()}
     print("shared stats", stats)
 
