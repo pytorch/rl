@@ -52,7 +52,7 @@ jobs:
         conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
     - name: Install TorchRL
       run: |
-        conda run -n build_binary python -m pip install torchrl-nightly
+        conda run -n build_binary python -m pip install -e .
     - name: Test torchrl installation
       shell: bash
       run: |
