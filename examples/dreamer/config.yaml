@@ -15,7 +15,7 @@ from_pixels: True
 env_per_collector: 8
 num_workers: 8
 # collector_devices: [cuda:1]
-collector_devices: cuda # [cpu,cpu,cpu,cpu,cpu,cpu,cpu,cpu]
+collector_devices: cpu # [cpu,cpu,cpu,cpu,cpu,cpu,cpu,cpu]
 frames_per_batch: 800
 optim_steps_per_batch: 80
 record_interval: 30

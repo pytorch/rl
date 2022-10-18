@@ -79,9 +79,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     if "SLURM_NTASKS" in os.environ:
         world_size = int(os.environ["SLURM_NTASKS"])
-        if cfg.collector_devices == "cuda":
-            world_size = world_size-1
-            cfg.collector_devices = f"cuda:{world_size}"
+        # if cfg.collector_devices == "cuda":
+        #     world_size = world_size-1
+        #     cfg.collector_devices = f"cuda:{world_size}"
 
     ngpus_per_node = torch.cuda.device_count()
 
@@ -183,6 +183,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         reward_normalizer = None
 
     # Losses
+    print("init losses")
     world_model_loss = DreamerModelLoss(world_model)
     if world_size > 1:
         world_model_loss = DDP(world_model_loss, device_ids=[gpu], output_device=gpu, process_group=group_wm)
@@ -197,6 +198,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     value_loss = DreamerValueLoss(value_model)
     if world_size > 1:
         value_loss = DDP(value_loss, device_ids=[gpu], output_device=gpu, process_group=group_value)
+    print("finished losses init")
 
     # Exploration noise to be added to the actions
     if cfg.exploration == "additive_gaussian":
