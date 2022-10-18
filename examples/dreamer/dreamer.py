@@ -159,11 +159,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
         stats = {k: v.clone() for k, v in stats.items()}
     elif cfg.from_pixels:
-        stats = {"loc": 0.5, "scale": 0.5}
+        stats = {"loc": torch.Tensor(0.5), "scale": torch.Tensor(0.5)}
     
     # Make the stats shared by all processes
     if world_size > 1:
-        stats = {k: dist.all_reduce(v, group=group_wm, op=dist.ReduceOp.SUM) for k, v in stats.items()}
+        stats = {k: dist.all_reduce(v.to(device), group=group_wm, op=dist.ReduceOp.SUM) for k, v in stats.items()}
         stats = {k: v / world_size for k, v in stats.items()}
     print("shared stats", stats)
 
