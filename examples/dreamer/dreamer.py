@@ -48,7 +48,9 @@ from torchrl.trainers.helpers.replay_buffer import (
 )
 from torchrl.trainers.helpers.trainers import TrainerConfig
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
-
+import os
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 config_fields = [
     (config_field.name, config_field.type, config_field)
@@ -72,15 +74,37 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
 
+    if "SLURM_NTASKS" in os.environ:
+        world_size = int(os.environ["SLURM_NTASKS"])
+        if cfg.collector_device == "cuda":
+            world_size = world_size-1
+            cfg.collector_device = f"cuda:{world_size}"
+
+    ngpus_per_node = torch.cuda.device_count()
+
+    if world_size > 1:
+        if 'SLURM_PROCID' in os.environ:  # for slurm scheduler
+            rank = int(os.environ['SLURM_PROCID'])
+            gpu = rank % torch.cuda.device_count()
+            print("gpu", gpu, "rank", rank, "ngpus_per_node", ngpus_per_node)
+            device = torch.device("cuda", gpu)
+            dist.init_process_group(backend='nccl', init_method='env://', world_size=world_size, rank=rank)
+
+            group_wm = torch.distributed.new_group(ranks=[i for i in range(world_size)])
+            group_actor = torch.distributed.new_group(ranks=[i for i in range(world_size)])
+            group_value = torch.distributed.new_group(ranks=[i for i in range(world_size)])
+    else:
+        if torch.cuda.is_available() and not cfg.model_device != "":
+            device = torch.device("cuda:0")
+        elif cfg.model_device:
+            device = torch.device(cfg.model_device)
+        else:
+            device = torch.device("cpu")
+        rank = 0
+            
     if not isinstance(cfg.reward_scaling, float):
         cfg.reward_scaling = 1.0
 
-    if torch.cuda.is_available() and not cfg.model_device != "":
-        device = torch.device("cuda:0")
-    elif cfg.model_device:
-        device = torch.device(cfg.model_device)
-    else:
-        device = torch.device("cpu")
     print(f"Using device {device}")
     exp_name = "_".join(
         [
@@ -156,13 +180,19 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Losses
     world_model_loss = DreamerModelLoss(world_model)
+    if world_size > 1:
+        world_model_loss = DDP(world_model_loss, device_ids=[gpu], output_device=gpu, process_group=group_wm)
     actor_loss = DreamerActorLoss(
         actor_model,
         value_model,
         model_based_env,
         imagination_horizon=cfg.imagination_horizon,
     )
+    if world_size > 1:
+        actor_loss = DDP(actor_loss, device_ids=[gpu], output_device=gpu, process_group=group_actor)
     value_loss = DreamerValueLoss(value_model)
+    if world_size > 1:
+        value_loss = DDP(value_loss, device_ids=[gpu], output_device=gpu, process_group=group_value)
 
     # Exploration noise to be added to the actions
     if cfg.exploration == "additive_gaussian":
