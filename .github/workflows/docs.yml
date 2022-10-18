@@ -3,7 +3,7 @@ name: Generate documentation
 on:
   push:
     branches:
-      - docs
+      - main
   workflow_dispatch:
 jobs:
   build_docs_job:
