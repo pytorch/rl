@@ -77,13 +77,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
 
+    ngpus_per_node = torch.cuda.device_count()
     if "SLURM_NTASKS" in os.environ:
         world_size = int(os.environ["SLURM_NTASKS"])
-        # if cfg.collector_devices == "cuda":
-        #     world_size = world_size-1
-        #     cfg.collector_devices = f"cuda:{world_size}"
-
-    ngpus_per_node = torch.cuda.device_count()
+        if cfg.collector_devices == "cuda":
+            if ngpus_per_node>world_size:
+                cfg.collector_devices = f"cuda:{ngpus_per_node-1}"
+            else:
+                cfg.collector_devices = "cpu"
 
     if world_size > 1:
         if 'SLURM_PROCID' in os.environ:  # for slurm scheduler
