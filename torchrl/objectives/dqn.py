@@ -11,14 +11,9 @@ from torchrl.modules import (
     DistributionalQValueActor,
     QValueActor,
 )
-from ...data.tensordict.tensordict import TensorDictBase
+from ..data.tensordict.tensordict import TensorDictBase
 from .common import LossModule
 from .utils import distance_loss, next_state_value
-
-__all__ = [
-    "DQNLoss",
-    "DistributionalDQNLoss",
-]
 
 
 class DQNLoss(LossModule):

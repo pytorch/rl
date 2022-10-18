@@ -64,22 +64,22 @@ from torchrl.objectives import (
     DreamerActorLoss,
     DreamerValueLoss,
 )
-from torchrl.objectives.costs.common import LossModule
-from torchrl.objectives.costs.deprecated import (
+from torchrl.objectives.common import LossModule
+from torchrl.objectives.deprecated import (
     DoubleREDQLoss_deprecated,
     REDQLoss_deprecated,
 )
-from torchrl.objectives.costs.redq import REDQLoss
-from torchrl.objectives.costs.reinforce import ReinforceLoss
-from torchrl.objectives.costs.utils import HardUpdate, hold_out_net, SoftUpdate
-from torchrl.objectives.returns.advantages import GAE, TDEstimate, TDLambdaEstimate
-from torchrl.objectives.returns.functional import (
+from torchrl.objectives.redq import REDQLoss
+from torchrl.objectives.reinforce import ReinforceLoss
+from torchrl.objectives.utils import HardUpdate, hold_out_net, SoftUpdate
+from torchrl.objectives.value.advantages import GAE, TDEstimate, TDLambdaEstimate
+from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td_lambda_advantage_estimate,
     vec_generalized_advantage_estimate,
     vec_td_lambda_advantage_estimate,
 )
-from torchrl.objectives.returns.utils import _custom_conv1d, _make_gammas_tensor
+from torchrl.objectives.value.utils import _custom_conv1d, _make_gammas_tensor
 
 
 @pytest.fixture

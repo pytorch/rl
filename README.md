@@ -1,7 +1,8 @@
 [![pytorch](https://circleci.com/gh/pytorch/rl.svg?style=shield)](https://circleci.com/gh/pytorch/rl)
+[![Documentation](https://img.shields.io/badge/Documentation-blue.svg)](https://pytorch.org/rl/)
 [![codecov](https://codecov.io/gh/pytorch/rl/branch/main/graph/badge.svg?token=HcpK1ILV6r)](https://codecov.io/gh/pytorch/rl)
 [![Twitter Follow](https://img.shields.io/twitter/follow/torchrl1?style=social)](https://twitter.com/torchrl1)
-[![Python 3.7, 3.8](https://img.shields.io/badge/python-3.7%20%7C%203.8%20%7C%203.9%20%7C%203.10%20%7C%20-blue.svg)](https://www.python.org/downloads/release/)
+[![Python 3.7, 3.8](https://img.shields.io/badge/python-3.7%20%7C%203.8%20%7C%203.9%20%7C%203.10-blue.svg)](https://www.python.org/downloads/)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/pytorch/rl/blob/main/LICENSE)
 <a href="https://pypi.org/project/torchrl"><img src="https://img.shields.io/pypi/v/torchrl" alt="pypi version"></a>
 <a href="https://pypi.org/project/torchrl-nightly"><img src="https://img.shields.io/pypi/v/torchrl-nightly?label=nightly" alt="pypi nightly version"></a>
@@ -317,7 +318,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
 
     ### Loss modules
     ```python
-    from torchrl.objectives.costs import DQNLoss
+    from torchrl.objectives import DQNLoss
     loss_module = DQNLoss(value_network=value_network, gamma=0.99)
     tensordict = replay_buffer.sample(batch_size)
     loss = loss_module(tensordict)
@@ -325,7 +326,7 @@ algorithms. For instance, here's how to code a rollout in TorchRL:
 
     ### Advantage computation
     ```python
-    from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
+    from torchrl.objectives.value.functional import vec_td_lambda_return_estimate
     advantage = vec_td_lambda_return_estimate(gamma, lmbda, next_state_value, reward, done)
     ```
 
