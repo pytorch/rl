@@ -161,13 +161,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
     elif cfg.from_pixels:
         stats = {"loc": torch.Tensor(0.5), "scale": torch.Tensor(0.5)}
     
-    # Make the stats shared by all processes
-    if world_size > 1:
-        for k, v in stats.items():
-            dist.all_reduce(v, op=dist.ReduceOp.SUM, group=group_wm)
-        stats = {k: v / world_size for k, v in stats.items()}
-    stats = {k: v.to(torch.device("cpu")) for k, v in stats.items()}
-    print("shared stats", stats)
+    # # Make the stats shared by all processes
+    # if world_size > 1:
+    #     for k, v in stats.items():
+    #         dist.all_reduce(v, op=dist.ReduceOp.SUM, group=group_wm)
+    #     stats = {k: v / world_size for k, v in stats.items()}
+    # stats = {k: v.to(torch.device("cpu")) for k, v in stats.items()}
+    # print("shared stats", stats)
 
     # Create the different components of dreamer
     world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
