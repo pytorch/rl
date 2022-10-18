@@ -163,7 +163,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     
     # Make the stats shared by all processes
     if world_size > 1:
+        print(stats)
         stats = {k: dist.all_reduce(v.to(device), group=group_wm, op=dist.ReduceOp.SUM) for k, v in stats.items()}
+        print(stats)
         stats = {k: v / world_size for k, v in stats.items()}
     print("shared stats", stats)
 
