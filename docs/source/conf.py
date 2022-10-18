@@ -58,11 +58,11 @@ extensions = [
     # "sphinx.ext.todo",
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
-    "sphinx.ext.viewcode",
-    "sphinx.ext.duration",
-    "sphinx.ext.autosectionlabel",
+    # "sphinx.ext.viewcode",
+    # "sphinx.ext.duration",
+    # "sphinx.ext.autosectionlabel",
     "sphinx_gallery.gen_gallery",
-    "sphinx_autodoc_typehints",
+    # "sphinx_autodoc_typehints",
     "sphinxcontrib.aafig",
 ]
 
@@ -104,15 +104,6 @@ exclude_patterns = []
 html_theme = "pytorch_sphinx_theme"
 html_theme_path = [pytorch_sphinx_theme.get_html_theme_path()]
 
-html_theme_options = {
-    "collapse_navigation": False,
-    "display_version": True,
-    "logo_only": True,
-    "pytorch_project": "docs",
-    "navigation_with_keys": True,
-    "analytics_id": "UA-117752657-2",
-}
-
 # Output file base name for HTML help builder.
 htmlhelp_basename = "PyTorchdoc"
 
@@ -125,27 +116,7 @@ html_static_path = ["_static"]
 
 # -- Options for LaTeX output ---------------------------------------------
 latex_elements = {
-    # The paper size ('letterpaper' or 'a4paper').
-    #
-    # 'papersize': 'letterpaper',
-    # The font size ('10pt', '11pt' or '12pt').
-    #
-    # 'pointsize': '10pt',
-    # Additional stuff for the LaTeX preamble.
-    #
-    # 'preamble': '',
-    # Latex figure (float) alignment
-    #
-    # 'figure_align': 'htbp',
 }
-
-
-# Grouping the document tree into LaTeX files. List of tuples
-# (source start file, target name, title,
-#  author, documentclass [howto, manual, or own class]).
-# latex_documents = [
-#     (master_doc, "pytorch.tex", "torchrl Documentation", "Torch Contributors", "manual"),
-# ]
 
 
 # -- Options for manual page output ---------------------------------------
