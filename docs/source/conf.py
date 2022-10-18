@@ -33,7 +33,7 @@ author = "Torch Contributors"
 # built documents.
 #
 # The short X.Y version.
-version = "main (" + torchrl.__version__ + " )"
+version = "main (" + str(torchrl.__version__) + " )"
 # The full version, including alpha/beta/rc tags.
 # TODO: verify this works as expected
 release = "main"
