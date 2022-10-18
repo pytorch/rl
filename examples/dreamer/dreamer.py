@@ -96,7 +96,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
             dist.init_process_group(backend='nccl', init_method='env://', world_size=world_size, rank=rank)
 
             group_wm = torch.distributed.new_group(ranks=[i for i in range(world_size)])
-            group_mb_env = torch.distributed.new_group(ranks=[i for i in range(world_size)])
             group_actor = torch.distributed.new_group(ranks=[i for i in range(world_size)])
             group_value = torch.distributed.new_group(ranks=[i for i in range(world_size)])
     else:
@@ -182,7 +181,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     if world_size > 1:
         world_model = DDP(world_model, device_ids=[gpu], output_device=gpu, process_group=group_wm)
-        model_based_env = DDP(model_based_env, device_ids=[gpu], output_device=gpu, process_group=group_mb_env)
         actor_model = DDP(actor_model, device_ids=[gpu], output_device=gpu, process_group=group_actor)
         value_model = DDP(value_model, device_ids=[gpu], output_device=gpu, process_group=group_value)
     # reward normalization
