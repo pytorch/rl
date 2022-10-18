@@ -56,8 +56,11 @@ jobs:
     - name: Test torchrl installation
       shell: bash
       run: |
+        mkdir _tmp
+        cd _tmp
         conda run -n build_binary \
           python -c "import torchrl"
+        cd ..
     - name: Build the docset
       run: |
         conda run -n build_binary python -m pip install -r docs/requirements.txt
