@@ -1976,7 +1976,7 @@ class TensorDict(TensorDictBase):
         return all(memmap_list) and len(memmap_list) > 0
 
     def _check_device(self) -> None:
-        devices = set(value.device for value in self.values_meta())
+        devices = set(torch.device(value.device.type) for value in self.values_meta())
         if self.device is not None and len(devices) >= 1 and devices != {self.device}:
             raise RuntimeError(
                 f"TensorDict.device is {self._device}, but elements have "
