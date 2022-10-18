@@ -310,7 +310,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             for j in range(cfg.optim_steps_per_batch):
                 cmpt += 1
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample(cfg.batch_size / world_size).to(
+                sampled_tensordict = replay_buffer.sample(cfg.batch_size // world_size).to(
                     device, non_blocking=True
                 )
                 if reward_normalizer is not None:
