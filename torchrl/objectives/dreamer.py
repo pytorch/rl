@@ -11,9 +11,9 @@ from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule
-from torchrl.objectives.costs.common import LossModule
-from torchrl.objectives.costs.utils import hold_out_net, distance_loss
-from torchrl.objectives.returns.functional import vec_td_lambda_return_estimate
+from torchrl.objectives.common import LossModule
+from torchrl.objectives.utils import hold_out_net, distance_loss
+from torchrl.objectives.value.functional import vec_td_lambda_return_estimate
 
 __all__ = ["DreamerModelLoss", "DreamerActorLoss", "DreamerValueLoss"]
 
@@ -78,19 +78,19 @@ class DreamerModelLoss(LossModule):
             tensordict.get("next_posterior_std"),
         )
         reco_loss = distance_loss(
-                tensordict.get("next_pixels"),
-                tensordict.get("next_reco_pixels"),
-                self.reco_loss,
-            )
+            tensordict.get("next_pixels"),
+            tensordict.get("next_reco_pixels"),
+            self.reco_loss,
+        )
         if not self.global_average:
             reco_loss = reco_loss.sum((-3, -2, -1))
         reco_loss = reco_loss.mean()
 
         reward_loss = distance_loss(
-                tensordict.get("true_reward"),
-                tensordict.get("reward"),
-                self.reward_loss,
-            )
+            tensordict.get("true_reward"),
+            tensordict.get("reward"),
+            self.reward_loss,
+        )
         if not self.global_average:
             reward_loss = reward_loss.squeeze(-1)
         reward_loss = reward_loss.mean()

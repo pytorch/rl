@@ -24,7 +24,7 @@ from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
-from torchrl.objectives.costs.dreamer import (
+from torchrl.objectives.dreamer import (
     DreamerActorLoss,
     DreamerModelLoss,
     DreamerValueLoss,
