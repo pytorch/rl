@@ -37,7 +37,7 @@ fi
 python -c "import functorch"
 
 # install snapshot
-pip3 install torchsnapshot-nightly
+pip3 install git+https://github.com/vmoens/torchsnapshot@poopulate_incomplete
 
 printf "* Installing torchrl\n"
 python setup.py develop
