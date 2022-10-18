@@ -76,9 +76,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     if "SLURM_NTASKS" in os.environ:
         world_size = int(os.environ["SLURM_NTASKS"])
-        if cfg.collector_device == "cuda":
+        if cfg.collector_devices == "cuda":
             world_size = world_size-1
-            cfg.collector_device = f"cuda:{world_size}"
+            cfg.collector_devices = f"cuda:{world_size}"
 
     ngpus_per_node = torch.cuda.device_count()
 
@@ -87,7 +87,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             rank = int(os.environ['SLURM_PROCID'])
             gpu = rank % torch.cuda.device_count()
             print("gpu", gpu, "rank", rank, "ngpus_per_node", ngpus_per_node)
-            device = torch.device("cuda", gpu)
+            torch.cuda.set_device(gpu)
+            device = torch.device("cuda")
             dist.init_process_group(backend='nccl', init_method='env://', world_size=world_size, rank=rank)
 
             group_wm = torch.distributed.new_group(ranks=[i for i in range(world_size)])
