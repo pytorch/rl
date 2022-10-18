@@ -96,6 +96,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             dist.init_process_group(backend='nccl', init_method='env://', world_size=world_size, rank=rank)
 
             group_wm = torch.distributed.new_group(ranks=[i for i in range(world_size)])
+            group_mb_env = torch.distributed.new_group(ranks=[i for i in range(world_size)])
             group_actor = torch.distributed.new_group(ranks=[i for i in range(world_size)])
             group_value = torch.distributed.new_group(ranks=[i for i in range(world_size)])
     else:
@@ -179,7 +180,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         value_key="state_value",
         proof_environment=transformed_env_constructor(cfg)(),
     )
-
+    if world_size > 1:
+        world_model = DDP(world_model, device_ids=[gpu], output_device=gpu, process_group=group_wm)
+        model_based_env = DDP(model_based_env, device_ids=[gpu], output_device=gpu, process_group=group_mb_env)
+        actor_model = DDP(actor_model, device_ids=[gpu], output_device=gpu, process_group=group_actor)
+        value_model = DDP(value_model, device_ids=[gpu], output_device=gpu, process_group=group_value)
     # reward normalization
     if cfg.normalize_rewards_online:
         # if used the running statistics of the rewards are computed and the
@@ -192,22 +197,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
         reward_normalizer = None
 
     # Losses
-    print("init losses")
     world_model_loss = DreamerModelLoss(world_model)
-    if world_size > 1:
-        world_model_loss = DDP(world_model_loss, device_ids=[gpu], output_device=gpu, process_group=group_wm)
     actor_loss = DreamerActorLoss(
         actor_model,
         value_model,
         model_based_env,
         imagination_horizon=cfg.imagination_horizon,
     )
-    if world_size > 1:
-        actor_loss = DDP(actor_loss, device_ids=[gpu], output_device=gpu, process_group=group_actor)
     value_loss = DreamerValueLoss(value_model)
-    if world_size > 1:
-        value_loss = DDP(value_loss, device_ids=[gpu], output_device=gpu, process_group=group_value)
-    print("finished losses init")
 
     # Exploration noise to be added to the actions
     if cfg.exploration == "additive_gaussian":
@@ -233,17 +230,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create the replay buffer
-
-    collector = make_collector_offpolicy(
-        make_env=create_env_fn,
-        actor_model_explore=exploration_policy,
-        cfg=cfg,
-        # make_env_kwargs=[
-        #     {"device": device}
-        #     for device in cfg.collector_devices
-        # ],
-    )
-    print("collector:", collector)
+    if rank==0:
+        collector = make_collector_offpolicy(
+            make_env=create_env_fn,
+            actor_model_explore=exploration_policy,
+            cfg=cfg,
+            # make_env_kwargs=[
+            #     {"device": device}
+            #     for device in cfg.collector_devices
+            # ],
+        )
+        print("collector:", collector)
 
     replay_buffer = make_replay_buffer(device, cfg)
 
@@ -263,8 +260,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             log_keys=cfg.recorder_log_keys,
         )
 
-    final_seed = collector.set_seed(cfg.seed)
-    print(f"init seed: {cfg.seed}, final seed: {final_seed}")
+        final_seed = collector.set_seed(cfg.seed)
+        print(f"init seed: {cfg.seed}, final seed: {final_seed}")
     # Training loop
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.total_frames)
@@ -284,10 +281,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         i +=1
         cmpt = 0
         if rank == 0:
-            tensordict = next(iter(collector)).to(device)
+            tensordict = [next(iter(collector)).to(device)]
         else:
-            tensordict = None
+            tensordict = [None]
         dist.broadcast_object_list([tensordict], src=0, group=group_wm)
+        tensordict = tensordict[0]
         if reward_normalizer is not None:
             reward_normalizer.update_reward_stats(tensordict)
         pbar.update(tensordict.numel())
