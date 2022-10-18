@@ -437,8 +437,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             if batch_size is not None
             else copy(self)
         )
-        if not inplace:
-            is_locked = out.is_locked
+        is_locked = out.is_locked
+        if not inplace and is_locked:
             out.unlock()
         for key, item in self.items():
             if isinstance(item, TensorDictBase):
@@ -447,7 +447,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 item_trsf = fn(item)
             if item_trsf is not None:
                 out.set(key, item_trsf, inplace=inplace)
-        if inplace and is_locked:
+        if not inplace and is_locked:
             out.lock()
         return out
 
