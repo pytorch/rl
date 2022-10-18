@@ -147,9 +147,9 @@ intersphinx_mapping = {
 }
 
 
-from docutils import nodes
-from sphinx import addnodes
-from sphinx.util.docfields import TypedField
+# from docutils import nodes
+# from sphinx import addnodes
+# from sphinx.util.docfields import TypedField
 
 
 # def patched_make_field(self, types, domain, items, **kw):
