@@ -6,10 +6,8 @@ sphinx==3.5.4
 -e git+https://github.com/pytorch/pytorch_sphinx_theme.git#egg=pytorch_sphinx_theme
 Jinja2==3.0.1
 sphinx-autodoc-typehints
-sphinx-copybutton
-sphinx-gallery
 sphinx-serve
-sphinxcontrib-aafig
+git+https://github.com/vmoens/aafig@4319769eae88fff8e3464858f3cf8c277f35335d
 sphinxcontrib-applehelp
 sphinxcontrib-devhelp
 sphinxcontrib-htmlhelp
