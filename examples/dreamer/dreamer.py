@@ -51,8 +51,6 @@ from torchrl.trainers.trainers import Recorder, RewardNormalizer
 import os
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-import hostlist
-
 config_fields = [
     (config_field.name, config_field.type, config_field)
     for config_cls in (
@@ -69,9 +67,8 @@ Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
 cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
 
-hostnames = hostlist.expand_hostlist(os.environ['SLURM_JOB_NODELIST'])
 gpu_ids = os.environ['SLURM_STEP_GPUS'].split(",")
-os.environ['MASTER_ADDR'] = hostnames[0]
+os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = str(12345 + int(min(gpu_ids))) #Avoid port conflict
 
 
