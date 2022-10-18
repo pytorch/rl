@@ -28,4 +28,3 @@ dependencies:
     - mlflow
     - av
     - coverage
-    - torchnapshot-nightly
