@@ -110,8 +110,7 @@ autosummary_generate = True
 html_static_path = ["_static"]
 
 # -- Options for LaTeX output ---------------------------------------------
-latex_elements = {
-}
+latex_elements = {}
 
 
 # -- Options for manual page output ---------------------------------------
