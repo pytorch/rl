@@ -12,7 +12,7 @@ jobs:
       matrix:
         include:
          - os: linux.2xlarge
-           python-version: 3.7
+           python-version: 3.8
     steps:
     - name: Check ldd --version
       run: ldd --version
