@@ -68,6 +68,11 @@ Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
 cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
 
+hostnames = hostlist.expand_hostlist(os.environ['SLURM_JOB_NODELIST'])
+gpu_ids = os.environ['SLURM_STEP_GPUS'].split(",")
+os.environ['MASTER_ADDR'] = hostnames[0]
+os.environ['MASTER_PORT'] = str(12345 + int(min(gpu_ids))) #Avoid port conflict
+
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
