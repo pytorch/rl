@@ -118,32 +118,32 @@ def main(cfg: "DictConfig"):  # noqa: F821
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
+    if rank==0:
+        if cfg.logger == "wandb":
+            from torchrl.trainers.loggers.wandb import WandbLogger
 
-    if cfg.logger == "wandb":
-        from torchrl.trainers.loggers.wandb import WandbLogger
+            logger = WandbLogger(
+                f"dreamer/{exp_name}",
+                project="torchrl",
+                group=f"Dreamer_{cfg.env_name}",
+                offline=cfg.offline_logging,
+            )
+        elif cfg.logger == "csv":
+            from torchrl.trainers.loggers.csv import CSVLogger
 
-        logger = WandbLogger(
-            f"dreamer/{exp_name}",
-            project="torchrl",
-            group=f"Dreamer_{cfg.env_name}",
-            offline=cfg.offline_logging,
-        )
-    elif cfg.logger == "csv":
-        from torchrl.trainers.loggers.csv import CSVLogger
+            logger = CSVLogger(
+                f"{exp_name}",
+                log_dir="dreamer",
+            )
+        elif cfg.logger == "tensorboard":
+            from torchrl.trainers.loggers.tensorboard import TensorboardLogger
 
-        logger = CSVLogger(
-            f"{exp_name}",
-            log_dir="dreamer",
-        )
-    elif cfg.logger == "tensorboard":
-        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
-
-        logger = TensorboardLogger(
-            f"{exp_name}",
-            log_dir="dreamer",
-        )
-    else:
-        raise NotImplementedError(cfg.logger)
+            logger = TensorboardLogger(
+                f"{exp_name}",
+                log_dir="dreamer",
+            )
+        else:
+            raise NotImplementedError(cfg.logger)
 
     video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
@@ -159,6 +159,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         stats = {k: v.clone() for k, v in stats.items()}
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
+    
+    # Make the stats shared by all processes
+    if world_size > 1:
+        stats = {k: dist.all_reduce(v, group=group_wm, op=dist.ReduceOp.SUM) for k, v in stats.items()}
+        stats = {k: v / world_size for k, v in stats.items()}
+    print("shared stats", stats)
 
     # Create the different components of dreamer
     world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
@@ -238,20 +244,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     replay_buffer = make_replay_buffer(device, cfg)
 
-    record = Recorder(
-        record_frames=cfg.record_frames,
-        frame_skip=cfg.frame_skip,
-        policy_exploration=policy,
-        recorder=make_recorder_env(
-            cfg,
-            video_tag,
-            stats,
-            logger,
-            create_env_fn,
-        ),
-        record_interval=cfg.record_interval,
-        log_keys=cfg.recorder_log_keys,
-    )
+    if rank==0:
+        record = Recorder(
+            record_frames=cfg.record_frames,
+            frame_skip=cfg.frame_skip,
+            policy_exploration=policy,
+            recorder=make_recorder_env(
+                cfg,
+                video_tag,
+                stats,
+                logger,
+                create_env_fn,
+            ),
+            record_interval=cfg.record_interval,
+            log_keys=cfg.recorder_log_keys,
+        )
 
     final_seed = collector.set_seed(cfg.seed)
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
@@ -283,11 +290,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # tensordict = tensordict.reshape(-1, cfg.batch_length)
         replay_buffer.extend(tensordict.cpu())
-        logger.log_scalar(
-            "r_training",
-            tensordict["reward"].mean().detach().item(),
-            step=collected_frames,
-        )
+        
+        if rank == 0:
+            logger.log_scalar(
+                "r_training",
+                tensordict["reward"].mean().detach().item(),
+                step=collected_frames,
+            )
 
         if (i % cfg.record_interval) == 0:
             do_log = True
@@ -295,12 +304,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
             do_log = False
 
         if collected_frames >= cfg.init_random_frames:
-            if i % cfg.record_interval == 0:
+            if i % cfg.record_interval == 0 and rank == 0:
                 logger.log_scalar("cmpt", cmpt)
             for j in range(cfg.optim_steps_per_batch):
                 cmpt += 1
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(
+                sampled_tensordict = replay_buffer.sample(cfg.batch_size / world_size).to(
                     device, non_blocking=True
                 )
                 if reward_normalizer is not None:
@@ -339,7 +348,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     scaler1.unscale_(world_model_opt)
                     clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
                     scaler1.step(world_model_opt)
-                    if j == cfg.optim_steps_per_batch - 1 and do_log:
+                    if j == cfg.optim_steps_per_batch - 1 and do_log and rank == 0:
                         logger.log_scalar(
                             "loss_world_model",
                             loss_world_model.detach().item(),
@@ -375,7 +384,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 scaler2.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
                 scaler2.step(actor_opt)
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
+                if j == cfg.optim_steps_per_batch - 1 and do_log and rank == 0:
                     logger.log_scalar(
                         "loss_actor",
                         actor_loss_td["loss_actor"].detach().item(),
@@ -396,7 +405,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 scaler3.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
                 scaler3.step(value_opt)
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
+                if j == cfg.optim_steps_per_batch - 1 and do_log and rank == 0:
                     logger.log_scalar(
                         "loss_value",
                         value_loss_td["loss_value"].detach().item(),
@@ -412,16 +421,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if j == cfg.optim_steps_per_batch - 1:
                     do_log = False
 
-            call_record(
-                logger,
-                record,
-                collected_frames,
-                sampled_tensordict_save,
-                stats,
-                model_based_env,
-                actor_model,
-                cfg,
-            )
+            if rank ==0:
+                call_record(
+                    logger,
+                    record,
+                    collected_frames,
+                    sampled_tensordict_save,
+                    stats,
+                    model_based_env,
+                    actor_model,
+                    cfg,
+                )
         if cfg.exploration != "":
             exploration_policy.step(current_frames)
         collector.update_policy_weights_()
