@@ -166,6 +166,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for k, v in stats.items():
             dist.all_reduce(v, op=dist.ReduceOp.SUM, group=group_wm)
         stats = {k: v / world_size for k, v in stats.items()}
+    stats = {k: v.to(torch.device("cpu")) for k, v in stats.items()}
     print("shared stats", stats)
 
     # Create the different components of dreamer
@@ -329,7 +330,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         + model_loss_td["loss_model_reward"]
                     )
                     # If we are logging videos, we keep some frames.
-                    if (
+                    if (rank==0 and
                         cfg.record_video
                         and (record._count + 1) % cfg.record_interval == 0
                     ):
