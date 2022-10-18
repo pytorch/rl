@@ -25,7 +25,7 @@ import pytorch_sphinx_theme
 import torchrl
 
 project = "torchrl"
-copyright = "2022-presennt, Torch Contributors"
+copyright = "2022, Meta"
 author = "Torch Contributors"
 
 # The version info for the project you're documenting, acts as replacement for
@@ -53,10 +53,9 @@ language = None
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
-    "sphinx.ext.coverage",
     "sphinx.ext.doctest",
     "sphinx.ext.intersphinx",
-    "sphinx.ext.todo",
+    # "sphinx.ext.todo",
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
@@ -240,5 +239,3 @@ def patched_make_field(self, types, domain, items, **kw):
 TypedField.make_field = patched_make_field
 
 aafig_default_options = dict(scale=1.5, aspect=1.0, proportional=True)
-
-coverage_show_missing_items = True
