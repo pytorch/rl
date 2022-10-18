@@ -3,7 +3,7 @@ name: Generate documentation
 on:
   push:
     branches:
-      - main
+      - docs
   workflow_dispatch:
 jobs:
   build_docs_job:
@@ -12,7 +12,7 @@ jobs:
       matrix:
         include:
          - os: linux.2xlarge
-           python-version: 3.7
+           python-version: 3.8
     steps:
     - name: Check ldd --version
       run: ldd --version
@@ -26,8 +26,13 @@ jobs:
         sudo pip3 install --upgrade pip
     - name: Setup conda
       run: |
+        rm -rf $HOME/miniconda
         wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
         bash ~/miniconda.sh -b -p $HOME/miniconda
+    - name: Install gcc
+      shell: bash
+      run: |
+        sudo yum group install -y "Development Tools"
     - name: setup Path
       run: |
         echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
@@ -51,12 +56,15 @@ jobs:
         conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
     - name: Install TorchRL
       run: |
-        conda run -n build_binary python -m pip install torchrl-nightly
+        conda run -n build_binary python -m pip install -e .
     - name: Test torchrl installation
       shell: bash
       run: |
+        mkdir _tmp
+        cd _tmp
         conda run -n build_binary \
           python -c "import torchrl"
+        cd ..
     - name: Build the docset
       run: |
         conda run -n build_binary python -m pip install -r docs/requirements.txt
