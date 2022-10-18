@@ -15,7 +15,7 @@ from torchrl.objectives import (
     next_state_value as get_next_state_value,
     distance_loss,
 )
-from torchrl.objectives.costs.common import LossModule
+from torchrl.objectives.common import LossModule
 
 
 class REDQLoss_deprecated(LossModule):
