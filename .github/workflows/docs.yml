@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         include:
-         - os: linux.large
+         - os: linux.2xlarge
            python-version: 3.7
     steps:
     - name: Check ldd --version
