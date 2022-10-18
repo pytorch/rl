@@ -5,3 +5,14 @@ sphinx-gallery>=0.9.0
 sphinx==3.5.4
 -e git+https://github.com/pytorch/pytorch_sphinx_theme.git#egg=pytorch_sphinx_theme
 Jinja2==3.0.1
+sphinx-autodoc-typehints
+sphinx-copybutton
+sphinx-gallery
+sphinx-serve
+sphinxcontrib-aafig
+sphinxcontrib-applehelp
+sphinxcontrib-devhelp
+sphinxcontrib-htmlhelp
+sphinxcontrib-jsmath
+sphinxcontrib-qthelp
+sphinxcontrib-serializinghtml
