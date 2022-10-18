@@ -23,7 +23,7 @@ DDPG
     DDPGLoss
 
 SAC
-----
+---
 
 .. autosummary::
     :toctree: generated/
@@ -41,7 +41,7 @@ REDQ
     REDQLoss
 
 PPO
-----
+---
 
 .. autosummary::
     :toctree: generated/
@@ -50,6 +50,25 @@ PPO
     PPOLoss
     ClipPPOLoss
     KLPENPPOLoss
+
+Returns
+-------
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    GAE
+    TDLambdaEstimate
+    TDEstimate
+    functional.generalized_advantage_estimate
+    functional.vec_generalized_advantage_estimate
+    functional.vec_td_lambda_return_estimate
+    functional.vec_td_lambda_advantage_estimate
+    functional.td_lambda_return_estimate
+    functional.td_lambda_advantage_estimate
+    functional.td_advantage_estimate
+
 
 Utils
 -----

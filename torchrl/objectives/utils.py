@@ -15,6 +15,14 @@ from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule
 
+__all__ = [
+    "SoftUpdate",
+    "HardUpdate",
+    "distance_loss",
+    "hold_out_params",
+    "hold_out_net",
+]
+
 
 class _context_manager:
     def __init__(self, value=True):

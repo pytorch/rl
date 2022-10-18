@@ -11,10 +11,10 @@ TensorDict modules
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
-    TDModule
-    ProbabilisticTDModule
-    TDSequence
-    TDModuleWrapper
+    TensorDictModule
+    ProbabilisticTensorDictModule
+    TensorDictSequential
+    TensorDictModuleWrapper
     Actor
     ProbabilisticActor
     ValueOperator
@@ -26,7 +26,7 @@ TensorDict modules
 
 Hooks
 -----
-.. currentmodule:: torchrl.modules.td_module.actors
+.. currentmodule:: torchrl.modules.tensordict_module.actors
 
 .. autosummary::
     :toctree: generated/
