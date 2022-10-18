@@ -440,7 +440,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
         if cfg.exploration != "":
             exploration_policy.step(current_frames)
-        collector.update_policy_weights_()
+        if rank == 0:
+            collector.update_policy_weights_()
 
 
 if __name__ == "__main__":
