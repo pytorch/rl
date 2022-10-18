@@ -5,6 +5,7 @@
 from typing import Optional, Tuple
 
 import torch
+from torch.nn.parallel import DistributedDataParallel
 
 from torchrl.data import TensorDict
 from torchrl.envs.model_based.dreamer import DreamerEnv
@@ -78,19 +79,19 @@ class DreamerModelLoss(LossModule):
             tensordict.get("next_posterior_std"),
         )
         reco_loss = distance_loss(
-                tensordict.get("next_pixels"),
-                tensordict.get("next_reco_pixels"),
-                self.reco_loss,
-            )
+            tensordict.get("next_pixels"),
+            tensordict.get("next_reco_pixels"),
+            self.reco_loss,
+        )
         if not self.global_average:
             reco_loss = reco_loss.sum((-3, -2, -1))
         reco_loss = reco_loss.mean()
 
         reward_loss = distance_loss(
-                tensordict.get("true_reward"),
-                tensordict.get("reward"),
-                self.reward_loss,
-            )
+            tensordict.get("true_reward"),
+            tensordict.get("reward"),
+            self.reward_loss,
+        )
         if not self.global_average:
             reward_loss = reward_loss.squeeze(-1)
         reward_loss = reward_loss.mean()
@@ -240,7 +241,10 @@ class DreamerValueLoss(LossModule):
 
     def forward(self, fake_data) -> torch.Tensor:
         lambda_target = fake_data.get("lambda_target")
-        tensordict_select = fake_data.select(*self.value_model.in_keys)
+        if isinstance(self.value_model, DistributedDataParallel):
+            tensordict_select = fake_data.select(*self.value_model.module.in_keys)
+        else:
+            tensordict_select = fake_data.select(*self.value_model.in_keys)
         self.value_model(tensordict_select)
         if self.discount_loss:
             discount = self.gamma * torch.ones_like(

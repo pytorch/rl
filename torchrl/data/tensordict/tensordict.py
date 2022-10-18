@@ -1977,7 +1977,11 @@ class TensorDict(TensorDictBase):
 
     def _check_device(self) -> None:
         devices = set(torch.device(value.device.type) for value in self.values_meta())
-        if self.device is not None and len(devices) >= 1 and devices != {torch.device(self.device.type)}:
+        if (
+            self.device is not None
+            and len(devices) >= 1
+            and devices != {torch.device(self.device.type)}
+        ):
             raise RuntimeError(
                 f"TensorDict.device is {self._device}, but elements have "
                 f"device values {devices}. If TensorDict.device is set then "

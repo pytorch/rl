@@ -1,4 +1,5 @@
 import dataclasses
+import os
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 import hydra
 import torch
 import torch.cuda
+import torch.distributed as dist
 import tqdm
 from dreamer_utils import (
     parallel_env_constructor,
@@ -19,6 +21,7 @@ from hydra.core.config_store import ConfigStore
 
 # float16
 from torch.cuda.amp import autocast, GradScaler
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.nn.utils import clip_grad_norm_
 from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
@@ -48,9 +51,7 @@ from torchrl.trainers.helpers.replay_buffer import (
 )
 from torchrl.trainers.helpers.trainers import TrainerConfig
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
-import os
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
+
 config_fields = [
     (config_field.name, config_field.type, config_field)
     for config_cls in (
@@ -67,9 +68,9 @@ Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
 cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
 
-gpu_ids = os.environ['SLURM_STEP_GPUS'].split(",")
-os.environ['MASTER_ADDR'] = 'localhost'
-os.environ['MASTER_PORT'] = str(12345 + int(min(gpu_ids))) #Avoid port conflict
+gpu_ids = os.environ["SLURM_STEP_GPUS"].split(",")
+os.environ["MASTER_ADDR"] = "localhost"
+os.environ["MASTER_PORT"] = str(12345 + int(min(gpu_ids)))  # Avoid port conflict
 
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
@@ -81,23 +82,29 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if "SLURM_NTASKS" in os.environ:
         world_size = int(os.environ["SLURM_NTASKS"])
         if cfg.collector_devices == "cuda":
-            if ngpus_per_node>world_size:
+            if ngpus_per_node > world_size:
                 cfg.collector_devices = f"cuda:{ngpus_per_node-1}"
             else:
                 cfg.collector_devices = "cpu"
 
     if world_size > 1:
-        if 'SLURM_PROCID' in os.environ:  # for slurm scheduler
-            rank = int(os.environ['SLURM_PROCID'])
+        if "SLURM_PROCID" in os.environ:  # for slurm scheduler
+            rank = int(os.environ["SLURM_PROCID"])
             gpu = rank % torch.cuda.device_count()
             print("gpu", gpu, "rank", rank, "ngpus_per_node", ngpus_per_node)
             torch.cuda.set_device(gpu)
             device = torch.device("cuda")
-            dist.init_process_group(backend='nccl', init_method='env://', world_size=world_size, rank=rank)
+            dist.init_process_group(
+                backend="nccl", init_method="env://", world_size=world_size, rank=rank
+            )
 
             group_wm = torch.distributed.new_group(ranks=[i for i in range(world_size)])
-            group_actor = torch.distributed.new_group(ranks=[i for i in range(world_size)])
-            group_value = torch.distributed.new_group(ranks=[i for i in range(world_size)])
+            group_actor = torch.distributed.new_group(
+                ranks=[i for i in range(world_size)]
+            )
+            group_value = torch.distributed.new_group(
+                ranks=[i for i in range(world_size)]
+            )
     else:
         if torch.cuda.is_available() and not cfg.model_device != "":
             device = torch.device("cuda:0")
@@ -106,7 +113,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         else:
             device = torch.device("cpu")
         rank = 0
-            
+
     if not isinstance(cfg.reward_scaling, float):
         cfg.reward_scaling = 1.0
 
@@ -119,7 +126,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
-    if rank==0:
+    if rank == 0:
         if cfg.logger == "wandb":
             from torchrl.trainers.loggers.wandb import WandbLogger
 
@@ -160,7 +167,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         stats = {k: v.clone().to(device) for k, v in stats.items()}
     elif cfg.from_pixels:
         stats = {"loc": torch.Tensor(0.5), "scale": torch.Tensor(0.5)}
-    
+
     # Make the stats shared by all processes
     if world_size > 1:
         for k, v in stats.items():
@@ -180,9 +187,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
         proof_environment=transformed_env_constructor(cfg)(),
     )
     if world_size > 1:
-        world_model = DDP(world_model, device_ids=[gpu], output_device=gpu, process_group=group_wm)
-        actor_model = DDP(actor_model, device_ids=[gpu], output_device=gpu, process_group=group_actor)
-        value_model = DDP(value_model, device_ids=[gpu], output_device=gpu, process_group=group_value)
+        world_model = DDP(
+            world_model, device_ids=[gpu], output_device=gpu, process_group=group_wm
+        )
+        actor_model = DDP(
+            actor_model, device_ids=[gpu], output_device=gpu, process_group=group_actor
+        )
+        value_model = DDP(
+            value_model, device_ids=[gpu], output_device=gpu, process_group=group_value
+        )
     # reward normalization
     if cfg.normalize_rewards_online:
         # if used the running statistics of the rewards are computed and the
@@ -228,7 +241,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create the replay buffer
-    if rank==0:
+    if rank == 0:
         collector = make_collector_offpolicy(
             make_env=create_env_fn,
             actor_model_explore=exploration_policy,
@@ -242,7 +255,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     replay_buffer = make_replay_buffer(device, cfg)
 
-    if rank==0:
+    if rank == 0:
         record = Recorder(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
@@ -276,7 +289,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     scaler3 = GradScaler()
     i = 0
     while True:
-        i +=1
+        i += 1
         cmpt = 0
         if rank == 0:
             tensordict = [next(iter(collector)).to(device)]
@@ -296,7 +309,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # tensordict = tensordict.reshape(-1, cfg.batch_length)
         if rank == 0:
-            
+
             logger.log_scalar(
                 "r_training",
                 tensordict["reward"].mean().detach().item(),
@@ -314,9 +327,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
             for j in range(cfg.optim_steps_per_batch):
                 cmpt += 1
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample(cfg.batch_size // world_size).to(
-                    device, non_blocking=True
-                )
+                sampled_tensordict = replay_buffer.sample(
+                    cfg.batch_size // world_size
+                ).to(device, non_blocking=True)
                 if reward_normalizer is not None:
                     sampled_tensordict = reward_normalizer.normalize_reward(
                         sampled_tensordict
@@ -332,8 +345,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         + model_loss_td["loss_model_reward"]
                     )
                     # If we are logging videos, we keep some frames.
-                    if (rank==0 and
-                        cfg.record_video
+                    if (
+                        rank == 0
+                        and cfg.record_video
                         and (record._count + 1) % cfg.record_interval == 0
                     ):
                         sampled_tensordict_save = (
@@ -426,7 +440,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if j == cfg.optim_steps_per_batch - 1:
                     do_log = False
 
-            if rank ==0:
+            if rank == 0:
                 call_record(
                     logger,
                     record,
