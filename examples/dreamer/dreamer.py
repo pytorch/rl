@@ -334,7 +334,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 cmpt += 1
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample(
-                    cfg.batch_size // world_size
+                    int(cfg.batch_size // world_size)
                 ).to(device, non_blocking=True)
                 if reward_normalizer is not None:
                     sampled_tensordict = reward_normalizer.normalize_reward(
