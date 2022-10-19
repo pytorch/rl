@@ -124,16 +124,20 @@ class _Dynamic_CKPT_BACKEND:
     """Allows CKPT_BACKEND to be changed on-the-fly."""
 
     backends = ["torch", "torchsnapshot"]
+
     def _get_backend(self):
         backend = os.environ.get("CKPT_BACKEND", "torchsnapshot")
         if backend == "torchsnapshot":
             try:
-                import torchsnapshot
+                import torchsnapshot  # noqa: F401
+
                 _has_ts = True
             except ImportError:
                 _has_ts = False
             if not _has_ts:
-                raise ImportError(f"torchsnapshot not found, but the backend points to this library. Consider installing torchsnapshot or choose another backend (available backends: {self.backends})")
+                raise ImportError(
+                    f"torchsnapshot not found, but the backend points to this library. Consider installing torchsnapshot or choose another backend (available backends: {self.backends})"
+                )
         return backend
 
     def __getattr__(self, item):
