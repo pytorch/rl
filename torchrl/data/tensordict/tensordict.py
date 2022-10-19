@@ -149,7 +149,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             raise RuntimeError(
                 "modifying the batch size of a lazy repesentation of a "
                 "tensordict is not permitted. Consider instantiating the "
-                "tensordict fist by calling :obj:`td = td.to_tensordict()` before "
+                "tensordict fist by calling `td = td.to_tensordict()` before "
                 "resetting the batch size."
             )
         if self.batch_size == new_batch_size:
