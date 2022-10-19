@@ -92,18 +92,18 @@ class Transform(nn.Module):
     the same or another) tensordict as output, where a series of values have
     been modified or created with a new key. When instantiating a new
     transform, the keys that are to be read from are passed to the
-    constructor via the `keys` argument.
+    constructor via the :obj:`keys` argument.
 
     Transforms are to be combined with their target environments with the
-    TransformedEnv class, which takes as arguments an `EnvBase` instance
+    TransformedEnv class, which takes as arguments an :obj:`EnvBase` instance
     and a transform. If multiple transforms are to be used, they can be
-    concatenated using the `Compose` class.
+    concatenated using the :obj:`Compose` class.
     A transform can be stateless or stateful (e.g. CatTransform). Because of
-    this, Transforms support the `reset` operation, which should reset the
+    this, Transforms support the :obj:`reset` operation, which should reset the
     transform to its initial state (such that successive trajectories are kept
     independent).
 
-    Notably, `Transform` subclasses take care of transforming the affected
+    Notably, :obj:`Transform` subclasses take care of transforming the affected
     specs from an environment: when querying
     `transformed_env.observation_spec`, the resulting objects will describe
     the specs of the transformed_in tensors.
@@ -268,7 +268,7 @@ class TransformedEnv(EnvBase):
     Args:
         env (EnvBase): original environment to be transformed_in.
         transform (Transform, optional): transform to apply to the tensordict resulting
-            from `env.step(td)`. If none is provided, an empty Compose
+            from :obj:`env.step(td)`. If none is provided, an empty Compose
             placeholder in an eval mode is used.
         cache_specs (bool, optional): if True, the specs will be cached once
             and for all after the first call (i.e. the specs will be
@@ -366,7 +366,6 @@ class TransformedEnv(EnvBase):
     @property
     def input_spec(self) -> TensorSpec:
         """Action spec of the transformed environment."""
-
         if self._input_spec is None or not self.cache_specs:
             input_spec = self.transform.transform_input_spec(
                 deepcopy(self.base_env.input_spec)
@@ -380,7 +379,6 @@ class TransformedEnv(EnvBase):
     @property
     def reward_spec(self) -> TensorSpec:
         """Reward spec of the transformed environment."""
-
         if self._reward_spec is None or not self.cache_specs:
             reward_spec = self.transform.transform_reward_spec(
                 deepcopy(self.base_env.reward_spec)

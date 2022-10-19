@@ -20,23 +20,23 @@ class GymPixelObservationWrapper(ObservationWrapper):
 
     Args:
         env: The environment to wrap.
-        pixels_only: If `True` (default), the original observation returned
+        pixels_only: If :obj:`True` (default), the original observation returned
             by the wrapped environment will be discarded, and a dictionary
-            observation will only include pixels. If `False`, the
+            observation will only include pixels. If :obj:`False`, the
             observation dictionary will contain both the original
             observations and the pixel observations.
-        render_kwargs: Optional `dict` containing keyword arguments passed
-            to the `self.render` method.
+        render_kwargs: Optional :obj:`dict` containing keyword arguments passed
+            to the :obj:`self.render` method.
         pixel_keys: Optional custom string specifying the pixel
-            observation's key in the `OrderedDict` of observations.
+            observation's key in the :obj:`OrderedDict` of observations.
             Defaults to 'pixels'.
 
     Raises:
-        ValueError: If `env`'s observation spec is not compatible with the
+        ValueError: If :obj:`env`'s observation spec is not compatible with the
             wrapper. Supported formats are a single array, or a dict of
             arrays.
-        ValueError: If `env`'s observation already contains any of the
-            specified `pixel_keys`.
+        ValueError: If :obj:`env`'s observation already contains any of the
+            specified :obj:`pixel_keys`.
     """
 
     def __init__(

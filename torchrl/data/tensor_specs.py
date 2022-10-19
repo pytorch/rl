@@ -289,7 +289,7 @@ class TensorSpec:
 
     @abc.abstractmethod
     def is_in(self, val: torch.Tensor) -> bool:
-        """If the value `val` is in the box defined by the TensorSpec, returns True, otherwise False.
+        """If the value :obj:`val` is in the box defined by the TensorSpec, returns True, otherwise False.
 
         Args:
             val (torch.Tensor): value to be checked
@@ -1003,7 +1003,7 @@ class CompositeSpec(TensorSpec):
     Args:
         **kwargs (key (str): value (TensorSpec)): dictionary of tensorspecs
             to be stored. Values can be None, in which case is_in will be assumed
-            to be `True` for the corresponding tensors, and `project()` will have no
+            to be :obj:`True` for the corresponding tensors, and :obj:`project()` will have no
             effect. `spec.encode` cannot be used with missing values.
 
     Examples:
@@ -1196,7 +1196,7 @@ dtype=torch.float32)},
         return self
 
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
-        return {key: self[key].to_numpy(val) for key, val in val.items()}
+        return {key: self[key]._to_numpy(val) for key, val in val.items()}
 
     def zero(self, shape=None) -> TensorDictBase:
         if shape is None:

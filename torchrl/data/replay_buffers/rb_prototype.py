@@ -9,7 +9,7 @@ from ..tensordict.tensordict import TensorDictBase, LazyStackedTensorDict
 from .replay_buffers import pin_memory_output, stack_tensors, stack_td
 from .samplers import Sampler, RandomSampler
 from .storages import Storage, ListStorage
-from .utils import INT_CLASSES, to_numpy
+from .utils import INT_CLASSES, _to_numpy
 from .writers import Writer, RoundRobinWriter
 
 
@@ -73,7 +73,7 @@ class ReplayBuffer:
 
     @pin_memory_output
     def __getitem__(self, index: Union[int, torch.Tensor]) -> Any:
-        index = to_numpy(index)
+        index = _to_numpy(index)
         with self._replay_lock:
             data = self._storage[index]
 

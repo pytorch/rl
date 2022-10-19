@@ -37,7 +37,7 @@ class Actor(TensorDictModule):
 
     The Actor class comes with default values for the out_keys (["action"])
     and if the spec is provided but not as a CompositeSpec object, it will be
-    automatically translated into `spec = CompositeSpec(action=spec)`
+    automatically translated into :obj:`spec = CompositeSpec(action=spec)`
 
     Examples:
         >>> from torchrl.data import TensorDict,
@@ -89,7 +89,7 @@ class ProbabilisticActor(ProbabilisticTensorDictModule):
 
     The Actor class comes with default values for the out_keys (["action"])
     and if the spec is provided but not as a CompositeSpec object, it will be
-    automatically translated into `spec = CompositeSpec(action=spec)`
+    automatically translated into :obj:`spec = CompositeSpec(action=spec)`
 
     Examples:
         >>> from torchrl.data import TensorDict, NdBoundedTensorSpec

@@ -231,7 +231,7 @@ def transformed_env_constructor(
         cfg (DictConfig): a DictConfig containing the arguments of the script.
         video_tag (str, optional): video tag to be passed to the Logger object
         logger (Logger, optional): logger associated with the script
-        stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
+        stats (dict, optional): a dictionary containing the :obj:`loc` and :obj:`scale` for the `ObservationNorm` transform
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.
         use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,

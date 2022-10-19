@@ -101,8 +101,7 @@ def _robust_to_tensor(array: Union[float, np.ndarray]) -> torch.Tensor:
 
 
 class DMControlWrapper(GymLikeEnv):
-    """
-    DeepMind Control lab environment wrapper.
+    """DeepMind Control lab environment wrapper.
 
     Args:
         env (dm_control.suite env): environment instance
@@ -115,6 +114,7 @@ class DMControlWrapper(GymLikeEnv):
         >>> td = env.rand_step()
         >>> print(td)
         >>> print(env.available_envs)
+
     """
 
     git_url = "https://github.com/deepmind/dm_control"
@@ -252,8 +252,7 @@ class DMControlWrapper(GymLikeEnv):
 
 
 class DMControlEnv(DMControlWrapper):
-    """
-    DeepMind Control lab environment wrapper.
+    """DeepMind Control lab environment wrapper.
 
     Args:
         env_name (str): name of the environment
@@ -269,6 +268,7 @@ class DMControlEnv(DMControlWrapper):
         >>> td = env.rand_step()
         >>> print(td)
         >>> print(env.available_envs)
+
     """
 
     def __init__(self, env_name, task_name, **kwargs):

@@ -72,7 +72,7 @@ class Trainer:
     of its specific operations: they all must be hooked at specific points in
     the training loop.
 
-    To build a Trainer, one needs an iterable data source (a `collector`), a
+    To build a Trainer, one needs an iterable data source (a :obj:`collector`), a
     loss module and an optimizer.
 
     Args:
@@ -94,12 +94,12 @@ class Trainer:
         clip_grad_norm (bool, optional): If True, the gradients will be clipped
             based on the total norm of the model parameters. If False,
             all the partial derivatives will be clamped to
-            (-clip_norm, clip_norm). Default is `True`.
+            (-clip_norm, clip_norm). Default is :obj:`True`.
         clip_norm (Number, optional): value to be used for clipping gradients.
             Default is 100.0.
         progress_bar (bool, optional): If True, a progress bar will be
             displayed using tqdm. If tqdm is not installed, this option
-            won't have any effect. Default is `True`
+            won't have any effect. Default is :obj:`True`
         seed (int, optional): Seed to be used for the collector, pytorch and
             numpy. Default is 42.
         save_trainer_interval (int, optional): How often the trainer should be
@@ -534,9 +534,9 @@ class ReplayBufferTrainer:
         flatten_tensordicts (bool, optional): if True, the tensordicts will be
             flattened (or equivalently masked with the valid mask obtained from
             the collector) before being passed to the replay buffer. Otherwise,
-            no transform will be achieved other than padding (see `max_dims` arg below).
+            no transform will be achieved other than padding (see :obj:`max_dims` arg below).
             Defaults to True
-        max_dims (sequence of int, optional): if `flatten_tensordicts` is set to False,
+        max_dims (sequence of int, optional): if :obj:`flatten_tensordicts` is set to False,
             this will be a list of the length of the batch_size of the provided
             tensordicts that represent the maximum size of each. If provided,
             this list of sizes will be used to pad the tensordict and make their shape
@@ -624,9 +624,9 @@ class LogReward:
     """Reward logger hook.
 
     Args:
-        logname (str, optional): name of the rewards to be logged. Default is `"r_training"`.
+        logname (str, optional): name of the rewards to be logged. Default is :obj:`"r_training"`.
         log_pbar (bool, optional): if True, the reward value will be logged on
-            the progression bar. Default is `False`.
+            the progression bar. Default is :obj:`False`.
 
     Examples:
         >>> log_reward = LogReward("reward")
@@ -762,7 +762,7 @@ class BatchSubSampler:
         sub_traj_len (int, optional): length of the trajectories that
             sub-samples must have in online settings. Default is -1 (i.e.
             takes the full length of the trajectory)
-        min_sub_traj_len (int, optional): minimum value of `sub_traj_len`, in
+        min_sub_traj_len (int, optional): minimum value of :obj:`sub_traj_len`, in
             case some elements of the batch contain few steps.
             Default is -1 (i.e. no minimum value)
 
@@ -798,8 +798,8 @@ class BatchSubSampler:
         dimensions, it is assumed that the first dimension represents the
         batch, and the second the time. If so, the resulting subsample will
         contain consecutive samples across time.
-        """
 
+        """
         if batch.ndimension() == 1:
             return batch[torch.randperm(batch.shape[0])[: self.batch_size]]
 

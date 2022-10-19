@@ -37,7 +37,7 @@ class MetaTensor:
     MetaTensor supports more operations than tensors on 'meta' device (
     `torch.tensor(..., device='meta')`).
     For instance, MetaTensor supports some operations on its shape and device,
-    such as `mt.to(device)`, `mt.view(*new_shape)`, `mt.expand(
+    such as :obj:`mt.to(device)`, :obj:`mt.view(*new_shape)`, :obj:`mt.expand(
     *expand_shape)` etc.
 
     Args:

@@ -3,27 +3,17 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import contextlib
 from typing import Callable, Optional, Tuple
 
 import torch
 from torch.utils._pytree import tree_map
 
 
-@contextlib.contextmanager
-def no_dispatch():
-    guard = torch._C._DisableTorchDispatch()
-    try:
-        yield
-    finally:
-        del guard
-
-
 class FiniteTensor(torch.Tensor):
     """A finite tensor.
 
     If the data contained in this tensor contain non-finite values (nan or inf)
-    a `RuntimeError` will be thrown.
+    a :obj:`RuntimeError` will be thrown.
 
     """
 
@@ -47,8 +37,7 @@ class FiniteTensor(torch.Tensor):
         # TODO: also explicitly recheck invariants on inplace/out mutation
         if kwargs:
             raise Exception("Expected empty kwargs")
-        with no_dispatch():
-            rs = func(*args)
+        rs = func(*args)
         return tree_map(
             lambda e: FiniteTensor(e) if isinstance(e, torch.Tensor) else e, rs
         )

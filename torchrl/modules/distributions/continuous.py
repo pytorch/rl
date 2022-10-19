@@ -56,7 +56,7 @@ class IndependentNormal(D.Independent):
 
         tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw value
             is kept.
-            Default is `True`;
+            Default is :obj:`True`;
     """
 
     num_params: int = 2
@@ -179,7 +179,7 @@ class TruncatedNormal(D.Independent):
         max (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
         tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw value
             is kept.
-            Default is `True`;
+            Default is :obj:`True`;
     """
 
     num_params: int = 2
@@ -296,7 +296,7 @@ class TanhNormal(D.TransformedDistribution):
         event_dims (int, optional): number of dimensions describing the action.
             Default is 1;
         tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw
-            value is kept. Default is `True`;
+            value is kept. Default is :obj:`True`;
     """
 
     arg_constraints = {

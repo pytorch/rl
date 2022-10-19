@@ -21,7 +21,7 @@ def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
       0 ]     |                        v
 
     This function takes care of applying the one-sided zero padding. In this example,
-    `Filter_dim` = `Time` = 4, but in practice Filter_dim can be <= to `Time`.
+    `Filter_dim` = :obj:`Time` = 4, but in practice Filter_dim can be <= to :obj:`Time`.
 
     Args:
         tensor (torch.Tensor): a [ Batch x 1 x Time ] floating-point tensor

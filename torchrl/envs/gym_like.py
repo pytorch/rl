@@ -101,13 +101,13 @@ class GymLikeEnv(_EnvWrapper):
 
     Its behaviour is similar to gym environments in what common methods (specifically reset and step) are expected to do.
 
-    A `GymLikeEnv` has a `.step()` method with the following signature:
+    A :obj:`GymLikeEnv` has a :obj:`.step()` method with the following signature:
 
         ``env.step(action: np.ndarray) -> Tuple[Union[np.ndarray, dict], double, bool, *info]``
 
     where the outputs are the observation, reward and done state respectively.
     In this implementation, the info output is discarded (but specific keys can be read
-    by updating info_dict_reader, see `set_info_dict_reader` class method).
+    by updating info_dict_reader, see :obj:`set_info_dict_reader` class method).
 
     By default, the first output is written at the "next_observation" key-value pair in the output tensordict, unless
     the first output is a dictionary. In that case, each observation output will be put at the corresponding

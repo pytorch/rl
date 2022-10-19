@@ -108,7 +108,7 @@ class LazyTensorStorage(Storage):
         size (int): size of the storage, i.e. maximum number of elements stored
             in the buffer.
         device (torch.device, optional): device where the sampled tensors will be
-            stored and sent. Default is `torch.device("cpu")`.
+            stored and sent. Default is :obj:`torch.device("cpu")`.
     """
 
     def __init__(self, max_size, scratch_dir=None, device=None):
@@ -183,7 +183,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             in the buffer.
         scratch_dir (str or path): directory where memmap-tensors will be written.
         device (torch.device, optional): device where the sampled tensors will be
-            stored and sent. Default is `torch.device("cpu")`.
+            stored and sent. Default is :obj:`torch.device("cpu")`.
     """
 
     def __init__(self, max_size, scratch_dir=None, device=None):

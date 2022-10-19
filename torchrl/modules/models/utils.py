@@ -110,8 +110,7 @@ def _find_depth(depth: Optional[int], *list_or_ints: Sequence):
 def create_on_device(
     module_class: Type[nn.Module], device: Optional[DEVICE_TYPING], *args, **kwargs
 ) -> nn.Module:
-    """
-    Create a new instance of `module_class` on `device`.
+    """Create a new instance of :obj:`module_class` on :obj:`device`.
 
     The new instance is created directly on the device if its constructor supports this.
 
@@ -120,6 +119,7 @@ def create_on_device(
         device (DEVICE_TYPING): device to create the module on.
         *args: positional arguments to be passed to the module constructor.
         **kwargs: keyword arguments to be passed to the module constructor.
+
     """
     fullargspec = inspect.getfullargspec(module_class.__init__)
     if "device" in fullargspec.args or "device" in fullargspec.kwonlyargs:

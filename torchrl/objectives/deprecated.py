@@ -42,7 +42,7 @@ class REDQLoss_deprecated(LossModule):
             Default is 0.1.
         max_alpha (float, optional): max value of alpha.
             Default is 10.0.
-        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is `False`.
+        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is :obj:`False`.
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
 
     """

@@ -64,6 +64,7 @@ class RandomPolicy:
             >>> action_spec = NdBoundedTensorSpec(-torch.ones(3), torch.ones(3))
             >>> actor = RandomPolicy(spec=action_spec)
             >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
+
         """
         self.action_spec = action_spec
 
@@ -689,7 +690,7 @@ class SyncDataCollector(_DataCollector):
         """Returns the local state_dict of the data collector (environment and policy).
 
         Returns:
-            an ordered dictionary with fields `"policy_state_dict"` and
+            an ordered dictionary with fields :obj:`"policy_state_dict"` and
             `"env_state_dict"`.
 
         """
@@ -716,7 +717,7 @@ class SyncDataCollector(_DataCollector):
 
         Args:
             state_dict (OrderedDict): ordered dictionary containing the fields
-                `"policy_state_dict"` and `"env_state_dict"`.
+                `"policy_state_dict"` and :obj:`"env_state_dict"`.
 
         """
         strict = kwargs.get("strict", True)
@@ -791,7 +792,7 @@ class _MultiDataCollector(_DataCollector):
         reset_when_done (bool, optional): if True, the contained environment will be reset
             every time it hits a done. If the env contains multiple independent envs, a
             reset index will be passed to it to reset only thos environments that need to
-            be reset. In practice, this will happen through a call to `env.reset(tensordict)`,
+            be reset. In practice, this will happen through a call to :obj:`env.reset(tensordict)`,
             in other words, if the env is a multi-agent env, all agents will be
             reset once one of them is done.
             Defaults to `True`.
@@ -1120,6 +1121,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
     and no environment step is computed in between the reception of a batch of
     trajectory and the start of the next collection.
     This class can be safely used with online RL algorithms.
+
     """
 
     __doc__ += _MultiDataCollector.__doc__
@@ -1214,6 +1216,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     The collection keeps on occuring on all processes even between the time
     the batch of rollouts is collected and the next call to the iterator.
     This class can be safely used with offline RL algorithms.
+
     """
 
     __doc__ += _MultiDataCollector.__doc__

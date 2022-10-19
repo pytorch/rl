@@ -140,7 +140,7 @@ class Specs:
 
         Args:
             next_observation (bool, optional): if False, the observation returned
-                will be of the current step only (no `"next_"` key will be present).
+                will be of the current step only (no :obj:`"next_"` key will be present).
                 Default is True.
             log_prob (bool, optional): If True, a log_prob key-value pair will be added
                 to the tensordict.
@@ -159,7 +159,7 @@ class Specs:
             for (key, item) in self["observation_spec"].items():
                 if not key.startswith("next_"):
                     raise RuntimeError(
-                        f"All observation keys must start with the `'next_'` prefix. Found {key}"
+                        f"All observation keys must start with the :obj:`'next_'` prefix. Found {key}"
                     )
                 observation_placeholder = torch.zeros(item.shape, dtype=item.dtype)
                 if next_observation:
@@ -380,13 +380,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     ) -> TensorDictBase:
         """Resets the environment.
 
-        As for step and _step, only the private method `_reset` should be overwritten by EnvBase subclasses.
+        As for step and _step, only the private method :obj:`_reset` should be overwritten by EnvBase subclasses.
 
         Args:
             tensordict (TensorDictBase, optional): tensordict to be used to contain the resulting new observation.
                 In some cases, this input can also be used to pass argument to the reset function.
-            execute_step (bool, optional): if True, a `step_mdp` is executed on the output TensorDict,
-                hereby removing the `"next_"` prefixes from the keys.
+            execute_step (bool, optional): if True, a :obj:`step_mdp` is executed on the output TensorDict,
+                hereby removing the :obj:`"next_"` prefixes from the keys.
             kwargs (optional): other arguments to be passed to the native
                 reset function.
 
@@ -525,14 +525,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             max_steps (int): maximum number of steps to be executed. The actual number of steps can be smaller if
                 the environment reaches a done state before max_steps have been executed.
             policy (callable, optional): callable to be called to compute the desired action. If no policy is provided,
-                actions will be called using `env.rand_step()`
+                actions will be called using :obj:`env.rand_step()`
                 default = None
             callback (callable, optional): function to be called at each iteration with the given TensorDict.
             auto_reset (bool, optional): if True, resets automatically the environment
                 if it is in a done state when the rollout is initiated.
-                Default is `True`.
+                Default is :obj:`True`.
             auto_cast_to_device (bool, optional): if True, the device of the tensordict is automatically cast to the
-                policy device before the policy is used. Default is `False`.
+                policy device before the policy is used. Default is :obj:`False`.
             break_when_any_done (bool): breaks if any of the done state is True. Default is True.
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
             tensordict (TensorDict, optional): if auto_reset is False, an initial
@@ -686,7 +686,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
     """Abstract environment wrapper class.
 
-    Unlike EnvBase, _EnvWrapper comes with a `_build_env` private method that will be called upon instantiation.
+    Unlike EnvBase, _EnvWrapper comes with a :obj:`_build_env` private method that will be called upon instantiation.
     Interfaces with other libraries should be coded using _EnvWrapper.
 
     It is possible to directly query attributed from the nested environment it its name does not conflict with

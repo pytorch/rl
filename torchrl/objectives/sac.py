@@ -23,8 +23,9 @@ from .common import LossModule
 
 
 class SACLoss(LossModule):
-    """
-    TorchRL implementation of the SAC loss, as presented in "Soft Actor-Critic: Off-Policy Maximum Entropy Deep
+    """TorchRL implementation of the SAC loss.
+
+    Presented in "Soft Actor-Critic: Off-Policy Maximum Entropy Deep
     Reinforcement Learning with a Stochastic Actor" https://arxiv.org/pdf/1801.01290.pdf
 
     Args:
@@ -51,19 +52,19 @@ class SACLoss(LossModule):
         fixed_alpha (bool, optional): if True, alpha will be fixed to its
             initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
-            Default is `False`.
+            Default is :obj:`False`.
         target_entropy (float or str, optional): Target entropy for the
             stochastic policy. Default is "auto", where target entropy is
-            computed as `-prod(n_actions)`.
+            computed as :obj:`-prod(n_actions)`.
         delay_actor (bool, optional): Whether to separate the target actor
             networks from the actor networks used for data collection.
-            Default is `False`.
+            Default is :obj:`False`.
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used for data collection.
-            Default is `False`.
+            Default is :obj:`False`.
         delay_value (bool, optional): Whether to separate the target value
             networks from the value networks used for data collection.
-            Default is `False`.
+            Default is :obj:`False`.
     """
 
     def __init__(

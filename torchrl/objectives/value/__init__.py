@@ -4,5 +4,3 @@
 # LICENSE file in the root directory of this source tree.
 
 from .advantages import GAE, TDLambdaEstimate, TDEstimate
-from .returns import bellman_max
-from .vtrace import c_val, dv_val, vtrace

@@ -123,7 +123,7 @@ class WandbLogger(Logger):
             **kwargs: Other keyword arguments. By construction, log_video
                 supports 'step' (integer indicating the step index), 'format'
                 (default is 'mp4') and 'fps' (default: 6). Other kwargs are
-                passed as-is to the `experiment.log` method.
+                passed as-is to the :obj:`experiment.log` method.
         """
         # check for correct format of the video tensor ((N), T, C, H, W)
         # check that the color channel (C) is either 1 or 3
