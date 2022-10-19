@@ -1894,7 +1894,9 @@ class TestDreamer:
         with pytest.raises(ValueError, match="No observation decoder provided"):
             mb_env.decode_obs(rollout)
         mb_env.obs_decoder = TensorDictModule(
-            nn.LazyLinear(4, device=device), in_keys=["state"], out_keys=["reco_observation"]
+            nn.LazyLinear(4, device=device),
+            in_keys=["state"],
+            out_keys=["reco_observation"],
         )
         # reconstruct
         mb_env.decode_obs(rollout)
