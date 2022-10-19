@@ -13,7 +13,7 @@ from torchrl.data.tensordict.tensordict import TensorDictBase
 AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
 
-class classproperty(property):
+class _classproperty(property):
     def __get__(self, cls, owner):
         return classmethod(self.fget).__get__(None, owner)()
 
@@ -26,23 +26,24 @@ def step_mdp(
     exclude_done: bool = True,
     exclude_action: bool = True,
 ) -> TensorDictBase:
-    """
-    Given a tensordict retrieved after a step, returns another tensordict with all the 'next_' prefixes are removed,
-    i.e. all the `'next_some_other_string'` keys will be renamed onto `'some_other_string'` keys.
+    """Creates a new tensordict that reflects a step in time of the input tensordict.
+
+    Given a tensordict retrieved after a step, returns another tensordict with all the :obj:`'next_'` prefixes are removed,
+    i.e. all the :obj:`'next_some_other_string'` keys will be renamed onto :obj:`'some_other_string'` keys.
 
 
     Args:
         tensordict (TensorDictBase): tensordict with keys to be renamed
         next_tensordict (TensorDictBase, optional): destination tensordict
-        keep_other (bool, optional): if True, all keys that do not start with `'next_'` will be kept.
+        keep_other (bool, optional): if True, all keys that do not start with :obj:`'next_'` will be kept.
             Default is True.
-        exclude_reward (bool, optional): if True, the `"reward"` key will be discarded
+        exclude_reward (bool, optional): if True, the :obj:`"reward"` key will be discarded
             from the resulting tensordict.
             Default is True.
-        exclude_done (bool, optional): if True, the `"done"` key will be discarded
+        exclude_done (bool, optional): if True, the :obj:`"done"` key will be discarded
             from the resulting tensordict.
             Default is True.
-        exclude_action (bool, optional): if True, the `"action"` key will be discarded
+        exclude_action (bool, optional): if True, the :obj:`"action"` key will be discarded
             from the resulting tensordict.
             Default is True.
 
@@ -99,67 +100,34 @@ def step_mdp(
 
 
 def get_available_libraries():
-    """
-
-    Returns:
-         all the supported libraries
-
-    """
+    """Returns all the supported libraries."""
     return SUPPORTED_LIBRARIES
 
 
 def _check_gym():
-    """
-
-    Returns:
-         True if the gym library is installed
-
-    """
+    """Returns True if the gym library is installed."""
     return "gym" in AVAILABLE_LIBRARIES
 
 
 def _check_gym_atari():
-    """
-
-    Returns:
-         True if the gym library is installed and atari envs can be found.
-
-    """
+    """Returns True if the gym library is installed and atari envs can be found."""
     if not _check_gym():
         return False
     return "atari-py" in AVAILABLE_LIBRARIES
 
 
 def _check_mario():
-    """
-
-    Returns:
-         True if the "gym-super-mario-bros" library is installed.
-
-    """
-
+    """Returns True if the "gym-super-mario-bros" library is installed."""
     return "gym-super-mario-bros" in AVAILABLE_LIBRARIES
 
 
 def _check_dmcontrol():
-    """
-
-    Returns:
-         True if the "dm-control" library is installed.
-
-    """
-
+    """Returns True if the "dm-control" library is installed."""
     return "dm-control" in AVAILABLE_LIBRARIES
 
 
 def _check_dmlab():
-    """
-
-    Returns:
-         True if the "deepmind-lab" library is installed.
-
-    """
-
+    """Returns True if the "deepmind-lab" library is installed."""
     return "deepmind-lab" in AVAILABLE_LIBRARIES
 
 
@@ -196,8 +164,7 @@ EXPLORATION_MODE = None
 
 
 class set_exploration_mode(_DecoratorContextManager):
-    """
-    Sets the exploration mode of all ProbabilisticTDModules to the desired mode.
+    """Sets the exploration mode of all ProbabilisticTDModules to the desired mode.
 
     Args:
         mode (str): mode to use when the policy is being called.
@@ -207,6 +174,7 @@ class set_exploration_mode(_DecoratorContextManager):
         >>> env.rollout(policy=policy, max_steps=100)  # rollout with the "mode" interaction mode
         >>> with set_exploration_mode("random"):
         >>>     env.rollout(policy=policy, max_steps=100)  # rollout with the "random" interaction mode
+
     """
 
     def __init__(self, mode: str = "mode"):

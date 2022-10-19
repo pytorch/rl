@@ -36,6 +36,8 @@ INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 
 
 class CloudpickleWrapper(object):
+    """A wrapper for functions that allow for serialization in multiprocessed settings."""
+
     def __init__(self, fn: Callable, **kwargs):
         if fn.__class__.__name__ == "EnvCreator":
             raise RuntimeError(
@@ -66,6 +68,7 @@ def expand_as_right(
     dest: Union[torch.Tensor, "MemmapTensor", "TensorDictBase"],  # noqa: F821
 ):
     """Expand a tensor on the right to match another tensor shape.
+
     Args:
         tensor: tensor to be expanded
         dest: tensor providing the target shape
@@ -78,8 +81,8 @@ def expand_as_right(
         >>> dest = torch.zeros(3,4,5)
         >>> print(expand_as_right(tensor, dest).shape)
         torch.Size([3,4,5])
-    """
 
+    """
     if dest.ndimension() < tensor.ndimension():
         raise RuntimeError(
             "expand_as_right requires the destination tensor to have less "
@@ -101,6 +104,7 @@ def expand_right(
     tensor: Union[torch.Tensor, "MemmapTensor"], shape: Sequence[int]  # noqa: F821
 ) -> torch.Tensor:
     """Expand a tensor on the right to match a desired shape.
+
     Args:
         tensor: tensor to be expanded
         shape: target shape
@@ -113,8 +117,8 @@ def expand_right(
         >>> shape = (3,4,5)
         >>> print(expand_right(tensor, shape).shape)
         torch.Size([3,4,5])
-    """
 
+    """
     tensor_expand = tensor
     while tensor_expand.ndimension() < len(shape):
         tensor_expand = tensor_expand.unsqueeze(-1)

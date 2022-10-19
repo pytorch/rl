@@ -29,8 +29,7 @@ except ImportError:
 
 
 class WandbLogger(Logger):
-    """
-    Wrapper for the wandb logger.
+    """Wrapper for the wandb logger.
 
     Args:
         exp_name (str): The name of the experiment.
@@ -86,15 +85,14 @@ class WandbLogger(Logger):
         self.video_log_counter = 0
 
     def _create_experiment(self) -> "WandbLogger":
-        """
-        Creates a wandb experiment.
+        """Creates a wandb experiment.
 
         Args:
             exp_name (str): The name of the experiment.
+
         Returns:
             WandbLogger: The wandb experiment logger.
         """
-
         if self.offline:
             os.environ["WANDB_MODE"] = "dryrun"
 
@@ -103,8 +101,7 @@ class WandbLogger(Logger):
         return wandb.init(**self._wandb_kwargs)
 
     def log_scalar(self, name: str, value: float, step: Optional[int] = None) -> None:
-        """
-        Logs a scalar value to wandb.
+        """Logs a scalar value to wandb.
 
         Args:
             name (str): The name of the scalar.
@@ -118,8 +115,7 @@ class WandbLogger(Logger):
             self.experiment.log({name: value})
 
     def log_video(self, name: str, video: Tensor, **kwargs) -> None:
-        """
-        Log videos inputs to wandb.
+        """Log videos inputs to wandb.
 
         Args:
             name (str): The name of the video.
@@ -127,7 +123,7 @@ class WandbLogger(Logger):
             **kwargs: Other keyword arguments. By construction, log_video
                 supports 'step' (integer indicating the step index), 'format'
                 (default is 'mp4') and 'fps' (default: 6). Other kwargs are
-                passed as-is to the `experiment.log` method.
+                passed as-is to the :obj:`experiment.log` method.
         """
         # check for correct format of the video tensor ((N), T, C, H, W)
         # check that the color channel (C) is either 1 or 3
@@ -165,13 +161,12 @@ class WandbLogger(Logger):
         )
 
     def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
-        """
-        Logs the hyperparameters of the experiment.
+        """Logs the hyperparameters of the experiment.
 
         Args:
             cfg (DictConfig): The configuration of the experiment.
-        """
 
+        """
         if type(cfg) is not dict and _has_omgaconf:
             if not _has_omgaconf:
                 raise ImportError(

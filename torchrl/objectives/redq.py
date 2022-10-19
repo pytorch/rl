@@ -23,8 +23,7 @@ from torchrl.objectives.utils import (
 
 
 class REDQLoss(LossModule):
-    """
-    REDQ Loss module.
+    """REDQ Loss module.
 
     REDQ (RANDOMIZED ENSEMBLED DOUBLE Q-LEARNING: LEARNING FAST WITHOUT A MODEL
     https://openreview.net/pdf?id=AY8zfZm0tDd) generalizes the idea of using an ensemble of Q-value functions to
@@ -47,10 +46,10 @@ class REDQLoss(LossModule):
             Default is 0.1.
         max_alpha (float, optional): max value of alpha.
             Default is 10.0.
-        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is `False`.
+        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is :obj:`False`.
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
         delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
-            for data collection. Default is `False`.
+            for data collection. Default is :obj:`False`.
         gSDE (bool, optional): Knowing if gSDE is used is necessary to create random noise variables.
             Default is False
 

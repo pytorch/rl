@@ -38,7 +38,7 @@ class TDEstimate(nn.Module):
         average_rewards (bool, optional): if True, rewards will be standardized
             before the TD is computed.
         gradient_mode (bool, optional): if True, gradients are propagated throught
-            the computation of the value function. Default is `False`.
+            the computation of the value function. Default is :obj:`False`.
         value_key (str, optional): key pointing to the state value. Default is
             `"state_value"`.
     """
@@ -251,8 +251,8 @@ class TDLambdaEstimate(nn.Module):
 
 
 class GAE(nn.Module):
-    """
-    A class wrapper around the generalized advantage estimate functional.
+    """A class wrapper around the generalized advantage estimate functional.
+
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
     https://arxiv.org/pdf/1506.02438.pdf for more context.
 
@@ -263,6 +263,7 @@ class GAE(nn.Module):
         average_rewards (bool): if True, rewards will be standardized before the GAE is computed.
         gradient_mode (bool): if True, gradients are propagated throught the computation of the value function.
             Default is `False`.
+
     """
 
     def __init__(

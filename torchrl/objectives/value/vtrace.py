@@ -9,7 +9,7 @@ from typing import Tuple, Union
 import torch
 
 
-def c_val(
+def _c_val(
     log_pi: torch.Tensor,
     log_mu: torch.Tensor,
     c: Union[float, torch.Tensor] = 1,
@@ -17,7 +17,7 @@ def c_val(
     return (log_pi - log_mu).clamp_max(math.log(c)).exp()
 
 
-def dv_val(
+def _dv_val(
     rewards: torch.Tensor,
     vals: torch.Tensor,
     gamma: Union[float, torch.Tensor],
@@ -25,13 +25,13 @@ def dv_val(
     log_pi: torch.Tensor,
     log_mu: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    rho = c_val(log_pi, log_mu, rho_bar)
+    rho = _c_val(log_pi, log_mu, rho_bar)
     next_vals = torch.cat([vals[:, 1:], torch.zeros_like(vals[:, :1])], 1)
     dv = rho * (rewards + gamma * next_vals - vals)
     return dv, rho
 
 
-def vtrace(
+def _vtrace(
     rewards: torch.Tensor,
     vals: torch.Tensor,
     log_pi: torch.Tensor,
@@ -44,8 +44,8 @@ def vtrace(
     if not isinstance(gamma, torch.Tensor):
         gamma = torch.full_like(vals, gamma)
 
-    dv, rho = dv_val(rewards, vals, gamma, rho_bar, log_pi, log_mu)
-    c = c_val(log_pi, log_mu, c_bar)
+    dv, rho = _dv_val(rewards, vals, gamma, rho_bar, log_pi, log_mu)
+    c = _c_val(log_pi, log_mu, c_bar)
 
     v_out = []
     v_out.append(vals[:, -1] + dv[:, -1])

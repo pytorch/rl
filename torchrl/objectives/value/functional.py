@@ -28,8 +28,8 @@ def generalized_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Get generalized advantage estimate of a trajectory
+    """Get generalized advantage estimate of a trajectory.
+
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
     https://arxiv.org/pdf/1506.02438.pdf for more context.
 
@@ -43,6 +43,7 @@ def generalized_advantage_estimate(
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
+
     """
     for tensor in (next_state_value, state_value, reward, done):
         if tensor.shape[-1] != 1:
@@ -79,8 +80,8 @@ def vec_generalized_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Get generalized advantage estimate of a trajectory
+    """Get generalized advantage estimate of a trajectory.
+
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
     https://arxiv.org/pdf/1506.02438.pdf for more context.
 
@@ -94,6 +95,7 @@ def vec_generalized_advantage_estimate(
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
+
     """
     for tensor in (next_state_value, state_value, reward, done):
         if tensor.shape[-1] != 1:
@@ -140,8 +142,8 @@ def td_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Get generalized advantage estimate of a trajectory
+    """Get generalized advantage estimate of a trajectory.
+
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
     https://arxiv.org/pdf/1506.02438.pdf for more context.
 
@@ -154,6 +156,7 @@ def td_advantage_estimate(
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
+
     """
     for tensor in (next_state_value, state_value, reward, done):
         if tensor.shape[-1] != 1:
@@ -204,6 +207,7 @@ def td_lambda_return_estimate(
                 v4,
               ]
             Default is True.
+
     """
     for tensor in (next_state_value, reward, done):
         if tensor.shape[-1] != 1:
@@ -298,6 +302,7 @@ def td_lambda_advantage_estimate(
                 v4,
               ]
             Default is True.
+
     """
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
@@ -351,6 +356,7 @@ def vec_td_lambda_advantage_estimate(
                 v4,
               ]
             Default is True.
+
     """
     return (
         vec_td_lambda_return_estimate(
@@ -397,7 +403,6 @@ def vec_td_lambda_return_estimate(
             Default is True.
 
     """
-
     shape = next_state_value.shape
     if not shape[-1] == 1:
         raise RuntimeError("last dimension of inputs shape must be singleton")
