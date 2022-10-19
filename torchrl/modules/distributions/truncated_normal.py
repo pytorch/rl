@@ -21,9 +21,9 @@ CONST_LOG_SQRT_2PI_E = 0.5 * math.log(2 * math.pi * math.e)
 
 
 class TruncatedStandardNormal(Distribution):
-    """
-    Truncated Standard Normal distribution
-    https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+    """Truncated Standard Normal distribution.
+
+    Source: https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
     """
 
     arg_constraints = {
@@ -134,8 +134,8 @@ class TruncatedStandardNormal(Distribution):
 
 
 class TruncatedNormal(TruncatedStandardNormal):
-    """
-    Truncated Normal distribution
+    """Truncated Normal distribution.
+
     https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
     """
 

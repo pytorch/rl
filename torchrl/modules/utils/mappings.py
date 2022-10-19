@@ -12,9 +12,10 @@ __all__ = ["mappings", "inv_softplus", "biased_softplus"]
 
 
 def inv_softplus(bias: Union[float, torch.Tensor]) -> Union[float, torch.Tensor]:
-    """
-    inverse softplus function.
+    """Inverse softplus function.
 
+    Args:
+        bias (float or tensor): the value to be softplus-inverted.
     """
     is_tensor = True
     if not isinstance(bias, torch.Tensor):
@@ -27,8 +28,11 @@ def inv_softplus(bias: Union[float, torch.Tensor]) -> Union[float, torch.Tensor]
 
 
 class biased_softplus(nn.Module):
-    """
-    A biased softplus layer.
+    """A biased softplus module.
+
+    The bias indicates the value that is to be returned when a zero-tensor is
+    passed through the transform.
+
     Args:
         bias (scalar): 'bias' of the softplus transform. If bias=1.0, then a _bias shift will be computed such that
             softplus(0.0 + _bias) = bias.
@@ -46,9 +50,8 @@ class biased_softplus(nn.Module):
 
 
 def expln(x):
-    """
-    A smooth, continuous positive mapping presented in "State-Dependent
-    Exploration for Policy Gradient Methods"
+    """A smooth, continuous positive mapping presented in "State-Dependent Exploration for Policy Gradient Methods".
+
     https://people.idsia.ch/~juergen/ecml2008rueckstiess.pdf
 
     """
@@ -60,8 +63,7 @@ def expln(x):
 
 
 def mappings(key: str) -> Callable:
-    """
-    Given an input string, return a surjective function f(x): R -> R^+
+    """Given an input string, returns a surjective function f(x): R -> R^+.
 
     Args:
         key (str): one of "softplus", "exp", "relu", "expln",
@@ -71,6 +73,7 @@ def mappings(key: str) -> Callable:
             Alternatively, the ```"biased_softplus_{bias}_{min_val}"``` syntax can be used. In that case, the additional ```min_val``` term is a floating point
             number that will be used to encode the minimum value of the softplus transform.
             In practice, the equation used is softplus(x + bias) + min_val, where bias and min_val are values computed such that the conditions above are met.
+
     Returns:
          a Callable
 

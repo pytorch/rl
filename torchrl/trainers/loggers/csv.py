@@ -13,6 +13,8 @@ from .common import Logger
 
 
 class CSVExperiment:
+    """A CSV logger experiment class."""
+
     def __init__(self, log_dir: str):
         self.scalars = defaultdict(lambda: [])
         self.videos_counter = defaultdict(lambda: 0)
@@ -56,8 +58,7 @@ class CSVExperiment:
 
 
 class CSVLogger(Logger):
-    """
-    A minimal-dependecy CSV-logger.
+    """A minimal-dependecy CSV-logger.
 
     Args:
         exp_name (str): The name of the experiment.
@@ -72,16 +73,12 @@ class CSVLogger(Logger):
         self._has_imported_moviepy = False
 
     def _create_experiment(self) -> "CSVExperiment":
-        """
-        Creates a CSV experiment.
-
-        """
+        """Creates a CSV experiment."""
         log_dir = str(os.path.join(self.log_dir, self.exp_name))
         return CSVExperiment(log_dir)
 
     def log_scalar(self, name: str, value: float, step: int = None) -> None:
-        """
-        Logs a scalar value to the tensorboard.
+        """Logs a scalar value to the tensorboard.
 
         Args:
             name (str): The name of the scalar.
@@ -91,8 +88,7 @@ class CSVLogger(Logger):
         self.experiment.add_scalar(name, value, global_step=step)
 
     def log_video(self, name: str, video: Tensor, step: int = None, **kwargs) -> None:
-        """
-        Log videos inputs to the tensorboard.
+        """Log videos inputs to the tensorboard.
 
         Args:
             name (str): The name of the video.
@@ -113,8 +109,7 @@ class CSVLogger(Logger):
         )
 
     def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
-        """
-        Logs the hyperparameters of the experiment.
+        """Logs the hyperparameters of the experiment.
 
         Args:
             cfg (DictConfig): The configuration of the experiment.

@@ -73,6 +73,14 @@ def _default_dtype_and_device(
 
 
 class invertible_dict(dict):
+    """An invertible dictionary.
+
+    Examples:
+        >>> my_dict = invertible_dict(a=3, b=2)
+        >>> inv_dict = my_dict.invert()
+        >>> assert {2, 3} == set(inv_dict.keys())
+    """
+
     def __init__(self, *args, inv_dict=None, **kwargs):
         if inv_dict is None:
             inv_dict = dict()
@@ -99,9 +107,7 @@ class invertible_dict(dict):
 
 
 class Box:
-    """
-    A box of values
-    """
+    """A box of values."""
 
     def __iter__(self):
         raise NotImplementedError
@@ -120,10 +126,7 @@ class Values:
 
 @dataclass(repr=False)
 class ContinuousBox(Box):
-    """
-    A continuous box of values, in between a minimum and a maximum.
-
-    """
+    """A continuous box of values, in between a minimum and a maximum."""
 
     minimum: torch.Tensor
     maximum: torch.Tensor
@@ -154,10 +157,7 @@ class ContinuousBox(Box):
 
 @dataclass(repr=False)
 class DiscreteBox(Box):
-    """
-    A box of discrete values
-
-    """
+    """A box of discrete values."""
 
     n: int
     register = invertible_dict()
@@ -171,10 +171,7 @@ class DiscreteBox(Box):
 
 @dataclass(repr=False)
 class BoxList(Box):
-    """
-    A box of discrete values
-
-    """
+    """A box of discrete values."""
 
     boxes: List
 
@@ -191,10 +188,7 @@ class BoxList(Box):
 
 @dataclass(repr=False)
 class BinaryBox(Box):
-    """
-    A box of n binary values
-
-    """
+    """A box of n binary values."""
 
     n: int
 
@@ -207,9 +201,7 @@ class BinaryBox(Box):
 
 @dataclass(repr=False)
 class TensorSpec:
-    """
-    Parent class of the tensor meta-data containers for observation, actions
-        and rewards.
+    """Parent class of the tensor meta-data containers for observation, actions and rewards.
 
     Args:
         shape (torch.Size): size of the tensor
@@ -227,8 +219,7 @@ class TensorSpec:
     domain: str = ""
 
     def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
-        """Encodes a value given the specified spec, and return the
-        corresponding tensor.
+        """Encodes a value given the specified spec, and return the corresponding tensor.
 
         Args:
             val (np.ndarray or torch.Tensor): value to be encoded as tensor.
@@ -281,7 +272,7 @@ class TensorSpec:
 
     @abc.abstractmethod
     def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
-        """Indexes the input tensor
+        """Indexes the input tensor.
 
         Args:
             index (int, torch.Tensor, slice or list): index of the tensor
@@ -298,8 +289,7 @@ class TensorSpec:
 
     @abc.abstractmethod
     def is_in(self, val: torch.Tensor) -> bool:
-        """If the value `val` is in the box defined by the TensorSpec,
-        returns True, otherwise False.
+        """If the value :obj:`val` is in the box defined by the TensorSpec, returns True, otherwise False.
 
         Args:
             val (torch.Tensor): value to be checked
@@ -311,8 +301,7 @@ class TensorSpec:
         raise NotImplementedError
 
     def project(self, val: torch.Tensor) -> torch.Tensor:
-        """If the input tensor is not in the TensorSpec box, it maps it back
-        to it given some heuristic.
+        """If the input tensor is not in the TensorSpec box, it maps it back to it given some heuristic.
 
         Args:
             val (torch.Tensor): tensor to be mapped to the box.
@@ -326,8 +315,7 @@ class TensorSpec:
         return val
 
     def assert_is_in(self, value: torch.Tensor) -> None:
-        """Asserts whether a tensor belongs to the box, and raises an
-        exception otherwise.
+        """Asserts whether a tensor belongs to the box, and raises an exception otherwise.
 
         Args:
             value (torch.Tensor): value to be checked.
@@ -341,8 +329,7 @@ class TensorSpec:
             )
 
     def type_check(self, value: torch.Tensor, key: str = None) -> None:
-        """Checks the input value dtype against the TensorSpec dtype and
-        raises an exception if they don't match.
+        """Checks the input value dtype against the TensorSpec dtype and raises an exception if they don't match.
 
         Args:
             value (torch.Tensor): tensor whose dtype has to be checked
@@ -359,8 +346,7 @@ class TensorSpec:
 
     @abc.abstractmethod
     def rand(self, shape=None) -> torch.Tensor:
-        """Returns a random tensor in the box. The sampling will be uniform
-        unless the box is unbounded.
+        """Returns a random tensor in the box. The sampling will be uniform unless the box is unbounded.
 
         Args:
             shape (torch.Size): shape of the random tensor
@@ -409,8 +395,7 @@ class TensorSpec:
 
 @dataclass(repr=False)
 class BoundedTensorSpec(TensorSpec):
-    """
-    A bounded, unidimensional, continuous tensor spec.
+    """A bounded, unidimensional, continuous tensor spec.
 
     Args:
         minimum (np.ndarray, torch.Tensor or number): lower bound of the box.
@@ -502,8 +487,8 @@ class BoundedTensorSpec(TensorSpec):
 
 @dataclass(repr=False)
 class OneHotDiscreteTensorSpec(TensorSpec):
-    """
-    A unidimensional, one-hot discrete tensor spec.
+    """A unidimensional, one-hot discrete tensor spec.
+
     By default, TorchRL assumes that categorical variables are encoded as
     one-hot encodings of the variable. This allows for simple indexing of
     tensors, e.g.
@@ -628,8 +613,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
 @dataclass(repr=False)
 class UnboundedContinuousTensorSpec(TensorSpec):
-    """
-    An unbounded, unidimensional, continuous tensor spec.
+    """An unbounded, unidimensional, continuous tensor spec.
 
     Args:
         device (str, int or torch.device, optional): device of the tensors.
@@ -661,8 +645,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
 
 @dataclass(repr=False)
 class UnboundedDiscreteTensorSpec(TensorSpec):
-    """
-    An unbounded, unidimensional, discrete tensor spec.
+    """An unbounded, unidimensional, discrete tensor spec.
 
     Args:
         device (str, int or torch.device, optional): device of the tensors.
@@ -701,8 +684,7 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
 
 @dataclass(repr=False)
 class NdBoundedTensorSpec(BoundedTensorSpec):
-    """
-    A bounded, multi-dimensional, continuous tensor spec.
+    """A bounded, multi-dimensional, continuous tensor spec.
 
     Args:
         minimum (np.ndarray, torch.Tensor or number): lower bound of the box.
@@ -794,8 +776,7 @@ class NdBoundedTensorSpec(BoundedTensorSpec):
 
 @dataclass(repr=False)
 class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
-    """
-    An unbounded, multi-dimensional, continuous tensor spec.
+    """An unbounded, multi-dimensional, continuous tensor spec.
 
     Args:
         device (str, int or torch.device, optional): device of the tensors.
@@ -824,8 +805,7 @@ class NdUnboundedContinuousTensorSpec(UnboundedContinuousTensorSpec):
 
 @dataclass(repr=False)
 class NdUnboundedDiscreteTensorSpec(UnboundedDiscreteTensorSpec):
-    """
-    An unbounded, multi-dimensional, discrete tensor spec.
+    """An unbounded, multi-dimensional, discrete tensor spec.
 
     Args:
         device (str, int or torch.device, optional): device of the tensors.
@@ -859,8 +839,7 @@ class NdUnboundedDiscreteTensorSpec(UnboundedDiscreteTensorSpec):
 
 @dataclass(repr=False)
 class BinaryDiscreteTensorSpec(TensorSpec):
-    """
-    A binary discrete tensor spec.
+    """A binary discrete tensor spec.
 
     Args:
         n (int): length of the binary vector.
@@ -908,8 +887,7 @@ class BinaryDiscreteTensorSpec(TensorSpec):
 
 @dataclass(repr=False)
 class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
-    """
-    A concatenation of one-hot discrete tensor spec.
+    """A concatenation of one-hot discrete tensor spec.
 
     Args:
         nvec (iterable of integers): cardinality of each of the elements of
@@ -1020,13 +998,12 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
 
 
 class CompositeSpec(TensorSpec):
-    """
-    A composition of TensorSpecs.
+    """A composition of TensorSpecs.
 
     Args:
         **kwargs (key (str): value (TensorSpec)): dictionary of tensorspecs
             to be stored. Values can be None, in which case is_in will be assumed
-            to be `True` for the corresponding tensors, and `project()` will have no
+            to be :obj:`True` for the corresponding tensors, and :obj:`project()` will have no
             effect. `spec.encode` cannot be used with missing values.
 
     Examples:
@@ -1219,7 +1196,7 @@ dtype=torch.float32)},
         return self
 
     def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
-        return {key: self[key].to_numpy(val) for key, val in val.items()}
+        return {key: self[key]._to_numpy(val) for key, val in val.items()}
 
     def zero(self, shape=None) -> TensorDictBase:
         if shape is None:
