@@ -1,7 +1,7 @@
 .. currentmodule:: torchrl.trainers
 
 torchrl.trainers package
-======================
+========================
 
 Trainer and hooks
 -----------------
