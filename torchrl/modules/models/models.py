@@ -34,9 +34,8 @@ __all__ = [
 
 
 class MLP(nn.Sequential):
-    """
+    """A multi-layer perceptron.
 
-    A multi-layer perceptron.
     If MLP receives more than one input, it concatenates them all along the last dimension before passing the
     resulting tensor through the network. This is aimed at allowing for a seamless interface with calls of the type of
 
@@ -270,8 +269,7 @@ class MLP(nn.Sequential):
 
 
 class ConvNet(nn.Sequential):
-    """
-    A convolutional neural network.
+    """A convolutional neural network.
 
     Args:
         in_features (int, optional): number of input features;
@@ -479,9 +477,9 @@ class ConvNet(nn.Sequential):
 
 
 class DuelingMlpDQNet(nn.Module):
-    """
-    Creates a Dueling MLP Q-network, as presented in
-    https://arxiv.org/abs/1511.06581
+    """Creates a Dueling MLP Q-network.
+
+    Presented in https://arxiv.org/abs/1511.06581
 
     Args:
         out_features (int): number of features for the advantage network
@@ -564,8 +562,9 @@ class DuelingMlpDQNet(nn.Module):
 
 
 class DuelingCnnDQNet(nn.Module):
-    """
-    Creates a Dueling CNN Q-network, as presented in https://arxiv.org/abs/1511.06581
+    """Dueling CNN Q-network.
+
+    Presented in https://arxiv.org/abs/1511.06581
 
     Args:
         out_features (int): number of features for the advantage network
@@ -637,8 +636,7 @@ class DuelingCnnDQNet(nn.Module):
 
 
 class DistributionalDQNnet(nn.Module):
-    """
-    Distributional Deep Q-Network.
+    """Distributional Deep Q-Network.
 
     Args:
         DQNet (nn.Module): Q-Network with output length equal to the number of atoms:
@@ -684,8 +682,9 @@ def ddpg_init_last_layer(
 
 
 class DdpgCnnActor(nn.Module):
-    """
-    DDPG Convolutional Actor class, as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+    """DDPG Convolutional Actor class.
+
+    Presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
     https://arxiv.org/pdf/1509.02971.pdf
 
     The DDPG Convolutional Actor takes as input an observation (some simple transformation of the observed pixels) and
@@ -717,7 +716,7 @@ class DdpgCnnActor(nn.Module):
             'bias_last_layer': True,
         }
         use_avg_pooling (bool, optional): if True, a nn.AvgPooling layer is
-            used to aggregate the output. Default is `False`.
+            used to aggregate the output. Default is :obj:`False`.
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """
 
@@ -769,8 +768,9 @@ class DdpgCnnActor(nn.Module):
 
 
 class DdpgMlpActor(nn.Module):
-    """
-    DDPG Actor class, as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+    """DDPG Actor class.
+
+    Presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
     https://arxiv.org/pdf/1509.02971.pdf
 
     The DDPG Actor takes as input an observation vector and returns an action from it.
@@ -816,8 +816,9 @@ class DdpgMlpActor(nn.Module):
 
 
 class DdpgCnnQNet(nn.Module):
-    """
-    DDPG Convolutional Q-value class, as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+    """DDPG Convolutional Q-value class.
+
+    Presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
     https://arxiv.org/pdf/1509.02971.pdf
 
     The DDPG Q-value network takes as input an observation and an action, and returns a scalar from it.
@@ -846,7 +847,7 @@ class DdpgCnnQNet(nn.Module):
             'bias_last_layer': True,
         }
         use_avg_pooling (bool, optional): if True, a nn.AvgPooling layer is
-            used to aggregate the output. Default is `True`.
+            used to aggregate the output. Default is :obj:`True`.
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """
 
@@ -897,8 +898,9 @@ class DdpgCnnQNet(nn.Module):
 
 
 class DdpgMlpQNet(nn.Module):
-    """
-    DDPG Q-value MLP class, as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
+    """DDPG Q-value MLP class.
+
+    Presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
     https://arxiv.org/pdf/1509.02971.pdf
 
     The DDPG Q-value network takes as input an observation and an action, and returns a scalar from it.

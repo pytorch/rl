@@ -56,7 +56,7 @@ class IndependentNormal(D.Independent):
 
         tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw value
             is kept.
-            Default is `True`;
+            Default is :obj:`True`;
     """
 
     num_params: int = 2
@@ -87,10 +87,7 @@ class IndependentNormal(D.Independent):
 
 
 class SafeTanhTransform(D.TanhTransform):
-    """
-    TanhTransform subclass that ensured that the transformation is numerically invertible.
-
-    """
+    """TanhTransform subclass that ensured that the transformation is numerically invertible."""
 
     def _call(self, x: torch.Tensor) -> torch.Tensor:
         y = safetanh(x)
@@ -182,7 +179,7 @@ class TruncatedNormal(D.Independent):
         max (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
         tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw value
             is kept.
-            Default is `True`;
+            Default is :obj:`True`;
     """
 
     num_params: int = 2
@@ -299,7 +296,7 @@ class TanhNormal(D.TransformedDistribution):
         event_dims (int, optional): number of dimensions describing the action.
             Default is 1;
         tanh_loc (bool, optional): if True, the above formula is used for the location scaling, otherwise the raw
-            value is kept. Default is `True`;
+            value is kept. Default is :obj:`True`;
     """
 
     arg_constraints = {
@@ -397,8 +394,7 @@ class TanhNormal(D.TransformedDistribution):
 
 
 def uniform_sample_tanhnormal(dist: TanhNormal, size=None) -> torch.Tensor:
-    """
-    Defines what uniform sampling looks like for a TanhNormal distribution.
+    """Defines what uniform sampling looks like for a TanhNormal distribution.
 
     Args:
         dist (TanhNormal): distribution defining the space where the sampling should occur.
@@ -414,8 +410,7 @@ def uniform_sample_tanhnormal(dist: TanhNormal, size=None) -> torch.Tensor:
 
 
 class Delta(D.Distribution):
-    """
-    Delta distribution.
+    """Delta distribution.
 
     Args:
         param (torch.Tensor): parameter of the delta distribution;
@@ -488,8 +483,7 @@ class Delta(D.Distribution):
 
 
 class TanhDelta(D.TransformedDistribution):
-    """
-    Implements a Tanh transformed_in Delta distribution.
+    """Implements a Tanh transformed_in Delta distribution.
 
     Args:
         param (torch.Tensor): parameter of the delta distribution;

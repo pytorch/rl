@@ -149,7 +149,7 @@ class R3MTransform(Compose):
 
     The R3MTransform is created in a lazy manner: the object will be initialized
     only when an attribute (a spec or the forward method) will be queried.
-    The reason for this is that the `_init()` method requires some attributes of
+    The reason for this is that the :obj:`_init()` method requires some attributes of
     the parent environment (if any) to be accessed: by making the class lazy we
     can ensure that the following code snippet works as expected:
 

@@ -11,10 +11,12 @@ from torchrl._torchrl import (
     SumSegmentTreeFp64,
 )
 from .storages import Storage
-from .utils import INT_CLASSES, to_numpy
+from .utils import INT_CLASSES, _to_numpy
 
 
 class Sampler(ABC):
+    """A generic sampler base class for composable Replay Buffers."""
+
     @abstractmethod
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
         raise NotImplementedError
@@ -36,15 +38,17 @@ class Sampler(ABC):
 
 
 class RandomSampler(Sampler):
+    """A uniformly random sampler for composable replay buffers."""
+
     def sample(self, storage: Storage, batch_size: int) -> Tuple[np.array, dict]:
         index = np.random.randint(0, len(storage), size=batch_size)
         return index, {}
 
 
 class PrioritizedSampler(Sampler):
-    """
-        Prioritized sampler for replay buffer as presented in
-        "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015.
+    """Prioritized sampler for replay buffer.
+
+    Presented in "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015.
         Prioritized experience replay."
         (https://arxiv.org/abs/1511.05952)
 
@@ -54,6 +58,7 @@ class PrioritizedSampler(Sampler):
         beta (float): importance sampling negative exponent.
         eps (float): delta added to the priorities to ensure that the buffer
             does not contain null priorities.
+
     """
 
     def __init__(
@@ -144,14 +149,14 @@ class PrioritizedSampler(Sampler):
     def update_priority(
         self, index: Union[int, torch.Tensor], priority: Union[float, torch.Tensor]
     ) -> None:
-        """
-        Updates the priority of the data pointed by the index.
+        """Updates the priority of the data pointed by the index.
 
         Args:
             index (int or torch.Tensor): indexes of the priorities to be
                 updated.
             priority (Number or torch.Tensor): new priorities of the
-                indexed elements
+                indexed elements.
+
         """
         if isinstance(index, INT_CLASSES):
             if not isinstance(priority, float):
@@ -170,8 +175,8 @@ class PrioritizedSampler(Sampler):
                     "priority should be a number or an iterable of the same "
                     "length as index"
                 )
-            index = to_numpy(index)
-            priority = to_numpy(priority)
+            index = _to_numpy(index)
+            priority = _to_numpy(priority)
 
         self._max_priority = max(self._max_priority, np.max(priority))
         priority = np.power(priority + self._eps, self._alpha)

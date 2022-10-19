@@ -20,7 +20,7 @@ META_HANDLED_FUNCTIONS = dict()
 
 
 def implements_for_meta(torch_function) -> Callable:
-    """Register a torch function override for ScalarTensor"""
+    """Register a torch function override for ScalarTensor."""
 
     @functools.wraps(torch_function)
     def decorator(func):
@@ -31,14 +31,13 @@ def implements_for_meta(torch_function) -> Callable:
 
 
 class MetaTensor:
-    """MetaTensor is a custom class that stores the meta-information about a
-    tensor without requiring to access the tensor.
+    """MetaTensor is a custom class that stores the meta-information about a tensor without requiring to access the tensor.
 
     This is intended to be used with tensors that have a high access cost.
     MetaTensor supports more operations than tensors on 'meta' device (
     `torch.tensor(..., device='meta')`).
     For instance, MetaTensor supports some operations on its shape and device,
-    such as `mt.to(device)`, `mt.view(*new_shape)`, `mt.expand(
+    such as :obj:`mt.to(device)`, :obj:`mt.view(*new_shape)`, :obj:`mt.expand(
     *expand_shape)` etc.
 
     Args:
@@ -142,7 +141,6 @@ class MetaTensor:
             self
 
         """
-
         self._is_shared = True
         self.class_name = "SharedTensor" if self.device.type != "cuda" else "Tensor"
         return self
@@ -165,10 +163,9 @@ class MetaTensor:
         return self._ndim
 
     def clone(self) -> MetaTensor:
-        """
+        """Clones the meta-tensor.
 
-        Returns:
-            a new MetaTensor with the same specs.
+        Returns: a new MetaTensor with the same specs.
 
         """
         return MetaTensor(
@@ -230,6 +227,7 @@ class MetaTensor:
         )
 
     def unsqueeze(self, dim: int) -> MetaTensor:
+        """Unsqueezes the meta-tensor along the desired dim."""
         clone = self.clone()
         new_shape = []
         shape = [i for i in clone.shape]
@@ -243,6 +241,7 @@ class MetaTensor:
         return clone
 
     def squeeze(self, dim: Optional[int] = None) -> MetaTensor:
+        """Squeezes the meta-tensor along the desired dim."""
         clone = self.clone()
         shape = clone.shape
         if dim is None:
@@ -260,6 +259,7 @@ class MetaTensor:
         return clone
 
     def permute(self, dims: int) -> MetaTensor:
+        """Permutes the dims of the meta-tensor."""
         clone = self.clone()
         new_shape = [self.shape[dim] for dim in dims]
         clone.shape = torch.Size(new_shape)
@@ -270,6 +270,7 @@ class MetaTensor:
         *shape: Sequence,
         size: Optional[Union[List, Tuple, torch.Size]] = None,
     ) -> MetaTensor:
+        """Returns a view of a reshaped meta-tensor."""
         if len(shape) == 0 and size is not None:
             return self.view(*size)
         elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
@@ -336,6 +337,7 @@ def stack_meta(
     dim: int = 0,
     safe: bool = False,
 ) -> MetaTensor:
+    """Stacks similar meta-tensors into a single meta-tensor."""
     dtype = (
         list_of_meta_tensors[0].dtype
         if len(list_of_meta_tensors)
