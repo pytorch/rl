@@ -87,6 +87,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             else:
                 cfg.collector_devices = "cpu"
             print("collecting on ", cfg.collector_devices)
+    else:
+        world_size = 1
+    
+    print("world_size: ", world_size)
 
     if world_size > 1:
         if "SLURM_PROCID" in os.environ:  # for slurm scheduler
