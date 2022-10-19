@@ -945,8 +945,8 @@ class TestSpec:
     def test_mult_discrete_action_spec_rand(self):
         torch.manual_seed(0)
         ns = (10, 5)
-        N = 100000
-        action_spec = MultOneHotDiscreteTensorSpec((10, 5))
+        N = 1000
+        action_spec = MultOneHotDiscreteTensorSpec(ns)
 
         actions_tensors = [action_spec.rand() for _ in range(10)]
         actions_numpy = [action_spec.to_numpy(a) for a in actions_tensors]

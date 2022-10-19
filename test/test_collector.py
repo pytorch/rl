@@ -31,7 +31,7 @@ from torchrl.data import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs import EnvCreator, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import (
@@ -138,7 +138,7 @@ def test_output_device_consistency(
     else:
 
         def env_fn(seed):
-            env = ParallelEnv(
+            env = SerialEnv(
                 num_workers=num_env,
                 create_env_fn=make_make_env("vec"),
                 create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
@@ -345,7 +345,10 @@ def test_collector_done_persist(num_env, env_name, seed=5):
 
 @pytest.mark.parametrize("num_env", [1, 3])
 @pytest.mark.parametrize("env_name", ["vec", "conv"])
-def test_collector_batch_size(num_env, env_name, seed=100):
+def test_collector_batch_size(
+    num_env, env_name, seed=100, num_workers=4, frames_per_batch=20
+):
+
     if num_env == 1:
 
         def env_fn():
@@ -355,17 +358,13 @@ def test_collector_batch_size(num_env, env_name, seed=100):
     else:
 
         def env_fn():
-            env = ParallelEnv(
-                num_workers=num_env, create_env_fn=make_make_env(env_name)
-            )
+            env = SerialEnv(num_workers=num_env, create_env_fn=make_make_env(env_name))
             return env
 
     policy = make_policy(env_name)
 
     torch.manual_seed(0)
     np.random.seed(0)
-    num_workers = 4
-    frames_per_batch = 20
     ccollector = MultiaSyncDataCollector(
         create_env_fn=[env_fn for _ in range(num_workers)],
         policy=policy,
@@ -527,9 +526,7 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     else:
 
         def env_fn(seed):
-            env = ParallelEnv(
-                num_workers=num_env, create_env_fn=make_make_env(env_name)
-            )
+            env = SerialEnv(num_workers=num_env, create_env_fn=make_make_env(env_name))
             env.set_seed(seed)
             return env
 
