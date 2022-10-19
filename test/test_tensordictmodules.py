@@ -24,6 +24,45 @@ from torchrl.modules.tensordict_module.sequence import TensorDictSequential
 
 
 class TestTDModule:
+    def test_multiple_output(self):
+        class MultiHeadLinear(nn.Module):
+            def __init__(self, in_1, out_1, out_2, out_3):
+                super().__init__()
+                self.linear_1 = nn.Linear(in_1, out_1)
+                self.linear_2 = nn.Linear(in_1, out_2)
+                self.linear_3 = nn.Linear(in_1, out_3)
+
+            def forward(self, x):
+                return self.linear_1(x), self.linear_2(x), self.linear_3(x)
+
+        tensordict_module = TensorDictModule(
+            MultiHeadLinear(5, 4, 3, 2),
+            in_keys=["input"],
+            out_keys=["out_1", "out_2", "out_3"]
+        )
+        td = TensorDict({"input": torch.randn(3, 5)}, batch_size=[3])
+        td = tensordict_module(td)
+        assert td.shape == torch.Size([3])
+        assert "input" in td.keys()
+        assert "out_1" in td.keys()
+        assert "out_2" in td.keys()
+        assert "out_3" in td.keys()
+        assert td.get("out_3").shape == torch.Size([3, 2])
+
+        # Using "_" key to ignore output
+        tensordict_module = TensorDictModule(
+            MultiHeadLinear(5, 4, 3, 2),
+            in_keys=["input"],
+            out_keys=["_", "_", "out_3"]
+        )
+        td = TensorDict({"input": torch.randn(3, 5)}, batch_size=[3])
+        td = tensordict_module(td)
+        assert td.shape == torch.Size([3])
+        assert "input" in td.keys()
+        assert "out_3" in td.keys()
+        assert "_" not in td.keys()
+        assert td.get("out_3").shape == torch.Size([3, 2])
+
     @pytest.mark.parametrize("safe", [True, False])
     @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
     @pytest.mark.parametrize("lazy", [True, False])
