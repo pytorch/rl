@@ -23,7 +23,8 @@ from ..gym_like import GymLikeEnv
 
 if torch.has_cuda and torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
-    os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
+    os.environ["EGL_DEVICE_ID"] = str(n)
+    # os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
     print("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
 
 try:
