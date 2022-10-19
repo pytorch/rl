@@ -32,7 +32,7 @@ class CEMPlanner(MPCPlannerBase):
 
     Args:
         env (EnvBase): The environment to perform the planning step on (can be
-            `ModelBasedEnv` or `EnvBase`).
+            `ModelBasedEnv` or :obj:`EnvBase`).
         planning_horizon (int): The length of the simulated trajectories
         optim_steps (int): The number of optimization steps used by the MPC
             planner

@@ -93,8 +93,7 @@ __all__ = [
 def make_dqn_actor(
     proof_environment: EnvBase, cfg: "DictConfig", device: torch.device  # noqa: F821
 ) -> Actor:
-    """
-    DQN constructor helper function.
+    """DQN constructor helper function.
 
     Args:
         proof_environment (EnvBase): a dummy environment to retrieve the observation and action spec.
@@ -220,8 +219,7 @@ def make_ddpg_actor(
     value_net_kwargs: Optional[dict] = None,
     device: DEVICE_TYPING = "cpu",
 ) -> torch.nn.ModuleList:
-    """
-    DDPG constructor helper function.
+    """DDPG constructor helper function.
 
     Args:
         proof_environment (EnvBase): a dummy environment to retrieve the observation and action spec
@@ -239,8 +237,7 @@ def make_ddpg_actor(
     https://arxiv.org/pdf/1509.02971.pdf.
 
     Examples:
-        >>> from torchrl.trainers.helpers.envs import parser_env_args
-        >>> from torchrl.trainers.helpers.models import make_ddpg_actor, parser_model_args_continuous
+        >>> from torchrl.trainers.helpers.models import make_ddpg_actor
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
         >>> import hydra
@@ -284,7 +281,6 @@ def make_ddpg_actor(
             device=cpu,
             is_shared=False)
     """
-
     # TODO: https://arxiv.org/pdf/1804.08617.pdf
 
     from_pixels = cfg.from_pixels
@@ -423,8 +419,8 @@ def make_ppo_model(
     observation_key=None,
     **kwargs,
 ) -> ActorValueOperator:
-    """
-    Actor-value model constructor helper function.
+    """Actor-value model constructor helper function.
+
     Currently constructs MLP networks with immutable default arguments as described in "Proximal Policy Optimization
     Algorithms", https://arxiv.org/abs/1707.06347
     Other configurations can easily be implemented by modifying this function at will.
@@ -715,8 +711,7 @@ def make_sac_model(
     observation_key=None,
     **kwargs,
 ) -> nn.ModuleList:
-    """
-    Actor, Q-value and value model constructor helper function for SAC.
+    """Actor, Q-value and value model constructor helper function for SAC.
 
     Follows default parameters proposed in SAC original paper: https://arxiv.org/pdf/1801.01290.pdf.
     Other configurations can easily be implemented by modifying this function at will.
@@ -736,7 +731,6 @@ def make_sac_model(
          A nn.ModuleList containing the actor, qvalue operator(s) and the value operator.
 
     Examples:
-        >>> from torchrl.trainers.helpers.envs import parser_env_args
         >>> from torchrl.trainers.helpers.models import make_sac_model, parser_model_args_continuous
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
@@ -936,8 +930,8 @@ def make_redq_model(
     observation_key=None,
     **kwargs,
 ) -> nn.ModuleList:
-    """
-    Actor and Q-value model constructor helper function for REDQ.
+    """Actor and Q-value model constructor helper function for REDQ.
+
     Follows default parameters proposed in REDQ original paper: https://openreview.net/pdf?id=AY8zfZm0tDd.
     Other configurations can easily be implemented by modifying this function at will.
     A single instance of the Q-value model is returned. It will be multiplicated by the loss function.
@@ -1008,7 +1002,6 @@ def make_redq_model(
             is_shared=False)
 
     """
-
     tanh_loc = cfg.tanh_loc
     default_policy_scale = cfg.default_policy_scale
     gSDE = cfg.gSDE

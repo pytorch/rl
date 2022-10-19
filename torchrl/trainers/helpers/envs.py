@@ -47,9 +47,8 @@ LIBS = {
 
 
 def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
-    """
-    Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the
-    frame_skip.
+    """Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the frame_skip.
+
     This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targetting a total number of frames
     of 1M but actually collecting frame_skip * 1M frames.
 
@@ -226,14 +225,13 @@ def transformed_env_constructor(
     state_dim_gsde: Optional[int] = None,
     batch_dims: Optional[int] = 0,
 ) -> Union[Callable, EnvCreator]:
-    """
-    Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
+    """Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
         cfg (DictConfig): a DictConfig containing the arguments of the script.
         video_tag (str, optional): video tag to be passed to the Logger object
         logger (Logger, optional): logger associated with the script
-        stats (dict, optional): a dictionary containing the `loc` and `scale` for the `ObservationNorm` transform
+        stats (dict, optional): a dictionary containing the :obj:`loc` and :obj:`scale` for the `ObservationNorm` transform
         norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won't be normalized online.
             Default is `False`.
         use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,
@@ -357,6 +355,18 @@ def get_stats_random_rollout(
     proof_environment: EnvBase = None,
     key: Optional[str] = None,
 ):
+    """Gathers stas (loc and scale) from an environment using random rollouts.
+
+    Args:
+        cfg (DictConfig): a config object with `init_env_steps` field, indicating
+            the total number of frames to be collected to compute the stats.
+        proof_environment (EnvBase instance, optional): if provided, this env will
+            be used ot execute the rollouts. If not, it will be created using
+            the cfg object.
+        key (str, optional): if provided, the stats of this key will be gathered.
+            If not, it is expected that only one key exists in `env.observation_spec`.
+
+    """
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
         proof_environment = transformed_env_constructor(

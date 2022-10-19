@@ -8,6 +8,8 @@ from .storages import Storage
 
 
 class Writer(ABC):
+    """A ReplayBuffer base Writer class."""
+
     def __init__(self) -> None:
         self._storage = None
 
@@ -16,22 +18,18 @@ class Writer(ABC):
 
     @abstractmethod
     def add(self, data: Any) -> int:
-        """
-        Inserts one piece of data at an appropriate index,
-        and returns that index.
-        """
+        """Inserts one piece of data at an appropriate index, and returns that index."""
         raise NotImplementedError
 
     @abstractmethod
     def extend(self, data: Sequence) -> torch.Tensor:
-        """
-        Inserts a series of data points at appropriate indices,
-        and returns a tensor containing the indices.
-        """
+        """Inserts a series of data points at appropriate indices, and returns a tensor containing the indices."""
         raise NotImplementedError
 
 
 class RoundRobinWriter(Writer):
+    """A RoundRobin Writer class for composable replay buffers."""
+
     def __init__(self, **kw) -> None:
         super().__init__(**kw)
         self._cursor = 0

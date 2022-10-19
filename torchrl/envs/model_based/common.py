@@ -135,9 +135,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         )
 
     def set_specs_from_env(self, env: EnvBase):
-        """
-        Sets the specs of the environment from the specs of the given environment.
-        """
+        """Sets the specs of the environment from the specs of the given environment."""
         self.observation_spec = deepcopy(env.observation_spec).to(self.device)
         self.reward_spec = deepcopy(env.reward_spec).to(self.device)
         self.input_spec = deepcopy(env.input_spec).to(self.device)

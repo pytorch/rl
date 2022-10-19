@@ -33,13 +33,9 @@ class WorldModelWrapper(TensorDictSequential):
         )
 
     def get_transition_model_operator(self) -> TensorDictSequential:
-        """
-        Returns a transition operator that maps either an observation to a world state or a world state to the next world state.
-        """
+        """Returns a transition operator that maps either an observation to a world state or a world state to the next world state."""
         return self.module[0]
 
     def get_reward_operator(self) -> TensorDictSequential:
-        """
-        Returns a reward operator that maps a world state to a reward.
-        """
+        """Returns a reward operator that maps a world state to a reward."""
         return self.module[1]

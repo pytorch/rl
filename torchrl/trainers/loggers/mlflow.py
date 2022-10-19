@@ -115,8 +115,7 @@ class MLFlowLogger(Logger):
                 mlflow.log_artifact(f.name, "videos")
 
     def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
-        """
-        Logs the hyperparameters of the experiment.
+        """Logs the hyperparameters of the experiment.
 
         Args:
             cfg (DictConfig): The configuration of the experiment.

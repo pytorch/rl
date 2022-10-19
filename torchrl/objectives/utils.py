@@ -44,15 +44,14 @@ def distance_loss(
     loss_function: str,
     strict_shape: bool = True,
 ) -> torch.Tensor:
-    """
-    Computes a distance loss between two tensors.
+    """Computes a distance loss between two tensors.
 
     Args:
         v1 (Tensor): a tensor with a shape compatible with v2
         v2 (Tensor): a tensor with a shape compatible with v1
         loss_function (str): One of "l2", "l1" or "smooth_l1" representing which loss function is to be used.
         strict_shape (bool): if False, v1 and v2 are allowed to have a different shape.
-            Default is `True`.
+            Default is :obj:`True`.
 
     Returns:
          A tensor of the shape v1.view_as(v2) or v2.view_as(v1) with values equal to the distance loss between the
@@ -95,8 +94,7 @@ class ValueLoss:
 
 
 class TargetNetUpdater:
-    """
-    An abstract class for target network update in Double DQN/DDPG.
+    """An abstract class for target network update in Double DQN/DDPG.
 
     Args:
         loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
@@ -201,8 +199,8 @@ class TargetNetUpdater:
 
 
 class SoftUpdate(TargetNetUpdater):
-    """
-    A soft-update class for target network update in Double DQN/DDPG.
+    """A soft-update class for target network update in Double DQN/DDPG.
+
     This was proposed in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf
 
     Args:
@@ -229,8 +227,8 @@ class SoftUpdate(TargetNetUpdater):
 
 
 class HardUpdate(TargetNetUpdater):
-    """
-    A hard-update class for target network update in Double DQN/DDPG (by contrast with soft updates).
+    """A hard-update class for target network update in Double DQN/DDPG (by contrast with soft updates).
+
     This was proposed in the original Double DQN paper: "Deep Reinforcement Learning with Double Q-learning",
     https://arxiv.org/abs/1509.06461.
 
@@ -302,8 +300,9 @@ def next_state_value(
     pred_next_val: Optional[Tensor] = None,
     **kwargs,
 ) -> torch.Tensor:
-    """
-    Computes the next state value (without gradient) to compute a target for the MSE loss
+    """Computes the next state value (without gradient) to compute a target value.
+
+    The target value is ususally used to compute a distance loss (e.g. MSE):
         L = Sum[ (q_value - target_value)^2 ]
     The target value is computed as
         r + gamma ** n_steps_to_next * value_next_state
@@ -323,6 +322,7 @@ def next_state_value(
 
     Returns:
         a Tensor of the size of the input tensordict containing the predicted value state.
+
     """
     if "steps_to_next_obs" in tensordict.keys():
         steps_to_next_obs = tensordict.get("steps_to_next_obs").squeeze(-1)
