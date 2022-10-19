@@ -1034,3 +1034,23 @@ class LSTMNet(nn.Module):
 
         input = self.mlp(input)
         return self._lstm(input, hidden0_in, hidden1_in)
+
+
+class GRUNet(nn.Module):
+    """
+    A GruCell encapsulated between two MLP
+    """
+
+    def __init__(
+        self, mlp_input_kwargs: Dict, gru_kwargs: Dict, mlp_output_kwargs: Dict
+    ) -> None:
+        self.mlp_int = MLP(**mlp_input_kwargs)
+        self.gru = nn.GRUCell(**gru_kwargs)
+        self.mlp_out = MLP(**mlp_output_kwargs)
+        super().__init__()
+
+    def forward(self, inputs, hidden_state):
+        x = self.mlp_int(inputs)
+        h = self.gru(x, hidden_state)
+        q = self.mlp_out(h)
+        return q, h
