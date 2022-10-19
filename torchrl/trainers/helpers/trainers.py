@@ -15,8 +15,8 @@ from torchrl.collectors.collectors import _DataCollector
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.modules import TensorDictModule, TensorDictModuleWrapper, reset_noise
-from torchrl.objectives.costs.common import LossModule
-from torchrl.objectives.costs.utils import TargetNetUpdater
+from torchrl.objectives.common import LossModule
+from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.trainers.loggers import Logger
 from torchrl.trainers.trainers import (
     Trainer,
@@ -116,8 +116,8 @@ def make_trainer(
         >>> from torchrl.data import TensorDictReplayBuffer
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> from torchrl.modules import TensorDictModuleWrapper, TensorDictModule, ValueOperator, EGreedyWrapper
-        >>> from torchrl.objectives.costs.common import LossModule
-        >>> from torchrl.objectives.costs.utils import TargetNetUpdater
+        >>> from torchrl.objectives.common import LossModule
+        >>> from torchrl.objectives.utils import TargetNetUpdater
         >>> from torchrl.objectives import DDPGLoss
         >>> env_maker = EnvCreator(lambda: GymEnv("Pendulum-v0"))
         >>> env_proof = env_maker()

@@ -19,7 +19,7 @@ from torchrl.data.tensordict.tensordict import (
     LazyStackedTensorDict,
     make_tensordict,
     pad,
-    stack as stack_td,
+    _stack as stack_td,
     TensorDictBase,
 )
 from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
@@ -932,6 +932,20 @@ class TestTensorDicts:
         assert_allclose_td(td_masked3, td_masked2)
         assert td_masked3.batch_size[0] == mask.sum()
         assert td_masked3.batch_dims == 1
+
+    def test_equal(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        assert (td == td.to_tensordict()).all()
+        td0 = td.to_tensordict().zero_()
+        assert (td != td0).any()
+
+    def test_equal_dict(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        assert (td == td.to_dict()).all()
+        td0 = td.to_tensordict().zero_().to_dict()
+        assert (td != td0).any()
 
     @pytest.mark.parametrize("from_list", [True, False])
     def test_masking_set(self, td_name, device, from_list):

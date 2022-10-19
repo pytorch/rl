@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import inspect
 import os
 import queue
 import time
@@ -15,12 +16,13 @@ from typing import Callable, Iterator, Optional, Sequence, Tuple, Union, Any, Di
 
 import numpy as np
 import torch
+import torch.nn as nn
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
 from torchrl.envs.utils import set_exploration_mode, step_mdp
 from .._utils import _check_for_faulty_process, prod
-from ..modules.tensordict_module import ProbabilisticTensorDictModule
+from ..modules.tensordict_module import ProbabilisticTensorDictModule, TensorDictModule
 from .utils import split_trajectories
 
 __all__ = [
@@ -47,6 +49,7 @@ DEFAULT_EXPLORATION_MODE: str = "random"
 class RandomPolicy:
     def __init__(self, action_spec: TensorSpec):
         """Random policy for a given action_spec.
+
         This is a wrapper around the action_spec.rand method.
 
 
@@ -61,6 +64,7 @@ class RandomPolicy:
             >>> action_spec = NdBoundedTensorSpec(-torch.ones(3), torch.ones(3))
             >>> actor = RandomPolicy(spec=action_spec)
             >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
+
         """
         self.action_spec = action_spec
 
@@ -81,6 +85,36 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
     )
 
 
+def _policy_is_tensordict_compatible(policy: nn.Module):
+    sig = inspect.signature(policy.forward)
+
+    if isinstance(policy, TensorDictModule) or (
+        len(sig.parameters) == 1
+        and hasattr(policy, "in_keys")
+        and hasattr(policy, "out_keys")
+    ):
+        # if the policy is a TensorDictModule or takes a single argument and defines
+        # in_keys and out_keys then we assume it can already deal with TensorDict input
+        # to forward and we return True
+        return True
+    elif not hasattr(policy, "in_keys") and not hasattr(policy, "out_keys"):
+        # if it's not a TensorDictModule, and in_keys and out_keys are not defined then
+        # we assume no TensorDict compatibility and will try to wrap it.
+        return False
+
+    # if in_keys or out_keys were defined but policy is not a TensorDictModule or
+    # accepts multiple arguments then it's likely the user is trying to do something
+    # that will have undetermined behaviour, we raise an error
+    raise TypeError(
+        "Received a policy that defines in_keys or out_keys and also expects multiple "
+        "arguments to policy.forward. If the policy is compatible with TensorDict, it "
+        "should take a single argument of type TensorDict to policy.forward and define "
+        "both in_keys and out_keys. Alternatively, policy.forward can accept "
+        "arbitrarily many tensor inputs and leave in_keys and out_keys undefined and "
+        "TorchRL will attempt to automatically wrap the policy with a TensorDictModule."
+    )
+
+
 class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
     def _get_policy_and_device(
         self,
@@ -91,10 +125,13 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             ]
         ] = None,
         device: Optional[DEVICE_TYPING] = None,
+        observation_spec: TensorSpec = None,
     ) -> Tuple[
         ProbabilisticTensorDictModule, torch.device, Union[None, Callable[[], dict]]
     ]:
-        """From a policy and a device, assigns the self.device attribute to
+        """Util method to get a policy and its device given the collector __init__ inputs.
+
+        From a policy and a device, assigns the self.device attribute to
         the desired device and maps the policy onto it or (if the device is
         ommitted) assigns the self.device attribute to the policy device.
 
@@ -105,6 +142,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
             policy (ProbabilisticTensorDictModule, optional): a policy to be used
             device (int, str or torch.device, optional): device where to place
                 the policy
+            observation_spec (TensorSpec, optional): spec of the observations
 
         """
         # if create_env_fn is not None:
@@ -124,6 +162,46 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
             policy = RandomPolicy(self.env.action_spec)
+        elif isinstance(policy, nn.Module):
+            # TODO: revisit these checks when we have determined whether arbitrary
+            # callables should be supported as policies.
+            if not _policy_is_tensordict_compatible(policy):
+                # policy is a nn.Module that doesn't operate on tensordicts directly
+                # so we attempt to auto-wrap policy with TensorDictModule
+                if observation_spec is None:
+                    raise ValueError(
+                        "Unable to read observation_spec from the environment. This is "
+                        "required to check compatibility of the environment and policy "
+                        "since the policy is a nn.Module that operates on tensors "
+                        "rather than a TensorDictModule or a nn.Module that accepts a "
+                        "TensorDict as input and defines in_keys and out_keys."
+                    )
+                sig = inspect.signature(policy.forward)
+                next_observation = {
+                    key[5:]: value
+                    for key, value in observation_spec.rand().items()
+                    if key.startswith("next_")
+                }
+                if set(sig.parameters) == set(next_observation):
+                    out_keys = ["action"]
+                    output = policy(**next_observation)
+
+                    if isinstance(output, tuple):
+                        out_keys.extend(f"output{i+1}" for i in range(len(output) - 1))
+
+                    policy = TensorDictModule(
+                        policy, in_keys=list(sig.parameters), out_keys=out_keys
+                    )
+                else:
+                    raise TypeError(
+                        "Arguments to policy.forward are incompatible with entries in "
+                        "env.observation_spec. If you want TorchRL to automatically "
+                        "wrap your policy with a TensorDictModule then the arguments "
+                        "to policy.forward must correspond one-to-one with entries in "
+                        "env.observation_spec that are prefixed with 'next_'. For more "
+                        "complex behaviour and more control you can consider writing "
+                        "your own TensorDictModule."
+                    )
 
         try:
             policy_device = next(policy.parameters()).device
@@ -173,8 +251,7 @@ class _DataCollector(IterableDataset, metaclass=abc.ABCMeta):
 
 
 class SyncDataCollector(_DataCollector):
-    """
-    Generic data collector for RL problems. Requires and environment constructor and a policy.
+    """Generic data collector for RL problems. Requires and environment constructor and a policy.
 
     Args:
         create_env_fn (Callable), returns an instance of EnvBase class.
@@ -298,6 +375,7 @@ class SyncDataCollector(_DataCollector):
         (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,
             device=device,
+            observation_spec=self.env.observation_spec,
         )
 
         self.env_device = env.device
@@ -324,10 +402,10 @@ class SyncDataCollector(_DataCollector):
         )
 
         if (
-            hasattr(policy, "spec")
-            and policy.spec is not None
-            and all(v is not None for v in policy.spec.values())
-            and set(policy.spec.keys()) == set(policy.out_keys)
+            hasattr(self.policy, "spec")
+            and self.policy.spec is not None
+            and all(v is not None for v in self.policy.spec.values())
+            and set(self.policy.spec.keys()) == set(self.policy.out_keys)
         ):
             # if policy spec is non-empty, all the values are not None and the keys
             # match the out_keys we assume the user has given all relevant information
@@ -338,7 +416,7 @@ class SyncDataCollector(_DataCollector):
                     "done": torch.zeros(
                         env.batch_size, dtype=torch.bool, device=env.device
                     ),
-                    **policy.spec.zero(env.batch_size),
+                    **self.policy.spec.zero(env.batch_size),
                 },
                 env.batch_size,
                 device=env.device,
@@ -510,7 +588,7 @@ class SyncDataCollector(_DataCollector):
             else:
                 self._tensordict.zero_()
 
-            self._tensordict.update(self.env.reset(), inplace=True)
+            self.env.reset(self._tensordict)
             if self._tensordict.get("done").any():
                 raise RuntimeError(
                     f"Got {sum(self._tensordict.get('done'))} done envs after reset."
@@ -609,15 +687,13 @@ class SyncDataCollector(_DataCollector):
         self.shutdown()  # make sure env is closed
 
     def state_dict(self) -> OrderedDict:
-        """Returns the local state_dict of the data collector (environment
-        and policy).
+        """Returns the local state_dict of the data collector (environment and policy).
 
         Returns:
-            an ordered dictionary with fields `"policy_state_dict"` and
+            an ordered dictionary with fields :obj:`"policy_state_dict"` and
             `"env_state_dict"`.
 
         """
-
         if isinstance(self.env, TransformedEnv):
             env_state_dict = self.env.transform.state_dict()
         elif isinstance(self.env, _BatchedEnv):
@@ -641,7 +717,7 @@ class SyncDataCollector(_DataCollector):
 
         Args:
             state_dict (OrderedDict): ordered dictionary containing the fields
-                `"policy_state_dict"` and `"env_state_dict"`.
+                `"policy_state_dict"` and :obj:`"env_state_dict"`.
 
         """
         strict = kwargs.get("strict", True)
@@ -716,7 +792,7 @@ class _MultiDataCollector(_DataCollector):
         reset_when_done (bool, optional): if True, the contained environment will be reset
             every time it hits a done. If the env contains multiple independent envs, a
             reset index will be passed to it to reset only thos environments that need to
-            be reset. In practice, this will happen through a call to `env.reset(tensordict)`,
+            be reset. In practice, this will happen through a call to :obj:`env.reset(tensordict)`,
             in other words, if the env is a multi-agent env, all agents will be
             reset once one of them is done.
             Defaults to `True`.
@@ -793,12 +869,24 @@ class _MultiDataCollector(_DataCollector):
             )
         self._policy_dict = {}
         self._get_weights_fn_dict = {}
-        for i, _device in enumerate(devices):
+
+        for i, (_device, create_env, kwargs) in enumerate(
+            zip(devices, self.create_env_fn, self.create_env_kwargs)
+        ):
             if _device in self._policy_dict:
                 devices[i] = _device
                 continue
+
+            if hasattr(create_env, "observation_spec"):
+                observation_spec = create_env.observation_spec
+            else:
+                try:
+                    observation_spec = create_env(**kwargs).observation_spec
+                except:  # noqa
+                    observation_spec = None
+
             _policy, _device, _get_weight_fn = self._get_policy_and_device(
-                policy=policy, device=_device
+                policy=policy, device=_device, observation_spec=observation_spec
             )
             self._policy_dict[_device] = _policy
             self._get_weights_fn_dict[_device] = _get_weight_fn
@@ -994,8 +1082,8 @@ class _MultiDataCollector(_DataCollector):
                     raise RuntimeError(f"Expected msg='reset', got {msg}")
 
     def state_dict(self) -> OrderedDict:
-        """
-        Returns the state_dict of the data collector.
+        """Returns the state_dict of the data collector.
+
         Each field represents a worker containing its own state_dict.
 
         """
@@ -1011,15 +1099,13 @@ class _MultiDataCollector(_DataCollector):
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:
-        """
-        Loads the state_dict on the workers.
+        """Loads the state_dict on the workers.
 
         Args:
             state_dict (OrderedDict): state_dict of the form
                 ``{"worker0": state_dict0, "worker1": state_dict1}``.
 
         """
-
         for idx in range(self.num_workers):
             self.pipes[idx].send((state_dict[f"worker{idx}"], "load_state_dict"))
         for idx in range(self.num_workers):
@@ -1029,13 +1115,13 @@ class _MultiDataCollector(_DataCollector):
 
 
 class MultiSyncDataCollector(_MultiDataCollector):
-    """Runs a given number of DataCollectors on separate processes
-    synchronously.
+    """Runs a given number of DataCollectors on separate processes synchronously.
 
     The collection starts when the next item of the collector is queried,
     and no environment step is computed in between the reception of a batch of
     trajectory and the start of the next collection.
     This class can be safely used with online RL algorithms.
+
     """
 
     __doc__ += _MultiDataCollector.__doc__
@@ -1125,12 +1211,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
 
 class MultiaSyncDataCollector(_MultiDataCollector):
-    """Runs a given number of DataCollectors on separate processes
-    asynchronously.
+    """Runs a given number of DataCollectors on separate processes asynchronously.
 
     The collection keeps on occuring on all processes even between the time
     the batch of rollouts is collected and the next call to the iterator.
     This class can be safely used with offline RL algorithms.
+
     """
 
     __doc__ += _MultiDataCollector.__doc__

@@ -17,11 +17,11 @@ __all__ = ["MPCPlannerBase"]
 class MPCPlannerBase(TensorDictModule, metaclass=abc.ABCMeta):
     """MPCPlannerBase abstract Module.
 
-    This class inherits from `TensorDictModule`. Provided a `TensorDict`, this module will perform a Model Predictive Control (MPC) planning step.
-    At the end of the planning step, the `MPCPlanner` will return a proposed action.
+    This class inherits from :obj:`TensorDictModule`. Provided a :obj:`TensorDict`, this module will perform a Model Predictive Control (MPC) planning step.
+    At the end of the planning step, the :obj:`MPCPlanner` will return a proposed action.
 
     Args:
-        env (EnvBase): The environment to perform the planning step on (Can be `ModelBasedEnvBase` or `EnvBase`).
+        env (EnvBase): The environment to perform the planning step on (Can be :obj:`ModelBasedEnvBase` or :obj:`EnvBase`).
         action_key (str, optional): The key that will point to the computed action.
     """
 

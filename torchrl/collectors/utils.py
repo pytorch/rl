@@ -28,7 +28,10 @@ def _stack_output_zip(fun) -> Callable:
 
 
 def split_trajectories(rollout_tensordict: TensorDictBase) -> TensorDictBase:
-    """Takes a tensordict with a key traj_ids that indicates the id of each trajectory.
+    """A util function for trajectory separation.
+
+    Takes a tensordict with a key traj_ids that indicates the id of each trajectory.
+
     From there, builds a B x T x ... zero-padded tensordict with B batches on max duration T
     """
     traj_ids = rollout_tensordict.get("traj_ids")

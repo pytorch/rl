@@ -21,7 +21,7 @@ from torchrl.data import (
 )
 from ...data.utils import numpy_to_torch_dtype_dict
 from ..gym_like import GymLikeEnv, default_info_dict_reader
-from ..utils import classproperty
+from ..utils import _classproperty
 
 try:
     import gym
@@ -129,8 +129,7 @@ def _is_from_pixels(env):
 
 
 class GymWrapper(GymLikeEnv):
-    """
-    OpenAI Gym environment wrapper.
+    """OpenAI Gym environment wrapper.
 
     Examples:
         >>> env = gym.make("Pendulum-v0")
@@ -138,6 +137,7 @@ class GymWrapper(GymLikeEnv):
         >>> td = env.rand_step()
         >>> print(td)
         >>> print(env.available_envs)
+
     """
 
     git_url = "https://github.com/openai/gym"
@@ -186,7 +186,7 @@ class GymWrapper(GymLikeEnv):
                 env = PixelObservationWrapper(env, pixels_only=pixels_only)
         return env
 
-    @classproperty
+    @_classproperty
     def available_envs(cls) -> List[str]:
         return _get_envs()
 
@@ -266,8 +266,7 @@ ACCEPTED_TYPE_ERRORS = {
 
 
 class GymEnv(GymWrapper):
-    """
-    OpenAI Gym environment wrapper.
+    """OpenAI Gym environment wrapper.
 
     Examples:
         >>> env = GymEnv(env_name="Pendulum-v0", frame_skip=4)

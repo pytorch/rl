@@ -167,6 +167,7 @@ def env_creator(fun: Callable) -> EnvCreator:
 def get_env_metadata(
     env_or_creator: Union[EnvBase, Callable], kwargs: Optional[Dict] = None
 ):
+    """Retrieves a EnvMetaData object from an env."""
     if isinstance(env_or_creator, (EnvBase,)):
         return EnvMetaData.build_metadata_from_env(env_or_creator)
     elif not isinstance(env_or_creator, EnvBase) and not isinstance(
