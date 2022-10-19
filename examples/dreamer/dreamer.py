@@ -86,6 +86,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 cfg.collector_devices = f"cuda:{ngpus_per_node-1}"
             else:
                 cfg.collector_devices = "cpu"
+            print("collecting on ", cfg.collector_devices)
 
     if world_size > 1:
         if "SLURM_PROCID" in os.environ:  # for slurm scheduler
