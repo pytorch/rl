@@ -529,7 +529,7 @@ def test_dreamer_make(device, tanh_loc, exploration):
     sys.path.append(os.path.dirname(__file__) + "/../examples/dreamer/")
     from dreamer_utils import transformed_env_constructor
 
-    flags = ["from_pixels=True", "catframes=1"]
+    flags = ["from_pixels=True", "catframes=1", f"collector_devices={device}"]
 
     config_fields = [
         (config_field.name, config_field.type, config_field)
