@@ -49,9 +49,11 @@ class TestTDModule:
         assert "out_3" in td.keys()
         assert td.get("out_3").shape == torch.Size([3, 2])
 
-        # Using "_" key to ignore output
+        # Using "_" key to ignore some output
         tensordict_module = TensorDictModule(
-            MultiHeadLinear(5, 4, 3, 2), in_keys=["input"], out_keys=["_", "_", "out_3"]
+            MultiHeadLinear(5, 4, 3, 2),
+            in_keys=["input"],
+            out_keys=["_", "_", "out_3"],
         )
         td = TensorDict({"input": torch.randn(3, 5)}, batch_size=[3])
         td = tensordict_module(td)
