@@ -17,12 +17,9 @@ from torchrl.modules import TensorDictModule
 from torchrl.modules.tensordict_module.actors import (
     ActorCriticWrapper,
 )
-from torchrl.objectives.costs.utils import distance_loss, next_state_value
+from torchrl.objectives.utils import distance_loss, next_state_value
+from ..envs.utils import set_exploration_mode
 from .common import LossModule
-
-__all__ = ["SACLoss"]
-
-from ...envs.utils import set_exploration_mode
 
 
 class SACLoss(LossModule):

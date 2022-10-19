@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-__all__ = ["LossModule"]
-
 from typing import Iterator, Optional, Tuple, List, Union
 
 import functorch

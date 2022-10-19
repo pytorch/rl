@@ -11,11 +11,8 @@ from torch import distributions as d
 
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 from torchrl.modules import TensorDictModule
-from ...modules.tensordict_module import ProbabilisticTensorDictModule
-
-__all__ = ["PPOLoss", "ClipPPOLoss", "KLPENPPOLoss"]
-
-from torchrl.objectives.costs.utils import distance_loss
+from torchrl.objectives.utils import distance_loss
+from ..modules.tensordict_module import ProbabilisticTensorDictModule
 from .common import LossModule
 
 
@@ -85,7 +82,7 @@ class PPOLoss(LossModule):
     def reset(self) -> None:
         pass
 
-    def get_entropy_bonus(self, dist: Optional[d.Distribution] = None) -> torch.Tensor:
+    def get_entropy_bonus(self, dist: d.Distribution) -> torch.Tensor:
         try:
             entropy = dist.entropy()
         except NotImplementedError:
