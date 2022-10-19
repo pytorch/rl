@@ -21,8 +21,8 @@ __all__ = ["VideoRecorder", "TensorDictRecorder"]
 
 
 class VideoRecorder(ObservationTransform):
-    """
-    Video Recorder transform.
+    """Video Recorder transform.
+
     Will record a series of observations from an environment and write them
     to a Logger object when needed.
 
@@ -31,13 +31,14 @@ class VideoRecorder(ObservationTransform):
             should be written.
         tag (str): the video tag in the logger.
         keys_in (Sequence[str], optional): keys to be read to produce the video.
-            Default is `"next_pixels"`.
+            Default is :obj:`"next_pixels"`.
         skip (int): frame interval in the output video.
             Default is 2.
         center_crop (int, optional): value of square center crop.
         make_grid (bool, optional): if True, a grid is created assuming that a
             tensor of shape [B x W x H x 3] is provided, with B being the batch
             size. Default is True.
+
     """
 
     def __init__(
@@ -131,15 +132,15 @@ class VideoRecorder(ObservationTransform):
 
 
 class TensorDictRecorder(Transform):
-    """
-    TensorDict recorder.
-    When the 'dump' method is called, this class will save a stack of the tensordict resulting from `env.step(td)` in a
+    """TensorDict recorder.
+
+    When the 'dump' method is called, this class will save a stack of the tensordict resulting from :obj:`env.step(td)` in a
     file with a prefix defined by the out_file_base argument.
 
     Args:
         out_file_base (str): a string defining the prefix of the file where the tensordict will be written.
         skip_reset (bool): if True, the first TensorDict of the list will be discarded (usually the tensordict
-            resulting from the call to `env.reset()`)
+            resulting from the call to :obj:`env.reset()`)
             default: True
         skip (int): frame interval for the saved tensordict.
             default: 4

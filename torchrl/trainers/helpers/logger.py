@@ -9,6 +9,8 @@ from typing import Any
 
 @dataclass
 class LoggerConfig:
+    """Logger config data-class."""
+
     logger: str = "csv"
     # recorder type to be used. One of 'tensorboard', 'wandb' or 'csv'
     record_video: bool = False

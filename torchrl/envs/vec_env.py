@@ -72,9 +72,8 @@ class _dispatch_caller_serial:
 
 
 class _BatchedEnv(EnvBase):
-    """
+    """Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.
 
-    Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.
     Those queries will return a list of length equal to the number of workers containing the
     values resulting from those queries.
         >>> env = ParallelEnv(3, my_env_fun)
@@ -95,9 +94,9 @@ class _BatchedEnv(EnvBase):
             drastically decrease the IO burden when the tensordict is placed in shared memory / memory map.
             env_input_keys will typically contain "action" and if this list is not provided this object
             will look for corresponding keys. When working with stateless models, it is important to include the
-            state to be read by the environment. If none is provided, _BatchedEnv will use the `EnvBase.input_spec`
+            state to be read by the environment. If none is provided, _BatchedEnv will use the :obj:`EnvBase.input_spec`
             keys as indicators of the keys to be sent to the env.
-        pin_memory (bool): if True and device is "cpu", calls `pin_memory` on the tensordicts when created.
+        pin_memory (bool): if True and device is "cpu", calls :obj:`pin_memory` on the tensordicts when created.
         selected_keys (list of str, optional): keys that have to be returned by the environment.
             When creating a batch of environment, it might be the case that only some of the keys are to be returned.
             For instance, if the environment returns 'next_pixels' and 'next_vector', the user might only
@@ -112,15 +111,15 @@ class _BatchedEnv(EnvBase):
         shared_memory (bool): whether or not the returned tensordict will be placed in shared memory;
         memmap (bool): whether or not the returned tensordict will be placed in memory map.
         policy_proof (callable, optional): if provided, it'll be used to get the list of
-            tensors to return through the `step()` and `reset()` methods, such as `"hidden"` etc.
+            tensors to return through the :obj:`step()` and :obj:`reset()` methods, such as :obj:`"hidden"` etc.
         device (str, int, torch.device): for consistency, this argument is kept. However this
             argument should not be passed, as the device will be inferred from the environments.
             It is assumed that all environments will run on the same device as a common shared
             tensordict will be used to pass data from process to process. The device can be
-            changed after instantiation using `env.to(device)`.
+            changed after instantiation using :obj:`env.to(device)`.
         allow_step_when_done (bool, optional): if True, batched environments can
             execute steps after a done state is encountered.
-            Defaults to `False`.
+            Defaults to :obj:`False`.
 
     """
 
@@ -535,10 +534,7 @@ class _BatchedEnv(EnvBase):
 
 
 class SerialEnv(_BatchedEnv):
-    """
-    Creates a series of environments in the same process.
-
-    """
+    """Creates a series of environments in the same process."""
 
     __doc__ += _BatchedEnv.__doc__
 
@@ -663,8 +659,8 @@ class SerialEnv(_BatchedEnv):
 
 
 class ParallelEnv(_BatchedEnv):
-    """
-    Creates one environment per process.
+    """Creates one environment per process.
+
     TensorDicts are passed via shared memory or memory map.
 
     """

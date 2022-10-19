@@ -17,8 +17,7 @@ from .common import LossModule
 
 
 class PPOLoss(LossModule):
-    """
-    A parent PPO loss class.
+    """A parent PPO loss class.
 
     PPO (Proximal Policy Optimisation) is a model-free, online RL algorithm that makes use of a recorded (batch of)
     trajectories to perform several optimization steps, while actively preventing the updated policy to deviate too
@@ -159,8 +158,7 @@ class PPOLoss(LossModule):
 
 
 class ClipPPOLoss(PPOLoss):
-    """
-    Clipped PPO loss.
+    """Clipped PPO loss.
 
     The clipped importance weighted loss is computed as follows:
         loss = -min( weight * advantage, min(max(weight, 1-eps), 1+eps) * advantage)
@@ -264,8 +262,7 @@ class ClipPPOLoss(PPOLoss):
 
 
 class KLPENPPOLoss(PPOLoss):
-    """
-    KL Penalty PPO loss.
+    """KL Penalty PPO loss.
 
     The KL penalty loss has the following formula:
         loss = loss - beta * KL(old_policy, new_policy)

@@ -15,5 +15,7 @@ from .utils import (
     distance_loss,
     hold_out_params,
     next_state_value,
+    hold_out_net,
 )
-from .value import bellman_max, c_val, dv_val, vtrace, GAE, TDLambdaEstimate, TDEstimate
+
+# from .value import bellman_max, c_val, dv_val, vtrace, GAE, TDLambdaEstimate, TDEstimate

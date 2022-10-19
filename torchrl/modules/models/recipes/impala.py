@@ -67,7 +67,7 @@ class _ConvNetBlock(nn.Module):
         return x
 
 
-class ImpalaNet(nn.Module):
+class ImpalaNet(nn.Module):  # noqa: D101
     def __init__(
         self,
         num_actions,
@@ -105,7 +105,7 @@ class ImpalaNet(nn.Module):
         self.policy = nn.Linear(core_output_size, self.num_actions)
         self.baseline = nn.Linear(core_output_size, 1)
 
-    def forward(self, x, reward, done, core_state=None, mask=None):
+    def forward(self, x, reward, done, core_state=None, mask=None):  # noqa: D102
         if self.batch_first:
             B, T, *x_shape = x.shape
             batch_shape = torch.Size([B, T])
@@ -170,10 +170,10 @@ class ImpalaNet(nn.Module):
         return x_empty
 
 
-class ImpalaNetTensorDict(ImpalaNet):
+class ImpalaNetTensorDict(ImpalaNet):  # noqa: D101
     observation_key = "pixels"
 
-    def forward(self, tensordict: TensorDictBase):
+    def forward(self, tensordict: TensorDictBase):  # noqa: D102
         x = tensordict.get(self.observation_key)
         done = tensordict.get("done").squeeze(-1)
         reward = tensordict.get("reward").squeeze(-1)

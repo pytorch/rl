@@ -21,8 +21,9 @@ from torchrl.modules.utils import inv_softplus
 
 
 class NoisyLinear(nn.Linear):
-    """
-    Noisy Linear Layer, as presented in "Noisy Networks for Exploration", https://arxiv.org/abs/1706.10295v3
+    """Noisy Linear Layer.
+
+    Presented in "Noisy Networks for Exploration", https://arxiv.org/abs/1706.10295v3
 
     A Noisy Linear Layer is a linear layer with parametric noise added to the weights. This induced stochasticity can
     be used in RL networks for the agent's policy to aid efficient exploration. The parameters of the noise are learned
@@ -41,6 +42,7 @@ class NoisyLinear(nn.Linear):
             default: None
         std_init (scalar): initial value of the Gaussian standard deviation before optimization.
             default: 1.0
+
     """
 
     def __init__(
@@ -145,8 +147,7 @@ class NoisyLinear(nn.Linear):
 
 
 class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
-    """
-    Noisy Lazy Linear Layer.
+    """Noisy Lazy Linear Layer.
 
     This class makes the Noisy Linear layer lazy, in that the in_feature argument does not need to be passed at
     initialization (but is inferred after the first call to the layer).
@@ -162,6 +163,7 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
             default: None
         std_init (scalar): initial value of the Gaussian standard deviation before optimization.
             default: 1.0
+
     """
 
     def __init__(
@@ -225,20 +227,21 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
 
 
 def reset_noise(layer: nn.Module) -> None:
+    """Resets the noise of noisy layers."""
     if hasattr(layer, "reset_noise"):
         layer.reset_noise()
 
 
 class gSDEModule(nn.Module):
-    """A gSDE exploration module as presented in "Smooth Exploration for
-    Robotic Reinforcement Learning" by Antonin Raffin, Jens Kober,
-    Freek Stulp (https://arxiv.org/abs/2005.05719)
+    """A gSDE exploration module.
+
+     Presented in "Smooth Exploration for Robotic Reinforcement Learning" by Antonin Raffin, Jens Kober, Freek Stulp (https://arxiv.org/abs/2005.05719)
 
     gSDEModule adds a state-dependent exploration noise to an input action.
     It also outputs the mean, scale (standard deviation) of the normal
     distribution, as well as the Gaussian noise used.
 
-    The noise input should be reset through a `torchrl.envs.transforms.gSDENoise`
+    The noise input should be reset through a :obj:`torchrl.envs.transforms.gSDENoise`
     instance: each time the environment is reset, the input noise will be set to
     zero by the environment transform, indicating to gSDEModule that it has to be resampled.
     This scheme allows us to have the environemt tell the module to resample a
@@ -297,6 +300,7 @@ class gSDEModule(nn.Module):
         >>> action_second_call = tensordict.get("action").clone()
         >>> assert (action_second_call == action_first_call).all()  # actions are the same
         >>> assert (action_first_call != dist.base_dist.base_dist.loc).all()  # actions are truly stochastic
+
     """
 
     def __init__(
@@ -402,11 +406,12 @@ class gSDEModule(nn.Module):
 
 class LazygSDEModule(LazyModuleMixin, gSDEModule):
     """Lazy gSDE Module.
+
     This module behaves exactly as gSDEModule except that it does not require the
     user to specify the action and state dimension.
     If the input state is multi-dimensional (i.e. more than one state is provided), the
-    sigma value is initialized such that the resulting variance will match `sigma_init`
-    (or 1 if no `sigma_init` value is provided).
+    sigma value is initialized such that the resulting variance will match :obj:`sigma_init`
+    (or 1 if no :obj:`sigma_init` value is provided).
 
     """
 

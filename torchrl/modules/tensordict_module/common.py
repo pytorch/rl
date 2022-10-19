@@ -86,12 +86,11 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
 
 
 class TensorDictModule(nn.Module):
-    """A TensorDictModule, for TensorDict module, is a python wrapper around a `nn.Module` that reads and writes to a
-    TensorDict, instead of reading and returning tensors.
+    """A TensorDictModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
 
     Args:
         module (nn.Module): a nn.Module used to map the input to the output parameter space. Can be a functional
-            module (FunctionalModule or FunctionalModuleWithBuffers), in which case the `forward` method will expect
+            module (FunctionalModule or FunctionalModuleWithBuffers), in which case the :obj:`forward` method will expect
             the params (and possibly) buffers keyword arguments.
         in_keys (iterable of str): keys to be read from input tensordict and passed to the module. If it
             contains more than one element, the values will be passed in the order given by the in_keys iterable.
@@ -101,11 +100,11 @@ class TensorDictModule(nn.Module):
             spec characterize the space of the first output tensor.
         safe (bool): if True, the value of the output is checked against the input spec. Out-of-domain sampling can
             occur because of exploration policies or numerical under/overflow issues.
-            If this value is out of bounds, it is projected back onto the desired space using the `TensorSpec.project`
-            method. Default is `False`.
+            If this value is out of bounds, it is projected back onto the desired space using the :obj:`TensorSpec.project`
+            method. Default is :obj:`False`.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can
-        be passed along if needed. TensorDictModule support functional and regular `nn.Module` objects. In the functional
+        be passed along if needed. TensorDictModule support functional and regular :obj:`nn.Module` objects. In the functional
         case, the 'params' (and 'buffers') keyword argument must be specified:
 
     Examples:
@@ -392,8 +391,9 @@ class TensorDictModule(nn.Module):
         return tensordict_out
 
     def random(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Samples a random element in the target space, irrespective of any input. If multiple output keys are present,
-        only the first will be written in the input `tensordict`.
+        """Samples a random element in the target space, irrespective of any input.
+
+        If multiple output keys are present, only the first will be written in the input :obj:`tensordict`.
 
         Args:
             tensordict (TensorDictBase): tensordict where the output value should be written.
@@ -407,7 +407,7 @@ class TensorDictModule(nn.Module):
         return tensordict
 
     def random_sample(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """see TensorDictModule.random(...)"""
+        """See :obj:`TensorDictModule.random(...)`."""
         return self.random(tensordict)
 
     @property
@@ -434,8 +434,8 @@ class TensorDictModule(nn.Module):
         return f"{self.__class__.__name__}(\n{fields})"
 
     def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
-        """
-        Transforms a stateful module in a functional module and returns its parameters and buffers.
+        """Transforms a stateful module in a functional module and returns its parameters and buffers.
+
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
 
         Args:
@@ -542,8 +542,8 @@ class TensorDictModule(nn.Module):
 
 
 class TensorDictModuleWrapper(nn.Module):
-    """
-    Wrapper calss for TensorDictModule objects.
+    """Wrapper calss for TensorDictModule objects.
+
     Once created, a TensorDictModuleWrapper will behave exactly as the TensorDictModule it contains except for the methods that are
     overwritten.
 
@@ -580,6 +580,7 @@ class TensorDictModuleWrapper(nn.Module):
         >>> tensordict_module_wrapped = EpsilonGreedyExploration(tensordict_module)
         >>> tensordict_module_wrapped(td, params=params, buffers=buffers)
         >>> print(td.get("output"))
+
     """
 
     def __init__(self, td_module: TensorDictModule):
