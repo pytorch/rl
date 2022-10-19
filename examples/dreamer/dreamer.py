@@ -174,7 +174,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         reward_normalizer = None
 
     # Losses
-    world_model_loss = DreamerModelLoss(world_model, observation_keys=obs_keys)
+    world_model_loss = DreamerModelLoss(
+        world_model, reco_loss=cfg.reco_loss, observation_keys=obs_keys
+    )
     actor_loss = DreamerActorLoss(
         actor_model,
         value_model,

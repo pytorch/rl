@@ -1477,6 +1477,7 @@ class DreamerConfig:
     model_device: str = ""
     # Decay of the reward moving averaging
     exploration: str = "additive_gaussian"
+    reco_loss: str = "l2"
     # One of "additive_gaussian", "ou_exploration" or ""
 
 

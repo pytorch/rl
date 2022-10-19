@@ -87,6 +87,7 @@ class ObsEncoder(nn.Module):
         self,
         conv_depth=32,
         state_obs_hidden_dim=32,
+        r3m_hidden_dim=128,
         use_pixels=True,
         use_r3m=False,
         use_states=False,
@@ -97,9 +98,9 @@ class ObsEncoder(nn.Module):
         self.use_r3m = use_r3m
         if self.use_pixels and self.use_r3m:
             self.pixel_encoder = nn.Sequential(
-                nn.LazyLinear(state_obs_hidden_dim),
+                nn.LazyLinear(2 * r3m_hidden_dim),
                 nn.ReLU(),
-                nn.Linear(state_obs_hidden_dim, state_obs_hidden_dim),
+                nn.Linear(2 * r3m_hidden_dim, r3m_hidden_dim),
                 nn.ReLU(),
             )
 
@@ -173,6 +174,7 @@ class ObsDecoder(nn.Module):
         self,
         depth=32,
         state_obs_hidden_dim=32,
+        r3m_hidden_dim=128,
         state_spec=None,
         r3m_spec=None,
         use_pixels=True,
@@ -190,11 +192,11 @@ class ObsDecoder(nn.Module):
         )
         if use_pixels and use_r3m:
             self.r3m_decoder = nn.Sequential(
-                nn.LazyLinear(state_obs_hidden_dim),
+                nn.LazyLinear(r3m_hidden_dim),
                 nn.ReLU(),
-                nn.Linear(state_obs_hidden_dim, state_obs_hidden_dim),
+                nn.Linear(r3m_hidden_dim, 2 * state_obs_hidden_dim),
                 nn.ReLU(),
-                nn.Linear(state_obs_hidden_dim, r3m_spec.shape[0]),
+                nn.Linear(2 * state_obs_hidden_dim, r3m_spec.shape[0]),
             )
 
         elif use_pixels:
