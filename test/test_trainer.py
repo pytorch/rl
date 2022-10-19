@@ -138,7 +138,7 @@ class TestSelectKeys:
 
     @pytest.mark.parametrize("backend", ["torchsnapshot", "torch"])
     def test_selectkeys_save(self, backend):
-        if not _has_ts:
+        if not _has_ts and backend == "torchsnapshot":
             pytest.skip("torchsnapshot not found")
         # we overwrite the method to make sure that load_state_dict and state_dict are being called
         state_dict_has_been_called = [False]
@@ -155,8 +155,10 @@ class TestSelectKeys:
         with tempfile.TemporaryDirectory() as tmpdirname:
             if backend == "torch":
                 file = path.join(tmpdirname, "file.pt")
-            else:
+            elif backend == "torchsnapshot":
                 file = tmpdirname
+            else:
+                raise NotImplementedError
             trainer = mocking_trainer(file=file)
             key1 = "first key"
             key2 = "second key"
@@ -337,7 +339,7 @@ class TestRB:
     def test_rb_trainer_save(
         self, prioritized, storage_type, backend, re_init, S=10, batch=11, N=3
     ):
-        if not _has_ts:
+        if not _has_ts and backend == "torchsnapshot":
             pytest.skip("torchsnapshot not found")
 
         torch.manual_seed(0)
@@ -381,8 +383,10 @@ class TestRB:
         with tempfile.TemporaryDirectory() as tmpdirname:
             if backend == "torch":
                 file = path.join(tmpdirname, "file.pt")
-            else:
+            elif backend == "torchsnapshot":
                 file = tmpdirname
+            else:
+                raise NotImplementedError
             trainer = mocking_trainer(file)
 
             storage, collate_fn = make_storage()
@@ -529,8 +533,10 @@ class TestRewardNorm:
         ],
     )
     def test_reward_norm_save(self, backend):
-        if not _has_ts:
+        if not _has_ts and backend == "torchsnapshot":
             pytest.skip("torchsnapshot not found")
+
+        os.environ["CKPT_BACKEND"] = backend
 
         state_dict_has_been_called = [False]
         load_state_dict_has_been_called = [False]
@@ -548,8 +554,10 @@ class TestRewardNorm:
         with tempfile.TemporaryDirectory() as tmpdirname:
             if backend == "torch":
                 file = path.join(tmpdirname, "file.pt")
-            else:
+            elif backend == "torchsnapshot":
                 file = tmpdirname
+            else:
+                raise NotImplementedError
             trainer = mocking_trainer(file)
             reward_normalizer = RewardNormalizer()
             reward_normalizer.register(trainer)
@@ -565,6 +573,7 @@ class TestRewardNorm:
             reward_normalizer2 = RewardNormalizer()
             reward_normalizer2.register(trainer2)
             trainer2.load_from_file(file)
+
         RewardNormalizer.state_dict = RewardNormalizer_state_dict
         RewardNormalizer.load_state_dict = RewardNormalizer_load_state_dict
 
