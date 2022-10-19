@@ -295,7 +295,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             tensordict = [next(iter(collector)).to(device)]
         else:
             tensordict = [None]
-        dist.broadcast_object_list(tensordict, src=0, group=group_wm)
+        if world_size > 1:
+            dist.broadcast_object_list(tensordict, src=0, group=group_wm)
         tensordict = tensordict[0]
         if reward_normalizer is not None:
             reward_normalizer.update_reward_stats(tensordict)
