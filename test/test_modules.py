@@ -405,7 +405,6 @@ class TestFunctionalModules:
         module = nn.Transformer(128)
         module.eval()
         fmodule, params, buffers = FunctionalModuleWithBuffers._create_from(module)
-        print(params, buffers)
         x = torch.randn(10, 128)
         torch.testing.assert_close(fmodule(params, buffers, x, x), module(x, x))
 
@@ -436,7 +435,7 @@ class TestPlanner:
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("batch_size", [3, 5])
+@pytest.mark.parametrize("batch_size", [[], [3], [5]])
 class TestDreamerComponents:
     @pytest.mark.parametrize("out_features", [3, 5])
     @pytest.mark.parametrize("temporal_size", [[], [2], [4]])
@@ -444,20 +443,20 @@ class TestDreamerComponents:
         actor = DreamerActor(
             out_features,
         ).to(device)
-        emb = torch.randn(batch_size, *temporal_size, 15, device=device)
-        state = torch.randn(batch_size, *temporal_size, 2, device=device)
+        emb = torch.randn(*batch_size, *temporal_size, 15, device=device)
+        state = torch.randn(*batch_size, *temporal_size, 2, device=device)
         loc, scale = actor(emb, state)
-        assert loc.shape == (batch_size, *temporal_size, out_features)
-        assert scale.shape == (batch_size, *temporal_size, out_features)
+        assert loc.shape == (*batch_size, *temporal_size, out_features)
+        assert scale.shape == (*batch_size, *temporal_size, out_features)
         assert torch.all(scale > 0)
 
     @pytest.mark.parametrize("depth", [32, 64])
     @pytest.mark.parametrize("temporal_size", [[], [2], [4]])
     def test_dreamer_encoder(self, device, temporal_size, batch_size, depth):
         encoder = ObsEncoder(depth=depth).to(device)
-        obs = torch.randn(batch_size, *temporal_size, 3, 64, 64, device=device)
+        obs = torch.randn(*batch_size, *temporal_size, 3, 64, 64, device=device)
         emb = encoder(obs)
-        assert emb.shape == (batch_size, *temporal_size, depth * 8 * 4)
+        assert emb.shape == (*batch_size, *temporal_size, depth * 8 * 4)
 
     @pytest.mark.parametrize("depth", [32, 64])
     @pytest.mark.parametrize("stoch_size", [10, 20])
@@ -467,10 +466,12 @@ class TestDreamerComponents:
         self, device, batch_size, temporal_size, depth, stoch_size, deter_size
     ):
         decoder = ObsDecoder(depth=depth).to(device)
-        stoch_state = torch.randn(batch_size, *temporal_size, stoch_size, device=device)
-        det_state = torch.randn(batch_size, *temporal_size, deter_size, device=device)
+        stoch_state = torch.randn(
+            *batch_size, *temporal_size, stoch_size, device=device
+        )
+        det_state = torch.randn(*batch_size, *temporal_size, deter_size, device=device)
         obs = decoder(stoch_state, det_state)
-        assert obs.shape == (batch_size, *temporal_size, 3, 64, 64)
+        assert obs.shape == (*batch_size, *temporal_size, 3, 64, 64)
 
     @pytest.mark.parametrize("stoch_size", [10, 20])
     @pytest.mark.parametrize("deter_size", [20, 30])
@@ -485,14 +486,14 @@ class TestDreamerComponents:
             rnn_hidden_dim=stoch_size,
             state_dim=deter_size,
         ).to(device)
-        state = torch.randn(batch_size, deter_size, device=device)
-        action = torch.randn(batch_size, action_size, device=device)
-        belief = torch.randn(batch_size, stoch_size, device=device)
+        state = torch.randn(*batch_size, deter_size, device=device)
+        action = torch.randn(*batch_size, action_size, device=device)
+        belief = torch.randn(*batch_size, stoch_size, device=device)
         prior_mean, prior_std, next_state, belief = rssm_prior(state, belief, action)
-        assert prior_mean.shape == (batch_size, deter_size)
-        assert prior_std.shape == (batch_size, deter_size)
-        assert next_state.shape == (batch_size, deter_size)
-        assert belief.shape == (batch_size, stoch_size)
+        assert prior_mean.shape == (*batch_size, deter_size)
+        assert prior_std.shape == (*batch_size, deter_size)
+        assert next_state.shape == (*batch_size, deter_size)
+        assert belief.shape == (*batch_size, stoch_size)
         assert torch.all(prior_std > 0)
 
     @pytest.mark.parametrize("stoch_size", [10, 20])
@@ -502,8 +503,8 @@ class TestDreamerComponents:
             hidden_dim=stoch_size,
             state_dim=deter_size,
         ).to(device)
-        belief = torch.randn(batch_size, stoch_size, device=device)
-        obs_emb = torch.randn(batch_size, 1024, device=device)
+        belief = torch.randn(*batch_size, stoch_size, device=device)
+        obs_emb = torch.randn(*batch_size, 1024, device=device)
         # Init of lazy linears
         _ = rssm_posterior(belief.clone(), obs_emb.clone())
 
@@ -511,9 +512,9 @@ class TestDreamerComponents:
         posterior_mean, posterior_std, next_state = rssm_posterior(
             belief.clone(), obs_emb.clone()
         )
-        assert posterior_mean.shape == (batch_size, deter_size)
-        assert posterior_std.shape == (batch_size, deter_size)
-        assert next_state.shape == (batch_size, deter_size)
+        assert posterior_mean.shape == (*batch_size, deter_size)
+        assert posterior_std.shape == (*batch_size, deter_size)
+        assert next_state.shape == (*batch_size, deter_size)
         assert torch.all(posterior_std > 0)
 
         torch.manual_seed(0)
@@ -567,10 +568,10 @@ class TestDreamerComponents:
             ),
         )
 
-        state = torch.randn(batch_size, temporal_size, deter_size, device=device)
-        belief = torch.randn(batch_size, temporal_size, stoch_size, device=device)
-        action = torch.randn(batch_size, temporal_size, action_size, device=device)
-        obs_emb = torch.randn(batch_size, temporal_size, 1024, device=device)
+        state = torch.randn(*batch_size, temporal_size, deter_size, device=device)
+        belief = torch.randn(*batch_size, temporal_size, stoch_size, device=device)
+        action = torch.randn(*batch_size, temporal_size, action_size, device=device)
+        obs_emb = torch.randn(*batch_size, temporal_size, 1024, device=device)
 
         tensordict = TensorDict(
             {
@@ -580,39 +581,39 @@ class TestDreamerComponents:
                 "next_encoded_latents": obs_emb.clone(),
             },
             device=device,
-            batch_size=torch.Size([batch_size, temporal_size]),
+            batch_size=torch.Size([*batch_size, temporal_size]),
         )
         ## Init of lazy linears
         _ = rssm_rollout(tensordict.clone())
         torch.manual_seed(0)
         rollout = rssm_rollout(tensordict)
         assert rollout["next_prior_mean"].shape == (
-            batch_size,
+            *batch_size,
             temporal_size,
             deter_size,
         )
         assert rollout["next_prior_std"].shape == (
-            batch_size,
+            *batch_size,
             temporal_size,
             deter_size,
         )
-        assert rollout["next_state"].shape == (batch_size, temporal_size, deter_size)
-        assert rollout["next_belief"].shape == (batch_size, temporal_size, stoch_size)
+        assert rollout["next_state"].shape == (*batch_size, temporal_size, deter_size)
+        assert rollout["next_belief"].shape == (*batch_size, temporal_size, stoch_size)
         assert rollout["next_posterior_mean"].shape == (
-            batch_size,
+            *batch_size,
             temporal_size,
             deter_size,
         )
         assert rollout["next_posterior_std"].shape == (
-            batch_size,
+            *batch_size,
             temporal_size,
             deter_size,
         )
         assert torch.all(rollout["next_prior_std"] > 0)
         assert torch.all(rollout["next_posterior_std"] > 0)
 
-        state[:, 1:] = 0
-        belief[:, 1:] = 0
+        state[..., 1:, :] = 0
+        belief[..., 1:, :] = 0
         # Only the first state is used for the prior. The rest are recomputed
 
         tensordict_bis = TensorDict(
@@ -623,14 +624,14 @@ class TestDreamerComponents:
                 "next_encoded_latents": obs_emb.clone(),
             },
             device=device,
-            batch_size=torch.Size([batch_size, temporal_size]),
+            batch_size=torch.Size([*batch_size, temporal_size]),
         )
         torch.manual_seed(0)
         rollout_bis = rssm_rollout(tensordict_bis)
 
         assert torch.allclose(
             rollout["next_prior_mean"], rollout_bis["next_prior_mean"]
-        )
+        ), (rollout["next_prior_mean"] - rollout_bis["next_prior_mean"]).norm()
         assert torch.allclose(rollout["next_prior_std"], rollout_bis["next_prior_std"])
         assert torch.allclose(rollout["next_state"], rollout_bis["next_state"])
         assert torch.allclose(rollout["next_belief"], rollout_bis["next_belief"])

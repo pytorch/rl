@@ -66,5 +66,5 @@ class DreamerEnv(ModelBasedEnvBase):
         if self.obs_decoder is None:
             raise ValueError("No observation decoder provided")
         if compute_latents:
-            tensordict = self(tensordict)
+            tensordict = self.world_model(tensordict)
         return self.obs_decoder(tensordict)

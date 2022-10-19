@@ -1818,9 +1818,7 @@ class TestDreamer:
     @pytest.mark.parametrize("reco_loss", ["l2", "smooth_l1"])
     @pytest.mark.parametrize("reward_loss", ["l2", "smooth_l1"])
     @pytest.mark.parametrize("free_nats", [-1000, 1000])
-    @pytest.mark.parametrize(
-        "delayed_clamp", [False]
-    )  # hard to test its effect indirectly
+    @pytest.mark.parametrize("delayed_clamp", [False, True])
     def test_dreamer_world_model(
         self,
         device,
@@ -1888,6 +1886,27 @@ class TestDreamer:
 
     @pytest.mark.parametrize("imagination_horizon", [3, 5])
     @pytest.mark.parametrize("discount_loss", [True, False])
+    def test_dreamer_env(self, device, imagination_horizon, discount_loss):
+        mb_env = self._create_mb_env(10, 5).to(device)
+        rollout = mb_env.rollout(3)
+        assert rollout.shape == torch.Size([3])
+        # test reconstruction
+        with pytest.raises(ValueError, match="No observation decoder provided"):
+            mb_env.decode_obs(rollout)
+        mb_env.obs_decoder = TensorDictModule(
+            nn.LazyLinear(4, device=device),
+            in_keys=["state"],
+            out_keys=["reco_observation"],
+        )
+        # reconstruct
+        mb_env.decode_obs(rollout)
+        assert "reco_observation" in rollout.keys()
+        # second pass
+        tensordict = mb_env.decode_obs(mb_env.reset(), compute_latents=True)
+        assert "reco_observation" in tensordict.keys()
+
+    @pytest.mark.parametrize("imagination_horizon", [3, 5])
+    @pytest.mark.parametrize("discount_loss", [True, False])
     def test_dreamer_actor(self, device, imagination_horizon, discount_loss):
         tensordict = self._create_actor_data(2, 3, 10, 5).to(device)
         mb_env = self._create_mb_env(10, 5).to(device)
@@ -1924,10 +1943,11 @@ class TestDreamer:
             raise ValueError("Gradients are zero")
         loss_module.zero_grad()
 
-    def test_dreamer_value(self, device):
+    @pytest.mark.parametrize("discount_loss", [True, False])
+    def test_dreamer_value(self, device, discount_loss):
         tensordict = self._create_value_data(2, 3, 10, 5).to(device)
         value_model = self._create_value_model(10, 5).to(device)
-        loss_module = DreamerValueLoss(value_model)
+        loss_module = DreamerValueLoss(value_model, discount_loss=discount_loss)
         loss_td, fake_data = loss_module(tensordict)
         assert loss_td.get("loss_value") is not None
         assert not fake_data.requires_grad
