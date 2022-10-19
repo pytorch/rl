@@ -189,7 +189,9 @@ class TensorDictModule(nn.Module):
         _check_all_str(self.in_keys)
 
         if "_" in in_keys:
-            warnings.warn('key "_" is for ignoring output, it should not be used in input keys')
+            warnings.warn(
+                'key "_" is for ignoring output, it should not be used in input keys'
+            )
 
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")

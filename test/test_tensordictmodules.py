@@ -38,7 +38,7 @@ class TestTDModule:
         tensordict_module = TensorDictModule(
             MultiHeadLinear(5, 4, 3, 2),
             in_keys=["input"],
-            out_keys=["out_1", "out_2", "out_3"]
+            out_keys=["out_1", "out_2", "out_3"],
         )
         td = TensorDict({"input": torch.randn(3, 5)}, batch_size=[3])
         td = tensordict_module(td)
@@ -51,9 +51,7 @@ class TestTDModule:
 
         # Using "_" key to ignore output
         tensordict_module = TensorDictModule(
-            MultiHeadLinear(5, 4, 3, 2),
-            in_keys=["input"],
-            out_keys=["_", "_", "out_3"]
+            MultiHeadLinear(5, 4, 3, 2), in_keys=["input"], out_keys=["_", "_", "out_3"]
         )
         td = TensorDict({"input": torch.randn(3, 5)}, batch_size=[3])
         td = tensordict_module(td)
