@@ -1190,7 +1190,6 @@ def make_dreamer(
         nn.TensorDictModel: Dreamer Actor for the real world space.
 
     """
-
     proof_env_is_none = proof_environment is None
     if proof_env_is_none:
         proof_environment = transformed_env_constructor(

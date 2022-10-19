@@ -17,6 +17,8 @@ from torchrl.modules.tensordict_module import TensorDictModule
 
 
 class DreamerEnv(ModelBasedEnvBase):
+    """Dreamer simulation environment."""
+
     def __init__(
         self,
         world_model: TensorDictModule,
@@ -35,9 +37,7 @@ class DreamerEnv(ModelBasedEnvBase):
         self.belief_shape = belief_shape
 
     def set_specs_from_env(self, env: EnvBase):
-        """
-        Sets the specs of the environment from the specs of the given environment.
-        """
+        """Sets the specs of the environment from the specs of the given environment."""
         super().set_specs_from_env(env)
         # self.observation_spec = CompositeSpec(
         #     next_state=NdUnboundedContinuousTensorSpec(

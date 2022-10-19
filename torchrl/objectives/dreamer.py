@@ -19,7 +19,7 @@ __all__ = ["DreamerModelLoss", "DreamerActorLoss", "DreamerValueLoss"]
 
 
 class DreamerModelLoss(LossModule):
-    """Dreamer Model Loss
+    """Dreamer Model Loss.
 
     Computes the loss of the dreamer world model. The loss is composed of the kl divergence between the prior and posterior of the RSSM,
     the reconstruction loss over the reconstructed observation and the reward loss over the predicted reward.
@@ -129,7 +129,7 @@ class DreamerModelLoss(LossModule):
 
 
 class DreamerActorLoss(LossModule):
-    """Dreamer Actor Loss
+    """Dreamer Actor Loss.
 
     Computes the loss of the dreamer actor. The actor loss is computed as the negative average lambda return.
 
@@ -145,6 +145,7 @@ class DreamerActorLoss(LossModule):
         lmbda (float, optional): the lambda discount factor factor. Default: 0.95.
         discount_loss (bool, optional): if True, the loss is discounted with a
             gamma discount factor. Default: False.
+
     """
 
     def __init__(
@@ -211,7 +212,7 @@ class DreamerActorLoss(LossModule):
 
 
 class DreamerValueLoss(LossModule):
-    """Dreamer Value Loss
+    """Dreamer Value Loss.
 
     Computes the loss of the dreamer value model. The value loss is computed between the predicted value and the lambda target.
 
@@ -223,6 +224,7 @@ class DreamerValueLoss(LossModule):
         gamma (float, optional): the gamma discount factor. Default: 0.99.
         discount_loss (bool, optional): if True, the loss is discounted with a
             gamma discount factor. Default: False.
+
     """
 
     def __init__(
