@@ -89,7 +89,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             print("collecting on ", cfg.collector_devices)
     else:
         world_size = 1
-    
+
     print("world_size: ", world_size)
 
     if world_size > 1:
@@ -293,7 +293,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     scaler2 = GradScaler()
     scaler3 = GradScaler()
     i = 0
-    iter_collector = iter(collector)
+    if rank == 0:
+        iter_collector = iter(collector)
     while True:
         i += 1
         cmpt = 0
