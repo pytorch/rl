@@ -1,0 +1,81 @@
+# This workflow builds the torchrec docs and deploys them to gh-pages.
+name: Generate documentation
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+jobs:
+  build_docs_job:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+         - os: linux.2xlarge
+           python-version: 3.8
+    steps:
+    - name: Check ldd --version
+      run: ldd --version
+    - name: Checkout
+      uses: actions/checkout@v2
+    # Update references
+    - name: Update pip
+      run: |
+        sudo yum update -y
+        sudo yum -y install git python3-pip
+        sudo pip3 install --upgrade pip
+    - name: Setup conda
+      run: |
+        rm -rf $HOME/miniconda
+        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+        bash ~/miniconda.sh -b -p $HOME/miniconda
+    - name: Install gcc
+      shell: bash
+      run: |
+        sudo yum group install -y "Development Tools"
+    - name: setup Path
+      run: |
+        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
+        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
+    - name: create conda env
+      run: |
+        conda create --name build_binary python=${{ matrix.python-version }}
+        conda info
+    - name: check python version no Conda
+      run: |
+        python --version
+    - name: check python version
+      run: |
+        conda run -n build_binary python --version
+    - name: setup Path
+      run: |
+        echo /usr/local/bin >> $GITHUB_PATH
+    - name: Install PyTorch
+      shell: bash
+      run: |
+        conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
+    - name: Install TorchRL
+      run: |
+        conda run -n build_binary python -m pip install -e .
+    - name: Test torchrl installation
+      shell: bash
+      run: |
+        mkdir _tmp
+        cd _tmp
+        conda run -n build_binary \
+          python -c "import torchrl"
+        cd ..
+    - name: Build the docset
+      run: |
+        conda run -n build_binary python -m pip install -r docs/requirements.txt
+        cd ./docs
+        conda run -n build_binary make html
+        cd ..
+    - name: Get output time
+      run: echo "The time was ${{ steps.build.outputs.time }}"
+    - name: Deploy
+      uses: JamesIves/github-pages-deploy-action@releases/v3
+      with:
+          ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: gh-pages # The branch the action should deploy to.
+          FOLDER: docs/build/html # The folder the action should deploy.

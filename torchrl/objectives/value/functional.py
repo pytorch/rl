@@ -17,7 +17,7 @@ __all__ = [
     "td_advantage_estimate",
 ]
 
-from torchrl.objectives.returns.utils import _custom_conv1d, _make_gammas_tensor
+from torchrl.objectives.value.utils import _custom_conv1d, _make_gammas_tensor
 
 
 def generalized_advantage_estimate(

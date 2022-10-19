@@ -20,16 +20,13 @@ from torch import Tensor, nn
 from torchrl.data.tensordict.tensordict import TensorDictBase
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import TensorDictModule
-from torchrl.objectives.returns.functional import (
+from torchrl.objectives.value.functional import (
     vec_generalized_advantage_estimate,
     td_lambda_advantage_estimate,
     vec_td_lambda_advantage_estimate,
 )
+from ..utils import hold_out_net
 from .functional import td_advantage_estimate
-
-__all__ = ["GAE", "TDLambdaEstimate", "TDEstimate"]
-
-from ..costs.utils import hold_out_net
 
 
 class TDEstimate(nn.Module):

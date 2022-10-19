@@ -8,17 +8,15 @@ from time import sleep
 import pytest
 import torch
 from torchrl.trainers.loggers.csv import CSVLogger
-from torchrl.trainers.loggers.mlflow import MLFlowLogger, _has_mlflow, _has_tv
-from torchrl.trainers.loggers.tensorboard import TensorboardLogger, _has_tb
-from torchrl.trainers.loggers.wandb import WandbLogger, _has_wandb
+from torchrl.trainers.loggers.mlflow import _has_mlflow, _has_tv, MLFlowLogger
+from torchrl.trainers.loggers.tensorboard import _has_tb, TensorboardLogger
+from torchrl.trainers.loggers.wandb import _has_wandb, WandbLogger
 
 if _has_tv:
     import torchvision
 
 if _has_tb:
-    from tensorboard.backend.event_processing.event_accumulator import (
-        EventAccumulator,
-    )
+    from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 if _has_mlflow:
     import mlflow

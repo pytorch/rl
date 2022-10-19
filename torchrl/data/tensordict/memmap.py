@@ -410,8 +410,13 @@ class MemmapTensor(object):
             os.unlink(self.filename)
 
     def __eq__(self, other: Any) -> torch.Tensor:
-        if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
-            raise NotImplementedError(f"Unknown type {type(other)}")
+        # if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
+        #     raise NotImplementedError(f"Unknown type {type(other)}")
+        return self._tensor == other
+
+    def __ne__(self, other: Any) -> torch.Tensor:
+        # if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
+        #     raise NotImplementedError(f"Unknown type {type(other)}")
         return self._tensor == other
 
     def __getattr__(self, attr: str) -> Any:

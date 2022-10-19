@@ -25,7 +25,7 @@ import pytorch_sphinx_theme
 import torchrl
 
 project = "torchrl"
-copyright = "2022-presennt, Torch Contributors"
+copyright = "2022, Meta"
 author = "Torch Contributors"
 
 # The version info for the project you're documenting, acts as replacement for
@@ -33,7 +33,7 @@ author = "Torch Contributors"
 # built documents.
 #
 # The short X.Y version.
-version = "main (" + torchrl.__version__ + " )"
+version = "main (" + str(torchrl.__version__) + " )"
 # The full version, including alpha/beta/rc tags.
 # TODO: verify this works as expected
 release = "main"
@@ -55,13 +55,9 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.doctest",
     "sphinx.ext.intersphinx",
-    "sphinx.ext.todo",
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
-    "sphinx.ext.viewcode",
-    "sphinx.ext.duration",
     "sphinx_gallery.gen_gallery",
-    "sphinx_autodoc_typehints",
     "sphinxcontrib.aafig",
 ]
 
@@ -75,6 +71,7 @@ sphinx_gallery_conf = {
 napoleon_use_ivar = True
 napoleon_numpy_docstring = False
 napoleon_google_docstring = True
+autosectionlabel_prefix_document = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -102,15 +99,6 @@ exclude_patterns = []
 html_theme = "pytorch_sphinx_theme"
 html_theme_path = [pytorch_sphinx_theme.get_html_theme_path()]
 
-html_theme_options = {
-    "collapse_navigation": False,
-    "display_version": True,
-    "logo_only": True,
-    "pytorch_project": "docs",
-    "navigation_with_keys": True,
-    "analytics_id": "UA-117752657-2",
-}
-
 # Output file base name for HTML help builder.
 htmlhelp_basename = "PyTorchdoc"
 
@@ -122,28 +110,7 @@ autosummary_generate = True
 html_static_path = ["_static"]
 
 # -- Options for LaTeX output ---------------------------------------------
-latex_elements = {
-    # The paper size ('letterpaper' or 'a4paper').
-    #
-    # 'papersize': 'letterpaper',
-    # The font size ('10pt', '11pt' or '12pt').
-    #
-    # 'pointsize': '10pt',
-    # Additional stuff for the LaTeX preamble.
-    #
-    # 'preamble': '',
-    # Latex figure (float) alignment
-    #
-    # 'figure_align': 'htbp',
-}
-
-
-# Grouping the document tree into LaTeX files. List of tuples
-# (source start file, target name, title,
-#  author, documentclass [howto, manual, or own class]).
-# latex_documents = [
-#     (master_doc, "pytorch.tex", "torchrl Documentation", "Torch Contributors", "manual"),
-# ]
+latex_elements = {}
 
 
 # -- Options for manual page output ---------------------------------------
@@ -178,62 +145,5 @@ intersphinx_mapping = {
     "numpy": ("https://numpy.org/doc/stable/", None),
 }
 
-
-from docutils import nodes
-from sphinx import addnodes
-from sphinx.util.docfields import TypedField
-
-
-def patched_make_field(self, types, domain, items, **kw):
-    # `kw` catches `env=None` needed for newer sphinx while maintaining
-    #  backwards compatibility when passed along further down!
-
-    # type: (list, unicode, tuple) -> nodes.field  # noqa: F821
-    def handle_item(fieldarg, content):
-        par = nodes.paragraph()
-        par += addnodes.literal_strong("", fieldarg)  # Patch: this line added
-        # par.extend(self.make_xrefs(self.rolename, domain, fieldarg,
-        #                           addnodes.literal_strong))
-        if fieldarg in types:
-            par += nodes.Text(" (")
-            # NOTE: using .pop() here to prevent a single type node to be
-            # inserted twice into the doctree, which leads to
-            # inconsistencies later when references are resolved
-            fieldtype = types.pop(fieldarg)
-            if len(fieldtype) == 1 and isinstance(fieldtype[0], nodes.Text):
-                typename = "".join(n.astext() for n in fieldtype)
-                typename = typename.replace("int", "python:int")
-                typename = typename.replace("long", "python:long")
-                typename = typename.replace("float", "python:float")
-                typename = typename.replace("type", "python:type")
-                par.extend(
-                    self.make_xrefs(
-                        self.typerolename,
-                        domain,
-                        typename,
-                        addnodes.literal_emphasis,
-                        **kw
-                    )
-                )
-            else:
-                par += fieldtype
-            par += nodes.Text(")")
-        par += nodes.Text(" -- ")
-        par += content
-        return par
-
-    fieldname = nodes.field_name("", self.label)
-    if len(items) == 1 and self.can_collapse:
-        fieldarg, content = items[0]
-        bodynode = handle_item(fieldarg, content)
-    else:
-        bodynode = self.list_type()
-        for fieldarg, content in items:
-            bodynode += nodes.list_item("", handle_item(fieldarg, content))
-    fieldbody = nodes.field_body("", bodynode)
-    return nodes.field("", fieldname, fieldbody)
-
-
-TypedField.make_field = patched_make_field
 
 aafig_default_options = dict(scale=1.5, aspect=1.0, proportional=True)
