@@ -24,7 +24,7 @@ except ImportError:
 import torch
 from torch import Tensor, nn
 
-from torchrl.data import CompositeSpec, TensorSpec
+from torchrl.data import CompositeSpec
 from torchrl.data.tensordict.tensordict import (
     LazyStackedTensorDict,
     TensorDict,
@@ -137,12 +137,19 @@ class TensorDictSequential(TensorDictModule):
     ):
         in_keys, out_keys = self._compute_in_and_out_keys(modules)
 
+        spec = CompositeSpec()
+        for module in modules:
+            if isinstance(module, TensorDictModule) or hasattr(module, "spec"):
+                spec.update(module.spec)
+            else:
+                spec.update(CompositeSpec(**{key: None for key in module.out_keys}))
         super().__init__(
-            spec=None,
+            spec=spec,
             module=nn.ModuleList(list(modules)),
             in_keys=in_keys,
             out_keys=out_keys,
         )
+
         self.partial_tolerant = partial_tolerant
 
     def _compute_in_and_out_keys(self, modules: List[TensorDictModule]) -> Tuple[List]:
@@ -368,23 +375,6 @@ class TensorDictSequential(TensorDictModule):
 
     def __delitem__(self, index: Union[int, slice]) -> None:
         self.module.__delitem__(idx=index)
-
-    @property
-    def spec(self):
-        kwargs = {}
-        for layer in self.module:
-            out_key = layer.out_keys[0]
-            spec = layer.spec
-            if spec is not None and not isinstance(spec, TensorSpec):
-                raise RuntimeError(
-                    f"TensorDictSequential.spec requires all specs to be valid TensorSpec objects. Got "
-                    f"{type(layer.spec)}"
-                )
-            if isinstance(spec, CompositeSpec):
-                kwargs.update(spec._specs)
-            else:
-                kwargs[out_key] = spec
-        return CompositeSpec(**kwargs)
 
     def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
         """

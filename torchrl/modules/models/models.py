@@ -168,7 +168,7 @@ class MLP(nn.Sequential):
         device: Optional[DEVICE_TYPING] = None,
     ):
         if out_features is None:
-            raise ValueError("out_feature must be specified for MLP.")
+            raise ValueError("out_features must be specified for MLP.")
 
         default_num_cells = 32
         if num_cells is None:

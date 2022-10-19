@@ -4,7 +4,7 @@ API Reference
 .. toctree::
     :maxdepth: 1
 
-    agents
+    trainers
     collectors
     data
     envs
