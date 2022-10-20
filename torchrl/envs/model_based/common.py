@@ -28,56 +28,56 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
     This is a base class for other environments and it should not be used directly.
 
     Example:
-    >>> import torch
-    >>> from torchrl.data import TensorDict, CompositeSpec, NdUnboundedContinuousTensorSpec
-    >>> class MyMBEnv(ModelBasedEnvBase):
-    ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
-    ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
-    ...         self.observation_spec = CompositeSpec(
-    ...             next_hidden_observation=NdUnboundedContinuousTensorSpec((4,))
-    ...         )
-    ...         self.input_spec = CompositeSpec(
-    ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
-    ...             action=NdUnboundedContinuousTensorSpec((1,)),
-    ...         )
-    ...         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
-    ...
-    ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
-    ...         tensordict = TensorDict({},
-    ...             batch_size=self.batch_size,
-    ...             device=self.device,
-    ...         )
-    ...         tensordict = tensordict.update(self.input_spec.rand(self.batch_size))
-    ...         tensordict = tensordict.update(self.observation_spec.rand(self.batch_size))
-    ...         return tensordict
-    >>> # This environment is used as follows:
-    >>> from torchrl.modules import MLP, WorldModelWrapper
-    >>> import torch.nn as nn
-    >>> world_model = WorldModelWrapper(
-    ...     TensorDictModule(
-    ...         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
-    ...         in_keys=["hidden_observation", "action"],
-    ...         out_keys=["next_hidden_observation"],
-    ...     ),
-    ...     TensorDictModule(
-    ...         nn.Linear(4, 1),
-    ...         in_keys=["hidden_observation"],
-    ...         out_keys=["reward"],
-    ...     ),
-    ... )
-    >>> env = MyMBEnv(world_model)
-    >>> tensordict = env.rollout(max_steps=10)
-    >>> print(tensordict)
-    TensorDict(
-        fields={
-            action: Tensor(torch.Size([10, 1]), dtype=torch.float32),
-            done: Tensor(torch.Size([10, 1]), dtype=torch.bool),
-            hidden_observation: Tensor(torch.Size([10, 4]), dtype=torch.float32),
-            next_hidden_observation: Tensor(torch.Size([10, 4]), dtype=torch.float32),
-            reward: Tensor(torch.Size([10, 1]), dtype=torch.float32)},
-        batch_size=torch.Size([10]),
-        device=cpu,
-        is_shared=False)
+        >>> import torch
+        >>> from torchrl.data import TensorDict, CompositeSpec, NdUnboundedContinuousTensorSpec
+        >>> class MyMBEnv(ModelBasedEnvBase):
+        ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
+        ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
+        ...         self.observation_spec = CompositeSpec(
+        ...             next_hidden_observation=NdUnboundedContinuousTensorSpec((4,))
+        ...         )
+        ...         self.input_spec = CompositeSpec(
+        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
+        ...             action=NdUnboundedContinuousTensorSpec((1,)),
+        ...         )
+        ...         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+        ...
+        ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
+        ...         tensordict = TensorDict({},
+        ...             batch_size=self.batch_size,
+        ...             device=self.device,
+        ...         )
+        ...         tensordict = tensordict.update(self.input_spec.rand(self.batch_size))
+        ...         tensordict = tensordict.update(self.observation_spec.rand(self.batch_size))
+        ...         return tensordict
+        >>> # This environment is used as follows:
+        >>> from torchrl.modules import MLP, WorldModelWrapper
+        >>> import torch.nn as nn
+        >>> world_model = WorldModelWrapper(
+        ...     TensorDictModule(
+        ...         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
+        ...         in_keys=["hidden_observation", "action"],
+        ...         out_keys=["next_hidden_observation"],
+        ...     ),
+        ...     TensorDictModule(
+        ...         nn.Linear(4, 1),
+        ...         in_keys=["hidden_observation"],
+        ...         out_keys=["reward"],
+        ...     ),
+        ... )
+        >>> env = MyMBEnv(world_model)
+        >>> tensordict = env.rollout(max_steps=10)
+        >>> print(tensordict)
+        TensorDict(
+            fields={
+                action: Tensor(torch.Size([10, 1]), dtype=torch.float32),
+                done: Tensor(torch.Size([10, 1]), dtype=torch.bool),
+                hidden_observation: Tensor(torch.Size([10, 4]), dtype=torch.float32),
+                next_hidden_observation: Tensor(torch.Size([10, 4]), dtype=torch.float32),
+                reward: Tensor(torch.Size([10, 1]), dtype=torch.float32)},
+            batch_size=torch.Size([10]),
+            device=cpu,
+            is_shared=False)
 
 
     Properties:
@@ -87,8 +87,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         - input_spec (CompositeSpec): sampling spec of the inputs;
         - batch_size (torch.Size): batch_size to be used by the env. If not set, the env accept tensordicts of all batch sizes.
         - device (torch.device): device where the env input and output are expected to live
-        - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the
-            last reset
+        - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the last reset
 
     Args:
         world_model (nn.Module): model that generates world states and its corresponding rewards;

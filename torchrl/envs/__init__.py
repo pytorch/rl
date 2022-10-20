@@ -8,3 +8,4 @@ from .vec_env import *
 from .transforms import *
 from .env_creator import *
 from .gym_like import *
+from .model_based import *

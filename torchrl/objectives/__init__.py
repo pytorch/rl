@@ -6,6 +6,7 @@
 from .common import LossModule
 from .ddpg import DDPGLoss
 from .dqn import DQNLoss, DistributionalDQNLoss
+from .dreamer import DreamerValueLoss, DreamerActorLoss, DreamerModelLoss
 from .ppo import PPOLoss, ClipPPOLoss, KLPENPPOLoss
 from .redq import REDQLoss
 from .sac import SACLoss

@@ -52,6 +52,37 @@ Models
     DdpgMlpActor
     DdpgMlpQNet
     LSTMNet
+    DreamerActor
+    ObsEncoder
+    ObsDecoder
+    RSSMPrior
+    RSSMPosterior
+
+
+Exploration
+-----------
+.. currentmodule:: torchrl.modules
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    NoisyLinear
+    NoisyLazyLinear
+    reset_noise
+
+
+Planners
+--------
+.. currentmodule:: torchrl.modules
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    CEMPlanner
+    MPCPlannerBase
+
 
 Distributions
 -------------
@@ -64,3 +95,16 @@ Distributions
     TruncatedNormal
     TanhDelta
     OneHotCategorical
+
+Utils
+-----
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    mappings
+    inv_softplus
+    biased_softplus
+    SqueezeLayer
+    Squeeze2dLayer
