@@ -25,6 +25,7 @@ from scipy.stats import chisquare
 from torch import nn
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
+    DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
     OneHotDiscreteTensorSpec,
@@ -891,9 +892,10 @@ class TestParallel:
 
 
 class TestSpec:
-    def test_discrete_action_spec_reconstruct(self):
+    @pytest.mark.parametrize("action_spec_cls", [OneHotDiscreteTensorSpec, DiscreteTensorSpec])
+    def test_discrete_action_spec_reconstruct(self, action_spec_cls):
         torch.manual_seed(0)
-        action_spec = OneHotDiscreteTensorSpec(10)
+        action_spec = action_spec_cls(10)
 
         actions_tensors = [action_spec.rand() for _ in range(10)]
         actions_numpy = [action_spec.to_numpy(a) for a in actions_tensors]
@@ -928,13 +930,27 @@ class TestSpec:
         actions_numpy_2 = [action_spec.to_numpy(a) for a in actions_tensors]
         assert all([(a1 == a2).all() for a1, a2 in zip(actions_numpy, actions_numpy_2)])
 
-    def test_discrete_action_spec_rand(self):
+    def test_one_hot_discrete_action_spec_rand(self):
         torch.manual_seed(0)
         action_spec = OneHotDiscreteTensorSpec(10)
 
         sample = torch.stack([action_spec.rand() for _ in range(10000)], 0)
 
         sample_list = sample.argmax(-1)
+        sample_list = list([sum(sample_list == i).item() for i in range(10)])
+        assert chisquare(sample_list).pvalue > 0.1
+
+        sample = action_spec.to_numpy(sample)
+        sample = [sum(sample == i) for i in range(10)]
+        assert chisquare(sample).pvalue > 0.1
+        
+    def test_categorical_action_spec_rand(self):
+        torch.manual_seed(0)
+        action_spec = DiscreteTensorSpec(10)
+
+        sample = torch.stack([action_spec.rand() for _ in range(10000)], 0)
+
+        sample_list = sample[:, 0]
         sample_list = list([sum(sample_list == i).item() for i in range(10)])
         assert chisquare(sample_list).pvalue > 0.1
 

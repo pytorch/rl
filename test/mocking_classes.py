@@ -11,6 +11,7 @@ from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
     CompositeSpec,
+    DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
     NdUnboundedContinuousTensorSpec,
@@ -24,6 +25,7 @@ from torchrl.envs.model_based.common import ModelBasedEnvBase
 spec_dict = {
     "bounded": BoundedTensorSpec,
     "one_hot": OneHotDiscreteTensorSpec,
+    "categorical": DiscreteTensorSpec,
     "unbounded": UnboundedContinuousTensorSpec,
     "ndbounded": NdBoundedTensorSpec,
     "ndunbounded": NdUnboundedContinuousTensorSpec,
@@ -35,6 +37,7 @@ spec_dict = {
 default_spec_kwargs = {
     BoundedTensorSpec: {"minimum": -1.0, "maximum": 1.0},
     OneHotDiscreteTensorSpec: {"n": 7},
+    DiscreteTensorSpec: {"n": 7},
     UnboundedContinuousTensorSpec: {},
     NdBoundedTensorSpec: {"minimum": -torch.ones(4), "maxmimum": torch.ones(4)},
     NdUnboundedContinuousTensorSpec: {
