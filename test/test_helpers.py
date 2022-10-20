@@ -558,7 +558,6 @@ def test_dreamer_make(device, tanh_loc, exploration):
         world_model, model_based_env, actor_model, value_model, policy = model
         out = world_model(proof_environment.rollout(3))
         expected_keys = {
-            "_",
             "action",
             "belief",
             "done",
@@ -581,7 +580,6 @@ def test_dreamer_make(device, tanh_loc, exploration):
 
         simulated_data = model_based_env.rollout(3)
         expected_keys = {
-            "_",
             "action",
             "belief",
             "done",
