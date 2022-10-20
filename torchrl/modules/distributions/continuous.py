@@ -101,7 +101,7 @@ class SafeTanhTransform(D.TanhTransform):
 
 
 class NormalParamWrapper(nn.Module):
-    """A wrapper for normal distirbution parameters.
+    """A wrapper for normal distribution parameters.
 
     Args:
         operator (nn.Module): operator whose output will be transformed_in in location and scale parameters
