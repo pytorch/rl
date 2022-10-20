@@ -79,7 +79,7 @@ class TestTDModule:
         }
 
         # warning due to "_" in spec keys
-        with pytest.warns():
+        with pytest.warns(UserWarning, match='got a spec with key "_"'):
             tensordict_module = TensorDictModule(
                 MultiHeadLinear(5, 4, 3),
                 in_keys=["input"],
@@ -837,11 +837,11 @@ class TestTDModule:
 
 class TestTDSequence:
     def test_in_key_warning(self):
-        with pytest.warns():
+        with pytest.warns(UserWarning, match='key "_" is for ignoring output'):
             tensordict_module = TensorDictModule(
                 nn.Linear(3, 4), in_keys=["_"], out_keys=["out1"]
             )
-        with pytest.warns():
+        with pytest.warns(UserWarning, match='key "_" is for ignoring output'):
             tensordict_module = TensorDictModule(
                 nn.Linear(3, 4), in_keys=["_", "key2"], out_keys=["out1"]
             )
