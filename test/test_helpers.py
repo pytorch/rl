@@ -529,7 +529,7 @@ def test_dreamer_make(device, tanh_loc, exploration):
     sys.path.append(os.path.dirname(__file__) + "/../examples/dreamer/")
     from dreamer_utils import transformed_env_constructor
 
-    flags = ["from_pixels=True", "catframes=1", f"collector_devices={device}"]
+    flags = ["from_pixels=True", "catframes=1", f"+collector_devices={device}"]
 
     config_fields = [
         (config_field.name, config_field.type, config_field)
@@ -580,7 +580,6 @@ def test_dreamer_make(device, tanh_loc, exploration):
         assert set(out.keys()) == expected_keys
 
         simulated_data = model_based_env.rollout(3)
-        print(simulated_data.keys())
         expected_keys = {
             "_",
             "action",
