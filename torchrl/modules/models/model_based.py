@@ -87,7 +87,7 @@ class ObsEncoder(nn.Module):
         self,
         conv_depth=32,
         state_obs_hidden_dim=32,
-        r3m_hidden_dim=128,
+        r3m_hidden_dim=512,
         use_pixels=True,
         use_r3m=False,
         use_states=False,
