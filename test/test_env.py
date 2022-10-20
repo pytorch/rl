@@ -892,7 +892,9 @@ class TestParallel:
 
 
 class TestSpec:
-    @pytest.mark.parametrize("action_spec_cls", [OneHotDiscreteTensorSpec, DiscreteTensorSpec])
+    @pytest.mark.parametrize(
+        "action_spec_cls", [OneHotDiscreteTensorSpec, DiscreteTensorSpec]
+    )
     def test_discrete_action_spec_reconstruct(self, action_spec_cls):
         torch.manual_seed(0)
         action_spec = action_spec_cls(10)
@@ -943,7 +945,7 @@ class TestSpec:
         sample = action_spec.to_numpy(sample)
         sample = [sum(sample == i) for i in range(10)]
         assert chisquare(sample).pvalue > 0.1
-        
+
     def test_categorical_action_spec_rand(self):
         torch.manual_seed(0)
         action_spec = DiscreteTensorSpec(10)

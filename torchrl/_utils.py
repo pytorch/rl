@@ -121,11 +121,12 @@ def prod(sequence):
 
 
 def get_binary_env_var(key):
-    """Parses and returns the binary enironment variable. If not present in environment,
-    it is considered False.
+    """Parses and returns the binary enironment variable value.
+
+    If not present in environment, it is considered `False`.
 
     Args:
-        key (str): _description_
+        key (str): name of the environment variable.
     """
     val = os.environ.get(key, False)
     if val in ("0", "False", False):

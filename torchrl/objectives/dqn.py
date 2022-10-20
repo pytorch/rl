@@ -5,13 +5,13 @@
 
 import torch
 
+from torchrl._utils import get_binary_env_var
 from torchrl.data import TensorDict
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import (
     DistributionalQValueActor,
     QValueActor,
 )
-from torchrl._utils import get_binary_env_var
 from ..data.tensordict.tensordict import TensorDictBase
 from .common import LossModule
 from .utils import distance_loss, next_state_value
@@ -209,7 +209,7 @@ class DistributionalDQNLoss(LossModule):
 
         if _CATEGORICAL_ACTION_ENCODING:
             log_ps_a = action_log_softmax[range(batch_size), :, action.squeeze(-1)]
-        else:    
+        else:
             action_expand = action.unsqueeze(-2).expand_as(action_log_softmax)
             log_ps_a = action_log_softmax.masked_select(action_expand.to(torch.bool))
             log_ps_a = log_ps_a.view(batch_size, atoms)  # log p(s_t, a_t; θonline)
@@ -222,7 +222,7 @@ class DistributionalDQNLoss(LossModule):
                 params=self.value_network_params,
                 buffers=self.value_network_buffers,
             )  # Probabilities p(s_t+n, ·; θonline)
-            
+
             next_td_action = next_td.get("action")
             if _CATEGORICAL_ACTION_ENCODING:
                 argmax_indices_ns = next_td_action.squeeze(-1)

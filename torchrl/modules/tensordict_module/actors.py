@@ -262,7 +262,7 @@ class QValueHook:
         }
         self.action_value_func_mapping = {
             "categorical": self._categorical_action_value,
-        }        
+        }
         if action_space not in self.action_func_mapping:
             raise ValueError(
                 f"action_space must be one of {list(self.action_func_mapping.keys())}"
@@ -275,7 +275,9 @@ class QValueHook:
             values = values[0]
         action = self.action_func_mapping[self.action_space](values)
 
-        action_value_func = self.action_value_func_mapping.get(self.action_space, self._default_action_value)
+        action_value_func = self.action_value_func_mapping.get(
+            self.action_space, self._default_action_value
+        )
         chosen_action_value = action_value_func(values, action)
         return action, values, chosen_action_value
 
@@ -303,13 +305,17 @@ class QValueHook:
     @staticmethod
     def _binary(value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
-    
+
     @staticmethod
-    def _default_action_value(values: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+    def _default_action_value(
+        values: torch.Tensor, action: torch.Tensor
+    ) -> torch.Tensor:
         return (action * values).sum(-1, True)
 
     @staticmethod
-    def _categorical_action_value(values: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+    def _categorical_action_value(
+        values: torch.Tensor, action: torch.Tensor
+    ) -> torch.Tensor:
         if len(values.shape) == 1:
             return values[action].unsqueeze(-1)
         batch_size = values.size(0)
@@ -377,7 +383,7 @@ class DistributionalQValueHook(QValueHook):
             "one_hot": self._one_hot,
             "mult_one_hot": self._mult_one_hot,
             "binary": self._binary,
-            "categorical": self._categorical
+            "categorical": self._categorical,
         }
         if action_space not in self.action_func_mapping:
             raise ValueError(

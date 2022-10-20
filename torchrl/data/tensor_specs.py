@@ -1034,7 +1034,9 @@ class DiscreteTensorSpec(TensorSpec):
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
             shape = torch.Size([])
-        return (torch.rand(*shape, *self.shape, device=self.device) * self.space.n).to(torch.long)
+        return (torch.rand(*shape, *self.shape, device=self.device) * self.space.n).to(
+            torch.long
+        )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         return torch.round(val).clamp_(min=0, max=self.space.n - 1)

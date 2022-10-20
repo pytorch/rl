@@ -9,6 +9,7 @@ from typing import Optional, Sequence
 import torch
 from torch import nn, distributions as d
 
+from torchrl._utils import get_binary_env_var
 from torchrl.data import DEVICE_TYPING, CompositeSpec, NdUnboundedContinuousTensorSpec
 from torchrl.envs import TransformedEnv, TensorDictPrimer
 from torchrl.envs.common import EnvBase
@@ -66,7 +67,6 @@ from torchrl.modules.tensordict_module.world_models import (
     WorldModelWrapper,
 )
 from torchrl.trainers.helpers import transformed_env_constructor
-from torchrl._utils import get_binary_env_var
 
 DISTRIBUTIONS = {
     "delta": Delta,
