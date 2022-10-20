@@ -27,8 +27,7 @@ from torchrl.data.tensordict.tensordict import TensorDictBase
 
 
 class EGreedyWrapper(TensorDictModuleWrapper):
-    """
-    Epsilon-Greedy PO wrapper.
+    """Epsilon-Greedy PO wrapper.
 
     Args:
         policy (TensorDictModule): a deterministic policy.
@@ -96,6 +95,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
 
     def step(self, frames: int = 1) -> None:
         """A step of epsilon decay.
+
         After self.annealing_num_steps, this function is a no-op.
 
         Args:
@@ -135,8 +135,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
 
 
 class AdditiveGaussianWrapper(TensorDictModuleWrapper):
-    """
-    Additive Gaussian PO wrapper.
+    """Additive Gaussian PO wrapper.
 
     Args:
         policy (TensorDictModule): a policy.
@@ -145,7 +144,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         sigma_end (scalar, optional): final epsilon value.
             default: 0.1
         annealing_num_steps (int, optional): number of steps it will take for
-            sigma to reach the `sigma_end` value.
+            sigma to reach the :obj:`sigma_end` value.
         action_key (str, optional): if the policy module has more than one output key,
             its output spec will be of type CompositeSpec. One needs to know where to
             find the action spec.
@@ -189,6 +188,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
 
     def step(self, frames: int = 1) -> None:
         """A step of sigma decay.
+
         After self.annealing_num_steps, this function is a no-op.
 
         Args:
@@ -230,9 +230,9 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
 
 
 class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
-    """
-    Ornstein-Uhlenbeck exploration policy wrapper as presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING",
-    https://arxiv.org/pdf/1509.02971.pdf.
+    """Ornstein-Uhlenbeck exploration policy wrapper.
+
+    Presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf.
 
     The OU exploration is to be used with continuous control policies and introduces a auto-correlated exploration
     noise. This enables a sort of 'structured' exploration.
@@ -242,7 +242,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         Sigma equation:
             current_sigma = (-(sigma - sigma_min) / (n_steps_annealing) * n_steps + sigma).clamp_min(sigma_min)
 
-    To keep track of the steps and noise from sample to sample, an `"ou_prev_noise{id}"` and `"ou_steps{id}"` keys
+    To keep track of the steps and noise from sample to sample, an :obj:`"ou_prev_noise{id}"` and :obj:`"ou_steps{id}"` keys
     will be written in the input/output tensordict. It is expected that the tensordict will be zeroed at reset,
     indicating that a new trajectory is being collected. If not, and is the same tensordict is used for consecutive
     trajectories, the step count will keep on increasing across rollouts. Note that the collector classes take care of
@@ -273,7 +273,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         key (str): key of the action to be modified.
             default: "action"
         safe (bool): if True, actions that are out of bounds given the action specs will be projected in the space
-            given the `TensorSpec.project` heuristic.
+            given the :obj:`TensorSpec.project` heuristic.
             default: True
 
     Examples:

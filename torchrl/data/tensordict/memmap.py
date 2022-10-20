@@ -30,7 +30,7 @@ EllipsisType = type(Ellipsis)
 
 
 def implements_for_memmap(torch_function) -> Callable:
-    """Register a torch function override for ScalarTensor"""
+    """Register a torch function override for ScalarTensor."""
 
     @functools.wraps(torch_function)
     def decorator(func):
@@ -75,7 +75,7 @@ class MemmapTensor(object):
             created from torch.Tensor objects. Default is "cpu".
         dtype (torch.dtype, optional): dtype of the loaded tensor.
             This should not be used with MemmapTensors created from torch.Tensor
-            objects. Default is `torch.get_default_dtype()`.
+            objects. Default is :obj:`torch.get_default_dtype()`.
         transfer_ownership (bool, optional): affects the ownership after serialization:
             if True, the current process looses ownership immediately after
             serialization. If False, the current process keeps the ownership
@@ -324,7 +324,7 @@ class MemmapTensor(object):
         return self._numel
 
     def clone(self) -> MemmapTensor:
-        """Clones the MemmapTensor onto another tensor
+        """Clones the MemmapTensor onto another tensor.
 
         Returns:
             a new torch.Tensor with the same data but a new storage.
@@ -359,7 +359,7 @@ class MemmapTensor(object):
         return self._shape
 
     def cpu(self) -> torch.Tensor:
-        """Defines the device of the MemmapTensor as "cpu"
+        """Defines the device of the MemmapTensor as "cpu".
 
         Returns: a MemmapTensor where device has been modified in-place
 
@@ -368,7 +368,7 @@ class MemmapTensor(object):
         return self
 
     def cuda(self) -> torch.Tensor:
-        """Defines the device of the MemmapTensor as "cuda"
+        """Defines the device of the MemmapTensor as "cuda".
 
         Returns: a MemmapTensor where device has been modified in-place
 
@@ -384,8 +384,7 @@ class MemmapTensor(object):
         return self
 
     def set_transfer_ownership(self, value: bool = True) -> MemmapTensor:
-        """Controls whether the ownership will be transferred to another
-        process upon serialization/deserialization
+        """Controls whether the ownership will be transferred to another process upon serialization/deserialization.
 
         Args:
             value (bool): if True, the ownership will be transferred.
@@ -538,7 +537,7 @@ class MemmapTensor(object):
                 tensor will be retrieved, mapped to the
                 desired dtype and cast to a new MemmapTensor.
 
-        Returns:
+        Returns: the same memmap-tensor with the changed device.
 
         """
         if isinstance(dest, (int, str, torch.device)):
@@ -621,5 +620,6 @@ implements_for_memmap(torch.cat)(_cat)
 
 
 def set_transfer_ownership(memmap: MemmapTensor, value: bool = True) -> None:
+    """Changes the transfer_ownership attribute of a MemmapTensor."""
     if isinstance(memmap, MemmapTensor):
         memmap.set_transfer_ownership(value)

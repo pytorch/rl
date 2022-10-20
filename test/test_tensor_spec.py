@@ -384,6 +384,8 @@ class TestComposite:
 
 
 class TestEquality:
+    """Tests spec comparison."""
+
     @staticmethod
     def _ts_make_all_fields_equal(ts_to, ts_from):
         ts_to.shape = ts_from.shape

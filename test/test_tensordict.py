@@ -19,7 +19,7 @@ from torchrl.data.tensordict.tensordict import (
     LazyStackedTensorDict,
     make_tensordict,
     pad,
-    stack as stack_td,
+    _stack as stack_td,
     TensorDictBase,
 )
 from torchrl.data.tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx

@@ -59,33 +59,14 @@ as shape, device, dtype and domain.
     MultOneHotDiscreteTensorSpec
     CompositeSpec
 
-Transforms
-----------
 
-In most cases, the raw output of an environment must be treated before being passed to another object (such as a
-policy or a value operator). To do this, TorchRL provides a set of transforms that aim at reproducing the transform
-logic of `torch.distributions.Transform` and `torchvision.transforms`.
-
+Utils
+-----
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template_noinherit.rst
+    :template: rl_template.rst
 
-    Transform
-    TransformedEnv
-    Compose
-    CatTensors
-    CatFrames
-    RewardClipping
-    Resize
-    GrayScale
-    ToTensorImage
-    ObservationNorm
-    RewardScaling
-    ObservationTransform
-    FiniteTensorDictCheck
-    DoubleToFloat
-    NoopResetEnv
-    BinerizeReward
-    PinMemoryTransform
-    VecNorm
+    utils.expand_as_right
+    utils.expand_right
+    MultiStep
