@@ -9,13 +9,16 @@ from typing import Optional, Sequence
 import torch
 from torch import nn, distributions as d
 
-from torchrl.data import DEVICE_TYPING, CompositeSpec
+from torchrl.data import DEVICE_TYPING, CompositeSpec, NdUnboundedContinuousTensorSpec
+from torchrl.envs import TransformedEnv, TensorDictPrimer
 from torchrl.envs.common import EnvBase
+from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     ActorValueOperator,
     NoisyLinear,
     TensorDictModule,
+    ProbabilisticTensorDictModule,
     NormalParamWrapper,
     TensorDictSequential,
 )
@@ -30,6 +33,14 @@ from torchrl.modules.distributions.continuous import (
     SafeTanhTransform,
 )
 from torchrl.modules.models.exploration import LazygSDEModule
+from torchrl.modules.models.model_based import (
+    DreamerActor,
+    ObsEncoder,
+    ObsDecoder,
+    RSSMPrior,
+    RSSMPosterior,
+    RSSMRollout,
+)
 from torchrl.modules.models.models import (
     ConvNet,
     DdpgCnnActor,
@@ -51,6 +62,10 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
     ProbabilisticActor,
 )
+from torchrl.modules.tensordict_module.world_models import (
+    WorldModelWrapper,
+)
+from torchrl.trainers.helpers import transformed_env_constructor
 
 DISTRIBUTIONS = {
     "delta": Delta,
@@ -71,6 +86,7 @@ __all__ = [
     "make_ppo_model",
     "make_sac_model",
     "make_redq_model",
+    "make_dreamer",
 ]
 
 
@@ -1139,6 +1155,294 @@ def make_redq_model(
             net(td)
     del td
     return model
+
+
+def make_dreamer(
+    cfg: "DictConfig",  # noqa: F821
+    proof_environment: EnvBase = None,
+    device: DEVICE_TYPING = "cpu",
+    action_key: str = "action",
+    value_key: str = "state_value",
+    use_decoder_in_env: bool = False,
+    stats: Optional[dict] = None,
+) -> nn.ModuleList:
+    """Create Dreamer components.
+
+    Args:
+        cfg (DictConfig): Config object.
+        proof_environment (EnvBase): Environment to initialize the model.
+        device (DEVICE_TYPING, optional): Device to use.
+            Defaults to "cpu".
+        action_key (str, optional): Key to use for the action.
+            Defaults to "action".
+        value_key (str, optional): Key to use for the value.
+            Defaults to "state_value".
+        use_decoder_in_env (bool, optional): Whether to use the decoder in the model based dreamer env.
+            Defaults to False.
+        stats (Optional[dict], optional): Stats to use for normalization.
+            Defaults to None.
+
+    Returns:
+        nn.TensorDictModel: Dreamer World model.
+        nn.TensorDictModel: Dreamer Model based environnement.
+        nn.TensorDictModel: Dreamer Actor the world model space.
+        nn.TensorDictModel: Dreamer Value model.
+        nn.TensorDictModel: Dreamer Actor for the real world space.
+
+    """
+    proof_env_is_none = proof_environment is None
+    if proof_env_is_none:
+        proof_environment = transformed_env_constructor(
+            cfg=cfg, use_env_creator=False, stats=stats
+        )()
+
+    # Modules
+    obs_encoder = ObsEncoder()
+    obs_decoder = ObsDecoder()
+
+    rssm_prior = RSSMPrior(
+        hidden_dim=cfg.rssm_hidden_dim,
+        rnn_hidden_dim=cfg.rssm_hidden_dim,
+        state_dim=cfg.state_dim,
+        action_spec=proof_environment.action_spec,
+    )
+    rssm_posterior = RSSMPosterior(
+        hidden_dim=cfg.rssm_hidden_dim, state_dim=cfg.state_dim
+    )
+    reward_module = MLP(
+        out_features=1, depth=2, num_cells=cfg.mlp_num_units, activation_class=nn.ELU
+    )
+
+    # World Model and reward model
+    rssm_rollout = RSSMRollout(
+        TensorDictModule(
+            rssm_prior,
+            in_keys=["state", "belief", "action"],
+            out_keys=[
+                "next_prior_mean",
+                "next_prior_std",
+                "_",
+                "next_belief",
+            ],
+        ),
+        TensorDictModule(
+            rssm_posterior,
+            in_keys=["next_belief", "next_encoded_latents"],
+            out_keys=[
+                "next_posterior_mean",
+                "next_posterior_std",
+                "next_state",
+            ],
+        ),
+    )
+
+    transition_model = TensorDictSequential(
+        TensorDictModule(
+            obs_encoder,
+            in_keys=["next_pixels"],
+            out_keys=["next_encoded_latents"],
+        ),
+        rssm_rollout,
+        TensorDictModule(
+            obs_decoder,
+            in_keys=["next_state", "next_belief"],
+            out_keys=["next_reco_pixels"],
+        ),
+    )
+    reward_model = TensorDictModule(
+        reward_module,
+        in_keys=["next_state", "next_belief"],
+        out_keys=["reward"],
+    )
+    world_model = WorldModelWrapper(
+        transition_model,
+        reward_model,
+    )
+
+    # actor for simulator: interacts with states ~ prior
+    actor_module = DreamerActor(
+        out_features=proof_environment.action_spec.shape[0],
+        depth=3,
+        num_cells=cfg.mlp_num_units,
+        activation_class=nn.ELU,
+    )
+    actor_simulator = ProbabilisticTensorDictModule(
+        TensorDictModule(
+            actor_module,
+            in_keys=["state", "belief"],
+            out_keys=["loc", "scale"],
+        ),
+        dist_param_keys=["loc", "scale"],
+        out_key_sample=[action_key],
+        default_interaction_mode="random",
+        distribution_class=TanhNormal,
+        spec=CompositeSpec(
+            **{
+                action_key: proof_environment.action_spec,
+                "loc": NdUnboundedContinuousTensorSpec(
+                    proof_environment.action_spec.shape,
+                    device=proof_environment.action_spec.device,
+                ),
+                "scale": NdUnboundedContinuousTensorSpec(
+                    proof_environment.action_spec.shape,
+                    device=proof_environment.action_spec.device,
+                ),
+            }
+        ),
+    )
+    # actor for real world: interacts with states ~ posterior
+    # Out actor differs from the original paper where first they compute prior and posterior and then act on it
+    # but we found that this approach worked better.
+    actor_realworld = TensorDictSequential(
+        TensorDictModule(
+            obs_encoder,
+            in_keys=["pixels"],
+            out_keys=["encoded_latents"],
+        ),
+        TensorDictModule(
+            rssm_posterior,
+            in_keys=["belief", "encoded_latents"],
+            out_keys=[
+                "_",
+                "_",
+                "state",
+            ],
+        ),
+        ProbabilisticTensorDictModule(
+            TensorDictModule(
+                actor_module,
+                in_keys=["state", "belief"],
+                out_keys=["loc", "scale"],
+            ),
+            dist_param_keys=["loc", "scale"],
+            out_key_sample=[action_key],
+            default_interaction_mode="random",
+            distribution_class=TanhNormal,
+            spec=CompositeSpec(
+                **{
+                    action_key: proof_environment.action_spec.to("cpu"),
+                    "loc": NdUnboundedContinuousTensorSpec(
+                        proof_environment.action_spec.shape,
+                    ),
+                    "scale": NdUnboundedContinuousTensorSpec(
+                        proof_environment.action_spec.shape,
+                    ),
+                }
+            ),
+        ),
+        TensorDictModule(
+            rssm_prior,
+            in_keys=["state", "belief", action_key],
+            out_keys=[
+                "_",
+                "_",
+                "_",  # we don't need the prior state
+                "next_belief",
+            ],
+        ),
+    )
+    value_model = TensorDictModule(
+        MLP(
+            out_features=1,
+            depth=3,
+            num_cells=cfg.mlp_num_units,
+            activation_class=nn.ELU,
+        ),
+        in_keys=["state", "belief"],
+        out_keys=[value_key],
+    )
+
+    # MB environment
+    if use_decoder_in_env:
+        mb_env_obs_decoder = TensorDictModule(
+            obs_decoder,
+            in_keys=["next_state", "next_belief"],
+            out_keys=["next_reco_pixels"],
+        )
+    else:
+        mb_env_obs_decoder = None
+
+    transition_model = TensorDictSequential(
+        TensorDictModule(
+            rssm_prior,
+            in_keys=["state", "belief", "action"],
+            out_keys=[
+                "_",
+                "_",
+                "next_state",
+                "next_belief",
+            ],
+        ),
+    )
+    reward_model = TensorDictModule(
+        reward_module,
+        in_keys=["next_state", "next_belief"],
+        out_keys=["reward"],
+    )
+    model_based_env = DreamerEnv(
+        world_model=WorldModelWrapper(
+            transition_model,
+            reward_model,
+        ),
+        prior_shape=torch.Size([cfg.state_dim]),
+        belief_shape=torch.Size([cfg.rssm_hidden_dim]),
+        obs_decoder=mb_env_obs_decoder,
+    )
+
+    model_based_env.set_specs_from_env(proof_environment)
+    model_based_env = TransformedEnv(model_based_env)
+    default_dict = {
+        "next_state": NdUnboundedContinuousTensorSpec(cfg.state_dim),
+        "next_belief": NdUnboundedContinuousTensorSpec(cfg.rssm_hidden_dim),
+        # "action": proof_environment.action_spec,
+    }
+    model_based_env.append_transform(
+        TensorDictPrimer(random=False, default_value=0, **default_dict)
+    )
+
+    world_model = world_model.to(device)
+
+    # init nets
+    with torch.no_grad(), set_exploration_mode("random"):
+        tensordict = proof_environment.rollout(4)
+        tensordict = tensordict.to_tensordict().to(device)
+        tensordict = tensordict.to(device)
+        world_model(tensordict)
+    model_based_env = model_based_env.to(device)
+
+    actor_simulator = actor_simulator.to(device)
+    value_model = value_model.to(device)
+
+    with torch.no_grad(), set_exploration_mode("random"):
+        tensordict = model_based_env.rollout(4)
+        tensordict = tensordict.to(device)
+        tensordict = actor_simulator(tensordict)
+        value_model(tensordict)
+
+    actor_realworld = actor_realworld.to(device)
+    if proof_env_is_none:
+        proof_environment.close()
+        torch.cuda.empty_cache()
+        del proof_environment
+
+    del tensordict
+    return world_model, model_based_env, actor_simulator, value_model, actor_realworld
+
+
+@dataclass
+class DreamerConfig:
+    batch_length: int = 50
+    state_dim: int = 30
+    rssm_hidden_dim: int = 200
+    mlp_num_units: int = 400
+    grad_clip: int = 100
+    world_model_lr: float = 6e-4
+    actor_value_lr: float = 8e-5
+    imagination_horizon: int = 15
+    model_device: str = ""
+    # Decay of the reward moving averaging
+    exploration: str = "additive_gaussian"
+    # One of "additive_gaussian", "ou_exploration" or ""
 
 
 @dataclass
