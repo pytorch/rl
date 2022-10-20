@@ -1,5 +1,6 @@
 import collections
 import math
+import os
 import time
 
 import numpy as np
@@ -117,3 +118,23 @@ def prod(sequence):
         return math.prod(sequence)
     else:
         return int(np.prod(sequence))
+
+
+def get_binary_env_var(key):
+    """Parses and returns the binary enironment variable. If not present in environment,
+    it is considered False.
+
+    Args:
+        key (str): _description_
+    """
+    val = os.environ.get(key, False)
+    if val in ("0", "False", False):
+        val = False
+    elif val in ("1", "True", True):
+        val = True
+    else:
+        raise ValueError(
+            f"Environment variable {key} should be in 'True', 'False', '0' or '1'. "
+            f"Got {val} instead."
+        )
+    return val

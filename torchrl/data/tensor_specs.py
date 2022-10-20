@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import abc
-import os
 from copy import deepcopy
 from dataclasses import dataclass
 from textwrap import indent
@@ -37,27 +36,20 @@ __all__ = [
     "NdUnboundedDiscreteTensorSpec",
     "BinaryDiscreteTensorSpec",
     "MultOneHotDiscreteTensorSpec",
+    "DiscreteTensorSpec",
     "CompositeSpec",
 ]
 
+from torchrl._utils import get_binary_env_var
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
 
-_CHECK_IMAGES = os.environ.get("CHECK_IMAGES", False)
+_CHECK_IMAGES = get_binary_env_var("CHECK_IMAGES")
 
 DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
-_NO_CHECK_SPEC_ENCODE = os.environ.get("NO_CHECK_SPEC_ENCODE", False)
-if _NO_CHECK_SPEC_ENCODE in ("0", "False", False):
-    _NO_CHECK_SPEC_ENCODE = False
-elif _NO_CHECK_SPEC_ENCODE in ("1", "True", True):
-    _NO_CHECK_SPEC_ENCODE = True
-else:
-    raise NotImplementedError(
-        "NO_CHECK_SPEC_ENCODE should be in 'True', 'False', '0' or '1'. "
-        f"Got {_NO_CHECK_SPEC_ENCODE} instead."
-    )
+_NO_CHECK_SPEC_ENCODE = get_binary_env_var("NO_CHECK_SPEC_ENCODE")
 
 
 def _default_dtype_and_device(
@@ -563,6 +555,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
                 space.register[val] = len(space.register)
             val = space.register[val]
 
+        if (val >= space.n).any():
+            raise AssertionError("Value must be less than action space.")
+
         val = torch.nn.functional.one_hot(val, space.n).to(torch.long)
         return val
 
@@ -995,6 +990,70 @@ class MultOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         vals = self._split(val)
         return torch.cat([super()._project(_val) for _val in vals], -1)
+
+
+class DiscreteTensorSpec(TensorSpec):
+    """A discrete tensor spec.
+
+    An alternative to OneHotTensorSpec for categorical variables in TorchRL. Instead of
+    using multiplication, categorical variables perform indexing which can speed up
+    computation and reduce memory cost for large categorical variables.
+        >>> batch, size = 3, 4
+        >>> action_value = torch.arange(batch*size)
+        >>> action_value = action_value.view(batch, size).to(torch.float)
+        >>> action = torch.argmax(action_value, dim=-1).to(torch.long)
+        >>> chosen_action_value = action_value[range(batch), action]
+        >>> print(chosen_action_value)
+        tensor([ 3.,  7., 11.])
+
+    Args:
+        n (int): number of possible outcomes.
+        shape: (torch.Size, optional): shape of the variable, default is "(1,)".
+        device (str, int or torch.device, optional): device of the tensors.
+        dtype (str or torch.dtype, optional): dtype of the tensors.
+
+    """
+
+    shape: torch.Size
+    space: DiscreteBox
+    device: torch.device = torch.device("cpu")
+    dtype: torch.dtype = torch.float
+    domain: str = ""
+
+    def __init__(
+        self,
+        n: int,
+        shape: Optional[torch.Size] = torch.Size((1,)),
+        device: Optional[DEVICE_TYPING] = None,
+        dtype: Optional[Union[str, torch.dtype]] = torch.long,
+    ):
+        dtype, device = _default_dtype_and_device(dtype, device)
+        space = DiscreteBox(n)
+        super().__init__(shape, space, device, dtype, domain="discrete")
+
+    def rand(self, shape=None) -> torch.Tensor:
+        if shape is None:
+            shape = torch.Size([])
+        return (torch.rand(*shape, *self.shape, device=self.device) * self.space.n).to(torch.long)
+
+    def _project(self, val: torch.Tensor) -> torch.Tensor:
+        return torch.round(val).clamp_(min=0, max=self.space.n - 1)
+
+    def is_in(self, val: torch.Tensor) -> bool:
+        return (0 <= val).all() and (val < self.space.n).all()
+
+    def __eq__(self, other):
+        return (
+            type(self) == type(other)
+            and self.shape == other.shape
+            and self.space == other.space
+            and self.device == other.device
+            and self.dtype == other.dtype
+            and self.domain == other.domain
+        )
+
+    def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
+        return super().to_numpy(val, safe).squeeze(-1)
 
 
 class CompositeSpec(TensorSpec):

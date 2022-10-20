@@ -13,12 +13,14 @@ from packaging import version
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
     CompositeSpec,
+    DiscreteTensorSpec,
     MultOneHotDiscreteTensorSpec,
     NdBoundedTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
+from torchrl._utils import get_binary_env_var
 from ...data.utils import numpy_to_torch_dtype_dict
 from ..gym_like import GymLikeEnv, default_info_dict_reader
 from ..utils import _classproperty
@@ -54,12 +56,15 @@ if _has_gym:
 
 __all__ = ["GymWrapper", "GymEnv"]
 
+_CATEGORICAL_ACTION_ENCODING = get_binary_env_var("CATEGORICAL_ACTION_ENCODING")
+
 
 def _gym_to_torchrl_spec_transform(spec, dtype=None, device="cpu") -> TensorSpec:
     if isinstance(spec, gym.spaces.tuple.Tuple):
         raise NotImplementedError("gym.spaces.tuple.Tuple mapping not yet implemented")
     if isinstance(spec, gym.spaces.discrete.Discrete):
-        return OneHotDiscreteTensorSpec(spec.n, device=device)
+        action_space_cls = DiscreteTensorSpec if _CATEGORICAL_ACTION_ENCODING else OneHotDiscreteTensorSpec
+        return action_space_cls(spec.n, device=device)
     elif isinstance(spec, gym.spaces.multi_binary.MultiBinary):
         return BinaryDiscreteTensorSpec(spec.n, device=device)
     elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):

@@ -66,6 +66,7 @@ from torchrl.modules.tensordict_module.world_models import (
     WorldModelWrapper,
 )
 from torchrl.trainers.helpers import transformed_env_constructor
+from torchrl._utils import get_binary_env_var
 
 DISTRIBUTIONS = {
     "delta": Delta,
@@ -88,6 +89,8 @@ __all__ = [
     "make_redq_model",
     "make_dreamer",
 ]
+
+_CATEGORICAL_ACTION_ENCODING = get_binary_env_var("CATEGORICAL_ACTION_ENCODING")
 
 
 def make_dqn_actor(
@@ -178,6 +181,11 @@ def make_dqn_actor(
     out_features = env_specs["action_spec"].shape[0]
     actor_class = QValueActor
     actor_kwargs = {}
+
+    if _CATEGORICAL_ACTION_ENCODING:
+        actor_kwargs.update({"action_space": "categorical"})
+        out_features = env_specs["action_spec"].space.n
+
     if cfg.distributional:
         if not atoms:
             raise RuntimeError(
