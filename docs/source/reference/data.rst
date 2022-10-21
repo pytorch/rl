@@ -19,6 +19,30 @@ widely used replay buffers:
     TensorDictReplayBuffer
     TensorDictPrioritizedReplayBuffer
 
+Composable Replay Buffers (Prototype)
+-------------------------------------
+
+We also provide a prototyped composable replay buffer.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    .. currentmodule:: torchrl.data.replay_buffers
+
+    torchrl.data.replay_buffers.rb_prototype.ReplayBuffer
+    torchrl.data.replay_buffers.rb_prototype.TensorDictReplayBuffer
+    torchrl.data.replay_buffers.samplers.Sampler
+    torchrl.data.replay_buffers.samplers.RandomSampler
+    torchrl.data.replay_buffers.samplers.PrioritizedSampler
+    torchrl.data.replay_buffers.storages.Storage
+    torchrl.data.replay_buffers.storages.ListStorage
+    torchrl.data.replay_buffers.storages.LazyTensorStorage
+    torchrl.data.replay_buffers.storages.LazyMemmapStorage
+    torchrl.data.replay_buffers.writers.Writer
+    torchrl.data.replay_buffers.writers.RoundRobinWriter
+
+
 
 TensorDict
 ----------
