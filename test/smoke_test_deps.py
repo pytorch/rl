@@ -1,4 +1,5 @@
 import argparse
+import os
 import tempfile
 
 import pytest
@@ -17,6 +18,12 @@ if _has_gym:
 else:
     # placeholders
     PONG_VERSIONED = "ALE/Pong-v5"
+
+_NO_TENSORBOARD = os.environ.get("NO_TENSORBOARD", False)
+if _NO_TENSORBOARD in ("0", "False"):
+    _NO_TENSORBOARD = False
+elif _NO_TENSORBOARD in ("1", "True"):
+    _NO_TENSORBOARD = True
 
 
 def test_dm_control():
@@ -44,6 +51,9 @@ def test_gym():
     env.reset()
 
 
+@pytest.mark.skipif(
+    _NO_TENSORBOARD, "Tensorboard should be ignored as per environment setting."
+)
 def test_tb():
     test_rounds = 100
     while test_rounds > 0:
