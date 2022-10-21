@@ -182,8 +182,13 @@ def _copy(self: List[int]):
 
 
 def infer_size_impl(shape: List[int], numel: int) -> List[int]:
-    # Copy-paste from https://github.com/pytorch/pytorch/blob/35d4fa444b67cbcbe34a862782ddf2d92f5b1ce7/torch/jit/_shape_functions.py
-    # for torch < 1.11
+    """Infers the shape of an expanded tensor whose number of elements is indicated by :obj:`numel`.
+
+    Copied from pytorch for compatibility issues (See #386).
+    See https://github.com/pytorch/pytorch/blob/35d4fa444b67cbcbe34a862782ddf2d92f5b1ce7/torch/jit/_shape_functions.py
+    for the original copy.
+
+    """
 
     newsize = 1
     infer_dim: Optional[int] = None
