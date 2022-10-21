@@ -27,7 +27,7 @@ if _has_dmc:
 from sys import platform
 
 from torchrl.data.tensordict.tensordict import assert_allclose_td
-from torchrl.envs import EnvCreator, ParallelEnv
+from torchrl.envs import EnvCreator, SerialEnv
 from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper
 from torchrl.envs.libs.gym import GymEnv, GymWrapper
 
@@ -241,7 +241,7 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
 class TestCollectorLib:
     def test_collector_run(self, env_lib, env_args, env_kwargs, device):
         env_fn = EnvCreator(lambda: env_lib(*env_args, **env_kwargs, device=device))
-        env = ParallelEnv(3, env_fn)
+        env = SerialEnv(3, env_fn)
         collector = MultiaSyncDataCollector(
             create_env_fn=[env, env],
             policy=RandomPolicy(env.action_spec),
