@@ -107,8 +107,9 @@ def select_and_repeat(
 
 
 class MultiStep(nn.Module):
-    """
-    Multistep reward, as presented in 'Sutton, R. S. 1988. Learning to
+    """Multistep reward transform.
+
+    Presented in 'Sutton, R. S. 1988. Learning to
     predict by the methods of temporal differences. Machine learning 3(
     1):9–44.'
 
@@ -140,7 +141,9 @@ class MultiStep(nn.Module):
         )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Args:
+        """Re-writes a tensordict following the multi-step transform.
+
+        Args:
             tensordict: TennsorDict instance with Batch x Time-steps x ...
                 dimensions.
                 The TensorDict must contain a "reward" and "done" key. All
@@ -159,6 +162,7 @@ class MultiStep(nn.Module):
 
                 - The "reward" values will be replaced by the newly computed
                 rewards.
+
 
         Returns:
             in-place transformation of the input tensordict.

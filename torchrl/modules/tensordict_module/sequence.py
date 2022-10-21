@@ -39,23 +39,23 @@ __all__ = ["TensorDictSequential"]
 
 
 class TensorDictSequential(TensorDictModule):
-    """
-    A sequence of TDModules.
-    Similarly to `nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
+    """A sequence of TensorDictModules.
+
+    Similarly to :obj:`nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
     each, this module will read and write over a tensordict by querying each of the input modules.
-    When calling a `TDSequence` instance with a functional module, it is expected that the parameter lists (and
+    When calling a :obj:`TensorDictSequencial` instance with a functional module, it is expected that the parameter lists (and
     buffers) will be concatenated in a single list.
 
     Args:
-         modules (iterable of TDModules): ordered sequence of TDModule instances to be run sequentially.
+         modules (iterable of TensorDictModules): ordered sequence of TensorDictModule instances to be run sequentially.
          partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
             If so, the only module that will be executed are those who can be executed given the keys that
             are present.
-            Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is `True` AND if the
+            Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is :obj:`True` AND if the
             stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
             looking for those that have the required keys, if any.
 
-    TDSequence supports functional, modular and vmap coding:
+    TensorDictSequence supports functional, modular and vmap coding:
     Examples:
         >>> from torchrl.modules.tensordict_module import ProbabilisticTensorDictModule
         >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
@@ -230,9 +230,7 @@ class TensorDictSequential(TensorDictModule):
     def select_subsequence(
         self, in_keys: Iterable[str] = None, out_keys: Iterable[str] = None
     ) -> "TensorDictSequential":
-        """
-        Returns a new TensorDictSequential with only the modules that are necessary to compute
-        the given output keys with the given input keys.
+        """Returns a new TensorDictSequential with only the modules that are necessary to compute the given output keys with the given input keys.
 
         Args:
             in_keys: input keys of the subsequence we want to select
@@ -377,8 +375,8 @@ class TensorDictSequential(TensorDictModule):
         self.module.__delitem__(idx=index)
 
     def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
-        """
-        Transforms a stateful module in a functional module and returns its parameters and buffers.
+        """Transforms a stateful module in a functional module and returns its parameters and buffers.
+
         Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
 
         Args:

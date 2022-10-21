@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-__all__ = ["LossModule"]
-
 from typing import Iterator, Optional, Tuple, List, Union
 
 import torch
@@ -35,12 +33,13 @@ from torchrl.modules import TensorDictModule
 
 
 class LossModule(nn.Module):
-    """
-    A parent class for RL losses.
+    """A parent class for RL losses.
+
     LossModule inherits from nn.Module. It is designed to read an input TensorDict and return another tensordict
     with loss keys named "loss_*".
     Splitting the loss in its component can then be used by the trainer to log the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
+
     """
 
     def __init__(self):
@@ -48,8 +47,8 @@ class LossModule(nn.Module):
         self._param_maps = dict()
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """It is designed to read an input TensorDict and return another tensordict
-        with loss keys named "loss*".
+        """It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".
+
         Splitting the loss in its component can then be used by the trainer to log the various loss values throughout
         training. Other scalars present in the output tensordict will be logged too.
 
@@ -60,6 +59,7 @@ class LossModule(nn.Module):
             A new tensordict with no batch dimension containing various loss scalars which will be named "loss*". It
             is essential that the losses are returned with this name as they will be read by the trainer before
             backpropagation.
+
         """
         raise NotImplementedError
 
