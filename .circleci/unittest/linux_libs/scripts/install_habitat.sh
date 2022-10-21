@@ -11,7 +11,7 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 conda install -c anaconda mesa-libgl-cos6-x86_64 -y
-conda install -c anaconda mesa-libegl-cos6-x86_64
+conda install -c anaconda mesa-libegl-cos6-x86_64 -y
 
 # suggested by habitat team: do we need this?
 #conda create -n $MY_TEST_ENV python=3.7 cmake=3.14.0 -y
