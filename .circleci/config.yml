@@ -337,6 +337,54 @@ jobs:
       - store_test_results:
           path: test-results
 
+  unittest_linux_habitat_gpu:
+    <<: *binary_common
+    machine:
+      image: ubuntu-2004-cuda-11.4:202110-01
+    resource_class: gpu.nvidia.medium
+    environment:
+      image_name: "pytorch/manylinux-cuda113"
+      TAR_OPTIONS: --no-same-owner
+      PYTHON_VERSION: << parameters.python_version >>
+      CU_VERSION: << parameters.cu_version >>
+
+    steps:
+      - checkout
+      - designate_upload_channel
+      - run:
+          name: Generate cache key
+          # This will refresh cache on Sundays, nightly build should generate new cache.
+          command: echo "$(date +"%Y-%U")" > .circleci-weekly
+      - restore_cache:
+
+          keys:
+            - env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_lib/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+
+      - run:
+          name: Setup
+          command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_lib/scripts/setup_env.sh
+      - save_cache:
+
+          key: env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_lib/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+
+          paths:
+            - conda
+            - env
+      - run:
+          name: Install torchrl
+          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_lib/scripts/install.sh
+      - run:
+          name: Install habitat
+          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_lib/scripts/install_habitat.sh
+      - run:
+          name: Run tests
+          command: bash .circleci/unittest/linux_lib/scripts/run_test.sh
+      - run:
+          name: Post Process
+          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_lib/scripts/post_process.sh
+      - store_test_results:
+          path: test-results
+
   unittest_linux_optdeps_gpu:
     <<: *binary_common
     machine:
@@ -576,62 +624,6 @@ workflows:
           python_version: '3.10'
           wheel_docker_image: pytorch/manylinux-cuda102
 
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda102
-#          cu_version: cu102
-#          name: binary_linux_wheel_py3.7_cu102
-#          python_version: '3.7'
-#          wheel_docker_image: pytorch/manylinux-cuda102
-#
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda102
-#          cu_version: cu102
-#          name: binary_linux_wheel_py3.8_cu102
-#          python_version: '3.8'
-#          wheel_docker_image: pytorch/manylinux-cuda102
-#
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda102
-#          cu_version: cu102
-#          name: binary_linux_wheel_py3.9_cu102
-#          python_version: '3.9'
-#          wheel_docker_image: pytorch/manylinux-cuda102
-#
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda102
-#          cu_version: cu102
-#          name: binary_linux_wheel_py3.10_cu102
-#          python_version: '3.10'
-#          wheel_docker_image: pytorch/manylinux-cuda102
-
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda113
-#          cu_version: cu113
-#          name: binary_linux_wheel_py3.7_cu113
-#          python_version: '3.7'
-#          wheel_docker_image: pytorch/manylinux-cuda113
-#
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda113
-#          cu_version: cu113
-#          name: binary_linux_wheel_py3.8_cu113
-#          python_version: '3.8'
-#          wheel_docker_image: pytorch/manylinux-cuda113
-#
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda113
-#          cu_version: cu113
-#          name: binary_linux_wheel_py3.9_cu113
-#          python_version: '3.9'
-#          wheel_docker_image: pytorch/manylinux-cuda113
-#
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda113
-#          cu_version: cu113
-#          name: binary_linux_wheel_py3.10_cu113
-#          python_version: '3.10'
-#          wheel_docker_image: pytorch/manylinux-cuda113
-
       - binary_macos_wheel:
           conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
@@ -710,6 +702,11 @@ workflows:
       - unittest_linux_stable_gpu:
           cu_version: cu113
           name: unittest_linux_stable_gpu_py3.8
+          python_version: '3.8'
+      # we test supported libs for 3.8 only
+      - unittest_linux_habitat_gpu:
+          cu_version: cu113
+          name: unittest_linux_habitat_gpu_py3.8
           python_version: '3.8'
 
       - unittest_macos_cpu:

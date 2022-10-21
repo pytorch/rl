@@ -13,6 +13,7 @@ from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy
 from torchrl.envs.libs.dm_control import _has_dmc
 from torchrl.envs.libs.gym import _has_gym, _is_from_pixels
+from torchrl.envs.libs.habitat import HabitatEnv, _has_habitat
 
 if _has_gym:
     import gym
@@ -264,6 +265,13 @@ class TestCollectorLib:
                 break
         collector.shutdown()
         del env
+
+
+@pytest.mark.skipif(not _has_habitat, reason="habitat not installed")
+def test_habitat():
+    env = HabitatEnv("HabitatHabitatRenderPick-v0")
+    rollout = env.rollout(3)
+    print(rollout)
 
 
 if __name__ == "__main__":
