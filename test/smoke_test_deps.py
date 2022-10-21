@@ -3,7 +3,6 @@ import os
 import tempfile
 
 import pytest
-from torch.utils.tensorboard import SummaryWriter
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 
@@ -25,6 +24,8 @@ if _NO_TENSORBOARD in ("0", "False"):
 elif _NO_TENSORBOARD in ("1", "True"):
     _NO_TENSORBOARD = True
 
+if not _NO_TENSORBOARD:
+    from torch.utils.tensorboard import SummaryWriter
 
 def test_dm_control():
     import dm_control  # noqa: F401
@@ -52,7 +53,7 @@ def test_gym():
 
 
 @pytest.mark.skipif(
-    _NO_TENSORBOARD, "Tensorboard should be ignored as per environment setting."
+    _NO_TENSORBOARD, reason="Tensorboard should be ignored as per environment setting."
 )
 def test_tb():
     test_rounds = 100
