@@ -10,6 +10,15 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
+yum makecache
+yum install -y glfw
+yum install -y glew
+yum install -y mesa-libGL
+yum install -y mesa-libGL-devel
+yum install -y mesa-libOSMesa-devel
+yum -y install egl-utils
+yum -y install freeglut
+
 # suggested by habitat team: do we need this?
 #conda create -n $MY_TEST_ENV python=3.7 cmake=3.14.0 -y
 #conda activate $MY_TEST_ENV
