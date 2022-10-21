@@ -16,7 +16,6 @@ conda activate ./env
 
 # If you already have an environment you want to use, you can just run the following:
 conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightly -y
-pip3 install gym
 pip3 install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
 
 # This is to reduce verbosity

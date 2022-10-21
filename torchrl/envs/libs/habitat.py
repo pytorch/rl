@@ -9,4 +9,10 @@ except ImportError:
 
 
 class HabitatEnv(GymEnv):
+    """A wrapper for habitat envs.
+
+    This class currently serves as placeholder and compatibility security.
+    It behaves exactly like the GymEnv wrapper.
+
+    """
     pass
