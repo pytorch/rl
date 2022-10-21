@@ -8,9 +8,6 @@ try:
 except ImportError:
     _has_habitat = False
 
-import habitat
-import habitat.utils.gym_definitions  # noqa
-
 class HabitatEnv(GymEnv):
     """A wrapper for habitat envs.
 
