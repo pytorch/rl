@@ -189,7 +189,6 @@ def infer_size_impl(shape: List[int], numel: int) -> List[int]:
     for the original copy.
 
     """
-
     newsize = 1
     infer_dim: Optional[int] = None
     for dim in range(len(shape)):
