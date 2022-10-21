@@ -16,6 +16,7 @@ from torchrl.modules import (
     ActorValueOperator,
     CEMPlanner,
     LSTMNet,
+    GRUNet,
     ProbabilisticActor,
     QValueActor,
     TensorDictModule,
@@ -303,6 +304,25 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
     torch.testing.assert_close(tds_vec["y"], tds_loop["y"])
     torch.testing.assert_close(tds_vec["hidden0_out"][-1], tds_loop["hidden0_out"][-1])
     torch.testing.assert_close(tds_vec["hidden1_out"][-1], tds_loop["hidden1_out"][-1])
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_gru_net_shape(device):
+    in_features = 32
+    hidden_size = 64
+    out_features = 4
+    mlp_input_kwargs = {"in_features": in_features, "out_features": hidden_size}
+    gru_kwargs = {"input_size": hidden_size, "hidden_size": hidden_size}
+    mlp_output_kwargs = {"in_features": hidden_size, "out_features": out_features}
+
+    net = GRUNet(mlp_input_kwargs, gru_kwargs, mlp_output_kwargs).to(device)
+
+    x = torch.randn(in_features, device=device)
+    h = torch.randn(hidden_size, device=device)
+    x, h = net(x, h)
+
+    assert x.size() == torch.Size([out_features])
+    assert h.size() == torch.Size([hidden_size])
 
 
 class TestFunctionalModules:
