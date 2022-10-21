@@ -16,7 +16,12 @@ conda activate ./env
 
 # If you already have an environment you want to use, you can just run the following:
 conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightly -y
-pip3 install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
+conda run python -m pip install install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
+conda run python -m pip install install gym[accept-rom-license]
+conda run python -m pip install install gym[atari]
 
 # This is to reduce verbosity
-export MAGNUM_LOG=quiet && export HABITAT_SIM_LOG=quiet
+conda env config vars set MAGNUM_LOG=quiet HABITAT_SIM_LOG=quiet
+
+# smoke test
+python -c "import habitat"
