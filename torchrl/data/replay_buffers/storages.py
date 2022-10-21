@@ -12,11 +12,12 @@ import torch
 from torchrl.data.replay_buffers.utils import INT_CLASSES
 from torchrl.data.tensordict.memmap import MemmapTensor
 from torchrl.data.tensordict.tensordict import TensorDictBase, TensorDict
+from torchrl.data.replay_buffers.utils import _MutualRegister
 
 __all__ = ["Storage", "ListStorage", "LazyMemmapStorage", "LazyTensorStorage"]
 
 
-class Storage:
+class Storage(_MutualRegister):
     """A Storage is the container of a replay buffer.
 
     Every storage must have a set, get and __len__ methods implemented.

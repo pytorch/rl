@@ -5,6 +5,7 @@
 # import tree
 import typing
 from typing import Union
+from abc import ABC
 
 import numpy as np
 import torch
@@ -37,3 +38,12 @@ def _to_torch(
         data = data.to(device, non_blocking=non_blocking)
 
     return data
+
+class _MutualRegister(ABC):
+    """Registers the parent of the rb component when the rb component is set in the buffer."""
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls.parent = []
+
+    def register_parent(self, parent):
+        self.parent.append(parent)

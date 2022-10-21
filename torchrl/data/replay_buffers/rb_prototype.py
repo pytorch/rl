@@ -46,6 +46,10 @@ class ReplayBuffer:
         self._writer = writer if writer is not None else RoundRobinWriter()
         self._writer.register_storage(self._storage)
 
+        self._storage.register_parent(self)
+        self._sampler.register_parent(self)
+        self._writer.register_parent(self)
+
         self._collate_fn = collate_fn or stack_tensors
         self._pin_memory = pin_memory
 

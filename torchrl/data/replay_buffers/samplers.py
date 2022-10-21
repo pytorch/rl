@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Any, Union, Tuple
 
 import numpy as np
@@ -11,10 +11,10 @@ from torchrl._torchrl import (
     SumSegmentTreeFp64,
 )
 from .storages import Storage
-from .utils import INT_CLASSES, _to_numpy
+from .utils import INT_CLASSES, _to_numpy, _MutualRegister
 
 
-class Sampler(ABC):
+class Sampler(_MutualRegister):
     """A generic sampler base class for composable Replay Buffers."""
 
     @abstractmethod

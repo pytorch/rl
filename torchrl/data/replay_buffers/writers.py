@@ -5,9 +5,10 @@ import numpy as np
 import torch
 
 from .storages import Storage
+from torchrl.data.replay_buffers.utils import _MutualRegister
 
 
-class Writer(ABC):
+class Writer(_MutualRegister):
     """A ReplayBuffer base Writer class."""
 
     def __init__(self) -> None:
